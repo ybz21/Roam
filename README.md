@@ -141,7 +141,7 @@ ttmux is designed to be called by [Claude Code](https://claude.ai/code) and othe
 ```bash
 # Install the skill
 mkdir -p ~/.claude/skills
-cp SKILL.md ~/.claude/skills/ttmux.md
+cp skills/tmux/SKILL.md ~/.claude/skills/ttmux.md
 ```
 
 Then use `/ttmux` in Claude Code to decompose tasks into parallel workers.
