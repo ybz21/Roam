@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d1117">
+<title>ttmux 控制台</title>
+<style>
+  :root{--bg:#0d1117;--panel:#161b22;--line:#30363d;--fg:#e6edf3;--dim:#8b949e;
+        --accent:#58a6ff;--ok:#3fb950;--warn:#d29922;--err:#f85149;--agent:#bc8cff;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+       font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,"PingFang SC","Microsoft YaHei",sans-serif;
+       -webkit-font-smoothing:antialiased}
+  code,pre,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  a{color:var(--accent);text-decoration:none}
+  button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--panel);
+         color:var(--fg);border-radius:8px;padding:10px 14px;min-height:42px}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#06223f;font-weight:600}
+  button.danger{border-color:var(--err);color:var(--err)}
+  button:active{transform:translateY(1px)}
+  input,select,textarea{font:inherit;background:#0b0f14;color:var(--fg);border:1px solid var(--line);
+         border-radius:8px;padding:10px;min-height:42px;width:100%}
+  .wrap{max-width:1100px;margin:0 auto;padding:14px;padding-bottom:84px}
+  header{position:sticky;top:0;background:rgba(13,17,23,.92);backdrop-filter:blur(6px);
+         border-bottom:1px solid var(--line);z-index:5}
+  .hd{max-width:1100px;margin:0 auto;display:flex;align-items:center;gap:10px;padding:12px 14px}
+  .hd b{font-size:18px}.hd .sp{flex:1}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin:12px 0}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center}
+  .stat b{display:block;font-size:26px}.stat span{color:var(--dim);font-size:13px}
+  .tag{font-size:12px;padding:2px 8px;border-radius:999px;border:1px solid var(--line)}
+  .t-run{color:var(--warn);border-color:var(--warn)}.t-ok{color:var(--ok);border-color:var(--ok)}
+  .t-err{color:var(--err);border-color:var(--err)}.t-cmd{color:var(--dim)}.t-agent{color:var(--agent);border-color:var(--agent)}
+  .item{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--line);
+        border-radius:10px;margin:8px 0;background:#0b0f14}
+  .item .nm{font-weight:600}.item .meta{color:var(--dim);font-size:13px}
+  pre{white-space:pre-wrap;word-break:break-word;background:#06090d;border:1px solid var(--line);
+      border-radius:10px;padding:12px;max-height:50vh;overflow:auto;font-size:12.5px;line-height:1.5}
+  .dim{color:var(--dim)} .err{color:var(--err)} .sp{flex:1}
+  /* 底部 Tab（手机/平板）；桌面变顶部，见媒体查询 */
+  nav.tabs{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--panel);
+           border-top:1px solid var(--line);z-index:6;padding-bottom:env(safe-area-inset-bottom)}
+  nav.tabs button{flex:1;border:0;background:none;border-radius:0;color:var(--dim);
+           display:flex;flex-direction:column;gap:2px;font-size:12px;padding:8px 0}
+  nav.tabs button.on{color:var(--accent)}
+  nav.tabs .ic{font-size:18px}
+  .hidden{display:none}
+  .center{min-height:80vh;display:flex;align-items:center;justify-content:center}
+  .login{width:min(360px,92vw)}
+  .taskrow{display:flex;gap:8px;margin:6px 0}
+  @media(min-width:1000px){
+    nav.tabs{position:sticky;top:0;bottom:auto;max-width:1100px;margin:0 auto;border:0;border-bottom:1px solid var(--line);background:transparent}
+    nav.tabs button{flex:0 0 auto;flex-direction:row;gap:6px;font-size:14px;padding:14px 16px}
+    .wrap{padding-bottom:24px}
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+const $ = (h)=>{const t=document.createElement('template');t.innerHTML=h.trim();return t.content.firstChild};
+const api = async (m,p,b)=>{
+  const r = await fetch('/api'+p,{method:m,headers:b?{'Content-Type':'application/json'}:{},
+                                 body:b?JSON.stringify(b):undefined});
+  if(r.status===401){state.authed=false;render();throw new Error('unauth')}
+  const ct=r.headers.get('content-type')||'';
+  const data = ct.includes('json')? await r.json() : await r.text();
+  if(!r.ok) throw new Error((data&&data.error&&data.error.message)||(data&&data.error&&data.error.code)||('HTTP '+r.status));
+  return data;
+};
+const toast=(msg,err)=>{const t=$(`<div style="position:fixed;left:50%;bottom:90px;transform:translateX(-50%);
+  background:${err?'#7d1f1f':'#1f4d2a'};color:#fff;padding:10px 16px;border-radius:10px;z-index:20;max-width:90vw">${esc(msg)}</div>`);
+  document.body.appendChild(t);setTimeout(()=>t.remove(),2600)};
+const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+const state={authed:true,tab:'overview',group:null};
+
+function statusTag(st,code){
+  if(st==='running')return '<span class="tag t-run">运行中</span>';
+  if(st==='done')return (code&&code!=='0')?'<span class="tag t-err">失败 '+esc(code)+'</span>':'<span class="tag t-ok">完成</span>';
+  return '<span class="tag">已结束</span>';
+}
+function typeTag(t){return t==='agent'?'<span class="tag t-agent">🤖 Agent</span>':'<span class="tag t-cmd">⌨️ 命令</span>'}
+
+// ── 视图 ──
+async function viewOverview(el){
+  el.innerHTML='<div class="dim">加载中…</div>';
+  try{
+    const info=await api('GET','/info');
+    const tasks=await api('GET','/tasks');
+    el.innerHTML='';
+    const g=$(`<div class="grid"></div>`);
+    g.append($(`<div class="stat"><b>${info.sessions}</b><span>会话</span></div>`));
+    g.append($(`<div class="stat"><b>${info.groups}</b><span>任务组</span></div>`));
+    g.append($(`<div class="stat"><b>${info.version}</b><span>ttmux</span></div>`));
+    g.append($(`<div class="stat"><b>${info.tmux_version}</b><span>tmux</span></div>`));
+    el.append(g);
+    const c=$(`<div class="card"><div class="row"><b>任务组</b><div class="sp"></div>
+        <button class="primary" id="ov-new">+ 创建任务</button></div><div id="ov-list"></div></div>`);
+    el.append(c);
+    const list=c.querySelector('#ov-list');
+    if(!tasks.length){list.innerHTML='<div class="dim" style="padding:8px">暂无任务组</div>'}
+    tasks.forEach(t=>{
+      const it=$(`<div class="item"><div><div class="nm">${esc(t.group)}</div>
+        <div class="meta">${t.total} 个任务 · 存活 ${t.alive}</div></div><div class="sp"></div>
+        ${statusTag(t.status==='running'?'running':(t.status==='done'?'done':'running'))}</div>`);
+      it.onclick=()=>{state.tab='tasks';state.group=t.group;render()};
+      list.append(it);
+    });
+    c.querySelector('#ov-new').onclick=spawnDialog;
+  }catch(e){el.innerHTML='<div class="err">'+esc(e.message)+'</div>'}
+}
+
+async function viewTasks(el){
+  el.innerHTML='';
+  const head=$(`<div class="row"><b>任务 (命令 / Agent)</b><div class="sp"></div>
+    <button class="primary" id="tk-new">+ 创建</button></div>`);
+  el.append(head);
+  head.querySelector('#tk-new').onclick=spawnDialog;
+  try{
+    const groups=await api('GET','/tasks');
+    if(!groups.length){el.append($('<div class="dim" style="padding:10px">暂无任务组</div>'));return}
+    for(const g of groups){
+      const open=state.group===g.group;
+      const card=$(`<div class="card"></div>`);
+      const hd=$(`<div class="row" style="cursor:pointer"><b>${esc(g.group)}</b>
+        <span class="dim">${g.alive}/${g.total} 存活</span><div class="sp"></div>
+        <button class="danger" data-k="${esc(g.group)}">清理</button></div>`);
+      hd.onclick=(ev)=>{if(ev.target.dataset.k!==undefined)return;state.group=open?null:g.group;render()};
+      hd.querySelector('button').onclick=async(ev)=>{ev.stopPropagation();
+        if(!confirm('清理任务组 '+g.group+'？'))return;
+        try{await api('DELETE','/tasks/'+encodeURIComponent(g.group));toast('已清理');state.group=null;render()}catch(e){toast(e.message,1)}};
+      card.append(hd);
+      if(open){
+        const body=$('<div></div>');card.append(body);
+        body.innerHTML='<div class="dim" style="padding:6px">加载中…</div>';
+        try{
+          const st=await api('GET','/tasks/'+encodeURIComponent(g.group));
+          body.innerHTML='';
+          (st.tasks||[]).forEach(t=>{
+            const it=$(`<div class="item"><div style="min-width:0">
+              <div class="nm">${esc(t.name)}</div>
+              <div class="meta">${typeTag(t.type)} ${statusTag(t.status,t.exit_code)} ${esc(t.task||'')}</div></div></div>`);
+            body.append(it);
+          });
+          const ops=$(`<div class="row" style="margin-top:10px">
+            <button data-a="collect">收集输出</button>
+            <button data-a="send">追加指令</button></div>`);
+          ops.querySelector('[data-a=collect]').onclick=()=>collectDialog(g.group);
+          ops.querySelector('[data-a=send]').onclick=()=>sendDialog(st.tasks||[]);
+          body.append(ops);
+        }catch(e){body.innerHTML='<div class="err">'+esc(e.message)+'</div>'}
+      }
+      el.append(card);
+    }
+  }catch(e){el.append($('<div class="err">'+esc(e.message)+'</div>'))}
+}
+
+async function viewSessions(el){
+  el.innerHTML='<b>会话</b><div class="dim">加载中…</div>';
+  try{
+    const ss=await api('GET','/sessions');
+    el.innerHTML='<b>会话</b>';
+    if(!ss.length){el.append($('<div class="dim" style="padding:10px">无活跃会话</div>'));return}
+    ss.forEach(s=>{
+      const it=$(`<div class="item"><div><div class="nm">${esc(s.name)}</div>
+        <div class="meta">${s.windows} 窗口 · ${s.attached==1?'已连接':'空闲'}</div></div>
+        <div class="sp"></div><button class="danger">关闭</button></div>`);
+      it.querySelector('button').onclick=async()=>{if(!confirm('关闭 '+s.name+'？'))return;
+        try{await api('DELETE','/sessions/'+encodeURIComponent(s.name));toast('已关闭');render()}catch(e){toast(e.message,1)}};
+      el.append(it);
+    });
+  }catch(e){el.innerHTML='<div class="err">'+esc(e.message)+'</div>'}
+}
+
+async function viewEnv(el){
+  el.innerHTML='';
+  const head=$(`<div class="row"><b>全局环境变量</b><div class="sp"></div>
+    <button id="env-add">+ 添加</button><button id="env-push">推送到会话</button></div>`);
+  el.append(head);
+  head.querySelector('#env-push').onclick=async()=>{try{await api('POST','/env/push');toast('已推送')}catch(e){toast(e.message,1)}};
+  head.querySelector('#env-add').onclick=async()=>{
+    const key=prompt('KEY');if(!key)return;const value=prompt('VALUE')||'';
+    try{await api('PUT','/env',{key,value});toast('已设置');render()}catch(e){toast(e.message,1)}};
+  try{
+    const list=await api('GET','/env');
+    if(!list.length){el.append($('<div class="dim" style="padding:10px">无环境变量</div>'))}
+    list.forEach(kv=>{
+      const it=$(`<div class="item"><div style="min-width:0"><div class="nm mono">${esc(kv.key)}</div>
+        <div class="meta mono">${esc(kv.value)}</div></div><div class="sp"></div>
+        <button class="danger">删除</button></div>`);
+      it.querySelector('button').onclick=async()=>{try{await api('DELETE','/env/'+encodeURIComponent(kv.key));toast('已删除');render()}catch(e){toast(e.message,1)}};
+      el.append(it);
+    });
+  }catch(e){el.append($('<div class="err">'+esc(e.message)+'</div>'))}
+}
+
+// ── 弹窗 ──
+function modal(inner){
+  const ov=$(`<div style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:30;display:flex;
+    align-items:flex-end;justify-content:center" ></div>`);
+  const box=$(`<div class="card" style="width:min(560px,100%);margin:0;border-radius:14px 14px 0 0;max-height:88vh;overflow:auto"></div>`);
+  if(window.innerWidth>=1000){ov.style.alignItems='center';box.style.borderRadius='14px'}
+  box.append(inner);ov.append(box);ov.onclick=(e)=>{if(e.target===ov)ov.remove()};
+  document.body.append(ov);return ov;
+}
+function spawnDialog(){
+  const box=$(`<div>
+    <div class="row"><b>创建任务</b></div>
+    <div class="row" style="margin:10px 0"><label class="dim">类型</label>
+      <select id="sp-type"><option value="cmd">⌨️ shell 命令</option><option value="agent">🤖 Claude Agent</option></select></div>
+    <input id="sp-group" placeholder="任务组名称" style="margin-bottom:8px">
+    <div id="sp-tasks"></div>
+    <button id="sp-add" style="margin:6px 0">+ 加一行</button>
+    <div id="sp-agent" class="hidden">
+      <input id="sp-dir" placeholder="工作目录 (--dir)" style="margin:6px 0">
+      <div class="row"><input id="sp-perm" placeholder="权限 auto/plan/default"><input id="sp-model" placeholder="模型 (可空)"></div>
+    </div>
+    <div class="row" style="margin-top:12px"><div class="sp"></div>
+      <button id="sp-cancel">取消</button><button class="primary" id="sp-go">创建</button></div>
+  </div>`);
+  const ov=modal(box);
+  const tasksEl=box.querySelector('#sp-tasks');
+  const addRow=()=>{const r=$(`<div class="taskrow"><input placeholder="名称" class="nm"><input placeholder="命令/任务" class="cmd"></div>`);tasksEl.append(r)};
+  addRow();addRow();
+  box.querySelector('#sp-add').onclick=addRow;
+  const typeSel=box.querySelector('#sp-type');
+  typeSel.onchange=()=>box.querySelector('#sp-agent').classList.toggle('hidden',typeSel.value!=='agent');
+  box.querySelector('#sp-cancel').onclick=()=>ov.remove();
+  box.querySelector('#sp-go').onclick=async()=>{
+    const group=box.querySelector('#sp-group').value.trim();if(!group)return toast('需要组名',1);
+    const type=typeSel.value;const tasks=[];
+    tasksEl.querySelectorAll('.taskrow').forEach(r=>{
+      const n=r.querySelector('.nm').value.trim();const c=r.querySelector('.cmd').value.trim();
+      if(n&&c)tasks.push(type==='agent'?{name:n,task:c}:{name:n,cmd:c});
+    });
+    if(!tasks.length)return toast('至少一个任务',1);
+    const body={group,type,tasks};
+    if(type==='agent'){body.dir=box.querySelector('#sp-dir').value.trim();
+      body.perm=box.querySelector('#sp-perm').value.trim();body.model=box.querySelector('#sp-model').value.trim()}
+    try{await api('POST','/tasks',body);toast('已创建');ov.remove();state.tab='tasks';state.group=group;render()}catch(e){toast(e.message,1)}
+  };
+}
+async function collectDialog(group){
+  const box=$(`<div><div class="row"><b>收集: ${esc(group)}</b></div><pre id="cl">加载中…</pre>
+    <div class="row" style="margin-top:8px"><div class="sp"></div><button id="cl-close">关闭</button></div></div>`);
+  const ov=modal(box);box.querySelector('#cl-close').onclick=()=>ov.remove();
+  try{const r=await api('GET','/tasks/'+encodeURIComponent(group)+'/collect');
+    box.querySelector('#cl').textContent=(r.results||[]).map(x=>`━━━ ${x.task} [${x.type}] ━━━\n${x.prompt?('任务: '+x.prompt+'\n'):''}${x.output}`).join('\n\n')||'(无输出)';
+  }catch(e){box.querySelector('#cl').textContent=e.message}
+}
+function sendDialog(tasks){
+  const opts=tasks.map(t=>`<option value="${esc(t.name)}">${esc(t.name)} [${t.type}]</option>`).join('');
+  const box=$(`<div><div class="row"><b>追加指令</b></div>
+    <select id="sd-sess" style="margin:8px 0">${opts}</select>
+    <textarea id="sd-msg" rows="3" placeholder="发送给该任务/Agent 的指令"></textarea>
+    <div class="row" style="margin-top:10px"><div class="sp"></div>
+      <button id="sd-cancel">取消</button><button class="primary" id="sd-go">发送</button></div></div>`);
+  const ov=modal(box);box.querySelector('#sd-cancel').onclick=()=>ov.remove();
+  box.querySelector('#sd-go').onclick=async()=>{
+    const sess=box.querySelector('#sd-sess').value;const msg=box.querySelector('#sd-msg').value;
+    if(!sess||!msg)return;try{await api('POST','/tasks/_/send',{sess,msg});toast('已发送');ov.remove()}catch(e){toast(e.message,1)}};
+}
+
+// ── 框架渲染 ──
+const TABS=[['overview','📊','概览'],['tasks','📋','任务'],['sessions','▸','会话'],['env','🌍','Env']];
+function render(){
+  const app=document.getElementById('app');
+  if(!state.authed){renderLogin(app);return}
+  app.innerHTML='';
+  const hdr=$(`<header><div class="hd"><b>ttmux</b><span class="dim">控制台</span><div class="sp"></div>
+    <button id="logout" style="min-height:36px;padding:6px 12px">退出</button></div></header>`);
+  hdr.querySelector('#logout').onclick=async()=>{await api('POST','/logout').catch(()=>{});state.authed=false;render()};
+  const nav=$(`<nav class="tabs"></nav>`);
+  TABS.forEach(([k,ic,label])=>{const b=$(`<button class="${state.tab===k?'on':''}"><span class="ic">${ic}</span><span>${label}</span></button>`);
+    b.onclick=()=>{state.tab=k;render()};nav.append(b)});
+  const wrap=$(`<div class="wrap"></div>`);const content=$('<div></div>');wrap.append(content);
+  // nav 的位置（桌面顶部 sticky / 手机底部 fixed）完全由 CSS 媒体查询处理
+  app.append(hdr);
+  app.append(nav);
+  app.append(wrap);
+  ({overview:viewOverview,tasks:viewTasks,sessions:viewSessions,env:viewEnv}[state.tab]||viewOverview)(content);
+}
+function renderLogin(app){
+  app.innerHTML='';
+  const box=$(`<div class="center"><form class="card login">
+    <div style="text-align:center;font-size:22px;font-weight:700;margin-bottom:14px">ttmux 控制台</div>
+    <div style="position:relative">
+      <input id="pw" type="password" placeholder="口令" autocomplete="current-password" style="padding-right:48px">
+      <button type="button" id="pw-eye" title="显示/隐藏密码"
+        style="position:absolute;right:4px;top:50%;transform:translateY(-50%);min-height:34px;
+               padding:4px 10px;border:0;background:none;font-size:18px">👁</button>
+    </div>
+    <div id="lg-err" class="err" style="min-height:18px;margin:8px 0;font-size:13px"></div>
+    <button class="primary" style="width:100%" type="submit">登 录</button>
+  </form></div>`);
+  const pw=box.querySelector('#pw');
+  box.querySelector('#pw-eye').onclick=(e)=>{e.preventDefault();
+    const show=pw.type==='password';pw.type=show?'text':'password';
+    e.target.textContent=show?'🙈':'👁';pw.focus()};
+  box.querySelector('form').onsubmit=async(e)=>{e.preventDefault();
+    try{await api('POST','/login',{password:pw.value});state.authed=true;render()}
+    catch(err){box.querySelector('#lg-err').textContent='登录失败'}};
+  app.append(box);
+}
+window.addEventListener('resize',()=>{clearTimeout(window._rt);window._rt=setTimeout(render,200)});
+// 启动时探活，决定是否已登录
+api('GET','/me').then(()=>{state.authed=true;render()}).catch(()=>{state.authed=false;render()});
+</script>
+</body>
+</html>
