@@ -1,7 +1,7 @@
 {
-  "name": "ttmux 控制台",
-  "short_name": "ttmux",
-  "description": "多终端 · 蜂群编排 · 一起干活",
+  "name": "Roam — Code anywhere, anytime",
+  "short_name": "Roam",
+  "description": "Code anywhere, anytime. 多终端 · 蜂群编排 · 远程控制台",
   "lang": "zh-CN",
   "start_url": "/",
   "scope": "/",

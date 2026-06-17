@@ -230,7 +230,7 @@ export default function App() {
           style={{ position: 'sticky', top: 0, height: '100dvh', background: '#0d1117', borderRight: '1px solid #21262d' }}>
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: collapsed ? '18px 0 16px' : '18px 18px 16px', justifyContent: collapsed ? 'center' : 'flex-start' }}>
-              <img src="/logo-mark.svg" width={34} height={34} alt="ttmux"
+              <img src="/logo-mark.svg" width={34} height={34} alt="Roam"
                 style={{ flex: '0 0 auto', borderRadius: 10, boxShadow: '0 1px 3px rgba(0,0,0,.5)' }} />
               {!collapsed && (
                 <div style={{ lineHeight: 1.15 }}>
@@ -238,8 +238,8 @@ export default function App() {
                     fontWeight: 800, fontSize: 19, letterSpacing: 0.5,
                     background: 'linear-gradient(180deg,#f5f7fa 0%,#c3c9d1 46%,#9aa1ab 56%,#e7ebef 100%)',
                     WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent',
-                  }}>ttmux</div>
-                  <div style={{ color: '#6e7681', fontSize: 11, letterSpacing: 2 }}>CONSOLE</div>
+                  }}>Roam</div>
+                  <div style={{ color: '#6e7681', fontSize: 10, letterSpacing: 1.5 }}>ANYWHERE · ANYTIME</div>
                 </div>
               )}
             </div>
@@ -372,7 +372,7 @@ function SoloTerminal({ name }: { name: string }) {
   const [codexView, setCodexView] = useState<Record<string, boolean>>({})
   const termRefs = useRef<Record<string, TermHandle | null>>({})
 
-  useEffect(() => { document.title = `ttmux · ${name}` }, [name])
+  useEffect(() => { document.title = `Roam · ${name}` }, [name])
   useEffect(() => {
     let stop = false
     const check = async () => {
@@ -577,9 +577,13 @@ function Login({ onOk }: { onOk: () => void }) {
     <div style={{ height: '100dvh', display: 'grid', placeItems: 'center', padding: 16, background: '#0d1117' }}>
       <Card style={{ width: 'min(360px,92vw)' }}>
         <div style={{ textAlign: 'center', marginBottom: 18 }}>
-          <img src="/logo-mark.svg" width={64} height={64} alt="ttmux" style={{ borderRadius: 14 }} />
-          <div style={{ fontSize: 22, fontWeight: 700, marginTop: 10 }}>ttmux 控制台</div>
-          <div style={{ color: '#6e7681', fontSize: 12, marginTop: 2 }}>多终端 · 一起干活</div>
+          <img src="/logo-mark.svg" width={64} height={64} alt="Roam" style={{ borderRadius: 14 }} />
+          <div style={{
+            fontSize: 30, fontWeight: 800, letterSpacing: 1, marginTop: 12,
+            background: 'linear-gradient(180deg,#f5f7fa 0%,#c3c9d1 46%,#9aa1ab 56%,#e7ebef 100%)',
+            WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent',
+          }}>Roam</div>
+          <div style={{ color: '#6e7681', fontSize: 12, marginTop: 4, letterSpacing: 0.5 }}>Code anywhere, anytime.</div>
         </div>
         <Form
           initialValues={{ password: saved, remember: !!saved }}
@@ -662,7 +666,7 @@ function Overview({ go, openTerm, kanna }: { go: (k: string) => void; openTerm: 
       {/* Hero */}
       <div style={{ borderRadius: 14, padding: '22px 24px', background: 'linear-gradient(135deg,#161b22 0%,#0d1117 100%)', border: '1px solid #21262d' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-          <img src="/logo-mark.svg" width={48} height={48} alt="ttmux" style={{ flex: '0 0 auto', borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,.5)' }} />
+          <img src="/logo-mark.svg" width={48} height={48} alt="Roam" style={{ flex: '0 0 auto', borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,.5)' }} />
           <div style={{ flex: 1, minWidth: 200 }}>
             <div style={{ fontSize: 22, fontWeight: 800, color: '#e6edf3' }}>欢迎回来{kanna ? '，' + kanna : ''} 👋</div>
             <div style={{ color: '#8b949e', fontSize: 13, marginTop: 4 }}>多终端 · 蜂群编排 · 一起干活</div>

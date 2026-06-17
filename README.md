@@ -1,10 +1,11 @@
-# ttmux
+# Roam
 
 **English** ｜ [简体中文](README.zh-CN.md)
 
-> AI-native tmux wrapper — parallel task orchestration from your terminal.
+> **Code anywhere, anytime.**
+> Orchestrate a swarm of coding agents from your terminal — or your phone.
 
-ttmux wraps tmux with a friendlier interface and adds first-class support for **parallel task execution**, **output capture**, **multi-agent orchestration**, and a **swarm** layer with a shared board + plaza — all reachable from the terminal or a **web console**.
+**Roam** wraps tmux with a friendlier interface and adds first-class support for **parallel task execution**, **output capture**, **multi-agent orchestration**, and a **swarm** layer with a shared board + plaza — all reachable from the terminal or a **remote web console**. The command-line tool is **`ttmux`**.
 
 ## Why
 
