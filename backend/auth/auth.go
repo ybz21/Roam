@@ -1,7 +1,7 @@
 // Package auth 负责口令校验、token 签发/校验、防爆破与认证中间件。
 //
 // 当前为单用户：口令来自配置（明文比较，常量时间）。argon2 哈希 +
-// passwd 子命令 + TOTP/Passkey 为后续增强（见 docs/web/03-auth-security.md）。
+// passwd 子命令 + TOTP/Passkey 为后续增强（见 docs/design/web/03-auth-security.md）。
 package auth
 
 import (

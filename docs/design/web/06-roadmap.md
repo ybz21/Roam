@@ -13,7 +13,7 @@
 | **M2 — 实时** | SSE 状态推送（`/api/stream/status`）+ 日志 WS（`/api/logs/:name`）已就绪；前端接入替换 3s 轮询 | 🟡 后端完成，前端待接入 |
 | **M4 — 打磨** | 断线重连、审计日志、argon2、Tunnel 部署文档；（v2）TOTP/Passkey | ⬜ |
 
-> 可运行实现：前端 [`../../frontend/`](../../frontend/)，后端 [`../../backend/`](../../backend/README.md)。
+> 可运行实现：前端 [`../../../frontend/`](../../../frontend/)，后端 [`../../../backend/`](../../../backend/README.md)。
 > 前后端分离，后端从磁盘代理 `frontend/dist`；找不到时回退到后端内嵌的 `server/fallback.html`。
 
 ## 2. 前置依赖（已清零）

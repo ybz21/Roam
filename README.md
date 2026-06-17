@@ -1,5 +1,7 @@
 # ttmux
 
+**English** ｜ [简体中文](README.zh-CN.md)
+
 > AI-native tmux wrapper — parallel task orchestration from your terminal.
 
 ttmux wraps tmux with a friendlier interface and adds first-class support for **parallel task execution**, **output capture**, **multi-agent orchestration**, and a **swarm** layer with a shared board + plaza — all reachable from the terminal or a **web console**.
@@ -26,6 +28,8 @@ cp ttmux ~/.local/bin/
 chmod +x ~/.local/bin/ttmux
 ttmux completion   # install tab completion
 ```
+
+Full guide (CLI + Web console, config, remote access): **[docs/install/](docs/install/)**.
 
 ## Quick Start
 
@@ -197,13 +201,15 @@ covers sessions / tasks / swarm board + plaza / env, with live xterm.js terminal
 per session and SSE status streaming.
 
 ```bash
-./start-all.sh        # build frontend → compile backend → serve
+cp .env.example .env  # set password / port
+./start-all.sh        # build frontend → compile backend → serve (background daemon)
 ```
 
-Config via `.env` at the repo root (see `.env.example`); details in
-[`backend/README.md`](backend/README.md).
+Default bind is `0.0.0.0:13579` (LAN-reachable). Config via `.env` at the repo
+root; full setup, all env vars, and remote access in **[docs/install/](docs/install/)**.
+Backend internals: [`backend/README.md`](backend/README.md).
 
-> ⚠ Default bind is `0.0.0.0:8080` — reachable on your LAN. Use a strong
+> ⚠ The Web console puts shell execution on the network. Use a strong
 > `TTMUX_WEB_PASSWORD`, and tunnel (Tailscale / Cloudflare) for remote access
 > rather than exposing the port directly.
 
@@ -229,6 +235,11 @@ Config via `.env` at the repo root (see `.env.example`); details in
 - Output auto-logged via `pipe-pane`
 - Group metadata in `~/.local/share/ttmux/groups/`
 - Status queried from tmux format strings (`#{pane_dead}`, `#{pane_current_command}`)
+
+## Documentation
+
+- [docs/install/](docs/install/) — install & deployment
+- [docs/design/](docs/design/) — design docs (swarm orchestration / board + plaza / web)
 
 ## License
 

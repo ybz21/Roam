@@ -1,5 +1,5 @@
 // ttmux Web 控制台 — React + Vite + Antd（统一深色主题）
-// 布局（见 docs/web/01-overview.md）：
+// 布局（见 docs/design/web/01-overview.md）：
 //   电脑 ≥1200 → 三栏：导航 Sider | 列表(页面) | 终端面板(常驻, 多标签)
 //   平板/手机   → 终端为全屏覆盖层；手机底部 Tab 导航
 // 终端：多标签 / 字号调节 / 复制 / 更多快捷键 / 断线自动重连。

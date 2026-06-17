@@ -1,5 +1,5 @@
 // 蜂群(swarm) 页面：列表 + 详情仪表盘（实时拓扑 / 广场 / 看板 / 节点详情抽屉）。
-// 数据全部来自后端 /api/swarms*（透传 ttmux CLI）。设计见 docs/蜂群 Web 接入设计.md。
+// 数据全部来自后端 /api/swarms*（透传 ttmux CLI）。设计见 docs/design/蜂群 Web 接入设计.md。
 //   一个蜂群 = 一个 master cc(会话 cc-<群>) 带一群 member cc(会话 <群>-<成员>)，每个节点可一键进终端。
 //   Web 只读 + 广场/看板轻操作；建群/加成员/接管仍在 CLI。
 import { useEffect, useMemo, useRef, useState } from 'react'

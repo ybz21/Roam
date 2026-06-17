@@ -2,7 +2,7 @@
 
 ttmux 的 Web 控制台后端，是 ttmux CLI 的薄封装：读 = 调 `ttmux <cmd> --json` 透传；写 = 调对应子命令。
 前端是独立项目 [`../frontend/`](../frontend/)（React + Vite + Antd），**不在本目录内**；后端从磁盘代理其
-构建产物 `frontend/dist`。完整设计见 [`../docs/web/`](../docs/web/)。
+构建产物 `frontend/dist`。完整设计见 [`../docs/design/web/`](../docs/design/web/)。
 
 ## 快速开始
 
@@ -33,7 +33,7 @@ TTMUX_BIN=../ttmux TTMUX_WEB_PASSWORD=secret ./ttmux-web -addr 127.0.0.1:8080 -w
   - `env`：列出 / 设置 / 删除 / 推送；`info`
   - **`term/:name`（WebSocket）**：桥接 `tmux attach`，每个会话 = 实时命令行
   - **`stream/status`（SSE）**：定期推送 tasks+sessions 快照；**`logs/:name`（WS）**：日志 `tail -f`
-- **前端**：[`../frontend/`](../frontend/) React + Vite + Antd SPA，三端响应式（见 `docs/web/01-overview.md`），
+- **前端**：[`../frontend/`](../frontend/) React + Vite + Antd SPA，三端响应式（见 `docs/design/web/01-overview.md`），
   覆盖 概览 / 任务 / 会话 / Env；创建任务（选类型）、收集、追加指令、清理；
   **每个会话/任务可进 xterm.js 终端**（手机带快捷键栏 Enter/Esc/^C/Tab/↑/↓）。
   后端从磁盘读取 `frontend/dist`；找不到时回退到内嵌的 `server/fallback.html`。
