@@ -48,69 +48,46 @@ fi
 chmod +x "${INSTALL_DIR}/ttmux"
 info "ttmux 已安装到 ${INSTALL_DIR}/ttmux"
 
-# 下载或复制 ttmux-chrome（独立的浏览器自动化 CLI）
-if [[ -f "${SCRIPT_DIR}/ttmux-chrome" ]]; then
-    cp "${SCRIPT_DIR}/ttmux-chrome" "${INSTALL_DIR}/ttmux-chrome"
+# 下载或复制 chrome（独立的浏览器自动化 CLI）
+if [[ -f "${SCRIPT_DIR}/chrome" ]]; then
+    cp "${SCRIPT_DIR}/chrome" "${INSTALL_DIR}/chrome"
 else
-    curl -fsSL "https://raw.githubusercontent.com/${REPO}/${BRANCH}/ttmux-chrome" \
-        -o "${INSTALL_DIR}/ttmux-chrome" 2>/dev/null || true
+    curl -fsSL "https://raw.githubusercontent.com/${REPO}/${BRANCH}/chrome" \
+        -o "${INSTALL_DIR}/chrome" 2>/dev/null || true
 fi
-[[ -f "${INSTALL_DIR}/ttmux-chrome" ]] && chmod +x "${INSTALL_DIR}/ttmux-chrome" \
-    && info "ttmux-chrome 已安装到 ${INSTALL_DIR}/ttmux-chrome"
+[[ -f "${INSTALL_DIR}/chrome" ]] && chmod +x "${INSTALL_DIR}/chrome" \
+    && info "chrome 已安装到 ${INSTALL_DIR}/chrome"
 
 # 安装 Claude Code skills
 mkdir -p "$SKILL_DIR"
-
-# ttmux skill
-if [[ -f "${SCRIPT_DIR}/skills/tmux/SKILL.md" ]]; then
-    cp "${SCRIPT_DIR}/skills/tmux/SKILL.md" "${SKILL_DIR}/ttmux.md"
-    info "ttmux skill 已安装"
-elif curl -fsSL "https://raw.githubusercontent.com/${REPO}/${BRANCH}/skills/tmux/SKILL.md" \
-        -o /tmp/ttmux-skill.md 2>/dev/null; then
-    mv /tmp/ttmux-skill.md "${SKILL_DIR}/ttmux.md"
-    info "ttmux skill 已安装"
-fi
-
-# cc-swarm skill — 合并多个子文档为一个文件（按生命周期顺序）
+# cc-swarm 子文档拼接顺序(生命周期)；与 skills/sync-skills.sh 保持一致。
 CC_SWARM_DOCS="intake decompose spawn patrol approve test-push review concurrency integrate memory"
 
-install_cc_swarm_skill() {
-    local src_dir="$1"
-    local dest="${SKILL_DIR}/cc-swarm.md"
-    if [[ -f "${src_dir}/SKILL.md" ]]; then
-        cat "${src_dir}/SKILL.md" > "$dest"
-        for doc in $CC_SWARM_DOCS; do
-            # 子文档放在 docs/ 下；兼容老的扁平布局
-            local doc_file="${src_dir}/docs/${doc}.md"
-            [[ -f "$doc_file" ]] || doc_file="${src_dir}/${doc}.md"
-            if [[ -f "$doc_file" ]]; then
-                echo "" >> "$dest"
-                echo "" >> "$dest"
-                cat "$doc_file" >> "$dest"
-            fi
-        done
-        info "cc-swarm skill 已安装"
-        return 0
-    fi
-    return 1
-}
-
-if [[ -d "${SCRIPT_DIR}/skills/cc-swarm" ]]; then
-    install_cc_swarm_skill "${SCRIPT_DIR}/skills/cc-swarm"
+if [[ -f "${SCRIPT_DIR}/skills/sync-skills.sh" ]]; then
+    # 本地安装：复用 skills/sync-skills.sh（与开发模式 start-all.sh 同一套合并逻辑）
+    bash "${SCRIPT_DIR}/skills/sync-skills.sh" "$SKILL_DIR" >/dev/null && info "skills 已安装 (ttmux, cc-swarm)"
 else
-    # 从 GitHub 下载各子文档并合并
-    local_tmp=$(mktemp -d)
-    mkdir -p "${local_tmp}/docs"
-    all_ok=true
+    # curl|bash 无本地文件：从 GitHub 下载合并
+    if curl -fsSL "https://raw.githubusercontent.com/${REPO}/${BRANCH}/skills/ttmux/SKILL.md" \
+            -o /tmp/ttmux-skill.md 2>/dev/null; then
+        mv /tmp/ttmux-skill.md "${SKILL_DIR}/ttmux.md"
+        info "ttmux skill 已安装"
+    fi
+    local_tmp=$(mktemp -d); all_ok=true
     curl -fsSL "https://raw.githubusercontent.com/${REPO}/${BRANCH}/skills/cc-swarm/SKILL.md" \
         -o "${local_tmp}/SKILL.md" 2>/dev/null || all_ok=false
     for d in $CC_SWARM_DOCS; do
         $all_ok || break
         curl -fsSL "https://raw.githubusercontent.com/${REPO}/${BRANCH}/skills/cc-swarm/docs/${d}.md" \
-            -o "${local_tmp}/docs/${d}.md" 2>/dev/null || { all_ok=false; break; }
+            -o "${local_tmp}/${d}.md" 2>/dev/null || { all_ok=false; break; }
     done
     if $all_ok; then
-        install_cc_swarm_skill "$local_tmp"
+        dest="${SKILL_DIR}/cc-swarm.md"
+        cat "${local_tmp}/SKILL.md" > "$dest"
+        for d in $CC_SWARM_DOCS; do
+            [[ -f "${local_tmp}/${d}.md" ]] && { printf '\n\n' >> "$dest"; cat "${local_tmp}/${d}.md" >> "$dest"; }
+        done
+        info "cc-swarm skill 已安装"
     fi
     rm -rf "$local_tmp"
 fi
@@ -128,14 +105,14 @@ fi
 step "安装 Tab 补全..."
 "${INSTALL_DIR}/ttmux" completion 2>/dev/null || true
 
-# 浏览器自动化依赖（ttmux-chrome —— Playwright over CDP）
+# 浏览器自动化依赖（chrome —— Playwright over CDP）
 # connectOverCDP 复用已开的 Chrome，不下载额外浏览器，仅装 playwright-core。
-if [[ -x "${INSTALL_DIR}/ttmux-chrome" ]]; then
+if [[ -x "${INSTALL_DIR}/chrome" ]]; then
     if command -v node &>/dev/null && command -v npm &>/dev/null; then
-        step "安装 ttmux-chrome 依赖 (playwright-core)..."
-        "${INSTALL_DIR}/ttmux-chrome" setup || echo -e "   ${dim}稍后可手动重试: ttmux-chrome setup${reset}"
+        step "安装 chrome 依赖 (playwright-core)..."
+        "${INSTALL_DIR}/chrome" setup || echo -e "   ${dim}稍后可手动重试: chrome setup${reset}"
     else
-        echo -e "  ${dim}⚠ 未检测到 node/npm，跳过 ttmux-chrome 依赖（装好后运行: ttmux-chrome setup）${reset}"
+        echo -e "  ${dim}⚠ 未检测到 node/npm，跳过 chrome 依赖（装好后运行: chrome setup）${reset}"
     fi
 fi
 

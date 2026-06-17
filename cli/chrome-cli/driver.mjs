@@ -1,5 +1,5 @@
-// ttmux-chrome driver — Playwright over CDP。
-// 由 cli/chrome-cli/build.sh 内联进 launcher 生成根目录 ttmux-chrome；本文件是真源，改这里。
+// chrome driver — Playwright over CDP。
+// 由 cli/chrome-cli/build.sh 内联进 launcher 生成根目录 chrome；本文件是真源，改这里。
 // 用法: node driver.mjs <verb> [args] [--tab N|--url 子串] [--timeout ms] [--cdp 地址]
 import { chromium } from 'playwright-core'
 
@@ -30,7 +30,7 @@ const to = Number(flags.timeout || 15000)
 const pick = () => {
   if (flags.tab != null) return pages[Number(flags.tab)] || die('无此 tab #' + flags.tab)
   if (flags.url) return pages.find((x) => x.url().includes(flags.url)) || die('无匹配 url 的 tab: ' + flags.url)
-  return pages[0] || die('当前没有打开的 tab（先 ttmux-chrome new <url>）')
+  return pages[0] || die('当前没有打开的 tab（先 chrome new <url>）')
 }
 
 try {

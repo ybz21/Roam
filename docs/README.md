@@ -12,6 +12,7 @@
 - [蜂群编排设计](./design/蜂群编排设计.md) — swarm / member / master / 依赖门控
 - [蜂群广场与看板设计](./design/蜂群广场与看板设计.md) — Plaza（消息流）+ Board（看板）
 - [蜂群 Web 接入设计](./design/蜂群%20Web%20接入设计.md) — 蜂群在 Web 端的映射
+- [蜂群成员启动与提示词模板设计](./design/蜂群成员启动与提示词模板设计.md) — claude/codex 引擎 · master/worker 角色 · 提示词模板（Go text/template）
 - [web/](./design/web/) — Web 控制台完整设计（总览 / 后端 / 认证 / 前端 / 逐页面 / 路线图）
 - [mockups/](./design/mockups/) — 静态原型
 
@@ -19,5 +20,5 @@
 
 - 根 [README](../README.md) ｜ [README.zh-CN](../README.zh-CN.md)
 - CLI 源码说明 [`cli/ttmux-cli/README.md`](../cli/ttmux-cli/README.md) — `ttmux` 主命令
-- 浏览器自动化 CLI [`cli/chrome-cli/README.md`](../cli/chrome-cli/README.md) — `ttmux-chrome`（Playwright over CDP）
+- 浏览器自动化 CLI [`cli/chrome-cli/README.md`](../cli/chrome-cli/README.md) — `chrome`（Playwright over CDP）
 - Web 后端说明 [`backend/README.md`](../backend/README.md)

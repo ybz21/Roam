@@ -162,24 +162,24 @@ ttmux swarm adopt login                 # 让 cc 主控来监督
 
 任何无法识别的命令都会直接转发给 `tmux`。
 
-### 浏览器自动化 —— `ttmux-chrome`
+### 浏览器自动化 —— `chrome`
 
-`ttmux-chrome` 是**独立 CLI**（与 `ttmux` 平级，不是子命令），用 **Playwright**
+`chrome` 是**独立 CLI**（与 `ttmux` 平级，不是子命令），用 **Playwright**
 （`connectOverCDP`）通过 CDP 驱动 Chrome，接的是 Web 控制台镜像的那台全局 Chrome
 ——**自动化能在「浏览器」标签里实时围观**。依赖很轻：`npm i playwright-core`
 （不下载自带浏览器），`install.sh` 自动装好。
 
 ```bash
-ttmux-chrome goto https://example.com
-ttmux-chrome fill "#q" "hello" && ttmux-chrome press "#q" Enter
-ttmux-chrome text h1
-ttmux-chrome eval "document.title"
-ttmux-chrome screenshot shot.png --full
+chrome goto https://example.com
+chrome fill "#q" "hello" && chrome press "#q" Enter
+chrome text h1
+chrome eval "document.title"
+chrome screenshot shot.png --full
 ```
 
 动词：`goto / click / fill / type / press / text / html / attr / eval / wait /
 screenshot / pdf / tabs / new / close`。选项 `--tab N` / `--url <子串>` 选标签页；
-`--timeout <ms>`、`--cdp <地址>`。完整列表见 `ttmux-chrome help`，源码见
+`--timeout <ms>`、`--cdp <地址>`。完整列表见 `chrome help`，源码见
 [`cli/chrome-cli/`](cli/chrome-cli/)。
 
 ## 给 AI Agent 用

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 #
-# cli/chrome-cli/build.sh — 把 driver.mjs 内联进 launcher.sh，生成单文件 仓库根/ttmux-chrome
+# cli/chrome-cli/build.sh — 把 driver.mjs 内联进 launcher.sh，生成单文件 仓库根/chrome
 #
-# 开发时改 driver.mjs / launcher.sh，然后跑本脚本重新生成根目录的 ttmux-chrome。
-# 根 ttmux-chrome 是生成物，请勿手改。
+# 开发时改 driver.mjs / launcher.sh，然后跑本脚本重新生成根目录的 chrome。
+# 根 chrome 是生成物，请勿手改。
 #
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-OUT="${SCRIPT_DIR}/../../ttmux-chrome"   # 仓库根（cli/chrome-cli → ../../）
+OUT="${SCRIPT_DIR}/../../chrome"   # 仓库根（cli/chrome-cli → ../../）
 
 [[ -f "${SCRIPT_DIR}/launcher.sh" ]] || { echo "✘ 缺少 launcher.sh"; exit 1; }
 [[ -f "${SCRIPT_DIR}/driver.mjs"  ]] || { echo "✘ 缺少 driver.mjs"; exit 1; }
@@ -26,5 +26,5 @@ chmod +x "$OUT"
 if bash -n "$OUT"; then
     echo "✔ 已生成 $(realpath --relative-to="${SCRIPT_DIR}/../.." "$OUT")  ($(wc -l < "$OUT") 行)"
 else
-    echo "✘ 生成的 ttmux-chrome 语法检查失败"; exit 1
+    echo "✘ 生成的 chrome 语法检查失败"; exit 1
 fi
