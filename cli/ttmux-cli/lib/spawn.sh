@@ -23,7 +23,7 @@ _spawn_one() {
 
     local run_cmd
     if [[ "$type" == "agent" ]]; then
-        run_cmd=$(_agent_claude_cmd "$payload")
+        run_cmd=$(_agent_cmd "$payload")   # 按 AGENT_KIND 选 claude / codex
     else
         run_cmd="$payload"
     fi

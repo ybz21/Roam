@@ -4,6 +4,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -44,16 +45,77 @@ func (a *API) SwarmAddMember(c *gin.Context) {
 		Deps  string `json:"deps"`
 		Model string `json:"model"`
 		Perm  string `json:"perm"`
+		Kind  string `json:"kind"` // claude(默认) | codex
+		Role  string `json:"role"` // master | worker（空=后端按"首个 agent 成员→master"决定）
 	}
 	if err := c.ShouldBindJSON(&b); err != nil || strings.TrimSpace(b.Name) == "" || strings.TrimSpace(b.Task) == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
 		return
 	}
+	n := c.Param("n")
 	typ := b.Type
 	if typ == "" {
 		typ = "agent"
 	}
-	args := []string{"swarm", "add", c.Param("n"), b.Name, "--type", typ}
+	kind := b.Kind
+	if kind == "" {
+		kind = "claude"
+	}
+
+	// 查蜂群状态：取 goal / 现有成员 / 是否已有 master
+	var st struct {
+		Goal    string `json:"goal"`
+		Members []struct {
+			Name string `json:"name"`
+			Role string `json:"role"`
+		} `json:"members"`
+	}
+	if out, err := a.TT.Run("swarm", "status", n, "--json"); err == nil {
+		_ = json.Unmarshal([]byte(out), &st)
+	}
+
+	role := b.Role
+	if role == "" {
+		hasMaster := false
+		for _, m := range st.Members {
+			if m.Role == "master" {
+				hasMaster = true
+				break
+			}
+		}
+		if typ == "agent" && !hasMaster {
+			role = "master"
+		} else {
+			role = "worker"
+		}
+	}
+
+	// agent 成员：按角色渲染提示词模板，把原始任务包成完整 prompt（含 skill/swarm 协作格式）
+	task := b.Task
+	if typ == "agent" {
+		var peers []string
+		var masterName string
+		for _, m := range st.Members {
+			if m.Name != b.Name {
+				peers = append(peers, m.Name)
+			}
+			if m.Role == "master" {
+				masterName = m.Name
+			}
+		}
+		if p := renderMemberPrompt(promptCtx{
+			Swarm: n, Goal: st.Goal, Member: b.Name, Role: role, Kind: kind,
+			Task: b.Task, Deps: b.Deps, Workdir: b.Dir, SkillsDir: skillsDir(),
+			MasterName: masterName, Peers: peers,
+		}); p != "" {
+			task = p
+		}
+	}
+
+	args := []string{"swarm", "add", n, b.Name, "--type", typ}
+	if typ == "agent" {
+		args = append(args, "--kind", kind, "--role", role)
+	}
 	if b.Dir != "" {
 		args = append(args, "--dir", b.Dir)
 	}
@@ -66,7 +128,7 @@ func (a *API) SwarmAddMember(c *gin.Context) {
 	if b.Perm != "" {
 		args = append(args, "--perm", b.Perm)
 	}
-	args = append(args, b.Task)
+	args = append(args, task)
 	a.text(c, args...)
 }
 

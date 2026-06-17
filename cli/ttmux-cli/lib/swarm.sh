@@ -73,10 +73,18 @@ _swarm_done_list() {
 # _swarm_pending_set <群> <成员> <type> <payload> <workdir> <model> <perm>
 _swarm_pending_set() {
     local db; db=$(_swarm_db_of "$1") || return 1
-    sqlite3 "$db" "INSERT INTO members(name,type,task,workdir,model,perm,pending)
-        VALUES('$(_sqe "$2")','$(_sqe "$3")','$(_sqe "$4")','$(_sqe "$5")','$(_sqe "$6")','$(_sqe "$7")',1)
+    sqlite3 "$db" "INSERT INTO members(name,type,task,workdir,model,perm,kind,role,pending)
+        VALUES('$(_sqe "$2")','$(_sqe "$3")','$(_sqe "$4")','$(_sqe "$5")','$(_sqe "$6")','$(_sqe "$7")','$(_sqe "${8:-claude}")','$(_sqe "${9:-worker}")',1)
         ON CONFLICT(name) DO UPDATE SET type=excluded.type,task=excluded.task,
-            workdir=excluded.workdir,model=excluded.model,perm=excluded.perm,pending=1;"
+            workdir=excluded.workdir,model=excluded.model,perm=excluded.perm,kind=excluded.kind,role=excluded.role,pending=1;"
+}
+
+# 蜂群里是否已有 master 成员
+_swarm_has_master() {
+    local db; db=$(_swarm_db_of "$1" 2>/dev/null) || return 1
+    [[ -n "$db" ]] || return 1
+    local n; n=$(sqlite3 "$db" "SELECT COUNT(*) FROM members WHERE role='master';" 2>/dev/null || echo 0)
+    [[ "${n:-0}" -gt 0 ]]
 }
 _swarm_pending_clear() {
     local db; db=$(_swarm_db_of "$1") || return 1
@@ -123,15 +131,17 @@ _swarm_deps_satisfied() {
 _swarm_spawn_pending() {
     local swarm="$1" member="$2"
     local db; db=$(_swarm_db_of "$swarm") || return 1
-    local type task workdir model perm
+    local type task workdir model perm kind
     type=$(sqlite3 "$db" "SELECT IFNULL(type,'agent') FROM members WHERE name='$(_sqe "$member")';")
     task=$(sqlite3 "$db" "SELECT IFNULL(task,'') FROM members WHERE name='$(_sqe "$member")';")
     workdir=$(sqlite3 "$db" "SELECT IFNULL(workdir,'') FROM members WHERE name='$(_sqe "$member")';")
     model=$(sqlite3 "$db" "SELECT IFNULL(model,'') FROM members WHERE name='$(_sqe "$member")';")
     perm=$(sqlite3 "$db" "SELECT IFNULL(perm,'') FROM members WHERE name='$(_sqe "$member")';")
+    kind=$(sqlite3 "$db" "SELECT IFNULL(kind,'claude') FROM members WHERE name='$(_sqe "$member")';")
     if [[ "$type" == "agent" ]]; then
         _agent_defaults
         AGENT_WORKDIR="$workdir"
+        AGENT_KIND="${kind:-claude}"
         [[ -n "$model" ]] && AGENT_MODEL="$model"
         [[ -n "$perm" ]]  && AGENT_PERMISSION="$perm"
     fi
@@ -235,7 +245,7 @@ _swarm_add() {
     fi
     [[ -n "$member" ]] || { msg_err "成员名不能为空"; return 1; }
 
-    local type="agent" workdir model="" perm="" deps="" payload_parts=()
+    local type="agent" workdir model="" perm="" deps="" kind="claude" role="" payload_parts=()
     _agent_defaults
     workdir="$AGENT_WORKDIR"
     while [[ $# -gt 0 ]]; do
@@ -245,6 +255,8 @@ _swarm_add() {
             --model)      model="$2"; shift 2 ;;
             --perm)       perm="$2"; shift 2 ;;
             --depends-on) deps="$2"; shift 2 ;;
+            --kind)       kind="$2"; shift 2 ;;   # 引擎: claude(默认) | codex
+            --role)       role="$2"; shift 2 ;;   # 角色: master | worker（空=自动）
             *)            payload_parts+=("$1"); shift ;;
         esac
     done
@@ -257,38 +269,47 @@ _swarm_add() {
         msg_err "--type 只能是 task 或 agent"
         return 1
     fi
+    if [[ "$type" == "agent" && "$kind" != "claude" && "$kind" != "codex" ]]; then
+        msg_err "--kind 只能是 claude 或 codex"
+        return 1
+    fi
+    # 角色默认: 首个 agent 成员 → master，其余 worker（task 类成员一律 worker）
+    if [[ -z "$role" ]]; then
+        if [[ "$type" == "agent" ]] && ! _swarm_has_master "$swarm"; then role="master"; else role="worker"; fi
+    fi
 
     # 记录依赖（供 status 展示 + 门控判断）
     [[ -n "$deps" ]] && _swarm_dep_set "$swarm" "$member" "$deps"
 
     # 依赖门控：有依赖且未满足 -> 挂起为 pending，不立即 spawn
     if [[ -n "$deps" ]] && ! _swarm_deps_satisfied "$swarm" "$member"; then
-        _swarm_pending_set "$swarm" "$member" "$type" "$payload" "$workdir" "$model" "$perm"
+        _swarm_pending_set "$swarm" "$member" "$type" "$payload" "$workdir" "$model" "$perm" "$kind" "$role"
         _swarm_meta_set "$swarm" status "running"
         local suffix=""; (( ${#payload} > 60 )) && suffix="..."
-        msg_info "成员 ${bold}${member}${reset} (${type}) ${yellow}已挂起${reset}: ${dim}${payload:0:60}${suffix}${reset}"
+        msg_info "成员 ${bold}${member}${reset} (${type}/${role}) ${yellow}已挂起${reset}: ${dim}${payload:0:60}${suffix}${reset}"
         echo -e "   ${dim}等待依赖完成: ${deps}  (依赖满足后自动解锁，或 ttmux swarm activate ${swarm})${reset}"
         return 0
     fi
 
-    # agent 成员: 设置 AGENT_* 供 _agent_claude_cmd 使用
+    # agent 成员: 设置 AGENT_* 供 _agent_cmd 使用（含引擎 kind）
     if [[ "$type" == "agent" ]]; then
         AGENT_WORKDIR="$workdir"
+        AGENT_KIND="$kind"
         [[ -n "$model" ]] && AGENT_MODEL="$model"
         [[ -n "$perm" ]]  && AGENT_PERMISSION="$perm"
     fi
 
-    # 成员 = 任务组 <swarm> 的会话；底层类型 agent 走 claude，task 走 shell
+    # 成员 = 任务组 <swarm> 的会话；底层类型 agent 走 claude/codex，task 走 shell
     if _spawn_one "$swarm" "$member" "$type" "$payload" "$workdir"; then
         # 登记成员行(非挂起)，供 done/状态追踪
         local mdb; mdb=$(_swarm_db_of "$swarm") || true
-        [[ -n "$mdb" ]] && sqlite3 "$mdb" "INSERT INTO members(name,type,task,workdir,model,perm,pending,done)
-            VALUES('$(_sqe "$member")','$(_sqe "$type")','$(_sqe "$payload")','$(_sqe "$workdir")','$(_sqe "$model")','$(_sqe "$perm")',0,0)
+        [[ -n "$mdb" ]] && sqlite3 "$mdb" "INSERT INTO members(name,type,task,workdir,model,perm,kind,role,pending,done)
+            VALUES('$(_sqe "$member")','$(_sqe "$type")','$(_sqe "$payload")','$(_sqe "$workdir")','$(_sqe "$model")','$(_sqe "$perm")','$(_sqe "$kind")','$(_sqe "$role")',0,0)
             ON CONFLICT(name) DO UPDATE SET type=excluded.type,task=excluded.task,
-                workdir=excluded.workdir,model=excluded.model,perm=excluded.perm,pending=0;"
+                workdir=excluded.workdir,model=excluded.model,perm=excluded.perm,kind=excluded.kind,role=excluded.role,pending=0;"
         _swarm_meta_set "$swarm" status "running"
         local suffix=""; (( ${#payload} > 60 )) && suffix="..."
-        msg_ok "成员 ${bold}${member}${reset} (${type}): ${dim}${payload:0:60}${suffix}${reset}"
+        msg_ok "成员 ${bold}${member}${reset} (${type}/${kind}/${role}): ${dim}${payload:0:60}${suffix}${reset}"
         [[ -n "$deps" ]] && echo -e "   ${dim}依赖: ${deps} (已满足)${reset}"
         return 0
     fi
@@ -373,10 +394,10 @@ _swarm_status_json() {
         "$(_jesc "$name")" "$(_jesc "$goal")" "$(_jesc "$status")" "$(_jesc "$sup")" "$(_jesc "$created")"
     local first=1
     if [[ -n "$db" ]]; then
-        local rows mname mtype mtask mdeps mdone
+        local rows mname mtype mtask mdeps mdone mkind mrole
         rows=$(sqlite3 -separator $'\x1f' "$db" \
-            "SELECT name,IFNULL(type,'agent'),IFNULL(task,''),IFNULL(deps,''),IFNULL(done,0) FROM members WHERE IFNULL(pending,0)=0 ORDER BY name;")
-        while IFS=$'\x1f' read -r mname mtype mtask mdeps mdone; do
+            "SELECT name,IFNULL(type,'agent'),IFNULL(task,''),IFNULL(deps,''),IFNULL(done,0),IFNULL(kind,'claude'),IFNULL(role,'worker') FROM members WHERE IFNULL(pending,0)=0 ORDER BY name;")
+        while IFS=$'\x1f' read -r mname mtype mtask mdeps mdone mkind mrole; do
             [[ -n "$mname" ]] || continue
             local sess="${name}-${mname}" lst="exited"
             if _session_exists "$sess"; then
@@ -385,8 +406,8 @@ _swarm_status_json() {
             elif [[ -f "${TTMUX_LOGS}/${sess}.log" ]]; then lst="done"; fi
             (( first )) || printf ','
             first=0
-            printf '{"name":"%s","type":"%s","task":"%s","deps":"%s","done":%s,"status":"%s","session":"%s"}' \
-                "$(_jesc "$mname")" "$(_jesc "$mtype")" "$(_jesc "$mtask")" "$(_jesc "$mdeps")" "${mdone:-0}" "$lst" "$(_jesc "$sess")"
+            printf '{"name":"%s","type":"%s","task":"%s","deps":"%s","done":%s,"kind":"%s","role":"%s","status":"%s","session":"%s"}' \
+                "$(_jesc "$mname")" "$(_jesc "$mtype")" "$(_jesc "$mtask")" "$(_jesc "$mdeps")" "${mdone:-0}" "$(_jesc "$mkind")" "$(_jesc "$mrole")" "$lst" "$(_jesc "$sess")"
         done <<< "$rows"
     fi
     printf '],"pending":['

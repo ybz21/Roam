@@ -22,7 +22,7 @@ const COL_LABEL: Record<Col, string> = { backlog: '待办', assigned: '已派', 
 const COL_COLOR: Record<Col, string> = { backlog: C.fg2, assigned: C.blue, doing: C.amber, review: C.cyan, done: C.green, blocked: C.red }
 
 interface SwarmRow { id: string; name: string; goal: string; status: string; supervisor: string; created: string; total: number; alive: number; pending: number }
-interface Member { name: string; type: string; task: string; deps: string; done: number; status: string; session: string }
+interface Member { name: string; type: string; task: string; deps: string; done: number; status: string; session: string; kind?: string; role?: string }
 interface Pending { name: string; deps: string }
 interface Detail { name: string; goal: string; status: string; supervisor: string; created: string; members: Member[]; pending: Pending[]; done_marked: string[] }
 interface Post { id: number; ts: string; author: string; kind: string; re: number | null; text: string }
@@ -249,22 +249,35 @@ function AddMemberModal({ open, name, members, onClose, onDone }: { open: boolea
   const { message } = AntApp.useApp()
   const [mname, setMname] = useState(''); const [task, setTask] = useState(''); const [type, setType] = useState('agent')
   const [deps, setDeps] = useState<string[]>([]); const [dir, setDir] = useState(''); const [busy, setBusy] = useState(false)
-  useEffect(() => { if (open) { setMname(''); setTask(''); setType('agent'); setDeps([]); setDir('') } }, [open])
+  const [kind, setKind] = useState('claude') // 引擎: claude(默认) | codex
+  useEffect(() => { if (open) { setMname(''); setTask(''); setType('agent'); setDeps([]); setDir(''); setKind('claude') } }, [open])
+  const willBeMaster = type === 'agent' && members.length === 0 // 首个 agent 成员 → master（最终由后端按真实状态裁定）
   const ok = async () => {
     if (!mname.trim()) return message.error('需要成员名')
     if (!task.trim()) return message.error(type === 'agent' ? '需要任务描述' : '需要命令')
     setBusy(true)
     try {
-      await api('POST', `/swarms/${encodeURIComponent(name)}/members`, { name: mname.trim(), type, task: task.trim(), deps: deps.join(','), dir: dir.trim() })
+      await api('POST', `/swarms/${encodeURIComponent(name)}/members`, { name: mname.trim(), type, task: task.trim(), deps: deps.join(','), dir: dir.trim(), kind })
       message.success(deps.length ? `成员 ${mname} 已挂起（等依赖）` : `成员 ${mname} 已启动`)
       onClose(); onDone()
     } catch (e: any) { message.error(e.message) } finally { setBusy(false) }
   }
   return (
-    <Modal open={open} onCancel={onClose} onOk={ok} okText="加成员" confirmLoading={busy} title="加成员（一个 cc 会话）" destroyOnClose>
+    <Modal open={open} onCancel={onClose} onOk={ok} okText="加成员" confirmLoading={busy} title="加成员" destroyOnClose>
       <Space direction="vertical" style={{ width: '100%' }}>
         <Segmented block value={type} onChange={(v) => setType(v as string)}
-          options={[{ label: '🤖 Agent (Claude)', value: 'agent' }, { label: '⌨️ 命令', value: 'task' }]} />
+          options={[{ label: '🤖 Agent', value: 'agent' }, { label: '⌨️ 命令', value: 'task' }]} />
+        {type === 'agent' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ color: C.fg2, fontSize: 12, whiteSpace: 'nowrap' }}>引擎</span>
+            <Segmented value={kind} onChange={(v) => setKind(v as string)}
+              options={[{ label: '🤖 Claude', value: 'claude' }, { label: '✦ Codex', value: 'codex' }]} />
+            <span style={{ flex: 1 }} />
+            <Tag color={willBeMaster ? 'magenta' : 'default'} bordered={false}>
+              {willBeMaster ? '◆ master（首个）' : 'worker'}
+            </Tag>
+          </div>
+        )}
         <Input placeholder="成员名，如 api / ui" value={mname} onChange={(e) => setMname(e.target.value)} autoFocus />
         <Input.TextArea rows={2} placeholder={type === 'agent' ? '任务描述，如：实现登录 API（注册/登录/JWT）' : 'shell 命令'} value={task} onChange={(e) => setTask(e.target.value)} />
         {type === 'agent' && <Input placeholder="工作目录（可空）" value={dir} onChange={(e) => setDir(e.target.value)} />}
@@ -297,7 +310,8 @@ function Topology({ detail, swarm, focus, onNode }: { detail: Detail | null; swa
     <Panel title={<><span>拓扑 · 实时依赖图</span></>} extra={<span style={{ fontSize: 11, color: C.fg3 }}>点节点 → 进终端/联动</span>}>
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 8 }}>
         {layout.nodes.length === 0 ? <Empty description="还没有成员（点右上「+ 成员」添加）" image={Empty.PRESENTED_IMAGE_SIMPLE} /> : (
-          <svg width="100%" viewBox={`0 0 ${layout.w} ${layout.h}`} preserveAspectRatio="xMidYMin meet" style={{ minHeight: 260 }}>
+          <svg viewBox={`0 0 ${layout.w} ${layout.h}`} width={layout.w} height={layout.h} preserveAspectRatio="xMidYMin meet"
+            style={{ display: 'block', margin: '0 auto', maxWidth: '100%', height: 'auto', minHeight: 260 }}>
             <defs>
               <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill={C.green} /></marker>
             </defs>
@@ -316,8 +330,8 @@ function Topology({ detail, swarm, focus, onNode }: { detail: Detail | null; swa
                   <rect x={n.x} y={n.y} width={n.w} height={n.h} rx={10}
                     fill={col + (n.kind === 'done' ? '22' : '12')} stroke={col} strokeWidth={n.role === 'master' ? 1.6 : 1.4}
                     strokeDasharray={n.kind === 'pending' ? '6 4' : undefined} />
-                  <text x={n.x + 14} y={n.y + 21} fontSize={12} fontWeight={600} fill={n.role === 'master' ? col : C.fg}>{nodeIcon(n)} {n.name}</text>
-                  <text x={n.x + 14} y={n.y + 38} fontSize={11} fill={col}>{nodeSub(n)}</text>
+                  <text x={n.x + 14} y={n.y + 21} fontSize={12} fontWeight={600} fill={n.role === 'master' ? col : C.fg}>{nodeIcon(n)} {n.mrole === 'master' ? '◆ ' : ''}{n.name}</text>
+                  <text x={n.x + 14} y={n.y + 38} fontSize={11} fill={col}>{nodeSub(n)}{n.mkind === 'codex' ? ' · codex' : ''}</text>
                 </g>
               )
             })}
@@ -350,10 +364,11 @@ function nodeSub(n: any) {
 function buildLayout(detail: Detail | null, swarm: string) {
   const NW = 132, NH = 50, GX = 26, GY = 64, TOP = 12, MASTER_H = 46
   if (!detail) return { nodes: [], edges: [], w: 400, h: 280 }
-  type N = { name: string; role: 'master' | 'member' | 'pending'; kind: string; deps: string; session: string; x: number; y: number; w: number; h: number }
+  type N = { name: string; role: 'master' | 'member' | 'pending'; kind: string; deps: string; session: string; x: number; y: number; w: number; h: number; mrole?: string; mkind?: string }
   const members = detail.members.map((m) => ({
     name: m.name, role: 'member' as const, deps: m.deps, session: m.session,
     kind: m.done ? 'done' : m.status === 'running' ? 'running' : m.status === 'done' ? 'done' : 'exited',
+    mrole: m.role, mkind: m.kind, // 成员级 角色(master/worker) 与 引擎(claude/codex)
   }))
   const pendings = detail.pending.map((p) => ({ name: p.name, role: 'pending' as const, deps: p.deps, session: `${swarm}-${p.name}`, kind: 'pending' }))
   const all = [...members, ...pendings]

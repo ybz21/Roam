@@ -65,21 +65,29 @@ _swarm_db()      { echo "$(_swarm_home "$1")/swarm.db"; }
 _swarm_logsdir() { echo "$(_swarm_home "$1")/logs"; }
 _swarm_db_init() {
     local id="$1" db; db=$(_swarm_db "$id")
-    [[ -f "$db" ]] && return 0
-    mkdir -p "$(_swarm_logsdir "$id")"
-    sqlite3 "$db" >/dev/null "
-        PRAGMA journal_mode=WAL;
-        CREATE TABLE IF NOT EXISTS members(
-            name TEXT PRIMARY KEY, type TEXT, task TEXT, workdir TEXT,
-            status TEXT, deps TEXT, done INT DEFAULT 0, pending INT DEFAULT 0,
-            model TEXT, perm TEXT);
-        CREATE TABLE IF NOT EXISTS posts(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ts TEXT, author TEXT, kind TEXT, re INTEGER, text TEXT);
-        CREATE TABLE IF NOT EXISTS cards(
-            id TEXT PRIMARY KEY, title TEXT, descr TEXT, assignee TEXT,
-            col TEXT DEFAULT 'backlog', deps TEXT, created TEXT, updated TEXT);
-    "
+    if [[ ! -f "$db" ]]; then
+        mkdir -p "$(_swarm_logsdir "$id")"
+        sqlite3 "$db" >/dev/null "
+            PRAGMA journal_mode=WAL;
+            CREATE TABLE IF NOT EXISTS members(
+                name TEXT PRIMARY KEY, type TEXT, task TEXT, workdir TEXT,
+                status TEXT, deps TEXT, done INT DEFAULT 0, pending INT DEFAULT 0,
+                model TEXT, perm TEXT,
+                kind TEXT DEFAULT 'claude',   -- 引擎: claude | codex
+                role TEXT DEFAULT 'worker');  -- 角色: master | worker
+            CREATE TABLE IF NOT EXISTS posts(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts TEXT, author TEXT, kind TEXT, re INTEGER, text TEXT);
+            CREATE TABLE IF NOT EXISTS cards(
+                id TEXT PRIMARY KEY, title TEXT, descr TEXT, assignee TEXT,
+                col TEXT DEFAULT 'backlog', deps TEXT, created TEXT, updated TEXT);
+        "
+    fi
+    # 迁移: 旧库补列(kind/role)，幂等
+    local info; info=$(sqlite3 "$db" "PRAGMA table_info(members);" 2>/dev/null || echo)
+    grep -q '|kind|' <<<"$info" || sqlite3 "$db" "ALTER TABLE members ADD COLUMN kind TEXT DEFAULT 'claude';" 2>/dev/null || true
+    grep -q '|role|' <<<"$info" || sqlite3 "$db" "ALTER TABLE members ADD COLUMN role TEXT DEFAULT 'worker';" 2>/dev/null || true
+    return 0
 }
 
 # name 或 id -> id（id 直接返回；name 查 meta.db；查不到回空串）

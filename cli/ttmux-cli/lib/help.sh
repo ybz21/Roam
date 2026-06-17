@@ -34,7 +34,7 @@ show_help() {
 
   ${bold}蜂群编排 ${magenta}(swarm — 有目标的任务组, 可被 cc 接管)${reset}
     ${green}swarm new${reset}    ${dim}<名> [--goal "..."] [--no-master]${reset}  新建蜂群(默认自带 cc 指挥, --no-master 跳过)
-    ${green}swarm add${reset}    ${dim}<群> <成员> --type task|agent ...${reset}  加成员
+    ${green}swarm add${reset}    ${dim}<群> <成员> --type task|agent [--kind claude|codex] [--role master|worker] ...${reset}  加成员(首个 agent 默认 master)
                 ${dim}[--dir/--perm/--model] [--depends-on a,b] <命令或任务>${reset}
     ${green}swarm ls${reset}     ${dim}[--json]${reset}                    列出蜂群 (目标/状态/指挥)
     ${green}swarm status${reset} ${dim}<群> [--json]${reset}             成员/依赖/挂起 + 看板摘要 + 广场最近
@@ -51,7 +51,7 @@ show_help() {
     ${green}swarm adopt${reset}  ${dim}<群> [--by <cc会话>]${reset}     cc 接管 (拉起指挥会话)
     ${green}swarm archive${reset}|${green}rm${reset} ${dim}<群>${reset}             归档 / 删除
 
-  ${dim}浏览器自动化是独立命令 ${reset}${green}ttmux-chrome${reset}${dim}（Playwright over CDP）—— ttmux-chrome help${reset}
+  ${dim}浏览器自动化是独立命令 ${reset}${green}chrome${reset}${dim}（Playwright over CDP）—— chrome help${reset}
 
   ${bold}窗口 / 窗格${reset}
     ${green}nw${reset}    ${dim}[名称]${reset}                新建窗口

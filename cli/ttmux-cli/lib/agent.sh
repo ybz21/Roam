@@ -6,10 +6,35 @@ TTMUX_AGENT_MARKER=".ttmux-agent"  # 标记文件，放在 session 数据里
 
 _agent_defaults() {
     AGENT_CLAUDE_BIN="${AGENT_CLAUDE_BIN:-$(command -v claude)}"
+    AGENT_CODEX_BIN="${AGENT_CODEX_BIN:-$(command -v codex)}"
+    AGENT_KIND="${AGENT_KIND:-claude}"   # 引擎: claude | codex
     AGENT_PERMISSION="${AGENT_PERMISSION:-dangerously-skip-permissions}"
     AGENT_MODEL="${AGENT_MODEL:-}"
     AGENT_WORKDIR="${AGENT_WORKDIR:-$(pwd)}"
     AGENT_MAX_TURNS="${AGENT_MAX_TURNS:-}"
+}
+
+# 构建 codex 启动命令（非交互 codex exec，prompt 走 stdin heredoc）
+_agent_codex_cmd() {
+    local task="$1"
+    _agent_defaults
+    local cmd="cd '${AGENT_WORKDIR}' && ${AGENT_CODEX_BIN:-codex} exec --skip-git-repo-check"
+    [[ -n "$AGENT_MODEL" ]] && cmd+=" -m ${AGENT_MODEL}"
+    # 默认放开沙箱/审批（与 claude 的 dangerously-skip-permissions 对齐）
+    if [[ "$AGENT_PERMISSION" == "dangerously-skip-permissions" || "$AGENT_PERMISSION" == "auto" ]]; then
+        cmd+=" --dangerously-bypass-approvals-and-sandbox"
+    fi
+    # 使用 heredoc 从 stdin 传入任务，避免引号转义问题（'-' = 读 stdin）
+    cmd+=" - <<'TTMUX_TASK_EOF'
+${task}
+TTMUX_TASK_EOF"
+    echo "$cmd"
+}
+
+# 按 AGENT_KIND 选引擎构建启动命令
+_agent_cmd() {
+    _agent_defaults
+    if [[ "$AGENT_KIND" == "codex" ]]; then _agent_codex_cmd "$1"; else _agent_claude_cmd "$1"; fi
 }
 
 # 构建 claude 启动命令
