@@ -2,7 +2,7 @@
 
 > AI-native tmux wrapper — parallel task orchestration from your terminal.
 
-ttmux wraps tmux with a friendlier interface and adds first-class support for **parallel task execution**, **output capture**, and **multi-agent orchestration**.
+ttmux wraps tmux with a friendlier interface and adds first-class support for **parallel task execution**, **output capture**, **multi-agent orchestration**, and a **swarm** layer with a shared board + plaza — all reachable from the terminal or a **web console**.
 
 ## Why
 
@@ -60,6 +60,20 @@ ttmux collect ci --json
 ttmux group kill ci
 ```
 
+Spawn Claude agents the same way with `--agent`:
+
+```bash
+ttmux spawn --agent refactor \
+  "api"   "重构用户认证模块" \
+  "db"    "优化数据库查询性能" \
+  "tests" "补充单元测试" \
+  --dir ~/project --perm auto
+
+ttmux status refactor                 # progress (commands + agents)
+ttmux send refactor-api "加上 JWT"    # send a follow-up to a running agent
+ttmux collect refactor                # gather all outputs
+```
+
 Or load tasks from a file:
 
 ```bash
@@ -89,27 +103,45 @@ ttmux spawn --file release tasks.txt
 
 | Command | Description |
 |---------|-------------|
-| `ttmux spawn <group> <n1> <c1> ...` | Spawn parallel tasks |
-| `ttmux spawn --file <group> <file>` | Spawn from task file |
-| `ttmux group ls` | List all task groups |
-| `ttmux group status <name>` | Group task status |
-| `ttmux group kill <name>` | Kill all tasks in group |
-| `ttmux status [group] [--json]` | Overview or group status |
+| `ttmux spawn <group> <n1> <c1> ...` | Spawn parallel command tasks |
+| `ttmux spawn --agent <group> <n1> <task1> ...` | Spawn parallel Claude agents |
+| `ttmux spawn [--agent] --file <group> <file>` | Spawn from a task file |
+| `ttmux status [group] [--json]` | Overview or group status (commands + agents) |
 | `ttmux wait <group> [--timeout N]` | Wait for group to finish |
-| `ttmux capture <session> [--lines N]` | Capture pane output |
 | `ttmux collect <group> [--json]` | Collect all task outputs |
+| `ttmux send <session> <msg>` | Send a follow-up to a task/agent |
+| `ttmux group ls` | List all task groups |
+| `ttmux group kill <name>` | Kill all tasks in group |
+| `ttmux capture <session> [--lines N]` | Capture pane output |
 
-### Multi-Agent (Claude)
+Agent options: `--dir <path>` `--model <model>` `--perm <mode>` `--max-turns <N>`.
+Legacy aliases `agent spawn|status|send|collect|kill` still work.
+
+### Swarm
+
+A swarm is a **goal-bearing task group** with dependency gating, a shared **board** (kanban), and a **plaza** (message feed) — and it can be adopted by a `cc` master session for autonomous supervision.
 
 | Command | Description |
 |---------|-------------|
-| `ttmux agent spawn <g> <n> <task> ...` | Launch multiple Claude agents |
-| `ttmux agent status <group>` | Agent group status |
-| `ttmux agent send <session> <msg>` | Send follow-up to an agent |
-| `ttmux agent collect <group> [--json]` | Collect agent outputs |
-| `ttmux agent kill <group>` | Clean up agent group |
+| `ttmux swarm new <name> [--goal "..."] [--no-master]` | Create a swarm (spawns a `cc` master by default) |
+| `ttmux swarm add <swarm> <member> --type task\|agent ... <cmd/task>` | Add a member (`--depends-on a,b` to gate) |
+| `ttmux swarm ls [--json]` | List swarms (goal / status / master) |
+| `ttmux swarm status <swarm> [--json]` | Members, deps, pending + board/plaza summary |
+| `ttmux swarm activate <swarm> [member] [--force]` | Unlock pending members (`--force` ignores deps) |
+| `ttmux swarm done <swarm> [member]` | Mark member done + cascade unlock (no member = whole swarm) |
+| `ttmux swarm collect <swarm> [--json]` | Collect member outputs |
+| `ttmux swarm say / feed / watch <swarm> ...` | Plaza: post / read / follow messages |
+| `ttmux swarm board <swarm> [--json]` | Board overview by column |
+| `ttmux swarm task <add\|ls\|show\|assign\|move\|done\|rm> <swarm> ...` | Manage board cards |
+| `ttmux swarm sql <swarm> [--json] "SELECT ..."` | Read-only query of the swarm's `swarm.db` |
+| `ttmux swarm adopt <swarm> [--by <cc session>]` | Hand the swarm to a `cc` master |
+| `ttmux swarm archive\|rm <swarm>` | Archive / delete |
 
-Options: `--dir <path>` `--model <model>` `--perm <mode>` `--max-turns <N>`
+```bash
+ttmux swarm new login --goal "加登录功能"
+ttmux swarm add login api --type agent "实现登录 API"
+ttmux swarm adopt login                 # let a cc master supervise
+```
 
 ### Window & Pane
 
@@ -140,11 +172,12 @@ ttmux is designed to be called by [Claude Code](https://claude.ai/code) and othe
 
 ```bash
 # Install the skill
-mkdir -p ~/.claude/skills
-cp skills/tmux/SKILL.md ~/.claude/skills/ttmux.md
+mkdir -p ~/.claude/skills/cc-swarm
+cp -r skills/cc-swarm/* ~/.claude/skills/cc-swarm/
 ```
 
-Then use `/ttmux` in Claude Code to decompose tasks into parallel workers.
+The `cc-swarm` skill teaches Claude Code to decompose a goal into a swarm, gate
+members by dependencies, and supervise progress via the board + plaza.
 
 ### JSON Mode
 
@@ -155,6 +188,24 @@ ttmux ls --json
 ttmux status ci --json
 ttmux collect ci --json
 ```
+
+## Web Console
+
+`ttmux-web` is a Go (Gin) + React (Vite + Antd) console — a thin wrapper over the
+CLI (reads proxy `ttmux <cmd> --json`, writes call the matching subcommand). It
+covers sessions / tasks / swarm board + plaza / env, with live xterm.js terminals
+per session and SSE status streaming.
+
+```bash
+./start-all.sh        # build frontend → compile backend → serve
+```
+
+Config via `.env` at the repo root (see `.env.example`); details in
+[`backend/README.md`](backend/README.md).
+
+> ⚠ Default bind is `0.0.0.0:8080` — reachable on your LAN. Use a strong
+> `TTMUX_WEB_PASSWORD`, and tunnel (Tailscale / Cloudflare) for remote access
+> rather than exposing the port directly.
 
 ## How It Works
 
