@@ -57,6 +57,13 @@ case "${1:-}" in
     exec tail -n 100 -f "$LOG" ;;
 esac
 
+# ── 开发模式：把仓库 skills/ 同步到 ~/.claude/skills（生产由 install.sh 装）─
+#   蜂群成员(claude/codex)靠 ~/.claude/skills 自动加载 cc-swarm 协作规范；
+#   开发时没跑 install.sh，这里复用同一套合并逻辑把 skills 拷过去。
+if [ -f skills/sync-skills.sh ]; then
+  bash skills/sync-skills.sh "${TTMUX_SKILLS_DIR:-$HOME/.claude/skills}" || true
+fi
+
 # ── 0. 可选：启动 kanna（Claude Code 精美 UI），并暴露给前端 ─────
 KANNA_PORT="${KANNA_PORT:-3210}"
 if command -v kanna >/dev/null 2>&1; then

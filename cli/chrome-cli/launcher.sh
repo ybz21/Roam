@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# ttmux-chrome — 浏览器自动化 CLI（Playwright over CDP）
+# chrome — 浏览器自动化 CLI（Playwright over CDP）
 # https://github.com/ybz21/ttmux
 #
 # ⚠ 本文件由 cli/chrome-cli/build.sh 生成（driver.mjs 内联进下方占位标记处），请勿手改。
@@ -45,7 +45,7 @@ _setup() {
         ( cd "$CHROME_DIR" \
             && { [ -f package.json ] || npm init -y >/dev/null 2>&1; } \
             && npm i --no-audit --no-fund --loglevel=error playwright-core ) \
-            || { _err "playwright-core 安装失败（可重试: ttmux-chrome setup）"; return 1; }
+            || { _err "playwright-core 安装失败（可重试: chrome setup）"; return 1; }
     fi
     return 0
 }
@@ -73,24 +73,24 @@ _ensure_browser() {
 
 _help() {
     cat <<'EOF'
-ttmux-chrome — 浏览器自动化（Playwright over CDP，驱动 ttmux Web 镜像那台 Chrome）
+chrome — 浏览器自动化（Playwright over CDP，驱动 ttmux Web 镜像那台 Chrome）
 
-  ttmux-chrome setup                     安装/更新依赖 (node + playwright-core)
-  ttmux-chrome goto <url>                打开网址
-  ttmux-chrome click <选择器>            点击
-  ttmux-chrome fill  <选择器> <文本>     填表单（直接设值）
-  ttmux-chrome type  <选择器> <文本>     逐字键入
-  ttmux-chrome press [选择器] <键>       按键（如 Enter / Control+a）
-  ttmux-chrome text  [选择器]            取可见文本（默认 body）
-  ttmux-chrome html  [选择器]            取 HTML（默认整页）
-  ttmux-chrome attr  <选择器> <属性>     取属性值
-  ttmux-chrome eval  "<js>"              页面内执行 JS 并打印返回（JSON）
-  ttmux-chrome wait  <选择器>            等待元素出现
-  ttmux-chrome screenshot [文件] [--full]   截图（默认 screenshot.png）
-  ttmux-chrome pdf   [文件]              导出 PDF（headless）
-  ttmux-chrome tabs                      列出标签页（序号 / 标题 / url）
-  ttmux-chrome new   [url]               新开标签页
-  ttmux-chrome close                     关闭标签页
+  chrome setup                     安装/更新依赖 (node + playwright-core)
+  chrome goto <url>                打开网址
+  chrome click <选择器>            点击
+  chrome fill  <选择器> <文本>     填表单（直接设值）
+  chrome type  <选择器> <文本>     逐字键入
+  chrome press [选择器] <键>       按键（如 Enter / Control+a）
+  chrome text  [选择器]            取可见文本（默认 body）
+  chrome html  [选择器]            取 HTML（默认整页）
+  chrome attr  <选择器> <属性>     取属性值
+  chrome eval  "<js>"              页面内执行 JS 并打印返回（JSON）
+  chrome wait  <选择器>            等待元素出现
+  chrome screenshot [文件] [--full]   截图（默认 screenshot.png）
+  chrome pdf   [文件]              导出 PDF（headless）
+  chrome tabs                      列出标签页（序号 / 标题 / url）
+  chrome new   [url]               新开标签页
+  chrome close                     关闭标签页
 
   通用选项: --tab <序号> | --url <子串>  选目标标签页（默认第一个）
             --timeout <ms>（默认 15000）  --cdp <地址>
@@ -102,7 +102,7 @@ EOF
 sub="${1:-help}"
 case "$sub" in
     help|-h|--help) _help; exit 0 ;;
-    -v|--version)   echo "ttmux-chrome v${TTMUX_CHROME_VERSION}"; exit 0 ;;
+    -v|--version)   echo "chrome v${TTMUX_CHROME_VERSION}"; exit 0 ;;
     setup)          _setup; exit $? ;;
 esac
 

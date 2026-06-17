@@ -8,6 +8,7 @@ description: >
 user-invocable: true
 allowed-tools:
   - Bash(ttmux *)
+  - Bash(chrome *)
   - Bash(tmux *)
   - Bash(sleep *)
   - Bash(ps *)
@@ -43,6 +44,17 @@ cc-swarm 同时是 **包工头** 和 **监护人**：
 2. **监护人（supervisory）** — 子会话跑起来后，持续巡检：审批、催测试、review、调度、集成。
 
 一次完整的运行就是从角色 1 平滑过渡到角色 2。
+
+## 可用 CLI 工具
+
+蜂群里能用的命令行工具（都在 `~/.local/bin/`），你和成员都可调用：
+
+| CLI | 用处 |
+|-----|------|
+| **`ttmux`** | 会话 / 任务 / 蜂群编排：建群、加成员、广场（`swarm say` / `swarm feed`）、看板（`swarm task …`）、`swarm done` / `activate` / `collect`。完整用法见 **ttmux** skill。 |
+| **`chrome`** | 浏览器自动化（Playwright over CDP）：`goto` / `click` / `fill` / `text` / `eval` / `screenshot` / `tabs` …。**验收 Web 类成果时用它真跑一遍**（打开页面、点按钮、读文本断言），比只读代码可靠。用法 `chrome help`。 |
+
+派活给成员时，对 Web 任务可在描述里点名："完成后用 `chrome` 自检页面（打开、点按钮、断言文本）"。
 
 ## 全生命周期
 

@@ -30,8 +30,8 @@ ttmux 有 **两种使用模式**，按需取用，也可叠加：
 | `sqlite3` | 蜂群 swarm 的元数据库 | 仅 `swarm` 子命令不可用 | `apt install sqlite3` / `brew install sqlite3` |
 | Claude Code | `spawn --agent` / 蜂群成员 | 仅 Agent 类任务不可用 | 见 [claude.ai/code](https://claude.ai/code) |
 | `go` ≥ 1.21 | 编译 Web 后端 | Web 控制台起不来 | [go.dev/dl](https://go.dev/dl/) |
-| `node` ≥ 18 + `npm` | 构建 Web 前端 + `ttmux-chrome` 自动化 | Web 控制台起不来 / `ttmux-chrome` 不可用 | [nodejs.org](https://nodejs.org/) |
-| `google-chrome` | 浏览器镜像页 + `ttmux-chrome` 自动化 | 「浏览器」标签 / `ttmux-chrome` 不可用 | 系统包管理器 |
+| `node` ≥ 18 + `npm` | 构建 Web 前端 + `chrome` 自动化 | Web 控制台起不来 / `chrome` 不可用 | [nodejs.org](https://nodejs.org/) |
+| `google-chrome` | 浏览器镜像页 + `chrome` 自动化 | 「浏览器」标签 / `chrome` 不可用 | 系统包管理器 |
 | `kanna` | Claude Code 精美 UI（可选） | 任务页少一个入口 | 自行安装 |
 
 ---
@@ -47,7 +47,7 @@ curl -fsSL https://raw.githubusercontent.com/ybz21/ttmux/main/install.sh | bash
 脚本会：
 
 - 把 `ttmux` 装到 `~/.local/bin/ttmux`；
-- 把 `ttmux-chrome`（浏览器自动化 CLI）装到 `~/.local/bin/`，并按需 `npm i playwright-core`；
+- 把 `chrome`（浏览器自动化 CLI）装到 `~/.local/bin/`，并按需 `npm i playwright-core`；
 - 把 Claude Code skills 装到 `~/.claude/skills/`（`ttmux.md`、`cc-swarm.md`）；
 - 创建数据目录 `~/.local/share/ttmux/{logs,groups}`；
 - 安装 Tab 补全。
@@ -297,20 +297,20 @@ bindPort = 13579        # 映射到本机
 - 已有 Chrome 跑在该端口（如 Agent 自己起的）则直接附着，不重复拉起。
 - 想清晰一点/省带宽一点，调 `TTMUX_CHROME_SCALE`。
 
-### 浏览器自动化 —— `ttmux-chrome`（独立 CLI）
+### 浏览器自动化 —— `chrome`（独立 CLI）
 
-`ttmux-chrome` 是 ttmux 家族里**独立的浏览器自动化 CLI**（不是 `ttmux` 子命令），引擎是 **Playwright over CDP**。它 `connectOverCDP` 接的就是上面那台全局 Chrome（`TTMUX_CHROME_CDP`），所以**自动化能在 Web「浏览器」标签里实时围观**；没起 web 后端时，本命令也会按同一套 flag 自己拉起 Chrome。
+`chrome` 是 ttmux 家族里**独立的浏览器自动化 CLI**（不是 `ttmux` 子命令），引擎是 **Playwright over CDP**。它 `connectOverCDP` 接的就是上面那台全局 Chrome（`TTMUX_CHROME_CDP`），所以**自动化能在 Web「浏览器」标签里实时围观**；没起 web 后端时，本命令也会按同一套 flag 自己拉起 Chrome。
 
-依赖 `node` + `npm`，`install.sh` 会随 `ttmux-chrome` 一起 `npm i playwright-core`（`connectOverCDP` 复用已开的 Chrome，**不下载 Playwright 自带浏览器**，很轻）。手动或重装：
+依赖 `node` + `npm`，`install.sh` 会随 `chrome` 一起 `npm i playwright-core`（`connectOverCDP` 复用已开的 Chrome，**不下载 Playwright 自带浏览器**，很轻）。手动或重装：
 
 ```bash
-ttmux-chrome setup                       # 安装/更新依赖（node + playwright-core）
-ttmux-chrome goto https://example.com    # 打开网址
-ttmux-chrome text h1                      # 取文本
-ttmux-chrome eval "document.title"        # 页面内执行 JS
-ttmux-chrome screenshot shot.png --full   # 整页截图
-ttmux-chrome tabs                         # 列标签页
-ttmux-chrome help                         # 全部动词与选项
+chrome setup                       # 安装/更新依赖（node + playwright-core）
+chrome goto https://example.com    # 打开网址
+chrome text h1                      # 取文本
+chrome eval "document.title"        # 页面内执行 JS
+chrome screenshot shot.png --full   # 整页截图
+chrome tabs                         # 列标签页
+chrome help                         # 全部动词与选项
 ```
 
 动词：`goto / click / fill / type / press / text / html / attr / eval / wait / screenshot / pdf / tabs / new / close`；
