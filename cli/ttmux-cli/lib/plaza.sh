@@ -3,7 +3,7 @@
 # ══════════════════════════════════════════
 #
 # 全群共享的追加型消息流；成员/master/human 都能发都能读。
-# 存每群 swarms/<id>/swarm.db 的 posts 表(WAL 并发安全)。详见 ttmux-cli/README.md。
+# 存每群 swarms/<id>/swarm.db 的 posts 表(WAL 并发安全)。详见 cli/ttmux-cli/README.md。
 # kind: note(随手记) ask(提问) block(报阻塞) decide(决策) done(完成播报) broadcast(全员广播)
 
 # 自动署名：按当前 tmux 会话名推断作者

@@ -3,7 +3,7 @@
 > 状态: **设计稿，待评审**　作者: cc-swarm　日期: 2026-06-16
 >
 > 前置:
-> - [蜂群编排设计.md](蜂群编排设计.md) —— swarm / member / master / 依赖门控（已实现，`ttmux-cli/lib/swarm.sh`）
+> - [蜂群编排设计.md](蜂群编排设计.md) —— swarm / member / master / 依赖门控（已实现，`cli/ttmux-cli/lib/swarm.sh`）
 > - [蜂群广场与看板设计.md](蜂群广场与看板设计.md) —— 广场(Plaza) / 看板(Board) 概念 + CLI + §9 Web 映射草案
 >
 > 本文把上文 §9「Web 映射」展开为可执行的三层(CLI / Go 后端 / React 前端)落地设计。
@@ -57,7 +57,7 @@ React 前端 (frontend/src)        Antd 深色主题 / hash 路由 / SSE
 Go 后端 (backend/api + server)   ttmux.Client 透传, 不含编排逻辑
    │  exec: ttmux swarm ... --json   (参数独立传入, 防注入)
    ▼
-ttmux CLI (ttmux-cli/lib)        数据真源: meta.db + 每群 swarm.db(WAL)
+ttmux CLI (cli/ttmux-cli/lib)        数据真源: meta.db + 每群 swarm.db(WAL)
 ```
 
 复用既有基建（不新造轮子）：
@@ -69,7 +69,7 @@ ttmux CLI (ttmux-cli/lib)        数据真源: meta.db + 每群 swarm.db(WAL)
 ## 4. 前置：补齐 CLI（board 子系统 + JSON 输出）
 
 Web 看板依赖的 CLI **尚未实现**（`cards` 表已在 `store.sh` 建好，但无命令）。先补这一层（对应原设计 P1），
-web 才有数据可吃。新增 `ttmux-cli/lib/board.sh`，在 `build.sh` 的 `MODULES` 里 `plaza` 之后插入 `board`，
+web 才有数据可吃。新增 `cli/ttmux-cli/lib/board.sh`，在 `build.sh` 的 `MODULES` 里 `plaza` 之后插入 `board`，
 并在 `99-main.sh` 的 `swarm` 路由加 `board` / `task` 分支、更新 `help.sh` / `completion.sh`。
 
 ### 4.1 新增/补齐命令

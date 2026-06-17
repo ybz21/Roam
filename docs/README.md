@@ -16,5 +16,6 @@
 ## 相关
 
 - 根 [README](../README.md) ｜ [README.zh-CN](../README.zh-CN.md)
-- CLI 源码说明 [`ttmux-cli/README.md`](../ttmux-cli/README.md)
+- CLI 源码说明 [`cli/ttmux-cli/README.md`](../cli/ttmux-cli/README.md) — `ttmux` 主命令
+- 浏览器自动化 CLI [`cli/chrome-cli/README.md`](../cli/chrome-cli/README.md) — `ttmux-chrome`（Playwright over CDP）
 - Web 后端说明 [`backend/README.md`](../backend/README.md)

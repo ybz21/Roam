@@ -3,8 +3,8 @@
 # ttmux - AI-native tmux wrapper
 # https://github.com/ybz21/ttmux
 #
-# ⚠ 本文件由 ttmux-cli/build.sh 自动生成，请勿直接编辑。
-#   改 ttmux-cli/lib/*.sh 后运行 ttmux-cli/build.sh 重新生成。
+# ⚠ 本文件由 cli/ttmux-cli/build.sh 自动生成，请勿直接编辑。
+#   改 cli/ttmux-cli/lib/*.sh 后运行 cli/ttmux-cli/build.sh 重新生成。
 #
 
 set -euo pipefail
@@ -145,7 +145,7 @@ _json_sessions() {
 # ── store: 蜂群 SQLite 存储地基 ──
 # ══════════════════════════════════════════
 #
-# 混合拓扑（详见 ttmux-cli/README.md「落盘布局」）：
+# 混合拓扑（详见 cli/ttmux-cli/README.md「落盘布局」）：
 #   ${TTMUX_HOME}/meta.db                 全局索引: swarms 注册表(name→id/状态)
 #   ${TTMUX_HOME}/swarms/<id>/swarm.db     每群库: members / posts(广场) / cards(看板)
 #   ${TTMUX_HOME}/swarms/<id>/logs/        成员终端日志(文件)
@@ -937,7 +937,7 @@ _kill_group() {
 # 成员就是底层任务组 <swarm> 的会话(<swarm>-<member>)，
 # 因此复用 _spawn_one / _status / _collect / _kill_group / _group_* 全套机制。
 #
-# 存储已迁 SQLite（地基在 lib/store.sh，详见 ttmux-cli/README.md）：
+# 存储已迁 SQLite（地基在 lib/store.sh，详见 cli/ttmux-cli/README.md）：
 #   ${TTMUX_HOME}/meta.db                全局: swarms(id,name,goal,status,supervisor,created)
 #   ${TTMUX_HOME}/swarms/<id>/swarm.db    每群: members(含 deps/done/pending 列)/posts/cards
 #   ${TTMUX_HOME}/swarms/<id>/logs/        成员终端日志(文件)
@@ -1795,7 +1795,7 @@ _interactive_swarm() {
 # ══════════════════════════════════════════
 #
 # 全群共享的追加型消息流；成员/master/human 都能发都能读。
-# 存每群 swarms/<id>/swarm.db 的 posts 表(WAL 并发安全)。详见 ttmux-cli/README.md。
+# 存每群 swarms/<id>/swarm.db 的 posts 表(WAL 并发安全)。详见 cli/ttmux-cli/README.md。
 # kind: note(随手记) ask(提问) block(报阻塞) decide(决策) done(完成播报) broadcast(全员广播)
 
 # 自动署名：按当前 tmux 会话名推断作者
@@ -2239,6 +2239,8 @@ show_help() {
     ${green}swarm sql${reset}    ${dim}<群> [--json] "SELECT ..."${reset}     只读查每群 swarm.db (web/调试)
     ${green}swarm adopt${reset}  ${dim}<群> [--by <cc会话>]${reset}     cc 接管 (拉起指挥会话)
     ${green}swarm archive${reset}|${green}rm${reset} ${dim}<群>${reset}             归档 / 删除
+
+  ${dim}浏览器自动化是独立命令 ${reset}${green}ttmux-chrome${reset}${dim}（Playwright over CDP）—— ttmux-chrome help${reset}
 
   ${bold}窗口 / 窗格${reset}
     ${green}nw${reset}    ${dim}[名称]${reset}                新建窗口

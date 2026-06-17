@@ -51,6 +51,8 @@ show_help() {
     ${green}swarm adopt${reset}  ${dim}<群> [--by <cc会话>]${reset}     cc 接管 (拉起指挥会话)
     ${green}swarm archive${reset}|${green}rm${reset} ${dim}<群>${reset}             归档 / 删除
 
+  ${dim}浏览器自动化是独立命令 ${reset}${green}ttmux-chrome${reset}${dim}（Playwright over CDP）—— ttmux-chrome help${reset}
+
   ${bold}窗口 / 窗格${reset}
     ${green}nw${reset}    ${dim}[名称]${reset}                新建窗口
     ${green}lw${reset}                         列出窗口

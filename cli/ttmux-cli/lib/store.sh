@@ -2,7 +2,7 @@
 # ── store: 蜂群 SQLite 存储地基 ──
 # ══════════════════════════════════════════
 #
-# 混合拓扑（详见 ttmux-cli/README.md「落盘布局」）：
+# 混合拓扑（详见 cli/ttmux-cli/README.md「落盘布局」）：
 #   ${TTMUX_HOME}/meta.db                 全局索引: swarms 注册表(name→id/状态)
 #   ${TTMUX_HOME}/swarms/<id>/swarm.db     每群库: members / posts(广场) / cards(看板)
 #   ${TTMUX_HOME}/swarms/<id>/logs/        成员终端日志(文件)

@@ -30,8 +30,8 @@ ttmux 有 **两种使用模式**，按需取用，也可叠加：
 | `sqlite3` | 蜂群 swarm 的元数据库 | 仅 `swarm` 子命令不可用 | `apt install sqlite3` / `brew install sqlite3` |
 | Claude Code | `spawn --agent` / 蜂群成员 | 仅 Agent 类任务不可用 | 见 [claude.ai/code](https://claude.ai/code) |
 | `go` ≥ 1.21 | 编译 Web 后端 | Web 控制台起不来 | [go.dev/dl](https://go.dev/dl/) |
-| `node` ≥ 18 + `npm` | 构建 Web 前端 | Web 控制台起不来 | [nodejs.org](https://nodejs.org/) |
-| `google-chrome` | 浏览器镜像页 | 仅「浏览器」标签不可用 | 系统包管理器 |
+| `node` ≥ 18 + `npm` | 构建 Web 前端 + `ttmux-chrome` 自动化 | Web 控制台起不来 / `ttmux-chrome` 不可用 | [nodejs.org](https://nodejs.org/) |
+| `google-chrome` | 浏览器镜像页 + `ttmux-chrome` 自动化 | 「浏览器」标签 / `ttmux-chrome` 不可用 | 系统包管理器 |
 | `kanna` | Claude Code 精美 UI（可选） | 任务页少一个入口 | 自行安装 |
 
 ---
@@ -47,6 +47,7 @@ curl -fsSL https://raw.githubusercontent.com/ybz21/ttmux/main/install.sh | bash
 脚本会：
 
 - 把 `ttmux` 装到 `~/.local/bin/ttmux`；
+- 把 `ttmux-chrome`（浏览器自动化 CLI）装到 `~/.local/bin/`，并按需 `npm i playwright-core`；
 - 把 Claude Code skills 装到 `~/.claude/skills/`（`ttmux.md`、`cc-swarm.md`）；
 - 创建数据目录 `~/.local/share/ttmux/{logs,groups}`；
 - 安装 Tab 补全。
@@ -68,15 +69,15 @@ ttmux completion          # 安装 Tab 补全
 
 ### 3. 从源码构建
 
-根目录的 `ttmux` 是**单文件分发版**，由 `ttmux-cli/lib/*.sh` 各模块拼接而成。改了模块要重新生成：
+根目录的 `ttmux` 是**单文件分发版**，由 `cli/ttmux-cli/lib/*.sh` 各模块拼接而成。改了模块要重新生成：
 
 ```bash
-vim ttmux-cli/lib/swarm.sh   # 改模块（不要直接改根目录的 ttmux，会被覆盖）
-bash ttmux-cli/build.sh      # 重新生成根目录 ttmux（末尾自带 bash -n 语法自检）
+vim cli/ttmux-cli/lib/swarm.sh   # 改模块（不要直接改根目录的 ttmux，会被覆盖）
+bash cli/ttmux-cli/build.sh      # 重新生成根目录 ttmux（末尾自带 bash -n 语法自检）
 bash install.sh              # 可选：装到 ~/.local/bin
 ```
 
-细节见 [`../../ttmux-cli/README.md`](../../ttmux-cli/README.md)。
+细节见 [`../../cli/ttmux-cli/README.md`](../../cli/ttmux-cli/README.md)。
 
 ### 4. 验证
 
@@ -296,6 +297,26 @@ bindPort = 13579        # 映射到本机
 - 已有 Chrome 跑在该端口（如 Agent 自己起的）则直接附着，不重复拉起。
 - 想清晰一点/省带宽一点，调 `TTMUX_CHROME_SCALE`。
 
+### 浏览器自动化 —— `ttmux-chrome`（独立 CLI）
+
+`ttmux-chrome` 是 ttmux 家族里**独立的浏览器自动化 CLI**（不是 `ttmux` 子命令），引擎是 **Playwright over CDP**。它 `connectOverCDP` 接的就是上面那台全局 Chrome（`TTMUX_CHROME_CDP`），所以**自动化能在 Web「浏览器」标签里实时围观**；没起 web 后端时，本命令也会按同一套 flag 自己拉起 Chrome。
+
+依赖 `node` + `npm`，`install.sh` 会随 `ttmux-chrome` 一起 `npm i playwright-core`（`connectOverCDP` 复用已开的 Chrome，**不下载 Playwright 自带浏览器**，很轻）。手动或重装：
+
+```bash
+ttmux-chrome setup                       # 安装/更新依赖（node + playwright-core）
+ttmux-chrome goto https://example.com    # 打开网址
+ttmux-chrome text h1                      # 取文本
+ttmux-chrome eval "document.title"        # 页面内执行 JS
+ttmux-chrome screenshot shot.png --full   # 整页截图
+ttmux-chrome tabs                         # 列标签页
+ttmux-chrome help                         # 全部动词与选项
+```
+
+动词：`goto / click / fill / type / press / text / html / attr / eval / wait / screenshot / pdf / tabs / new / close`；
+通用选项 `--tab <序号>` / `--url <子串>` 选目标标签页、`--timeout <ms>`、`--cdp <地址>`。
+源码与开发见 [`../../cli/chrome-cli/README.md`](../../cli/chrome-cli/README.md)。
+
 ### kanna（Claude Code 精美 UI）
 
 设置 `TTMUX_KANNA_URL` 后，任务页的 Agent 行会出现进入 kanna 的入口。若本机装了 `kanna`，`start-all.sh` 会用 `KANNA_PORT`（默认 3210）自动以守护方式拉起，并把地址注入前端。需自行安装 kanna 且对本网可达。
@@ -304,7 +325,7 @@ bindPort = 13579        # 映射到本机
 
 ## 六、升级与卸载
 
-**升级 CLI**：重跑一键脚本即可覆盖；或在仓库内 `git pull && bash ttmux-cli/build.sh && bash install.sh`。
+**升级 CLI**：重跑一键脚本即可覆盖；或在仓库内 `git pull && bash cli/ttmux-cli/build.sh && bash install.sh`。
 
 **升级 Web**：`git pull && ./start-all.sh`（脚本检测改动并重编）。
 

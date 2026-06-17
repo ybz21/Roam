@@ -3,8 +3,8 @@
 # ttmux - AI-native tmux wrapper
 # https://github.com/ybz21/ttmux
 #
-# ⚠ 本文件由 ttmux-cli/build.sh 自动生成，请勿直接编辑。
-#   改 ttmux-cli/lib/*.sh 后运行 ttmux-cli/build.sh 重新生成。
+# ⚠ 本文件由 cli/ttmux-cli/build.sh 自动生成，请勿直接编辑。
+#   改 cli/ttmux-cli/lib/*.sh 后运行 cli/ttmux-cli/build.sh 重新生成。
 #
 
 set -euo pipefail

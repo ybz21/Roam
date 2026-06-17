@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 #
-# ttmux-cli/build.sh — 把 lib/*.sh 按顺序拼接成单文件 ../ttmux
+# cli/ttmux-cli/build.sh — 把 lib/*.sh 按顺序拼接成单文件 仓库根/ttmux
 #
-# 开发时改 ttmux-cli/lib/*.sh，然后跑本脚本重新生成根目录的 ttmux。
+# 开发时改 cli/ttmux-cli/lib/*.sh，然后跑本脚本重新生成根目录的 ttmux。
 # 根 ttmux 是生成物，请勿手改。
 #
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="${SCRIPT_DIR}/lib"
-OUT="${SCRIPT_DIR}/../ttmux"
+OUT="${SCRIPT_DIR}/../../ttmux"   # 仓库根（cli/ttmux-cli → ../../）
 
 # 拼接顺序（必须 00-header 在最前、99-main 在最后）
 MODULES=(
@@ -51,7 +51,7 @@ chmod +x "$OUT"
 
 # 语法自检
 if bash -n "$OUT"; then
-    echo "✔ 已生成 $(realpath --relative-to="${SCRIPT_DIR}/.." "$OUT")  ($(wc -l < "$OUT") 行, ${#MODULES[@]} 个模块)"
+    echo "✔ 已生成 $(realpath --relative-to="${SCRIPT_DIR}/../.." "$OUT")  ($(wc -l < "$OUT") 行, ${#MODULES[@]} 个模块)"
 else
     echo "✘ 生成的 ttmux 语法检查失败"
     exit 1

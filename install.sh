@@ -48,6 +48,16 @@ fi
 chmod +x "${INSTALL_DIR}/ttmux"
 info "ttmux 已安装到 ${INSTALL_DIR}/ttmux"
 
+# 下载或复制 ttmux-chrome（独立的浏览器自动化 CLI）
+if [[ -f "${SCRIPT_DIR}/ttmux-chrome" ]]; then
+    cp "${SCRIPT_DIR}/ttmux-chrome" "${INSTALL_DIR}/ttmux-chrome"
+else
+    curl -fsSL "https://raw.githubusercontent.com/${REPO}/${BRANCH}/ttmux-chrome" \
+        -o "${INSTALL_DIR}/ttmux-chrome" 2>/dev/null || true
+fi
+[[ -f "${INSTALL_DIR}/ttmux-chrome" ]] && chmod +x "${INSTALL_DIR}/ttmux-chrome" \
+    && info "ttmux-chrome 已安装到 ${INSTALL_DIR}/ttmux-chrome"
+
 # 安装 Claude Code skills
 mkdir -p "$SKILL_DIR"
 
@@ -117,6 +127,17 @@ fi
 # 安装补全
 step "安装 Tab 补全..."
 "${INSTALL_DIR}/ttmux" completion 2>/dev/null || true
+
+# 浏览器自动化依赖（ttmux-chrome —— Playwright over CDP）
+# connectOverCDP 复用已开的 Chrome，不下载额外浏览器，仅装 playwright-core。
+if [[ -x "${INSTALL_DIR}/ttmux-chrome" ]]; then
+    if command -v node &>/dev/null && command -v npm &>/dev/null; then
+        step "安装 ttmux-chrome 依赖 (playwright-core)..."
+        "${INSTALL_DIR}/ttmux-chrome" setup || echo -e "   ${dim}稍后可手动重试: ttmux-chrome setup${reset}"
+    else
+        echo -e "  ${dim}⚠ 未检测到 node/npm，跳过 ttmux-chrome 依赖（装好后运行: ttmux-chrome setup）${reset}"
+    fi
+fi
 
 echo ""
 echo -e "  ${bold}安装完成!${reset}"

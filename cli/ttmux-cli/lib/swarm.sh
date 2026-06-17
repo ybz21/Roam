@@ -6,7 +6,7 @@
 # 成员就是底层任务组 <swarm> 的会话(<swarm>-<member>)，
 # 因此复用 _spawn_one / _status / _collect / _kill_group / _group_* 全套机制。
 #
-# 存储已迁 SQLite（地基在 lib/store.sh，详见 ttmux-cli/README.md）：
+# 存储已迁 SQLite（地基在 lib/store.sh，详见 cli/ttmux-cli/README.md）：
 #   ${TTMUX_HOME}/meta.db                全局: swarms(id,name,goal,status,supervisor,created)
 #   ${TTMUX_HOME}/swarms/<id>/swarm.db    每群: members(含 deps/done/pending 列)/posts/cards
 #   ${TTMUX_HOME}/swarms/<id>/logs/        成员终端日志(文件)

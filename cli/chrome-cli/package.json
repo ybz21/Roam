@@ -1,0 +1,10 @@
+{
+  "name": "ttmux-chrome",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ttmux-chrome 运行时依赖声明：Playwright over CDP 浏览器自动化。connectOverCDP 复用已开的 Chrome，不下载自带浏览器。",
+  "type": "module",
+  "dependencies": {
+    "playwright-core": "^1.49.0"
+  }
+}

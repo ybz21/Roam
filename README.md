@@ -168,6 +168,27 @@ ttmux swarm adopt login                 # let a cc master supervise
 
 Any unrecognized command is forwarded directly to `tmux`.
 
+### Browser Automation — `ttmux-chrome`
+
+`ttmux-chrome` is a **standalone CLI** (a sibling of `ttmux`, not a subcommand) that
+drives Chrome over CDP using **Playwright** (`connectOverCDP`), targeting the same
+global Chrome the Web console mirrors — so automation is visible live in the browser
+tab. Lean dependency: `npm i playwright-core` (no bundled browser download); set up
+automatically by `install.sh`.
+
+```bash
+ttmux-chrome goto https://example.com
+ttmux-chrome fill "#q" "hello" && ttmux-chrome press "#q" Enter
+ttmux-chrome text h1
+ttmux-chrome eval "document.title"
+ttmux-chrome screenshot shot.png --full
+```
+
+Verbs: `goto / click / fill / type / press / text / html / attr / eval / wait /
+screenshot / pdf / tabs / new / close`. Options `--tab N` / `--url <substr>` pick a
+tab; `--timeout <ms>`, `--cdp <addr>`. Run `ttmux-chrome help` for the full list.
+Source: [`cli/chrome-cli/`](cli/chrome-cli/).
+
 ## For AI Agents
 
 ttmux is designed to be called by [Claude Code](https://claude.ai/code) and other AI agents.
