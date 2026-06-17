@@ -9,6 +9,7 @@ import {
 } from 'antd'
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
 import { api } from './api'
+import Markdown from './Markdown'
 
 // ── 配色（与 App.tsx 一致） ──
 const C = {
@@ -574,28 +575,22 @@ function NodeDrawer({ swarm, member, detail, cards, posts, openTerm, onClose, on
   openTerm: (n: string) => void; onClose: () => void
   onDone: (m?: string) => void; onActivate: (m?: string, force?: boolean) => void
 }) {
-  const [snap, setSnap] = useState('')
   const isMaster = !!detail && (member === detail.supervisor)
   const m = detail?.members.find((x) => x.name === member)
   const pend = detail?.pending.find((x) => x.name === member)
   const session = isMaster ? (detail?.supervisor || `cc-${swarm}`) : m?.session || `${swarm}-${member}`
-
-  useEffect(() => {
-    if (!member) { setSnap(''); return }
-    let stop = false
-    setSnap('加载中…')
-    api('GET', `/sessions/${encodeURIComponent(session)}/capture?lines=40`)
-      .then((r) => { if (!stop) setSnap((r.data || '').trim() || '(空)') })
-      .catch(() => { if (!stop) setSnap('(会话未运行)') })
-    return () => { stop = true }
-  }, [member, session])
+  // 抽屉至少占屏宽一半（窄屏则占满）
+  const winW = typeof window !== 'undefined' ? window.innerWidth : 800
+  const drawerW = Math.min(winW, Math.max(520, Math.round(winW * 0.5)))
+  // 初始化指令（成员收到的提示词 / master 的目标），按 markdown 渲染
+  const initCmd = isMaster ? (detail?.goal ? `**目标**\n\n${detail.goal}` : '') : (m?.task || '')
 
   const myCards = cards.filter((c) => c.assignee === member)
   const myPosts = posts.filter((p) => p.author === member)
   const color = isMaster ? C.magenta : pend ? C.amber : m?.done ? C.green : m?.status === 'running' ? C.green : C.fg2
 
   return (
-    <Drawer open={!!member} onClose={onClose} width={400} title={
+    <Drawer open={!!member} onClose={onClose} width={drawerW} title={
       <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <i style={{ width: 8, height: 8, borderRadius: '50%', background: color }} />
         <b>{member}</b>
@@ -607,30 +602,29 @@ function NodeDrawer({ swarm, member, detail, cards, posts, openTerm, onClose, on
           <div>
             <div style={{ color: C.fg2, fontSize: 12, marginBottom: 4 }}>身份</div>
             <div style={{ fontSize: 13 }}>{isMaster ? 'master · 指挥' : `${m?.type || 'agent'} · 成员`} · 会话 <b>{session}</b></div>
-            {(m?.task || (isMaster && detail?.goal)) && <div style={{ fontSize: 13, color: C.fg2, marginTop: 6 }}>{isMaster ? `目标：${detail?.goal}` : m?.task}</div>}
             {(m?.deps || pend?.deps) && <div style={{ fontSize: 12, color: C.fg3, marginTop: 4 }}>依赖→ {m?.deps || pend?.deps}</div>}
-            {!isMaster && (
-              <Space wrap style={{ marginTop: 10 }}>
-                {pend ? (
-                  <>
-                    <Button size="small" onClick={() => { onActivate(member!); onClose() }}>解锁（依赖满足）</Button>
-                    <Popconfirm title="无视依赖强制解锁？" onConfirm={() => { onActivate(member!, true); onClose() }}><Button size="small" danger>强制解锁</Button></Popconfirm>
-                  </>
-                ) : !m?.done ? (
-                  <Popconfirm title={`标记 ${member} 完成？会解锁其下游成员`} onConfirm={() => { onDone(member!); onClose() }}>
-                    <Button size="small">标记完成</Button>
-                  </Popconfirm>
-                ) : <Tag color="success">✔ 已完成</Tag>}
-              </Space>
-            )}
+            <Space wrap style={{ marginTop: 10 }}>
+              <Button size="small" type="primary" onClick={() => { openTerm(session); onClose() }}>进入终端 ↗</Button>
+              {!isMaster && (pend ? (
+                <>
+                  <Button size="small" onClick={() => { onActivate(member!); onClose() }}>解锁（依赖满足）</Button>
+                  <Popconfirm title="无视依赖强制解锁？" onConfirm={() => { onActivate(member!, true); onClose() }}><Button size="small" danger>强制解锁</Button></Popconfirm>
+                </>
+              ) : !m?.done ? (
+                <Popconfirm title={`标记 ${member} 完成？会解锁其下游成员`} onConfirm={() => { onDone(member!); onClose() }}>
+                  <Button size="small">标记完成</Button>
+                </Popconfirm>
+              ) : <Tag color="success">✔ 已完成</Tag>)}
+            </Space>
           </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
-              <span style={{ color: C.fg2, fontSize: 12 }}>终端快照</span>
-              <Button size="small" type="primary" style={{ marginLeft: 'auto' }} onClick={() => { openTerm(session); onClose() }}>进入终端 ↗</Button>
+          {initCmd && (
+            <div>
+              <div style={{ color: C.fg2, fontSize: 12, marginBottom: 6 }}>初始化指令</div>
+              <div style={{ background: C.bg3, border: `1px solid ${C.line}`, borderRadius: 8, padding: '10px 14px', maxHeight: '48vh', overflow: 'auto' }}>
+                <Markdown>{initCmd}</Markdown>
+              </div>
             </div>
-            <pre style={{ background: C.bg3, border: `1px solid ${C.line}`, borderRadius: 8, padding: 10, fontSize: 12, lineHeight: 1.5, color: '#c9d1d9', whiteSpace: 'pre-wrap', maxHeight: 200, overflow: 'auto', margin: 0 }}>{snap}</pre>
-          </div>
+          )}
           <div>
             <div style={{ color: C.fg2, fontSize: 12, marginBottom: 6 }}>它的看板卡 ({myCards.length})</div>
             {myCards.length ? myCards.map((c) => (
