@@ -20,7 +20,7 @@ function BrowserTab({ tab, active, onSelect, onClose }: {
         display: 'flex', alignItems: 'center', gap: 6, width: 150, flex: '0 0 auto', height: 28,
         padding: '0 8px', borderRadius: 6, cursor: 'pointer', userSelect: 'none', fontSize: 12,
         background: active ? '#283039' : 'transparent',
-        color: active ? '#e6edf3' : '#9aa4ae',
+        color: active ? 'var(--text-bright)' : '#9aa4ae',
         border: '1px solid ' + (active ? '#3d444d' : 'transparent'),
       }}
     >
@@ -30,7 +30,7 @@ function BrowserTab({ tab, active, onSelect, onClose }: {
       <span
         onClick={(e) => { e.stopPropagation(); onClose() }}
         onMouseDown={(e) => e.stopPropagation()}
-        style={{ flex: '0 0 auto', width: 16, height: 16, lineHeight: '15px', textAlign: 'center', borderRadius: 4, color: '#8b949e' }}
+        style={{ flex: '0 0 auto', width: 16, height: 16, lineHeight: '15px', textAlign: 'center', borderRadius: 4, color: 'var(--text-dim)' }}
       >×</span>
     </div>
   )
@@ -50,7 +50,7 @@ function TabBar({ tabs, active, onSelect, onClose, onAdd, extra }: {
         <button
           onClick={onAdd}
           title="新建标签"
-          style={{ flex: '0 0 auto', width: 28, height: 28, border: 'none', background: 'transparent', color: '#8b949e', cursor: 'pointer', fontSize: 16, borderRadius: 6 }}
+          style={{ flex: '0 0 auto', width: 28, height: 28, border: 'none', background: 'transparent', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 16, borderRadius: 6 }}
         >+</button>
       </div>
       <div style={{ flex: '0 0 auto' }}>{extra}</div>
@@ -349,13 +349,13 @@ export default function BrowserView() {
                     onClick={() => changeQuality(o.value)}
                     style={on
                       ? { background: '#1f6feb', borderColor: '#1f6feb', color: '#fff', fontWeight: 700, boxShadow: '0 0 0 2px rgba(31,111,235,.35)', zIndex: 1 }
-                      : { background: 'transparent', borderColor: '#30363d', color: '#8b949e' }}
+                      : { background: 'transparent', borderColor: 'var(--border)', color: 'var(--text-dim)' }}
                   >{o.label}</Button>
                 )
               })}
             </Space.Compact>
             <Tag color={connected ? 'green' : 'red'} style={{ marginInlineEnd: 0 }}>{connected ? '已连接' : '未连接'}</Tag>
-            <span style={{ color: '#8b949e', fontSize: 12, whiteSpace: 'nowrap' }}>
+            <span style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap' }}>
               {quality === 'auto' && levelName ? <span style={{ color: '#58a6ff' }}>{levelName} ·</span> : null}
               {cell(latency == null ? '—' : latency + 'ms', 48)} ·{cell(fmtRate(bw), 70)} ·{cell(fps + 'fps', 42)}
             </span>

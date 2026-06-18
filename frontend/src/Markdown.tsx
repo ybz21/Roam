@@ -2,16 +2,21 @@
 // 工具输出/命令仍按原样 <pre> 显示，不走这里。
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import rehypeHighlight from 'rehype-highlight'
 import type { CSSProperties } from 'react'
+import { CodeBox } from './chat/blocks'
 
 const mono = 'ui-monospace, SFMono-Regular, Menlo, monospace'
 
-const preStyle: CSSProperties = {
-  margin: '6px 0', padding: 10, borderRadius: 6, background: '#0d1117', border: '1px solid #21262d',
-  overflow: 'auto', fontFamily: mono, fontSize: 12.5, lineHeight: 1.45,
+// 从 hast 节点递归取纯文本（供复制按钮用原始代码而非高亮后的 DOM）
+function nodeText(node: any): string {
+  if (!node) return ''
+  if (node.type === 'text') return node.value || ''
+  return Array.isArray(node.children) ? node.children.map(nodeText).join('') : ''
 }
+
 const inlineCode: CSSProperties = {
-  fontFamily: mono, fontSize: '0.88em', background: 'rgba(110,118,129,.28)',
+  fontFamily: mono, fontSize: '0.88em', background: 'var(--border-subtle)',
   padding: '1px 5px', borderRadius: 4,
 }
 
@@ -20,6 +25,7 @@ export default function Markdown({ children, accent = '#58a6ff' }: { children: s
     <div style={{ fontSize: 13.5, lineHeight: 1.55, wordBreak: 'break-word' }}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={[[rehypeHighlight, { detect: true, ignoreMissing: true }]]}
         components={{
           // 段落/列表/标题 收紧默认大边距
           p: ({ children }) => <p style={{ margin: '4px 0' }}>{children}</p>,
@@ -31,19 +37,23 @@ export default function Markdown({ children, accent = '#58a6ff' }: { children: s
           h3: ({ children }) => <h3 style={{ fontSize: 14.5, margin: '6px 0 4px', fontWeight: 600 }}>{children}</h3>,
           h4: ({ children }) => <h4 style={{ fontSize: 13.5, margin: '6px 0 4px', fontWeight: 600 }}>{children}</h4>,
           a: ({ children, href }) => <a href={href} target="_blank" rel="noreferrer" style={{ color: accent, textDecoration: 'underline' }}>{children}</a>,
-          blockquote: ({ children }) => <blockquote style={{ margin: '6px 0', padding: '2px 10px', borderLeft: '3px solid #30363d', color: '#aab2bd' }}>{children}</blockquote>,
-          hr: () => <hr style={{ border: 0, borderTop: '1px solid #30363d', margin: '8px 0' }} />,
+          blockquote: ({ children }) => <blockquote style={{ margin: '6px 0', padding: '2px 10px', borderLeft: '3px solid var(--border)', color: 'var(--text-dim)' }}>{children}</blockquote>,
+          hr: () => <hr style={{ border: 0, borderTop: '1px solid var(--border)', margin: '8px 0' }} />,
           // pre 透传，由 code 统一加样式（块级 vs 行内）
           pre: ({ children }) => <>{children}</>,
-          code: ({ className, children }) => {
-            const text = String(children)
-            const block = (className && className.startsWith('language-')) || text.includes('\n')
-            if (block) return <pre style={preStyle}><code style={{ fontFamily: mono }}>{children}</code></pre>
+          code: ({ className, children, node }: any) => {
+            const cls = className || ''
+            const block = /hljs|language-/.test(cls) || nodeText(node).includes('\n')
+            // 块级代码复用对话里的 CodeBox（hover 复制 + 主题色 + 语法高亮）
+            if (block) {
+              const raw = (node ? nodeText(node) : String(children)).replace(/\n$/, '')
+              return <CodeBox text={raw} max={420} className={`hljs ${cls}`}>{children}</CodeBox>
+            }
             return <code style={inlineCode}>{children}</code>
           },
           table: ({ children }) => <table style={{ borderCollapse: 'collapse', margin: '6px 0', fontSize: 12.5 }}>{children}</table>,
-          th: ({ children }) => <th style={{ border: '1px solid #30363d', padding: '3px 8px', textAlign: 'left', background: '#161b22' }}>{children}</th>,
-          td: ({ children }) => <td style={{ border: '1px solid #30363d', padding: '3px 8px' }}>{children}</td>,
+          th: ({ children }) => <th style={{ border: '1px solid var(--border)', padding: '3px 8px', textAlign: 'left', background: 'var(--bg-container)' }}>{children}</th>,
+          td: ({ children }) => <td style={{ border: '1px solid var(--border)', padding: '3px 8px' }}>{children}</td>,
           img: ({ src, alt }) => <img src={src} alt={alt} style={{ maxWidth: '100%', borderRadius: 6 }} />,
         }}
       >

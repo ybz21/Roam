@@ -10,10 +10,10 @@ import { api } from './api'
 export interface Choice { num: number; label: string; selected: boolean }
 export interface Prompt { kind: 'select' | 'yesno'; question: string; choices: Choice[] }
 
-const CURSOR = /[❯➤▶►▸→›»☞◉●]/u                       // 选中游标常见字形
+const CURSOR = /[❯➤▶►▸→›»☞◉●>]/u                      // 选中游标常见字形（含 ASCII >）
 const LEAD = /^[\s│┃|╎┆┊╭╰├╞┝─━═]+/u                  // 行首方框线/竖线/空白
 const TAIL = /[\s│┃|╎┆┊╮╯┤╡┥─━═]+$/u                  // 行尾同上
-const OPT = /^(?:[❯➤▶►▸→›»☞◉●]\s*)?(\d+)[.)]\s+(\S.*)$/u // [游标?] N. 文本
+const OPT = /^(?:[❯➤▶►▸→›»☞◉●>]\s*)?(\d+)[.)]\s+(\S.*)$/u // [游标?] N. 文本
 const KW = /(proceed|allow|continue|overwrite|apply|approve|trust|run|是否|确认|继续|允许|要不要|执行)/i
 const clean = (s: string) => s.replace(LEAD, '').replace(TAIL, '')
 
@@ -90,20 +90,32 @@ export function PromptPanel({ name, accent }: { name: string; accent: string }) 
     setTimeout(async () => { setP(await fetchPrompt(name)) }, 350)
   }
 
+  // 点选某项：从当前游标用方向键移动到目标项再回车确认。
+  // 比直接发数字键更可靠——纯方向键菜单（无数字热键）也能点选。
+  const choose = (target: Choice) => {
+    const cur = Math.max(0, p!.choices.findIndex((c) => c.selected))
+    const tgt = p!.choices.findIndex((c) => c.num === target.num)
+    if (tgt < 0) return
+    const delta = tgt - cur
+    const keys = Array(Math.abs(delta)).fill(delta > 0 ? 'Down' : 'Up')
+    keys.push('Enter')
+    press(keys)
+  }
+
   return (
-    <div style={{ borderTop: `1px solid ${accent}55`, background: '#0d1117', padding: '10px 12px' }}>
+    <div style={{ borderTop: `1px solid ${accent}55`, background: 'var(--bg-base)', padding: '10px 12px' }}>
       <div style={{ color: accent, fontSize: 12, fontWeight: 600, marginBottom: 8 }}>● 需要你确认</div>
-      {p.question && <div style={{ color: '#e6edf3', fontSize: 13, marginBottom: 8, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{p.question}</div>}
+      {p.question && <div style={{ color: 'var(--text-bright)', fontSize: 13, marginBottom: 8, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{p.question}</div>}
       {p.kind === 'select' ? (
         <Space direction="vertical" style={{ width: '100%' }} size={6}>
           {p.choices.map((ch) => (
-            <Button key={ch.num} block disabled={busy} onClick={() => press([String(ch.num)])}
+            <Button key={ch.num} block disabled={busy} onClick={() => choose(ch)}
               style={{
                 textAlign: 'left', height: 'auto', minHeight: 32, whiteSpace: 'normal', padding: '6px 10px',
-                borderColor: ch.selected ? accent : '#30363d', color: '#e6edf3',
+                borderColor: ch.selected ? accent : 'var(--border)', color: 'var(--text-bright)',
                 background: ch.selected ? accent + '22' : 'transparent',
               }}>
-              <b style={{ color: accent, marginRight: 6 }}>{ch.num}.</b>{ch.label}
+              <b style={{ color: accent, marginRight: 6 }}>{ch.selected ? '❯' : ''}{ch.num}.</b>{ch.label}
             </Button>
           ))}
         </Space>

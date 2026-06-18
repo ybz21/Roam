@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"ttmux-web/ttmux"
@@ -161,7 +162,14 @@ func (a *API) Send(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
 		return
 	}
-	a.text(c, "send", b.Sess, b.Msg)
+	// 分两步注入：先字面文本(-l，不解释按键名)，停顿一下，再单独回车。
+	// 否则像 Codex 这类 TUI 会把「文本+回车」当成一次粘贴，把回车并进去变成换行而非提交。
+	if _, err := a.TT.Run("send-keys", "-t", b.Sess, "-l", b.Msg); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "TTMUX_ERROR", "message": ttmux.StripANSI(err.Error())}})
+		return
+	}
+	time.Sleep(90 * time.Millisecond)
+	a.text(c, "send-keys", "-t", b.Sess, "Enter")
 }
 
 func (a *API) Spawn(c *gin.Context) {

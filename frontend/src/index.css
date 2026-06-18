@@ -1,29 +1,90 @@
 /* 全局基调 · 精致克制
    目标：细边框、舒展留白、克制的交互反馈、精修排版（近 Linear/Vercel 的高级感）。
-   只调"基调"，不逐页堆样式；页面组件继承这里的观感即可。 */
+   只调"基调"，不逐页堆样式；页面组件继承这里的观感即可。
+   黑/白主题：所有结构色走 CSS 变量，<html data-theme="light"> 时整体翻白。
+   终端画布的颜色由 Terminal.tsx 读取同名变量并随主题切换。 */
 
-:root { color-scheme: dark; }
+/* ── 深色（默认）── */
+:root {
+  color-scheme: dark;
+  --bg-base: #0d1117;
+  --bg-container: #161b22;
+  --bg-elevated: #1b222b;
+  --bg-term: #06090d;
+  --border: #30363d;
+  --border-subtle: #21262d;
+  --text-bright: #e6edf3;
+  --text-dim: #8b949e;
+  --text-dimmer: #6e7681;
+  --brand-grad: linear-gradient(180deg, #f5f7fa 0%, #c3c9d1 46%, #9aa1ab 56%, #e7ebef 100%);
+  --list-hover: rgba(255, 255, 255, .025);
+  --scroll-thumb: #2a313a;
+  --scroll-thumb-hover: #3d444d;
+  --card-hover-shadow: 0 8px 24px rgba(1, 4, 9, .5);
+  --elevated-shadow: 0 16px 48px rgba(1, 4, 9, .55);
+  --xterm-bg: #06090d;
+  --xterm-fg: #e6edf3;
+  /* highlight.js token 配色（深色，GitHub-ish） */
+  --hl-comment: #8b949e;
+  --hl-keyword: #ff7b72;
+  --hl-string: #a5d6ff;
+  --hl-number: #79c0ff;
+  --hl-title: #d2a8ff;
+  --hl-attr: #7ee787;
+  --hl-built: #ffa657;
+}
+
+/* ── 浅色 ── */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg-base: #f6f8fa;
+  --bg-container: #ffffff;
+  --bg-elevated: #ffffff;
+  --bg-term: #ffffff;
+  --border: #d0d7de;
+  --border-subtle: #e6e9ec;
+  --text-bright: #1f2328;
+  --text-dim: #57606a;
+  --text-dimmer: #8c959f;
+  --brand-grad: linear-gradient(180deg, #2c333b 0%, #1f2328 100%);
+  --list-hover: rgba(27, 31, 36, .04);
+  --scroll-thumb: #c9d1d9;
+  --scroll-thumb-hover: #aab1b9;
+  --card-hover-shadow: 0 8px 24px rgba(140, 149, 159, .18);
+  --elevated-shadow: 0 16px 48px rgba(140, 149, 159, .22);
+  --xterm-bg: #ffffff;
+  --xterm-fg: #1f2328;
+  /* highlight.js token 配色（浅色） */
+  --hl-comment: #6e7781;
+  --hl-keyword: #cf222e;
+  --hl-string: #0a3069;
+  --hl-number: #0550ae;
+  --hl-title: #8250df;
+  --hl-attr: #116329;
+  --hl-built: #953800;
+}
 
 html, body, #root { height: 100%; margin: 0; }
 body {
-  background: #0d1117;
+  background: var(--bg-base);
   /* 精修字体栈：优先界面无衬线 + 中文黑体；数字等宽对齐更整齐 */
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
     'Hiragino Sans GB', 'Microsoft YaHei', Roboto, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  transition: background-color .2s ease;
 }
 
-/* ── 细滚动条：更窄、更暗，hover 才稍亮（覆盖 index.html 的基础版） ── */
-* { scrollbar-width: thin; scrollbar-color: #2a313a transparent; }
+/* ── 细滚动条：更窄，hover 才稍亮 ── */
+* { scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
 *::-webkit-scrollbar { width: 9px; height: 9px; }
 *::-webkit-scrollbar-track { background: transparent; }
 *::-webkit-scrollbar-thumb {
-  background: #2a313a; border-radius: 8px;
+  background: var(--scroll-thumb); border-radius: 8px;
   border: 2px solid transparent; background-clip: content-box;
 }
-*::-webkit-scrollbar-thumb:hover { background: #3d444d; background-clip: content-box; }
+*::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-hover); background-clip: content-box; }
 *::-webkit-scrollbar-corner { background: transparent; }
 
 /* 选区色：主色低透明，克制 */
@@ -37,20 +98,20 @@ body {
 }
 
 /* ── 卡片：细边框 + 克制悬浮（边框微亮 + 极轻阴影，不位移） ── */
-.ant-card { border-color: #21262d; }
-.ant-card-bordered { border-color: #21262d; }
+.ant-card { border-color: var(--border-subtle); }
+.ant-card-bordered { border-color: var(--border-subtle); }
 .ant-card-hoverable:hover {
-  border-color: #30363d;
-  box-shadow: 0 8px 24px rgba(1, 4, 9, .5);
+  border-color: var(--border);
+  box-shadow: var(--card-hover-shadow);
   transform: translateY(-1px);
 }
-.ant-card-head { border-block-end-color: #21262d; min-height: 46px; }
+.ant-card-head { border-block-end-color: var(--border-subtle); min-height: 46px; }
 .ant-card-head-title { font-weight: 600; letter-spacing: .2px; }
 
 /* ── 列表：行距舒展、分隔线更淡、hover 轻微提亮并圆角 ── */
-.ant-list-split .ant-list-item { border-block-end-color: #1c2128; }
+.ant-list-split .ant-list-item { border-block-end-color: var(--border-subtle); }
 .ant-list-item { border-radius: 8px; padding-inline: 8px; }
-.ant-list-item:hover { background: rgba(255, 255, 255, .025); }
+.ant-list-item:hover { background: var(--list-hover); }
 
 /* ── 输入框：聚焦细发光，克制 ── */
 .ant-input:focus, .ant-input-focused,
@@ -69,5 +130,39 @@ body {
 
 /* 弹层：与页面拉开一点层次（配合 colorBgElevated） */
 .ant-modal-content, .ant-dropdown-menu, .ant-popover-inner, .ant-select-dropdown {
-  box-shadow: 0 16px 48px rgba(1, 4, 9, .55) !important;
+  box-shadow: var(--elevated-shadow) !important;
 }
+
+/* ── Claude 对话「正在生成」省略号 ── */
+.cc-dots { display: inline-flex; gap: 3px; }
+.cc-dots i {
+  width: 5px; height: 5px; border-radius: 50%; background: var(--cc-dot, #d2a8ff);
+  animation: cc-blink 1.2s infinite both;
+}
+.cc-dots i:nth-child(2) { animation-delay: .2s; }
+.cc-dots i:nth-child(3) { animation-delay: .4s; }
+@keyframes cc-blink { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
+.cc-pulse { animation: cc-blink 1.2s infinite both; }
+
+/* 文件行下载按钮：hover 行时浮现 */
+.cc-dl { opacity: 0; transition: opacity .15s ease; }
+.cc-filerow:hover .cc-dl, .cc-dl:focus { opacity: 1; }
+@media (pointer: coarse) { .cc-dl { opacity: .6; } }
+
+/* 代码框复制按钮：默认淡出，hover 代码框时浮现 */
+.cc-copy { opacity: 0; transition: opacity .15s ease; }
+.cc-codebox:hover .cc-copy, .cc-copy:focus { opacity: 1; }
+@media (pointer: coarse) { .cc-copy { opacity: .6; } }
+
+/* ── 语法高亮（highlight.js 类 → 主题变量；不引外部 CSS，随黑白主题切换） ── */
+.hljs { color: var(--text-bright); background: transparent; }
+.hljs-comment, .hljs-quote { color: var(--hl-comment); font-style: italic; }
+.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-section, .hljs-doctag { color: var(--hl-keyword); }
+.hljs-string, .hljs-template-string, .hljs-addition, .hljs-meta-string { color: var(--hl-string); }
+.hljs-number, .hljs-params, .hljs-type, .hljs-selector-attr, .hljs-selector-pseudo { color: var(--hl-number); }
+.hljs-title, .hljs-name, .hljs-selector-id, .hljs-selector-class { color: var(--hl-title); }
+.hljs-attr, .hljs-attribute, .hljs-variable, .hljs-template-variable { color: var(--hl-attr); }
+.hljs-built_in, .hljs-builtin-name, .hljs-symbol, .hljs-bullet, .hljs-link, .hljs-meta, .hljs-regexp { color: var(--hl-built); }
+.hljs-deletion { color: #f85149; }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 600; }

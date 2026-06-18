@@ -103,7 +103,8 @@ fi
 
 # ── 3. 编译后端（增量）──────────────────────────────────────────
 BIN=backend/ttmux-web
-if [ ! -f "$BIN" ] || [ "$(find backend -name '*.go' -newer "$BIN" 2>/dev/null | head -1)" ]; then
+# 检测 .go 与 go:embed 的资源(*.tmpl/*.html)变更，避免改模板却跳过编译
+if [ ! -f "$BIN" ] || [ "$(find backend \( -name '*.go' -o -name '*.tmpl' -o -name '*.html' \) -newer "$BIN" 2>/dev/null | head -1)" ]; then
   echo "==> 编译后端..."
   (cd backend && go build -o ttmux-web ./cmd)
 else

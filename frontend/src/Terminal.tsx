@@ -14,6 +14,14 @@ export interface TermHandle {
   toBottom: () => void
 }
 
+// xterm 不认 CSS var()，需具体色值：读 <html> 上的同名变量，随黑/白主题切换。
+function xtermTheme() {
+  const cs = getComputedStyle(document.documentElement)
+  const bg = cs.getPropertyValue('--xterm-bg').trim() || '#06090d'
+  const fg = cs.getPropertyValue('--xterm-fg').trim() || '#e6edf3'
+  return { background: bg, foreground: fg, cursor: '#58a6ff' }
+}
+
 // 跨 http（局域网非安全上下文）也能用的复制
 function copyText(s: string) {
   if (navigator.clipboard && window.isSecureContext) {
@@ -101,7 +109,7 @@ const Term = forwardRef<TermHandle, {
       cursorBlink: true,
       scrollback: 5000,
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-      theme: { background: '#06090d', foreground: '#e6edf3', cursor: '#58a6ff' },
+      theme: xtermTheme(),
     })
     const fit = new FitAddon()
     term.loadAddon(fit)
@@ -109,6 +117,10 @@ const Term = forwardRef<TermHandle, {
     termRef.current = term
     fitRef.current = fit
     setTimeout(() => { try { fit.fit() } catch {} }, 0)
+
+    // 跟随全局黑/白主题：监听 <html data-theme> 变化，热更新终端配色
+    const themeObs = new MutationObserver(() => { try { term.options.theme = xtermTheme() } catch {} })
+    themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
 
     const dataDisp = term.onData((d) => { const ws = wsRef.current; if (ws && ws.readyState === 1) ws.send(d) })
     const ro = new ResizeObserver(() => sendResize())
@@ -146,6 +158,7 @@ const Term = forwardRef<TermHandle, {
       unmounted.current = true
       clearTimeout(retry.current)
       ro.disconnect()
+      themeObs.disconnect()
       window.removeEventListener('resize', sendResize)
       el.removeEventListener('touchstart', onTS, { capture: true } as any)
       el.removeEventListener('touchmove', onTM, { capture: true } as any)

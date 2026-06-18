@@ -23,3 +23,15 @@ export async function api(method: string, path: string, body?: any): Promise<any
   }
   return data
 }
+
+// 上传文件到指定目录（multipart）。返回 { dir, saved: 绝对路径[] }。
+export async function upload(dir: string, files: FileList | File[]): Promise<{ dir: string; saved: string[] }> {
+  const form = new FormData()
+  form.append('dir', dir)
+  Array.from(files).forEach((f) => form.append('files', f))
+  const r = await fetch('/api/upload', { method: 'POST', body: form })
+  if (r.status === 401) { onUnauth(); throw new Error('未登录') }
+  const data = await r.json().catch(() => null)
+  if (!r.ok) throw new Error(data?.error?.message || data?.error?.code || 'HTTP ' + r.status)
+  return data.data
+}

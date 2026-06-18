@@ -4,11 +4,13 @@ package api
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -98,5 +100,62 @@ func (a *API) FileRaw(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "NOT_FILE"}})
 		return
 	}
+	if c.Query("dl") != "" { // 强制下载（附件），带原文件名
+		c.FileAttachment(p, filepath.Base(p))
+		return
+	}
 	c.File(p)
+}
+
+// uniquePath 目标已存在时在扩展名前加 (1)/(2)… 避免覆盖。
+func uniquePath(p string) string {
+	if _, err := os.Stat(p); os.IsNotExist(err) {
+		return p
+	}
+	ext := filepath.Ext(p)
+	base := strings.TrimSuffix(p, ext)
+	for i := 1; ; i++ {
+		cand := fmt.Sprintf("%s (%d)%s", base, i, ext)
+		if _, err := os.Stat(cand); os.IsNotExist(err) {
+			return cand
+		}
+	}
+}
+
+// Upload POST /upload —— multipart 上传文件到指定目录(dir)。
+// form: dir=<绝对目录> + 一个或多个 files=<文件>。返回保存后的绝对路径。
+func (a *API) Upload(c *gin.Context) {
+	dir := filepath.Clean(c.PostForm("dir"))
+	if dir == "" || !filepath.IsAbs(dir) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_PATH"}})
+		return
+	}
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "NOT_DIR"}})
+		return
+	}
+	form, err := c.MultipartForm()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_FORM", "message": err.Error()}})
+		return
+	}
+	files := form.File["files"]
+	if len(files) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "NO_FILE"}})
+		return
+	}
+	saved := []string{}
+	for _, fh := range files {
+		name := filepath.Base(fh.Filename) // 去掉任何路径成分，防穿越
+		if name == "" || name == "." || name == ".." {
+			continue
+		}
+		dest := uniquePath(filepath.Join(dir, name))
+		if err := c.SaveUploadedFile(fh, dest); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "WRITE_ERROR", "message": err.Error()}})
+			return
+		}
+		saved = append(saved, dest)
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"dir": dir, "saved": saved}})
 }

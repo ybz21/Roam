@@ -150,17 +150,20 @@ func (a *API) ClaudeStatus(c *gin.Context) {
 // ── JSONL → 可渲染对话 ──
 
 type cBlock struct {
-	Kind    string `json:"kind"`              // text | thinking | tool_use | tool_result
-	Text    string `json:"text,omitempty"`    // text/thinking/tool_result 文本
-	Name    string `json:"name,omitempty"`    // tool_use 工具名
-	Input   string `json:"input,omitempty"`   // tool_use 入参(JSON 字符串)
-	IsError bool   `json:"isError,omitempty"` // tool_result 是否报错
+	Kind      string `json:"kind"`                // text | thinking | tool_use | tool_result
+	Text      string `json:"text,omitempty"`      // text/thinking/tool_result 文本
+	Name      string `json:"name,omitempty"`      // tool_use 工具名
+	Input     string `json:"input,omitempty"`     // tool_use 入参(JSON 字符串)
+	ID        string `json:"id,omitempty"`        // tool_use 的 id（供前端把结果挂到调用下）
+	ToolUseID string `json:"toolUseId,omitempty"` // tool_result 对应的 tool_use id
+	IsError   bool   `json:"isError,omitempty"`   // tool_result 是否报错
 }
 
 type cMsg struct {
 	Role   string   `json:"role"` // user | assistant | tool
 	Blocks []cBlock `json:"blocks"`
 	Ts     string   `json:"ts,omitempty"`
+	ID     string   `json:"id,omitempty"` // 行 uuid，供前端做稳定 key（保住折叠态）
 }
 
 const blockCap = 6000 // 单块文本上限，避免巨大 tool 输出撑爆响应
@@ -188,11 +191,17 @@ func rawContentText(raw json.RawMessage) string {
 	if json.Unmarshal(raw, &arr) == nil {
 		var b strings.Builder
 		for _, x := range arr {
-			b.WriteString(x.Text)
+			switch x.Type {
+			case "image":
+				b.WriteString("[图片]\n")
+			default:
+				b.WriteString(x.Text)
+			}
 		}
-		return b.String()
+		return strings.TrimRight(b.String(), "\n")
 	}
-	return ""
+	// 其它结构（对象等）：原样回退为紧凑 JSON，至少不丢信息
+	return string(raw)
 }
 
 // parseLine 把一行 JSONL 解析成 cMsg；非对话行（mode/snapshot/system 等）返回 nil。
@@ -200,6 +209,7 @@ func parseLine(line string) *cMsg {
 	var raw struct {
 		Type    string `json:"type"`
 		Ts      string `json:"timestamp"`
+		UUID    string `json:"uuid"`
 		Message struct {
 			Role    string          `json:"role"`
 			Content json.RawMessage `json:"content"`
@@ -219,18 +229,20 @@ func parseLine(line string) *cMsg {
 		if str == "" {
 			return nil
 		}
-		return &cMsg{Role: "user", Ts: raw.Ts, Blocks: []cBlock{{Kind: "text", Text: clip(str)}}}
+		return &cMsg{Role: "user", Ts: raw.Ts, ID: raw.UUID, Blocks: []cBlock{{Kind: "text", Text: clip(str)}}}
 	}
 
 	// 否则是块数组
 	var arr []struct {
-		Type     string          `json:"type"`
-		Text     string          `json:"text"`
-		Thinking string          `json:"thinking"`
-		Name     string          `json:"name"`
-		Input    json.RawMessage `json:"input"`
-		Content  json.RawMessage `json:"content"`
-		IsError  bool            `json:"is_error"`
+		Type      string          `json:"type"`
+		Text      string          `json:"text"`
+		Thinking  string          `json:"thinking"`
+		Name      string          `json:"name"`
+		Input     json.RawMessage `json:"input"`
+		Content   json.RawMessage `json:"content"`
+		ID        string          `json:"id"`
+		ToolUseID string          `json:"tool_use_id"`
+		IsError   bool            `json:"is_error"`
 	}
 	if json.Unmarshal(raw.Message.Content, &arr) != nil {
 		return nil
@@ -248,17 +260,19 @@ func parseLine(line string) *cMsg {
 			if t := strings.TrimSpace(b.Thinking); t != "" {
 				blocks = append(blocks, cBlock{Kind: "thinking", Text: clip(t)})
 			}
+		case "redacted_thinking":
+			blocks = append(blocks, cBlock{Kind: "thinking", Text: "（思考内容已加密，无法展示）"})
 		case "tool_use":
-			blocks = append(blocks, cBlock{Kind: "tool_use", Name: b.Name, Input: clip(string(b.Input))})
+			blocks = append(blocks, cBlock{Kind: "tool_use", Name: b.Name, Input: clip(string(b.Input)), ID: b.ID})
 		case "tool_result":
 			role = "tool"
-			blocks = append(blocks, cBlock{Kind: "tool_result", Text: clip(rawContentText(b.Content)), IsError: b.IsError})
+			blocks = append(blocks, cBlock{Kind: "tool_result", Text: clip(rawContentText(b.Content)), ToolUseID: b.ToolUseID, IsError: b.IsError})
 		}
 	}
 	if len(blocks) == 0 {
 		return nil
 	}
-	return &cMsg{Role: role, Ts: raw.Ts, Blocks: blocks}
+	return &cMsg{Role: role, Ts: raw.Ts, ID: raw.UUID, Blocks: blocks}
 }
 
 // ClaudeTranscript GET /sessions/:name/transcript?file=...&offset=N
@@ -298,6 +312,9 @@ func (a *API) ClaudeTranscript(c *gin.Context) {
 			continue
 		}
 		if m := parseLine(sc.Text()); m != nil {
+			if m.ID == "" { // uuid 缺失时用行号兜底，保证稳定 key
+				m.ID = strconv.Itoa(n)
+			}
 			msgs = append(msgs, *m)
 		}
 	}

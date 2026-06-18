@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   Layout, Menu, Button, Card, List, Tag, Form, Input, Select, Segmented,
-  Statistic, Row, Col, Space, Popconfirm, Empty, Modal, Grid, App as AntApp, Typography, Spin, Tooltip, Dropdown, Checkbox, Progress,
+  Statistic, Row, Col, Space, Popconfirm, Empty, Modal, Grid, App as AntApp, Typography, Spin, Tooltip, Dropdown, Checkbox, Progress, AutoComplete,
 } from 'antd'
 import { QRCodeSVG } from 'qrcode.react'
 import { api, setUnauthorizedHandler } from './api'
@@ -16,6 +16,8 @@ import CodexChat from './CodexChat'
 import FileBrowser from './FileBrowser'
 import BrowserView from './BrowserView'
 import Swarm from './Swarm'
+import UpdateBanner from './UpdateBanner'
+import { useThemeMode } from './theme'
 
 interface ClaudeInfo { running: boolean; file?: string; dir?: string }
 
@@ -98,6 +100,10 @@ export default function App() {
   const tab = route.split('/')[0]                                  // 基础页（swarm/leave → swarm）
   const swarmSub = tab === 'swarm' && route.includes('/') ? decodeURIComponent(route.slice(route.indexOf('/') + 1)) : '' // 深链选中的蜂群
   const go = (k: string) => { location.hash = '#/' + k } // hash 路由：/#/xxx
+  const { mode, toggle: toggleTheme } = useThemeMode()
+  const themeIcon = mode === 'dark'
+    ? svg(<><circle cx="12" cy="12" r="4.2" /><path d="M12 2v2.2M12 19.8V22M4.2 4.2l1.6 1.6M18.2 18.2l1.6 1.6M2 12h2.2M19.8 12H22M4.2 19.8l1.6-1.6M18.2 5.8l1.6-1.6" /></>)
+    : svg(<><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z" /></>)
   const [collapsed, setCollapsed] = useState(false)
   const screens = useBreakpoint()
   const hasSider = !!screens.md
@@ -218,18 +224,19 @@ export default function App() {
 
   const menu = (
     <Menu
-      theme="dark" mode="inline" selectedKeys={[tab]} onClick={(e) => go(e.key)}
+      theme={mode} mode="inline" selectedKeys={[tab]} onClick={(e) => go(e.key)}
       items={NAV.map((n) => ({ key: n.key, icon: ICONS[n.key], label: n.label }))}
       style={{ borderInlineEnd: 0, background: 'transparent' }}
     />
   )
 
   return (
-    <Layout style={{ minHeight: '100dvh', background: '#0d1117' }}>
+    <Layout style={{ minHeight: '100dvh', background: 'var(--bg-base)' }}>
+      <UpdateBanner />
       {hasSider && !dockMax && (
         <Sider collapsible trigger={null} collapsed={collapsed} collapsedWidth={64}
-          breakpoint="lg" onBreakpoint={(b) => setCollapsed(b)} width={208} theme="dark"
-          style={{ position: 'sticky', top: 0, height: '100dvh', background: '#0d1117', borderRight: '1px solid #21262d' }}>
+          breakpoint="lg" onBreakpoint={(b) => setCollapsed(b)} width={208} theme={mode}
+          style={{ position: 'sticky', top: 0, height: '100dvh', background: 'var(--bg-base)', borderRight: '1px solid var(--border-subtle)' }}>
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: collapsed ? '18px 0 16px' : '18px 18px 16px', justifyContent: collapsed ? 'center' : 'flex-start' }}>
               <img src="/logo-mark.svg" width={34} height={34} alt="Roam"
@@ -238,30 +245,34 @@ export default function App() {
                 <div style={{ lineHeight: 1.15 }}>
                   <div style={{
                     fontWeight: 800, fontSize: 19, letterSpacing: 0.5,
-                    background: 'linear-gradient(180deg,#f5f7fa 0%,#c3c9d1 46%,#9aa1ab 56%,#e7ebef 100%)',
+                    background: 'var(--brand-grad)',
                     WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent',
                   }}>Roam</div>
-                  <div style={{ color: '#6e7681', fontSize: 10, letterSpacing: 1.5 }}>ANYWHERE · ANYTIME</div>
+                  <div style={{ color: 'var(--text-dimmer)', fontSize: 10, letterSpacing: 1.5 }}>ANYWHERE · ANYTIME</div>
                 </div>
               )}
             </div>
             <div style={{ flex: 1, overflowY: 'auto' }}>{menu}</div>
             {/* 底部：全屏（上）+ 折叠 + 退出（下），始终竖向堆叠 */}
-            <div style={{ borderTop: '1px solid #21262d', padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ borderTop: '1px solid var(--border-subtle)', padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <Button type="text" block onClick={toggleTheme} style={{ color: 'var(--text-dim)', textAlign: collapsed ? 'center' : 'left' }}
+                title={mode === 'dark' ? '切换浅色' : '切换深色'}>
+                {collapsed ? themeIcon : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{themeIcon}{mode === 'dark' ? '浅色主题' : '深色主题'}</span>}
+              </Button>
               {fsSupported && (
-                <Button type="text" block onClick={toggleFs} style={{ color: '#8b949e', textAlign: collapsed ? 'center' : 'left' }}
+                <Button type="text" block onClick={toggleFs} style={{ color: 'var(--text-dim)', textAlign: collapsed ? 'center' : 'left' }}
                   title={isFs ? '退出全屏' : '全屏'}>
                   {collapsed ? fsIcon : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{fsIcon}{isFs ? '退出全屏' : '全屏'}</span>}
                 </Button>
               )}
-              <Button type="text" block onClick={() => setCollapsed((c) => !c)} style={{ color: '#8b949e' }}
+              <Button type="text" block onClick={() => setCollapsed((c) => !c)} style={{ color: 'var(--text-dim)' }}
                 title={collapsed ? '展开导航' : '折叠导航'}>
                 {svg(collapsed
                   ? <><polyline points="9 6 15 12 9 18" /></>
                   : <><polyline points="15 6 9 12 15 18" /></>)}
               </Button>
               <Popconfirm title="确定退出登录？" okText="退出" cancelText="取消" onConfirm={logout} placement="topRight">
-                <Button type="text" block style={{ color: '#8b949e', textAlign: collapsed ? 'center' : 'left' }} title="退出登录">
+                <Button type="text" block style={{ color: 'var(--text-dim)', textAlign: collapsed ? 'center' : 'left' }} title="退出登录">
                   {collapsed ? svg(<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></>) : '退出登录'}
                 </Button>
               </Popconfirm>
@@ -271,7 +282,7 @@ export default function App() {
       )}
 
       {/* 主区：左侧页面 + 右侧可停靠终端栏（桌面）。开终端时页面向左压缩。*/}
-      <Layout style={{ background: '#0d1117' }}>
+      <Layout style={{ background: 'var(--bg-base)' }}>
         <div style={{ display: 'flex', height: '100dvh', minHeight: 0 }}>
           <Content style={{
             // 终端弹出时左侧页面压窄到 300；继续向左扩展(dockMax)则收到 0、被终端遮住
@@ -288,15 +299,15 @@ export default function App() {
           {/* 角标把手：上半 ◂ 向左扩展（关→开→遮住会话列表），下半 ▸ 向右收起 */}
           {hasSider && terms.length > 0 && (
             <div style={{
-              flex: '0 0 22px', background: '#161b22', borderLeft: '1px solid #30363d',
-              display: 'flex', flexDirection: 'column', color: anyClaude ? '#d2a8ff' : '#8b949e', userSelect: 'none',
+              flex: '0 0 22px', background: 'var(--bg-container)', borderLeft: '1px solid var(--border)',
+              display: 'flex', flexDirection: 'column', color: anyClaude ? '#d2a8ff' : 'var(--text-dim)', userSelect: 'none',
             }}>
               {/* 上半：向左扩展 */}
               <div onClick={() => (dockOpen ? setDockMax(true) : setDockOpen(true))}
                 title={!dockOpen ? '展开终端' : '向左扩展（遮住会话列表）'}
                 style={{
                   flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8,
-                  borderBottom: '1px solid #30363d', cursor: dockMax ? 'default' : 'pointer', opacity: dockMax ? 0.3 : 1,
+                  borderBottom: '1px solid var(--border)', cursor: dockMax ? 'default' : 'pointer', opacity: dockMax ? 0.3 : 1,
                 }}>
                 <span style={{ fontSize: 13 }}>◂</span>
                 <span style={{ writingMode: 'vertical-rl', letterSpacing: 2, fontSize: 12 }}>{anyClaude ? '🤖 终端' : '终端'}</span>
@@ -319,7 +330,7 @@ export default function App() {
             <div style={{
               flex: dockOpen ? 1 : '0 0 0px', minWidth: dockOpen ? 480 : 0,
               width: dockOpen ? 'auto' : 0, overflow: 'hidden', transition: 'flex-basis .2s, min-width .2s',
-              display: 'flex', flexDirection: 'column', background: '#06090d',
+              display: 'flex', flexDirection: 'column', background: 'var(--bg-term)',
             }}>
               {termPane}
             </div>
@@ -328,31 +339,31 @@ export default function App() {
       </Layout>
 
       {isMobile && (
-        <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, display: 'flex', background: '#161b22', borderTop: '1px solid #30363d', zIndex: 50, paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, display: 'flex', background: 'var(--bg-container)', borderTop: '1px solid var(--border)', zIndex: 50, paddingBottom: 'env(safe-area-inset-bottom)' }}>
           {NAV.map((n) => (
             <button key={n.key} onClick={() => go(n.key)}
-              style={{ flex: 1, border: 0, background: 'none', color: tab === n.key ? '#58a6ff' : '#8b949e', padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11 }}>
+              style={{ flex: 1, border: 0, background: 'none', color: tab === n.key ? '#58a6ff' : 'var(--text-dim)', padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11 }}>
               {ICONS[n.key]}{n.label}
             </button>
           ))}
-          {fsSupported && (
-            <button onClick={toggleFs}
-              style={{ flex: 1, border: 0, background: 'none', color: '#8b949e', padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11 }}>
-              {fsIcon}{isFs ? '退出' : '全屏'}
-            </button>
-          )}
-          <Popconfirm title="确定退出登录？" okText="退出" cancelText="取消" onConfirm={logout} placement="top">
+          {/* 主题/全屏/退出折叠进「更多」，省出底栏空间 */}
+          <Dropdown placement="top" trigger={['click']} menu={{ items: [
+            { key: 'theme', icon: themeIcon, label: mode === 'dark' ? '浅色主题' : '深色主题', onClick: toggleTheme },
+            ...(fsSupported ? [{ key: 'fs', icon: fsIcon, label: isFs ? '退出全屏' : '全屏', onClick: toggleFs }] : []),
+            { type: 'divider' as const },
+            { key: 'logout', danger: true, label: '退出登录', onClick: () => Modal.confirm({ title: '确定退出登录？', okText: '退出', cancelText: '取消', okButtonProps: { danger: true }, onOk: logout }) },
+          ] }}>
             <button
-              style={{ flex: 1, border: 0, background: 'none', color: '#8b949e', padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11 }}>
-              {svg(<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></>)}退出
+              style={{ flex: 1, border: 0, background: 'none', color: 'var(--text-dim)', padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11 }}>
+              {svg(<><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></>)}更多
             </button>
-          </Popconfirm>
+          </Dropdown>
         </nav>
       )}
 
       {/* 手机/平板：全屏会话覆盖层（桌面用右侧停靠栏，不走这里）*/}
       {isMobile && overlay && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: '#06090d', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'var(--bg-term)', display: 'flex', flexDirection: 'column' }}>
           {termPane}
         </div>
       )}
@@ -387,7 +398,7 @@ function SoloTerminal({ name }: { name: string }) {
   }, [name])
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#06090d', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'var(--bg-term)', display: 'flex', flexDirection: 'column' }}>
       <TerminalPane
         terms={[name]} active={name} setActive={() => {}} closeTerm={() => window.close()}
         fontSize={fontSize} setFontSize={setFontSize}
@@ -414,6 +425,9 @@ function TerminalPane(props: {
   const { message } = AntApp.useApp()
   const st = active ? statusMap[active] : undefined
   const dot = st === 'connected' ? '#3fb950' : st === 'connecting' ? '#d29922' : '#f85149'
+  // 当前标签是否在 Claude/Codex 对话视图：此时聊天 UI 自带输入框，
+  // 终端那条移动输入条 + 快捷键栏要隐藏，否则手机上会出现两个输入框。
+  const inChat = !!active && ((claudeView[active] && claudeMap[active]?.running) || (codexView[active] && codexMap[active]?.running))
 
   // 移动端可靠输入：xterm 隐藏 textarea 在软键盘/输入法「合成/预测词」下会把字留在
   // 合成缓冲里不提交，onData 不触发 → 打完字发不出去。触摸设备改用独立输入框：整行送 PTY。
@@ -440,10 +454,10 @@ function TerminalPane(props: {
 
   if (terms.length === 0) {
     return (
-      <div style={{ flex: 1, display: 'grid', placeItems: 'center', color: '#8b949e' }}>
+      <div style={{ flex: 1, display: 'grid', placeItems: 'center', color: 'var(--text-dim)' }}>
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: 40 }}>▸</div>
-          <div>点击「会话」或「任务」里的 <b style={{ color: '#e6edf3' }}>终端</b> 进入命令行</div>
+          <div>点击「会话」或「任务」里的 <b style={{ color: 'var(--text-bright)' }}>终端</b> 进入命令行</div>
         </div>
       </div>
     )
@@ -452,26 +466,26 @@ function TerminalPane(props: {
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       {/* 标签栏 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 8px', borderBottom: '1px solid #30363d', overflowX: 'auto' }}>
-        {onCollapse && <Button size="small" type="text" style={{ color: '#8b949e' }} onClick={onCollapse}>✕ 收起</Button>}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 8px', borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
+        {onCollapse && <Button size="small" type="text" style={{ color: 'var(--text-dim)' }} onClick={onCollapse}>✕ 收起</Button>}
         {terms.map((t) => (
           <span key={t} onClick={() => setActive(t)}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap',
-              background: t === active ? '#1f6feb33' : 'transparent', border: t === active ? '1px solid #1f6feb' : '1px solid #30363d', color: '#e6edf3',
+              background: t === active ? '#1f6feb33' : 'transparent', border: t === active ? '1px solid #1f6feb' : '1px solid var(--border)', color: 'var(--text-bright)',
             }}>
             <i style={{ width: 7, height: 7, borderRadius: '50%', background: (statusMap[t] === 'connected' ? '#3fb950' : statusMap[t] === 'connecting' ? '#d29922' : '#f85149') }} />
             {claudeMap[t]?.running && <span title="正在运行 Claude Code">🤖</span>}
             {codexMap[t]?.running && <span title="正在运行 Codex" style={{ color: '#10a37f' }}>✸</span>}
             {t}
-            <a onClick={(e) => { e.stopPropagation(); closeTerm(t) }} style={{ color: '#8b949e' }}>×</a>
+            <a onClick={(e) => { e.stopPropagation(); closeTerm(t) }} style={{ color: 'var(--text-dim)' }}>×</a>
           </span>
         ))}
       </div>
 
       {/* 工具栏 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderBottom: '1px solid #21262d' }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#8b949e', fontSize: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-dim)', fontSize: 12 }}>
           <i style={{ width: 8, height: 8, borderRadius: '50%', background: dot }} />
           {st === 'connected' ? '已连接' : st === 'connecting' ? '连接中' : '已断开'}
         </span>
@@ -538,8 +552,9 @@ function TerminalPane(props: {
         )}
       </div>
 
-      {/* 移动端文字输入框：软键盘/输入法在 xterm 里会丢字，这里整行可靠发送到 PTY */}
-      {isTouch && (
+      {/* 移动端文字输入框：软键盘/输入法在 xterm 里会丢字，这里整行可靠发送到 PTY。
+          对话视图(Claude/Codex)有自己的输入框，这里隐藏避免双输入框。 */}
+      {isTouch && !inChat && (
         <div style={{ display: 'flex', gap: 6, padding: '8px 8px 0' }}>
           <Input
             value={line}
@@ -553,13 +568,15 @@ function TerminalPane(props: {
         </div>
       )}
 
-      {/* 快捷键栏 */}
-      <div style={{ display: 'flex', gap: 6, padding: 8, borderTop: '1px solid #30363d', overflowX: 'auto' }}>
-        <Button type="primary" onMouseDown={noBlur} onClick={() => (isTouch ? submitLine() : sendKey('\r'))}>Enter</Button>
-        {KEYS.map(([label, seq]) => (
-          <Button key={label} onMouseDown={noBlur} onClick={() => tapKey(seq)} style={{ flex: '0 0 auto' }}>{label}</Button>
-        ))}
-      </div>
+      {/* 快捷键栏：对话视图下隐藏（聊天 UI 不需要终端控制键，且避免与其输入区挤占） */}
+      {!inChat && (
+        <div style={{ display: 'flex', gap: 6, padding: 8, borderTop: '1px solid var(--border)', overflowX: 'auto' }}>
+          <Button type="primary" onMouseDown={noBlur} onClick={() => (isTouch ? submitLine() : sendKey('\r'))}>Enter</Button>
+          {KEYS.map(([label, seq]) => (
+            <Button key={label} onMouseDown={noBlur} onClick={() => tapKey(seq)} style={{ flex: '0 0 auto' }}>{label}</Button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -576,16 +593,16 @@ function Login({ onOk }: { onOk: () => void }) {
   useEffect(() => { api('GET', '/pubconfig').then((r) => setTotp(!!r?.data?.totp)).catch(() => {}) }, [])
 
   return (
-    <div style={{ height: '100dvh', display: 'grid', placeItems: 'center', padding: 16, background: '#0d1117' }}>
+    <div style={{ height: '100dvh', display: 'grid', placeItems: 'center', padding: 16, background: 'var(--bg-base)' }}>
       <Card style={{ width: 'min(360px,92vw)' }}>
         <div style={{ textAlign: 'center', marginBottom: 18 }}>
           <img src="/logo-mark.svg" width={64} height={64} alt="Roam" style={{ borderRadius: 14 }} />
           <div style={{
             fontSize: 30, fontWeight: 800, letterSpacing: 1, marginTop: 12,
-            background: 'linear-gradient(180deg,#f5f7fa 0%,#c3c9d1 46%,#9aa1ab 56%,#e7ebef 100%)',
+            background: 'var(--brand-grad)',
             WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent',
           }}>Roam</div>
-          <div style={{ color: '#6e7681', fontSize: 12, marginTop: 4, letterSpacing: 0.5 }}>Code anywhere, anytime.</div>
+          <div style={{ color: 'var(--text-dimmer)', fontSize: 12, marginTop: 4, letterSpacing: 0.5 }}>Code anywhere, anytime.</div>
         </div>
         <Form
           initialValues={{ password: saved, remember: !!saved }}
@@ -636,12 +653,12 @@ function StatTile({ icon, label, value, accent, onClick }: {
 }) {
   return (
     <Card size="small" hoverable={!!onClick} onClick={onClick}
-      style={{ cursor: onClick ? 'pointer' : 'default', background: '#161b22', borderColor: '#21262d' }}>
+      style={{ cursor: onClick ? 'pointer' : 'default', background: 'var(--bg-container)', borderColor: 'var(--border-subtle)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <div style={{ width: 40, height: 40, borderRadius: 10, flex: '0 0 auto', display: 'grid', placeItems: 'center', color: accent, background: accent + '22' }}>{icon}</div>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 24, fontWeight: 700, lineHeight: 1.1, color: '#e6edf3' }}>{value}</div>
-          <div style={{ color: '#8b949e', fontSize: 12 }}>{label}</div>
+          <div style={{ fontSize: 24, fontWeight: 700, lineHeight: 1.1, color: 'var(--text-bright)' }}>{value}</div>
+          <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>{label}</div>
         </div>
       </div>
     </Card>
@@ -661,17 +678,17 @@ function Overview({ go, openTerm, kanna }: { go: (k: string) => void; openTerm: 
 
   const aliveMembers = swarms.reduce((n, x) => n + (x.alive || 0), 0)
   const pendingMembers = swarms.reduce((n, x) => n + (x.pending || 0), 0)
-  const chip = { color: '#8b949e', background: '#0d1117', border: '1px solid #21262d', fontSize: 12 }
+  const chip = { color: 'var(--text-dim)', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', fontSize: 12 }
 
   return (
     <Space direction="vertical" size={14} style={{ width: '100%' }}>
       {/* Hero */}
-      <div style={{ borderRadius: 14, padding: '22px 24px', background: 'linear-gradient(135deg,#161b22 0%,#0d1117 100%)', border: '1px solid #21262d' }}>
+      <div style={{ borderRadius: 14, padding: '22px 24px', background: 'linear-gradient(135deg,var(--bg-container) 0%,var(--bg-base) 100%)', border: '1px solid var(--border-subtle)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
           <img src="/logo-mark.svg" width={48} height={48} alt="Roam" style={{ flex: '0 0 auto', borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,.5)' }} />
           <div style={{ flex: 1, minWidth: 200 }}>
-            <div style={{ fontSize: 22, fontWeight: 800, color: '#e6edf3' }}>欢迎回来{kanna ? '，' + kanna : ''} 👋</div>
-            <div style={{ color: '#8b949e', fontSize: 13, marginTop: 4 }}>多终端 · 蜂群编排 · 一起干活</div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-bright)' }}>欢迎回来 👋</div>
+            <div style={{ color: 'var(--text-dim)', fontSize: 13, marginTop: 4 }}>多终端 · 蜂群编排 · 一起干活</div>
           </div>
           <Space wrap>
             <Button type="primary" onClick={() => go('sessions')}>进入会话</Button>
@@ -701,16 +718,16 @@ function Overview({ go, openTerm, kanna }: { go: (k: string) => void; openTerm: 
               <Space direction="vertical" size={10} style={{ width: '100%' }}>
                 {swarms.slice(0, 5).map((s: any) => (
                   <div key={s.id || s.name} onClick={() => go('swarm')}
-                    style={{ cursor: 'pointer', padding: '10px 12px', borderRadius: 10, background: '#0d1117', border: '1px solid #21262d' }}>
+                    style={{ cursor: 'pointer', padding: '10px 12px', borderRadius: 10, background: 'var(--bg-base)', border: '1px solid var(--border-subtle)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontWeight: 600, color: '#e6edf3' }}>{s.name}</span>
+                      <span style={{ fontWeight: 600, color: 'var(--text-bright)' }}>{s.name}</span>
                       <SwarmStatusTag status={s.status} />
                       {s.supervisor && <Text type="secondary" style={{ fontSize: 12 }}>◆{s.supervisor}</Text>}
                       <span style={{ flex: 1 }} />
-                      <span style={{ color: '#8b949e', fontSize: 12, whiteSpace: 'nowrap' }}>{s.alive}/{s.total} 活{s.pending ? ` · +${s.pending} 待` : ''}</span>
+                      <span style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap' }}>{s.alive}/{s.total} 活{s.pending ? ` · +${s.pending} 待` : ''}</span>
                     </div>
-                    <div style={{ color: '#8b949e', fontSize: 12, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.goal || '(无目标)'}</div>
-                    <Progress percent={s.total ? Math.round((s.alive / s.total) * 100) : 0} showInfo={false} size="small" strokeColor="#d2a8ff" trailColor="#21262d" style={{ marginBottom: 0, marginTop: 6 }} />
+                    <div style={{ color: 'var(--text-dim)', fontSize: 12, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.goal || '(无目标)'}</div>
+                    <Progress percent={s.total ? Math.round((s.alive / s.total) * 100) : 0} showInfo={false} size="small" strokeColor="#d2a8ff" trailColor="var(--border-subtle)" style={{ marginBottom: 0, marginTop: 6 }} />
                   </div>
                 ))}
               </Space>
@@ -723,7 +740,7 @@ function Overview({ go, openTerm, kanna }: { go: (k: string) => void; openTerm: 
               <List size="small" dataSource={sessions.slice(0, 6)} renderItem={(s: any) => (
                 <List.Item actions={[<a key="t" onClick={() => openTerm(s.name)}>终端</a>]}>
                   <List.Item.Meta
-                    title={<span style={{ color: '#e6edf3' }}>{s.name}</span>}
+                    title={<span style={{ color: 'var(--text-bright)' }}>{s.name}</span>}
                     description={`${s.windows} 窗口 · ${s.attached == 1 ? '已连接' : '空闲'}`} />
                 </List.Item>
               )} />
@@ -802,21 +819,43 @@ function Tasks({ openTerm, kanna }: { openTerm: (n: string) => void; kanna?: str
 }
 
 // ── 服务器目录选择器 ──
+// 最近用过的工作目录（localStorage 持久化），作为目录选择器的快捷候选
+const RECENT_DIRS_KEY = 'ttmux_recent_dirs'
+function recentDirs(): string[] { try { return JSON.parse(localStorage.getItem(RECENT_DIRS_KEY) || '[]') } catch { return [] } }
+export function pushRecentDir(d: string) {
+  if (!d || !d.trim()) return
+  try { localStorage.setItem(RECENT_DIRS_KEY, JSON.stringify([d.trim(), ...recentDirs().filter((x) => x !== d.trim())].slice(0, 8))) } catch {}
+}
+
 function DirPicker({ open, start, onPick, onClose }: { open: boolean; start?: string; onPick: (p: string) => void; onClose: () => void }) {
   const [data, setData] = useState<any>({ path: '', parent: '', dirs: [] })
+  const [recent, setRecent] = useState<string[]>([])
   const { message } = AntApp.useApp()
   const load = (p?: string) => api('GET', '/fs' + (p !== undefined ? '?path=' + encodeURIComponent(p) : '')).then((r) => setData(r.data)).catch((e) => message.error(e.message))
-  useEffect(() => { if (open) load(start || undefined) }, [open])
+  useEffect(() => { if (open) { setRecent(recentDirs()); load(start || undefined) } }, [open])
   const enter = (d: string) => load((data.path === '/' ? '' : data.path) + '/' + d)
+  const choose = (p: string) => { pushRecentDir(p); onPick(p) }
   return (
     <Modal open={open} onCancel={onClose} title="选择工作目录" zIndex={1100}
-      footer={[<Button key="c" onClick={onClose}>取消</Button>, <Button key="o" type="primary" onClick={() => onPick(data.path)}>选择此目录</Button>]}>
-      <div style={{ fontFamily: 'monospace', color: '#8b949e', marginBottom: 8, wordBreak: 'break-all' }}>{data.path || '…'}</div>
+      footer={[<Button key="c" onClick={onClose}>取消</Button>, <Button key="o" type="primary" onClick={() => choose(data.path)}>选择此目录</Button>]}>
+      {/* 快捷候选：家目录 + 最近用过的目录 */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+        <Tag style={{ cursor: 'pointer', margin: 0 }} onClick={() => load(undefined)}>🏠 家目录</Tag>
+        {recent.map((d) => (
+          <Tooltip key={d} title={d}>
+            <Tag color="blue" style={{ cursor: 'pointer', margin: 0, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}
+              onClick={() => load(d)} onDoubleClick={() => choose(d)}>
+              {d.split('/').filter(Boolean).pop() || d}
+            </Tag>
+          </Tooltip>
+        ))}
+      </div>
+      <div style={{ fontFamily: 'monospace', color: 'var(--text-dim)', marginBottom: 8, wordBreak: 'break-all' }}>{data.path || '…'}</div>
       <List size="small" style={{ maxHeight: '50vh', overflow: 'auto' }}
         dataSource={['..', ...(data.dirs || [])]}
         renderItem={(d: string) => (
           <List.Item style={{ cursor: 'pointer' }} onClick={() => (d === '..' ? load(data.parent) : enter(d))}>
-            <span style={{ color: d === '..' ? '#8b949e' : '#e6edf3' }}>{d === '..' ? '↑ 上级目录' : '▸ ' + d}</span>
+            <span style={{ color: d === '..' ? 'var(--text-dim)' : 'var(--text-bright)' }}>{d === '..' ? '↑ 上级目录' : '▸ ' + d}</span>
           </List.Item>
         )} />
     </Modal>
@@ -832,7 +871,7 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
   useEffect(() => { if (open) { setName(''); setDir('') } }, [open])
   const ok = async () => {
     if (!name.trim()) return message.error('请输入名称')
-    try { await api('POST', '/sessions', { name: name.trim(), dir: dir.trim() }); message.success('已创建'); onClose(); onDone(name.trim()) }
+    try { await api('POST', '/sessions', { name: name.trim(), dir: dir.trim() }); pushRecentDir(dir); message.success('已创建'); onClose(); onDone(name.trim()) }
     catch (e: any) { message.error(e.message) }
   }
   return (
@@ -841,7 +880,10 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
         <Space direction="vertical" style={{ width: '100%' }}>
           <Input placeholder="会话名称，如 work" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
           <Space.Compact style={{ width: '100%' }}>
-            <Input placeholder="工作目录（可空，默认家目录）" value={dir} onChange={(e) => setDir(e.target.value)} />
+            <AutoComplete style={{ flex: 1 }} value={dir} onChange={setDir}
+              options={recentDirs().map((d) => ({ value: d }))}
+              filterOption={(input, opt) => String(opt?.value).toLowerCase().includes(input.toLowerCase())}
+              placeholder="工作目录（可空，默认家目录；聚焦看最近）" />
             <Button onClick={() => setPick(true)}>浏览…</Button>
           </Space.Compact>
         </Space>
@@ -856,10 +898,36 @@ function Sessions({ openTerm }: { openTerm: (n: string) => void }) {
   const [list, setList] = useState<any[]>([])
   const [cc, setCc] = useState<Record<string, boolean>>({})
   const [cx, setCx] = useState<Record<string, boolean>>({})
+  const [swarmMap, setSwarmMap] = useState<Record<string, { swarm: string; role: string }>>({})
   const [newOpen, setNewOpen] = useState(false)
   const { message } = AntApp.useApp()
   const load = () => api('GET', '/sessions').then(setList).catch(() => {})
   useEffect(() => { load(); const t = setInterval(load, 3000); return () => clearInterval(t) }, [])
+  // 拉取蜂群拓扑：哪些会话其实是蜂群的指挥/成员。会话页和蜂群页看到的是同一批 tmux 会话，
+  // 这里据成员的真实 session 名(非前缀猜测)打标，并据此拦住「关闭」误把成员当完成解锁下游。
+  useEffect(() => {
+    let stop = false
+    const loadSwarms = async () => {
+      try {
+        const swarms = await api('GET', '/swarms')
+        if (!Array.isArray(swarms)) return
+        const map: Record<string, { swarm: string; role: string }> = {}
+        await Promise.all(swarms.map(async (sw: any) => {
+          try {
+            const st = await api('GET', `/swarms/${encodeURIComponent(sw.name)}`)
+            if (st?.supervisor) map[st.supervisor] = { swarm: sw.name, role: 'master' }
+            for (const m of (st?.members || [])) {
+              if (m?.session) map[m.session] = { swarm: sw.name, role: m.role === 'master' ? 'master' : 'worker' }
+            }
+          } catch {}
+        }))
+        if (!stop) setSwarmMap(map)
+      } catch {}
+    }
+    loadSwarms()
+    const t = setInterval(loadSwarms, 8000)
+    return () => { stop = true; clearInterval(t) }
+  }, [])
   // 标注哪些会话在跑 Claude Code
   useEffect(() => {
     let stop = false
@@ -872,26 +940,85 @@ function Sessions({ openTerm }: { openTerm: (n: string) => void }) {
     return () => { stop = true; clearInterval(t) }
   }, [list])
   const kill = async (n: string) => { try { await api('DELETE', '/sessions/' + encodeURIComponent(n)); message.success('已关闭'); load() } catch (e: any) { message.error(e.message) } }
+  const goSwarm = (sw: string) => { location.hash = '#/swarm/' + encodeURIComponent(sw) }
+
+  // ── 筛选 / 搜索 ──
+  const [q, setQ] = useState('')
+  const [filter, setFilter] = useState<'all' | 'claude' | 'codex' | 'swarm' | 'idle'>('all')
+  const ql = q.trim().toLowerCase()
+  const isSwarm = (s: any) => !!swarmMap[s.name]
+  // 默认不展示蜂群会话（它们有专门的蜂群页）；仅「蜂群」筛选时才列出
+  const match = (s: any, f: typeof filter) => {
+    if (f === 'swarm') return isSwarm(s)
+    if (isSwarm(s)) return false
+    switch (f) {
+      case 'claude': return !!cc[s.name]
+      case 'codex': return !!cx[s.name]
+      case 'idle': return !cc[s.name] && !cx[s.name]
+      default: return true
+    }
+  }
+  const filtered = list.filter((s: any) => (!ql || s.name.toLowerCase().includes(ql)) && match(s, filter))
+  const cnt = (f: typeof filter) => list.filter((s: any) => match(s, f)).length
+
   return (
-    <Card title="会话" extra={<Button type="primary" onClick={() => setNewOpen(true)}>+ 新建会话</Button>}>
-      {list.length === 0 ? <Empty description="无活跃会话" /> : (
-        <List dataSource={list} renderItem={(s: any) => (
-          <List.Item actions={[
-            <a key="t" onClick={() => openTerm(s.name)}>终端</a>,
-            <Popconfirm key="k" title={`关闭 ${s.name}？`} onConfirm={() => kill(s.name)}><a style={{ color: '#f85149' }}>关闭</a></Popconfirm>,
-          ]}>
-            <List.Item.Meta
-              title={
-                <Space size={6}>
-                  <span>{s.name}</span>
-                  {cc[s.name] && <Tag color="purple" style={{ margin: 0 }}>🤖 Claude</Tag>}
-                  {cx[s.name] && <Tag color="green" style={{ margin: 0 }}>✸ Codex</Tag>}
-                </Space>
-              }
-              description={`${s.windows} 窗口 · ${s.attached == 1 ? '已连接' : '空闲'}`} />
-          </List.Item>
-        )} />
-      )}
+    <Card
+      title={<Space size={8}>会话<Tag style={{ margin: 0 }}>{cnt('all')}</Tag></Space>}
+      extra={<Button type="primary" onClick={() => setNewOpen(true)}>+ 新建会话</Button>}
+    >
+      {/* 工具条：搜索 + 类型筛选 */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginBottom: 14 }}>
+        <Input allowClear value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索会话名…"
+          style={{ width: 220, maxWidth: '100%' }}
+          prefix={svg(<><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></>)} />
+        <Segmented value={filter} onChange={(v) => setFilter(v as any)} options={[
+          { label: `全部 ${cnt('all')}`, value: 'all' },
+          { label: `Claude ${cnt('claude')}`, value: 'claude' },
+          { label: `Codex ${cnt('codex')}`, value: 'codex' },
+          { label: `蜂群 ${cnt('swarm')}`, value: 'swarm' },
+          { label: `空闲 ${cnt('idle')}`, value: 'idle' },
+        ]} />
+      </div>
+
+      {list.length === 0 ? <Empty description="无活跃会话" />
+        : filtered.length === 0 ? <Empty description="无匹配会话" />
+          : (
+            <List dataSource={filtered} renderItem={(s: any) => {
+              const sw = swarmMap[s.name]
+              const connected = s.attached == 1
+              const agent = cc[s.name] ? 'claude' : cx[s.name] ? 'codex' : null
+              return (
+                // 整行点击直接进入终端；右侧操作区 stopPropagation 不触发进入
+                <List.Item style={{ padding: '10px 8px', cursor: 'pointer' }} onClick={() => openTerm(s.name)}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', width: '100%' }}>
+                    <i style={{ width: 8, height: 8, borderRadius: '50%', flex: '0 0 8px', background: connected ? '#3fb950' : 'var(--text-dimmer)' }} />
+                    <span style={{ fontWeight: 600, color: 'var(--text-bright)' }} title={s.name}>{s.name}</span>
+                    {sw && <Tag color="blue" style={{ margin: 0 }}>蜂群:{sw.swarm}{sw.role === 'master' ? '·指挥' : ''}</Tag>}
+                    {cc[s.name] && <Tag color="purple" style={{ margin: 0 }}>🤖 Claude</Tag>}
+                    {cx[s.name] && <Tag color="green" style={{ margin: 0 }}>✸ Codex</Tag>}
+                    {!sw && !agent && <Tag style={{ margin: 0 }}>{connected ? '已连接' : '空闲'}</Tag>}
+                    <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{s.windows} 窗口</span>
+                    <div onClick={(e) => e.stopPropagation()} style={{ marginLeft: 'auto', display: 'flex', gap: 14, alignItems: 'center' }}>
+                      {sw && <a onClick={() => goSwarm(sw.swarm)}>蜂群页</a>}
+                      {sw ? (
+                        <Popconfirm
+                          title="直接关闭蜂群会话？"
+                          description={<div style={{ maxWidth: 280 }}>这是蜂群 <b>{sw.swarm}</b> 的{sw.role === 'master' ? '指挥' : '成员'}。从这里关闭只是 kill 会话，蜂群会据此把它当作「已完成」并解锁下游依赖，可能脱节。建议到蜂群页管理。</div>}
+                          okText="仍要关闭" okButtonProps={{ danger: true }} cancelText="取消"
+                          onConfirm={() => kill(s.name)}>
+                          <a style={{ color: '#f85149' }}>关闭</a>
+                        </Popconfirm>
+                      ) : (
+                        <Popconfirm title={`关闭 ${s.name}？`} onConfirm={() => kill(s.name)}>
+                          <a style={{ color: '#f85149' }}>关闭</a>
+                        </Popconfirm>
+                      )}
+                    </div>
+                  </div>
+                </List.Item>
+              )
+            }} />
+          )}
       <NewSessionModal open={newOpen} onClose={() => setNewOpen(false)} onDone={(name) => { load(); openTerm(name) }} />
     </Card>
   )
@@ -929,7 +1056,7 @@ function EnvPage() {
         {list.length === 0 ? <Empty description="无环境变量" /> : (
           <List dataSource={list} renderItem={(kv: any) => (
             <List.Item actions={[<Popconfirm key="d" title="删除？" onConfirm={async () => { try { await api('DELETE', '/env/' + encodeURIComponent(kv.key)); message.success('已删除'); load() } catch (e: any) { message.error(e.message) } }}><a style={{ color: '#f85149' }}>删除</a></Popconfirm>]}>
-              <List.Item.Meta title={<code>{kv.key}</code>} description={<code style={{ color: '#8b949e' }}>{kv.value}</code>} />
+              <List.Item.Meta title={<code>{kv.key}</code>} description={<code style={{ color: 'var(--text-dim)' }}>{kv.value}</code>} />
             </List.Item>
           )} />
         )}
@@ -994,16 +1121,16 @@ function TwoFactorCard() {
 
         {/* 开启流程：扫码 → 输码确认 */}
         {setup && (
-          <div style={{ padding: 16, background: '#0d1117', borderRadius: 8 }}>
+          <div style={{ padding: 16, background: 'var(--bg-base)', borderRadius: 8 }}>
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
               <div style={{ background: '#fff', padding: 10, borderRadius: 8 }}><QRCodeSVG value={setup.uri} size={168} /></div>
               <div style={{ flex: 1, minWidth: 240 }}>
-                <div style={{ color: '#8b949e', fontSize: 12, marginBottom: 4 }}>① 用 Authenticator 扫码，或手动输入密钥：</div>
+                <div style={{ color: 'var(--text-dim)', fontSize: 12, marginBottom: 4 }}>① 用 Authenticator 扫码，或手动输入密钥：</div>
                 <Space.Compact style={{ width: '100%', marginBottom: 10 }}>
                   <Input readOnly value={setup.secret} />
                   <Button onClick={() => copy(setup.secret)}>复制</Button>
                 </Space.Compact>
-                <div style={{ color: '#8b949e', fontSize: 12, marginBottom: 4 }}>② 输入 App 上显示的 6 位码确认：</div>
+                <div style={{ color: 'var(--text-dim)', fontSize: 12, marginBottom: 4 }}>② 输入 App 上显示的 6 位码确认：</div>
                 <Space.Compact style={{ width: '100%' }}>
                   <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="6 位动态码" inputMode="numeric" maxLength={6} onPressEnter={confirmEnable} />
                   <Button type="primary" loading={busy} onClick={confirmEnable}>确认开启</Button>
@@ -1016,10 +1143,10 @@ function TwoFactorCard() {
 
         {/* 查看当前二维码（已开启时给新设备加） */}
         {qr && (
-          <div style={{ padding: 16, background: '#0d1117', borderRadius: 8, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ padding: 16, background: 'var(--bg-base)', borderRadius: 8, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
             <div style={{ background: '#fff', padding: 10, borderRadius: 8 }}><QRCodeSVG value={qr.uri} size={168} /></div>
             <div style={{ flex: 1, minWidth: 240 }}>
-              <div style={{ color: '#8b949e', fontSize: 12, marginBottom: 4 }}>扫码把当前密钥加入新设备：</div>
+              <div style={{ color: 'var(--text-dim)', fontSize: 12, marginBottom: 4 }}>扫码把当前密钥加入新设备：</div>
               <Space.Compact style={{ width: '100%' }}><Input readOnly value={qr.secret} /><Button onClick={() => copy(qr.secret)}>复制</Button></Space.Compact>
             </div>
           </div>
@@ -1117,7 +1244,7 @@ function CollectModal({ group, onClose }: { group: string | null; onClose: () =>
   }, [group])
   return (
     <Modal open={!!group} onCancel={onClose} footer={null} title={`收集: ${group || ''}`} width="min(720px,94vw)">
-      <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '60vh', overflow: 'auto', background: '#06090d', padding: 12, borderRadius: 8, fontSize: 12.5 }}>{text}</pre>
+      <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '60vh', overflow: 'auto', background: 'var(--bg-term)', padding: 12, borderRadius: 8, fontSize: 12.5 }}>{text}</pre>
     </Modal>
   )
 }

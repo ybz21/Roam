@@ -1,8 +1,8 @@
 // 文件侧栏 —— 在 Claude / Codex 对话页右侧浏览工作目录、查看文件内容（类似 codex 右侧边栏）。
 // 单层可导航列表：目录在前可进入、↑ 回上级、点文件在弹层里查看正文。
-import { useEffect, useState } from 'react'
-import { Button, Modal, Spin } from 'antd'
-import { api } from './api'
+import { useEffect, useRef, useState } from 'react'
+import { Button, Modal, Spin, App as AntApp } from 'antd'
+import { api, upload } from './api'
 import Markdown from './Markdown'
 
 const IMG_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'avif', 'svg']
@@ -46,7 +46,7 @@ function Viewer({ path, accent, onClose }: { path: string; accent: string; onClo
 
   const name = path.split('/').pop()
   const codePre = (text: string) => (
-    <pre style={{ margin: 0, whiteSpace: 'pre', overflow: 'auto', maxHeight: '70vh', background: '#0d1117', padding: 12, borderRadius: 8, fontFamily: 'ui-monospace, monospace', fontSize: 12.5, lineHeight: 1.5, color: '#c9d1d9' }}>{text}</pre>
+    <pre style={{ margin: 0, whiteSpace: 'pre', overflow: 'auto', maxHeight: '70vh', background: 'var(--bg-base)', padding: 12, borderRadius: 8, fontFamily: 'ui-monospace, monospace', fontSize: 12.5, lineHeight: 1.5, color: '#c9d1d9' }}>{text}</pre>
   )
 
   return (
@@ -60,11 +60,11 @@ function Viewer({ path, accent, onClose }: { path: string; accent: string; onClo
           {isMd && data && !data.binary && (
             <Button size="small" onClick={() => setSource((s) => !s)}>{source ? '渲染' : '源码'}</Button>
           )}
-          <a href={rawUrl} target="_blank" rel="noreferrer" style={{ color: '#8b949e', fontSize: 12 }}>↗ 原始</a>
+          <a href={rawUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--text-dim)', fontSize: 12 }}>↗ 原始</a>
         </div>
       }>
       {isImg ? (
-        <div style={{ textAlign: 'center', background: '#0d1117', borderRadius: 8, padding: 12 }}>
+        <div style={{ textAlign: 'center', background: 'var(--bg-base)', borderRadius: 8, padding: 12 }}>
           <img src={rawUrl} alt={name} style={{ maxWidth: '100%', maxHeight: '74vh', objectFit: 'contain' }} />
         </div>
       ) : (
@@ -72,7 +72,7 @@ function Viewer({ path, accent, onClose }: { path: string; accent: string; onClo
           {err && <div style={{ color: '#f85149' }}>{err}</div>}
           {!data && !err && <div style={{ textAlign: 'center', padding: 30 }}><Spin /></div>}
           {data && data.binary && (
-            <div style={{ color: '#8b949e' }}>二进制文件，无法预览（{fmtSize(data.size)}）。<a href={rawUrl} target="_blank" rel="noreferrer" style={{ color: accent }}>下载/打开原始文件</a></div>
+            <div style={{ color: 'var(--text-dim)' }}>二进制文件，无法预览（{fmtSize(data.size)}）。<a href={rawUrl} target="_blank" rel="noreferrer" style={{ color: accent }}>下载/打开原始文件</a></div>
           )}
           {data && !data.binary && (
             <>
@@ -88,11 +88,15 @@ function Viewer({ path, accent, onClose }: { path: string; accent: string; onClo
   )
 }
 
-export default function FileBrowser({ dir, accent = '#58a6ff', onClose }: { dir?: string; accent?: string; onClose?: () => void }) {
+export default function FileBrowser({ dir, accent = '#58a6ff', onClose, onInsertPath }: { dir?: string; accent?: string; onClose?: () => void; onInsertPath?: (p: string) => void }) {
   const [path, setPath] = useState(dir || '')
   const [data, setData] = useState<Dir | null>(null)
   const [err, setErr] = useState('')
   const [view, setView] = useState<string | null>(null)
+  const [tick, setTick] = useState(0) // 上传后强制重载当前目录
+  const [uploading, setUploading] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const { message } = AntApp.useApp()
 
   // 会话切换（dir 变化）→ 回到工作目录根
   useEffect(() => { setPath(dir || '') }, [dir])
@@ -103,36 +107,67 @@ export default function FileBrowser({ dir, accent = '#58a6ff', onClose }: { dir?
     const q = path ? `?path=${encodeURIComponent(path)}` : ''
     api('GET', `/files${q}`).then((r) => { if (!stop) setData(r.data) }).catch((e) => { if (!stop) setErr(e.message) })
     return () => { stop = true }
-  }, [path])
+  }, [path, tick])
 
   const cur = data?.path || path
+
+  const doUpload = async (files: FileList | File[]) => {
+    if (!files || !files.length || !cur || uploading) return
+    setUploading(true)
+    try {
+      const res = await upload(cur, files)
+      message.success(`已上传 ${res.saved.length} 个文件`)
+      setTick((t) => t + 1)
+    } catch (e: any) { message.error('上传失败：' + e.message) }
+    finally { setUploading(false) }
+  }
   // 根目录之上不再回退（防止越过工作目录乱逛；dir 为空时允许一直向上）
   const canUp = !!data && data.parent !== data.path && (!dir || cur !== dir)
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#0a0e13', borderLeft: '1px solid #21262d' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderBottom: '1px solid #21262d' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#0a0e13', borderLeft: '1px solid var(--border-subtle)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderBottom: '1px solid var(--border-subtle)' }}>
         <span style={{ color: accent }}><FolderIcon /></span>
-        <span style={{ color: '#e6edf3', fontWeight: 600, fontSize: 13 }}>文件</span>
+        <span style={{ color: 'var(--text-bright)', fontWeight: 600, fontSize: 13 }}>文件</span>
         <span style={{ flex: 1 }} />
-        {onClose && <a onClick={onClose} style={{ color: '#8b949e', fontSize: 12 }}>✕</a>}
+        <input ref={fileRef} type="file" multiple style={{ display: 'none' }}
+          onChange={(e) => { if (e.target.files?.length) doUpload(e.target.files); e.target.value = '' }} />
+        <a onClick={() => fileRef.current?.click()} title="上传到当前目录" style={{ color: uploading ? accent : 'var(--text-dim)', fontSize: 13, marginRight: onClose ? 8 : 0 }}>⬆</a>
+        {onClose && <a onClick={onClose} style={{ color: 'var(--text-dim)', fontSize: 12 }}>✕</a>}
       </div>
-      <div title={cur} style={{ padding: '4px 10px', color: '#8b949e', fontSize: 11.5, fontFamily: 'ui-monospace, monospace', borderBottom: '1px solid #161b22', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', direction: 'rtl', textAlign: 'left' }}>{cur || '…'}</div>
+      <div title={cur} style={{ padding: '4px 10px', color: 'var(--text-dim)', fontSize: 11.5, fontFamily: 'ui-monospace, monospace', borderBottom: '1px solid var(--bg-container)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', direction: 'rtl', textAlign: 'left' }}>{cur || '…'}</div>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 0' }}>
         {err && <div style={{ color: '#f85149', fontSize: 12, padding: '6px 10px' }}>{err}</div>}
         {canUp && (
           <div onClick={() => setPath(data!.parent)} style={rowStyle()}>
-            <span style={{ color: '#8b949e' }}>↑</span><span style={{ color: '#8b949e' }}>上级目录</span>
+            <span style={{ color: 'var(--text-dim)' }}>↑</span><span style={{ color: 'var(--text-dim)' }}>上级目录</span>
           </div>
         )}
         {data?.entries.map((e) => (
-          <div key={e.name} onClick={() => (e.dir ? setPath((cur === '/' ? '' : cur) + '/' + e.name) : setView((cur === '/' ? '' : cur) + '/' + e.name))} style={rowStyle()}>
-            <span style={{ color: e.dir ? accent : '#6e7681', flex: '0 0 auto', display: 'inline-flex' }}>{e.dir ? <FolderIcon /> : <FileIcon />}</span>
-            <span style={{ color: e.dir ? '#e6edf3' : '#c9d1d9', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name}</span>
-            {!e.dir && <span style={{ color: '#6e7681', fontSize: 11, flex: '0 0 auto' }}>{fmtSize(e.size)}</span>}
+          <div key={e.name} className="cc-filerow"
+            draggable
+            onDragStart={(ev) => {
+              const full = (cur === '/' ? '' : cur) + '/' + e.name
+              ev.dataTransfer.setData('application/x-ttmux-path', full) // 给对话框识别用
+              ev.dataTransfer.setData('text/plain', full)
+              ev.dataTransfer.effectAllowed = 'copy'
+            }}
+            onClick={() => (e.dir ? setPath((cur === '/' ? '' : cur) + '/' + e.name) : setView((cur === '/' ? '' : cur) + '/' + e.name))} style={rowStyle()}>
+            <span style={{ color: e.dir ? accent : 'var(--text-dimmer)', flex: '0 0 auto', display: 'inline-flex' }}>{e.dir ? <FolderIcon /> : <FileIcon />}</span>
+            <span style={{ color: e.dir ? 'var(--text-bright)' : 'var(--text-bright)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name}</span>
+            {!e.dir && <span style={{ color: 'var(--text-dimmer)', fontSize: 11, flex: '0 0 auto' }}>{fmtSize(e.size)}</span>}
+            {onInsertPath && (
+              <a className="cc-dl" title="插入路径到输入框（@引用）"
+                onClick={(ev) => { ev.stopPropagation(); onInsertPath((cur === '/' ? '' : cur) + '/' + e.name) }}
+                style={{ color: accent, flex: '0 0 auto', fontSize: 13, fontWeight: 700 }}>@</a>
+            )}
+            {!e.dir && (
+              <a className="cc-dl" title="下载" href={`/api/file/raw?path=${encodeURIComponent((cur === '/' ? '' : cur) + '/' + e.name)}&dl=1`}
+                onClick={(ev) => ev.stopPropagation()} style={{ color: 'var(--text-dim)', flex: '0 0 auto', fontSize: 13 }}>↓</a>
+            )}
           </div>
         ))}
-        {data && data.entries.length === 0 && <div style={{ color: '#6e7681', fontSize: 12, padding: '6px 10px' }}>空目录</div>}
+        {data && data.entries.length === 0 && <div style={{ color: 'var(--text-dimmer)', fontSize: 12, padding: '6px 10px' }}>空目录</div>}
       </div>
       {view && <Viewer path={view} accent={accent} onClose={() => setView(null)} />}
     </div>

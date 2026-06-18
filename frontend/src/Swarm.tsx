@@ -13,8 +13,8 @@ import Markdown from './Markdown'
 
 // ── 配色（与 App.tsx 一致） ──
 const C = {
-  bg: '#0d1117', bg2: '#161b22', bg3: '#06090d', line: '#21262d', line2: '#30363d',
-  fg: '#e6edf3', fg2: '#8b949e', fg3: '#6e7681',
+  bg: 'var(--bg-base)', bg2: 'var(--bg-container)', bg3: 'var(--bg-term)', line: 'var(--border-subtle)', line2: 'var(--border)',
+  fg: 'var(--text-bright)', fg2: 'var(--text-dim)', fg3: 'var(--text-dimmer)',
   blue: '#58a6ff', green: '#3fb950', amber: '#d29922', red: '#f85149', magenta: '#d2a8ff', cyan: '#39c5cf',
 }
 const COLS = ['backlog', 'assigned', 'doing', 'review', 'done', 'blocked'] as const
@@ -54,24 +54,51 @@ export default function Swarm({ openTerm, initialSwarm, onNav }: { openTerm: (n:
 }
 
 // ── 列表页 ──
+const SWARM_STATUSES = ['running', 'planning', 'integrating', 'done', 'archived'] as const
+const SWARM_STATUS_LABEL: Record<string, string> = {
+  running: '运行中', planning: '规划', integrating: '集成中', done: '完成', archived: '归档',
+}
+
 function SwarmList({ list, onOpen, reload }: { list: SwarmRow[]; onOpen: (n: string) => void; reload: () => void }) {
   const [creating, setCreating] = useState(false)
+  // 默认只看「活跃」（非归档）；归档的蜂群需点「归档」筛选才显示
+  const [status, setStatus] = useState<string>('active')
+  const norm = (st: string) => st || 'planning'
+  const isArchived = (s: SwarmRow) => norm(s.status) === 'archived'
+  const count = (f: string) => f === 'active'
+    ? list.filter((s) => !isArchived(s)).length
+    : list.filter((s) => norm(s.status) === f).length
+  // 活跃在前 + 实际存在的非归档子状态；归档单列最后（默认不展示）
+  const options = [
+    { label: `活跃 ${count('active')}`, value: 'active' },
+    ...SWARM_STATUSES.filter((st) => st !== 'archived' && count(st) > 0).map((st) => ({ label: `${SWARM_STATUS_LABEL[st]} ${count(st)}`, value: st })),
+    ...(count('archived') > 0 ? [{ label: `${SWARM_STATUS_LABEL.archived} ${count('archived')}`, value: 'archived' }] : []),
+  ]
+  const shown = status === 'active' ? list.filter((s) => !isArchived(s)) : list.filter((s) => norm(s.status) === status)
   return (
     <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 18, fontWeight: 700, color: C.fg }}>蜂群</span>
         <span style={{ color: C.fg3, fontSize: 12 }}>一个 master cc 带一群 member cc 协作</span>
         <Button type="primary" style={{ marginLeft: 'auto' }} onClick={() => setCreating(true)}>+ 新建蜂群</Button>
       </div>
+      {/* 按状态过滤 */}
+      {list.length > 0 && options.length > 1 && (
+        <Segmented value={status} onChange={(v) => setStatus(v as string)} options={options} />
+      )}
       {list.length === 0 ? (
         <Card style={{ textAlign: 'center', padding: '32px 0' }}>
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={<span style={{ color: C.fg2 }}>还没有蜂群</span>}>
             <Button type="primary" onClick={() => setCreating(true)}>+ 新建第一个蜂群</Button>
           </Empty>
         </Card>
+      ) : shown.length === 0 ? (
+        <Card style={{ textAlign: 'center', padding: '24px 0' }}>
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={<span style={{ color: C.fg2 }}>没有「{status === 'active' ? '活跃' : (SWARM_STATUS_LABEL[status] || status)}」的蜂群</span>} />
+        </Card>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(300px,1fr))', gap: 14 }}>
-          {list.map((s) => <SwarmCard key={s.id || s.name} s={s} onOpen={onOpen} />)}
+          {shown.map((s) => <SwarmCard key={s.id || s.name} s={s} onOpen={onOpen} />)}
         </div>
       )}
       <NewSwarmModal open={creating} onClose={() => setCreating(false)} onDone={reload} />

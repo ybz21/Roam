@@ -161,6 +161,7 @@ func parseCodexItem(payload json.RawMessage, ts string) *cMsg {
 		Arguments string          `json:"arguments"`
 		Input     string          `json:"input"`
 		Output    json.RawMessage `json:"output"`
+		CallID    string          `json:"call_id"`
 	}
 	if json.Unmarshal(payload, &p) != nil {
 		return nil
@@ -197,12 +198,12 @@ func parseCodexItem(payload json.RawMessage, ts string) *cMsg {
 		}
 		return &cMsg{Role: "assistant", Ts: ts, Blocks: []cBlock{{Kind: "thinking", Text: clip(t)}}}
 	case "function_call":
-		return &cMsg{Role: "assistant", Ts: ts, Blocks: []cBlock{{Kind: "tool_use", Name: p.Name, Input: clip(p.Arguments)}}}
+		return &cMsg{Role: "assistant", Ts: ts, Blocks: []cBlock{{Kind: "tool_use", Name: p.Name, Input: clip(p.Arguments), ID: p.CallID}}}
 	case "custom_tool_call":
-		return &cMsg{Role: "assistant", Ts: ts, Blocks: []cBlock{{Kind: "tool_use", Name: p.Name, Input: clip(p.Input)}}}
+		return &cMsg{Role: "assistant", Ts: ts, Blocks: []cBlock{{Kind: "tool_use", Name: p.Name, Input: clip(p.Input), ID: p.CallID}}}
 	case "function_call_output", "custom_tool_call_output":
 		out := codexOutputText(p.Output)
-		return &cMsg{Role: "tool", Ts: ts, Blocks: []cBlock{{Kind: "tool_result", Text: clip(out), IsError: codexOutputIsError(out)}}}
+		return &cMsg{Role: "tool", Ts: ts, Blocks: []cBlock{{Kind: "tool_result", Text: clip(out), ToolUseID: p.CallID, IsError: codexOutputIsError(out)}}}
 	}
 	return nil
 }
@@ -282,6 +283,9 @@ func (a *API) CodexTranscript(c *gin.Context) {
 			continue
 		}
 		if m := parseCodexLine(sc.Text()); m != nil {
+			if m.ID == "" { // 行号作稳定 key（前端窗口化/折叠态持久化用）
+				m.ID = strconv.Itoa(n)
+			}
 			msgs = append(msgs, *m)
 		}
 	}
