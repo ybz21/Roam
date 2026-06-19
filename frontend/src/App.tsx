@@ -164,8 +164,8 @@ export default function App() {
   if (authed === null) return <div style={{ height: '100dvh', display: 'grid', placeItems: 'center' }}><Spin size="large" /></div>
   if (!authed) return <Login onOk={() => { setAuthed(true); go('overview') }} />
 
-  // 独立单终端页（新标签全屏打开）：URL 带 ?term=<会话名>
-  const soloName = new URLSearchParams(location.search).get('term')
+  // 独立单终端页（新标签全屏打开）：hash 路由 #/term/<会话名>
+  const soloName = tab === 'term' && route.includes('/') ? decodeURIComponent(route.slice(route.indexOf('/') + 1)) : ''
   if (soloName) return <SoloTerminal name={soloName} />
 
   const openTerm = (name: string) => {
@@ -255,10 +255,6 @@ export default function App() {
             <div style={{ flex: 1, overflowY: 'auto' }}>{menu}</div>
             {/* 底部：全屏（上）+ 折叠 + 退出（下），始终竖向堆叠 */}
             <div style={{ borderTop: '1px solid var(--border-subtle)', padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <Button type="text" block onClick={toggleTheme} style={{ color: 'var(--text-dim)', textAlign: collapsed ? 'center' : 'left' }}
-                title={mode === 'dark' ? '切换浅色' : '切换深色'}>
-                {collapsed ? themeIcon : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{themeIcon}{mode === 'dark' ? '浅色主题' : '深色主题'}</span>}
-              </Button>
               {fsSupported && (
                 <Button type="text" block onClick={toggleFs} style={{ color: 'var(--text-dim)', textAlign: collapsed ? 'center' : 'left' }}
                   title={isFs ? '退出全屏' : '全屏'}>
@@ -382,7 +378,7 @@ export default function App() {
   }
 }
 
-// ── 独立单终端页：新浏览器标签全屏打开单个会话（URL ?term=name）──
+// ── 独立单终端页：新浏览器标签全屏打开单个会话（hash 路由 #/term/name）──
 function SoloTerminal({ name }: { name: string }) {
   const [fontSize, setFontSize] = useState(13)
   const [statusMap, setStatusMap] = useState<Record<string, TermStatus>>({})
@@ -518,7 +514,7 @@ function TerminalPane(props: {
         </Dropdown>
         {active && (
           <Tooltip title="在新浏览器标签全屏打开此会话">
-            <Button size="small" onClick={() => window.open(`/?term=${encodeURIComponent(active)}`, '_blank')}>↗ 新标签</Button>
+            <Button size="small" onClick={() => window.open(`/#/term/${encodeURIComponent(active)}`, '_blank')}>↗ 新标签</Button>
           </Tooltip>
         )}
         <Tooltip title="文件浏览（当前会话工作目录）">
@@ -1035,6 +1031,7 @@ function Sessions({ openTerm }: { openTerm: (n: string) => void }) {
 function EnvPage() {
   const [list, setList] = useState<any[]>([])
   const { message, modal } = AntApp.useApp()
+  const { mode, setMode } = useThemeMode()
   const load = () => api('GET', '/env').then(setList).catch(() => {})
   useEffect(() => { load() }, [])
   const add = () => {
@@ -1056,6 +1053,19 @@ function EnvPage() {
   }
   return (
     <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+      <Card title="外观主题">
+        <Space align="center" wrap>
+          <Segmented
+            value={mode}
+            onChange={(v) => setMode(v as 'light' | 'dark')}
+            options={[
+              { label: '☀ 浅色主题', value: 'light' },
+              { label: '☾ 深色主题', value: 'dark' },
+            ]}
+          />
+          <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>切换即时生效并记住偏好</span>
+        </Space>
+      </Card>
       <Card title="全局环境变量" extra={<Space>
         <Button onClick={add}>+ 添加</Button>
         <Button onClick={async () => { try { await api('POST', '/env/push'); message.success('已推送') } catch (e: any) { message.error(e.message) } }}>推送到会话</Button>
