@@ -3,7 +3,7 @@
 //   收 {type:'frame', data, w, h} | {type:'pong', t} | {type:'error', msg}
 //   发 {type:'nav', url} | {type:'ping', t} | {type:'mouse'|'wheel'|'key', ...}（输入仅 control=1 生效）
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Button, Input, Space, Switch, Tag, App as AntApp } from 'antd'
+import { Button, Input, Space, Tag, App as AntApp } from 'antd'
 import { api } from './api'
 
 interface TabInfo { id: string; title: string; url: string }
@@ -61,6 +61,7 @@ function TabBar({ tabs, active, onSelect, onClose, onAdd, extra }: {
 // 清晰度档位（栏目级配置，存 localStorage）。'auto'=自适应，数字=固定 JPEG 质量
 type Quality = number | 'auto'
 const QKEY = 'ttmux.browser.quality'
+const RKEY = 'ttmux.browser.rotate' // 画面旋转角度（0/90/180/270），手机竖屏看横屏用
 const QUALITY_OPTS: { label: string; value: Quality }[] = [
   { label: '自动', value: 'auto' },
   { label: '标清', value: 50 },
@@ -71,6 +72,21 @@ const QUALITY_OPTS: { label: string; value: Quality }[] = [
 function fmtRate(bytesPerSec: number) {
   if (bytesPerSec >= 1 << 20) return (bytesPerSec / (1 << 20)).toFixed(1) + ' MB/s'
   return Math.round(bytesPerSec / 1024) + ' KB/s'
+}
+
+// 地址栏自适应 http/https：本机/内网地址默认 http，其余默认 https。
+// 已带 scheme 的原样返回；避免内网 IP / localhost 被强转 https 连不上。
+function smartUrl(input: string): string {
+  const s = input.trim()
+  if (/^[a-z]+:\/\//i.test(s)) return s            // 已有 http(s):// 等协议，尊重用户
+  const host = s.split('/')[0].split(':')[0].toLowerCase()
+  const local =
+    host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || host === '::1' ||
+    host.endsWith('.local') ||                       // .local 局域网域名（mDNS）
+    /^10\./.test(host) ||                            // 10.0.0.0/8
+    /^192\.168\./.test(host) ||                      // 192.168.0.0/16
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host)          // 172.16.0.0/12
+  return (local ? 'http://' : 'https://') + s
 }
 
 // 固定宽度数字槽：右对齐 + 等宽数字，数值变化不改变总宽（避免挤占/回流）
@@ -100,7 +116,7 @@ export default function BrowserView() {
   const stageRef = useRef<HTMLDivElement>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const sizeRef = useRef({ w: 1280, h: 800 }) // 画面内在尺寸（CDP 设备像素）
-  const [control, setControl] = useState(true) // 默认接管（可在工具栏关掉变只读镜像）
+  const control = true // 始终接管（鼠标/键盘转发给 Chrome）
   const controlRef = useRef(true)
   const [connected, setConnected] = useState(false)
   const [url, setUrl] = useState('')
@@ -108,6 +124,9 @@ export default function BrowserView() {
   // 标签页（复用同一台 Chrome）
   const [tabs, setTabs] = useState<TabInfo[]>([])
   const [target, setTarget] = useState('') // 当前镜像的标签页 id；空 = 第一个
+  // 导航起始页地址（后端 /api/me 提供，形如 http://127.0.0.1:<port>/home）；
+  // 新标签默认开它、可点「主页」回到它。默认值按当前端口兜底。
+  const [home, setHome] = useState(`http://127.0.0.1:${location.port || '8080'}/home`)
   // 栏目级清晰度配置（持久化）；默认自适应
   const [quality, setQuality] = useState<Quality>(() => {
     const s = localStorage.getItem(QKEY)
@@ -115,6 +134,9 @@ export default function BrowserView() {
     return Number(s) || 'auto'
   })
   const [levelName, setLevelName] = useState('') // 服务端当前生效档位名（自适应时显示）
+  // 画面旋转：0/90/180/270，持久化。手机竖屏看横屏浏览器时转 90°
+  const [rotation, setRotation] = useState<number>(() => Number(localStorage.getItem(RKEY)) || 0)
+  const [stage, setStage] = useState({ w: 0, h: 0 }) // 舞台尺寸，旋转时需据此对调 <img> 盒子宽高
   // 实时指标
   const [latency, setLatency] = useState<number | null>(null)
   const [bw, setBw] = useState(0)   // 字节/秒
@@ -129,6 +151,26 @@ export default function BrowserView() {
 
   // control 开关用 ref 同步，供事件回调读取最新值
   useEffect(() => { controlRef.current = control }, [control])
+
+  // 跟踪舞台尺寸：旋转 90/270 时 <img> 盒子宽高要对调，才能铺满竖屏
+  useEffect(() => {
+    const el = stageRef.current
+    if (!el) return
+    const measure = () => setStage({ w: el.clientWidth, h: el.clientHeight })
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  // 旋转：每次 +90°，循环 0→90→180→270→0，持久化
+  const rotate = () => setRotation((r) => { const n = (r + 90) % 360; localStorage.setItem(RKEY, String(n)); return n })
+  const rotated = rotation === 90 || rotation === 270
+
+  // 取导航起始页地址（后端按 TTMUX_HOME_BIND 算出）
+  useEffect(() => {
+    api('GET', '/me').then((r) => { if (r?.data?.browserHome) setHome(r.data.browserHome) }).catch(() => {})
+  }, [])
 
   // 拉取标签页列表（每 3s 刷新，反映 agent 自己开的标签页/标题变化）
   const loadTabs = async () => {
@@ -149,7 +191,7 @@ export default function BrowserView() {
   const newTab = async () => {
     try {
       const known = new Set(tabs.map((t) => t.id)) // 记下创建前的 id，用于定位新开的那个
-      await api('POST', '/browser/tabs', { url: 'about:blank' })
+      await api('POST', '/browser/tabs', { url: home }) // 新标签默认开导航起始页
       const r = await api('GET', '/browser/tabs')
       const list: TabInfo[] = r?.data || []
       setTabs((prev) => mergeTabs(prev, list))
@@ -239,8 +281,7 @@ export default function BrowserView() {
 
   const navigate = () => {
     if (!url) return
-    const u = /^[a-z]+:\/\//i.test(url) ? url : 'https://' + url
-    act('navigate', { url: u })
+    act('navigate', { url: smartUrl(url) })
   }
 
   const changeQuality = (v: Quality) => { setQuality(v); localStorage.setItem(QKEY, String(v)) }
@@ -256,21 +297,29 @@ export default function BrowserView() {
   }
 
   // 把鼠标坐标换算成 CDP 期望的页面 CSS 像素坐标。
-  // 关键：<img> 用 object-fit: contain，画面在元素框内居中留黑边，
-  // 必须扣掉黑边(letterbox)再按真实显示区缩放，否则点击会整体错位。
+  // 关键：<img> 用 object-fit: contain（居中留黑边）且可能被旋转，
+  // 所以先把屏幕点平移到舞台中心相对、再逆旋转回画面坐标系，最后扣黑边按真实显示区缩放。
   const mapXY = (e: React.MouseEvent) => {
-    const el = imgRef.current!
-    const r = el.getBoundingClientRect()
-    const nw = el.naturalWidth || sizeRef.current.w
-    const nh = el.naturalHeight || sizeRef.current.h
-    const scale = Math.min(r.width / nw, r.height / nh) // contain 缩放比
-    const dispW = nw * scale, dispH = nh * scale        // 画面实际显示尺寸
-    const padX = (r.width - dispW) / 2                  // 左右黑边
-    const padY = (r.height - dispH) / 2                 // 上下黑边
-    const fx = Math.max(0, Math.min(1, (e.clientX - r.left - padX) / dispW))
-    const fy = Math.max(0, Math.min(1, (e.clientY - r.top - padY) / dispH))
-    // 缩放到 CDP 页面坐标系（设备 CSS 像素）；jpeg 若被降采样，natural < device，故按比例还原
-    return { x: fx * (sizeRef.current.w || nw), y: fy * (sizeRef.current.h || nh) }
+    const r = stageRef.current!.getBoundingClientRect()
+    const nw = sizeRef.current.w, nh = sizeRef.current.h
+    // 旋转 90/270 时画面盒子宽高对调
+    const boxW = rotated ? r.height : r.width
+    const boxH = rotated ? r.width : r.height
+    const scale = Math.min(boxW / nw, boxH / nh) // contain 缩放比
+    const dispW = nw * scale, dispH = nh * scale // 画面实际显示尺寸
+    const padX = (boxW - dispW) / 2, padY = (boxH - dispH) / 2 // 黑边
+    // 屏幕点 → 舞台中心相对
+    const dx = e.clientX - (r.left + r.width / 2)
+    const dy = e.clientY - (r.top + r.height / 2)
+    // 逆旋转（R(-θ)）还原到未旋转的画面盒子坐标
+    const rad = (rotation * Math.PI) / 180
+    const cos = Math.cos(rad), sin = Math.sin(rad)
+    const lx = dx * cos + dy * sin + boxW / 2
+    const ly = -dx * sin + dy * cos + boxH / 2
+    const fx = Math.max(0, Math.min(1, (lx - padX) / dispW))
+    const fy = Math.max(0, Math.min(1, (ly - padY) / dispH))
+    // 缩放到 CDP 页面坐标系（设备 CSS 像素）
+    return { x: fx * nw, y: fy * nh }
   }
 
   // CDP 修饰键位掩码：Alt=1 Ctrl=2 Meta=4 Shift=8
@@ -304,8 +353,13 @@ export default function BrowserView() {
   const onWheel = (e: React.WheelEvent) => {
     if (!controlRef.current) return
     const { x, y } = mapXY(e as any)
+    // 画面旋转后，屏幕滚动方向也要逆旋转回页面坐标系，手势才跟视觉一致
+    const rad = (rotation * Math.PI) / 180
+    const cos = Math.cos(rad), sin = Math.sin(rad)
+    const ddx = e.deltaX * cos + e.deltaY * sin
+    const ddy = -e.deltaX * sin + e.deltaY * cos
     const w = wheelRef.current
-    w.x = x; w.y = y; w.dx += e.deltaX; w.dy += e.deltaY; w.m = mods(e)
+    w.x = x; w.y = y; w.dx += ddx; w.dy += ddy; w.m = mods(e)
     if (!w.timer) {
       w.timer = setTimeout(() => {
         send({ type: 'wheel', x: w.x, y: w.y, deltaX: w.dx, deltaY: w.dy, modifiers: w.m })
@@ -327,6 +381,17 @@ export default function BrowserView() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* 图标用的金属高光渐变（银色 chrome 质感，与品牌 mark 一致） */}
+      <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true">
+        <defs>
+          <linearGradient id="metalIcon" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#f2f5f9" />
+            <stop offset="0.45" stopColor="#c4cbd4" />
+            <stop offset="0.55" stopColor="#878f9b" />
+            <stop offset="1" stopColor="#b3bbc6" />
+          </linearGradient>
+        </defs>
+      </svg>
       {/* 标签栏：左=标签页(自定义固定宽度，切换不易位)，右=接管/清晰度/状态/指标 */}
       <TabBar
         tabs={tabs}
@@ -336,7 +401,16 @@ export default function BrowserView() {
         onAdd={newTab}
         extra={
           <Space size={10} style={{ paddingRight: 4 }}>
-            <Space size={4}>接管<Switch size="small" checked={control} onChange={setControl} /></Space>
+            <Button size="small" onClick={rotate} title="旋转画面 90°（手机竖屏看横屏）"
+              style={rotation ? { color: '#58a6ff', borderColor: '#58a6ff66' } : undefined}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                {/* 屏幕旋转图标（倾斜设备框 + 对角双箭头），明显区别于刷新的环形箭头 */}
+                <svg viewBox="0 0 24 24" width={15} height={15} fill="url(#metalIcon)" style={{ display: 'block' }}>
+                  <path d="M16.48 2.52c3.27 1.55 5.61 4.72 5.97 8.48h1.5C23.44 4.84 18.29 0 12 0l-.66.03 3.81 3.81 1.33-1.32zM10.23 1.75c-.59-.59-1.54-.59-2.12 0L1.75 8.11c-.59.59-.59 1.54 0 2.12l12.02 12.02c.59.59 1.54.59 2.12 0l6.36-6.36c.59-.59.59-1.54 0-2.12L10.23 1.75zm4.6 19.44L2.81 9.17l6.36-6.36 12.02 12.02-6.36 6.36zM7.52 21.48C4.25 19.94 1.91 16.76 1.55 13H.05C.56 19.16 5.71 24 12 24l.66-.03-3.81-3.81-1.33 1.32z" />
+                </svg>
+                {rotation ? <span>{rotation}°</span> : null}
+              </span>
+            </Button>
             {/* 清晰度：选中档亮蓝底 + 白字加粗 + 辉光，未选中压暗，对比鲜明 */}
             <Space.Compact size="small">
               {QUALITY_OPTS.map((o) => {
@@ -368,6 +442,12 @@ export default function BrowserView() {
           <Button onClick={() => act('back')} title="后退">←</Button>
           <Button onClick={() => act('forward')} title="前进">→</Button>
           <Button onClick={() => act('reload')} title="刷新">⟳</Button>
+          <Button onClick={() => act('navigate', { url: home })} title="导航起始页">
+            <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="url(#metalIcon)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+              <path d="M3 11.5 L12 4 L21 11.5" />
+              <path d="M5.5 10 V19.5 H18.5 V10" />
+            </svg>
+          </Button>
         </Button.Group>
         <Input
           size="small"
@@ -404,7 +484,14 @@ export default function BrowserView() {
           onMouseDown={onMouse('down')}
           onMouseUp={onMouse('up')}
           onMouseMove={onMove}
-          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+          style={{
+            // 绝对居中 + 旋转；旋转 90/270 时盒子宽高对调以铺满舞台
+            position: 'absolute', left: '50%', top: '50%',
+            width: rotated ? stage.h : stage.w,
+            height: rotated ? stage.w : stage.h,
+            objectFit: 'contain',
+            transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
+          }}
         />
         {ripples.map((p) => (
           <span key={p.id} className="bv-ripple" style={{ left: p.x, top: p.y }} />

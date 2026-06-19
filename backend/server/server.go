@@ -17,6 +17,7 @@ import (
 	"ttmux-web/api"
 	"ttmux-web/auth"
 	"ttmux-web/browser"
+	"ttmux-web/home"
 	"ttmux-web/pty"
 	"ttmux-web/stream"
 	"ttmux-web/ttmux"
@@ -30,6 +31,8 @@ type Config struct {
 	LogsDir     string
 	FrontendDir string // frontend/dist 的路径；为空或不存在时用内嵌回退页
 	KannaURL    string // 可选：kanna（Claude Code 精美 UI）地址
+	BrowserHome string // 浏览器导航起始页地址（供 Chrome 当默认主页）
+	DataDir     string // 数据目录（导航页站点列表等持久化到此）
 	Password    string
 	TOTPSecret  string // 可选：两步验证密钥（base32）初始种子；UI 可覆盖
 	TOTPState   string // 两步验证状态持久化文件路径
@@ -44,13 +47,19 @@ func New(cfg Config) *gin.Engine {
 
 	tt := ttmux.New(cfg.TTmuxBin)
 	a := auth.New(cfg.Password, cfg.TOTPSecret, cfg.TOTPState, cfg.LockAfter, cfg.LockSecs)
-	h := api.New(tt, cfg.KannaURL)
+	h := api.New(tt, cfg.KannaURL, cfg.BrowserHome)
 	hub := stream.New(tt, cfg.LogsDir)
 
 	// 公开端点
 	r.POST("/api/login", a.Login)
 	r.POST("/api/logout", a.Logout)
 	r.GET("/api/pubconfig", a.PubConfig) // 登录页据此决定是否要动态码
+
+	// 导航起始页（免登录）：供被投屏的 Chrome 当默认主页，因此不能挂在认证组里
+	hm := home.New(cfg.DataDir)
+	r.GET("/home", hm.Page)
+	r.GET("/home/sites", hm.GetSites)
+	r.PUT("/home/sites", hm.PutSites)
 
 	// 受保护端点
 	g := r.Group("/api", a.Middleware())

@@ -90,7 +90,7 @@ function StatusTag({ status, code }: { status?: string; code?: string }) {
   return <Tag>已结束</Tag>
 }
 function TypeTag({ type }: { type?: string }) {
-  return type === 'agent' ? <Tag color="purple">🤖 Agent</Tag> : <Tag>⌨️ 命令</Tag>
+  return type === 'agent' ? <Tag color="blue">🤖 Agent</Tag> : <Tag>⌨️ 命令</Tag>
 }
 
 export default function App() {
@@ -296,31 +296,38 @@ export default function App() {
             {pages[tab] || pages.sessions}
           </Content>
 
-          {/* 角标把手：上半 ◂ 向左扩展（关→开→遮住会话列表），下半 ▸ 向右收起 */}
+          {/* 角标把手：上半=向左扩展（关→开→遮住会话列表），下半=向右收起；都带图标+文字 */}
           {hasSider && terms.length > 0 && (
             <div style={{
-              flex: '0 0 22px', background: 'var(--bg-container)', borderLeft: '1px solid var(--border)',
-              display: 'flex', flexDirection: 'column', color: anyClaude ? '#d2a8ff' : 'var(--text-dim)', userSelect: 'none',
+              flex: '0 0 32px', background: 'var(--bg-container)', borderLeft: '1px solid var(--border)',
+              display: 'flex', flexDirection: 'column', color: anyClaude ? '#58a6ff' : 'var(--text-dim)', userSelect: 'none',
             }}>
               {/* 上半：向左扩展 */}
               <div onClick={() => (dockOpen ? setDockMax(true) : setDockOpen(true))}
                 title={!dockOpen ? '展开终端' : '向左扩展（遮住会话列表）'}
                 style={{
-                  flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 7,
                   borderBottom: '1px solid var(--border)', cursor: dockMax ? 'default' : 'pointer', opacity: dockMax ? 0.3 : 1,
                 }}>
-                <span style={{ fontSize: 13 }}>◂</span>
-                <span style={{ writingMode: 'vertical-rl', letterSpacing: 2, fontSize: 12 }}>{anyClaude ? '🤖 终端' : '终端'}</span>
+                {/* 双箭头向左 = 扩展/展开面板 */}
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M13 6 L7 12 L13 18" /><path d="M18 6 L12 12 L18 18" />
+                </svg>
+                <span style={{ writingMode: 'vertical-rl', letterSpacing: 3, fontSize: 12, fontWeight: 600 }}>{dockOpen ? '扩展' : '展开'}</span>
                 <span style={{ fontSize: 11, background: '#1f6feb', color: '#fff', borderRadius: 9, padding: '0 6px' }}>{terms.length}</span>
               </div>
               {/* 下半：向右收起 */}
               <div onClick={() => (dockMax ? setDockMax(false) : setDockOpen(false))}
                 title={dockMax ? '还原' : '向右收起'}
                 style={{
-                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 7,
                   cursor: dockOpen ? 'pointer' : 'default', opacity: dockOpen ? 1 : 0.3,
                 }}>
-                <span style={{ fontSize: 13 }}>▸</span>
+                {/* 双箭头向右 = 收起/还原面板 */}
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M11 6 L17 12 L11 18" /><path d="M6 6 L12 12 L6 18" />
+                </svg>
+                <span style={{ writingMode: 'vertical-rl', letterSpacing: 3, fontSize: 12, fontWeight: 600 }}>{dockMax ? '还原' : '收起'}</span>
               </div>
             </div>
           )}
@@ -705,7 +712,7 @@ function Overview({ go, openTerm, kanna }: { go: (k: string) => void; openTerm: 
       {/* 统计磁贴 */}
       <Row gutter={[14, 14]}>
         <Col xs={12} sm={6}><StatTile icon={ICONS.sessions} label="会话" value={info?.sessions ?? sessions.length} accent="#58a6ff" onClick={() => go('sessions')} /></Col>
-        <Col xs={12} sm={6}><StatTile icon={ICONS.swarm} label="蜂群" value={swarms.length} accent="#d2a8ff" onClick={() => go('swarm')} /></Col>
+        <Col xs={12} sm={6}><StatTile icon={ICONS.swarm} label="蜂群" value={swarms.length} accent="#58a6ff" onClick={() => go('swarm')} /></Col>
         <Col xs={12} sm={6}><StatTile icon={ICONS.swarm} label="活跃成员" value={aliveMembers} accent="#3fb950" onClick={() => go('swarm')} /></Col>
         <Col xs={12} sm={6}><StatTile icon={ICONS.overview} label="待解锁" value={pendingMembers} accent="#d29922" onClick={() => go('swarm')} /></Col>
       </Row>
@@ -713,7 +720,7 @@ function Overview({ go, openTerm, kanna }: { go: (k: string) => void; openTerm: 
       {/* 蜂群 + 会话 双栏 */}
       <Row gutter={[14, 14]}>
         <Col xs={24} lg={14}>
-          <Card title={<Space><span style={{ color: '#d2a8ff' }}>◆</span>蜂群</Space>} extra={<a onClick={() => go('swarm')}>全部 →</a>}>
+          <Card title={<Space><span style={{ color: '#58a6ff' }}>◆</span>蜂群</Space>} extra={<a onClick={() => go('swarm')}>全部 →</a>}>
             {swarms.length === 0 ? <Empty description="暂无蜂群（在终端 ttmux swarm new 创建）" /> : (
               <Space direction="vertical" size={10} style={{ width: '100%' }}>
                 {swarms.slice(0, 5).map((s: any) => (
@@ -727,7 +734,7 @@ function Overview({ go, openTerm, kanna }: { go: (k: string) => void; openTerm: 
                       <span style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap' }}>{s.alive}/{s.total} 活{s.pending ? ` · +${s.pending} 待` : ''}</span>
                     </div>
                     <div style={{ color: 'var(--text-dim)', fontSize: 12, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.goal || '(无目标)'}</div>
-                    <Progress percent={s.total ? Math.round((s.alive / s.total) * 100) : 0} showInfo={false} size="small" strokeColor="#d2a8ff" trailColor="var(--border-subtle)" style={{ marginBottom: 0, marginTop: 6 }} />
+                    <Progress percent={s.total ? Math.round((s.alive / s.total) * 100) : 0} showInfo={false} size="small" strokeColor="#58a6ff" trailColor="var(--border-subtle)" style={{ marginBottom: 0, marginTop: 6 }} />
                   </div>
                 ))}
               </Space>
@@ -994,7 +1001,7 @@ function Sessions({ openTerm }: { openTerm: (n: string) => void }) {
                     <i style={{ width: 8, height: 8, borderRadius: '50%', flex: '0 0 8px', background: connected ? '#3fb950' : 'var(--text-dimmer)' }} />
                     <span style={{ fontWeight: 600, color: 'var(--text-bright)' }} title={s.name}>{s.name}</span>
                     {sw && <Tag color="blue" style={{ margin: 0 }}>蜂群:{sw.swarm}{sw.role === 'master' ? '·指挥' : ''}</Tag>}
-                    {cc[s.name] && <Tag color="purple" style={{ margin: 0 }}>🤖 Claude</Tag>}
+                    {cc[s.name] && <Tag color="blue" style={{ margin: 0 }}>🤖 Claude</Tag>}
                     {cx[s.name] && <Tag color="green" style={{ margin: 0 }}>✸ Codex</Tag>}
                     {!sw && !agent && <Tag style={{ margin: 0 }}>{connected ? '已连接' : '空闲'}</Tag>}
                     <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{s.windows} 窗口</span>

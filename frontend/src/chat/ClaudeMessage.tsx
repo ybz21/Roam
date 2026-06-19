@@ -72,7 +72,7 @@ function ToolUse({ b, result }: { b: Block; result?: Block }) {
   return (
     <div style={{ border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg-base)', padding: '6px 10px', fontSize: 12.5 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, cursor: hasBody ? 'pointer' : 'default' }} onClick={() => hasBody && setOpen((v) => !v)}>
-        <span style={{ color: '#d2a8ff', fontWeight: 600, flex: '0 0 auto' }}>{icon} {b.name}</span>
+        <span style={{ color: '#58a6ff', fontWeight: 600, flex: '0 0 auto' }}>{icon} {b.name}</span>
         {title && <span style={{ color: 'var(--text-dim)', fontFamily: MONO, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</span>}
         {hasBody && <span style={{ marginLeft: 'auto', color: 'var(--text-dimmer)', flex: '0 0 auto' }}>{open ? '▾' : '▸'}</span>}
       </div>

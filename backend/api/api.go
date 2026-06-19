@@ -16,11 +16,14 @@ import (
 )
 
 type API struct {
-	TT       *ttmux.Client
-	KannaURL string // 可选：Claude Code 精美 UI（kanna）的地址；为空则前端不显示入口
+	TT          *ttmux.Client
+	KannaURL    string // 可选：Claude Code 精美 UI（kanna）的地址；为空则前端不显示入口
+	BrowserHome string // 浏览器导航起始页地址（供前端设为默认主页）
 }
 
-func New(tt *ttmux.Client, kannaURL string) *API { return &API{TT: tt, KannaURL: kannaURL} }
+func New(tt *ttmux.Client, kannaURL, browserHome string) *API {
+	return &API{TT: tt, KannaURL: kannaURL, BrowserHome: browserHome}
+}
 
 // json 透传 ttmux 的 --json 输出
 func (a *API) json(c *gin.Context, args ...string) {
@@ -43,7 +46,7 @@ func (a *API) text(c *gin.Context, args ...string) {
 }
 
 func (a *API) Me(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"data": gin.H{"authed": true, "kanna": a.KannaURL}})
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"authed": true, "kanna": a.KannaURL, "browserHome": a.BrowserHome}})
 }
 func (a *API) Info(c *gin.Context) { a.json(c, "info", "--json") }
 

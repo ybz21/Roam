@@ -78,7 +78,7 @@ export function Diff({ text, max = 360 }: { text: string; max?: number }) {
   )
 }
 
-export function Typing({ color = '#d2a8ff' }: { color?: string }) {
+export function Typing({ color = '#58a6ff' }: { color?: string }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'flex-start', margin: '6px 0' }}>
       <div style={{ background: 'var(--bg-container)', border: '1px solid var(--border)', borderRadius: 12, padding: '8px 14px', color: 'var(--text-dim)', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 8 }}>

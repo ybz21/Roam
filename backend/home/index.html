@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>导航</title>
+<style>
+  :root { --accent:#1f6feb; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    color: #2b3440;
+    background: linear-gradient(160deg, #eef3fb 0%, #f7f9fc 40%, #fdf6f0 100%);
+    min-height: 100%;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 32px 20px 64px; }
+  .top { display: flex; align-items: center; gap: 11px; margin-bottom: 22px; }
+  .brand { display: flex; align-items: center; gap: 11px; }
+  .brand svg { width: 38px; height: 38px; display: block; filter: drop-shadow(0 4px 10px rgba(20,40,80,.18)); }
+  .brand .word { font-size: 26px; font-weight: 800; letter-spacing: .5px;
+    background: linear-gradient(90deg, #1f6feb, #8957e5); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .brand .sub { font-size: 12px; color: #9aa4b2; align-self: flex-end; padding-bottom: 5px; letter-spacing: 2px; }
+  .spacer { flex: 1; }
+  .edit-btn {
+    border: 1px solid #d0d7de; background: #fff; color: #57606a; border-radius: 8px;
+    padding: 7px 14px; font-size: 13px; cursor: pointer; transition: .15s;
+  }
+  .edit-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .edit-btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  /* 搜索 */
+  .search { display: flex; gap: 8px; margin: 0 auto 30px; max-width: 640px; }
+  .search select {
+    border: 1px solid #d0d7de; border-radius: 12px; padding: 0 10px; background: #fff;
+    font-size: 14px; color: #57606a; outline: none;
+  }
+  .search input {
+    flex: 1; min-width: 0; border: 1px solid #d0d7de; border-radius: 12px; padding: 13px 18px;
+    font-size: 15px; outline: none; background: #fff; box-shadow: 0 2px 10px rgba(31,111,235,.06);
+    transition: .15s;
+  }
+  .search input:focus { border-color: var(--accent); box-shadow: 0 2px 16px rgba(31,111,235,.18); }
+  .search button {
+    border: none; border-radius: 12px; padding: 0 22px; background: var(--accent); color: #fff;
+    font-size: 15px; cursor: pointer; font-weight: 600;
+  }
+
+  /* 站点网格 */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 14px; }
+  .tile {
+    position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px;
+    padding: 16px 8px 12px; border-radius: 14px; background: #fff; cursor: pointer; text-decoration: none;
+    color: #2b3440; border: 1px solid rgba(0,0,0,.04); box-shadow: 0 1px 4px rgba(20,40,80,.05);
+    transition: transform .12s, box-shadow .12s;
+  }
+  .tile:hover { transform: translateY(-3px); box-shadow: 0 8px 22px rgba(20,40,80,.12); }
+  .tile .ico { width: 40px; height: 40px; border-radius: 11px; object-fit: cover; display: block; }
+  .tile .ph { width: 40px; height: 40px; border-radius: 11px; display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 20px; font-weight: 700; }
+  .tile .nm { font-size: 13px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tile .del {
+    position: absolute; top: -7px; right: -7px; width: 22px; height: 22px; border-radius: 50%;
+    background: #e5484d; color: #fff; border: 2px solid #fff; font-size: 13px; line-height: 18px;
+    display: none; align-items: center; justify-content: center; cursor: pointer;
+  }
+  body.editing .tile .del { display: flex; }
+  body.editing .tile { cursor: default; }
+  .add { border: 2px dashed #c4cdd8; background: transparent; box-shadow: none; color: #8a93a0; display: none; }
+  body.editing .add { display: flex; }
+  .add:hover { border-color: var(--accent); color: var(--accent); transform: none; box-shadow: none; }
+  .add .ph { background: transparent; color: inherit; font-size: 28px; font-weight: 400; }
+
+  /* 添加弹层 */
+  .mask { position: fixed; inset: 0; background: rgba(20,30,50,.35); display: none; align-items: center; justify-content: center; z-index: 50; }
+  .mask.on { display: flex; }
+  .dlg { background: #fff; border-radius: 16px; padding: 22px; width: min(360px, 90vw); box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+  .dlg h3 { margin: 0 0 16px; font-size: 17px; }
+  .dlg label { display: block; font-size: 13px; color: #57606a; margin: 12px 0 6px; }
+  .dlg input { width: 100%; border: 1px solid #d0d7de; border-radius: 10px; padding: 10px 12px; font-size: 14px; outline: none; }
+  .dlg input:focus { border-color: var(--accent); }
+  .dlg .row { display: flex; gap: 10px; margin-top: 20px; }
+  .dlg .row button { flex: 1; border-radius: 10px; padding: 10px; font-size: 14px; cursor: pointer; border: 1px solid #d0d7de; background: #fff; }
+  .dlg .row .ok { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .empty { text-align: center; color: #99a2ad; padding: 40px 0; font-size: 14px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="brand">
+        <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Roam">
+          <defs>
+            <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#161b22"/><stop offset="1" stop-color="#05070a"/></linearGradient>
+            <linearGradient id="edge" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3b4252"/><stop offset=".5" stop-color="#222a35"/><stop offset="1" stop-color="#11151b"/></linearGradient>
+            <linearGradient id="active" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1f6feb"/><stop offset="1" stop-color="#388bfd"/></linearGradient>
+            <filter id="glow" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="1.6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+          <rect x="1.5" y="1.5" width="61" height="61" rx="15" fill="url(#edge)"/>
+          <rect x="3" y="3" width="58" height="58" rx="13.5" fill="url(#tile)"/>
+          <g stroke-linecap="round" stroke-linejoin="round" fill="none">
+            <rect x="12" y="12" width="18" height="18" rx="4" fill="#0d1117" stroke="#233042"/>
+            <path d="M16.5 18.5 L20 21.5 L16.5 24.5" stroke="#39d0d8" stroke-width="2.2"/>
+            <line x1="22.5" y1="24.5" x2="26" y2="24.5" stroke="#39d0d8" stroke-width="2.2" opacity=".55"/>
+            <rect x="34" y="12" width="18" height="18" rx="4" fill="#0d1117" stroke="#233042"/>
+            <path d="M38.5 18.5 L42 21.5 L38.5 24.5" stroke="#3fb950" stroke-width="2.2"/>
+            <line x1="44.5" y1="24.5" x2="48" y2="24.5" stroke="#3fb950" stroke-width="2.2" opacity=".55"/>
+            <rect x="12" y="34" width="18" height="18" rx="4" fill="#0d1117" stroke="#233042"/>
+            <path d="M16.5 40.5 L20 43.5 L16.5 46.5" stroke="#bc8cff" stroke-width="2.2"/>
+            <line x1="22.5" y1="46.5" x2="26" y2="46.5" stroke="#bc8cff" stroke-width="2.2" opacity=".55"/>
+            <rect x="34" y="34" width="18" height="18" rx="4" fill="#0b1f3a" stroke="url(#active)" stroke-width="1.6" filter="url(#glow)"/>
+            <path d="M38.5 40.5 L42 43.5 L38.5 46.5" stroke="#58a6ff" stroke-width="2.2" filter="url(#glow)"/>
+            <rect x="44" y="41.4" width="4.6" height="4.6" rx="1" fill="#58a6ff" stroke="none" filter="url(#glow)"/>
+          </g>
+          <g>
+            <line x1="32" y1="21" x2="32" y2="43" stroke="#58a6ff" stroke-width="1.1" opacity=".35"/>
+            <line x1="21" y1="32" x2="43" y2="32" stroke="#58a6ff" stroke-width="1.1" opacity=".35"/>
+            <circle cx="32" cy="32" r="3.4" fill="#0d1117" stroke="url(#active)" stroke-width="1.6"/>
+            <circle cx="32" cy="32" r="1.3" fill="#58a6ff"/>
+          </g>
+        </svg>
+        <span class="word">Roam</span>
+        <span class="sub">导航</span>
+      </div>
+      <div class="spacer"></div>
+      <button class="edit-btn" id="editBtn">编辑</button>
+    </div>
+    <form class="search" id="searchForm">
+      <select id="engine">
+        <option value="https://www.baidu.com/s?wd=">百度</option>
+        <option value="https://www.google.com/search?q=">Google</option>
+        <option value="https://www.bing.com/search?q=">Bing</option>
+      </select>
+      <input id="q" placeholder="搜索，或输入网址直接回车前往" autocomplete="off">
+      <button type="submit">搜索</button>
+    </form>
+    <div class="grid" id="grid"></div>
+  </div>
+
+  <div class="mask" id="mask">
+    <div class="dlg">
+      <h3>添加网站</h3>
+      <label>名称</label>
+      <input id="addName" placeholder="如：GitHub">
+      <label>网址</label>
+      <input id="addUrl" placeholder="如：github.com">
+      <div class="row">
+        <button id="addCancel">取消</button>
+        <button class="ok" id="addOk">添加</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+const PALETTE = ['#1f6feb','#8957e5','#2da44e','#e3963e','#cf222e','#1b7c83','#bf3989','#6e7781'];
+let sites = [];
+let editing = false;
+
+const $ = (s) => document.querySelector(s);
+const grid = $('#grid');
+
+function hostOf(url) { try { return new URL(normalize(url)).host; } catch { return ''; } }
+function originOf(url) { try { return new URL(normalize(url)).origin; } catch { return ''; } }
+function normalize(url) { return /^[a-z]+:\/\//i.test(url) ? url : 'https://' + url; }
+function colorFor(s) { let h = 0; for (const c of (s||'')) h = (h*31 + c.charCodeAt(0)) >>> 0; return PALETTE[h % PALETTE.length]; }
+
+async function load() {
+  try { sites = await (await fetch('/home/sites')).json(); } catch { sites = []; }
+  if (!Array.isArray(sites)) sites = [];
+  render();
+}
+async function save() {
+  try { await fetch('/home/sites', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sites) }); }
+  catch (e) { console.error('保存失败', e); }
+}
+
+function tileEl(site, idx) {
+  const a = document.createElement('a');
+  a.className = 'tile';
+  a.href = normalize(site.url);
+  a.onclick = (e) => { if (editing) e.preventDefault(); };
+
+  const ico = document.createElement('img');
+  ico.className = 'ico';
+  ico.referrerPolicy = 'no-referrer';
+  ico.src = originOf(site.url) + '/favicon.ico';
+  ico.onerror = () => { ico.replaceWith(placeholder(site.name)); };
+  a.appendChild(ico);
+
+  const nm = document.createElement('div');
+  nm.className = 'nm';
+  nm.textContent = site.name || hostOf(site.url);
+  a.appendChild(nm);
+
+  const del = document.createElement('div');
+  del.className = 'del';
+  del.textContent = '×';
+  del.onclick = (e) => { e.preventDefault(); e.stopPropagation(); sites.splice(idx, 1); save(); render(); };
+  a.appendChild(del);
+  return a;
+}
+function placeholder(name) {
+  const ph = document.createElement('div');
+  ph.className = 'ph';
+  ph.style.background = colorFor(name);
+  ph.textContent = (name || '?').trim().charAt(0).toUpperCase();
+  return ph;
+}
+function addTile() {
+  const d = document.createElement('div');
+  d.className = 'tile add';
+  d.innerHTML = '<div class="ph">+</div><div class="nm">添加</div>';
+  d.onclick = openAdd;
+  return d;
+}
+
+function render() {
+  grid.innerHTML = '';
+  sites.forEach((s, i) => grid.appendChild(tileEl(s, i)));
+  grid.appendChild(addTile());
+  if (!sites.length && !editing) {
+    const e = document.createElement('div');
+    e.className = 'empty';
+    e.textContent = '还没有网站，点右上角「编辑」添加';
+    grid.appendChild(e);
+  }
+}
+
+// 编辑模式
+$('#editBtn').onclick = () => {
+  editing = !editing;
+  document.body.classList.toggle('editing', editing);
+  $('#editBtn').classList.toggle('on', editing);
+  $('#editBtn').textContent = editing ? '完成' : '编辑';
+  render();
+};
+
+// 添加弹层
+function openAdd() {
+  $('#addName').value = ''; $('#addUrl').value = '';
+  $('#mask').classList.add('on');
+  $('#addName').focus();
+}
+function closeAdd() { $('#mask').classList.remove('on'); }
+$('#addCancel').onclick = closeAdd;
+$('#mask').onclick = (e) => { if (e.target === $('#mask')) closeAdd(); };
+$('#addOk').onclick = () => {
+  const name = $('#addName').value.trim();
+  const url = $('#addUrl').value.trim();
+  if (!url) { $('#addUrl').focus(); return; }
+  sites.push({ name: name || hostOf(url), url });
+  save(); render(); closeAdd();
+};
+
+// 搜索 / 直达
+$('#searchForm').onsubmit = (e) => {
+  e.preventDefault();
+  const q = $('#q').value.trim();
+  if (!q) return;
+  // 看起来像网址就直达，否则走搜索引擎
+  if (/^[a-z]+:\/\//i.test(q) || /^[\w-]+(\.[\w-]+)+(:\d+)?(\/.*)?$/.test(q)) {
+    location.href = normalize(q);
+  } else {
+    location.href = $('#engine').value + encodeURIComponent(q);
+  }
+};
+
+load();
+</script>
+</body>
+</html>

@@ -621,7 +621,7 @@ function NodeDrawer({ swarm, member, detail, cards, posts, openTerm, onClose, on
       <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <i style={{ width: 8, height: 8, borderRadius: '50%', background: color }} />
         <b>{member}</b>
-        {isMaster ? <Tag color="purple">master</Tag> : pend ? <Tag color="warning">挂起</Tag> : <Tag color={m?.status === 'running' ? 'processing' : 'default'}>{m?.done ? 'done' : m?.status}</Tag>}
+        {isMaster ? <Tag color="blue">master</Tag> : pend ? <Tag color="warning">挂起</Tag> : <Tag color={m?.status === 'running' ? 'processing' : 'default'}>{m?.done ? 'done' : m?.status}</Tag>}
       </span>
     }>
       {member && (

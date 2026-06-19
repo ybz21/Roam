@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"flag"
 	"log"
+	"net"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -49,11 +50,20 @@ func main() {
 		totp = ""
 	}
 
+	// 导航起始页挂在本服务的公开路由 /home 上（免登录，供被投屏的 Chrome 当默认主页）。
+	// Chrome 与本服务同机，统一用回环地址访问（绑定即便是 0.0.0.0 也走 127.0.0.1）。
+	homeURL := "http://127.0.0.1:8080/home"
+	if _, port, err := net.SplitHostPort(bind); err == nil && port != "" {
+		homeURL = "http://127.0.0.1:" + port + "/home"
+	}
+
 	cfg := server.Config{
 		TTmuxBin:    bin,
 		LogsDir:     logsDir(),
 		FrontendDir: fdir,
 		KannaURL:    os.Getenv("TTMUX_KANNA_URL"),
+		BrowserHome: homeURL,
+		DataDir:     dataDir(),
 		Password:    pw,
 		TOTPSecret:  totp,
 		TOTPState:   filepath.Join(dataDir(), "totp.json"),
