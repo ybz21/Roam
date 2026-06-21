@@ -29,6 +29,7 @@ const NAV = [
   { key: 'overview', label: '概览' },
   { key: 'sessions', label: '会话' },
   { key: 'swarm', label: '蜂群' },
+  { key: 'files', label: '文件' },
   { key: 'browser', label: '浏览器' },
   { key: 'env', label: '系统配置' },
 ]
@@ -42,6 +43,7 @@ const ICONS: Record<string, any> = {
   overview: svg(<><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>),
   sessions: svg(<><polyline points="5 8 9 12 5 16" /><line x1="12" y1="16" x2="18" y2="16" /></>),
   swarm: svg(<><circle cx="12" cy="5" r="2.4" /><circle cx="5" cy="17" r="2.4" /><circle cx="19" cy="17" r="2.4" /><line x1="12" y1="7.4" x2="6.5" y2="14.8" /><line x1="12" y1="7.4" x2="17.5" y2="14.8" /></>),
+  files: svg(<><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><path d="M7 12h10" /><path d="M7 16h6" /></>),
   env: svg(<><line x1="4" y1="7" x2="20" y2="7" /><circle cx="9" cy="7" r="2.3" /><line x1="4" y1="17" x2="20" y2="17" /><circle cx="15" cy="17" r="2.3" /></>),
   browser: svg(<><rect x="3" y="4" width="18" height="16" rx="2" /><line x1="3" y1="9" x2="21" y2="9" /><circle cx="6" cy="6.5" r="0.6" /><circle cx="8.4" cy="6.5" r="0.6" /></>),
 }
@@ -91,6 +93,14 @@ function StatusTag({ status, code }: { status?: string; code?: string }) {
 }
 function TypeTag({ type }: { type?: string }) {
   return type === 'agent' ? <Tag color="blue">🤖 Agent</Tag> : <Tag>⌨️ 命令</Tag>
+}
+
+function FilesPage() {
+  return (
+    <div style={{ height: '100%', minHeight: 0 }}>
+      <FileBrowser accent="#58a6ff" />
+    </div>
+  )
 }
 
 export default function App() {
@@ -219,6 +229,7 @@ export default function App() {
     overview: <Overview go={go} openTerm={openTerm} kanna={kanna} />,
     swarm: <Swarm openTerm={openTerm} initialSwarm={swarmSub || undefined} onNav={(n) => { location.hash = n ? '#/swarm/' + encodeURIComponent(n) : '#/swarm' }} />,
     sessions: <Sessions openTerm={openTerm} />,
+    files: <FilesPage />,
     env: <EnvPage />,
     browser: <BrowserView />,
   }
@@ -283,11 +294,11 @@ export default function App() {
         <div style={{ display: 'flex', height: '100dvh', minHeight: 0 }}>
           <Content style={{
             // 终端弹出时左侧页面保留可读宽度；继续向左扩展(dockMax)则收到 0、被终端遮住
-            flex: docked && tab !== 'browser' ? (dockMax ? '0 0 0px' : `0 0 ${dockPageWidth}px`) : 1,
-            width: docked && tab !== 'browser' ? (dockMax ? 0 : dockPageWidth) : 'auto', minWidth: 0,
-            height: '100dvh', overflow: tab === 'browser' ? 'hidden' : 'auto',
-            padding: tab === 'browser' ? 0 : 14,
-            paddingBottom: isMobile ? 76 : (tab === 'browser' ? 0 : 14),
+            flex: docked && tab !== 'browser' && tab !== 'files' ? (dockMax ? '0 0 0px' : `0 0 ${dockPageWidth}px`) : 1,
+            width: docked && tab !== 'browser' && tab !== 'files' ? (dockMax ? 0 : dockPageWidth) : 'auto', minWidth: 0,
+            height: '100dvh', overflow: tab === 'browser' || tab === 'files' ? 'hidden' : 'auto',
+            padding: tab === 'browser' || tab === 'files' ? 0 : 14,
+            paddingBottom: isMobile ? 76 : (tab === 'browser' || tab === 'files' ? 0 : 14),
             transition: 'flex-basis .2s, width .2s',
           }}>
             {pages[tab] || pages.sessions}
