@@ -18,6 +18,8 @@ import BrowserView from './BrowserView'
 import Swarm from './Swarm'
 import UpdateBanner from './UpdateBanner'
 import { useThemeMode } from './theme'
+import { detectPrompt } from './prompt'
+import { copyText } from './chat/blocks'
 
 interface ClaudeInfo { running: boolean; file?: string; dir?: string }
 
@@ -486,6 +488,7 @@ function TerminalPane(props: {
   // 文件侧栏（终端视图下也可用）：定位到当前会话的工作目录
   const [showFiles, setShowFiles] = useState(false)
   const [cwd, setCwd] = useState('')
+  const [ctx, setCtx] = useState<{ x: number; y: number; session: string; selection: string } | null>(null)
   useEffect(() => {
     if (!active) { setCwd(''); return }
     // 优先用 claude/codex 已知工作目录，否则查会话 pane 当前路径
@@ -495,6 +498,39 @@ function TerminalPane(props: {
     api('GET', `/sessions/${encodeURIComponent(active)}/cwd`).then((r) => { if (!stop) setCwd(r.data?.dir || '') }).catch(() => {})
     return () => { stop = true }
   }, [active, claudeMap, codexMap])
+
+  const pasteClipboard = async (session: string) => {
+    try {
+      const text = await navigator.clipboard.readText()
+      if (text) termRefs.current[session]?.send(text, true)
+    } catch {
+      message.info('浏览器未允许读取剪贴板，可用键盘粘贴')
+    }
+  }
+  const ctxItems = ctx ? [
+    ...(ctx.selection ? [{ key: 'copy', label: '复制选中文本' }] : []),
+    { key: 'paste', label: '粘贴剪贴板' },
+    { type: 'divider' as const },
+    { key: 'scroll-up', label: '上翻历史' },
+    { key: 'bottom', label: '回到最新' },
+    { key: 'reconnect', label: '重新连接' },
+    { type: 'divider' as const },
+    { key: PFX + '[', label: 'tmux 复制模式' },
+    { key: PFX + 'w', label: 'tmux 窗口列表' },
+    { key: PFX + '%', label: 'tmux 竖分屏' },
+    { key: PFX + '"', label: 'tmux 横分屏' },
+  ] : []
+  const onCtxClick = ({ key }: { key: string }) => {
+    if (!ctx) return
+    const h = termRefs.current[ctx.session]
+    if (key === 'copy') copyText(ctx.selection)
+    else if (key === 'paste') pasteClipboard(ctx.session)
+    else if (key === 'scroll-up') h?.scroll(-12)
+    else if (key === 'bottom') h?.toBottom()
+    else if (key === 'reconnect') h?.reconnect()
+    else h?.send(key)
+    setCtx(null)
+  }
 
   if (terms.length === 0) {
     return (
@@ -509,6 +545,15 @@ function TerminalPane(props: {
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <Dropdown
+        open={!!ctx}
+        trigger={[]}
+        menu={{ items: ctxItems as any, onClick: onCtxClick }}
+        onOpenChange={(open) => { if (!open) setCtx(null) }}
+        placement="bottomLeft"
+      >
+        <span style={{ position: 'fixed', left: ctx?.x ?? -1000, top: ctx?.y ?? -1000, width: 1, height: 1, pointerEvents: 'none' }} />
+      </Dropdown>
       {/* 标签栏 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 8px', borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
         {onCollapse && <Button size="small" type="text" style={{ color: 'var(--text-dim)' }} onClick={onCollapse}>✕ 收起</Button>}
@@ -575,7 +620,8 @@ function TerminalPane(props: {
         <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
           {terms.map((t) => (
             <div key={t} style={{ position: 'absolute', inset: 0, display: t === active ? 'block' : 'none', padding: 6 }}>
-              <Term ref={(h) => { termRefs.current[t] = h }} name={t} fontSize={fontSize} active={t === active} onStatus={(s) => setStatus(t, s)} />
+              <Term ref={(h) => { termRefs.current[t] = h }} name={t} fontSize={fontSize} active={t === active} onStatus={(s) => setStatus(t, s)}
+                onContextMenu={({ x, y, selection }) => { setActive(t); setCtx({ x, y, session: t, selection }) }} />
               {claudeView[t] && claudeMap[t]?.running && (
                 <div style={{ position: 'absolute', inset: 0 }}>
                   <ClaudeChat name={t} file={claudeMap[t].file} dir={claudeMap[t].dir} onBack={() => setClaudeView((v) => ({ ...v, [t]: false }))} />
@@ -946,6 +992,7 @@ function Sessions({ openTerm }: { openTerm: (n: string) => void }) {
   const [list, setList] = useState<any[]>([])
   const [cc, setCc] = useState<Record<string, boolean>>({})
   const [cx, setCx] = useState<Record<string, boolean>>({})
+  const [needsInput, setNeedsInput] = useState<Record<string, boolean>>({})
   const [swarmMap, setSwarmMap] = useState<Record<string, { swarm: string; role: string }>>({})
   const [newOpen, setNewOpen] = useState(false)
   const { message } = AntApp.useApp()
@@ -987,17 +1034,37 @@ function Sessions({ openTerm }: { openTerm: (n: string) => void }) {
     const t = setInterval(() => { if (list.length) check() }, 5000)
     return () => { stop = true; clearInterval(t) }
   }, [list])
+  // 识别卡在人类决策/审批点的会话，列表上给出醒目标识，方便及时介入。
+  useEffect(() => {
+    if (!list.length) { setNeedsInput({}); return }
+    let stop = false
+    const checkPrompts = async () => {
+      const entries = await Promise.all(list.map(async (s: any) => {
+        try {
+          const r = await api('GET', `/sessions/${encodeURIComponent(s.name)}/capture?lines=50`)
+          return [s.name, !!detectPrompt(r.data || '')] as const
+        } catch {
+          return [s.name, false] as const
+        }
+      }))
+      if (!stop) setNeedsInput(Object.fromEntries(entries))
+    }
+    checkPrompts()
+    const t = setInterval(checkPrompts, 4000)
+    return () => { stop = true; clearInterval(t) }
+  }, [list])
   const kill = async (n: string) => { try { await api('DELETE', '/sessions/' + encodeURIComponent(n)); message.success('已关闭'); load() } catch (e: any) { message.error(e.message) } }
   const goSwarm = (sw: string) => { location.hash = '#/swarm/' + encodeURIComponent(sw) }
 
   // ── 筛选 / 搜索 ──
   const [q, setQ] = useState('')
-  const [filter, setFilter] = useState<'all' | 'claude' | 'codex' | 'swarm' | 'idle'>('all')
+  const [filter, setFilter] = useState<'all' | 'waiting' | 'claude' | 'codex' | 'swarm' | 'idle'>('all')
   const ql = q.trim().toLowerCase()
   const isSwarm = (s: any) => !!swarmMap[s.name]
   // 默认不展示蜂群会话（它们有专门的蜂群页）；仅「蜂群」筛选时才列出
   const match = (s: any, f: typeof filter) => {
     if (f === 'swarm') return isSwarm(s)
+    if (f === 'waiting') return !!needsInput[s.name]
     if (isSwarm(s)) return false
     switch (f) {
       case 'claude': return !!cc[s.name]
@@ -1021,6 +1088,7 @@ function Sessions({ openTerm }: { openTerm: (n: string) => void }) {
           prefix={svg(<><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></>)} />
         <Segmented value={filter} onChange={(v) => setFilter(v as any)} options={[
           { label: `全部 ${cnt('all')}`, value: 'all' },
+          { label: `待确认 ${cnt('waiting')}`, value: 'waiting' },
           { label: `Claude ${cnt('claude')}`, value: 'claude' },
           { label: `Codex ${cnt('codex')}`, value: 'codex' },
           { label: `蜂群 ${cnt('swarm')}`, value: 'swarm' },
@@ -1043,6 +1111,7 @@ function Sessions({ openTerm }: { openTerm: (n: string) => void }) {
                       <i style={{ width: 8, height: 8, borderRadius: '50%', flex: '0 0 8px', background: connected ? '#3fb950' : 'var(--text-dimmer)' }} />
                       <span style={{ fontWeight: 600, color: 'var(--text-bright)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.name}>{s.name}</span>
                       {sw && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>蜂群:{sw.swarm}{sw.role === 'master' ? '·指挥' : ''}</Tag>}
+                      {needsInput[s.name] && <Tag color="warning" style={{ margin: 0, flex: '0 0 auto' }}>待确认</Tag>}
                       {cc[s.name] && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>🤖 Claude</Tag>}
                       {cx[s.name] && <Tag color="green" style={{ margin: 0, flex: '0 0 auto' }}>✸ Codex</Tag>}
                       {!sw && !agent && <Tag style={{ margin: 0, flex: '0 0 auto' }}>{connected ? '已连接' : '空闲'}</Tag>}
