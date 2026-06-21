@@ -18,7 +18,7 @@ import BrowserView from './BrowserView'
 import Swarm from './Swarm'
 import UpdateBanner from './UpdateBanner'
 import { useThemeMode } from './theme'
-import { detectPrompt } from './prompt'
+import { PromptDialog, detectPrompt } from './prompt'
 import { copyText } from './chat/blocks'
 
 interface ClaudeInfo { running: boolean; file?: string; dir?: string }
@@ -545,6 +545,7 @@ function TerminalPane(props: {
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      {active && <PromptDialog name={active} accent={codexMap[active]?.running ? '#10a37f' : '#58a6ff'} enabled={!inChat} />}
       <Dropdown
         open={!!ctx}
         trigger={[]}
