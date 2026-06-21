@@ -1,7 +1,7 @@
 // 文件侧栏 —— 在 Claude / Codex 对话页右侧浏览工作目录、查看文件内容（类似 codex 右侧边栏）。
 // 单层可导航列表：目录在前可进入、↑ 回上级、点文件在弹层里查看正文。
 import { type ReactNode, useEffect, useRef, useState } from 'react'
-import { Button, Modal, Spin, App as AntApp, Popconfirm, Tooltip } from 'antd'
+import { Button, Modal, Spin, App as AntApp, Tooltip } from 'antd'
 import { api, upload } from './api'
 import Markdown from './Markdown'
 
@@ -134,9 +134,6 @@ const UploadIcon = () => (
 const DownloadIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v10" /><path d="m8.5 9.5 3.5 3.5 3.5-3.5" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></svg>
 )
-const TrashIcon = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 15H6L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /></svg>
-)
 const CloseIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
 )
@@ -148,7 +145,7 @@ const IconButton = ({ title, children, danger, onClick, disabled, width = 24 }: 
     </Button>
   </Tooltip>
 )
-function Viewer({ path, accent, onClose, onDelete }: { path: string; accent: string; onClose: () => void; onDelete: (p: string) => Promise<void> }) {
+function Viewer({ path, accent, onClose }: { path: string; accent: string; onClose: () => void }) {
   const ext = extOf(path)
   const isImg = IMG_EXT.includes(ext)
   const isMd = MD_EXT.includes(ext)
@@ -217,10 +214,6 @@ function Viewer({ path, accent, onClose, onDelete }: { path: string; accent: str
           )}
           <Button size="small" onClick={copyPath}>复制路径</Button>
           <Button size="small" href={`${rawUrl}&dl=1`}>下载</Button>
-          <Popconfirm title="删除此文件？" okText="删除" cancelText="取消" okButtonProps={{ danger: true }}
-            onConfirm={async () => { await onDelete(path); onClose() }}>
-            <Button size="small" danger>删除</Button>
-          </Popconfirm>
           <a href={rawUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--text-dim)', fontSize: 12 }}>原始</a>
         </div>
       }>
@@ -293,7 +286,7 @@ export default function FileBrowser({ dir, accent = '#58a6ff', onClose, onInsert
   const [tick, setTick] = useState(0) // 上传后强制重载当前目录
   const [uploading, setUploading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
-  const { message } = AntApp.useApp()
+  const { message, modal } = AntApp.useApp()
 
   // 会话切换（dir 变化）→ 回到工作目录根
   useEffect(() => { setPath(dir || '') }, [dir])
@@ -334,6 +327,16 @@ export default function FileBrowser({ dir, accent = '#58a6ff', onClose, onInsert
       message.error('删除失败：' + e.message)
       throw e
     }
+  }
+  const confirmDelete = (target: string, isDir: boolean) => {
+    modal.confirm({
+      title: isDir ? '删除此空目录？' : '删除此文件？',
+      content: target,
+      okText: '删除',
+      cancelText: '取消',
+      okButtonProps: { danger: true },
+      onOk: () => deletePath(target),
+    })
   }
   // 根目录之上不再回退（防止越过工作目录乱逛；dir 为空时允许一直向上）
   const canUp = !!data && data.parent !== data.path && (!dir || cur !== dir)
@@ -376,7 +379,13 @@ export default function FileBrowser({ dir, accent = '#58a6ff', onClose, onInsert
             onClick={(ev) => {
               if ((ev.target as HTMLElement).closest('[data-file-action]')) return
               e.dir ? setPath(joinPath(cur, e.name)) : setView(joinPath(cur, e.name))
-            }} style={rowStyle()}>
+            }}
+            onContextMenu={(ev) => {
+              ev.preventDefault()
+              ev.stopPropagation()
+              confirmDelete(joinPath(cur, e.name), e.dir)
+            }}
+            style={rowStyle()}>
             <span style={{ color: e.dir ? accent : 'var(--text-dimmer)', flex: '0 0 auto', display: 'inline-flex', width: 25, justifyContent: 'center' }}>{e.dir ? <FolderIcon /> : <FileTypeIcon name={e.name} />}</span>
             <span style={{ color: e.dir ? 'var(--text-bright)' : 'var(--text-bright)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name}</span>
             {!e.dir && <span style={{ color: 'var(--text-dimmer)', fontSize: 11, flex: '0 0 auto' }}>{fmtSize(e.size)}</span>}
@@ -395,18 +404,11 @@ export default function FileBrowser({ dir, accent = '#58a6ff', onClose, onInsert
                 </span>
               </>
             )}
-            <Popconfirm title={e.dir ? '删除此空目录？' : '删除此文件？'} okText="删除" cancelText="取消" okButtonProps={{ danger: true }}
-              onConfirm={() => deletePath(joinPath(cur, e.name))}>
-              <span data-file-action>
-                <Button type="text" size="small" danger
-                  style={{ width: 24, height: 24, minWidth: 24, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><TrashIcon /></Button>
-              </span>
-            </Popconfirm>
           </div>
         ))}
         {data && data.entries.length === 0 && <div style={{ color: 'var(--text-dimmer)', fontSize: 12, padding: '6px 10px' }}>空目录</div>}
       </div>
-      {view && <Viewer path={view} accent={accent} onClose={() => setView(null)} onDelete={deletePath} />}
+      {view && <Viewer path={view} accent={accent} onClose={() => setView(null)} />}
     </div>
   )
 }
