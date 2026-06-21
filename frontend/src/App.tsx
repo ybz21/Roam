@@ -470,7 +470,9 @@ function TerminalPane(props: {
   const { terms, active, setActive, closeTerm, fontSize, setFontSize, statusMap, setStatus, termRefs, sendKey, onCollapse, claudeMap, claudeView, setClaudeView, codexMap, codexView, setCodexView } = props
   const { message } = AntApp.useApp()
   const st = active ? statusMap[active] : undefined
-  const dot = st === 'connected' ? '#3fb950' : st === 'connecting' ? '#d29922' : '#f85149'
+  const [termNeedsInput, setTermNeedsInput] = useState<Record<string, boolean>>({})
+  const activeNeedsInput = !!(active && termNeedsInput[active])
+  const dot = activeNeedsInput ? '#d29922' : st === 'connected' ? '#3fb950' : st === 'connecting' ? '#d29922' : '#f85149'
   // 当前标签是否在 Claude/Codex 对话视图：此时聊天 UI 自带输入框，
   // 终端那条移动输入条 + 快捷键栏要隐藏，否则手机上会出现两个输入框。
   const inChat = !!active && ((claudeView[active] && claudeMap[active]?.running) || (codexView[active] && codexMap[active]?.running))
@@ -489,6 +491,10 @@ function TerminalPane(props: {
   const [showFiles, setShowFiles] = useState(false)
   const [cwd, setCwd] = useState('')
   const [ctx, setCtx] = useState<{ x: number; y: number; session: string; selection: string } | null>(null)
+  const [pasteOpen, setPasteOpen] = useState(false)
+  const [pasteSession, setPasteSession] = useState('')
+  const [pasteText, setPasteText] = useState('')
+  const [selTip, setSelTip] = useState<{ x: number; y: number; session: string; selection: string } | null>(null)
   useEffect(() => {
     if (!active) { setCwd(''); return }
     // 优先用 claude/codex 已知工作目录，否则查会话 pane 当前路径
@@ -499,17 +505,47 @@ function TerminalPane(props: {
     return () => { stop = true }
   }, [active, claudeMap, codexMap])
 
+  useEffect(() => {
+    if (!terms.length) { setTermNeedsInput({}); return }
+    let stop = false
+    const checkPrompts = async () => {
+      const entries = await Promise.all(terms.map(async (name) => {
+        try {
+          const r = await api('GET', `/sessions/${encodeURIComponent(name)}/capture?lines=50`)
+          return [name, !!detectPrompt(r.data || '')] as const
+        } catch {
+          return [name, false] as const
+        }
+      }))
+      if (!stop) setTermNeedsInput(Object.fromEntries(entries))
+    }
+    checkPrompts()
+    const t = setInterval(checkPrompts, 4000)
+    return () => { stop = true; clearInterval(t) }
+  }, [terms])
+
+  const sendPaste = (session: string, text: string) => {
+    if (!text) return
+    termRefs.current[session]?.send(text.replace(/\r\n/g, '\n'), true)
+  }
+  const openManualPaste = (session: string) => {
+    setPasteSession(session)
+    setPasteText('')
+    setPasteOpen(true)
+  }
   const pasteClipboard = async (session: string) => {
     try {
       const text = await navigator.clipboard.readText()
-      if (text) termRefs.current[session]?.send(text, true)
+      if (text) sendPaste(session, text)
+      else openManualPaste(session)
     } catch {
-      message.info('浏览器未允许读取剪贴板，可用键盘粘贴')
+      openManualPaste(session)
     }
   }
   const ctxItems = ctx ? [
     ...(ctx.selection ? [{ key: 'copy', label: '复制选中文本' }] : []),
     { key: 'paste', label: '粘贴剪贴板' },
+    { key: 'manual-paste', label: '手动粘贴…' },
     { type: 'divider' as const },
     { key: 'scroll-up', label: '上翻历史' },
     { key: 'bottom', label: '回到最新' },
@@ -525,11 +561,18 @@ function TerminalPane(props: {
     const h = termRefs.current[ctx.session]
     if (key === 'copy') copyText(ctx.selection)
     else if (key === 'paste') pasteClipboard(ctx.session)
+    else if (key === 'manual-paste') openManualPaste(ctx.session)
     else if (key === 'scroll-up') h?.scroll(-12)
     else if (key === 'bottom') h?.toBottom()
     else if (key === 'reconnect') h?.reconnect()
     else h?.send(key)
     setCtx(null)
+  }
+  const copySelectionTip = () => {
+    if (!selTip) return
+    copyText(selTip.selection)
+    message.success('已复制')
+    setSelTip(null)
   }
 
   if (terms.length === 0) {
@@ -546,6 +589,30 @@ function TerminalPane(props: {
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       {active && <PromptDialog name={active} accent={codexMap[active]?.running ? '#10a37f' : '#58a6ff'} enabled={!inChat} />}
+      <Modal
+        open={pasteOpen}
+        title="粘贴到会话"
+        okText="粘贴"
+        cancelText="取消"
+        destroyOnClose
+        onCancel={() => setPasteOpen(false)}
+        onOk={() => {
+          sendPaste(pasteSession, pasteText)
+          setPasteOpen(false)
+          message.success('已粘贴')
+        }}
+      >
+        <Input.TextArea
+          autoFocus
+          value={pasteText}
+          onChange={(e) => setPasteText(e.target.value)}
+          autoSize={{ minRows: 6, maxRows: 12 }}
+          placeholder="把要发送到终端的内容粘贴到这里"
+        />
+        <div style={{ color: 'var(--text-dim)', fontSize: 12, marginTop: 8 }}>
+          用于浏览器不允许直接读取剪贴板时的兜底；内容会原样写入当前 PTY，不自动追加回车。
+        </div>
+      </Modal>
       <Dropdown
         open={!!ctx}
         trigger={[]}
@@ -555,6 +622,26 @@ function TerminalPane(props: {
       >
         <span style={{ position: 'fixed', left: ctx?.x ?? -1000, top: ctx?.y ?? -1000, width: 1, height: 1, pointerEvents: 'none' }} />
       </Dropdown>
+      {selTip && (
+        <div
+          style={{
+            position: 'fixed',
+            left: Math.min(selTip.x + 8, window.innerWidth - 88),
+            top: Math.max(8, selTip.y - 42),
+            zIndex: 1200,
+            display: 'flex',
+            gap: 4,
+            padding: 4,
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            background: 'var(--bg-elevated)',
+            boxShadow: 'var(--elevated-shadow)',
+          }}
+        >
+          <Button size="small" type="primary" onMouseDown={(e) => e.preventDefault()} onClick={copySelectionTip}>复制</Button>
+          <Button size="small" type="text" onMouseDown={(e) => e.preventDefault()} onClick={() => setSelTip(null)}>×</Button>
+        </div>
+      )}
       {/* 标签栏 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 8px', borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
         {onCollapse && <Button size="small" type="text" style={{ color: 'var(--text-dim)' }} onClick={onCollapse}>✕ 收起</Button>}
@@ -564,7 +651,8 @@ function TerminalPane(props: {
               display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap',
               background: t === active ? '#1f6feb33' : 'transparent', border: t === active ? '1px solid #1f6feb' : '1px solid var(--border)', color: 'var(--text-bright)',
             }}>
-            <i style={{ width: 7, height: 7, borderRadius: '50%', background: (statusMap[t] === 'connected' ? '#3fb950' : statusMap[t] === 'connecting' ? '#d29922' : '#f85149') }} />
+            <i style={{ width: 7, height: 7, borderRadius: '50%', background: termNeedsInput[t] ? '#d29922' : (statusMap[t] === 'connected' ? '#3fb950' : statusMap[t] === 'connecting' ? '#d29922' : '#f85149') }} />
+            {termNeedsInput[t] && <span title="需要你确认" style={{ color: '#d29922', fontSize: 12, fontWeight: 600 }}>待确认</span>}
             {claudeMap[t]?.running && <span title="正在运行 Claude Code">🤖</span>}
             {codexMap[t]?.running && <span title="正在运行 Codex" style={{ color: '#10a37f' }}>✸</span>}
             {t}
@@ -577,7 +665,7 @@ function TerminalPane(props: {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-dim)', fontSize: 12 }}>
           <i style={{ width: 8, height: 8, borderRadius: '50%', background: dot }} />
-          {st === 'connected' ? '已连接' : st === 'connecting' ? '连接中' : '已断开'}
+          {activeNeedsInput ? '待确认' : st === 'connected' ? '已连接' : st === 'connecting' ? '连接中' : '已断开'}
         </span>
         {active && claudeMap[active]?.running && (
           <Tooltip title="切换到 Claude Code 对话界面">
@@ -622,7 +710,8 @@ function TerminalPane(props: {
           {terms.map((t) => (
             <div key={t} style={{ position: 'absolute', inset: 0, display: t === active ? 'block' : 'none', padding: 6 }}>
               <Term ref={(h) => { termRefs.current[t] = h }} name={t} fontSize={fontSize} active={t === active} onStatus={(s) => setStatus(t, s)}
-                onContextMenu={({ x, y, selection }) => { setActive(t); setCtx({ x, y, session: t, selection }) }} />
+                onContextMenu={({ x, y, selection }) => { setActive(t); setSelTip(null); setCtx({ x, y, session: t, selection }) }}
+                onSelectionMenu={({ x, y, selection }) => { setActive(t); setCtx(null); setSelTip({ x, y, session: t, selection }) }} />
               {claudeView[t] && claudeMap[t]?.running && (
                 <div style={{ position: 'absolute', inset: 0 }}>
                   <ClaudeChat name={t} file={claudeMap[t].file} dir={claudeMap[t].dir} onBack={() => setClaudeView((v) => ({ ...v, [t]: false }))} />
@@ -1104,15 +1193,16 @@ function Sessions({ openTerm }: { openTerm: (n: string) => void }) {
               const sw = swarmMap[s.name]
               const connected = s.attached == 1
               const agent = cc[s.name] ? 'claude' : cx[s.name] ? 'codex' : null
+              const waiting = !!needsInput[s.name]
               return (
                 // 整行点击直接进入终端；右侧操作区 stopPropagation 不触发进入
                 <List.Item style={{ padding: '10px 8px', cursor: 'pointer' }} onClick={() => openTerm(s.name)}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
-                      <i style={{ width: 8, height: 8, borderRadius: '50%', flex: '0 0 8px', background: connected ? '#3fb950' : 'var(--text-dimmer)' }} />
+                      <i title={waiting ? '需要确认' : connected ? '已连接' : '空闲'} style={{ width: 8, height: 8, borderRadius: '50%', flex: '0 0 8px', background: waiting ? '#d29922' : connected ? '#3fb950' : 'var(--text-dimmer)' }} />
                       <span style={{ fontWeight: 600, color: 'var(--text-bright)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.name}>{s.name}</span>
                       {sw && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>蜂群:{sw.swarm}{sw.role === 'master' ? '·指挥' : ''}</Tag>}
-                      {needsInput[s.name] && <Tag color="warning" style={{ margin: 0, flex: '0 0 auto' }}>待确认</Tag>}
+                      {waiting && <Tag color="warning" style={{ margin: 0, flex: '0 0 auto' }}>待确认</Tag>}
                       {cc[s.name] && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>🤖 Claude</Tag>}
                       {cx[s.name] && <Tag color="green" style={{ margin: 0, flex: '0 0 auto' }}>✸ Codex</Tag>}
                       {!sw && !agent && <Tag style={{ margin: 0, flex: '0 0 auto' }}>{connected ? '已连接' : '空闲'}</Tag>}

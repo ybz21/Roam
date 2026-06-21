@@ -47,7 +47,8 @@ const Term = forwardRef<TermHandle, {
   active: boolean
   onStatus?: (s: TermStatus) => void
   onContextMenu?: (e: { x: number; y: number; selection: string }) => void
-}>(function Term({ name, fontSize, active, onStatus, onContextMenu }, ref) {
+  onSelectionMenu?: (e: { x: number; y: number; selection: string }) => void
+}>(function Term({ name, fontSize, active, onStatus, onContextMenu, onSelectionMenu }, ref) {
   const elRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal>()
   const fitRef = useRef<FitAddon>()
@@ -151,6 +152,15 @@ const Term = forwardRef<TermHandle, {
       sendScroll(e.deltaY < 0 ? 'up' : 'down', n)
       e.preventDefault(); e.stopPropagation()
     }
+    const onMouseUp = (e: MouseEvent) => {
+      const sel = termRef.current?.getSelection() || ''
+      if (sel.trim()) onSelectionMenu?.({ x: e.clientX, y: e.clientY, selection: sel })
+    }
+    const onTouchEnd = (e: TouchEvent) => {
+      const sel = termRef.current?.getSelection() || ''
+      const t = e.changedTouches[0]
+      if (sel.trim() && t) onSelectionMenu?.({ x: t.clientX, y: t.clientY, selection: sel })
+    }
     // 右键改为 Roam 菜单：有选区时优先复制；无选区时提供粘贴/重连/tmux 常用动作。
     const onCtx = (e: MouseEvent) => {
       e.preventDefault()
@@ -160,6 +170,8 @@ const Term = forwardRef<TermHandle, {
     el.addEventListener('touchstart', onTS, { passive: true, capture: true })
     el.addEventListener('touchmove', onTM, { passive: false, capture: true })
     el.addEventListener('wheel', onWheel, { passive: false, capture: true })
+    el.addEventListener('mouseup', onMouseUp)
+    el.addEventListener('touchend', onTouchEnd)
     el.addEventListener('contextmenu', onCtx)
 
     connect()
@@ -173,6 +185,8 @@ const Term = forwardRef<TermHandle, {
       el.removeEventListener('touchstart', onTS, { capture: true } as any)
       el.removeEventListener('touchmove', onTM, { capture: true } as any)
       el.removeEventListener('wheel', onWheel, { capture: true } as any)
+      el.removeEventListener('mouseup', onMouseUp)
+      el.removeEventListener('touchend', onTouchEnd)
       el.removeEventListener('contextmenu', onCtx)
       dataDisp.dispose()
       try { wsRef.current?.close() } catch {}
