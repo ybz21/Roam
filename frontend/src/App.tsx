@@ -185,6 +185,7 @@ export default function App() {
   }
   const anyClaude = terms.some((t) => claudeMap[t]?.running || codexMap[t]?.running)
   const docked = hasSider && terms.length > 0 && dockOpen // 桌面停靠栏已展开
+  const dockPageWidth = tab === 'sessions' || tab === 'overview' ? 420 : 300
   const setStatus = (name: string, s: TermStatus) => setStatusMap((m) => ({ ...m, [name]: s }))
   const sendKey = (seq: string) => active && termRefs.current[active]?.send(seq)
 
@@ -281,9 +282,9 @@ export default function App() {
       <Layout style={{ background: 'var(--bg-base)' }}>
         <div style={{ display: 'flex', height: '100dvh', minHeight: 0 }}>
           <Content style={{
-            // 终端弹出时左侧页面压窄到 300；继续向左扩展(dockMax)则收到 0、被终端遮住
-            flex: docked && tab !== 'browser' ? (dockMax ? '0 0 0px' : '0 0 300px') : 1,
-            width: docked && tab !== 'browser' ? (dockMax ? 0 : 300) : 'auto', minWidth: 0,
+            // 终端弹出时左侧页面保留可读宽度；继续向左扩展(dockMax)则收到 0、被终端遮住
+            flex: docked && tab !== 'browser' ? (dockMax ? '0 0 0px' : `0 0 ${dockPageWidth}px`) : 1,
+            width: docked && tab !== 'browser' ? (dockMax ? 0 : dockPageWidth) : 'auto', minWidth: 0,
             height: '100dvh', overflow: tab === 'browser' ? 'hidden' : 'auto',
             padding: tab === 'browser' ? 0 : 14,
             paddingBottom: isMobile ? 76 : (tab === 'browser' ? 0 : 14),
@@ -715,19 +716,19 @@ function Overview({ go, openTerm, kanna }: { go: (k: string) => void; openTerm: 
 
       {/* 蜂群 + 会话 双栏 */}
       <Row gutter={[14, 14]}>
-        <Col xs={24} lg={14}>
+        <Col xs={24} xl={14}>
           <Card title={<Space><span style={{ color: '#58a6ff' }}>◆</span>蜂群</Space>} extra={<a onClick={() => go('swarm')}>全部 →</a>}>
             {swarms.length === 0 ? <Empty description="暂无蜂群（在终端 ttmux swarm new 创建）" /> : (
               <Space direction="vertical" size={10} style={{ width: '100%' }}>
                 {swarms.slice(0, 5).map((s: any) => (
                   <div key={s.id || s.name} onClick={() => go('swarm')}
                     style={{ cursor: 'pointer', padding: '10px 12px', borderRadius: 10, background: 'var(--bg-base)', border: '1px solid var(--border-subtle)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontWeight: 600, color: 'var(--text-bright)' }}>{s.name}</span>
-                      <SwarmStatusTag status={s.status} />
-                      {s.supervisor && <Text type="secondary" style={{ fontSize: 12 }}>◆{s.supervisor}</Text>}
-                      <span style={{ flex: 1 }} />
-                      <span style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap' }}>{s.alive}/{s.total} 活{s.pending ? ` · +${s.pending} 待` : ''}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                      <span style={{ fontWeight: 600, color: 'var(--text-bright)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
+                      <span style={{ flex: '0 0 auto' }}><SwarmStatusTag status={s.status} /></span>
+                      {s.supervisor && <Text type="secondary" style={{ fontSize: 12, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>◆{s.supervisor}</Text>}
+                      <span style={{ flex: 1, minWidth: 8 }} />
+                      <span style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap', flex: '0 0 auto' }}>{s.alive}/{s.total} 活{s.pending ? ` · +${s.pending} 待` : ''}</span>
                     </div>
                     <div style={{ color: 'var(--text-dim)', fontSize: 12, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.goal || '(无目标)'}</div>
                     <Progress percent={s.total ? Math.round((s.alive / s.total) * 100) : 0} showInfo={false} size="small" strokeColor="#58a6ff" trailColor="var(--border-subtle)" style={{ marginBottom: 0, marginTop: 6 }} />
@@ -737,14 +738,18 @@ function Overview({ go, openTerm, kanna }: { go: (k: string) => void; openTerm: 
             )}
           </Card>
         </Col>
-        <Col xs={24} lg={10}>
+        <Col xs={24} xl={10}>
           <Card title="会话" extra={<a onClick={() => go('sessions')}>全部 →</a>}>
             {sessions.length === 0 ? <Empty description="无活跃会话" /> : (
               <List size="small" dataSource={sessions.slice(0, 6)} renderItem={(s: any) => (
-                <List.Item actions={[<a key="t" onClick={() => openTerm(s.name)}>终端</a>]}>
-                  <List.Item.Meta
-                    title={<span style={{ color: 'var(--text-bright)' }}>{s.name}</span>}
-                    description={`${s.windows} 窗口 · ${s.attached == 1 ? '已连接' : '空闲'}`} />
+                <List.Item style={{ padding: '8px 0' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minWidth: 0 }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ color: 'var(--text-bright)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.name}>{s.name}</div>
+                      <div style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap' }}>{s.windows} 窗口 · {s.attached == 1 ? '已连接' : '空闲'}</div>
+                    </div>
+                    <a onClick={() => openTerm(s.name)} style={{ flex: '0 0 auto', whiteSpace: 'nowrap' }}>终端</a>
+                  </div>
                 </List.Item>
               )} />
             )}
@@ -993,15 +998,17 @@ function Sessions({ openTerm }: { openTerm: (n: string) => void }) {
               return (
                 // 整行点击直接进入终端；右侧操作区 stopPropagation 不触发进入
                 <List.Item style={{ padding: '10px 8px', cursor: 'pointer' }} onClick={() => openTerm(s.name)}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', width: '100%' }}>
-                    <i style={{ width: 8, height: 8, borderRadius: '50%', flex: '0 0 8px', background: connected ? '#3fb950' : 'var(--text-dimmer)' }} />
-                    <span style={{ fontWeight: 600, color: 'var(--text-bright)' }} title={s.name}>{s.name}</span>
-                    {sw && <Tag color="blue" style={{ margin: 0 }}>蜂群:{sw.swarm}{sw.role === 'master' ? '·指挥' : ''}</Tag>}
-                    {cc[s.name] && <Tag color="blue" style={{ margin: 0 }}>🤖 Claude</Tag>}
-                    {cx[s.name] && <Tag color="green" style={{ margin: 0 }}>✸ Codex</Tag>}
-                    {!sw && !agent && <Tag style={{ margin: 0 }}>{connected ? '已连接' : '空闲'}</Tag>}
-                    <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{s.windows} 窗口</span>
-                    <div onClick={(e) => e.stopPropagation()} style={{ marginLeft: 'auto', display: 'flex', gap: 14, alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
+                      <i style={{ width: 8, height: 8, borderRadius: '50%', flex: '0 0 8px', background: connected ? '#3fb950' : 'var(--text-dimmer)' }} />
+                      <span style={{ fontWeight: 600, color: 'var(--text-bright)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.name}>{s.name}</span>
+                      {sw && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>蜂群:{sw.swarm}{sw.role === 'master' ? '·指挥' : ''}</Tag>}
+                      {cc[s.name] && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>🤖 Claude</Tag>}
+                      {cx[s.name] && <Tag color="green" style={{ margin: 0, flex: '0 0 auto' }}>✸ Codex</Tag>}
+                      {!sw && !agent && <Tag style={{ margin: 0, flex: '0 0 auto' }}>{connected ? '已连接' : '空闲'}</Tag>}
+                      <span style={{ color: 'var(--text-dim)', fontSize: 12, flex: '0 0 auto', whiteSpace: 'nowrap' }}>{s.windows} 窗口</span>
+                    </div>
+                    <div onClick={(e) => e.stopPropagation()} style={{ marginLeft: 'auto', display: 'flex', gap: 14, alignItems: 'center', flex: '0 0 auto', whiteSpace: 'nowrap' }}>
                       {sw && <a onClick={() => goSwarm(sw.swarm)}>蜂群页</a>}
                       {sw ? (
                         <Popconfirm

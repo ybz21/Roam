@@ -1,12 +1,20 @@
 // 文件侧栏 —— 在 Claude / Codex 对话页右侧浏览工作目录、查看文件内容（类似 codex 右侧边栏）。
 // 单层可导航列表：目录在前可进入、↑ 回上级、点文件在弹层里查看正文。
-import { useEffect, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { Button, Modal, Spin, App as AntApp, Popconfirm, Tooltip } from 'antd'
 import { api, upload } from './api'
 import Markdown from './Markdown'
 
 const IMG_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'avif', 'svg']
 const MD_EXT = ['md', 'markdown', 'mdx']
+const CODE_LANG: Record<string, string> = {
+  py: 'python', pyw: 'python', sh: 'bash', bash: 'bash', zsh: 'bash', fish: 'bash', ps1: 'powershell',
+  js: 'javascript', jsx: 'jsx', ts: 'typescript', tsx: 'tsx', mjs: 'javascript', cjs: 'javascript',
+  go: 'go', rs: 'rust', java: 'java', kt: 'kotlin', c: 'c', h: 'c', cpp: 'cpp', hpp: 'cpp',
+  cs: 'csharp', php: 'php', rb: 'ruby', swift: 'swift', html: 'html', htm: 'html', css: 'css',
+  scss: 'scss', sass: 'sass', less: 'less', sql: 'sql', json: 'json', yaml: 'yaml', yml: 'yaml',
+  toml: 'toml', xml: 'xml', ini: 'ini', env: 'ini', conf: 'ini', Dockerfile: 'dockerfile',
+}
 function extOf(path: string): string {
   const m = path.toLowerCase().match(/\.([a-z0-9]+)$/)
   return m ? m[1] : ''
@@ -25,13 +33,95 @@ function joinPath(dir: string, name: string): string {
   return (dir === '/' ? '' : dir) + '/' + name
 }
 
-// 目录/文件图标（线性）
+function codeLangOf(path: string): string {
+  const name = path.split('/').pop() || ''
+  if (name === 'Dockerfile' || name.endsWith('.Dockerfile')) return 'dockerfile'
+  return CODE_LANG[extOf(path)] || ''
+}
+
+function parseDelimited(text: string, sep: ',' | '\t'): string[][] {
+  const rows: string[][] = []
+  let row: string[] = [], cell = '', quote = false
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    if (quote && ch === '"' && text[i + 1] === '"') { cell += '"'; i++; continue }
+    if (ch === '"') { quote = !quote; continue }
+    if (!quote && ch === sep) { row.push(cell); cell = ''; continue }
+    if (!quote && (ch === '\n' || ch === '\r')) {
+      if (ch === '\r' && text[i + 1] === '\n') i++
+      row.push(cell); rows.push(row); row = []; cell = ''
+      continue
+    }
+    cell += ch
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row) }
+  return rows.filter((r) => r.some((x) => x.trim() !== '')).slice(0, 80).map((r) => r.slice(0, 12))
+}
+
+// 目录/文件图标：按 blade-agent 的分类 SVG 思路做轻量映射，避免字母块图标。
 const FolderIcon = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" opacity="0.9"><path d="M20 6h-8l-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2z" /></svg>
 )
 const FileIcon = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><polyline points="14 3 14 8 19 8" /></svg>
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" /><polyline points="14 2 14 8 20 8" /></svg>
 )
+const CodeIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></svg>
+const TableIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18" /><path d="M3 15h18" /><path d="M9 3v18" /></svg>
+const SlidesIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8" /><path d="M12 17v4" /></svg>
+const PdfIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" /><path d="M8 13h8" /><path d="M8 17h5" /></svg>
+const ImageIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-3.09-3.09a2 2 0 0 0-2.82 0L6 21" /></svg>
+const TextIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" /><path d="M8 13h8" /><path d="M8 17h8" /><path d="M8 9h3" /></svg>
+const ArchiveIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" /><path d="M12 4v16" /><path d="m10 10 4 4" /><path d="m14 10-4 4" /></svg>
+const ConfigIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" /><circle cx="12" cy="15" r="2" /><path d="M12 11v2" /></svg>
+const DatabaseIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5v14a9 3 0 0 0 18 0V5" /><path d="M3 12a9 3 0 0 0 18 0" /></svg>
+const AudioIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
+const VideoIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="2" /><path d="m10 8 6 4-6 4V8z" /></svg>
+const DesignIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="m12 19 7-7 3 3-7 7-3-3z" /><path d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" /><path d="m2 2 7.586 7.586" /><circle cx="11" cy="11" r="2" /></svg>
+type FileIconEntry = { icon: ReactNode; color: string }
+const EXT_ICON: Record<string, FileIconEntry> = {}
+function regIcon(exts: string[], icon: ReactNode, color: string) {
+  for (const ext of exts) EXT_ICON[ext] = { icon, color }
+}
+regIcon(['py', 'pyw', 'ipynb'], <CodeIcon />, 'hsl(210,70%,58%)')
+regIcon(['js', 'jsx', 'mjs', 'cjs'], <CodeIcon />, 'hsl(48,90%,50%)')
+regIcon(['ts', 'tsx'], <CodeIcon />, 'hsl(210,80%,55%)')
+regIcon(['go'], <CodeIcon />, 'hsl(195,70%,50%)')
+regIcon(['rs'], <CodeIcon />, 'hsl(25,80%,55%)')
+regIcon(['java', 'kt'], <CodeIcon />, 'hsl(20,85%,52%)')
+regIcon(['rb'], <CodeIcon />, 'hsl(0,70%,55%)')
+regIcon(['c', 'cpp', 'h', 'hpp'], <CodeIcon />, 'hsl(210,60%,55%)')
+regIcon(['cs'], <CodeIcon />, 'hsl(265,55%,55%)')
+regIcon(['swift'], <CodeIcon />, 'hsl(20,90%,55%)')
+regIcon(['html', 'htm'], <CodeIcon />, 'hsl(15,85%,55%)')
+regIcon(['css', 'scss', 'sass', 'less'], <CodeIcon />, 'hsl(210,70%,55%)')
+regIcon(['vue'], <CodeIcon />, 'hsl(153,60%,48%)')
+regIcon(['php'], <CodeIcon />, 'hsl(240,40%,58%)')
+regIcon(['sh', 'bash', 'zsh', 'fish', 'ps1'], <CodeIcon />, 'var(--text-dim)')
+regIcon(['sql'], <CodeIcon />, 'hsl(210,50%,55%)')
+regIcon(['json', 'jsonl', 'ndjson'], <ConfigIcon />, 'hsl(158,55%,48%)')
+regIcon(['yaml', 'yml', 'toml', 'ini', 'conf', 'env', 'lock'], <ConfigIcon />, 'var(--text-dim)')
+regIcon(['xml'], <CodeIcon />, 'hsl(25,65%,52%)')
+regIcon(['db', 'sqlite', 'parquet'], <DatabaseIcon />, 'hsl(210,50%,55%)')
+regIcon(['doc', 'docx', 'odt', 'rtf', 'pages'], <TextIcon />, 'hsl(210,65%,52%)')
+regIcon(['xls', 'xlsx', 'xlsm', 'csv', 'tsv', 'ods', 'numbers'], <TableIcon />, 'hsl(140,55%,42%)')
+regIcon(['ppt', 'pptx', 'odp', 'key'], <SlidesIcon />, 'hsl(15,80%,52%)')
+regIcon(['pdf'], <PdfIcon />, 'hsl(0,65%,50%)')
+regIcon(['md', 'markdown', 'txt', 'log', 'tex', 'epub'], <TextIcon />, 'var(--text-dim)')
+regIcon(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'heic', 'heif', 'avif', 'tif', 'tiff', 'svg'], <ImageIcon />, 'hsl(280,55%,58%)')
+regIcon(['psd', 'ai', 'fig', 'sketch', 'xd', 'blend'], <DesignIcon />, 'hsl(280,50%,55%)')
+regIcon(['mp3', 'wav', 'flac', 'ogg', 'aac', 'aiff', 'm4a', 'mid'], <AudioIcon />, 'hsl(330,60%,55%)')
+regIcon(['mp4', 'mov', 'mkv', 'avi', 'webm', 'wmv', 'flv', 'm4v'], <VideoIcon />, 'hsl(340,65%,52%)')
+regIcon(['zip', 'tar', 'gz', 'rar', '7z', 'bz2', 'xz', 'tgz', 'dmg', 'iso', 'pkg'], <ArchiveIcon />, 'hsl(30,50%,48%)')
+regIcon(['ttf', 'otf', 'woff', 'woff2'], <FileIcon />, 'var(--text-dim)')
+const FileTypeIcon = ({ name }: { name: string }) => {
+  const entry = EXT_ICON[extOf(name)] || { icon: <FileIcon />, color: 'var(--text-dimmer)' }
+  return (
+    <span style={{
+      width: 22, height: 22, display: 'inline-grid', placeItems: 'center', color: entry.color,
+      flex: '0 0 auto',
+    }}>{entry.icon}</span>
+  )
+}
 const FolderUpIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><path d="M12 16V10" /><path d="m9 13 3-3 3 3" /></svg>
 )
@@ -61,14 +151,14 @@ const IconButton = ({ title, children, danger, onClick, disabled, width = 24 }: 
     </Button>
   </Tooltip>
 )
-const Stop = ({ children }: { children: React.ReactNode }) => (
-  <span onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>{children}</span>
-)
-
 function Viewer({ path, accent, onClose, onDelete }: { path: string; accent: string; onClose: () => void; onDelete: (p: string) => Promise<void> }) {
   const ext = extOf(path)
   const isImg = IMG_EXT.includes(ext)
   const isMd = MD_EXT.includes(ext)
+  const isPdf = ext === 'pdf'
+  const isOffice = ['doc', 'docx', 'xls', 'xlsx', 'xlsm', 'ppt', 'pptx', 'rtf'].includes(ext)
+  const isSheetText = ['csv', 'tsv'].includes(ext)
+  const codeLang = codeLangOf(path)
   const rawUrl = `/api/file/raw?path=${encodeURIComponent(path)}`
   const [data, setData] = useState<any>(null)
   const [err, setErr] = useState('')
@@ -76,10 +166,10 @@ function Viewer({ path, accent, onClose, onDelete }: { path: string; accent: str
   const { message } = AntApp.useApp()
 
   useEffect(() => {
-    if (isImg) return // 图片直接走 <img>，不取文本
+    if (isImg || isPdf || isOffice) return // 图片/PDF/Office 直接走 raw 或专用面板
     setData(null); setErr(''); setSource(false)
     api('GET', `/file?path=${encodeURIComponent(path)}`).then((r) => setData(r.data)).catch((e) => setErr(e.message))
-  }, [path, isImg])
+  }, [path, isImg, isPdf, isOffice])
 
   const name = path.split('/').pop()
   const copyPath = async () => {
@@ -93,6 +183,29 @@ function Viewer({ path, accent, onClose, onDelete }: { path: string; accent: str
   const codePre = (text: string) => (
     <pre style={{ margin: 0, whiteSpace: 'pre', overflow: 'auto', maxHeight: '70vh', background: 'var(--bg-base)', padding: 12, borderRadius: 8, fontFamily: 'ui-monospace, monospace', fontSize: 12.5, lineHeight: 1.5, color: '#c9d1d9' }}>{text}</pre>
   )
+  const previewShell = (title: string, body: React.ReactNode) => (
+    <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 8, overflow: 'hidden', background: 'var(--bg-base)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-dim)', fontSize: 12 }}>
+        <FileTypeIcon name={path} />
+        <span>{title}</span>
+        {data?.truncated && <span style={{ marginLeft: 'auto', color: '#d29922' }}>仅显示前 512 KB</span>}
+      </div>
+      {body}
+    </div>
+  )
+  const csvTable = (text: string, sep: ',' | '\t') => {
+    const rows = parseDelimited(text, sep)
+    const head = rows[0] || []
+    const body = rows.slice(1)
+    return previewShell(`${sep === ',' ? 'CSV' : 'TSV'} 表格预览 · 最多 80 行 / 12 列`, (
+      <div style={{ maxHeight: '70vh', overflow: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <thead>{head.length > 0 && <tr>{head.map((c, i) => <th key={i} style={cellStyle(true)}>{c || `列 ${i + 1}`}</th>)}</tr>}</thead>
+          <tbody>{body.map((r, i) => <tr key={i}>{head.map((_, j) => <td key={j} style={cellStyle(false)}>{r[j] || ''}</td>)}</tr>)}</tbody>
+        </table>
+      </div>
+    ))
+  }
 
   return (
     <Modal open onCancel={onClose} footer={null} width="min(900px,94vw)"
@@ -118,6 +231,19 @@ function Viewer({ path, accent, onClose, onDelete }: { path: string; accent: str
         <div style={{ textAlign: 'center', background: 'var(--bg-base)', borderRadius: 8, padding: 12 }}>
           <img src={rawUrl} alt={name} style={{ maxWidth: '100%', maxHeight: '74vh', objectFit: 'contain' }} />
         </div>
+      ) : isPdf ? (
+        previewShell('PDF 内嵌预览', <iframe title={name} src={rawUrl} style={{ width: '100%', height: '74vh', border: 0, background: '#fff' }} />)
+      ) : isOffice ? (
+        previewShell('Office 文件预览', (
+          <div style={{ padding: 18, color: 'var(--text-dim)', lineHeight: 1.7 }}>
+            <div style={{ color: 'var(--text-bright)', fontWeight: 700, marginBottom: 6 }}>{name}</div>
+            <div>浏览器不能稳定直接渲染此类 Office 二进制文件。请下载后用本地 Office/WPS/LibreOffice 打开，或点“原始”交给浏览器处理。</div>
+            <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
+              <Button size="small" type="primary" href={`${rawUrl}&dl=1`}>下载文件</Button>
+              <Button size="small" href={rawUrl} target="_blank">打开原始</Button>
+            </div>
+          </div>
+        ))
       ) : (
         <>
           {err && <div style={{ color: '#f85149' }}>{err}</div>}
@@ -127,9 +253,15 @@ function Viewer({ path, accent, onClose, onDelete }: { path: string; accent: str
           )}
           {data && !data.binary && (
             <>
-              {isMd && !source
-                ? <div style={{ maxHeight: '70vh', overflow: 'auto' }}><Markdown accent={accent}>{data.content}</Markdown></div>
-                : codePre(data.content)}
+              {isSheetText
+                ? csvTable(data.content, ext === 'tsv' ? '\t' : ',')
+                : isMd && !source
+                  ? <div style={{ maxHeight: '70vh', overflow: 'auto' }}><Markdown accent={accent}>{data.content}</Markdown></div>
+                  : ext === 'json'
+                    ? previewShell('JSON 结构预览', <div style={{ maxHeight: '70vh', overflow: 'auto', padding: 12 }}><Markdown accent={accent}>{fence('json', formatJSON(data.content))}</Markdown></div>)
+                    : codeLang
+                      ? previewShell(`${codeLang.toUpperCase()} 代码预览`, <div style={{ maxHeight: '70vh', overflow: 'auto', padding: 12 }}><Markdown accent={accent}>{fence(codeLang, data.content)}</Markdown></div>)
+                      : codePre(data.content)}
               {data.truncated && <div style={{ color: '#d29922', fontSize: 12, marginTop: 6 }}>⚠ 文件较大，仅显示前 512 KB</div>}
             </>
           )}
@@ -137,6 +269,22 @@ function Viewer({ path, accent, onClose, onDelete }: { path: string; accent: str
       )}
     </Modal>
   )
+}
+
+function cellStyle(head: boolean): React.CSSProperties {
+  return {
+    padding: '6px 8px', border: '1px solid var(--border-subtle)', textAlign: 'left',
+    background: head ? 'var(--bg-container)' : 'transparent', color: head ? 'var(--text-bright)' : 'var(--text-dim)',
+    maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+  }
+}
+
+function formatJSON(text: string): string {
+  try { return JSON.stringify(JSON.parse(text), null, 2) } catch { return text }
+}
+
+function fence(lang: string, content: string): string {
+  return '```' + lang + '\n' + content + '\n```'
 }
 
 export default function FileBrowser({ dir, accent = '#58a6ff', onClose, onInsertPath }: { dir?: string; accent?: string; onClose?: () => void; onInsertPath?: (p: string) => void }) {
@@ -228,31 +376,39 @@ export default function FileBrowser({ dir, accent = '#58a6ff', onClose, onInsert
               ev.dataTransfer.setData('text/plain', full)
               ev.dataTransfer.effectAllowed = 'copy'
             }}
-            onClick={() => (e.dir ? setPath(joinPath(cur, e.name)) : setView(joinPath(cur, e.name)))} style={rowStyle()}>
-            <span style={{ color: e.dir ? accent : 'var(--text-dimmer)', flex: '0 0 auto', display: 'inline-flex' }}>{e.dir ? <FolderIcon /> : <FileIcon />}</span>
+            onClick={(ev) => {
+              if ((ev.target as HTMLElement).closest('[data-file-action]')) return
+              e.dir ? setPath(joinPath(cur, e.name)) : setView(joinPath(cur, e.name))
+            }} style={rowStyle()}>
+            <span style={{ color: e.dir ? accent : 'var(--text-dimmer)', flex: '0 0 auto', display: 'inline-flex', width: 25, justifyContent: 'center' }}>{e.dir ? <FolderIcon /> : <FileTypeIcon name={e.name} />}</span>
             <span style={{ color: e.dir ? 'var(--text-bright)' : 'var(--text-bright)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name}</span>
             {!e.dir && <span style={{ color: 'var(--text-dimmer)', fontSize: 11, flex: '0 0 auto' }}>{fmtSize(e.size)}</span>}
             {onInsertPath && (
-              <IconButton title="插入路径" onClick={(ev) => { ev.stopPropagation(); onInsertPath(joinPath(cur, e.name)) }}>@</IconButton>
+              <span data-file-action>
+                <IconButton title="插入路径" onClick={() => onInsertPath(joinPath(cur, e.name))}>@</IconButton>
+              </span>
             )}
             {!e.dir && (
               <>
-                <Tooltip title="下载">
-                  <Button type="text" size="small" href={`/api/file/raw?path=${encodeURIComponent(joinPath(cur, e.name))}&dl=1`}
-                    onClick={(ev) => ev.stopPropagation()}
-                    style={{ width: 24, height: 24, minWidth: 24, padding: 0, color: 'var(--text-dim)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><DownloadIcon /></Button>
-                </Tooltip>
+                <span data-file-action>
+                  <Tooltip title="下载">
+                    <Button type="text" size="small" href={`/api/file/raw?path=${encodeURIComponent(joinPath(cur, e.name))}&dl=1`}
+                      style={{ width: 24, height: 24, minWidth: 24, padding: 0, color: 'var(--text-dim)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><DownloadIcon /></Button>
+                  </Tooltip>
+                </span>
               </>
             )}
             <Popconfirm title={e.dir ? '删除此空目录？' : '删除此文件？'} okText="删除" cancelText="取消" okButtonProps={{ danger: true }}
               onConfirm={() => deletePath(joinPath(cur, e.name))}>
-              <Stop>
+              <span data-file-action>
                 <Button type="text" size="small" danger
                   style={{ width: 24, height: 24, minWidth: 24, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><TrashIcon /></Button>
-              </Stop>
+              </span>
             </Popconfirm>
             {e.dir && (
-              <IconButton title="进入目录" onClick={(ev) => { ev.stopPropagation(); setPath(joinPath(cur, e.name)) }}><EnterIcon /></IconButton>
+              <span data-file-action>
+                <IconButton title="进入目录" onClick={() => setPath(joinPath(cur, e.name))}><EnterIcon /></IconButton>
+              </span>
             )}
           </div>
         ))}
