@@ -188,7 +188,6 @@ function SwarmDetail({ name, onBack, openTerm, onGone }: { name: string; onBack:
   const [posts, setPosts] = useState<Post[]>([])
   const [focus, setFocus] = useState<string | null>(null)   // 聚焦成员（跨面板联动）
   const [drawer, setDrawer] = useState<string | null>(null) // 抽屉里的成员
-  const [view, setView] = useState<'topo' | 'board' | 'plaza'>('topo')
   const [lowerView, setLowerView] = useState<'board' | 'inbox'>('board')
   const [narrow, setNarrow] = useState(false)
   const [adding, setAdding] = useState(false)
@@ -262,13 +261,12 @@ function SwarmDetail({ name, onBack, openTerm, onGone }: { name: string; onBack:
       </div>
 
       {!detail ? <div style={{ flex: 1, display: 'grid', placeItems: 'center' }}><Spin /></div> : narrow ? (
-        <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr) auto minmax(0, 1fr)', gap: 10 }}>
-          <Segmented block value={view} onChange={(v) => setView(v as any)} style={{ marginBottom: 10 }}
-            options={[{ label: t('swarm.topology'), value: 'topo' }, { label: t('swarm.plaza'), value: 'plaza' }]} />
-          <div style={{ minHeight: 0 }}>{view === 'plaza' ? plaza : topo}</div>
+        <div style={{ flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 10, paddingBottom: 4 }}>
+          <div style={{ flex: '0 0 320px', minHeight: 0 }}>{topo}</div>
+          <div style={{ flex: '0 0 280px', minHeight: 0 }}>{plaza}</div>
           <Segmented block value={lowerView} onChange={(v) => setLowerView(v as any)}
             options={[{ label: t('swarm.board'), value: 'board' }, { label: t('swarm.inbox'), value: 'inbox' }]} />
-          <div style={{ minHeight: 0 }}>{lowerView === 'inbox' ? inbox : board}</div>
+          <div style={{ flex: '0 0 330px', minHeight: 0 }}>{lowerView === 'inbox' ? inbox : board}</div>
         </div>
       ) : (
         <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateRows: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12 }}>
