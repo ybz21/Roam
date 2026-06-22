@@ -27,11 +27,12 @@ const swarmStatusLabel = (t: T, status: string) => t(`swarm.status.${status}`)
 const isLeaderRole = (role?: string) => role === 'leader' || role === 'master'
 const isLeaderAuthor = (author?: string) => author === 'leader' || author === 'master'
 const authorLabel = (author: string, t: T) => isLeaderAuthor(author) ? t('swarm.master') : author
+const displayPostText = (text: string) => text.replace(/(^|\s)@master\b/g, '$1@leader')
 
 interface SwarmRow { id: string; name: string; goal: string; status: string; supervisor: string; created: string; total: number; alive: number; pending: number }
 interface Member { name: string; type: string; task: string; deps: string; done: number; status: string; session: string; kind?: string; role?: string }
 interface Pending { name: string; deps: string }
-interface Detail { name: string; goal: string; status: string; supervisor: string; created: string; members: Member[]; pending: Pending[]; done_marked: string[] }
+interface Detail { name: string; goal: string; status: string; supervisor: string; created: string; leader_last_post?: number; members: Member[]; pending: Pending[]; done_marked: string[] }
 interface Post { id: number; ts: string; author: string; kind: string; re: number | null; text: string }
 interface CardT { id: string; title: string; descr: string; assignee: string; col: string; deps: string; updated: string }
 
@@ -633,7 +634,7 @@ function Inbox({ detail, cards, posts, onNode }: { detail: Detail | null; cards:
     }))
     posts.filter((p) => p.kind === 'block').slice(-6).reverse().forEach((p) => out.push({
       key: `post-block-${p.id}`, type: t('swarm.inbox.type.block'), tone: C.red,
-      title: `#${p.id} · ${authorLabel(p.author, t)}`, meta: (p.ts || '').slice(5, 16), body: p.text, member: p.author !== 'human' && !isLeaderAuthor(p.author) ? p.author : undefined,
+      title: `#${p.id} · ${authorLabel(p.author, t)}`, meta: (p.ts || '').slice(5, 16), body: displayPostText(p.text), member: p.author !== 'human' && !isLeaderAuthor(p.author) ? p.author : undefined,
     }))
     cards.filter((c) => c.col === 'review').forEach((c) => out.push({
       key: `card-review-${c.id}`, type: t('swarm.inbox.type.review'), tone: C.cyan,
@@ -643,9 +644,10 @@ function Inbox({ detail, cards, posts, onNode }: { detail: Detail | null; cards:
       key: `pending-${p.name}`, type: t('swarm.inbox.type.pending'), tone: C.amber,
       title: p.name, meta: t('swarm.nodeDepsShort', { deps: p.deps || '?' }), member: p.name,
     }))
-    posts.filter((p) => p.author === 'human' && (p.kind === 'ask' || /@(leader|master)\b/.test(p.text))).slice(-6).reverse().forEach((p) => out.push({
+    const leaderLastPost = detail?.leader_last_post || 0
+    posts.filter((p) => p.id > leaderLastPost && p.author === 'human' && (p.kind === 'ask' || /@(leader|master)\b/.test(p.text))).slice(-6).reverse().forEach((p) => out.push({
       key: `human-${p.id}`, type: t('swarm.inbox.type.human'), tone: C.blue,
-      title: `#${p.id} · human`, meta: (p.ts || '').slice(5, 16), body: p.text,
+      title: `#${p.id} · human`, meta: (p.ts || '').slice(5, 16), body: displayPostText(p.text),
     }))
     return out.slice(0, 14)
   }, [cards, detail, posts, t])

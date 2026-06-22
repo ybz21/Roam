@@ -476,18 +476,20 @@ _swarm_ls() {
 }
 
 # ttmux swarm status <群> --json — 结构化输出(给 web/巡检)
-# {name,goal,status,supervisor,created, members:[{name,type,task,deps,done,status,session}], pending:[{name,deps}], done_marked:[...]}
+# {name,goal,status,supervisor,created,leader_last_post, members:[{name,type,task,deps,done,status,session}], pending:[{name,deps}], done_marked:[...]}
 _swarm_status_json() {
     local name="$1"
     _swarm_activate "$name" --quiet >/dev/null 2>&1 || true
-    local goal status sup created db
+    local goal status sup created db leader_last
     goal=$(_swarm_meta_get "$name" goal)
     status=$(_swarm_meta_get "$name" status)
     sup=$(_swarm_meta_get "$name" supervisor)
     created=$(_swarm_meta_get "$name" created)
     db=$(_swarm_db_of "$name" 2>/dev/null || true)
-    printf '{"name":"%s","goal":"%s","status":"%s","supervisor":"%s","created":"%s","members":[' \
-        "$(_jesc "$name")" "$(_jesc "$goal")" "$(_jesc "$status")" "$(_jesc "$sup")" "$(_jesc "$created")"
+    leader_last=$(_listener_last_get "$name" leader 2>/dev/null || echo 0)
+    [[ "$leader_last" =~ ^[0-9]+$ ]] || leader_last=0
+    printf '{"name":"%s","goal":"%s","status":"%s","supervisor":"%s","created":"%s","leader_last_post":%s,"members":[' \
+        "$(_jesc "$name")" "$(_jesc "$goal")" "$(_jesc "$status")" "$(_jesc "$sup")" "$(_jesc "$created")" "$leader_last"
     local first=1
     if [[ -n "$db" ]]; then
         local rows mname mtype mtask mdeps mdone mkind mrole

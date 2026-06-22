@@ -132,6 +132,8 @@ next_out=$("$TTMUX" swarm listen listen-case --as leader --once)
 next_msgs=$(printf '%s\n' "$next_out" | message_section)
 assert_contains "$next_msgs" "@leader 第二条 human 指令" "游标后新消息仍可读取"
 assert_not_contains "$next_msgs" "@leader 补移动端验收" "新一轮不回放旧 human 消息"
+status_json=$("$TTMUX" swarm status listen-case --json)
+assert_contains "$status_json" '"leader_last_post":4' "状态 JSON 暴露 leader 已处理游标"
 echo ""
 
 echo -e "${bold}[leader 会话通知]${reset}"
