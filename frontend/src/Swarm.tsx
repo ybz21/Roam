@@ -461,7 +461,7 @@ function Topology({ detail, swarm, cards, posts, focus, onNode }: {
                           <div className="swarm-office-keyboard" />
                         </div>
                         <div className="swarm-office-chair">
-                          <div className={`swarm-office-agent hair-${memberHairStyle(n)}`} style={{ ['--hair-color' as any]: memberHairColor(n) }}><span /><i /><em /></div>
+                          <div className={`swarm-office-agent hat-${memberHatStyle(n)}`} style={{ ['--hat-color' as any]: memberHatColor(n) }}><span /><i /><em /></div>
                         </div>
                         <div className="swarm-office-shadow" />
                         <div className="swarm-office-stats">
@@ -519,7 +519,7 @@ function OfficeBackdrop({ w, h, title }: { w: number; h: number; title: string }
 }
 
 const MEMBER_COLORS = ['#58a6ff', '#3fb950', '#d2a8ff', '#39c5cf', '#ff7b72', '#f2cc60', '#a5d6ff', '#db6d28']
-const MEMBER_HAIR_COLORS = ['#f2cc60', '#58a6ff', '#d2a8ff']
+const MEMBER_HAT_COLORS = ['#f2cc60', '#58a6ff', '#d2a8ff']
 function stableIndex(name: string, mod: number) {
   let h = 0
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0
@@ -528,11 +528,11 @@ function stableIndex(name: string, mod: number) {
 function memberColor(name: string) {
   return MEMBER_COLORS[stableIndex(name, MEMBER_COLORS.length)]
 }
-function memberHairColor(n: any) {
+function memberHatColor(n: any) {
   if (n.role === 'leader' || isLeaderRole(n.mrole)) return '#3fb950'
-  return MEMBER_HAIR_COLORS[stableIndex(n.name || '', MEMBER_HAIR_COLORS.length)]
+  return MEMBER_HAT_COLORS[stableIndex(n.name || '', MEMBER_HAT_COLORS.length)]
 }
-function memberHairStyle(n: any) {
+function memberHatStyle(n: any) {
   if (n.role === 'leader' || isLeaderRole(n.mrole)) return 'leader'
   return String(stableIndex(n.name || '', 3))
 }
