@@ -661,7 +661,7 @@ export default function FileBrowser({
         <AutoComplete
           value={pathDraft}
           options={pathOptions}
-          onChange={setPathDraft}
+          onChange={(v) => setPathDraft(v)}
           onSelect={(v) => submitTypedPath(v)}
           style={{ width: '100%' }}
           popupMatchSelectWidth={false}
