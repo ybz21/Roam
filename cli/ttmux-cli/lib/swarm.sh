@@ -159,8 +159,49 @@ _swarm_done_list() {
     sqlite3 "$db" "SELECT name FROM members WHERE done=1 ORDER BY name;"
 }
 
+_swarm_busy_dir() {
+    local d; d=$(_swarm_dir "$1") || return 1
+    echo "${d}/busy"
+}
+
+_swarm_member_touch_busy() {
+    local swarm="$1" member="$2" db dir now targets
+    [[ -n "$swarm" && -n "$member" ]] || return 0
+    db=$(_swarm_db_of "$swarm" 2>/dev/null) || return 0
+    dir=$(_swarm_busy_dir "$swarm" 2>/dev/null) || return 0
+    mkdir -p "$dir"
+    now=$(date +%s)
+    case "$member" in
+        leader|master|lead)
+            targets=$(sqlite3 "$db" "SELECT name FROM members WHERE role IN ('leader','master') AND IFNULL(pending,0)=0;" 2>/dev/null || true)
+            ;;
+        all)
+            targets=$(sqlite3 "$db" "SELECT name FROM members WHERE IFNULL(pending,0)=0;" 2>/dev/null || true)
+            ;;
+        *)
+            targets="$member"
+            ;;
+    esac
+    local m
+    while IFS= read -r m; do
+        [[ -n "$m" ]] || continue
+        printf '%s\n' "$now" > "${dir}/${m}.busy"
+    done <<< "$targets"
+}
+
+_swarm_member_busy_recent() {
+    local swarm="$1" member="$2" dir f ts now ttl="${TTMUX_SWARM_BUSY_TTL:-45}"
+    dir=$(_swarm_busy_dir "$swarm" 2>/dev/null) || return 1
+    f="${dir}/${member}.busy"
+    [[ -f "$f" ]] || return 1
+    ts=$(<"$f")
+    [[ "$ts" =~ ^[0-9]+$ ]] || return 1
+    now=$(date +%s)
+    (( now - ts <= ttl ))
+}
+
 _swarm_session_live_status() {
-    local sess="$1" kind="${2:-claude}" dead scr tail recent flat low
+    local swarm="$1" member="$2" sess="$3" kind="${4:-claude}" dead scr tail recent flat low
     if ! _session_exists "$sess"; then
         [[ -f "${TTMUX_LOGS}/${sess}.log" ]] && echo "done" || echo "exited"
         return 0
@@ -185,6 +226,10 @@ _swarm_session_live_status() {
         return 0
     fi
     if [[ "$recent" == *"✻"* && "$recent" != *"Worked for"* ]]; then
+        echo "running"
+        return 0
+    fi
+    if [[ "$recent" != *"Worked for"* ]] && _swarm_member_busy_recent "$swarm" "$member"; then
         echo "running"
         return 0
     fi
@@ -543,7 +588,7 @@ _swarm_status_json() {
             if [[ "${mdone:-0}" == "1" ]]; then
                 lst="done"
             else
-                lst=$(_swarm_session_live_status "$sess" "$mkind")
+                lst=$(_swarm_session_live_status "$name" "$mname" "$sess" "$mkind")
             fi
             (( first )) || printf ','
             first=0

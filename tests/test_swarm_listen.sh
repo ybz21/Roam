@@ -110,6 +110,8 @@ card=$("$TTMUX" swarm task add listen-case "前端返工" --assignee web 2>/dev/
 "$TTMUX" swarm say listen-case --as leader --to web --kind decide "#${card} 补空状态" >/dev/null
 "$TTMUX" swarm say listen-case --as api --kind note "普通进度" >/dev/null
 pass "写入 leader/web/普通三类广场消息"
+status_json=$("$TTMUX" swarm status listen-case --json)
+assert_contains "$status_json" '"name":"oldlead","type":"agent","task":"旧 leader","deps":"","done":0,"kind":"claude","role":"leader","status":"running"' "发给 leader 后短期显示 running"
 echo ""
 
 echo -e "${bold}[@mention 写入]${reset}"
