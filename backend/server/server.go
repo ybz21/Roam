@@ -79,6 +79,7 @@ func New(cfg Config) *gin.Engine {
 
 		g.GET("/sessions", h.Sessions)
 		g.POST("/sessions", h.NewSession)
+		g.PATCH("/sessions/:name", h.RenameSession)
 		g.DELETE("/sessions/:name", h.KillSession)
 		g.GET("/sessions/:name/capture", h.Capture)
 		g.POST("/sessions/:name/keys", h.Keys)                       // 注入原始按键（响应 TUI 选择框）

@@ -227,6 +227,40 @@ export default function App() {
     if (hasSider) { setDockOpen(true); setDockMax(false) } // 桌面：拉出右侧停靠栏（压缩页面到左）
     else setOverlay(true)           // 手机/平板：全屏
   }
+  const renameOpenTerm = (oldName: string, newName: string) => {
+    if (oldName === newName) return
+    setTerms((ts) => Array.from(new Set(ts.map((t) => (t === oldName ? newName : t)))))
+    setActive((a) => (a === oldName ? newName : a))
+    setStatusMap((m) => {
+      if (!(oldName in m)) return m
+      const { [oldName]: oldValue, ...rest } = m
+      return { ...rest, [newName]: oldValue }
+    })
+    setClaudeMap((m) => {
+      if (!(oldName in m)) return m
+      const { [oldName]: oldValue, ...rest } = m
+      return { ...rest, [newName]: oldValue }
+    })
+    setClaudeView((m) => {
+      if (!(oldName in m)) return m
+      const { [oldName]: oldValue, ...rest } = m
+      return { ...rest, [newName]: oldValue }
+    })
+    setCodexMap((m) => {
+      if (!(oldName in m)) return m
+      const { [oldName]: oldValue, ...rest } = m
+      return { ...rest, [newName]: oldValue }
+    })
+    setCodexView((m) => {
+      if (!(oldName in m)) return m
+      const { [oldName]: oldValue, ...rest } = m
+      return { ...rest, [newName]: oldValue }
+    })
+    if (termRefs.current[oldName]) {
+      termRefs.current[newName] = termRefs.current[oldName]
+      delete termRefs.current[oldName]
+    }
+  }
   const closeTerm = (name: string) => {
     setTerms((ts) => {
       const next = ts.filter((t) => t !== name)
@@ -264,6 +298,7 @@ export default function App() {
       termRefs={termRefs} sendKey={sendKey}
       claudeMap={claudeMap} claudeView={claudeView} setClaudeView={setClaudeView}
       codexMap={codexMap} codexView={codexView} setCodexView={setCodexView}
+      onRename={renameOpenTerm}
       onCollapse={() => { setOverlay(false); setDockOpen(false) }}
     />
   )
@@ -467,6 +502,7 @@ function SoloTerminal({ name }: { name: string }) {
         termRefs={termRefs} sendKey={(seq) => termRefs.current[name]?.send(seq)}
         claudeMap={claudeMap} claudeView={claudeView} setClaudeView={setClaudeView}
         codexMap={codexMap} codexView={codexView} setCodexView={setCodexView}
+        onRename={(_, newName) => { location.hash = '#/term/' + encodeURIComponent(newName) }}
       />
     </div>
   )
@@ -481,8 +517,9 @@ function TerminalPane(props: {
   sendKey: (seq: string) => void; onCollapse?: () => void
   claudeMap: Record<string, ClaudeInfo>; claudeView: Record<string, boolean>; setClaudeView: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
   codexMap: Record<string, ClaudeInfo>; codexView: Record<string, boolean>; setCodexView: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
+  onRename: (oldName: string, newName: string) => void
 }) {
-  const { terms, active, setActive, closeTerm, fontSize, setFontSize, statusMap, setStatus, termRefs, sendKey, onCollapse, claudeMap, claudeView, setClaudeView, codexMap, codexView, setCodexView } = props
+  const { terms, active, setActive, closeTerm, fontSize, setFontSize, statusMap, setStatus, termRefs, sendKey, onCollapse, claudeMap, claudeView, setClaudeView, codexMap, codexView, setCodexView, onRename } = props
   const { message } = AntApp.useApp()
   const { t } = useI18n()
   const st = active ? statusMap[active] : undefined
@@ -510,6 +547,7 @@ function TerminalPane(props: {
   const [pasteOpen, setPasteOpen] = useState(false)
   const [pasteSession, setPasteSession] = useState('')
   const [pasteText, setPasteText] = useState('')
+  const [renameSession, setRenameSession] = useState<string | null>(null)
   const [selTip, setSelTip] = useState<{ x: number; y: number; session: string; selection: string } | null>(null)
   useEffect(() => {
     if (!active) { setCwd(''); return }
@@ -629,6 +667,7 @@ function TerminalPane(props: {
           {t('terminal.pasteHelp')}
         </div>
       </Modal>
+      <RenameSessionModal session={renameSession} onClose={() => setRenameSession(null)} onDone={onRename} />
       <Dropdown
         open={!!ctx}
         trigger={[]}
@@ -707,6 +746,9 @@ function TerminalPane(props: {
           <Tooltip title={t('terminal.openInNewTabTitle')}>
             <Button size="small" onClick={() => window.open(`/#/term/${encodeURIComponent(active)}`, '_blank')}>↗ {t('terminal.newTab')}</Button>
           </Tooltip>
+        )}
+        {active && (
+          <Button size="small" onClick={() => setRenameSession(active)}>{t('session.rename')}</Button>
         )}
         <Tooltip title={t('terminal.fileBrowserTitle')}>
           <Button size="small" type={showFiles ? 'primary' : 'default'} onClick={() => setShowFiles((s) => !s)}>📁 {t('chat.files')}</Button>
@@ -1094,6 +1136,33 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
       </Modal>
       <DirPicker open={pick} start={dir || undefined} onPick={(p) => { setDir(p); setPick(false) }} onClose={() => setPick(false)} />
     </>
+  )
+}
+
+function RenameSessionModal({ session, onClose, onDone }: { session: string | null; onClose: () => void; onDone: (oldName: string, newName: string) => void }) {
+  const [name, setName] = useState('')
+  const { message } = AntApp.useApp()
+  const { t } = useI18n()
+  useEffect(() => { if (session) setName(session) }, [session])
+  const ok = async () => {
+    if (!session) return
+    const next = name.trim()
+    if (!next) return message.error(t('session.nameRequired'))
+    try {
+      await api('PATCH', `/sessions/${encodeURIComponent(session)}`, { name: next })
+      message.success(t('session.renamed'))
+      onClose()
+      onDone(session, next)
+    } catch (e: any) {
+      message.error(e.message)
+    }
+  }
+  return (
+    <Modal open={!!session} onCancel={onClose} onOk={ok} okText={t('session.rename')} title={t('session.renameTitle')} destroyOnClose>
+      <Space direction="vertical" style={{ width: '100%' }}>
+        <Input placeholder={t('session.namePlaceholder')} value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+      </Space>
+    </Modal>
   )
 }
 

@@ -96,6 +96,27 @@ func (a *API) NewSession(c *gin.Context) {
 	a.text(c, args...)
 }
 
+func (a *API) RenameSession(c *gin.Context) {
+	var b struct {
+		Name string `json:"name"`
+	}
+	oldName := strings.TrimSpace(c.Param("name"))
+	if err := c.ShouldBindJSON(&b); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
+		return
+	}
+	newName := strings.TrimSpace(b.Name)
+	if oldName == "" || newName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
+		return
+	}
+	if oldName == newName {
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"name": newName}})
+		return
+	}
+	a.text(c, "rename-session", "-t", oldName, newName)
+}
+
 // 用 tmux kill-session（转发），避开 ttmux kill 的交互式 y/N 确认（后端无 tty）
 func (a *API) KillSession(c *gin.Context) { a.text(c, "kill-session", "-t", c.Param("name")) }
 func (a *API) Capture(c *gin.Context) {
