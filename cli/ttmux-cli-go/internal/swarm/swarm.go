@@ -103,6 +103,59 @@ func (o Options) withDefaults() Options {
 	return o
 }
 
+// SessionNames returns the set of tmux session names that belong to swarms
+// (swarm supervisors plus all group members), mirroring bash _is_swarm_session.
+// Failures degrade silently to a smaller set, matching the shell behaviour of
+// hiding swarm sessions only when the metadata is reachable.
+func SessionNames(opt Options) map[string]bool {
+	opt = opt.withDefaults()
+	set := map[string]bool{}
+	names := map[string]bool{}
+
+	metaPath := filepath.Join(opt.HomeDir, "meta.db")
+	if _, err := os.Stat(metaPath); err == nil {
+		if db, err := openSQLite(metaPath); err == nil {
+			if rows, err := db.Query(`SELECT name, IFNULL(supervisor,'') FROM swarms`); err == nil {
+				for rows.Next() {
+					var name, sup string
+					if rows.Scan(&name, &sup) == nil {
+						if name != "" {
+							names[name] = true
+						}
+						if sup != "" {
+							set[sup] = true
+						}
+					}
+				}
+				rows.Close()
+			}
+			db.Close()
+		}
+	}
+
+	// Legacy layout: directories under DataDir/swarms also count as swarm names.
+	if entries, err := os.ReadDir(filepath.Join(opt.DataDir, "swarms")); err == nil {
+		for _, e := range entries {
+			if e.IsDir() {
+				names[e.Name()] = true
+			}
+		}
+	}
+
+	for name := range names {
+		b, err := os.ReadFile(filepath.Join(opt.DataDir, "groups", name+".group"))
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(b), "\n") {
+			if line = strings.TrimSpace(line); line != "" {
+				set[line] = true
+			}
+		}
+	}
+	return set
+}
+
 func StatusJSON(name string, opt Options) ([]byte, error) {
 	st, err := Status(name, opt)
 	if err != nil {
@@ -349,5 +402,12 @@ func busyRecent(opt Options, meta swarmMeta, m SwarmMember) bool {
 	if _, err := fmt.Sscanf(strings.TrimSpace(string(b)), "%d", &ts); err != nil {
 		return false
 	}
-	return opt.Now().Unix()-ts <= 45
+	ttl := int64(45)
+	if v := strings.TrimSpace(os.Getenv("TTMUX_SWARM_BUSY_TTL")); v != "" {
+		var n int64
+		if _, err := fmt.Sscanf(v, "%d", &n); err == nil && n > 0 {
+			ttl = n
+		}
+	}
+	return opt.Now().Unix()-ts <= ttl
 }

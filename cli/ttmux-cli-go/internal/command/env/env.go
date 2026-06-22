@@ -36,19 +36,19 @@ func Run(rt runtime.Runtime, args []string, w io.Writer) error {
 		if len(args) < 1 {
 			return fmt.Errorf("usage: ttmux env set KEY=VALUE")
 		}
-		return Set(rt, args[0])
+		return Set(rt, args[0], w)
 	case "rm", "del", "delete":
 		if len(args) < 1 {
 			return fmt.Errorf("usage: ttmux env rm KEY")
 		}
-		return Remove(rt, args[0])
+		return Remove(rt, args[0], w)
 	case "clear":
-		return os.RemoveAll(rt.EnvFile)
+		return Clear(rt, w)
 	case "push":
 		return rt.Shell("env", "push")
 	default:
 		if strings.Contains(subcmd, "=") {
-			return Set(rt, subcmd)
+			return Set(rt, subcmd, w)
 		}
 		return fmt.Errorf("unknown subcommand: env %s", subcmd)
 	}
@@ -65,7 +65,7 @@ func ListJSON(rt runtime.Runtime, w io.Writer) error {
 	return json.NewEncoder(w).Encode(entries)
 }
 
-func Set(rt runtime.Runtime, kv string) error {
+func Set(rt runtime.Runtime, kv string, w io.Writer) error {
 	if !strings.Contains(kv, "=") {
 		return fmt.Errorf("usage: ttmux env set KEY=VALUE")
 	}
@@ -80,10 +80,18 @@ func Set(rt runtime.Runtime, kv string) error {
 		out = append(out, line)
 	}
 	out = append(out, kv)
-	return os.WriteFile(rt.EnvFile, []byte(strings.Join(out, "\n")+"\n"), 0o644)
+	if err := os.WriteFile(rt.EnvFile, []byte(strings.Join(out, "\n")+"\n"), 0o644); err != nil {
+		return err
+	}
+	_, err := fmt.Fprintf(w, "设置 %s\n", kv)
+	return err
 }
 
-func Remove(rt runtime.Runtime, key string) error {
+func Remove(rt runtime.Runtime, key string, w io.Writer) error {
+	if _, err := os.Stat(rt.EnvFile); err != nil {
+		_, err := fmt.Fprintln(w, "无环境变量配置")
+		return err
+	}
 	lines := readEnvLines(rt)
 	out := make([]string, 0, len(lines))
 	for _, line := range lines {
@@ -93,7 +101,19 @@ func Remove(rt runtime.Runtime, key string) error {
 		}
 		out = append(out, line)
 	}
-	return os.WriteFile(rt.EnvFile, []byte(strings.Join(out, "\n")+"\n"), 0o644)
+	if err := os.WriteFile(rt.EnvFile, []byte(strings.Join(out, "\n")+"\n"), 0o644); err != nil {
+		return err
+	}
+	_, err := fmt.Fprintf(w, "已删除 %s\n", key)
+	return err
+}
+
+func Clear(rt runtime.Runtime, w io.Writer) error {
+	if err := os.RemoveAll(rt.EnvFile); err != nil {
+		return err
+	}
+	_, err := fmt.Fprintln(w, "全局环境变量已清空")
+	return err
 }
 
 func readEnvLines(rt runtime.Runtime) []string {

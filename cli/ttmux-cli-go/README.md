@@ -48,3 +48,11 @@ Compatibility routed in this slice:
 
 The migration path is to replace compatibility-routed commands one domain at a
 time while keeping command behavior stable.
+
+## Runtime Dependency
+
+This binary is **not** standalone yet. Every compatibility-routed command shells
+out to the generated bash CLI at `<repo-root>/ttmux` (located by walking up from
+the working directory for a file named `ttmux`, overridable via `TTMUX_SHELL`).
+Run `cli/ttmux-cli/build.sh` to (re)generate that script before relying on the
+Go binary outside the repository.

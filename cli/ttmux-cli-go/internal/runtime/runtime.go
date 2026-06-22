@@ -108,6 +108,19 @@ func (r Runtime) TaskDesc(name string) string {
 	return ""
 }
 
+// TaskDescRaw returns the task description without trimming, mirroring the
+// shell CLI's `cat` so `collect --json` preserves the stored trailing newline
+// (whereas `status --json` strips it via TaskDesc).
+func (r Runtime) TaskDescRaw(name string) string {
+	if b, err := os.ReadFile(filepath.Join(r.TaskMetaDir(name), "desc.txt")); err == nil {
+		return string(b)
+	}
+	if b, err := os.ReadFile(filepath.Join(r.DataDir, "agents", name, "task.txt")); err == nil {
+		return string(b)
+	}
+	return ""
+}
+
 func (r Runtime) GroupSessions(group string) ([]string, error) {
 	b, err := os.ReadFile(r.GroupFile(group))
 	if err != nil {

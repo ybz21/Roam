@@ -111,7 +111,7 @@ func CollectJSON(rt runtime.Runtime, group string, w io.Writer) error {
 		res.Results = append(res.Results, collectEntry{
 			Task:   sess,
 			Type:   rt.TaskType(sess),
-			Prompt: rt.TaskDesc(sess),
+			Prompt: rt.TaskDescRaw(sess),
 			Output: output,
 		})
 	}

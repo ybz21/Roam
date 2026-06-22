@@ -16,7 +16,7 @@ type sessionInfo struct {
 	Name     string `json:"name"`
 	Windows  int    `json:"windows"`
 	Created  string `json:"created"`
-	Attached bool   `json:"attached"`
+	Attached int    `json:"attached"`
 }
 
 type infoJSON struct {
@@ -27,13 +27,13 @@ type infoJSON struct {
 	Groups   int    `json:"groups"`
 }
 
-func ListJSON(rt runtime.Runtime, w io.Writer) error {
+func ListJSON(rt runtime.Runtime, exclude map[string]bool, w io.Writer) error {
 	out, err := rt.TmuxOutput("list-sessions", "-F", "#{session_name}\t#{session_windows}\t#{session_created}\t#{session_attached}")
 	if err != nil && strings.TrimSpace(out) == "" {
 		_, _ = io.WriteString(w, "[]\n")
 		return nil
 	}
-	var sessions []sessionInfo
+	sessions := []sessionInfo{}
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
 		if strings.TrimSpace(line) == "" {
 			continue
@@ -42,22 +42,26 @@ func ListJSON(rt runtime.Runtime, w io.Writer) error {
 		if len(parts) < 4 {
 			continue
 		}
+		if exclude[parts[0]] {
+			continue
+		}
 		windows, _ := strconv.Atoi(parts[1])
+		attached, _ := strconv.Atoi(parts[3])
 		sessions = append(sessions, sessionInfo{
 			Name:     parts[0],
 			Windows:  windows,
 			Created:  parts[2],
-			Attached: parts[3] == "1",
+			Attached: attached,
 		})
 	}
 	return json.NewEncoder(w).Encode(sessions)
 }
 
-func InfoJSON(rt runtime.Runtime, version string, w io.Writer) error {
+func InfoJSON(rt runtime.Runtime, version string, exclude map[string]bool, w io.Writer) error {
 	sessions := 0
 	out, _ := rt.TmuxOutput("list-sessions", "-F", "#{session_name}")
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		if strings.TrimSpace(line) != "" {
+		if name := strings.TrimSpace(line); name != "" && !exclude[name] {
 			sessions++
 		}
 	}

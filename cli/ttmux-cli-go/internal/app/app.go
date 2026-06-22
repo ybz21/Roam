@@ -10,6 +10,7 @@ import (
 	"ttmux-cli-go/internal/command/session"
 	swarmcommand "ttmux-cli-go/internal/command/swarm"
 	"ttmux-cli-go/internal/runtime"
+	swarmcore "ttmux-cli-go/internal/swarm"
 )
 
 const version = "0.4.1-go"
@@ -37,7 +38,7 @@ func (a App) Run(args []string) error {
 		return nil
 	case "ls":
 		if has(rest, "--json") {
-			return session.ListJSON(a.rt, os.Stdout)
+			return session.ListJSON(a.rt, a.swarmSessions(), os.Stdout)
 		}
 		return a.rt.Shell(args...)
 	case "group":
@@ -58,7 +59,7 @@ func (a App) Run(args []string) error {
 		return envelope.Run(a.rt, rest, os.Stdout)
 	case "info":
 		if has(rest, "--json") {
-			return session.InfoJSON(a.rt, version, os.Stdout)
+			return session.InfoJSON(a.rt, version, a.swarmSessions(), os.Stdout)
 		}
 		return a.rt.Shell(args...)
 	case "swarm":
@@ -90,6 +91,17 @@ func (a App) runGroup(args []string) error {
 	default:
 		return fmt.Errorf("unknown subcommand: group %s", subcmd)
 	}
+}
+
+// swarmSessions returns the set of tmux sessions that belong to swarms so the
+// native session listings hide them, matching the shell CLI's _is_swarm_session.
+func (a App) swarmSessions() map[string]bool {
+	return swarmcore.SessionNames(swarmcore.Options{
+		HomeDir: a.rt.HomeDir,
+		DataDir: a.rt.DataDir,
+		TmuxBin: a.rt.TmuxBin,
+		Now:     a.rt.Now,
+	})
 }
 
 func has(args []string, want string) bool {
