@@ -354,6 +354,7 @@ function Topology({ detail, swarm, cards, posts, focus, onNode }: {
   const { t } = useI18n()
   const wrapRef = useRef<HTMLDivElement>(null)
   const [viewport, setViewport] = useState({ w: 0, h: 0 })
+  const [view, setView] = useState<'office' | 'graph'>('office')
   const layout = useMemo(() => buildLayout(detail, swarm), [detail, swarm])
   const canvasW = Math.max(layout.w, Math.floor(viewport.w - 16), 420)
   const canvasH = Math.max(layout.h, Math.floor(viewport.h - 16), 320)
@@ -413,7 +414,11 @@ function Topology({ detail, swarm, cards, posts, focus, onNode }: {
     if (!d?.moved) onNode(name)
   }
   return (
-    <Panel title={<><span>{t('swarm.topologyTitle')}</span></>} extra={<span style={{ fontSize: 11, color: C.fg3 }}>{t('swarm.topologyHelp')}</span>}>
+    <Panel title={<><span>{t('swarm.topologyTitle')}</span></>} extra={<Space size={8}>
+      <Segmented size="small" value={view} onChange={(v) => setView(v as 'office' | 'graph')}
+        options={[{ label: t('swarm.topology.view.office'), value: 'office' }, { label: t('swarm.topology.view.graph'), value: 'graph' }]} />
+      <span style={{ fontSize: 11, color: C.fg3 }}>{t('swarm.topologyHelp')}</span>
+    </Space>}>
       <div ref={wrapRef} style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 8 }}>
         {layout.nodes.length === 0 ? <Empty description={t('swarm.noMembersAdd')} image={Empty.PRESENTED_IMAGE_SIMPLE} /> : (
           <svg viewBox={`0 0 ${canvasW} ${canvasH}`} width={canvasW} height={canvasH} preserveAspectRatio="xMinYMin meet"
@@ -424,8 +429,12 @@ function Topology({ detail, swarm, cards, posts, focus, onNode }: {
                 <feGaussianBlur stdDeviation="3" result="blur" />
                 <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
               </filter>
+              <filter id="officeShadow" x="-30%" y="-30%" width="160%" height="160%">
+                <feDropShadow dx="0" dy="16" stdDeviation="10" floodColor="#000000" floodOpacity=".16" />
+              </filter>
             </defs>
-            {layout.edges.map((e, i) => (
+            {view === 'office' && <OfficeBackdrop w={canvasW} h={canvasH} title={t('swarm.officeTitle')} />}
+            {view === 'graph' && layout.edges.map((e, i) => (
               <path key={i} d={pathFor(e)} fill="none" stroke={e.kind === 'cmd' ? C.fg2 : C.green} strokeWidth={e.kind === 'cmd' ? 1.2 : 1.7}
                 strokeDasharray={e.kind === 'cmd' ? '4 4' : undefined} opacity={e.kind === 'cmd' ? 0.55 : 0.95} markerEnd={e.kind === 'dep' ? 'url(#arr)' : undefined} />
             ))}
@@ -440,25 +449,47 @@ function Topology({ detail, swarm, cards, posts, focus, onNode }: {
                   onPointerDown={(e) => startDrag(e, n)} onPointerMove={moveDrag} onPointerUp={(e) => endDrag(e, n.name)} onPointerCancel={() => { drag.current = null }}>
                   {running && <rect className="swarm-topology-pulse" x={n.x - 5} y={n.y - 5} width={n.w + 10} height={n.h + 10} rx={14} fill="none" stroke={col} strokeWidth={1.4} filter="url(#nodeGlow)" />}
                   <foreignObject x={n.x} y={n.y} width={n.w} height={n.h}>
-                    <div className={`swarm-node-card ${running ? 'is-running' : ''} ${n.kind === 'idle' ? 'is-idle' : ''} ${n.kind === 'waiting' ? 'is-waiting' : ''} ${n.kind === 'pending' ? 'is-pending' : ''}`} style={{ ['--node-accent' as any]: col }}>
-                      <div className="swarm-node-head">
-                        <span className="swarm-node-mark">{nodeIcon(n)}</span>
-                        <span className="swarm-node-name">{isLeaderRole(n.mrole) ? '◆ ' : ''}{n.name}</span>
-                        <span className="swarm-node-status">{nodeStatus(n, t)}</span>
+                    {view === 'office' ? (
+                      <div className={`swarm-office-desk ${running ? 'is-running' : ''} ${n.kind === 'idle' ? 'is-idle' : ''} ${n.kind === 'waiting' ? 'is-waiting' : ''}`} style={{ ['--node-accent' as any]: col }}>
+                        <div className="swarm-office-label">
+                          <b>{isLeaderRole(n.mrole) ? `◆ ${n.name}` : n.name}</b>
+                          <span>{nodeStatus(n, t)}</span>
+                        </div>
+                        <div className="swarm-office-surface">
+                          <div className="swarm-office-monitor"><span>{n.mkind || 'agent'}</span></div>
+                          <div className="swarm-office-tower" />
+                          <div className="swarm-office-keyboard" />
+                        </div>
+                        <div className="swarm-office-chair">
+                          <div className="swarm-office-agent"><i /><em /></div>
+                        </div>
+                        <div className="swarm-office-shadow" />
+                        <div className="swarm-office-stats">
+                          <span>{t('swarm.nodeCardsShort', { count: assigned.length })}</span>
+                          <span>{t('swarm.nodePostsShort', { count: posts.filter((p) => p.author === n.name).length })}</span>
+                        </div>
                       </div>
-                      <div className="swarm-node-meta">
-                        <span>{nodeRole(n, t)}</span>
-                        {n.mkind && <span>{n.mkind}</span>}
-                        {n.session && <span>{n.session}</span>}
+                    ) : (
+                      <div className={`swarm-node-card ${running ? 'is-running' : ''} ${n.kind === 'idle' ? 'is-idle' : ''} ${n.kind === 'waiting' ? 'is-waiting' : ''} ${n.kind === 'pending' ? 'is-pending' : ''}`} style={{ ['--node-accent' as any]: col }}>
+                        <div className="swarm-node-head">
+                          <span className="swarm-node-mark">{nodeIcon(n)}</span>
+                          <span className="swarm-node-name">{isLeaderRole(n.mrole) ? '◆ ' : ''}{n.name}</span>
+                          <span className="swarm-node-status">{nodeStatus(n, t)}</span>
+                        </div>
+                        <div className="swarm-node-meta">
+                          <span>{nodeRole(n, t)}</span>
+                          {n.mkind && <span>{n.mkind}</span>}
+                          {n.session && <span>{n.session}</span>}
+                        </div>
+                        {n.task && <div className="swarm-node-task">{n.task}</div>}
+                        <div className="swarm-node-foot">
+                          <span>{t('swarm.nodeCardsShort', { count: assigned.length })}</span>
+                          <span>{t('swarm.nodePostsShort', { count: posts.filter((p) => p.author === n.name).length })}</span>
+                          {n.deps && <span>{t('swarm.nodeDepsShort', { deps: n.deps })}</span>}
+                        </div>
+                        {lastPost && <div className="swarm-node-last">{lastPost.text}</div>}
                       </div>
-                      {n.task && <div className="swarm-node-task">{n.task}</div>}
-                      <div className="swarm-node-foot">
-                        <span>{t('swarm.nodeCardsShort', { count: assigned.length })}</span>
-                        <span>{t('swarm.nodePostsShort', { count: posts.filter((p) => p.author === n.name).length })}</span>
-                        {n.deps && <span>{t('swarm.nodeDepsShort', { deps: n.deps })}</span>}
-                      </div>
-                      {lastPost && <div className="swarm-node-last">{lastPost.text}</div>}
-                    </div>
+                    )}
                   </foreignObject>
                 </g>
               )
@@ -467,6 +498,31 @@ function Topology({ detail, swarm, cards, posts, focus, onNode }: {
         )}
       </div>
     </Panel>
+  )
+}
+
+function OfficeBackdrop({ w, h, title }: { w: number; h: number; title: string }) {
+  const sideW = Math.min(250, Math.max(160, w * 0.26))
+  const rightX = sideW + 28
+  const workW = Math.max(240, w - rightX - 18)
+  return (
+    <g className="swarm-office-backdrop">
+      <rect x="0" y="0" width={w} height={h} rx="18" fill="var(--bg-container)" />
+      <text x={w - 26} y="42" textAnchor="end" className="swarm-office-title">{title}</text>
+      <rect x="24" y="64" width={sideW - 36} height={Math.max(88, h * 0.18)} rx="4" className="swarm-office-zone" />
+      <rect x="24" y={Math.max(178, h * 0.42)} width={sideW - 36} height={Math.max(98, h * 0.2)} rx="4" className="swarm-office-zone" />
+      <rect x="24" y={Math.max(286, h * 0.72)} width={sideW - 36} height={Math.max(86, h * 0.18)} rx="4" className="swarm-office-zone" />
+      <g opacity=".34">
+        <rect x={rightX} y="74" width={workW} height={Math.max(90, h - 104)} rx="12" fill="none" stroke="var(--border-subtle)" strokeDasharray="8 10" />
+        {Array.from({ length: 4 }).map((_, i) => (
+          <line key={i} x1={rightX + 34} x2={rightX + workW - 34} y1={118 + i * 98} y2={118 + i * 98} stroke="var(--border-subtle)" />
+        ))}
+      </g>
+      <g filter="url(#officeShadow)" opacity=".72">
+        <ellipse cx={sideW * 0.52} cy={Math.max(126, h * 0.2)} rx="54" ry="13" className="swarm-office-facility-shadow" />
+        <ellipse cx={sideW * 0.5} cy={Math.max(236, h * 0.5)} rx="58" ry="14" className="swarm-office-facility-shadow" />
+      </g>
+    </g>
   )
 }
 
