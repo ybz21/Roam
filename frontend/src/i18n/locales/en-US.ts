@@ -238,6 +238,8 @@ const enUS = {
   'overview.swarmCounts': '{alive}/{total} active',
   'overview.pendingShort': '+{count} pending',
   'overview.noGoal': '(no goal)',
+  'swarm.status.running': 'Running',
+  'swarm.status.done': 'Done',
   'swarm.status.planning': 'Planning',
   'swarm.status.integrating': 'Integrating',
   'swarm.status.archived': 'Archived',

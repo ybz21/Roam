@@ -238,6 +238,8 @@ const zhCN = {
   'overview.swarmCounts': '{alive}/{total} 活',
   'overview.pendingShort': '+{count} 待',
   'overview.noGoal': '（无目标）',
+  'swarm.status.running': '运行中',
+  'swarm.status.done': '完成',
   'swarm.status.planning': '规划中',
   'swarm.status.integrating': '集成中',
   'swarm.status.archived': '已归档',

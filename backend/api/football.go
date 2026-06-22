@@ -82,6 +82,12 @@ func (s *FootballStore) addTeamLocked(t FootballTeam) FootballTeam {
 	if t.Lineup.Formation == "" {
 		t.Lineup.Formation = "4-3-3"
 	}
+	if t.Lineup.Starters == nil {
+		t.Lineup.Starters = []string{}
+	}
+	if t.Lineup.Bench == nil {
+		t.Lineup.Bench = []string{}
+	}
 	t.PlayerIDs = []string{}
 	s.teams[t.ID] = t
 	return t
