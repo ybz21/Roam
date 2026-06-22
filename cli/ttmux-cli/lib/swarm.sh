@@ -76,8 +76,8 @@ _swarm_migrate_members() {
             type=$(_task_type "$sess")
             task=$(_task_desc "$sess")
             workdir=$(_read_first_file "$(_task_meta_dir "$sess")/workdir.txt")
-            role="worker"
-            [[ -n "$supervisor" && "$sess" == "$supervisor" ]] && role="master"
+            role="member"
+            [[ -n "$supervisor" && "$sess" == "$supervisor" ]] && role="leader"
             sqlite3 "$db" "INSERT INTO members(name,type,task,workdir,role,pending,done)
                 VALUES('$(_sqe "$member")','$(_sqe "$type")','$(_sqe "$task")','$(_sqe "$workdir")','$(_sqe "$role")',0,0)
                 ON CONFLICT(name) DO UPDATE SET
@@ -166,16 +166,16 @@ _swarm_done_list() {
 _swarm_pending_set() {
     local db; db=$(_swarm_db_of "$1") || return 1
     sqlite3 "$db" "INSERT INTO members(name,type,task,workdir,model,perm,kind,role,pending)
-        VALUES('$(_sqe "$2")','$(_sqe "$3")','$(_sqe "$4")','$(_sqe "$5")','$(_sqe "$6")','$(_sqe "$7")','$(_sqe "${8:-claude}")','$(_sqe "${9:-worker}")',1)
+        VALUES('$(_sqe "$2")','$(_sqe "$3")','$(_sqe "$4")','$(_sqe "$5")','$(_sqe "$6")','$(_sqe "$7")','$(_sqe "${8:-claude}")','$(_sqe "$(_swarm_role_norm "${9:-member}")")',1)
         ON CONFLICT(name) DO UPDATE SET type=excluded.type,task=excluded.task,
             workdir=excluded.workdir,model=excluded.model,perm=excluded.perm,kind=excluded.kind,role=excluded.role,pending=1;"
 }
 
-# 蜂群里是否已有 master 成员
+# 蜂群里是否已有 leader 成员
 _swarm_has_master() {
     local db; db=$(_swarm_db_of "$1" 2>/dev/null) || return 1
     [[ -n "$db" ]] || return 1
-    local n; n=$(sqlite3 "$db" "SELECT COUNT(*) FROM members WHERE role='master';" 2>/dev/null || echo 0)
+    local n; n=$(sqlite3 "$db" "SELECT COUNT(*) FROM members WHERE role IN ('leader','master');" 2>/dev/null || echo 0)
     [[ "${n:-0}" -gt 0 ]]
 }
 _swarm_pending_clear() {
@@ -316,14 +316,14 @@ _swarm_new() {
     msg_ok "蜂群 ${bold}${name}${reset} 已创建 ${dim}(${id})${reset}"
     [[ -n "$goal" ]] && echo -e "   ${dim}目标: ${goal}${reset}"
     echo -e "   ${dim}加成员: ttmux swarm add ${name} <名> --type agent \"<任务>\"${reset}"
-    # 自带 master：建群即拉起一个加载了 cc-swarm skill 的指挥会话(cc-<群>)，它已被告知如何操作 swarm CLI。
+    # 自带 leader：建群即拉起一个加载了 cc-swarm skill 的 Leader 会话(cc-<群>)，它已被告知如何操作 swarm CLI。
     # --no-master 跳过(纯元数据/测试)；缺 claude/tmux 时降级为提示，不中断。
     if [[ -z "$no_master" ]]; then
         if command -v claude >/dev/null 2>&1 && [[ -n "${TMUX_BIN}" ]]; then
-            echo -e "   ${dim}拉起指挥(master) cc-${name} …${reset}"
-            _swarm_adopt "$name" || msg_warn "指挥拉起失败，可稍后手动: ${dim}ttmux swarm adopt ${name}${reset}"
+            echo -e "   ${dim}拉起 Leader cc-${name} …${reset}"
+            _swarm_adopt "$name" || msg_warn "Leader 拉起失败，可稍后手动: ${dim}ttmux swarm adopt ${name}${reset}"
         else
-            msg_info "未检测到 claude/tmux，未拉起指挥；装好后手动接管: ${dim}ttmux swarm adopt ${name}${reset}"
+            msg_info "未检测到 claude/tmux，未拉起 Leader；装好后手动接管: ${dim}ttmux swarm adopt ${name}${reset}"
         fi
     fi
 }
@@ -349,7 +349,7 @@ _swarm_add() {
             --perm)       perm="$2"; shift 2 ;;
             --depends-on) deps="$2"; shift 2 ;;
             --kind)       kind="$2"; shift 2 ;;   # 引擎: claude(默认) | codex
-            --role)       role="$2"; shift 2 ;;   # 角色: master | worker（空=自动）
+            --role)       role="$2"; shift 2 ;;   # 角色: leader | member（兼容 master | worker，空=自动）
             *)            payload_parts+=("$1"); shift ;;
         esac
     done
@@ -366,9 +366,10 @@ _swarm_add() {
         msg_err "--kind 只能是 claude 或 codex"
         return 1
     fi
-    # 角色默认: 首个 agent 成员 → master，其余 worker（task 类成员一律 worker）
+    role=$(_swarm_role_norm "$role")
+    # 角色默认: 首个 agent 成员 → leader，其余 member（task 类成员一律 member）
     if [[ -z "$role" ]]; then
-        if [[ "$type" == "agent" ]] && ! _swarm_has_master "$swarm"; then role="master"; else role="worker"; fi
+        if [[ "$type" == "agent" ]] && ! _swarm_has_master "$swarm"; then role="leader"; else role="member"; fi
     fi
 
     # 记录依赖（供 status 展示 + 门控判断）
@@ -493,7 +494,7 @@ _swarm_status_json() {
         # task 可能含多行(渲染后的提示词)：用 \x1e 作记录分隔、read -d 按它读，
         # 否则 task 里的换行会把一行记录拆成多行、字段错位、JSON 崩。
         rows=$(sqlite3 -separator $'\x1f' -newline $'\x1e' "$db" \
-            "SELECT name,IFNULL(type,'agent'),IFNULL(task,''),IFNULL(deps,''),IFNULL(done,0),IFNULL(kind,'claude'),IFNULL(role,'worker') FROM members WHERE IFNULL(pending,0)=0 ORDER BY name;")
+            "SELECT name,IFNULL(type,'agent'),IFNULL(task,''),IFNULL(deps,''),IFNULL(done,0),IFNULL(kind,'claude'),CASE IFNULL(role,'member') WHEN 'master' THEN 'leader' WHEN 'worker' THEN 'member' ELSE IFNULL(role,'member') END FROM members WHERE IFNULL(pending,0)=0 ORDER BY name;")
         while IFS=$'\x1f' read -r -d $'\x1e' mname mtype mtask mdeps mdone mkind mrole; do
             [[ -n "$mname" ]] || continue
             local sess="${name}-${mname}" lst="exited"

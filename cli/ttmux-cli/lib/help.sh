@@ -33,8 +33,8 @@ show_help() {
     ${dim}兼容别名: agent spawn|status|send|collect|kill 仍可用${reset}
 
   ${bold}蜂群编排 ${magenta}(swarm — 有目标的任务组, 可被 cc 接管)${reset}
-    ${green}swarm new${reset}    ${dim}<名> [--goal "..."] [--no-master]${reset}  新建蜂群(默认自带 cc 指挥, --no-master 跳过)
-    ${green}swarm add${reset}    ${dim}<群> <成员> --type task|agent [--kind claude|codex] [--role master|worker] ...${reset}  加成员(首个 agent 默认 master)
+    ${green}swarm new${reset}    ${dim}<名> [--goal "..."] [--no-master]${reset}  新建蜂群(默认自带 Leader, --no-master 跳过)
+    ${green}swarm add${reset}    ${dim}<群> <成员> --type task|agent [--kind claude|codex] [--role leader|member] ...${reset}  加成员(首个 agent 默认 leader)
                 ${dim}[--dir/--perm/--model] [--depends-on a,b] <命令或任务>${reset}
     ${green}swarm ls${reset}     ${dim}[--json]${reset}                    列出蜂群 (目标/状态/指挥)
     ${green}swarm status${reset} ${dim}<群> [--json]${reset}             成员/依赖/挂起 + 看板摘要 + 广场最近
@@ -44,7 +44,7 @@ show_help() {
     ${green}swarm migrate${reset}                          迁移旧版蜂群元数据并补齐成员索引
     ${magenta}广场${reset} ${green}swarm say${reset} ${dim}<群> [--as 成员][--to 目标][--kind 类型][--re id] <消息>${reset}  发言(@提及/自动署名)
          ${green}swarm feed${reset} ${dim}<群> [-n N][--from][--kind][--since id][--json]${reset}  读消息流
-         ${green}swarm listen${reset} ${dim}<群> [--as master|成员][--once][--mentions]${reset}  agent 监听增量消息
+         ${green}swarm listen${reset} ${dim}<群> [--as leader|成员][--once][--mentions]${reset}  agent 监听增量消息
          ${green}swarm watch${reset} ${dim}<群>${reset}                  实时跟随广场
     ${magenta}看板${reset} ${green}swarm board${reset} ${dim}<群> [--json]${reset}             看板全貌(按列)
          ${green}swarm task add${reset} ${dim}<群> "标题" [--desc/--assignee/--deps/--col]${reset}  建卡

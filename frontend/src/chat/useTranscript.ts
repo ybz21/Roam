@@ -1,12 +1,14 @@
 // 轮询会话转录(JSONL)，按物理行 offset 增量拉取，自动归一为 Msg[]。
 // Claude 与 Codex 共用，只是 path 不同(transcript / codex-transcript)。
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
 import type { Block, Msg } from './types'
 
 export function useTranscript(name: string, file: string | undefined, path: string, interval = 1500) {
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [err, setErr] = useState('')
+  const [refreshKey, setRefreshKey] = useState(0)
+  const refresh = useCallback(() => setRefreshKey((n) => n + 1), [])
   useEffect(() => {
     let stop = false
     let offset = 0
@@ -40,8 +42,8 @@ export function useTranscript(name: string, file: string | undefined, path: stri
     const t = setInterval(poll, interval)
     return () => { stop = true; clearInterval(t) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, file, path])
-  return { msgs, err }
+  }, [name, file, path, refreshKey])
+  return { msgs, err, refresh }
 }
 
 // 把 tool_result 按 tool_use_id 挂回对应 tool_use，并从消息流里隐去已收纳的独立结果气泡。

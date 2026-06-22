@@ -274,6 +274,42 @@ func (a *API) FileDelete(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"path": p, "dir": info.IsDir()}})
 }
 
+// FileMkdir POST /file/mkdir —— 在指定目录(dir)下新建子目录(name)。返回创建后的绝对路径。
+func (a *API) FileMkdir(c *gin.Context) {
+	var req struct {
+		Dir  string `json:"dir"`
+		Name string `json:"name"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_FORM", "message": err.Error()}})
+		return
+	}
+	dir := filepath.Clean(req.Dir)
+	if dir == "" || !filepath.IsAbs(dir) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_PATH"}})
+		return
+	}
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "NOT_DIR"}})
+		return
+	}
+	name := filepath.Base(strings.TrimSpace(req.Name)) // 去掉任何路径成分，防穿越
+	if name == "" || name == "." || name == ".." {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_NAME", "message": "目录名无效"}})
+		return
+	}
+	dest := filepath.Join(dir, name)
+	if _, err := os.Stat(dest); err == nil {
+		c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "EXISTS", "message": "同名文件或目录已存在"}})
+		return
+	}
+	if err := os.Mkdir(dest, 0o755); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "MKDIR_ERROR", "message": err.Error()}})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"path": dest}})
+}
+
 // uniquePath 目标已存在时在扩展名前加 (1)/(2)… 避免覆盖。
 func uniquePath(p string) string {
 	if _, err := os.Stat(p); os.IsNotExist(err) {

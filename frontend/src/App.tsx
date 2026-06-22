@@ -14,10 +14,12 @@ import Term, { TermHandle, TermStatus } from './Terminal'
 import ClaudeChat from './ClaudeChat'
 import CodexChat from './CodexChat'
 import FileBrowser from './FileBrowser'
+import FloatingFileDrawer from './FloatingFileDrawer'
 import BrowserView from './BrowserView'
 import Swarm from './Swarm'
 import UpdateBanner from './UpdateBanner'
 import { useThemeMode } from './theme'
+import { useI18n } from './i18n'
 import { PromptDialog, detectPrompt } from './prompt'
 import { copyText } from './chat/blocks'
 
@@ -28,13 +30,19 @@ const { useBreakpoint } = Grid
 const { Text } = Typography
 
 const NAV = [
-  { key: 'overview', label: '概览' },
-  { key: 'sessions', label: '会话' },
-  { key: 'swarm', label: '蜂群' },
-  { key: 'files', label: '文件' },
-  { key: 'browser', label: '浏览器' },
-  { key: 'env', label: '系统配置' },
+  { key: 'overview', labelKey: 'nav.overview' },
+  { key: 'sessions', labelKey: 'nav.sessions' },
+  { key: 'swarm', labelKey: 'nav.swarm' },
+  { key: 'files', labelKey: 'nav.files' },
+  { key: 'browser', labelKey: 'nav.browser' },
+  { key: 'settings', labelKey: 'nav.env' },
 ]
+
+// 旧链接兼容：/#/env 重定向到 /#/settings
+function normalizeRoute(route: string): string {
+  if (route === 'env' || route.startsWith('env/')) return 'settings' + route.slice(3)
+  return route
+}
 
 // 线性图标（无 emoji，currentColor 描边）
 const svg = (paths: any) => (
@@ -46,7 +54,7 @@ const ICONS: Record<string, any> = {
   sessions: svg(<><polyline points="5 8 9 12 5 16" /><line x1="12" y1="16" x2="18" y2="16" /></>),
   swarm: svg(<><circle cx="12" cy="5" r="2.4" /><circle cx="5" cy="17" r="2.4" /><circle cx="19" cy="17" r="2.4" /><line x1="12" y1="7.4" x2="6.5" y2="14.8" /><line x1="12" y1="7.4" x2="17.5" y2="14.8" /></>),
   files: svg(<><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><path d="M7 12h10" /><path d="M7 16h6" /></>),
-  env: svg(<><line x1="4" y1="7" x2="20" y2="7" /><circle cx="9" cy="7" r="2.3" /><line x1="4" y1="17" x2="20" y2="17" /><circle cx="15" cy="17" r="2.3" /></>),
+  settings: svg(<><line x1="4" y1="7" x2="20" y2="7" /><circle cx="9" cy="7" r="2.3" /><line x1="4" y1="17" x2="20" y2="17" /><circle cx="15" cy="17" r="2.3" /></>),
   browser: svg(<><rect x="3" y="4" width="18" height="16" rx="2" /><line x1="3" y1="9" x2="21" y2="9" /><circle cx="6" cy="6.5" r="0.6" /><circle cx="8.4" cy="6.5" r="0.6" /></>),
 }
 
@@ -59,42 +67,44 @@ const KEYS: [string, string][] = [
 // tmux 基操菜单：前缀键 C-b(\x02) + 命令键，直接发给 tmux attach
 // （key 即要发送的字节序列，onClick 时原样发出）
 const PFX = '\x02'
-const TMUX_MENU = [
-  { type: 'group', label: '分屏', children: [
-    { key: PFX + '%', label: '竖分屏 — 左右 ▏▏' },
-    { key: PFX + '"', label: '横分屏 — 上下 ▔▁' },
+const tmuxMenu = (t: (key: string) => string) => [
+  { type: 'group', label: t('tmux.split'), children: [
+    { key: PFX + '%', label: t('tmux.splitVertical') },
+    { key: PFX + '"', label: t('tmux.splitHorizontal') },
   ]},
-  { type: 'group', label: '窗格 (Pane)', children: [
-    { key: PFX + 'o', label: '切到下一个窗格' },
-    { key: PFX + '\x1b[A', label: '选上方窗格 ↑' },
-    { key: PFX + '\x1b[B', label: '选下方窗格 ↓' },
-    { key: PFX + '\x1b[D', label: '选左侧窗格 ←' },
-    { key: PFX + '\x1b[C', label: '选右侧窗格 →' },
-    { key: PFX + 'z', label: '最大化 / 还原窗格' },
-    { key: PFX + ' ', label: '切换布局' },
-    { key: PFX + 'x', label: '关闭当前窗格', danger: true },
+  { type: 'group', label: t('tmux.pane'), children: [
+    { key: PFX + 'o', label: t('tmux.nextPane') },
+    { key: PFX + '\x1b[A', label: t('tmux.selectPaneUp') },
+    { key: PFX + '\x1b[B', label: t('tmux.selectPaneDown') },
+    { key: PFX + '\x1b[D', label: t('tmux.selectPaneLeft') },
+    { key: PFX + '\x1b[C', label: t('tmux.selectPaneRight') },
+    { key: PFX + 'z', label: t('tmux.zoomPane') },
+    { key: PFX + ' ', label: t('tmux.switchLayout') },
+    { key: PFX + 'x', label: t('tmux.closePane'), danger: true },
   ]},
-  { type: 'group', label: '窗口 (Window)', children: [
-    { key: PFX + 'c', label: '新建窗口' },
-    { key: PFX + 'n', label: '下一个窗口' },
-    { key: PFX + 'p', label: '上一个窗口' },
-    { key: PFX + 'w', label: '窗口列表' },
-    { key: PFX + ',', label: '重命名窗口' },
+  { type: 'group', label: t('tmux.window'), children: [
+    { key: PFX + 'c', label: t('tmux.newWindow') },
+    { key: PFX + 'n', label: t('tmux.nextWindow') },
+    { key: PFX + 'p', label: t('tmux.prevWindow') },
+    { key: PFX + 'w', label: t('tmux.windowList') },
+    { key: PFX + ',', label: t('tmux.renameWindow') },
   ]},
-  { type: 'group', label: '其他', children: [
-    { key: PFX + '[', label: '复制模式（翻历史）' },
-    { key: PFX + 'd', label: '断开会话 (detach)' },
-    { key: PFX + 't', label: '显示时钟' },
+  { type: 'group', label: t('tmux.other'), children: [
+    { key: PFX + '[', label: t('tmux.copyMode') },
+    { key: PFX + 'd', label: t('tmux.detach') },
+    { key: PFX + 't', label: t('tmux.clock') },
   ]},
 ] as const
 
 function StatusTag({ status, code }: { status?: string; code?: string }) {
-  if (status === 'running') return <Tag color="processing">运行中</Tag>
-  if (status === 'done') return code && code !== '0' ? <Tag color="error">失败 {code}</Tag> : <Tag color="success">完成</Tag>
-  return <Tag>已结束</Tag>
+  const { t } = useI18n()
+  if (status === 'running') return <Tag color="processing">{t('common.running')}</Tag>
+  if (status === 'done') return code && code !== '0' ? <Tag color="error">{t('session.status.failedWithCode', { code })}</Tag> : <Tag color="success">{t('common.done')}</Tag>
+  return <Tag>{t('common.ended')}</Tag>
 }
 function TypeTag({ type }: { type?: string }) {
-  return type === 'agent' ? <Tag color="blue">🤖 Agent</Tag> : <Tag>⌨️ 命令</Tag>
+  const { t } = useI18n()
+  return type === 'agent' ? <Tag color="blue">🤖 {t('session.type.agent')}</Tag> : <Tag>⌨️ {t('session.type.command')}</Tag>
 }
 
 function pathDirname(path: string): string {
@@ -112,6 +122,7 @@ function shellQuote(s: string): string {
 
 function FilesPage({ openTerm }: { openTerm: (name: string) => void }) {
   const { message } = AntApp.useApp()
+  const { t } = useI18n()
   const openAgent = async (kind: 'claude' | 'codex', file: string) => {
     const base = pathBasename(file).replace(/[^a-zA-Z0-9_.-]+/g, '-').slice(0, 28) || 'file'
     const name = `${kind}-${base}-${Date.now().toString(36).slice(-5)}`
@@ -121,10 +132,10 @@ function FilesPage({ openTerm }: { openTerm: (name: string) => void }) {
     try {
       await api('POST', '/sessions', { name, dir })
       await api('POST', '/tasks/_/send', { sess: name, msg: cmd })
-      message.success(`已在 ${kind === 'claude' ? 'Claude Code' : 'Codex'} 中打开`)
+      message.success(t('file.openedInAgent', { agent: kind === 'claude' ? 'Claude Code' : 'Codex' }))
       openTerm(name)
     } catch (e: any) {
-      message.error('打开失败：' + e.message)
+      message.error(t('file.openFailed', { message: e.message }))
     }
   }
   return (
@@ -137,11 +148,12 @@ function FilesPage({ openTerm }: { openTerm: (name: string) => void }) {
 export default function App() {
   const [authed, setAuthed] = useState<boolean | null>(null)
   const [kanna, setKanna] = useState('')
-  const [route, setRoute] = useState(() => location.hash.replace(/^#\/?/, '') || 'sessions')
+  const [route, setRoute] = useState(() => normalizeRoute(location.hash.replace(/^#\/?/, '') || 'sessions'))
   const tab = route.split('/')[0]                                  // 基础页（swarm/leave → swarm）
   const swarmSub = tab === 'swarm' && route.includes('/') ? decodeURIComponent(route.slice(route.indexOf('/') + 1)) : '' // 深链选中的蜂群
   const go = (k: string) => { location.hash = '#/' + k } // hash 路由：/#/xxx
   const { mode, toggle: toggleTheme } = useThemeMode()
+  const { t } = useI18n()
   const themeIcon = mode === 'dark'
     ? svg(<><circle cx="12" cy="12" r="4.2" /><path d="M12 2v2.2M12 19.8V22M4.2 4.2l1.6 1.6M18.2 18.2l1.6 1.6M2 12h2.2M19.8 12H22M4.2 19.8l1.6-1.6M18.2 5.8l1.6-1.6" /></>)
     : svg(<><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z" /></>)
@@ -183,7 +195,7 @@ export default function App() {
 
   // hash 路由：URL #/xxx 与当前页同步（支持前进/后退、刷新保持、收藏分享）
   useEffect(() => {
-    const apply = () => setRoute(location.hash.replace(/^#\/?/, '') || 'sessions')
+    const apply = () => setRoute(normalizeRoute(location.hash.replace(/^#\/?/, '') || 'sessions'))
     apply()
     window.addEventListener('hashchange', apply)
     return () => window.removeEventListener('hashchange', apply)
@@ -226,7 +238,7 @@ export default function App() {
   }
   const anyClaude = terms.some((t) => claudeMap[t]?.running || codexMap[t]?.running)
   const docked = hasSider && terms.length > 0 && dockOpen // 桌面停靠栏已展开
-  const dockPageWidth = tab === 'sessions' || tab === 'overview' ? 420 : 300
+  const dockPageWidth = tab === 'sessions' || tab === 'overview' || tab === 'swarm' || tab === 'settings' ? 420 : 300
   const setStatus = (name: string, s: TermStatus) => setStatusMap((m) => ({ ...m, [name]: s }))
   const sendKey = (seq: string) => active && termRefs.current[active]?.send(seq)
 
@@ -261,14 +273,18 @@ export default function App() {
     swarm: <Swarm openTerm={openTerm} initialSwarm={swarmSub || undefined} onNav={(n) => { location.hash = n ? '#/swarm/' + encodeURIComponent(n) : '#/swarm' }} />,
     sessions: <Sessions openTerm={openTerm} />,
     files: <FilesPage openTerm={openTerm} />,
-    env: <EnvPage />,
+    settings: <EnvPage />,
     browser: <BrowserView />,
   }
+  const page = pages[tab] || pages.sessions
+  const pageNode = tab === 'browser'
+    ? page
+    : <div className={`tt-page tt-page-${tab}${isMobile ? ' tt-page-mobile' : ''}`}>{page}</div>
 
   const menu = (
     <Menu
       theme={mode} mode="inline" selectedKeys={[tab]} onClick={(e) => go(e.key)}
-      items={NAV.map((n) => ({ key: n.key, icon: ICONS[n.key], label: n.label }))}
+      items={NAV.map((n) => ({ key: n.key, icon: ICONS[n.key], label: t(n.labelKey) }))}
       style={{ borderInlineEnd: 0, background: 'transparent' }}
     />
   )
@@ -291,7 +307,7 @@ export default function App() {
                     background: 'var(--brand-grad)',
                     WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent',
                   }}>Roam</div>
-                  <div style={{ color: 'var(--text-dimmer)', fontSize: 10, letterSpacing: 1.5 }}>ANYWHERE · ANYTIME</div>
+                  <div style={{ color: 'var(--text-dimmer)', fontSize: 10, letterSpacing: 1.5 }}>{t('app.tagline')}</div>
                 </div>
               )}
             </div>
@@ -300,19 +316,19 @@ export default function App() {
             <div style={{ borderTop: '1px solid var(--border-subtle)', padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
               {fsSupported && (
                 <Button type="text" block onClick={toggleFs} style={{ color: 'var(--text-dim)', textAlign: collapsed ? 'center' : 'left' }}
-                  title={isFs ? '退出全屏' : '全屏'}>
-                  {collapsed ? fsIcon : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{fsIcon}{isFs ? '退出全屏' : '全屏'}</span>}
+                  title={isFs ? t('common.exitFullscreen') : t('common.fullscreen')}>
+                  {collapsed ? fsIcon : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{fsIcon}{isFs ? t('common.exitFullscreen') : t('common.fullscreen')}</span>}
                 </Button>
               )}
               <Button type="text" block onClick={() => setCollapsed((c) => !c)} style={{ color: 'var(--text-dim)' }}
-                title={collapsed ? '展开导航' : '折叠导航'}>
+                title={collapsed ? t('common.expand') : t('common.collapse')}>
                 {svg(collapsed
                   ? <><polyline points="9 6 15 12 9 18" /></>
                   : <><polyline points="15 6 9 12 15 18" /></>)}
               </Button>
-              <Popconfirm title="确定退出登录？" okText="退出" cancelText="取消" onConfirm={logout} placement="topRight">
-                <Button type="text" block style={{ color: 'var(--text-dim)', textAlign: collapsed ? 'center' : 'left' }} title="退出登录">
-                  {collapsed ? svg(<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></>) : '退出登录'}
+              <Popconfirm title={t('common.logoutConfirm')} okText={t('common.logout')} cancelText={t('common.cancel')} onConfirm={logout} placement="topRight">
+                <Button type="text" block style={{ color: 'var(--text-dim)', textAlign: collapsed ? 'center' : 'left' }} title={t('common.logout')}>
+                  {collapsed ? svg(<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></>) : t('common.logout')}
                 </Button>
               </Popconfirm>
             </div>
@@ -328,45 +344,44 @@ export default function App() {
             flex: docked && tab !== 'browser' && tab !== 'files' ? (dockMax ? '0 0 0px' : `0 0 ${dockPageWidth}px`) : 1,
             width: docked && tab !== 'browser' && tab !== 'files' ? (dockMax ? 0 : dockPageWidth) : 'auto', minWidth: 0,
             height: '100dvh', overflow: tab === 'browser' || tab === 'files' ? 'hidden' : 'auto',
-            padding: tab === 'browser' || tab === 'files' ? 0 : 14,
-            paddingBottom: isMobile ? 76 : (tab === 'browser' || tab === 'files' ? 0 : 14),
+            padding: 0,
             transition: 'flex-basis .2s, width .2s',
           }}>
-            {pages[tab] || pages.sessions}
+            {pageNode}
           </Content>
 
           {/* 角标把手：上半=向左扩展（关→开→遮住会话列表），下半=向右收起；都带图标+文字 */}
           {hasSider && terms.length > 0 && (
             <div style={{
-              flex: '0 0 32px', background: 'var(--bg-container)', borderLeft: '1px solid var(--border)',
+              flex: '0 0 22px', background: 'var(--bg-container)', borderLeft: '1px solid var(--border)',
               display: 'flex', flexDirection: 'column', color: anyClaude ? '#58a6ff' : 'var(--text-dim)', userSelect: 'none',
             }}>
               {/* 上半：向左扩展 */}
               <div onClick={() => (dockOpen ? setDockMax(true) : setDockOpen(true))}
-                title={!dockOpen ? '展开终端' : '向左扩展（遮住会话列表）'}
+                title={!dockOpen ? t('terminal.expandTitle') : t('terminal.expandLeftTitle')}
                 style={{
-                  flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 7,
+                  flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5,
                   borderBottom: '1px solid var(--border)', cursor: dockMax ? 'default' : 'pointer', opacity: dockMax ? 0.3 : 1,
                 }}>
                 {/* 双箭头向左 = 扩展/展开面板 */}
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M13 6 L7 12 L13 18" /><path d="M18 6 L12 12 L18 18" />
                 </svg>
-                <span style={{ writingMode: 'vertical-rl', letterSpacing: 3, fontSize: 12, fontWeight: 600 }}>{dockOpen ? '扩展' : '展开'}</span>
-                <span style={{ fontSize: 11, background: '#1f6feb', color: '#fff', borderRadius: 9, padding: '0 6px' }}>{terms.length}</span>
+                <span style={{ writingMode: 'vertical-rl', letterSpacing: 1, fontSize: 11, fontWeight: 600 }}>{dockOpen ? t('common.extend') : t('common.expand')}</span>
+                <span style={{ fontSize: 10, background: '#1f6feb', color: '#fff', borderRadius: 8, padding: '0 4px', lineHeight: 1.35 }}>{terms.length}</span>
               </div>
               {/* 下半：向右收起 */}
               <div onClick={() => (dockMax ? setDockMax(false) : setDockOpen(false))}
-                title={dockMax ? '还原' : '向右收起'}
+                title={dockMax ? t('terminal.restoreTitle') : t('terminal.collapseRightTitle')}
                 style={{
-                  flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 7,
+                  flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5,
                   cursor: dockOpen ? 'pointer' : 'default', opacity: dockOpen ? 1 : 0.3,
                 }}>
                 {/* 双箭头向右 = 收起/还原面板 */}
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M11 6 L17 12 L11 18" /><path d="M6 6 L12 12 L6 18" />
                 </svg>
-                <span style={{ writingMode: 'vertical-rl', letterSpacing: 3, fontSize: 12, fontWeight: 600 }}>{dockMax ? '还原' : '收起'}</span>
+                <span style={{ writingMode: 'vertical-rl', letterSpacing: 1, fontSize: 11, fontWeight: 600 }}>{dockMax ? t('common.restore') : t('common.collapse')}</span>
               </div>
             </div>
           )}
@@ -389,19 +404,19 @@ export default function App() {
           {NAV.map((n) => (
             <button key={n.key} onClick={() => go(n.key)}
               style={{ flex: 1, border: 0, background: 'none', color: tab === n.key ? '#58a6ff' : 'var(--text-dim)', padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11 }}>
-              {ICONS[n.key]}{n.label}
+              {ICONS[n.key]}{t(n.labelKey)}
             </button>
           ))}
           {/* 主题/全屏/退出折叠进「更多」，省出底栏空间 */}
           <Dropdown placement="top" trigger={['click']} menu={{ items: [
-            { key: 'theme', icon: themeIcon, label: mode === 'dark' ? '浅色主题' : '深色主题', onClick: toggleTheme },
-            ...(fsSupported ? [{ key: 'fs', icon: fsIcon, label: isFs ? '退出全屏' : '全屏', onClick: toggleFs }] : []),
+            { key: 'theme', icon: themeIcon, label: mode === 'dark' ? t('common.lightTheme') : t('common.darkTheme'), onClick: toggleTheme },
+            ...(fsSupported ? [{ key: 'fs', icon: fsIcon, label: isFs ? t('common.exitFullscreen') : t('common.fullscreen'), onClick: toggleFs }] : []),
             { type: 'divider' as const },
-            { key: 'logout', danger: true, label: '退出登录', onClick: () => Modal.confirm({ title: '确定退出登录？', okText: '退出', cancelText: '取消', okButtonProps: { danger: true }, onOk: logout }) },
+            { key: 'logout', danger: true, label: t('common.logout'), onClick: () => Modal.confirm({ title: t('common.logoutConfirm'), okText: t('common.logout'), cancelText: t('common.cancel'), okButtonProps: { danger: true }, onOk: logout }) },
           ] }}>
             <button
               style={{ flex: 1, border: 0, background: 'none', color: 'var(--text-dim)', padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11 }}>
-              {svg(<><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></>)}更多
+              {svg(<><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></>)}{t('common.more')}
             </button>
           </Dropdown>
         </nav>
@@ -469,6 +484,7 @@ function TerminalPane(props: {
 }) {
   const { terms, active, setActive, closeTerm, fontSize, setFontSize, statusMap, setStatus, termRefs, sendKey, onCollapse, claudeMap, claudeView, setClaudeView, codexMap, codexView, setCodexView } = props
   const { message } = AntApp.useApp()
+  const { t } = useI18n()
   const st = active ? statusMap[active] : undefined
   const [termNeedsInput, setTermNeedsInput] = useState<Record<string, boolean>>({})
   const activeNeedsInput = !!(active && termNeedsInput[active])
@@ -543,18 +559,18 @@ function TerminalPane(props: {
     }
   }
   const ctxItems = ctx ? [
-    ...(ctx.selection ? [{ key: 'copy', label: '复制选中文本' }] : []),
-    { key: 'paste', label: '粘贴剪贴板' },
-    { key: 'manual-paste', label: '手动粘贴…' },
+    ...(ctx.selection ? [{ key: 'copy', label: t('terminal.copySelected') }] : []),
+    { key: 'paste', label: t('terminal.pasteClipboard') },
+    { key: 'manual-paste', label: t('terminal.manualPaste') },
     { type: 'divider' as const },
-    { key: 'scroll-up', label: '上翻历史' },
-    { key: 'bottom', label: '回到最新' },
-    { key: 'reconnect', label: '重新连接' },
+    { key: 'scroll-up', label: t('terminal.scrollHistory') },
+    { key: 'bottom', label: t('terminal.toBottom') },
+    { key: 'reconnect', label: t('terminal.reconnect') },
     { type: 'divider' as const },
-    { key: PFX + '[', label: 'tmux 复制模式' },
-    { key: PFX + 'w', label: 'tmux 窗口列表' },
-    { key: PFX + '%', label: 'tmux 竖分屏' },
-    { key: PFX + '"', label: 'tmux 横分屏' },
+    { key: PFX + '[', label: t('terminal.tmuxCopyMode') },
+    { key: PFX + 'w', label: t('terminal.tmuxWindowList') },
+    { key: PFX + '%', label: t('terminal.tmuxSplitVertical') },
+    { key: PFX + '"', label: t('terminal.tmuxSplitHorizontal') },
   ] : []
   const onCtxClick = ({ key }: { key: string }) => {
     if (!ctx) return
@@ -571,7 +587,7 @@ function TerminalPane(props: {
   const copySelectionTip = () => {
     if (!selTip) return
     copyText(selTip.selection)
-    message.success('已复制')
+    message.success(t('common.copied'))
     setSelTip(null)
   }
 
@@ -580,7 +596,7 @@ function TerminalPane(props: {
       <div style={{ flex: 1, display: 'grid', placeItems: 'center', color: 'var(--text-dim)' }}>
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: 40 }}>▸</div>
-          <div>点击「会话」或「任务」里的 <b style={{ color: 'var(--text-bright)' }}>终端</b> 进入命令行</div>
+          <div>{t('terminal.openHint', { terminal: t('common.terminal') })}</div>
         </div>
       </div>
     )
@@ -591,15 +607,15 @@ function TerminalPane(props: {
       {active && <PromptDialog name={active} accent={codexMap[active]?.running ? '#10a37f' : '#58a6ff'} enabled={!inChat} />}
       <Modal
         open={pasteOpen}
-        title="粘贴到会话"
-        okText="粘贴"
-        cancelText="取消"
+        title={t('terminal.pasteTitle')}
+        okText={t('terminal.pasteAction')}
+        cancelText={t('common.cancel')}
         destroyOnClose
         onCancel={() => setPasteOpen(false)}
         onOk={() => {
           sendPaste(pasteSession, pasteText)
           setPasteOpen(false)
-          message.success('已粘贴')
+          message.success(t('terminal.pasted'))
         }}
       >
         <Input.TextArea
@@ -607,10 +623,10 @@ function TerminalPane(props: {
           value={pasteText}
           onChange={(e) => setPasteText(e.target.value)}
           autoSize={{ minRows: 6, maxRows: 12 }}
-          placeholder="把要发送到终端的内容粘贴到这里"
+          placeholder={t('terminal.pastePlaceholder')}
         />
         <div style={{ color: 'var(--text-dim)', fontSize: 12, marginTop: 8 }}>
-          用于浏览器不允许直接读取剪贴板时的兜底；内容会原样写入当前 PTY，不自动追加回车。
+          {t('terminal.pasteHelp')}
         </div>
       </Modal>
       <Dropdown
@@ -638,25 +654,25 @@ function TerminalPane(props: {
             boxShadow: 'var(--elevated-shadow)',
           }}
         >
-          <Button size="small" type="primary" onMouseDown={(e) => e.preventDefault()} onClick={copySelectionTip}>复制</Button>
+          <Button size="small" type="primary" onMouseDown={(e) => e.preventDefault()} onClick={copySelectionTip}>{t('common.copy')}</Button>
           <Button size="small" type="text" onMouseDown={(e) => e.preventDefault()} onClick={() => setSelTip(null)}>×</Button>
         </div>
       )}
       {/* 标签栏 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 8px', borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
-        {onCollapse && <Button size="small" type="text" style={{ color: 'var(--text-dim)' }} onClick={onCollapse}>✕ 收起</Button>}
-        {terms.map((t) => (
-          <span key={t} onClick={() => setActive(t)}
+        {onCollapse && <Button size="small" type="text" style={{ color: 'var(--text-dim)' }} onClick={onCollapse}>✕ {t('common.collapse')}</Button>}
+        {terms.map((termName) => (
+          <span key={termName} onClick={() => setActive(termName)}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap',
-              background: t === active ? '#1f6feb33' : 'transparent', border: t === active ? '1px solid #1f6feb' : '1px solid var(--border)', color: 'var(--text-bright)',
+              background: termName === active ? '#1f6feb33' : 'transparent', border: termName === active ? '1px solid #1f6feb' : '1px solid var(--border)', color: 'var(--text-bright)',
             }}>
-            <i style={{ width: 7, height: 7, borderRadius: '50%', background: termNeedsInput[t] ? '#d29922' : (statusMap[t] === 'connected' ? '#3fb950' : statusMap[t] === 'connecting' ? '#d29922' : '#f85149') }} />
-            {termNeedsInput[t] && <span title="需要你确认" style={{ color: '#d29922', fontSize: 12, fontWeight: 600 }}>待确认</span>}
-            {claudeMap[t]?.running && <span title="正在运行 Claude Code">🤖</span>}
-            {codexMap[t]?.running && <span title="正在运行 Codex" style={{ color: '#10a37f' }}>✸</span>}
-            {t}
-            <a onClick={(e) => { e.stopPropagation(); closeTerm(t) }} style={{ color: 'var(--text-dim)' }}>×</a>
+            <i style={{ width: 7, height: 7, borderRadius: '50%', background: termNeedsInput[termName] ? '#d29922' : (statusMap[termName] === 'connected' ? '#3fb950' : statusMap[termName] === 'connecting' ? '#d29922' : '#f85149') }} />
+            {termNeedsInput[termName] && <span title={t('prompt.confirmRequired')} style={{ color: '#d29922', fontSize: 12, fontWeight: 600 }}>{t('session.waiting')}</span>}
+            {claudeMap[termName]?.running && <span title={t('session.runningClaude')}>🤖</span>}
+            {codexMap[termName]?.running && <span title={t('session.runningCodex')} style={{ color: '#10a37f' }}>✸</span>}
+            {termName}
+            <a onClick={(e) => { e.stopPropagation(); closeTerm(termName) }} style={{ color: 'var(--text-dim)' }}>×</a>
           </span>
         ))}
       </div>
@@ -665,16 +681,16 @@ function TerminalPane(props: {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-dim)', fontSize: 12 }}>
           <i style={{ width: 8, height: 8, borderRadius: '50%', background: dot }} />
-          {activeNeedsInput ? '待确认' : st === 'connected' ? '已连接' : st === 'connecting' ? '连接中' : '已断开'}
+          {activeNeedsInput ? t('session.waiting') : st === 'connected' ? t('terminal.status.connected') : st === 'connecting' ? t('terminal.status.connecting') : t('terminal.status.disconnected')}
         </span>
         {active && claudeMap[active]?.running && (
-          <Tooltip title="切换到 Claude Code 对话界面">
+          <Tooltip title={t('chat.switchToClaude')}>
             <Button size="small" type={claudeView[active] ? 'primary' : 'default'}
               onClick={() => setClaudeView((v) => ({ ...v, [active!]: !v[active!] }))}>🤖 Claude</Button>
           </Tooltip>
         )}
         {active && codexMap[active]?.running && (
-          <Tooltip title="切换到 Codex 对话界面">
+          <Tooltip title={t('chat.switchToCodex')}>
             <Button size="small" type={codexView[active] ? 'primary' : 'default'}
               style={codexView[active] ? { background: '#10a37f', borderColor: '#10a37f' } : {}}
               onClick={() => setCodexView((v) => ({ ...v, [active!]: !v[active!] }))}>✸ Codex</Button>
@@ -682,55 +698,53 @@ function TerminalPane(props: {
         )}
         <Dropdown
           trigger={['click']}
-          menu={{ items: TMUX_MENU as any, onClick: ({ key }) => sendKey(key) }}
+          menu={{ items: tmuxMenu(t) as any, onClick: ({ key }) => sendKey(key) }}
           placement="bottomLeft"
         >
           <Button size="small" type="primary" ghost>tmux ▾</Button>
         </Dropdown>
         {active && (
-          <Tooltip title="在新浏览器标签全屏打开此会话">
-            <Button size="small" onClick={() => window.open(`/#/term/${encodeURIComponent(active)}`, '_blank')}>↗ 新标签</Button>
+          <Tooltip title={t('terminal.openInNewTabTitle')}>
+            <Button size="small" onClick={() => window.open(`/#/term/${encodeURIComponent(active)}`, '_blank')}>↗ {t('terminal.newTab')}</Button>
           </Tooltip>
         )}
-        <Tooltip title="文件浏览（当前会话工作目录）">
-          <Button size="small" type={showFiles ? 'primary' : 'default'} onClick={() => setShowFiles((s) => !s)}>📁 文件</Button>
+        <Tooltip title={t('terminal.fileBrowserTitle')}>
+          <Button size="small" type={showFiles ? 'primary' : 'default'} onClick={() => setShowFiles((s) => !s)}>📁 {t('chat.files')}</Button>
         </Tooltip>
         <span style={{ flex: 1 }} />
-        <Tooltip title="上翻看历史对话"><Button size="small" onClick={() => active && termRefs.current[active]?.scroll(-12)}>▲</Button></Tooltip>
-        <Tooltip title="回到最新"><Button size="small" onClick={() => active && termRefs.current[active]?.toBottom()}>▼底</Button></Tooltip>
-        <Tooltip title="缩小字号"><Button size="small" onClick={() => setFontSize(Math.max(10, fontSize - 1))}>A-</Button></Tooltip>
-        <Tooltip title="放大字号"><Button size="small" onClick={() => setFontSize(Math.min(22, fontSize + 1))}>A+</Button></Tooltip>
-        <Tooltip title="复制选中"><Button size="small" onClick={() => { const ok = active && termRefs.current[active]?.copy(); message[ok ? 'success' : 'info'](ok ? '已复制' : '请先选中文本') }}>复制</Button></Tooltip>
-        <Tooltip title="重新连接"><Button size="small" onClick={() => active && termRefs.current[active]?.reconnect()}>重连</Button></Tooltip>
+        <Tooltip title={t('terminal.scrollHistory')}><Button size="small" onClick={() => active && termRefs.current[active]?.scroll(-12)}>▲</Button></Tooltip>
+        <Tooltip title={t('terminal.toBottom')}><Button size="small" onClick={() => active && termRefs.current[active]?.toBottom()}>{t('terminal.bottomShort')}</Button></Tooltip>
+        <Tooltip title={t('terminal.decreaseFont')}><Button size="small" onClick={() => setFontSize(Math.max(10, fontSize - 1))}>A-</Button></Tooltip>
+        <Tooltip title={t('terminal.increaseFont')}><Button size="small" onClick={() => setFontSize(Math.min(22, fontSize + 1))}>A+</Button></Tooltip>
+        <Tooltip title={t('terminal.copySelection')}><Button size="small" onClick={() => { const ok = active && termRefs.current[active]?.copy(); message[ok ? 'success' : 'info'](ok ? t('common.copied') : t('terminal.selectTextFirst')) }}>{t('common.copy')}</Button></Tooltip>
+        <Tooltip title={t('terminal.reconnect')}><Button size="small" onClick={() => active && termRefs.current[active]?.reconnect()}>{t('terminal.reconnectShort')}</Button></Tooltip>
       </div>
 
-      {/* 终端区（所有标签常驻，仅激活可见，保留滚动历史）+ 可选文件侧栏 */}
+      {/* 终端区（所有标签常驻，仅激活可见，保留滚动历史） */}
       <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
         <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
-          {terms.map((t) => (
-            <div key={t} style={{ position: 'absolute', inset: 0, display: t === active ? 'block' : 'none', padding: 6 }}>
-              <Term ref={(h) => { termRefs.current[t] = h }} name={t} fontSize={fontSize} active={t === active} onStatus={(s) => setStatus(t, s)}
-                onContextMenu={({ x, y, selection }) => { setActive(t); setSelTip(null); setCtx({ x, y, session: t, selection }) }}
-                onSelectionMenu={({ x, y, selection }) => { setActive(t); setCtx(null); setSelTip({ x, y, session: t, selection }) }} />
-              {claudeView[t] && claudeMap[t]?.running && (
+          {terms.map((termName) => (
+            <div key={termName} style={{ position: 'absolute', inset: 0, display: termName === active ? 'block' : 'none', padding: 6 }}>
+              <Term ref={(h) => { termRefs.current[termName] = h }} name={termName} fontSize={fontSize} active={termName === active} onStatus={(s) => setStatus(termName, s)}
+                onContextMenu={({ x, y, selection }) => { setActive(termName); setSelTip(null); setCtx({ x, y, session: termName, selection }) }}
+                onSelectionMenu={({ x, y, selection }) => { setActive(termName); setCtx(null); setSelTip({ x, y, session: termName, selection }) }} />
+              {claudeView[termName] && claudeMap[termName]?.running && (
                 <div style={{ position: 'absolute', inset: 0 }}>
-                  <ClaudeChat name={t} file={claudeMap[t].file} dir={claudeMap[t].dir} onBack={() => setClaudeView((v) => ({ ...v, [t]: false }))} />
+                  <ClaudeChat name={termName} file={claudeMap[termName].file} dir={claudeMap[termName].dir} onBack={() => setClaudeView((v) => ({ ...v, [termName]: false }))} />
                 </div>
               )}
-              {codexView[t] && codexMap[t]?.running && (
+              {codexView[termName] && codexMap[termName]?.running && (
                 <div style={{ position: 'absolute', inset: 0 }}>
-                  <CodexChat name={t} file={codexMap[t].file} dir={codexMap[t].dir} onBack={() => setCodexView((v) => ({ ...v, [t]: false }))} />
+                  <CodexChat name={termName} file={codexMap[termName].file} dir={codexMap[termName].dir} onBack={() => setCodexView((v) => ({ ...v, [termName]: false }))} />
                 </div>
               )}
             </div>
           ))}
         </div>
-        {showFiles && (
-          <div style={{ flex: '0 0 clamp(200px, 28%, 300px)', minWidth: 0 }}>
-            <FileBrowser dir={cwd} accent="#58a6ff" onClose={() => setShowFiles(false)} />
-          </div>
-        )}
       </div>
+      <FloatingFileDrawer open={showFiles}>
+        <FileBrowser dir={cwd} accent="#58a6ff" onClose={() => setShowFiles(false)} />
+      </FloatingFileDrawer>
 
       {/* 移动端文字输入框：软键盘/输入法在 xterm 里会丢字，这里整行可靠发送到 PTY。
           对话视图(Claude/Codex)有自己的输入框，这里隐藏避免双输入框。 */}
@@ -740,11 +754,11 @@ function TerminalPane(props: {
             value={line}
             onChange={(e) => setLine(e.target.value)}
             onPressEnter={(e) => { if ((e.nativeEvent as any).isComposing) return; submitLine() }}
-            placeholder="输入文字，回车 / 发送 → 终端"
+            placeholder={t('terminal.mobileInputPlaceholder')}
             allowClear
             autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
           />
-          <Button type="primary" onMouseDown={noBlur} onClick={submitLine}>发送</Button>
+          <Button type="primary" onMouseDown={noBlur} onClick={submitLine}>{t('common.send')}</Button>
         </div>
       )}
 
@@ -765,6 +779,7 @@ function TerminalPane(props: {
 const PW_KEY = 'ttmux_pw' // 「记住密码」本地存储键
 function Login({ onOk }: { onOk: () => void }) {
   const { message } = AntApp.useApp()
+  const { t } = useI18n()
   const [loading, setLoading] = useState(false)
   const [totp, setTotp] = useState(false) // 是否开启两步验证
   const saved = (() => { try { return localStorage.getItem(PW_KEY) || '' } catch { return '' } })()
@@ -782,7 +797,7 @@ function Login({ onOk }: { onOk: () => void }) {
             background: 'var(--brand-grad)',
             WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent',
           }}>Roam</div>
-          <div style={{ color: 'var(--text-dimmer)', fontSize: 12, marginTop: 4, letterSpacing: 0.5 }}>Code anywhere, anytime.</div>
+          <div style={{ color: 'var(--text-dimmer)', fontSize: 12, marginTop: 4, letterSpacing: 0.5 }}>{t('auth.tagline')}</div>
         </div>
         <Form
           initialValues={{ password: saved, remember: !!saved }}
@@ -794,22 +809,22 @@ function Login({ onOk }: { onOk: () => void }) {
               onOk()
             }
             catch (e: any) {
-              message.error(/BAD_CODE/.test(e.message) ? '动态码错误' : /LOCKED/.test(e.message) ? '尝试过多，已锁定' : '登录失败')
+              message.error(/BAD_CODE/.test(e.message) ? t('auth.badCode') : /LOCKED/.test(e.message) ? t('auth.locked') : t('auth.loginFailed'))
             } finally { setLoading(false) }
           }}
         >
-          <Form.Item name="password" rules={[{ required: true, message: '请输入口令' }]}>
-            <Input.Password size="large" placeholder="口令" autoFocus={!saved} />
+          <Form.Item name="password" rules={[{ required: true, message: t('auth.passwordRequired') }]}>
+            <Input.Password size="large" placeholder={t('auth.password')} autoFocus={!saved} />
           </Form.Item>
           {totp && (
-            <Form.Item name="code" rules={[{ required: true, message: '请输入动态码' }]}>
-              <Input size="large" placeholder="Authenticator 动态码（6 位）" inputMode="numeric" maxLength={6} autoFocus={!!saved} />
+            <Form.Item name="code" rules={[{ required: true, message: t('auth.codeRequired') }]}>
+              <Input size="large" placeholder={t('auth.codePlaceholder')} inputMode="numeric" maxLength={6} autoFocus={!!saved} />
             </Form.Item>
           )}
           <Form.Item name="remember" valuePropName="checked" style={{ marginBottom: 12 }}>
-            <Checkbox>记住密码</Checkbox>
+            <Checkbox>{t('auth.rememberPassword')}</Checkbox>
           </Form.Item>
-          <Button type="primary" size="large" block htmlType="submit" loading={loading}>登 录</Button>
+          <Button type="primary" size="large" block htmlType="submit" loading={loading}>{t('auth.login')}</Button>
         </Form>
       </Card>
     </div>
@@ -819,9 +834,10 @@ function Login({ onOk }: { onOk: () => void }) {
 // ── 概览（仪表盘）──
 // 蜂群状态 → 颜色/中文
 function SwarmStatusTag({ status }: { status?: string }) {
+  const { t } = useI18n()
   const m: Record<string, [string, string]> = {
-    planning: ['blue', '规划中'], running: ['processing', '运行中'],
-    integrating: ['gold', '集成中'], done: ['success', '完成'], archived: ['default', '已归档'],
+    planning: ['blue', t('swarm.status.planning')], running: ['processing', t('common.running')],
+    integrating: ['gold', t('swarm.status.integrating')], done: ['success', t('common.done')], archived: ['default', t('swarm.status.archived')],
   }
   const [c, l] = m[status || ''] || ['default', status || '—']
   return <Tag color={c} style={{ margin: 0 }}>{l}</Tag>
@@ -846,6 +862,7 @@ function StatTile({ icon, label, value, accent, onClick }: {
 }
 
 function Overview({ go, openTerm, kanna }: { go: (k: string) => void; openTerm: (n: string) => void; kanna?: string }) {
+  const { t } = useI18n()
   const [info, setInfo] = useState<any>(null)
   const [swarms, setSwarms] = useState<any[]>([])
   const [sessions, setSessions] = useState<any[]>([])
@@ -867,12 +884,12 @@ function Overview({ go, openTerm, kanna }: { go: (k: string) => void; openTerm: 
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
           <img src="/logo-mark.svg" width={48} height={48} alt="Roam" style={{ flex: '0 0 auto', borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,.5)' }} />
           <div style={{ flex: 1, minWidth: 200 }}>
-            <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-bright)' }}>欢迎回来 👋</div>
-            <div style={{ color: 'var(--text-dim)', fontSize: 13, marginTop: 4 }}>多终端 · 蜂群编排 · 一起干活</div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-bright)' }}>{t('overview.welcome')}</div>
+            <div style={{ color: 'var(--text-dim)', fontSize: 13, marginTop: 4 }}>{t('overview.subtitle')}</div>
           </div>
           <Space wrap>
-            <Button type="primary" onClick={() => go('sessions')}>进入会话</Button>
-            <Button onClick={() => go('swarm')}>查看蜂群</Button>
+            <Button type="primary" onClick={() => go('sessions')}>{t('overview.enterSessions')}</Button>
+            <Button onClick={() => go('swarm')}>{t('overview.viewSwarm')}</Button>
           </Space>
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
@@ -884,17 +901,17 @@ function Overview({ go, openTerm, kanna }: { go: (k: string) => void; openTerm: 
 
       {/* 统计磁贴 */}
       <Row gutter={[14, 14]}>
-        <Col xs={12} sm={6}><StatTile icon={ICONS.sessions} label="会话" value={info?.sessions ?? sessions.length} accent="#58a6ff" onClick={() => go('sessions')} /></Col>
-        <Col xs={12} sm={6}><StatTile icon={ICONS.swarm} label="蜂群" value={swarms.length} accent="#58a6ff" onClick={() => go('swarm')} /></Col>
-        <Col xs={12} sm={6}><StatTile icon={ICONS.swarm} label="活跃成员" value={aliveMembers} accent="#3fb950" onClick={() => go('swarm')} /></Col>
-        <Col xs={12} sm={6}><StatTile icon={ICONS.overview} label="待解锁" value={pendingMembers} accent="#d29922" onClick={() => go('swarm')} /></Col>
+        <Col xs={12} sm={6}><StatTile icon={ICONS.sessions} label={t('nav.sessions')} value={info?.sessions ?? sessions.length} accent="#58a6ff" onClick={() => go('sessions')} /></Col>
+        <Col xs={12} sm={6}><StatTile icon={ICONS.swarm} label={t('nav.swarm')} value={swarms.length} accent="#58a6ff" onClick={() => go('swarm')} /></Col>
+        <Col xs={12} sm={6}><StatTile icon={ICONS.swarm} label={t('overview.activeMembers')} value={aliveMembers} accent="#3fb950" onClick={() => go('swarm')} /></Col>
+        <Col xs={12} sm={6}><StatTile icon={ICONS.overview} label={t('overview.pendingUnlock')} value={pendingMembers} accent="#d29922" onClick={() => go('swarm')} /></Col>
       </Row>
 
       {/* 蜂群 + 会话 双栏 */}
       <Row gutter={[14, 14]}>
-        <Col xs={24} xl={14}>
-          <Card title={<Space><span style={{ color: '#58a6ff' }}>◆</span>蜂群</Space>} extra={<a onClick={() => go('swarm')}>全部 →</a>}>
-            {swarms.length === 0 ? <Empty description="暂无蜂群（在终端 ttmux swarm new 创建）" /> : (
+        <Col xs={24} lg={12}>
+          <Card title={<Space><span style={{ color: '#58a6ff' }}>◆</span>{t('nav.swarm')}</Space>} extra={<a onClick={() => go('swarm')}>{t('common.all')} →</a>}>
+            {swarms.length === 0 ? <Empty description={t('overview.noSwarms')} /> : (
               <Space direction="vertical" size={10} style={{ width: '100%' }}>
                 {swarms.slice(0, 5).map((s: any) => (
                   <div key={s.id || s.name} onClick={() => go('swarm')}
@@ -904,9 +921,9 @@ function Overview({ go, openTerm, kanna }: { go: (k: string) => void; openTerm: 
                       <span style={{ flex: '0 0 auto' }}><SwarmStatusTag status={s.status} /></span>
                       {s.supervisor && <Text type="secondary" style={{ fontSize: 12, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>◆{s.supervisor}</Text>}
                       <span style={{ flex: 1, minWidth: 8 }} />
-                      <span style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap', flex: '0 0 auto' }}>{s.alive}/{s.total} 活{s.pending ? ` · +${s.pending} 待` : ''}</span>
+                      <span style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap', flex: '0 0 auto' }}>{t('overview.swarmCounts', { alive: s.alive, total: s.total })}{s.pending ? ` · ${t('overview.pendingShort', { count: s.pending })}` : ''}</span>
                     </div>
-                    <div style={{ color: 'var(--text-dim)', fontSize: 12, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.goal || '(无目标)'}</div>
+                    <div style={{ color: 'var(--text-dim)', fontSize: 12, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.goal || t('overview.noGoal')}</div>
                     <Progress percent={s.total ? Math.round((s.alive / s.total) * 100) : 0} showInfo={false} size="small" strokeColor="#58a6ff" trailColor="var(--border-subtle)" style={{ marginBottom: 0, marginTop: 6 }} />
                   </div>
                 ))}
@@ -914,17 +931,17 @@ function Overview({ go, openTerm, kanna }: { go: (k: string) => void; openTerm: 
             )}
           </Card>
         </Col>
-        <Col xs={24} xl={10}>
-          <Card title="会话" extra={<a onClick={() => go('sessions')}>全部 →</a>}>
-            {sessions.length === 0 ? <Empty description="无活跃会话" /> : (
+        <Col xs={24} lg={12}>
+          <Card title={t('nav.sessions')} extra={<a onClick={() => go('sessions')}>{t('common.all')} →</a>}>
+            {sessions.length === 0 ? <Empty description={t('session.noActive')} /> : (
               <List size="small" dataSource={sessions.slice(0, 6)} renderItem={(s: any) => (
                 <List.Item style={{ padding: '8px 0' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minWidth: 0 }}>
                     <div style={{ minWidth: 0, flex: 1 }}>
                       <div style={{ color: 'var(--text-bright)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.name}>{s.name}</div>
-                      <div style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap' }}>{s.windows} 窗口 · {s.attached == 1 ? '已连接' : '空闲'}</div>
+                      <div style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap' }}>{t('session.windows', { count: s.windows })} · {s.attached == 1 ? t('terminal.status.connected') : t('terminal.status.idle')}</div>
                     </div>
-                    <a onClick={() => openTerm(s.name)} style={{ flex: '0 0 auto', whiteSpace: 'nowrap' }}>终端</a>
+                    <a onClick={() => openTerm(s.name)} style={{ flex: '0 0 auto', whiteSpace: 'nowrap' }}>{t('common.terminal')}</a>
                   </div>
                 </List.Item>
               )} />
@@ -945,6 +962,7 @@ function Tasks({ openTerm, kanna }: { openTerm: (n: string) => void; kanna?: str
   const [send, setSend] = useState<any[] | null>(null)
   const [collect, setCollect] = useState<string | null>(null)
   const { message } = AntApp.useApp()
+  const { t } = useI18n()
 
   const loadGroups = () => api('GET', '/tasks').then(setGroups).catch(() => {})
   const loadDetail = (g: string) => api('GET', '/tasks/' + encodeURIComponent(g)).then((d) => setDetail((s) => ({ ...s, [g]: d }))).catch(() => {})
@@ -957,26 +975,26 @@ function Tasks({ openTerm, kanna }: { openTerm: (n: string) => void; kanna?: str
   }, [open])
 
   const kill = async (g: string) => {
-    try { await api('DELETE', '/tasks/' + encodeURIComponent(g)); message.success('已清理'); setOpen(null); loadGroups() }
+    try { await api('DELETE', '/tasks/' + encodeURIComponent(g)); message.success(t('task.cleaned')); setOpen(null); loadGroups() }
     catch (e: any) { message.error(e.message) }
   }
 
   return (
     <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-      <div><Button type="primary" onClick={() => setSpawn(true)}>+ 创建任务</Button></div>
-      {groups.length === 0 && <Empty description="暂无任务组" />}
+      <div><Button type="primary" onClick={() => setSpawn(true)}>+ {t('task.create')}</Button></div>
+      {groups.length === 0 && <Empty description={t('task.noGroups')} />}
       {groups.map((g: any) => (
         <Card key={g.group} size="small"
           title={<span onClick={() => setOpen(open === g.group ? null : g.group)} style={{ cursor: 'pointer' }}>
-            {g.group} <Text type="secondary" style={{ fontSize: 13 }}>{g.alive}/{g.total} 存活</Text></span>}
-          extra={<Popconfirm title={`清理 ${g.group}？`} onConfirm={() => kill(g.group)}><Button danger size="small">清理</Button></Popconfirm>}
+            {g.group} <Text type="secondary" style={{ fontSize: 13 }}>{t('task.aliveCount', { alive: g.alive, total: g.total })}</Text></span>}
+          extra={<Popconfirm title={t('task.cleanConfirm', { group: g.group })} onConfirm={() => kill(g.group)}><Button danger size="small">{t('task.clean')}</Button></Popconfirm>}
         >
           {open === g.group && (
             <>
-              <List size="small" dataSource={detail[g.group]?.tasks || []} locale={{ emptyText: '加载中…' }}
+              <List size="small" dataSource={detail[g.group]?.tasks || []} locale={{ emptyText: t('common.loading') }}
                 renderItem={(t: any) => (
                   <List.Item actions={[
-                    <a key="t" onClick={() => openTerm(t.name)}>终端</a>,
+                    <a key="t" onClick={() => openTerm(t.name)}>{t('common.terminal')}</a>,
                     ...(kanna && t.type === 'agent'
                       ? [<a key="k" href={kanna} target="_blank" rel="noreferrer">Kanna ↗</a>]
                       : []),
@@ -988,8 +1006,8 @@ function Tasks({ openTerm, kanna }: { openTerm: (n: string) => void; kanna?: str
                   </List.Item>
                 )} />
               <Space style={{ marginTop: 10 }}>
-                <Button size="small" onClick={() => setCollect(g.group)}>收集输出</Button>
-                <Button size="small" onClick={() => setSend(detail[g.group]?.tasks || [])}>追加指令</Button>
+                <Button size="small" onClick={() => setCollect(g.group)}>{t('task.collectOutput')}</Button>
+                <Button size="small" onClick={() => setSend(detail[g.group]?.tasks || [])}>{t('task.appendInstruction')}</Button>
               </Space>
             </>
           )}
@@ -1015,16 +1033,17 @@ function DirPicker({ open, start, onPick, onClose }: { open: boolean; start?: st
   const [data, setData] = useState<any>({ path: '', parent: '', dirs: [] })
   const [recent, setRecent] = useState<string[]>([])
   const { message } = AntApp.useApp()
+  const { t } = useI18n()
   const load = (p?: string) => api('GET', '/fs' + (p !== undefined ? '?path=' + encodeURIComponent(p) : '')).then((r) => setData(r.data)).catch((e) => message.error(e.message))
   useEffect(() => { if (open) { setRecent(recentDirs()); load(start || undefined) } }, [open])
   const enter = (d: string) => load((data.path === '/' ? '' : data.path) + '/' + d)
   const choose = (p: string) => { pushRecentDir(p); onPick(p) }
   return (
-    <Modal open={open} onCancel={onClose} title="选择工作目录" zIndex={1100}
-      footer={[<Button key="c" onClick={onClose}>取消</Button>, <Button key="o" type="primary" onClick={() => choose(data.path)}>选择此目录</Button>]}>
+    <Modal open={open} onCancel={onClose} title={t('dirPicker.title')} zIndex={1100}
+      footer={[<Button key="c" onClick={onClose}>{t('common.cancel')}</Button>, <Button key="o" type="primary" onClick={() => choose(data.path)}>{t('dirPicker.chooseCurrent')}</Button>]}>
       {/* 快捷候选：家目录 + 最近用过的目录 */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
-        <Tag style={{ cursor: 'pointer', margin: 0 }} onClick={() => load(undefined)}>🏠 家目录</Tag>
+        <Tag style={{ cursor: 'pointer', margin: 0 }} onClick={() => load(undefined)}>🏠 {t('dirPicker.home')}</Tag>
         {recent.map((d) => (
           <Tooltip key={d} title={d}>
             <Tag color="blue" style={{ cursor: 'pointer', margin: 0, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}
@@ -1039,7 +1058,7 @@ function DirPicker({ open, start, onPick, onClose }: { open: boolean; start?: st
         dataSource={['..', ...(data.dirs || [])]}
         renderItem={(d: string) => (
           <List.Item style={{ cursor: 'pointer' }} onClick={() => (d === '..' ? load(data.parent) : enter(d))}>
-            <span style={{ color: d === '..' ? 'var(--text-dim)' : 'var(--text-bright)' }}>{d === '..' ? '↑ 上级目录' : '▸ ' + d}</span>
+            <span style={{ color: d === '..' ? 'var(--text-dim)' : 'var(--text-bright)' }}>{d === '..' ? `↑ ${t('file.parentDir')}` : '▸ ' + d}</span>
           </List.Item>
         )} />
     </Modal>
@@ -1052,23 +1071,24 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
   const [dir, setDir] = useState('')
   const [pick, setPick] = useState(false)
   const { message } = AntApp.useApp()
+  const { t } = useI18n()
   useEffect(() => { if (open) { setName(''); setDir('') } }, [open])
   const ok = async () => {
-    if (!name.trim()) return message.error('请输入名称')
-    try { await api('POST', '/sessions', { name: name.trim(), dir: dir.trim() }); pushRecentDir(dir); message.success('已创建'); onClose(); onDone(name.trim()) }
+    if (!name.trim()) return message.error(t('session.nameRequired'))
+    try { await api('POST', '/sessions', { name: name.trim(), dir: dir.trim() }); pushRecentDir(dir); message.success(t('session.created')); onClose(); onDone(name.trim()) }
     catch (e: any) { message.error(e.message) }
   }
   return (
     <>
-      <Modal open={open} onCancel={onClose} onOk={ok} okText="创建" title="新建会话" destroyOnClose>
+      <Modal open={open} onCancel={onClose} onOk={ok} okText={t('file.create')} title={t('session.new')} destroyOnClose>
         <Space direction="vertical" style={{ width: '100%' }}>
-          <Input placeholder="会话名称，如 work" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+          <Input placeholder={t('session.namePlaceholder')} value={name} onChange={(e) => setName(e.target.value)} autoFocus />
           <Space.Compact style={{ width: '100%' }}>
             <AutoComplete style={{ flex: 1 }} value={dir} onChange={setDir}
               options={recentDirs().map((d) => ({ value: d }))}
               filterOption={(input, opt) => String(opt?.value).toLowerCase().includes(input.toLowerCase())}
-              placeholder="工作目录（可空，默认家目录；聚焦看最近）" />
-            <Button onClick={() => setPick(true)}>浏览…</Button>
+              placeholder={t('session.dirPlaceholder')} />
+            <Button onClick={() => setPick(true)}>{t('common.browse')}</Button>
           </Space.Compact>
         </Space>
       </Modal>
@@ -1086,6 +1106,7 @@ function Sessions({ openTerm }: { openTerm: (n: string) => void }) {
   const [swarmMap, setSwarmMap] = useState<Record<string, { swarm: string; role: string }>>({})
   const [newOpen, setNewOpen] = useState(false)
   const { message } = AntApp.useApp()
+  const { t } = useI18n()
   const load = () => api('GET', '/sessions').then(setList).catch(() => {})
   useEffect(() => { load(); const t = setInterval(load, 3000); return () => clearInterval(t) }, [])
   // 拉取蜂群拓扑：哪些会话其实是蜂群的指挥/成员。会话页和蜂群页看到的是同一批 tmux 会话，
@@ -1100,9 +1121,9 @@ function Sessions({ openTerm }: { openTerm: (n: string) => void }) {
         await Promise.all(swarms.map(async (sw: any) => {
           try {
             const st = await api('GET', `/swarms/${encodeURIComponent(sw.name)}`)
-            if (st?.supervisor) map[st.supervisor] = { swarm: sw.name, role: 'master' }
+            if (st?.supervisor) map[st.supervisor] = { swarm: sw.name, role: 'leader' }
             for (const m of (st?.members || [])) {
-              if (m?.session) map[m.session] = { swarm: sw.name, role: m.role === 'master' ? 'master' : 'worker' }
+              if (m?.session) map[m.session] = { swarm: sw.name, role: m.role === 'leader' || m.role === 'master' ? 'leader' : 'member' }
             }
           } catch {}
         }))
@@ -1143,7 +1164,7 @@ function Sessions({ openTerm }: { openTerm: (n: string) => void }) {
     const t = setInterval(checkPrompts, 4000)
     return () => { stop = true; clearInterval(t) }
   }, [list])
-  const kill = async (n: string) => { try { await api('DELETE', '/sessions/' + encodeURIComponent(n)); message.success('已关闭'); load() } catch (e: any) { message.error(e.message) } }
+  const kill = async (n: string) => { try { await api('DELETE', '/sessions/' + encodeURIComponent(n)); message.success(t('session.closed')); load() } catch (e: any) { message.error(e.message) } }
   const goSwarm = (sw: string) => { location.hash = '#/swarm/' + encodeURIComponent(sw) }
 
   // ── 筛选 / 搜索 ──
@@ -1168,26 +1189,26 @@ function Sessions({ openTerm }: { openTerm: (n: string) => void }) {
 
   return (
     <Card
-      title={<Space size={8}>会话<Tag style={{ margin: 0 }}>{cnt('all')}</Tag></Space>}
-      extra={<Button type="primary" onClick={() => setNewOpen(true)}>+ 新建会话</Button>}
+      title={<Space size={8}>{t('nav.sessions')}<Tag style={{ margin: 0 }}>{cnt('all')}</Tag></Space>}
+      extra={<Button type="primary" onClick={() => setNewOpen(true)}>+ {t('session.new')}</Button>}
     >
       {/* 工具条：搜索 + 类型筛选 */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginBottom: 14 }}>
-        <Input allowClear value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索会话名…"
+        <Input allowClear value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('session.searchPlaceholder')}
           style={{ width: 220, maxWidth: '100%' }}
           prefix={svg(<><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></>)} />
         <Segmented value={filter} onChange={(v) => setFilter(v as any)} options={[
-          { label: `全部 ${cnt('all')}`, value: 'all' },
-          { label: `待确认 ${cnt('waiting')}`, value: 'waiting' },
+          { label: `${t('common.all')} ${cnt('all')}`, value: 'all' },
+          { label: `${t('session.waiting')} ${cnt('waiting')}`, value: 'waiting' },
           { label: `Claude ${cnt('claude')}`, value: 'claude' },
           { label: `Codex ${cnt('codex')}`, value: 'codex' },
-          { label: `蜂群 ${cnt('swarm')}`, value: 'swarm' },
-          { label: `空闲 ${cnt('idle')}`, value: 'idle' },
+          { label: `${t('nav.swarm')} ${cnt('swarm')}`, value: 'swarm' },
+          { label: `${t('terminal.status.idle')} ${cnt('idle')}`, value: 'idle' },
         ]} />
       </div>
 
-      {list.length === 0 ? <Empty description="无活跃会话" />
-        : filtered.length === 0 ? <Empty description="无匹配会话" />
+      {list.length === 0 ? <Empty description={t('session.noActive')} />
+        : filtered.length === 0 ? <Empty description={t('session.noMatches')} />
           : (
             <List dataSource={filtered} renderItem={(s: any) => {
               const sw = swarmMap[s.name]
@@ -1199,28 +1220,28 @@ function Sessions({ openTerm }: { openTerm: (n: string) => void }) {
                 <List.Item style={{ padding: '10px 8px', cursor: 'pointer' }} onClick={() => openTerm(s.name)}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
-                      <i title={waiting ? '需要确认' : connected ? '已连接' : '空闲'} style={{ width: 8, height: 8, borderRadius: '50%', flex: '0 0 8px', background: waiting ? '#d29922' : connected ? '#3fb950' : 'var(--text-dimmer)' }} />
+                      <i title={waiting ? t('prompt.confirmRequired') : connected ? t('terminal.status.connected') : t('terminal.status.idle')} style={{ width: 8, height: 8, borderRadius: '50%', flex: '0 0 8px', background: waiting ? '#d29922' : connected ? '#3fb950' : 'var(--text-dimmer)' }} />
                       <span style={{ fontWeight: 600, color: 'var(--text-bright)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.name}>{s.name}</span>
-                      {sw && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>蜂群:{sw.swarm}{sw.role === 'master' ? '·指挥' : ''}</Tag>}
-                      {waiting && <Tag color="warning" style={{ margin: 0, flex: '0 0 auto' }}>待确认</Tag>}
+                      {sw && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>{t('nav.swarm')}:{sw.swarm}{sw.role === 'leader' ? `·${t('swarm.master')}` : ''}</Tag>}
+                      {waiting && <Tag color="warning" style={{ margin: 0, flex: '0 0 auto' }}>{t('session.waiting')}</Tag>}
                       {cc[s.name] && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>🤖 Claude</Tag>}
                       {cx[s.name] && <Tag color="green" style={{ margin: 0, flex: '0 0 auto' }}>✸ Codex</Tag>}
-                      {!sw && !agent && <Tag style={{ margin: 0, flex: '0 0 auto' }}>{connected ? '已连接' : '空闲'}</Tag>}
-                      <span style={{ color: 'var(--text-dim)', fontSize: 12, flex: '0 0 auto', whiteSpace: 'nowrap' }}>{s.windows} 窗口</span>
+                      {!sw && !agent && <Tag style={{ margin: 0, flex: '0 0 auto' }}>{connected ? t('terminal.status.connected') : t('terminal.status.idle')}</Tag>}
+                      <span style={{ color: 'var(--text-dim)', fontSize: 12, flex: '0 0 auto', whiteSpace: 'nowrap' }}>{t('session.windows', { count: s.windows })}</span>
                     </div>
                     <div onClick={(e) => e.stopPropagation()} style={{ marginLeft: 'auto', display: 'flex', gap: 14, alignItems: 'center', flex: '0 0 auto', whiteSpace: 'nowrap' }}>
-                      {sw && <a onClick={() => goSwarm(sw.swarm)}>蜂群页</a>}
+                      {sw && <a onClick={() => goSwarm(sw.swarm)}>{t('session.swarmPage')}</a>}
                       {sw ? (
                         <Popconfirm
-                          title="直接关闭蜂群会话？"
-                          description={<div style={{ maxWidth: 280 }}>这是蜂群 <b>{sw.swarm}</b> 的{sw.role === 'master' ? '指挥' : '成员'}。从这里关闭只是 kill 会话，蜂群会据此把它当作「已完成」并解锁下游依赖，可能脱节。建议到蜂群页管理。</div>}
-                          okText="仍要关闭" okButtonProps={{ danger: true }} cancelText="取消"
+                          title={t('session.closeSwarmSessionTitle')}
+                          description={<div style={{ maxWidth: 280 }}>{t('session.closeSwarmSessionDesc', { swarm: sw.swarm, role: sw.role === 'leader' ? t('swarm.master') : t('swarm.member') })}</div>}
+                          okText={t('session.closeAnyway')} okButtonProps={{ danger: true }} cancelText={t('common.cancel')}
                           onConfirm={() => kill(s.name)}>
-                          <a style={{ color: '#f85149' }}>关闭</a>
+                          <a style={{ color: '#f85149' }}>{t('session.close')}</a>
                         </Popconfirm>
                       ) : (
-                        <Popconfirm title={`关闭 ${s.name}？`} onConfirm={() => kill(s.name)}>
-                          <a style={{ color: '#f85149' }}>关闭</a>
+                        <Popconfirm title={t('session.closeConfirm', { name: s.name })} onConfirm={() => kill(s.name)}>
+                          <a style={{ color: '#f85149' }}>{t('session.close')}</a>
                         </Popconfirm>
                       )}
                     </div>
@@ -1239,47 +1260,60 @@ function EnvPage() {
   const [list, setList] = useState<any[]>([])
   const { message, modal } = AntApp.useApp()
   const { mode, setMode } = useThemeMode()
+  const { t, locale, setLocale } = useI18n()
   const load = () => api('GET', '/env').then(setList).catch(() => {})
   useEffect(() => { load() }, [])
   const add = () => {
     let key = '', value = ''
     modal.confirm({
-      title: '添加环境变量',
+      title: t('env.addVariable'),
       content: (
         <Space direction="vertical" style={{ width: '100%' }}>
-          <Input placeholder="KEY" onChange={(e) => (key = e.target.value)} />
-          <Input placeholder="VALUE" onChange={(e) => (value = e.target.value)} />
+          <Input placeholder={t('env.keyPlaceholder')} onChange={(e) => (key = e.target.value)} />
+          <Input placeholder={t('env.valuePlaceholder')} onChange={(e) => (value = e.target.value)} />
         </Space>
       ),
-      okText: '设置',
+      okText: t('env.set'),
       onOk: async () => {
-        if (!key.trim()) { message.error('需要 KEY'); throw new Error('empty') }
-        await api('PUT', '/env', { key: key.trim(), value }); message.success('已设置'); load()
+        if (!key.trim()) { message.error(t('env.keyRequired')); throw new Error('empty') }
+        await api('PUT', '/env', { key: key.trim(), value }); message.success(t('env.setDone')); load()
       },
     })
   }
   return (
     <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-      <Card title="外观主题">
+      <Card title={t('settings.appearance')}>
         <Space align="center" wrap>
           <Segmented
             value={mode}
             onChange={(v) => setMode(v as 'light' | 'dark')}
             options={[
-              { label: '☀ 浅色主题', value: 'light' },
-              { label: '☾ 深色主题', value: 'dark' },
+              { label: `☀ ${t('common.lightTheme')}`, value: 'light' },
+              { label: `☾ ${t('common.darkTheme')}`, value: 'dark' },
             ]}
           />
-          <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>切换即时生效并记住偏好</span>
+          <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('settings.themeHelp')}</span>
         </Space>
       </Card>
-      <Card title="全局环境变量" extra={<Space>
-        <Button onClick={add}>+ 添加</Button>
-        <Button onClick={async () => { try { await api('POST', '/env/push'); message.success('已推送') } catch (e: any) { message.error(e.message) } }}>推送到会话</Button>
+      <Card title={t('settings.language')}>
+        <Space align="center" wrap>
+          <Select
+            value={locale}
+            onChange={setLocale}
+            options={[{ value: 'zh-CN', label: '中文' }, { value: 'en-US', label: 'English' }]}
+            aria-label={t('settings.language')}
+            style={{ width: 180 }}
+          />
+          <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('settings.languageHelp')}</span>
+        </Space>
+      </Card>
+      <Card title={t('env.globalVariables')} extra={<Space>
+        <Button onClick={add}>+ {t('env.add')}</Button>
+        <Button onClick={async () => { try { await api('POST', '/env/push'); message.success(t('env.pushed')) } catch (e: any) { message.error(e.message) } }}>{t('env.pushToSessions')}</Button>
       </Space>}>
-        {list.length === 0 ? <Empty description="无环境变量" /> : (
+        {list.length === 0 ? <Empty description={t('env.empty')} /> : (
           <List dataSource={list} renderItem={(kv: any) => (
-            <List.Item actions={[<Popconfirm key="d" title="删除？" onConfirm={async () => { try { await api('DELETE', '/env/' + encodeURIComponent(kv.key)); message.success('已删除'); load() } catch (e: any) { message.error(e.message) } }}><a style={{ color: '#f85149' }}>删除</a></Popconfirm>]}>
+            <List.Item actions={[<Popconfirm key="d" title={t('env.deleteConfirm')} onConfirm={async () => { try { await api('DELETE', '/env/' + encodeURIComponent(kv.key)); message.success(t('file.deleted')); load() } catch (e: any) { message.error(e.message) } }}><a style={{ color: '#f85149' }}>{t('file.delete')}</a></Popconfirm>]}>
               <List.Item.Meta title={<code>{kv.key}</code>} description={<code style={{ color: 'var(--text-dim)' }}>{kv.value}</code>} />
             </List.Item>
           )} />
@@ -1293,6 +1327,7 @@ function EnvPage() {
 // ── 两步验证 (TOTP / Authenticator)：可在 UI 里开启/关闭，即时生效并持久化 ──
 function TwoFactorCard() {
   const { message } = AntApp.useApp()
+  const { t } = useI18n()
   const [enabled, setEnabled] = useState<boolean | null>(null)
   const [setup, setSetup] = useState<{ uri: string; secret: string } | null>(null) // 开启流程中的待确认密钥
   const [code, setCode] = useState('')
@@ -1309,37 +1344,37 @@ function TwoFactorCard() {
   const confirmEnable = async () => {
     if (!setup) return
     setBusy(true)
-    try { await api('POST', '/2fa/enable', { secret: setup.secret, code: code.trim() }); message.success('两步验证已开启'); setSetup(null); refresh() }
-    catch (e: any) { message.error(/BAD_CODE/.test(e.message) ? '动态码不正确，请用最新的码' : e.message) }
+    try { await api('POST', '/2fa/enable', { secret: setup.secret, code: code.trim() }); message.success(t('twoFactor.enabled')); setSetup(null); refresh() }
+    catch (e: any) { message.error(/BAD_CODE/.test(e.message) ? t('twoFactor.badCode') : e.message) }
     finally { setBusy(false) }
   }
   const disable = async () => {
-    try { await api('POST', '/2fa/disable'); message.success('两步验证已关闭'); setQr(null); refresh() }
+    try { await api('POST', '/2fa/disable'); message.success(t('twoFactor.disabled')); setQr(null); refresh() }
     catch (e: any) { message.error(e.message) }
   }
   const showCurrent = async () => {
     try { const r = await api('GET', '/2fa/qr'); if (r.data?.enabled) setQr({ uri: r.data.uri, secret: r.data.secret }) }
     catch (e: any) { message.error(e.message) }
   }
-  const copy = (s: string) => { try { navigator.clipboard?.writeText(s) } catch {}; message.success('已复制') }
+  const copy = (s: string) => { try { navigator.clipboard?.writeText(s) } catch {}; message.success(t('common.copied')) }
 
   return (
-    <Card title="两步验证 (TOTP / Authenticator)" extra={
-      <Tag color={enabled ? 'green' : 'default'}>{enabled === null ? '…' : enabled ? '已开启' : '未开启'}</Tag>
+    <Card title={t('twoFactor.title')} extra={
+      <Tag color={enabled ? 'green' : 'default'}>{enabled === null ? '…' : enabled ? t('twoFactor.on') : t('twoFactor.off')}</Tag>
     }>
       <Space direction="vertical" size="middle" style={{ width: '100%' }}>
         <Text type="secondary" style={{ fontSize: 13 }}>
-          开启后登录需「口令 + Authenticator 6 位动态码」。开关即时生效并持久化；也可用环境变量 <code>TTMUX_WEB_TOTP_SECRET</code> 预置。
+          {t('twoFactor.helpPrefix')}<code>TTMUX_WEB_TOTP_SECRET</code>{t('twoFactor.helpSuffix')}
         </Text>
 
         {!setup && (
           <Space>
             {enabled
               ? <>
-                  <Button onClick={showCurrent}>查看二维码</Button>
-                  <Popconfirm title="确定关闭两步验证？" onConfirm={disable}><Button danger>关闭两步验证</Button></Popconfirm>
+                  <Button onClick={showCurrent}>{t('twoFactor.showQr')}</Button>
+                  <Popconfirm title={t('twoFactor.disableConfirm')} onConfirm={disable}><Button danger>{t('twoFactor.disable')}</Button></Popconfirm>
                 </>
-              : <Button type="primary" onClick={startSetup}>开启两步验证</Button>}
+              : <Button type="primary" onClick={startSetup}>{t('twoFactor.enable')}</Button>}
           </Space>
         )}
 
@@ -1349,19 +1384,19 @@ function TwoFactorCard() {
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
               <div style={{ background: '#fff', padding: 10, borderRadius: 8 }}><QRCodeSVG value={setup.uri} size={168} /></div>
               <div style={{ flex: 1, minWidth: 240 }}>
-                <div style={{ color: 'var(--text-dim)', fontSize: 12, marginBottom: 4 }}>① 用 Authenticator 扫码，或手动输入密钥：</div>
+                <div style={{ color: 'var(--text-dim)', fontSize: 12, marginBottom: 4 }}>{t('twoFactor.scanStep')}</div>
                 <Space.Compact style={{ width: '100%', marginBottom: 10 }}>
                   <Input readOnly value={setup.secret} />
-                  <Button onClick={() => copy(setup.secret)}>复制</Button>
+                  <Button onClick={() => copy(setup.secret)}>{t('common.copy')}</Button>
                 </Space.Compact>
-                <div style={{ color: 'var(--text-dim)', fontSize: 12, marginBottom: 4 }}>② 输入 App 上显示的 6 位码确认：</div>
+                <div style={{ color: 'var(--text-dim)', fontSize: 12, marginBottom: 4 }}>{t('twoFactor.codeStep')}</div>
                 <Space.Compact style={{ width: '100%' }}>
-                  <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="6 位动态码" inputMode="numeric" maxLength={6} onPressEnter={confirmEnable} />
-                  <Button type="primary" loading={busy} onClick={confirmEnable}>确认开启</Button>
+                  <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder={t('twoFactor.codePlaceholder')} inputMode="numeric" maxLength={6} onPressEnter={confirmEnable} />
+                  <Button type="primary" loading={busy} onClick={confirmEnable}>{t('twoFactor.confirmEnable')}</Button>
                 </Space.Compact>
               </div>
             </div>
-            <div style={{ marginTop: 10 }}><Button size="small" onClick={() => setSetup(null)}>取消</Button></div>
+            <div style={{ marginTop: 10 }}><Button size="small" onClick={() => setSetup(null)}>{t('common.cancel')}</Button></div>
           </div>
         )}
 
@@ -1370,8 +1405,8 @@ function TwoFactorCard() {
           <div style={{ padding: 16, background: 'var(--bg-base)', borderRadius: 8, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
             <div style={{ background: '#fff', padding: 10, borderRadius: 8 }}><QRCodeSVG value={qr.uri} size={168} /></div>
             <div style={{ flex: 1, minWidth: 240 }}>
-              <div style={{ color: 'var(--text-dim)', fontSize: 12, marginBottom: 4 }}>扫码把当前密钥加入新设备：</div>
-              <Space.Compact style={{ width: '100%' }}><Input readOnly value={qr.secret} /><Button onClick={() => copy(qr.secret)}>复制</Button></Space.Compact>
+              <div style={{ color: 'var(--text-dim)', fontSize: 12, marginBottom: 4 }}>{t('twoFactor.addDevice')}</div>
+              <Space.Compact style={{ width: '100%' }}><Input readOnly value={qr.secret} /><Button onClick={() => copy(qr.secret)}>{t('common.copy')}</Button></Space.Compact>
             </div>
           </div>
         )}
@@ -1386,48 +1421,49 @@ function SpawnModal({ open, onClose, onDone }: { open: boolean; onClose: () => v
   const [type, setType] = useState('cmd')
   const [pickDir, setPickDir] = useState(false)
   const { message } = AntApp.useApp()
+  const { t } = useI18n()
   const submit = async () => {
     const v = await form.validateFields()
     const tasks = (v.tasks || []).filter((t: any) => t?.name && t?.payload)
       .map((t: any) => (type === 'agent' ? { name: t.name, task: t.payload } : { name: t.name, cmd: t.payload }))
-    if (!tasks.length) return message.error('至少一个任务')
+    if (!tasks.length) return message.error(t('task.needOne'))
     const body: any = { group: v.group, type, tasks }
     if (type === 'agent') { body.dir = v.dir; body.perm = v.perm; body.model = v.model }
-    try { await api('POST', '/tasks', body); message.success('已创建'); onClose(); onDone() }
+    try { await api('POST', '/tasks', body); message.success(t('session.created')); onClose(); onDone() }
     catch (e: any) { message.error(e.message) }
   }
   return (
     <>
-      <Modal open={open} onCancel={onClose} onOk={submit} okText="创建" title="创建任务" destroyOnClose>
+      <Modal open={open} onCancel={onClose} onOk={submit} okText={t('file.create')} title={t('task.create')} destroyOnClose>
         <Segmented block value={type} onChange={(v) => setType(v as string)}
-          options={[{ label: '命令', value: 'cmd' }, { label: 'Agent', value: 'agent' }]} style={{ marginBottom: 12 }} />
+          options={[{ label: t('common.command'), value: 'cmd' }, { label: 'Agent', value: 'agent' }]} style={{ marginBottom: 12 }} />
         <Form form={form} layout="vertical" preserve={false} initialValues={{ tasks: [{}, {}], perm: 'auto' }}>
-          <Form.Item name="group" label="任务组名称" rules={[{ required: true }]}><Input placeholder="如 build / refactor" /></Form.Item>
+          <Form.Item name="group" label={t('task.groupName')} rules={[{ required: true }]}><Input placeholder={t('task.groupPlaceholder')} /></Form.Item>
           <Form.List name="tasks">
             {(fields, { add, remove }) => (
               <>
                 {fields.map((f) => (
                   <Space key={f.key} align="baseline" style={{ display: 'flex', marginBottom: 8 }}>
-                    <Form.Item {...f} name={[f.name, 'name']} noStyle><Input placeholder="名称" style={{ width: 110 }} /></Form.Item>
-                    <Form.Item {...f} name={[f.name, 'payload']} noStyle><Input placeholder={type === 'agent' ? '任务描述' : '命令'} style={{ width: 240 }} /></Form.Item>
+                    <Form.Item {...f} name={[f.name, 'name']} noStyle><Input placeholder={t('common.name')} style={{ width: 110 }} /></Form.Item>
+                    <Form.Item {...f} name={[f.name, 'payload']} noStyle><Input placeholder={type === 'agent' ? t('task.description') : t('common.command')} style={{ width: 240 }} /></Form.Item>
                     <a onClick={() => remove(f.name)} style={{ color: '#f85149' }}>×</a>
                   </Space>
                 ))}
-                <Button type="dashed" onClick={() => add()} block>+ 加一行</Button>
+                <Button type="dashed" onClick={() => add()} block>+ {t('task.addRow')}</Button>
               </>
             )}
           </Form.List>
           {type === 'agent' && (
             <div style={{ marginTop: 12 }}>
-              <Form.Item label="工作目录 (--dir)">
+              <Form.Item label={t('task.workdirLabel')}>
                 <Space.Compact style={{ width: '100%' }}>
-                  <Form.Item name="dir" noStyle><Input placeholder="如 ~/project" /></Form.Item>
-                  <Button onClick={() => setPickDir(true)}>浏览…</Button>
+                  <Form.Item name="dir" noStyle><Input placeholder={t('task.dirExample')} /></Form.Item>
+                  <Button onClick={() => setPickDir(true)}>{t('common.browse')}</Button>
                 </Space.Compact>
               </Form.Item>
               <Space>
-                <Form.Item name="perm" label="权限"><Input placeholder="auto/plan/default" /></Form.Item>
-                <Form.Item name="model" label="模型"><Input placeholder="可空" /></Form.Item>
+                <Form.Item name="perm" label={t('task.permission')}><Input placeholder={t('task.permissionPlaceholder')} /></Form.Item>
+                <Form.Item name="model" label={t('task.model')}><Input placeholder={t('common.optional')} /></Form.Item>
               </Space>
             </div>
           )}
@@ -1443,31 +1479,33 @@ function SendModal({ tasks, onClose }: { tasks: any[] | null; onClose: () => voi
   const [sess, setSess] = useState<string>()
   const [msg, setMsg] = useState('')
   const { message } = AntApp.useApp()
+  const { t } = useI18n()
   useEffect(() => { if (tasks?.length) setSess(tasks[0].name) }, [tasks])
   const go = async () => {
     if (!sess || !msg) return
-    try { await api('POST', '/tasks/_/send', { sess, msg }); message.success('已发送'); onClose() } catch (e: any) { message.error(e.message) }
+    try { await api('POST', '/tasks/_/send', { sess, msg }); message.success(t('task.sent')); onClose() } catch (e: any) { message.error(e.message) }
   }
   return (
-    <Modal open={!!tasks} onCancel={onClose} onOk={go} okText="发送" title="追加指令" destroyOnClose>
+    <Modal open={!!tasks} onCancel={onClose} onOk={go} okText={t('common.send')} title={t('task.appendInstruction')} destroyOnClose>
       <Select style={{ width: '100%', marginBottom: 10 }} value={sess} onChange={setSess}
         options={(tasks || []).map((t: any) => ({ value: t.name, label: `${t.name} [${t.type}]` }))} />
-      <Input.TextArea rows={3} value={msg} onChange={(e) => setMsg(e.target.value)} placeholder="发送给该任务/Agent 的指令" />
+      <Input.TextArea rows={3} value={msg} onChange={(e) => setMsg(e.target.value)} placeholder={t('task.instructionPlaceholder')} />
     </Modal>
   )
 }
 
 function CollectModal({ group, onClose }: { group: string | null; onClose: () => void }) {
-  const [text, setText] = useState('加载中…')
+  const { t } = useI18n()
+  const [text, setText] = useState(t('common.loading'))
   useEffect(() => {
     if (!group) return
-    setText('加载中…')
+    setText(t('common.loading'))
     api('GET', '/tasks/' + encodeURIComponent(group) + '/collect')
-      .then((r) => setText((r.results || []).map((x: any) => `━━━ ${x.task} [${x.type}] ━━━\n${x.prompt ? '任务: ' + x.prompt + '\n' : ''}${x.output}`).join('\n\n') || '(无输出)'))
+      .then((r) => setText((r.results || []).map((x: any) => `━━━ ${x.task} [${x.type}] ━━━\n${x.prompt ? t('task.promptPrefix') + x.prompt + '\n' : ''}${x.output}`).join('\n\n') || t('task.noOutput')))
       .catch((e) => setText(e.message))
-  }, [group])
+  }, [group, t])
   return (
-    <Modal open={!!group} onCancel={onClose} footer={null} title={`收集: ${group || ''}`} width="min(720px,94vw)">
+    <Modal open={!!group} onCancel={onClose} footer={null} title={t('task.collectTitle', { group: group || '' })} width="min(720px,94vw)">
       <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '60vh', overflow: 'auto', background: 'var(--bg-term)', padding: 12, borderRadius: 8, fontSize: 12.5 }}>{text}</pre>
     </Modal>
   )

@@ -24,7 +24,7 @@ mv "$tmp" "$OUT"
 chmod +x "$OUT"
 
 if bash -n "$OUT"; then
-    echo "✔ 已生成 $(realpath --relative-to="${SCRIPT_DIR}/../.." "$OUT")  ($(wc -l < "$OUT") 行)"
+    echo "✔ 已生成 $OUT  ($(wc -l < "$OUT") 行)"
 else
     echo "✘ 生成的 chrome 语法检查失败"; exit 1
 fi

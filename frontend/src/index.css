@@ -46,6 +46,35 @@ body {
   transition: background-color .2s ease;
 }
 
+/* ── 页面骨架：所有一级页面从同一个左上角起笔，卡片和工具区间距一致 ── */
+.tt-page {
+  min-height: 100%;
+  padding: 16px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+.tt-page-mobile {
+  padding-bottom: calc(76px + env(safe-area-inset-bottom));
+}
+.tt-page > * {
+  width: 100%;
+  min-width: 0;
+}
+.tt-page-files {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.tt-page-files > * {
+  height: 100%;
+  min-height: 0;
+}
+.tt-page .ant-space-vertical {
+  align-items: stretch;
+}
+
 /* ── 细滚动条：更窄，hover 才稍亮 ── */
 * { scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
 *::-webkit-scrollbar { width: 9px; height: 9px; }
@@ -75,8 +104,14 @@ body {
   box-shadow: var(--card-hover-shadow);
   transform: translateY(-1px);
 }
-.ant-card-head { border-block-end-color: var(--border-subtle); min-height: 46px; }
+.ant-card-head { border-block-end-color: var(--border-subtle); min-height: 46px; padding-inline: 18px; }
 .ant-card-head-title { font-weight: 600; letter-spacing: .2px; }
+.ant-card-body { padding: 18px; }
+.tt-page > .ant-card:first-child,
+.tt-page > .ant-space:first-child,
+.tt-page > div:first-child {
+  margin-top: 0;
+}
 
 /* ── 列表：行距舒展、分隔线更淡、hover 轻微提亮并圆角 ── */
 .ant-list-split .ant-list-item { border-block-end-color: var(--border-subtle); }
@@ -122,6 +157,172 @@ body {
 .cc-filerow:hover { background: rgba(88, 166, 255, .08); }
 .cc-filerow .ant-btn { color: var(--text-dim); }
 .cc-filerow .ant-btn:hover { color: var(--text-bright) !important; background: rgba(255, 255, 255, .06) !important; }
+
+.tt-file-detail {
+  transform: translateZ(0);
+  contain: layout paint;
+}
+.tt-file-detail {
+  width: min(760px, calc(100vw - min(420px, 92vw)));
+  min-width: 360px;
+}
+.tt-file-drawer .ant-btn,
+.tt-file-detail .ant-btn {
+  transform: none !important;
+}
+.tt-file-close {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  display: inline-grid;
+  place-items: center;
+  color: var(--text-dim);
+  background: transparent;
+  cursor: pointer;
+  transition: none !important;
+  transform: none !important;
+}
+.tt-file-close:hover {
+  color: var(--text-bright);
+  background: var(--list-hover);
+}
+@media (max-width: 760px) {
+  .tt-file-detail {
+    right: 0 !important;
+    z-index: 1201 !important;
+    width: min(420px, 92vw);
+    min-width: 0;
+  }
+}
+
+/* ── Swarm topology: draggable rich graph cards ── */
+.swarm-topology-node {
+  transition: opacity .16s ease, filter .16s ease;
+}
+.swarm-topology-node:hover {
+  filter: drop-shadow(0 10px 22px rgba(1, 4, 9, .35));
+}
+.swarm-topology-pulse {
+  transform-origin: center;
+  animation: swarm-node-pulse 1.8s ease-in-out infinite;
+}
+.swarm-node-card {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--node-accent) 68%, transparent);
+  border-left-width: 4px;
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--node-accent) 15%, transparent), transparent 48%),
+    color-mix(in srgb, var(--bg-container) 94%, black);
+  color: var(--text-bright);
+  padding: 10px 11px;
+  overflow: hidden;
+  box-shadow: 0 8px 20px rgba(1, 4, 9, .28);
+  user-select: none;
+}
+.swarm-node-card.is-running {
+  animation: swarm-node-live 2.4s ease-in-out infinite;
+}
+.swarm-node-card.is-pending {
+  border-style: dashed;
+}
+.swarm-node-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.swarm-node-mark {
+  color: var(--node-accent);
+  flex: 0 0 auto;
+}
+.swarm-node-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 700;
+}
+.swarm-node-status {
+  flex: 0 0 auto;
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid color-mix(in srgb, var(--node-accent) 42%, transparent);
+  border-radius: 999px;
+  padding: 1px 6px;
+  color: var(--node-accent);
+  font-size: 10px;
+  line-height: 16px;
+  background: color-mix(in srgb, var(--node-accent) 9%, transparent);
+}
+.swarm-node-meta,
+.swarm-node-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+  margin-top: 6px;
+  color: var(--text-dim);
+  font-size: 10.5px;
+}
+.swarm-node-meta span,
+.swarm-node-foot span {
+  min-width: 0;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 999px;
+  padding: 1px 6px;
+  line-height: 15px;
+  background: rgba(255, 255, 255, .025);
+}
+.swarm-node-task {
+  margin-top: 8px;
+  min-height: 30px;
+  max-height: 45px;
+  color: var(--text-bright);
+  opacity: .88;
+  font-size: 11px;
+  line-height: 15px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+.swarm-node-last {
+  margin-top: 7px;
+  min-height: 15px;
+  max-height: 30px;
+  color: var(--text-dimmer);
+  font-size: 10.5px;
+  overflow: hidden;
+  line-height: 15px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  border-top: 1px solid color-mix(in srgb, var(--border-subtle) 80%, transparent);
+  padding-top: 5px;
+}
+@keyframes swarm-node-pulse {
+  0%, 100% { opacity: .18; transform: scale(.985); }
+  50% { opacity: .72; transform: scale(1.02); }
+}
+@keyframes swarm-node-live {
+  0%, 100% { box-shadow: 0 8px 20px rgba(1, 4, 9, .28); }
+  50% { box-shadow: 0 10px 28px color-mix(in srgb, var(--node-accent) 26%, transparent); }
+}
 
 /* 代码框复制按钮：默认淡出，hover 代码框时浮现 */
 .cc-copy { opacity: 0; transition: opacity .15s ease; }

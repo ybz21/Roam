@@ -4,6 +4,8 @@
 import { createContext, useContext, useLayoutEffect, useState, type ReactNode } from 'react'
 import { ConfigProvider, theme as antdTheme } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
+import enUS from 'antd/locale/en_US'
+import { useI18n } from './i18n'
 
 export type ThemeMode = 'dark' | 'light'
 const KEY = 'ttmux-theme'
@@ -156,6 +158,7 @@ function applyCssVars(mode: ThemeMode) {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
+  const { locale } = useI18n()
   const [mode, setMode] = useState<ThemeMode>(() => {
     try { const v = localStorage.getItem(KEY); if (v === 'light' || v === 'dark') return v } catch {}
     return 'dark'
@@ -167,7 +170,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const toggle = () => setMode((m) => (m === 'dark' ? 'light' : 'dark'))
   return (
     <ThemeCtx.Provider value={{ mode, toggle, setMode }}>
-      <ConfigProvider locale={zhCN} theme={buildTheme(mode)}>{children}</ConfigProvider>
+      <ConfigProvider locale={locale === 'en-US' ? enUS : zhCN} theme={buildTheme(mode)}>{children}</ConfigProvider>
     </ThemeCtx.Provider>
   )
 }

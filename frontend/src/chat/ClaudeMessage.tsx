@@ -3,6 +3,7 @@
 import { memo, useState } from 'react'
 import Markdown from '../Markdown'
 import { CodeBox, Collapsible, Diff, MONO, copyText, fmtTs, ToolResult } from './blocks'
+import { useI18n } from '../i18n'
 import type { Block, Msg } from './types'
 
 function parseInput(input?: string): any {
@@ -11,8 +12,8 @@ function parseInput(input?: string): any {
 }
 
 // 工具名 → 图标 + 单行标题（取最有信息量的字段）
-function toolHead(name?: string, o?: any): { icon: string; title: string } {
-  const n = name || '工具'
+function toolHead(name: string | undefined, o: any, t: (key: string, vars?: Record<string, string | number>) => string): { icon: string; title: string } {
+  const n = name || t('chat.tool')
   const s = (v: any) => (v == null ? '' : String(v))
   const clip = (v: string) => (v.length > 140 ? v.slice(0, 140) + '…' : v)
   switch (n) {
@@ -24,7 +25,7 @@ function toolHead(name?: string, o?: any): { icon: string; title: string } {
     case 'Glob': return { icon: '🔍', title: clip(s(o?.pattern) + (o?.path ? `  @ ${o.path}` : '')) }
     case 'Grep': return { icon: '🔍', title: clip(s(o?.pattern) + (o?.path ? `  @ ${o.path}` : '')) }
     case 'Task': return { icon: '🤖', title: clip(s(o?.description || o?.subagent_type)) }
-    case 'TodoWrite': return { icon: '☑', title: `${(o?.todos || []).length} 项待办` }
+    case 'TodoWrite': return { icon: '☑', title: t('chat.todoCount', { count: (o?.todos || []).length }) }
     case 'WebFetch': return { icon: '🌐', title: clip(s(o?.url)) }
     case 'WebSearch': return { icon: '🌐', title: clip(s(o?.query)) }
     default: {
@@ -65,8 +66,9 @@ function ToolBody({ name, o, raw }: { name?: string; o: any; raw?: string }) {
 }
 
 function ToolUse({ b, result }: { b: Block; result?: Block }) {
+  const { t } = useI18n()
   const o = parseInput(b.input)
-  const { icon, title } = toolHead(b.name, o)
+  const { icon, title } = toolHead(b.name, o, t)
   const [open, setOpen] = useState(false)
   const hasBody = !!(o || b.input)
   return (
@@ -90,6 +92,7 @@ function messageText(m: Msg): string {
 }
 
 export const ClaudeBubble = memo(function ClaudeBubble({ m, results }: { m: Msg; results: Record<string, Block> }) {
+  const { t } = useI18n()
   const isUser = m.role === 'user'
   const isTool = m.role === 'tool'
   const align = isUser ? 'flex-end' : 'flex-start'
@@ -100,9 +103,9 @@ export const ClaudeBubble = memo(function ClaudeBubble({ m, results }: { m: Msg;
       <div style={{ maxWidth: isUser ? '86%' : '100%', width: isUser ? 'auto' : '100%', background: bg, border, borderRadius: 12, padding: isTool ? 0 : '8px 12px', color: isUser ? '#fff' : 'var(--text-bright)', display: 'flex', flexDirection: 'column', gap: 6 }}>
         {m.blocks.map((b, i) => {
           if (b.kind === 'text') return <Markdown key={i} accent={isUser ? '#cfe1ff' : '#58a6ff'}>{b.text || ''}</Markdown>
-          if (b.kind === 'thinking') return <Collapsible key={i} label="思考过程" text={b.text} color="var(--text-dim)" />
+          if (b.kind === 'thinking') return <Collapsible key={i} label={t('chat.thinking')} text={b.text} color="var(--text-dim)" />
           if (b.kind === 'tool_use') return <ToolUse key={i} b={b} result={b.id ? results[b.id] : undefined} />
-          if (b.kind === 'tool_result') return <Collapsible key={i} label={b.isError ? '⚠ 工具输出（错误）' : '工具输出'} text={b.text} color={b.isError ? '#f85149' : 'var(--text-dim)'} />
+          if (b.kind === 'tool_result') return <Collapsible key={i} label={b.isError ? t('chat.toolOutputError') : t('chat.toolOutput')} text={b.text} color={b.isError ? '#f85149' : 'var(--text-dim)'} />
           if (b.text) return <Markdown key={i} accent="#58a6ff">{b.text}</Markdown>
           return null
         })}
@@ -110,7 +113,7 @@ export const ClaudeBubble = memo(function ClaudeBubble({ m, results }: { m: Msg;
       {!isTool && (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 10, color: 'var(--text-dimmer)', padding: '0 4px' }}>
           {m.ts && fmtTs(m.ts)}
-          <button className="cc-msg-copy" onClick={() => copyText(messageText(m))}>复制</button>
+          <button className="cc-msg-copy" onClick={() => copyText(messageText(m))}>{t('common.copy')}</button>
         </span>
       )}
     </div>

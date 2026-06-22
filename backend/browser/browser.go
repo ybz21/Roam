@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"runtime"
 	"sync"
 	"syscall"
 	"time"
@@ -36,6 +37,28 @@ func envOr(k, d string) string {
 		return v
 	}
 	return d
+}
+
+func chromeExecutable() string {
+	if v := os.Getenv("CHROME_BIN"); v != "" {
+		if _, err := os.Stat(v); err == nil {
+			return v
+		}
+	}
+	for _, name := range []string{"google-chrome", "chromium", "chromium-browser"} {
+		if p, err := exec.LookPath(name); err == nil {
+			return p
+		}
+	}
+	for _, p := range []string{
+		"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+		"/Applications/Chromium.app/Contents/MacOS/Chromium",
+	} {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return "google-chrome"
 }
 
 type target struct {
@@ -60,11 +83,11 @@ func ensureChrome() error {
 		// 高 DPI 渲染：像素密度翻倍但 CSS 布局不变 → 画面更清晰（可用 TTMUX_CHROME_SCALE 调）
 		"--force-device-scale-factor=" + envOr("TTMUX_CHROME_SCALE", "2"),
 	}
-	if os.Getenv("DISPLAY") == "" { // 无显示器（服务器）→ 无头，screencast 同样可用
+	if runtime.GOOS != "darwin" && os.Getenv("DISPLAY") == "" { // 无显示器（服务器）→ 无头，screencast 同样可用
 		args = append(args, "--headless=new", "--window-size=1280,800")
 	}
 	args = append(args, "about:blank")
-	cmd := exec.Command("google-chrome", args...)
+	cmd := exec.Command(chromeExecutable(), args...)
 	// 不继承本进程的 stdout/stderr：避免 Chrome 日志刷屏，也避免持有管道导致父进程读阻塞
 	cmd.Stdout = nil
 	cmd.Stderr = nil
@@ -76,7 +99,7 @@ func ensureChrome() error {
 	procMu.Lock()
 	chrome = cmd
 	procMu.Unlock()
-	go cmd.Wait() // 收尸，避免 Chrome 自行退出后留下僵尸
+	go cmd.Wait()             // 收尸，避免 Chrome 自行退出后留下僵尸
 	for i := 0; i < 50; i++ { // 最多等 5s
 		if alive() {
 			return nil

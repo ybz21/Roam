@@ -2,20 +2,20 @@
 # ── plaza: 蜂群广场（异步消息流）──
 # ══════════════════════════════════════════
 #
-# 全群共享的追加型消息流；成员/master/human 都能发都能读。
+# 全群共享的追加型消息流；成员/leader/human 都能发都能读。
 # 存每群 swarms/<id>/swarm.db 的 posts 表(WAL 并发安全)。详见 cli/ttmux-cli/README.md。
 # kind: note(随手记) ask(提问) block(报阻塞) decide(决策) done(完成播报) broadcast(全员广播)
 
 # 自动署名：按当前 tmux 会话名推断作者
-#   <群>-<成员> -> 成员;  cc-<群> 或 supervisor -> master;  否则 human
+#   <群>-<成员> -> 成员;  cc-<群> 或 supervisor -> leader;  否则 human
 _plaza_author() {
     local swarm="$1" sname sess sup
     sname=$(_swarm_name "$swarm")
     sess=$("$TMUX_BIN" display-message -p '#{session_name}' 2>/dev/null || true)
     [[ -n "$sess" ]] || { echo "human"; return; }
     sup=$(_swarm_meta_get "$swarm" supervisor 2>/dev/null || true)
-    if [[ -n "$sup" && "$sess" == "$sup" ]]; then echo "master"; return; fi
-    if [[ "$sess" == "cc-${sname}" ]]; then echo "master"; return; fi
+    if [[ -n "$sup" && "$sess" == "$sup" ]]; then echo "leader"; return; fi
+    if [[ "$sess" == "cc-${sname}" ]]; then echo "leader"; return; fi
     if [[ -n "$sname" && "$sess" == "${sname}-"* ]]; then echo "${sess#"${sname}"-}"; return; fi
     echo "human"
 }
@@ -31,6 +31,41 @@ _plaza_kind_icon() {
     esac
 }
 
+_plaza_master_session() {
+    local swarm="$1" sname sup db m
+    sname=$(_swarm_name "$swarm")
+    sup=$(_swarm_meta_get "$swarm" supervisor 2>/dev/null || true)
+    if [[ -n "$sup" ]] && _session_exists "$sup"; then echo "$sup"; return 0; fi
+    if [[ -n "$sname" ]] && _session_exists "cc-${sname}"; then echo "cc-${sname}"; return 0; fi
+    db=$(_swarm_db_of "$swarm" 2>/dev/null || true)
+    if [[ -n "$db" ]]; then
+        m=$(sqlite3 "$db" "SELECT name FROM members WHERE role IN ('leader','master') AND IFNULL(pending,0)=0 ORDER BY name LIMIT 1;" 2>/dev/null || true)
+        if [[ -n "$m" ]] && _session_exists "${sname}-${m}"; then echo "${sname}-${m}"; return 0; fi
+    fi
+    return 1
+}
+
+_plaza_notify_master() {
+    local swarm="$1" post_id="$2" author="$3" kind="$4" text="$5"
+    [[ "${TTMUX_SWARM_NOTIFY_MASTER:-1}" == "0" ]] && return 0
+    [[ "$author" == "leader" || "$author" == "master" ]] && return 0
+    case "$author:$kind:$text" in
+        human:*|*:ask:*|*:block:*|*:@leader*|*:@master*|*:@all*) ;;
+        *) return 0 ;;
+    esac
+    local target; target=$(_plaza_master_session "$swarm" 2>/dev/null || true)
+    [[ -n "$target" ]] || return 0
+    local sname; sname=$(_swarm_name "$swarm")
+    local notice="广场有新消息需要你处理：#${post_id} (${author}/${kind}) ${text}
+
+请先执行：
+ttmux swarm listen ${sname} --as leader --once
+
+然后判断是否需要回复 human、重开/新建卡片、派活或验收。处理结果请用 swarm say --kind decide/ask --re ${post_id} 回写广场。"
+    _tmux_send_prompt_submit "$target" "$notice" || true
+    msg_info "已通知 Leader 会话 ${bold}${target}${reset} 处理 #${post_id}"
+}
+
 # 渲染一批消息行（stdin: 用 US(\x1f) 分隔的 id ts author kind re text）
 # 用 \x1f 而非 \t：tab 属空白类 IFS，连续 tab 会折叠致空字段(空 re)串列。
 _plaza_render_rows() {
@@ -39,7 +74,7 @@ _plaza_render_rows() {
         [[ -n "$id" ]] || continue
         icon=$(_plaza_kind_icon "$kind")
         case "$author" in
-            master) who="${magenta}◆ ${author}${reset}" ;;
+            leader|master) who="${magenta}◆ ${author}${reset}" ;;
             human)  who="${blue}● ${author}${reset}" ;;
             *)      who="${green}● ${author}${reset}" ;;
         esac
@@ -49,7 +84,7 @@ _plaza_render_rows() {
     done
 }
 
-# ttmux swarm say <群> [--as <成员>] [--to <master|human|all|成员>] [--kind <类型>] [--re <id>] <消息...>
+# ttmux swarm say <群> [--as <成员>] [--to <leader|human|all|成员>] [--kind <类型>] [--re <id>] <消息...>
 _plaza_say() {
     local swarm="$1"; shift || true
     if ! _swarm_exists "$swarm"; then msg_err "蜂群不存在: ${swarm}"; return 1; fi
@@ -66,6 +101,7 @@ _plaza_say() {
     local text="${parts[*]}"
     [[ -n "$text" ]] || { msg_err "消息不能为空"; return 1; }
     if [[ -n "$to" ]]; then
+        [[ "$to" == "master" || "$to" == "lead" ]] && to="leader"
         # @xx 是广场定向提及；--to 只是语法糖，底层仍存原始文本，便于兼容旧库。
         if [[ ! "$text" =~ (^|[[:space:]])@${to}($|[[:space:][:punct:]]) ]]; then
             text="@${to} ${text}"
@@ -73,6 +109,7 @@ _plaza_say() {
     fi
     local author="$as"
     [[ -n "$author" ]] || author=$(_plaza_author "$swarm")
+    [[ "$author" == "master" || "$author" == "lead" ]] && author="leader"
     local reval="NULL"; [[ "$re" =~ ^[0-9]+$ ]] && reval="$re"
     local db id; db=$(_swarm_db_of "$swarm") || return 1
     # 同一连接内 INSERT + 取自增 id（last_insert_rowid 按连接，分两次调用会拿到 0）
@@ -80,6 +117,7 @@ _plaza_say() {
         VALUES(datetime('now','localtime'),'$(_sqe "$author")','$(_sqe "$kind")',${reval},'$(_sqe "$text")');
         SELECT last_insert_rowid();")
     msg_ok "#${id} 已发布 ${dim}(${author}/${kind})${reset}"
+    _plaza_notify_master "$swarm" "$id" "$author" "$kind" "$text"
 }
 
 # 构造 feed 的 WHERE 子句（公共）

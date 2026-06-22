@@ -66,6 +66,26 @@ _session_exists() {
     "$TMUX_BIN" has-session -t "$1" 2>/dev/null
 }
 
+_tmux_send_prompt_submit() {
+    local target="$1" message="$2"
+    if "$TMUX_BIN" set-buffer -b ttmux-prompt "$message" 2>/dev/null \
+        && "$TMUX_BIN" paste-buffer -d -b ttmux-prompt -t "$target" 2>/dev/null; then
+        :
+    else
+        "$TMUX_BIN" send-keys -t "$target" "$message" 2>/dev/null || return 1
+    fi
+
+    # Claude/Codex TUI inputs can accept pasted text while staying in edit mode.
+    # Submit as separate key events, with a second Enter as a conservative fallback.
+    "$TMUX_BIN" send-keys -t "$target" Enter 2>/dev/null \
+        || "$TMUX_BIN" send-keys -t "$target" C-m 2>/dev/null \
+        || return 1
+    if [[ "${TTMUX_FORCE_PROMPT_SUBMIT:-1}" != "0" ]]; then
+        sleep "${TTMUX_PROMPT_SUBMIT_DELAY:-0.05}"
+        "$TMUX_BIN" send-keys -t "$target" Enter 2>/dev/null || true
+    fi
+}
+
 _swarm_names() {
     local db="${TTMUX_HOME}/meta.db"
     if [[ -f "$db" ]] && command -v sqlite3 >/dev/null 2>&1; then
@@ -261,7 +281,7 @@ _swarm_db_init() {
                 status TEXT, deps TEXT, done INT DEFAULT 0, pending INT DEFAULT 0,
                 model TEXT, perm TEXT,
                 kind TEXT DEFAULT 'claude',   -- 引擎: claude | codex
-                role TEXT DEFAULT 'worker');  -- 角色: master | worker
+                role TEXT DEFAULT 'member');  -- 角色: leader | member
             CREATE TABLE IF NOT EXISTS posts(
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 ts TEXT, author TEXT, kind TEXT, re INTEGER, text TEXT);
@@ -273,8 +293,18 @@ _swarm_db_init() {
     # 迁移: 旧库补列(kind/role)，幂等
     local info; info=$(sqlite3 "$db" "PRAGMA table_info(members);" 2>/dev/null || echo)
     grep -q '|kind|' <<<"$info" || sqlite3 "$db" "ALTER TABLE members ADD COLUMN kind TEXT DEFAULT 'claude';" 2>/dev/null || true
-    grep -q '|role|' <<<"$info" || sqlite3 "$db" "ALTER TABLE members ADD COLUMN role TEXT DEFAULT 'worker';" 2>/dev/null || true
+    grep -q '|role|' <<<"$info" || sqlite3 "$db" "ALTER TABLE members ADD COLUMN role TEXT DEFAULT 'member';" 2>/dev/null || true
+    sqlite3 "$db" "UPDATE members SET role='leader' WHERE role='master'; UPDATE members SET role='member' WHERE role='worker' OR IFNULL(role,'')='';" 2>/dev/null || true
     return 0
+}
+
+_swarm_role_norm() {
+    case "${1:-}" in
+        leader|lead|master) echo "leader" ;;
+        member|worker) echo "member" ;;
+        "") echo "" ;;
+        *) echo "$1" ;;
+    esac
 }
 
 # name 或 id -> id（id 直接返回；name 查 meta.db；查不到回空串）
@@ -319,22 +349,24 @@ _set_global_env() {
 _env_set() {
     local kv="$1"
     local key="${kv%%=*}"
+    local tmp
+    tmp="$(mktemp "${TTMUX_DATA}/env.XXXXXX")"
     if [[ -f "$TTMUX_ENV" ]]; then
         # 移除旧的同名变量
-        local tmp
-        tmp=$(grep -v "^${key}=" "$TTMUX_ENV" 2>/dev/null || true)
-        echo "$tmp" > "$TTMUX_ENV"
+        grep -v "^${key}=" "$TTMUX_ENV" 2>/dev/null | grep -v '^$' > "$tmp" || true
     fi
-    echo "$kv" >> "$TTMUX_ENV"
-    # 去除空行
-    sed -i '/^$/d' "$TTMUX_ENV"
+    echo "$kv" >> "$tmp"
+    mv "$tmp" "$TTMUX_ENV"
     msg_ok "设置 ${bold}${kv}${reset}"
 }
 
 _env_rm() {
     local key="$1"
     if [[ -f "$TTMUX_ENV" ]]; then
-        sed -i "/^${key}=/d" "$TTMUX_ENV"
+        local tmp
+        tmp="$(mktemp "${TTMUX_DATA}/env.XXXXXX")"
+        grep -v "^${key}=" "$TTMUX_ENV" 2>/dev/null | grep -v '^$' > "$tmp" || true
+        mv "$tmp" "$TTMUX_ENV"
         msg_ok "已删除 ${bold}${key}${reset}"
     else
         msg_info "无环境变量配置"
@@ -398,7 +430,6 @@ _env_push() {
         msg_ok "已推送到 ${bold}${sess}${reset}"
     done <<< "$sessions"
 }
-
 # ══════════════════════════════════════════
 # ── Task Group 管理 ──
 # ══════════════════════════════════════════
@@ -1137,8 +1168,8 @@ _swarm_migrate_members() {
             type=$(_task_type "$sess")
             task=$(_task_desc "$sess")
             workdir=$(_read_first_file "$(_task_meta_dir "$sess")/workdir.txt")
-            role="worker"
-            [[ -n "$supervisor" && "$sess" == "$supervisor" ]] && role="master"
+            role="member"
+            [[ -n "$supervisor" && "$sess" == "$supervisor" ]] && role="leader"
             sqlite3 "$db" "INSERT INTO members(name,type,task,workdir,role,pending,done)
                 VALUES('$(_sqe "$member")','$(_sqe "$type")','$(_sqe "$task")','$(_sqe "$workdir")','$(_sqe "$role")',0,0)
                 ON CONFLICT(name) DO UPDATE SET
@@ -1227,16 +1258,16 @@ _swarm_done_list() {
 _swarm_pending_set() {
     local db; db=$(_swarm_db_of "$1") || return 1
     sqlite3 "$db" "INSERT INTO members(name,type,task,workdir,model,perm,kind,role,pending)
-        VALUES('$(_sqe "$2")','$(_sqe "$3")','$(_sqe "$4")','$(_sqe "$5")','$(_sqe "$6")','$(_sqe "$7")','$(_sqe "${8:-claude}")','$(_sqe "${9:-worker}")',1)
+        VALUES('$(_sqe "$2")','$(_sqe "$3")','$(_sqe "$4")','$(_sqe "$5")','$(_sqe "$6")','$(_sqe "$7")','$(_sqe "${8:-claude}")','$(_sqe "$(_swarm_role_norm "${9:-member}")")',1)
         ON CONFLICT(name) DO UPDATE SET type=excluded.type,task=excluded.task,
             workdir=excluded.workdir,model=excluded.model,perm=excluded.perm,kind=excluded.kind,role=excluded.role,pending=1;"
 }
 
-# 蜂群里是否已有 master 成员
+# 蜂群里是否已有 leader 成员
 _swarm_has_master() {
     local db; db=$(_swarm_db_of "$1" 2>/dev/null) || return 1
     [[ -n "$db" ]] || return 1
-    local n; n=$(sqlite3 "$db" "SELECT COUNT(*) FROM members WHERE role='master';" 2>/dev/null || echo 0)
+    local n; n=$(sqlite3 "$db" "SELECT COUNT(*) FROM members WHERE role IN ('leader','master');" 2>/dev/null || echo 0)
     [[ "${n:-0}" -gt 0 ]]
 }
 _swarm_pending_clear() {
@@ -1377,14 +1408,14 @@ _swarm_new() {
     msg_ok "蜂群 ${bold}${name}${reset} 已创建 ${dim}(${id})${reset}"
     [[ -n "$goal" ]] && echo -e "   ${dim}目标: ${goal}${reset}"
     echo -e "   ${dim}加成员: ttmux swarm add ${name} <名> --type agent \"<任务>\"${reset}"
-    # 自带 master：建群即拉起一个加载了 cc-swarm skill 的指挥会话(cc-<群>)，它已被告知如何操作 swarm CLI。
+    # 自带 leader：建群即拉起一个加载了 cc-swarm skill 的 Leader 会话(cc-<群>)，它已被告知如何操作 swarm CLI。
     # --no-master 跳过(纯元数据/测试)；缺 claude/tmux 时降级为提示，不中断。
     if [[ -z "$no_master" ]]; then
         if command -v claude >/dev/null 2>&1 && [[ -n "${TMUX_BIN}" ]]; then
-            echo -e "   ${dim}拉起指挥(master) cc-${name} …${reset}"
-            _swarm_adopt "$name" || msg_warn "指挥拉起失败，可稍后手动: ${dim}ttmux swarm adopt ${name}${reset}"
+            echo -e "   ${dim}拉起 Leader cc-${name} …${reset}"
+            _swarm_adopt "$name" || msg_warn "Leader 拉起失败，可稍后手动: ${dim}ttmux swarm adopt ${name}${reset}"
         else
-            msg_info "未检测到 claude/tmux，未拉起指挥；装好后手动接管: ${dim}ttmux swarm adopt ${name}${reset}"
+            msg_info "未检测到 claude/tmux，未拉起 Leader；装好后手动接管: ${dim}ttmux swarm adopt ${name}${reset}"
         fi
     fi
 }
@@ -1410,7 +1441,7 @@ _swarm_add() {
             --perm)       perm="$2"; shift 2 ;;
             --depends-on) deps="$2"; shift 2 ;;
             --kind)       kind="$2"; shift 2 ;;   # 引擎: claude(默认) | codex
-            --role)       role="$2"; shift 2 ;;   # 角色: master | worker（空=自动）
+            --role)       role="$2"; shift 2 ;;   # 角色: leader | member（兼容 master | worker，空=自动）
             *)            payload_parts+=("$1"); shift ;;
         esac
     done
@@ -1427,9 +1458,10 @@ _swarm_add() {
         msg_err "--kind 只能是 claude 或 codex"
         return 1
     fi
-    # 角色默认: 首个 agent 成员 → master，其余 worker（task 类成员一律 worker）
+    role=$(_swarm_role_norm "$role")
+    # 角色默认: 首个 agent 成员 → leader，其余 member（task 类成员一律 member）
     if [[ -z "$role" ]]; then
-        if [[ "$type" == "agent" ]] && ! _swarm_has_master "$swarm"; then role="master"; else role="worker"; fi
+        if [[ "$type" == "agent" ]] && ! _swarm_has_master "$swarm"; then role="leader"; else role="member"; fi
     fi
 
     # 记录依赖（供 status 展示 + 门控判断）
@@ -1554,7 +1586,7 @@ _swarm_status_json() {
         # task 可能含多行(渲染后的提示词)：用 \x1e 作记录分隔、read -d 按它读，
         # 否则 task 里的换行会把一行记录拆成多行、字段错位、JSON 崩。
         rows=$(sqlite3 -separator $'\x1f' -newline $'\x1e' "$db" \
-            "SELECT name,IFNULL(type,'agent'),IFNULL(task,''),IFNULL(deps,''),IFNULL(done,0),IFNULL(kind,'claude'),IFNULL(role,'worker') FROM members WHERE IFNULL(pending,0)=0 ORDER BY name;")
+            "SELECT name,IFNULL(type,'agent'),IFNULL(task,''),IFNULL(deps,''),IFNULL(done,0),IFNULL(kind,'claude'),CASE IFNULL(role,'member') WHEN 'master' THEN 'leader' WHEN 'worker' THEN 'member' ELSE IFNULL(role,'member') END FROM members WHERE IFNULL(pending,0)=0 ORDER BY name;")
         while IFS=$'\x1f' read -r -d $'\x1e' mname mtype mtask mdeps mdone mkind mrole; do
             [[ -n "$mname" ]] || continue
             local sess="${name}-${mname}" lst="exited"
@@ -2042,20 +2074,20 @@ _interactive_swarm() {
 # ── plaza: 蜂群广场（异步消息流）──
 # ══════════════════════════════════════════
 #
-# 全群共享的追加型消息流；成员/master/human 都能发都能读。
+# 全群共享的追加型消息流；成员/leader/human 都能发都能读。
 # 存每群 swarms/<id>/swarm.db 的 posts 表(WAL 并发安全)。详见 cli/ttmux-cli/README.md。
 # kind: note(随手记) ask(提问) block(报阻塞) decide(决策) done(完成播报) broadcast(全员广播)
 
 # 自动署名：按当前 tmux 会话名推断作者
-#   <群>-<成员> -> 成员;  cc-<群> 或 supervisor -> master;  否则 human
+#   <群>-<成员> -> 成员;  cc-<群> 或 supervisor -> leader;  否则 human
 _plaza_author() {
     local swarm="$1" sname sess sup
     sname=$(_swarm_name "$swarm")
     sess=$("$TMUX_BIN" display-message -p '#{session_name}' 2>/dev/null || true)
     [[ -n "$sess" ]] || { echo "human"; return; }
     sup=$(_swarm_meta_get "$swarm" supervisor 2>/dev/null || true)
-    if [[ -n "$sup" && "$sess" == "$sup" ]]; then echo "master"; return; fi
-    if [[ "$sess" == "cc-${sname}" ]]; then echo "master"; return; fi
+    if [[ -n "$sup" && "$sess" == "$sup" ]]; then echo "leader"; return; fi
+    if [[ "$sess" == "cc-${sname}" ]]; then echo "leader"; return; fi
     if [[ -n "$sname" && "$sess" == "${sname}-"* ]]; then echo "${sess#"${sname}"-}"; return; fi
     echo "human"
 }
@@ -2071,6 +2103,41 @@ _plaza_kind_icon() {
     esac
 }
 
+_plaza_master_session() {
+    local swarm="$1" sname sup db m
+    sname=$(_swarm_name "$swarm")
+    sup=$(_swarm_meta_get "$swarm" supervisor 2>/dev/null || true)
+    if [[ -n "$sup" ]] && _session_exists "$sup"; then echo "$sup"; return 0; fi
+    if [[ -n "$sname" ]] && _session_exists "cc-${sname}"; then echo "cc-${sname}"; return 0; fi
+    db=$(_swarm_db_of "$swarm" 2>/dev/null || true)
+    if [[ -n "$db" ]]; then
+        m=$(sqlite3 "$db" "SELECT name FROM members WHERE role IN ('leader','master') AND IFNULL(pending,0)=0 ORDER BY name LIMIT 1;" 2>/dev/null || true)
+        if [[ -n "$m" ]] && _session_exists "${sname}-${m}"; then echo "${sname}-${m}"; return 0; fi
+    fi
+    return 1
+}
+
+_plaza_notify_master() {
+    local swarm="$1" post_id="$2" author="$3" kind="$4" text="$5"
+    [[ "${TTMUX_SWARM_NOTIFY_MASTER:-1}" == "0" ]] && return 0
+    [[ "$author" == "leader" || "$author" == "master" ]] && return 0
+    case "$author:$kind:$text" in
+        human:*|*:ask:*|*:block:*|*:@leader*|*:@master*|*:@all*) ;;
+        *) return 0 ;;
+    esac
+    local target; target=$(_plaza_master_session "$swarm" 2>/dev/null || true)
+    [[ -n "$target" ]] || return 0
+    local sname; sname=$(_swarm_name "$swarm")
+    local notice="广场有新消息需要你处理：#${post_id} (${author}/${kind}) ${text}
+
+请先执行：
+ttmux swarm listen ${sname} --as leader --once
+
+然后判断是否需要回复 human、重开/新建卡片、派活或验收。处理结果请用 swarm say --kind decide/ask --re ${post_id} 回写广场。"
+    _tmux_send_prompt_submit "$target" "$notice" || true
+    msg_info "已通知 Leader 会话 ${bold}${target}${reset} 处理 #${post_id}"
+}
+
 # 渲染一批消息行（stdin: 用 US(\x1f) 分隔的 id ts author kind re text）
 # 用 \x1f 而非 \t：tab 属空白类 IFS，连续 tab 会折叠致空字段(空 re)串列。
 _plaza_render_rows() {
@@ -2079,7 +2146,7 @@ _plaza_render_rows() {
         [[ -n "$id" ]] || continue
         icon=$(_plaza_kind_icon "$kind")
         case "$author" in
-            master) who="${magenta}◆ ${author}${reset}" ;;
+            leader|master) who="${magenta}◆ ${author}${reset}" ;;
             human)  who="${blue}● ${author}${reset}" ;;
             *)      who="${green}● ${author}${reset}" ;;
         esac
@@ -2089,7 +2156,7 @@ _plaza_render_rows() {
     done
 }
 
-# ttmux swarm say <群> [--as <成员>] [--to <master|human|all|成员>] [--kind <类型>] [--re <id>] <消息...>
+# ttmux swarm say <群> [--as <成员>] [--to <leader|human|all|成员>] [--kind <类型>] [--re <id>] <消息...>
 _plaza_say() {
     local swarm="$1"; shift || true
     if ! _swarm_exists "$swarm"; then msg_err "蜂群不存在: ${swarm}"; return 1; fi
@@ -2106,6 +2173,7 @@ _plaza_say() {
     local text="${parts[*]}"
     [[ -n "$text" ]] || { msg_err "消息不能为空"; return 1; }
     if [[ -n "$to" ]]; then
+        [[ "$to" == "master" || "$to" == "lead" ]] && to="leader"
         # @xx 是广场定向提及；--to 只是语法糖，底层仍存原始文本，便于兼容旧库。
         if [[ ! "$text" =~ (^|[[:space:]])@${to}($|[[:space:][:punct:]]) ]]; then
             text="@${to} ${text}"
@@ -2113,6 +2181,7 @@ _plaza_say() {
     fi
     local author="$as"
     [[ -n "$author" ]] || author=$(_plaza_author "$swarm")
+    [[ "$author" == "master" || "$author" == "lead" ]] && author="leader"
     local reval="NULL"; [[ "$re" =~ ^[0-9]+$ ]] && reval="$re"
     local db id; db=$(_swarm_db_of "$swarm") || return 1
     # 同一连接内 INSERT + 取自增 id（last_insert_rowid 按连接，分两次调用会拿到 0）
@@ -2120,6 +2189,7 @@ _plaza_say() {
         VALUES(datetime('now','localtime'),'$(_sqe "$author")','$(_sqe "$kind")',${reval},'$(_sqe "$text")');
         SELECT last_insert_rowid();")
     msg_ok "#${id} 已发布 ${dim}(${author}/${kind})${reset}"
+    _plaza_notify_master "$swarm" "$id" "$author" "$kind" "$text"
 }
 
 # 构造 feed 的 WHERE 子句（公共）
@@ -2381,7 +2451,7 @@ _board_task() {
 # ── listener: 广场监听游标 / @mention 路由摘要 ──
 # ══════════════════════════════════════════
 #
-# ttmux swarm listen <群> --as <master|成员> [--once] [--mentions] [--no-advance] [--interval N]
+# ttmux swarm listen <群> --as <leader|成员> [--once] [--mentions] [--no-advance] [--interval N]
 # 给 agent loop 使用：读取上次游标之后的广场消息，标注 @xx/#tN 相关性，输出状态/看板摘要。
 # 它只递送上下文，不替 agent 做决策。
 
@@ -2392,9 +2462,10 @@ _listener_dir() {
 }
 
 _listener_key() {
-    local key="${1:-master}"
+    local key="${1:-leader}"
+    [[ "$key" == "master" || "$key" == "lead" ]] && key="leader"
     key="${key//[^A-Za-z0-9_.-]/_}"
-    [[ -n "$key" ]] || key="master"
+    [[ -n "$key" ]] || key="leader"
     echo "$key"
 }
 
@@ -2433,8 +2504,8 @@ _listener_member_cards_pattern() {
 
 _listener_relevance() {
     local who="$1" author="$2" kind="$3" text="$4" cards_re="${5:-}"
-    if [[ "$who" == "master" ]]; then
-        if [[ "$author" == "human" || "$text" =~ (^|[[:space:]])@master($|[[:space:][:punct:]]) || "$text" =~ (^|[[:space:]])@all($|[[:space:][:punct:]]) ]]; then
+    if [[ "$who" == "leader" || "$who" == "master" ]]; then
+        if [[ "$author" == "human" || "$text" =~ (^|[[:space:]])@leader($|[[:space:][:punct:]]) || "$text" =~ (^|[[:space:]])@master($|[[:space:][:punct:]]) || "$text" =~ (^|[[:space:]])@all($|[[:space:][:punct:]]) ]]; then
             echo "HIGH"
         else
             echo "watch"
@@ -2444,14 +2515,15 @@ _listener_relevance() {
     if [[ "$text" =~ (^|[[:space:]])@${who}($|[[:space:][:punct:]]) ]]; then echo "HIGH"; return 0; fi
     if [[ "$text" =~ (^|[[:space:]])@all($|[[:space:][:punct:]]) ]]; then echo "all"; return 0; fi
     if [[ -n "$cards_re" && "$text" =~ (^|[[:space:]#])(${cards_re})($|[[:space:][:punct:]]) ]]; then echo "card"; return 0; fi
-    if [[ "$author" == "master" && ( "$kind" == "decide" || "$kind" == "broadcast" ) ]]; then echo "master"; return 0; fi
+    if [[ ( "$author" == "leader" || "$author" == "master" ) && ( "$kind" == "decide" || "$kind" == "broadcast" ) ]]; then echo "leader"; return 0; fi
     echo ""
 }
 
 _listener_emit_once() {
     local swarm="$1" who="$2" mentions="$3" advance="$4" n="$5"
     if ! _swarm_exists "$swarm"; then msg_err "蜂群不存在: ${swarm}"; return 1; fi
-    [[ -n "$who" ]] || who="master"
+    [[ -n "$who" ]] || who="leader"
+    [[ "$who" == "master" || "$who" == "lead" ]] && who="leader"
     [[ "$n" =~ ^[0-9]+$ ]] || n=50
 
     local db last rows cards_re max_id=0
@@ -2475,7 +2547,7 @@ _listener_emit_once() {
             [[ -n "$mentions" && -z "$rel" ]] && continue
             icon=$(_plaza_kind_icon "$kind")
             case "$author" in
-                master) who_label="${magenta}◆ ${author}${reset}" ;;
+                leader|master) who_label="${magenta}◆ ${author}${reset}" ;;
                 human)  who_label="${blue}● ${author}${reset}" ;;
                 *)      who_label="${green}● ${author}${reset}" ;;
             esac
@@ -2500,11 +2572,12 @@ _listener_emit_once() {
         _listener_last_set "$swarm" "$who" "$max_id"
         echo -e "  ${dim}游标已推进到 #${max_id}${reset}"
     fi
+    return 0
 }
 
 _swarm_listen() {
     local swarm="$1"; shift || true
-    local who="master" once="" mentions="" advance=1 interval=10 n=50
+    local who="leader" once="" mentions="" advance=1 interval=10 n=50
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --as)         who="$2"; shift 2 ;;
@@ -2625,8 +2698,8 @@ show_help() {
     ${dim}兼容别名: agent spawn|status|send|collect|kill 仍可用${reset}
 
   ${bold}蜂群编排 ${magenta}(swarm — 有目标的任务组, 可被 cc 接管)${reset}
-    ${green}swarm new${reset}    ${dim}<名> [--goal "..."] [--no-master]${reset}  新建蜂群(默认自带 cc 指挥, --no-master 跳过)
-    ${green}swarm add${reset}    ${dim}<群> <成员> --type task|agent [--kind claude|codex] [--role master|worker] ...${reset}  加成员(首个 agent 默认 master)
+    ${green}swarm new${reset}    ${dim}<名> [--goal "..."] [--no-master]${reset}  新建蜂群(默认自带 Leader, --no-master 跳过)
+    ${green}swarm add${reset}    ${dim}<群> <成员> --type task|agent [--kind claude|codex] [--role leader|member] ...${reset}  加成员(首个 agent 默认 leader)
                 ${dim}[--dir/--perm/--model] [--depends-on a,b] <命令或任务>${reset}
     ${green}swarm ls${reset}     ${dim}[--json]${reset}                    列出蜂群 (目标/状态/指挥)
     ${green}swarm status${reset} ${dim}<群> [--json]${reset}             成员/依赖/挂起 + 看板摘要 + 广场最近
@@ -2636,7 +2709,7 @@ show_help() {
     ${green}swarm migrate${reset}                          迁移旧版蜂群元数据并补齐成员索引
     ${magenta}广场${reset} ${green}swarm say${reset} ${dim}<群> [--as 成员][--to 目标][--kind 类型][--re id] <消息>${reset}  发言(@提及/自动署名)
          ${green}swarm feed${reset} ${dim}<群> [-n N][--from][--kind][--since id][--json]${reset}  读消息流
-         ${green}swarm listen${reset} ${dim}<群> [--as master|成员][--once][--mentions]${reset}  agent 监听增量消息
+         ${green}swarm listen${reset} ${dim}<群> [--as leader|成员][--once][--mentions]${reset}  agent 监听增量消息
          ${green}swarm watch${reset} ${dim}<群>${reset}                  实时跟随广场
     ${magenta}看板${reset} ${green}swarm board${reset} ${dim}<群> [--json]${reset}             看板全貌(按列)
          ${green}swarm task add${reset} ${dim}<群> "标题" [--desc/--assignee/--deps/--col]${reset}  建卡
@@ -3332,7 +3405,7 @@ case "$cmd" in
                 _plaza_say "$@"
                 ;;
             listen)
-                [[ $# -ge 1 ]] || { msg_err "用法: ttmux swarm listen <群> [--as master|成员] [--once] [--mentions]"; exit 1; }
+                [[ $# -ge 1 ]] || { msg_err "用法: ttmux swarm listen <群> [--as leader|成员] [--once] [--mentions]"; exit 1; }
                 _swarm_listen "$@"
                 ;;
             feed)

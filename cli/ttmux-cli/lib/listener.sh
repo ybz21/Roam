@@ -2,7 +2,7 @@
 # ── listener: 广场监听游标 / @mention 路由摘要 ──
 # ══════════════════════════════════════════
 #
-# ttmux swarm listen <群> --as <master|成员> [--once] [--mentions] [--no-advance] [--interval N]
+# ttmux swarm listen <群> --as <leader|成员> [--once] [--mentions] [--no-advance] [--interval N]
 # 给 agent loop 使用：读取上次游标之后的广场消息，标注 @xx/#tN 相关性，输出状态/看板摘要。
 # 它只递送上下文，不替 agent 做决策。
 
@@ -13,9 +13,10 @@ _listener_dir() {
 }
 
 _listener_key() {
-    local key="${1:-master}"
+    local key="${1:-leader}"
+    [[ "$key" == "master" || "$key" == "lead" ]] && key="leader"
     key="${key//[^A-Za-z0-9_.-]/_}"
-    [[ -n "$key" ]] || key="master"
+    [[ -n "$key" ]] || key="leader"
     echo "$key"
 }
 
@@ -54,8 +55,8 @@ _listener_member_cards_pattern() {
 
 _listener_relevance() {
     local who="$1" author="$2" kind="$3" text="$4" cards_re="${5:-}"
-    if [[ "$who" == "master" ]]; then
-        if [[ "$author" == "human" || "$text" =~ (^|[[:space:]])@master($|[[:space:][:punct:]]) || "$text" =~ (^|[[:space:]])@all($|[[:space:][:punct:]]) ]]; then
+    if [[ "$who" == "leader" || "$who" == "master" ]]; then
+        if [[ "$author" == "human" || "$text" =~ (^|[[:space:]])@leader($|[[:space:][:punct:]]) || "$text" =~ (^|[[:space:]])@master($|[[:space:][:punct:]]) || "$text" =~ (^|[[:space:]])@all($|[[:space:][:punct:]]) ]]; then
             echo "HIGH"
         else
             echo "watch"
@@ -65,14 +66,15 @@ _listener_relevance() {
     if [[ "$text" =~ (^|[[:space:]])@${who}($|[[:space:][:punct:]]) ]]; then echo "HIGH"; return 0; fi
     if [[ "$text" =~ (^|[[:space:]])@all($|[[:space:][:punct:]]) ]]; then echo "all"; return 0; fi
     if [[ -n "$cards_re" && "$text" =~ (^|[[:space:]#])(${cards_re})($|[[:space:][:punct:]]) ]]; then echo "card"; return 0; fi
-    if [[ "$author" == "master" && ( "$kind" == "decide" || "$kind" == "broadcast" ) ]]; then echo "master"; return 0; fi
+    if [[ ( "$author" == "leader" || "$author" == "master" ) && ( "$kind" == "decide" || "$kind" == "broadcast" ) ]]; then echo "leader"; return 0; fi
     echo ""
 }
 
 _listener_emit_once() {
     local swarm="$1" who="$2" mentions="$3" advance="$4" n="$5"
     if ! _swarm_exists "$swarm"; then msg_err "蜂群不存在: ${swarm}"; return 1; fi
-    [[ -n "$who" ]] || who="master"
+    [[ -n "$who" ]] || who="leader"
+    [[ "$who" == "master" || "$who" == "lead" ]] && who="leader"
     [[ "$n" =~ ^[0-9]+$ ]] || n=50
 
     local db last rows cards_re max_id=0
@@ -96,7 +98,7 @@ _listener_emit_once() {
             [[ -n "$mentions" && -z "$rel" ]] && continue
             icon=$(_plaza_kind_icon "$kind")
             case "$author" in
-                master) who_label="${magenta}◆ ${author}${reset}" ;;
+                leader|master) who_label="${magenta}◆ ${author}${reset}" ;;
                 human)  who_label="${blue}● ${author}${reset}" ;;
                 *)      who_label="${green}● ${author}${reset}" ;;
             esac
@@ -121,11 +123,12 @@ _listener_emit_once() {
         _listener_last_set "$swarm" "$who" "$max_id"
         echo -e "  ${dim}游标已推进到 #${max_id}${reset}"
     fi
+    return 0
 }
 
 _swarm_listen() {
     local swarm="$1"; shift || true
-    local who="master" once="" mentions="" advance=1 interval=10 n=50
+    local who="leader" once="" mentions="" advance=1 interval=10 n=50
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --as)         who="$2"; shift 2 ;;

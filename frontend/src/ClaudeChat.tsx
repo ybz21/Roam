@@ -5,9 +5,11 @@ import { ChatShell } from './chat/ChatShell'
 import { Typing } from './chat/blocks'
 import { ClaudeBubble } from './chat/ClaudeMessage'
 import { useTranscript, isPending, pairToolResults } from './chat/useTranscript'
+import { useI18n } from './i18n'
 
 export default function ClaudeChat({ name, file, dir, onBack }: { name: string; file?: string; dir?: string; onBack: () => void }) {
-  const { msgs, err } = useTranscript(name, file, 'transcript')
+  const { t } = useI18n()
+  const { msgs, err, refresh } = useTranscript(name, file, 'transcript')
   const { results, view } = useMemo(() => pairToolResults(msgs), [msgs])
   const pending = isPending(view)
 
@@ -15,8 +17,9 @@ export default function ClaudeChat({ name, file, dir, onBack }: { name: string; 
     <ChatShell
       name={name} dir={dir} accent="#58a6ff" error={err}
       title={<span style={{ color: '#58a6ff', fontWeight: 600 }}>🤖 Claude Code</span>}
-      placeholder="给 Claude 发消息（Enter 发送，Shift+Enter 换行）"
+      placeholder={t('chat.claudePlaceholder')}
       onBack={onBack}
+      onRefresh={refresh}
       messages={view}
       renderMessage={(m, i) => <ClaudeBubble key={m.id || i} m={m} results={results} />}
       pending={pending ? <Typing color="#58a6ff" /> : undefined}

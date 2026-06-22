@@ -4,16 +4,19 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button, Input, App as AntApp } from 'antd'
 import { api, upload } from '../api'
 import FileBrowser from '../FileBrowser'
+import FloatingFileDrawer from '../FloatingFileDrawer'
 import { PromptPanel, detectPrompt } from '../prompt'
+import { useI18n } from '../i18n'
 import type { Msg } from './types'
 
-export function ChatShell({ name, dir, accent, title, placeholder, onBack, messages, renderMessage, pending, busy, error }: {
+export function ChatShell({ name, dir, accent, title, placeholder, onBack, onRefresh, messages, renderMessage, pending, busy, error }: {
   name: string
   dir?: string
   accent: string
   title: ReactNode
   placeholder: string
   onBack: () => void
+  onRefresh?: () => void
   messages: Msg[]
   renderMessage: (m: Msg, i: number) => ReactNode
   pending?: ReactNode
@@ -33,6 +36,7 @@ export function ChatShell({ name, dir, accent, title, placeholder, onBack, messa
   const fileRef = useRef<HTMLInputElement>(null)
   const atBottom = useRef(true)
   const { message } = AntApp.useApp()
+  const { t } = useI18n()
 
   // 把路径插进输入框（文件侧栏「@」按钮 / 拖拽 / 上传后共用）
   const insertPath = (p: string) => setInput((v) => (v ? v.replace(/\s*$/, ' ') : '') + p + ' ')
@@ -44,12 +48,12 @@ export function ChatShell({ name, dir, accent, title, placeholder, onBack, messa
     try {
       const cwd = await api('GET', `/sessions/${encodeURIComponent(name)}/cwd`)
       const dir = cwd?.data?.dir
-      if (!dir) { message.error('无法定位工作目录'); return }
+      if (!dir) { message.error(t('chat.cwdMissing')); return }
       const res = await upload(dir, files)
       const names = res.saved.map((p) => p.split('/').pop() || p)
       setInput((v) => (v ? v.replace(/\s*$/, ' ') : '') + names.join(' ') + ' ')
-      message.success(`已上传 ${names.length} 个文件到 ${dir}`)
-    } catch (e: any) { message.error('上传失败：' + e.message) }
+      message.success(t('chat.uploadedFiles', { count: names.length, dir }))
+    } catch (e: any) { message.error(t('chat.uploadFailed', { message: e.message })) }
     finally { setUploading(false) }
   }
 
@@ -107,22 +111,23 @@ export function ChatShell({ name, dir, accent, title, placeholder, onBack, messa
         }}>
         {dragOver && (
           <div style={{ position: 'absolute', inset: 0, zIndex: 30, pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)', border: `2px dashed ${accent}`, borderRadius: 12, color: accent, fontSize: 15, fontWeight: 600 }}>
-            {dropMode === 'path' ? '📄 松开插入文件路径' : '📎 松开上传到工作目录'}
+            {dropMode === 'path' ? t('chat.dropInsertPath') : t('chat.dropUpload')}
           </div>
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: '1px solid var(--border)' }}>
           {title}
           <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{name}</span>
           <span style={{ flex: 1 }} />
-          <Button size="small" type={showFiles ? 'primary' : 'default'} style={showFiles ? { background: accent, borderColor: accent } : {}} onClick={() => setShowFiles((s) => !s)}>📁 文件</Button>
-          <Button size="small" onClick={onBack}>切回终端 ▸</Button>
+          {onRefresh && <Button size="small" title={t('chat.refreshTranscript')} onClick={() => { atBottom.current = true; onRefresh() }}>{t('common.refresh')}</Button>}
+          <Button size="small" type={showFiles ? 'primary' : 'default'} style={showFiles ? { background: accent, borderColor: accent } : {}} onClick={() => setShowFiles((s) => !s)}>📁 {t('chat.files')}</Button>
+          <Button size="small" onClick={onBack}>{t('chat.backToTerminal')}</Button>
         </div>
         <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex' }}>
           <div ref={boxRef} onScroll={onScroll} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '8px 12px' }}>
-            {messages.length === 0 && !pending && <div style={{ color: 'var(--text-dim)', textAlign: 'center', marginTop: 30 }}>加载对话记录…</div>}
+            {messages.length === 0 && !pending && <div style={{ color: 'var(--text-dim)', textAlign: 'center', marginTop: 30 }}>{t('chat.loadingTranscript')}</div>}
             {hidden > 0 && (
               <div style={{ textAlign: 'center', margin: '2px 0 8px' }}>
-                <a onClick={() => setLimit((l) => l + 200)} style={{ color: 'var(--text-dim)', fontSize: 12 }}>⤒ 加载更早 {hidden} 条</a>
+                <a onClick={() => setLimit((l) => l + 200)} style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('chat.loadEarlier', { count: hidden })}</a>
               </div>
             )}
             {visible.map(renderMessage)}
@@ -130,7 +135,7 @@ export function ChatShell({ name, dir, accent, title, placeholder, onBack, messa
             {busy && <LiveTail name={name} />}
           </div>
           {showJump && (
-            <button onClick={jump} title="回到底部"
+            <button onClick={jump} title={t('chat.jumpToBottom')}
               style={{ position: 'absolute', right: 14, bottom: 12, width: 34, height: 34, borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--bg-container)', color: accent, fontSize: 16, cursor: 'pointer', boxShadow: 'var(--card-hover-shadow)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               ↓
             </button>
@@ -142,21 +147,19 @@ export function ChatShell({ name, dir, accent, title, placeholder, onBack, messa
         <div style={{ display: 'flex', gap: 8, padding: 10, borderTop: '1px solid var(--border)', alignItems: 'flex-end' }}>
           <input ref={fileRef} type="file" multiple style={{ display: 'none' }}
             onChange={(e) => { if (e.target.files?.length) doUpload(e.target.files); e.target.value = '' }} />
-          <Button title="上传文件到工作目录" loading={uploading} onClick={() => fileRef.current?.click()}>📎</Button>
+          <Button title={t('chat.uploadToCwd')} loading={uploading} onClick={() => fileRef.current?.click()}>📎</Button>
           <Input.TextArea
             value={input} onChange={(e) => setInput(e.target.value)}
             autoSize={{ minRows: 1, maxRows: 5 }} placeholder={placeholder}
             onPressEnter={(e) => { if (!e.shiftKey) { e.preventDefault(); send() } }}
           />
-          {busy && <Button danger title="发送 Esc 打断当前生成" onClick={stop}>■ 停止</Button>}
-          <Button type="primary" loading={sending} onClick={send} style={{ background: accent, borderColor: accent }}>发送</Button>
+          {busy && <Button danger title={t('chat.stopTitle')} onClick={stop}>{t('chat.stop')}</Button>}
+          <Button type="primary" loading={sending} onClick={send} style={{ background: accent, borderColor: accent }}>{t('common.send')}</Button>
         </div>
       </div>
-      {showFiles && (
-        <div style={{ flex: '0 0 clamp(200px, 32%, 300px)', minWidth: 0 }}>
-          <FileBrowser dir={dir} accent={accent} onClose={() => setShowFiles(false)} onInsertPath={insertPath} />
-        </div>
-      )}
+      <FloatingFileDrawer open={showFiles}>
+        <FileBrowser dir={dir} accent={accent} onClose={() => setShowFiles(false)} onInsertPath={insertPath} />
+      </FloatingFileDrawer>
     </div>
   )
 }
@@ -180,6 +183,7 @@ function cleanTail(raw: string): string {
 }
 
 function LiveTail({ name }: { name: string }) {
+  const { t } = useI18n()
   const [text, setText] = useState('')
   useEffect(() => {
     let stop = false
@@ -200,7 +204,7 @@ function LiveTail({ name }: { name: string }) {
     <div style={{ margin: '4px 0', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg-base)', overflow: 'hidden' }}>
       <div style={{ fontSize: 11, color: 'var(--text-dim)', padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 6 }}>
         <span className="cc-pulse" style={{ width: 6, height: 6, borderRadius: '50%', background: '#3fb950', display: 'inline-block' }} />
-        实时输出（终端）
+        {t('chat.liveTerminalOutput')}
       </div>
       <pre style={{ margin: 0, padding: '0 8px 8px', maxHeight: 160, overflow: 'auto', fontFamily: 'ui-monospace, monospace', fontSize: 11.5, lineHeight: 1.45, color: 'var(--text-dim)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{text}</pre>
     </div>

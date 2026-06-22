@@ -42,6 +42,18 @@ const withTimeout = (promise, ms, label) => Promise.race([
 ])
 const to = Number(flags.timeout || 15000)
 const settle = () => num(flags.wait || flags.settle, 0)
+const chromeExecutable = () => {
+  const candidates = [
+    process.env.CHROME_BIN,
+    '/opt/google/chrome/chrome',
+    '/usr/bin/google-chrome',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Chromium.app/Contents/MacOS/Chromium',
+  ].filter(Boolean)
+  return candidates.find((p) => existsSync(p))
+}
 
 if ((verb === 'screenshot' || verb === 'shot') && flags.fresh) {
   const f = pos[0] || 'screenshot.png'
@@ -51,8 +63,8 @@ if ((verb === 'screenshot' || verb === 'shot') && flags.fresh) {
   const quality = type === 'jpeg' ? num(flags.quality, 85) : undefined
   let fresh
   try {
-    const chromeBin = process.env.CHROME_BIN || '/opt/google/chrome/chrome'
-    const launch = existsSync(chromeBin)
+    const chromeBin = chromeExecutable()
+    const launch = chromeBin
       ? { executablePath: chromeBin }
       : { channel: 'chrome' }
     fresh = await chromium.launch({

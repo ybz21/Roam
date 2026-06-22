@@ -34,22 +34,24 @@ _set_global_env() {
 _env_set() {
     local kv="$1"
     local key="${kv%%=*}"
+    local tmp
+    tmp="$(mktemp "${TTMUX_DATA}/env.XXXXXX")"
     if [[ -f "$TTMUX_ENV" ]]; then
         # 移除旧的同名变量
-        local tmp
-        tmp=$(grep -v "^${key}=" "$TTMUX_ENV" 2>/dev/null || true)
-        echo "$tmp" > "$TTMUX_ENV"
+        grep -v "^${key}=" "$TTMUX_ENV" 2>/dev/null | grep -v '^$' > "$tmp" || true
     fi
-    echo "$kv" >> "$TTMUX_ENV"
-    # 去除空行
-    sed -i '/^$/d' "$TTMUX_ENV"
+    echo "$kv" >> "$tmp"
+    mv "$tmp" "$TTMUX_ENV"
     msg_ok "设置 ${bold}${kv}${reset}"
 }
 
 _env_rm() {
     local key="$1"
     if [[ -f "$TTMUX_ENV" ]]; then
-        sed -i "/^${key}=/d" "$TTMUX_ENV"
+        local tmp
+        tmp="$(mktemp "${TTMUX_DATA}/env.XXXXXX")"
+        grep -v "^${key}=" "$TTMUX_ENV" 2>/dev/null | grep -v '^$' > "$tmp" || true
+        mv "$tmp" "$TTMUX_ENV"
         msg_ok "已删除 ${bold}${key}${reset}"
     else
         msg_info "无环境变量配置"
@@ -113,4 +115,3 @@ _env_push() {
         msg_ok "已推送到 ${bold}${sess}${reset}"
     done <<< "$sessions"
 }
-

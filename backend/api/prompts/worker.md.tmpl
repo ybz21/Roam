@@ -1,4 +1,4 @@
-# 成员 {{.Member}} · worker
+# {{.Member}} · Member
 
 **蜂群**：{{.Swarm}}{{if .Goal}}
 **目标**：{{.Goal}}{{end}}
@@ -19,8 +19,8 @@
   ```
 
 - 认领 / 流转看板卡：`ttmux swarm task <ls|show|move|done> {{.Swarm}} …`
-- 定期监听广场中与你相关的消息：`ttmux swarm listen {{.Swarm}} --as {{.Member}} --mentions --once`。必须处理 `@{{.Member}}`、`@all`、你负责卡片 `#tN`、以及 master 的 decide/broadcast；不要给其他成员派活，需要全局调度就 `--to master --kind ask`。
-{{if .MasterName}}- 有问题找 master **{{.MasterName}}**。
+- 定期监听广场中与你相关的消息：`ttmux swarm listen {{.Swarm}} --as {{.Member}} --mentions --once`。必须处理 `@{{.Member}}`、`@all`、你负责卡片 `#tN`、以及 Leader 的 decide/broadcast；不要给其他成员派活，需要全局调度就 `--to leader --kind ask`。
+{{if .MasterName}}- 有问题找 Leader **{{.MasterName}}**。
 {{end}}- Web 类成果用 `chrome` 自检（打开页面、点按钮、读文本断言），别只读代码。
 - **干完务必**（解锁下游成员）：
 

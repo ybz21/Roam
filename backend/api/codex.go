@@ -23,11 +23,7 @@ import (
 
 // cmdlineHasCodex 判断进程命令行是否是 codex CLI。
 func cmdlineHasCodex(pid int) bool {
-	b, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "cmdline"))
-	if err != nil {
-		return false
-	}
-	cl := strings.ToLower(strings.ReplaceAll(string(b), "\x00", " "))
+	cl := processCmdline(pid)
 	return strings.Contains(cl, "codex") && !strings.Contains(cl, "codex-web")
 }
 

@@ -19,10 +19,11 @@ type API struct {
 	TT          *ttmux.Client
 	KannaURL    string // 可选：Claude Code 精美 UI（kanna）的地址；为空则前端不显示入口
 	BrowserHome string // 浏览器导航起始页地址（供前端设为默认主页）
+	Football    *FootballStore
 }
 
 func New(tt *ttmux.Client, kannaURL, browserHome string) *API {
-	return &API{TT: tt, KannaURL: kannaURL, BrowserHome: browserHome}
+	return &API{TT: tt, KannaURL: kannaURL, BrowserHome: browserHome, Football: NewFootballStore()}
 }
 
 // json 透传 ttmux 的 --json 输出

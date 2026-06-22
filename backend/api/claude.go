@@ -27,26 +27,46 @@ func encodeProject(dir string) string { return nonAlnum.ReplaceAllString(dir, "-
 func procChildren() map[int][]int {
 	m := map[int][]int{}
 	ents, err := os.ReadDir("/proc")
+	if err == nil {
+		for _, e := range ents {
+			pid, err := strconv.Atoi(e.Name())
+			if err != nil {
+				continue
+			}
+			// /proc/<pid>/stat: "pid (comm) state ppid ..."，comm 可能含空格/括号，取末尾 ')' 后再切
+			b, err := os.ReadFile(filepath.Join("/proc", e.Name(), "stat"))
+			if err != nil {
+				continue
+			}
+			s := string(b)
+			i := strings.LastIndexByte(s, ')')
+			if i < 0 || i+2 >= len(s) {
+				continue
+			}
+			fields := strings.Fields(s[i+2:]) // state ppid ...
+			if len(fields) < 2 {
+				continue
+			}
+			ppid, err := strconv.Atoi(fields[1])
+			if err != nil {
+				continue
+			}
+			m[ppid] = append(m[ppid], pid)
+		}
+		return m
+	}
+
+	out, err := exec.Command("ps", "-axo", "pid=", "-o", "ppid=").Output()
 	if err != nil {
 		return m
 	}
-	for _, e := range ents {
-		pid, err := strconv.Atoi(e.Name())
-		if err != nil {
-			continue
-		}
-		// /proc/<pid>/stat: "pid (comm) state ppid ..."，comm 可能含空格/括号，取末尾 ')' 后再切
-		b, err := os.ReadFile(filepath.Join("/proc", e.Name(), "stat"))
-		if err != nil {
-			continue
-		}
-		s := string(b)
-		i := strings.LastIndexByte(s, ')')
-		if i < 0 || i+2 >= len(s) {
-			continue
-		}
-		fields := strings.Fields(s[i+2:]) // state ppid ...
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		fields := strings.Fields(line)
 		if len(fields) < 2 {
+			continue
+		}
+		pid, err := strconv.Atoi(fields[0])
+		if err != nil {
 			continue
 		}
 		ppid, err := strconv.Atoi(fields[1])
@@ -58,13 +78,21 @@ func procChildren() map[int][]int {
 	return m
 }
 
+func processCmdline(pid int) string {
+	b, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "cmdline"))
+	if err == nil {
+		return strings.ToLower(strings.ReplaceAll(string(b), "\x00", " "))
+	}
+	out, err := exec.Command("ps", "-p", strconv.Itoa(pid), "-o", "command=").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(string(out)))
+}
+
 // cmdlineHasClaude 判断进程命令行是否是 claude。
 func cmdlineHasClaude(pid int) bool {
-	b, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "cmdline"))
-	if err != nil {
-		return false
-	}
-	cl := strings.ToLower(strings.ReplaceAll(string(b), "\x00", " "))
+	cl := processCmdline(pid)
 	// 命令行里出现独立的 claude 段（claude / .../claude / node ... claude）
 	return strings.Contains(cl, "claude") && !strings.Contains(cl, "claude-code-webui")
 }

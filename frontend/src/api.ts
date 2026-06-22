@@ -13,7 +13,7 @@ export async function api(method: string, path: string, body?: any): Promise<any
   })
   if (r.status === 401) {
     onUnauth()
-    throw new Error('未登录')
+    throw new Error('UNAUTHORIZED')
   }
   const ct = r.headers.get('content-type') || ''
   const data = ct.includes('json') ? await r.json() : await r.text()
@@ -30,7 +30,7 @@ export async function upload(dir: string, files: FileList | File[]): Promise<{ d
   form.append('dir', dir)
   Array.from(files).forEach((f) => form.append('files', f))
   const r = await fetch('/api/upload', { method: 'POST', body: form })
-  if (r.status === 401) { onUnauth(); throw new Error('未登录') }
+  if (r.status === 401) { onUnauth(); throw new Error('UNAUTHORIZED') }
   const data = await r.json().catch(() => null)
   if (!r.ok) throw new Error(data?.error?.message || data?.error?.code || 'HTTP ' + r.status)
   return data.data

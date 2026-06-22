@@ -311,7 +311,7 @@ case "$cmd" in
                 _plaza_say "$@"
                 ;;
             listen)
-                [[ $# -ge 1 ]] || { msg_err "用法: ttmux swarm listen <群> [--as master|成员] [--once] [--mentions]"; exit 1; }
+                [[ $# -ge 1 ]] || { msg_err "用法: ttmux swarm listen <群> [--as leader|成员] [--once] [--mentions]"; exit 1; }
                 _swarm_listen "$@"
                 ;;
             feed)

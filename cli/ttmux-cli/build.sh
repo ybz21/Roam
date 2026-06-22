@@ -52,7 +52,7 @@ chmod +x "$OUT"
 
 # 语法自检
 if bash -n "$OUT"; then
-    echo "✔ 已生成 $(realpath --relative-to="${SCRIPT_DIR}/../.." "$OUT")  ($(wc -l < "$OUT") 行, ${#MODULES[@]} 个模块)"
+    echo "✔ 已生成 $OUT  ($(wc -l < "$OUT") 行, ${#MODULES[@]} 个模块)"
 else
     echo "✘ 生成的 ttmux 语法检查失败"
     exit 1

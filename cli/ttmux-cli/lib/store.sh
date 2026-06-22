@@ -74,7 +74,7 @@ _swarm_db_init() {
                 status TEXT, deps TEXT, done INT DEFAULT 0, pending INT DEFAULT 0,
                 model TEXT, perm TEXT,
                 kind TEXT DEFAULT 'claude',   -- 引擎: claude | codex
-                role TEXT DEFAULT 'worker');  -- 角色: master | worker
+                role TEXT DEFAULT 'member');  -- 角色: leader | member
             CREATE TABLE IF NOT EXISTS posts(
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 ts TEXT, author TEXT, kind TEXT, re INTEGER, text TEXT);
@@ -86,8 +86,18 @@ _swarm_db_init() {
     # 迁移: 旧库补列(kind/role)，幂等
     local info; info=$(sqlite3 "$db" "PRAGMA table_info(members);" 2>/dev/null || echo)
     grep -q '|kind|' <<<"$info" || sqlite3 "$db" "ALTER TABLE members ADD COLUMN kind TEXT DEFAULT 'claude';" 2>/dev/null || true
-    grep -q '|role|' <<<"$info" || sqlite3 "$db" "ALTER TABLE members ADD COLUMN role TEXT DEFAULT 'worker';" 2>/dev/null || true
+    grep -q '|role|' <<<"$info" || sqlite3 "$db" "ALTER TABLE members ADD COLUMN role TEXT DEFAULT 'member';" 2>/dev/null || true
+    sqlite3 "$db" "UPDATE members SET role='leader' WHERE role='master'; UPDATE members SET role='member' WHERE role='worker' OR IFNULL(role,'')='';" 2>/dev/null || true
     return 0
+}
+
+_swarm_role_norm() {
+    case "${1:-}" in
+        leader|lead|master) echo "leader" ;;
+        member|worker) echo "member" ;;
+        "") echo "" ;;
+        *) echo "$1" ;;
+    esac
 }
 
 # name 或 id -> id（id 直接返回；name 查 meta.db；查不到回空串）

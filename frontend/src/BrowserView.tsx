@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button, Input, Space, Tag, App as AntApp } from 'antd'
 import { api } from './api'
+import { useI18n } from './i18n'
 
 interface TabInfo { id: string; title: string; url: string }
 
@@ -41,6 +42,7 @@ function TabBar({ tabs, active, onSelect, onClose, onAdd, extra }: {
   tabs: TabInfo[]; active: string
   onSelect: (id: string) => void; onClose: (id: string) => void; onAdd: () => void; extra: ReactNode
 }) {
+  const { t } = useI18n()
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px 0', flex: '0 0 auto' }}>
       <div style={{ display: 'flex', gap: 4, overflowX: 'auto', flex: 1, minWidth: 0 }}>
@@ -49,7 +51,7 @@ function TabBar({ tabs, active, onSelect, onClose, onAdd, extra }: {
         ))}
         <button
           onClick={onAdd}
-          title="新建标签"
+          title={t('browser.newTab')}
           style={{ flex: '0 0 auto', width: 28, height: 28, border: 'none', background: 'transparent', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 16, borderRadius: 6 }}
         >+</button>
       </div>
@@ -62,11 +64,11 @@ function TabBar({ tabs, active, onSelect, onClose, onAdd, extra }: {
 type Quality = number | 'auto'
 const QKEY = 'ttmux.browser.quality'
 const RKEY = 'ttmux.browser.rotate' // 画面旋转角度（0/90/180/270），手机竖屏看横屏用
-const QUALITY_OPTS: { label: string; value: Quality }[] = [
-  { label: '自动', value: 'auto' },
-  { label: '标清', value: 50 },
-  { label: '高清', value: 80 },
-  { label: '超清', value: 92 },
+const QUALITY_OPTS: { labelKey: string; value: Quality }[] = [
+  { labelKey: 'browser.quality.auto', value: 'auto' },
+  { labelKey: 'browser.quality.standard', value: 50 },
+  { labelKey: 'browser.quality.high', value: 80 },
+  { labelKey: 'browser.quality.ultra', value: 92 },
 ]
 
 function fmtRate(bytesPerSec: number) {
@@ -112,6 +114,7 @@ function mergeTabs(prev: TabInfo[], incoming: TabInfo[]): TabInfo[] {
 
 export default function BrowserView() {
   const { message } = AntApp.useApp()
+  const { t } = useI18n()
   const imgRef = useRef<HTMLImageElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
   const wsRef = useRef<WebSocket | null>(null)
@@ -290,7 +293,7 @@ export default function BrowserView() {
   // F12：打开 Chrome 自带 DevTools（经后端反代 /api/browser/cdp/*，直连该 tab 的 CDP）。
   // https 页面必须用 wss= 参数，否则 DevTools 起 ws:// 连接会被混合内容拦截。
   const openDevtools = () => {
-    if (!target) { message.warning('没有可调试的标签页'); return }
+    if (!target) { message.warning(t('browser.noDebuggableTab')); return }
     const wsParam = location.protocol === 'https:' ? 'wss' : 'ws'
     const u = `${location.origin}/api/browser/cdp/devtools/inspector.html`
       + `?${wsParam}=${location.host}/api/browser/cdp/devtools/page/${target}`
@@ -446,7 +449,7 @@ export default function BrowserView() {
         onAdd={newTab}
         extra={
           <Space size={10} style={{ paddingRight: 4 }}>
-            <Button size="small" onClick={rotate} title="旋转画面 90°（手机竖屏看横屏）"
+            <Button size="small" onClick={rotate} title={t('browser.rotateTitle')}
               style={rotation ? { color: '#58a6ff', borderColor: '#58a6ff66' } : undefined}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 {/* 屏幕旋转图标（倾斜设备框 + 对角双箭头），明显区别于刷新的环形箭头 */}
@@ -469,11 +472,11 @@ export default function BrowserView() {
                     style={on
                       ? { background: '#1f6feb', borderColor: '#1f6feb', color: '#fff', fontWeight: 700, boxShadow: '0 0 0 2px rgba(31,111,235,.35)', zIndex: 1 }
                       : { background: 'transparent', borderColor: 'var(--border)', color: 'var(--text-dim)' }}
-                  >{o.label}</Button>
+                  >{t(o.labelKey)}</Button>
                 )
               })}
             </Space.Compact>
-            <Tag color={connected ? 'green' : 'red'} style={{ marginInlineEnd: 0 }}>{connected ? '已连接' : '未连接'}</Tag>
+            <Tag color={connected ? 'green' : 'red'} style={{ marginInlineEnd: 0 }}>{connected ? t('browser.connected') : t('browser.disconnected')}</Tag>
             <span style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap' }}>
               {quality === 'auto' && levelName ? <span style={{ color: '#58a6ff' }}>{levelName} ·</span> : null}
               {cell(latency == null ? '—' : latency + 'ms', 48)} ·{cell(fmtRate(bw), 70)} ·{cell(fps + 'fps', 42)}
@@ -484,10 +487,10 @@ export default function BrowserView() {
       {/* 地址栏：紧凑一行，地址框自适应铺满 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 8px', flex: '0 0 auto' }}>
         <Button.Group size="small">
-          <Button onClick={() => act('back')} title="后退">←</Button>
-          <Button onClick={() => act('forward')} title="前进">→</Button>
-          <Button onClick={() => act('reload')} title="刷新">⟳</Button>
-          <Button onClick={() => act('navigate', { url: home })} title="导航起始页">
+          <Button onClick={() => act('back')} title={t('file.back')}>←</Button>
+          <Button onClick={() => act('forward')} title={t('file.forward')}>→</Button>
+          <Button onClick={() => act('reload')} title={t('common.refresh')}>⟳</Button>
+          <Button onClick={() => act('navigate', { url: home })} title={t('browser.home')}>
             <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="url(#metalIcon)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
               <path d="M3 11.5 L12 4 L21 11.5" />
               <path d="M5.5 10 V19.5 H18.5 V10" />
@@ -496,7 +499,7 @@ export default function BrowserView() {
         </Button.Group>
         <Input
           size="small"
-          placeholder="输入网址回车导航，如 example.com"
+          placeholder={t('browser.urlPlaceholder')}
           value={url}
           style={{ flex: 1 }}
           onChange={(e) => setUrl(e.target.value)}
@@ -504,8 +507,8 @@ export default function BrowserView() {
           onBlur={() => { addrFocused.current = false }}
           onPressEnter={navigate}
         />
-        <Button size="small" onClick={navigate}>前往</Button>
-        <Button size="small" onClick={openDevtools} title="打开调试工具 (F12 / DevTools)">调试</Button>
+        <Button size="small" onClick={navigate}>{t('browser.go')}</Button>
+        <Button size="small" onClick={openDevtools} title={t('browser.devtoolsTitle')}>{t('browser.debug')}</Button>
       </div>
       <style>{`
         .bv-ripple{position:absolute;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;

@@ -23,7 +23,36 @@ BIND="${TTMUX_WEB_BIND:-0.0.0.0:13579}"
 PORT="${BIND##*:}"
 export TTMUX_BIN="${TTMUX_BIN:-$(pwd)/ttmux}"
 export TTMUX_WEB_PASSWORD="${TTMUX_WEB_PASSWORD:-BladeAI2026!!}"
-LAN=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
+OS="$(uname -s 2>/dev/null || echo unknown)"
+
+lan_ip() {
+  if [ "$OS" = "Darwin" ]; then
+    ipconfig getifaddr en0 2>/dev/null \
+      || ipconfig getifaddr en1 2>/dev/null \
+      || route -n get default 2>/dev/null | awk '/interface:/{print $2}' | xargs -I{} ipconfig getifaddr {} 2>/dev/null \
+      || true
+  else
+    hostname -I 2>/dev/null | awk '{print $1}' || true
+  fi
+}
+
+daemon_start() {
+  if command -v setsid >/dev/null 2>&1; then
+    setsid "$@" </dev/null >>"$LOG" 2>&1 &
+  else
+    nohup "$@" </dev/null >>"$LOG" 2>&1 &
+  fi
+}
+
+daemon_start_quiet() {
+  if command -v setsid >/dev/null 2>&1; then
+    setsid "$@" </dev/null >/tmp/kanna.log 2>&1 &
+  else
+    nohup "$@" </dev/null >/tmp/kanna.log 2>&1 &
+  fi
+}
+
+LAN=$(lan_ip)
 
 LOG="${TTMUX_WEB_LOG:-/tmp/ttmux-web.log}"
 PIDFILE="${TTMUX_WEB_PID:-/tmp/ttmux-web.pid}"
@@ -71,7 +100,7 @@ if command -v kanna >/dev/null 2>&1; then
     echo "==> kanna 已在运行 :$KANNA_PORT"
   else
     echo "==> 启动 kanna :$KANNA_PORT（守护，关终端不影响）"
-    setsid kanna --remote --port "$KANNA_PORT" --password "$TTMUX_WEB_PASSWORD" --no-open </dev/null >/tmp/kanna.log 2>&1 &
+    daemon_start_quiet kanna --remote --port "$KANNA_PORT" --password "$TTMUX_WEB_PASSWORD" --no-open
     sleep 1
   fi
   export TTMUX_KANNA_URL="${TTMUX_KANNA_URL:-http://${LAN:-127.0.0.1}:$KANNA_PORT}"
@@ -121,8 +150,8 @@ if [ "${1:-}" = "fg" ]; then
   exec "$BIN" -web "$(pwd)/frontend/dist" -addr "$BIND" "$@"
 fi
 
-# 默认：后台守护。setsid 脱离当前终端会话 → 关终端 / Ctrl-C 都不影响
-setsid "$BIN" -web "$(pwd)/frontend/dist" -addr "$BIND" "$@" </dev/null >>"$LOG" 2>&1 &
+# 默认：后台守护。Linux 优先 setsid；macOS 无 setsid 时使用 nohup。
+daemon_start "$BIN" -web "$(pwd)/frontend/dist" -addr "$BIND" "$@"
 sleep 1
 pids="$(port_pids)"
 [ -n "${pids// /}" ] && echo "$pids" | tr ' ' '\n' | head -1 > "$PIDFILE"

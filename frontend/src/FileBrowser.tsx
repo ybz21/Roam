@@ -5,6 +5,7 @@ import { AutoComplete, Button, Input, Modal, Space, Spin, App as AntApp, Tooltip
 import { api, upload } from './api'
 import Markdown from './Markdown'
 import { DocxFilePreview, ExcelFilePreview, PptxFilePreview } from './OfficePreviewers'
+import { useI18n } from './i18n'
 
 const IMG_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'avif', 'svg']
 const MD_EXT = ['md', 'markdown', 'mdx']
@@ -176,6 +177,15 @@ const FolderUpIcon = () => (
 const RefreshIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 1-15 6.7" /><path d="M3 12A9 9 0 0 1 18 5.3" /><path d="M18 2v4h-4" /><path d="M6 22v-4h4" /></svg>
 )
+const BackIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+)
+const ForwardIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg>
+)
+const NewFolderIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" /><path d="M12 10v6" /><path d="M9 13h6" /></svg>
+)
 const UploadIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M16 16h2a4 4 0 0 0 .7-7.9A6 6 0 0 0 7.4 6.8 5 5 0 0 0 8 16h1" /><path d="M12 18V10" /><path d="m8.5 13.5 3.5-3.5 3.5 3.5" /></svg>
 )
@@ -194,7 +204,21 @@ const IconButton = ({ title, children, danger, onClick, disabled, width = 24 }: 
   </Tooltip>
 )
 
+const ClosePanelButton = ({ title, onClick }: { title: string; onClick: () => void }) => (
+  <button
+    type="button"
+    title={title}
+    aria-label={title}
+    className="tt-file-close"
+    onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+    onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClick() }}
+  >
+    <CloseIcon />
+  </button>
+)
+
 function OfficePreview({ name, previewUrl, rawUrl, downloadUrl, downloadName, height }: { name: string; previewUrl: string; rawUrl: string; downloadUrl: string; downloadName: string; height: string }) {
+  const { t } = useI18n()
   const [url, setUrl] = useState('')
   const [err, setErr] = useState('')
   useEffect(() => {
@@ -227,8 +251,8 @@ function OfficePreview({ name, previewUrl, rawUrl, downloadUrl, downloadName, he
         <div style={{ color: 'var(--text-bright)', fontWeight: 700, marginBottom: 6 }}>{name}</div>
         <div>{err}</div>
         <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <Button size="small" type="primary" href={downloadUrl} download={downloadName}>下载文件</Button>
-          <Button size="small" href={rawUrl} target="_blank">打开原始</Button>
+          <Button size="small" type="primary" href={downloadUrl} download={downloadName}>{t('file.downloadFile')}</Button>
+          <Button size="small" href={rawUrl} target="_blank">{t('file.openRaw')}</Button>
         </div>
       </div>
     )
@@ -272,6 +296,7 @@ function Viewer({
   const [source, setSource] = useState(false) // markdown：源码/渲染切换
   const [agentPick, setAgentPick] = useState(false)
   const { message } = AntApp.useApp()
+  const { t } = useI18n()
 
   useEffect(() => {
     if (isImg || isPdf || isOffice) return // 图片/PDF/Office 直接走 raw 或专用面板
@@ -283,9 +308,9 @@ function Viewer({
   const copyPath = async () => {
     try {
       await navigator.clipboard.writeText(path)
-      message.success('已复制路径')
+      message.success(t('file.pathCopied'))
     } catch {
-      message.error('复制失败')
+      message.error(t('common.copyFailed'))
     }
   }
   const codePre = (text: string) => (
@@ -308,7 +333,7 @@ function Viewer({
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-dim)', fontSize: 12 }}>
         <FileTypeIcon name={path} />
         <span>{title}</span>
-        {data?.truncated && <span style={{ marginLeft: 'auto', color: '#d29922' }}>仅显示前 512 KB</span>}
+        {data?.truncated && <span style={{ marginLeft: 'auto', color: '#d29922' }}>{t('file.truncatedShort')}</span>}
       </div>
       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>{body}</div>
     </div>
@@ -317,10 +342,10 @@ function Viewer({
     const rows = parseDelimited(text, sep)
     const head = rows[0] || []
     const body = rows.slice(1)
-    return previewShell(`${sep === ',' ? 'CSV' : 'TSV'} 表格预览 · 最多 80 行 / 12 列`, (
+    return previewShell(t('file.tablePreviewTitle', { kind: sep === ',' ? 'CSV' : 'TSV' }), (
       <div style={{ height: previewHeight, overflow: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-          <thead>{head.length > 0 && <tr>{head.map((c, i) => <th key={i} style={cellStyle(true)}>{c || `列 ${i + 1}`}</th>)}</tr>}</thead>
+          <thead>{head.length > 0 && <tr>{head.map((c, i) => <th key={i} style={cellStyle(true)}>{c || t('file.column', { index: i + 1 })}</th>)}</tr>}</thead>
           <tbody>{body.map((r, i) => <tr key={i}>{head.map((_, j) => <td key={j} style={cellStyle(false)}>{r[j] || ''}</td>)}</tr>)}</tbody>
         </table>
       </div>
@@ -334,15 +359,15 @@ function Viewer({
       </span>
       <span style={{ flex: 1, minWidth: 8 }} />
       {isMd && data && !data.binary && (
-        <Button size="small" onClick={() => setSource((s) => !s)}>{source ? '渲染' : '源码'}</Button>
+        <Button size="small" onClick={() => setSource((s) => !s)}>{source ? t('file.rendered') : t('file.source')}</Button>
       )}
       {onOpenAgent && (
-        <Button size="small" onClick={() => setAgentPick(true)}>在 Agent 中打开</Button>
+        <Button size="small" onClick={() => setAgentPick(true)}>{t('file.openInAgent')}</Button>
       )}
-      <Button size="small" onClick={copyPath}>复制路径</Button>
-      <Button size="small" href={downloadUrl} download={downloadName}>下载</Button>
-      <a href={rawUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--text-dim)', fontSize: 12 }}>原始</a>
-      {inline && <IconButton title="关闭预览" onClick={onClose}><CloseIcon /></IconButton>}
+      <Button size="small" onClick={copyPath}>{t('file.copyPath')}</Button>
+      <Button size="small" href={downloadUrl} download={downloadName}>{t('file.download')}</Button>
+      <a href={rawUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('file.raw')}</a>
+      {inline && <IconButton title={t('file.closePreview')} onClick={onClose}><CloseIcon /></IconButton>}
     </div>
   )
   const bodyNode = (
@@ -352,23 +377,23 @@ function Viewer({
           <img src={rawUrl} alt={name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
         </div>
       ) : isPdf ? (
-        previewShell('PDF 内嵌预览', <iframe title={name} src={rawUrl} style={{ width: '100%', height: '100%', border: 0, background: '#fff' }} />)
+        previewShell(t('file.pdfPreview'), <iframe title={name} src={rawUrl} style={{ width: '100%', height: '100%', border: 0, background: '#fff' }} />)
       ) : isDocxPreview ? (
-        previewShell('Word 预览', <DocxFilePreview src={rawUrl} name={name} downloadUrl={downloadUrl} />)
+        previewShell(t('file.wordPreview'), <DocxFilePreview src={rawUrl} name={name} downloadUrl={downloadUrl} />)
       ) : isExcelPreview ? (
-        previewShell('Excel 预览', <ExcelFilePreview src={rawUrl} name={name} downloadUrl={downloadUrl} />)
+        previewShell(t('file.excelPreview'), <ExcelFilePreview src={rawUrl} name={name} downloadUrl={downloadUrl} />)
       ) : isPptxPreview ? (
-        previewShell('PPT 预览', <PptxFilePreview src={rawUrl} name={name} downloadUrl={downloadUrl} />)
+        previewShell(t('file.pptPreview'), <PptxFilePreview src={rawUrl} name={name} downloadUrl={downloadUrl} />)
       ) : isOffice ? (
-        previewShell('Office 转 PDF 预览', (
+        previewShell(t('file.officePreview'), (
           <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
             <div style={{ flex: 1, minHeight: 0 }}>
               <OfficePreview name={name} previewUrl={previewUrl} rawUrl={rawUrl} downloadUrl={downloadUrl} downloadName={downloadName} height="100%" />
             </div>
             <div style={{ padding: '8px 10px', borderTop: '1px solid var(--border-subtle)', color: 'var(--text-dim)', fontSize: 12, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <span>预览依赖本机 LibreOffice/soffice 转换。</span>
-              <Button size="small" type="primary" href={downloadUrl} download={downloadName}>下载文件</Button>
-              <Button size="small" href={rawUrl} target="_blank">打开原始</Button>
+              <span>{t('file.officePreviewHelp')}</span>
+              <Button size="small" type="primary" href={downloadUrl} download={downloadName}>{t('file.downloadFile')}</Button>
+              <Button size="small" href={rawUrl} target="_blank">{t('file.openRaw')}</Button>
             </div>
           </div>
         ))
@@ -377,7 +402,7 @@ function Viewer({
           {err && <div style={{ color: '#f85149' }}>{err}</div>}
           {!data && !err && <div style={{ textAlign: 'center', padding: 30 }}><Spin /></div>}
           {data && data.binary && (
-            <div style={{ color: 'var(--text-dim)' }}>二进制文件，无法预览（{fmtSize(data.size)}）。<a href={rawUrl} target="_blank" rel="noreferrer" style={{ color: accent }}>下载/打开原始文件</a></div>
+            <div style={{ color: 'var(--text-dim)' }}>{t('file.binaryCannotPreview', { size: fmtSize(data.size) })}<a href={rawUrl} target="_blank" rel="noreferrer" style={{ color: accent }}>{t('file.downloadOrOpenRaw')}</a></div>
           )}
           {data && !data.binary && (
             <>
@@ -386,17 +411,17 @@ function Viewer({
                 : isMd && !source
                   ? <div style={{ height: previewHeight, overflow: 'auto' }}><Markdown accent={accent} resolveHref={resolvePreviewHref} onLinkClick={openPreviewLink}>{data.content}</Markdown></div>
                   : ext === 'json'
-                    ? previewShell('JSON 结构预览', <div style={{ height: previewHeight, overflow: 'auto', padding: 12 }}><Markdown accent={accent}>{fence('json', formatJSON(data.content))}</Markdown></div>)
+                    ? previewShell(t('file.jsonPreview'), <div style={{ height: previewHeight, overflow: 'auto', padding: 12 }}><Markdown accent={accent}>{fence('json', formatJSON(data.content))}</Markdown></div>)
                     : codeLang
-                      ? previewShell(`${codeLang.toUpperCase()} 代码预览`, <div style={{ height: previewHeight, overflow: 'auto', padding: 12 }}><Markdown accent={accent}>{fence(codeLang, data.content)}</Markdown></div>)
+                      ? previewShell(t('file.codePreview', { lang: codeLang.toUpperCase() }), <div style={{ height: previewHeight, overflow: 'auto', padding: 12 }}><Markdown accent={accent}>{fence(codeLang, data.content)}</Markdown></div>)
                       : codePre(data.content)}
-              {data.truncated && <div style={{ color: '#d29922', fontSize: 12, marginTop: 6 }}>⚠ 文件较大，仅显示前 512 KB</div>}
+              {data.truncated && <div style={{ color: '#d29922', fontSize: 12, marginTop: 6 }}>⚠ {t('file.truncatedLong')}</div>}
             </>
           )}
         </>
       )}
       {onOpenAgent && (
-        <Modal open={agentPick} title="在 Agent 中打开" footer={null} onCancel={() => setAgentPick(false)}>
+        <Modal open={agentPick} title={t('file.openInAgent')} footer={null} onCancel={() => setAgentPick(false)}>
           <Space direction="vertical" size={12} style={{ width: '100%' }}>
             <div style={{ color: 'var(--text-dim)', fontFamily: 'ui-monospace, monospace', wordBreak: 'break-all' }}>{path}</div>
             <Space>
@@ -464,11 +489,42 @@ export default function FileBrowser({
   const [pathDraft, setPathDraft] = useState('')
   const [tick, setTick] = useState(0) // 上传后强制重载当前目录
   const [uploading, setUploading] = useState(false)
+  const [history, setHistory] = useState<string[]>([dir || '']) // 浏览器式前进/后退历史
+  const [histIdx, setHistIdx] = useState(0)
+  const [mkdirOpen, setMkdirOpen] = useState(false)
+  const [mkdirName, setMkdirName] = useState('')
+  const [mkdirBusy, setMkdirBusy] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const { message, modal } = AntApp.useApp()
+  const { t } = useI18n()
 
-  // 会话切换（dir 变化）→ 回到工作目录根
-  useEffect(() => { setPath(dir || '') }, [dir])
+  // 会话切换（dir 变化）→ 回到工作目录根，并重置历史
+  useEffect(() => {
+    setPath(dir || '')
+    setHistory([dir || ''])
+    setHistIdx(0)
+  }, [dir])
+
+  // 进入新目录：截断当前位置之后的前进记录，再追加并前移
+  const navigate = (target: string) => {
+    if (target === path) return
+    setPath(target)
+    setView(null)
+    setHistory((h) => [...h.slice(0, histIdx + 1), target])
+    setHistIdx((i) => i + 1)
+  }
+  const canBack = histIdx > 0
+  const canForward = histIdx < history.length - 1
+  const goBack = () => {
+    if (!canBack) return
+    const i = histIdx - 1
+    setHistIdx(i); setPath(history[i]); setView(null)
+  }
+  const goForward = () => {
+    if (!canForward) return
+    const i = histIdx + 1
+    setHistIdx(i); setPath(history[i]); setView(null)
+  }
 
   useEffect(() => {
     let stop = false
@@ -484,7 +540,7 @@ export default function FileBrowser({
 
   const cur = data?.path || path
   const refresh = () => setTick((t) => t + 1)
-  const goUp = () => { if (data && canUp) setPath(data.parent) }
+  const goUp = () => { if (data && canUp) navigate(data.parent) }
 
   useEffect(() => {
     setPathDraft(displayPath(cur))
@@ -495,28 +551,41 @@ export default function FileBrowser({
     setUploading(true)
     try {
       const res = await upload(cur, files)
-      message.success(`已上传 ${res.saved.length} 个文件`)
+      message.success(t('file.uploadedCount', { count: res.saved.length }))
       refresh()
-    } catch (e: any) { message.error('上传失败：' + e.message) }
+    } catch (e: any) { message.error(t('chat.uploadFailed', { message: e.message })) }
     finally { setUploading(false) }
+  }
+  const doMkdir = async () => {
+    const name = mkdirName.trim()
+    if (!name || !cur || mkdirBusy) return
+    setMkdirBusy(true)
+    try {
+      await api('POST', '/file/mkdir', { dir: cur, name })
+      message.success(t('file.folderCreated'))
+      setMkdirOpen(false)
+      setMkdirName('')
+      refresh()
+    } catch (e: any) { message.error(t('file.mkdirFailed', { message: e.message })) }
+    finally { setMkdirBusy(false) }
   }
   const deletePath = async (target: string) => {
     try {
       const res = await api('DELETE', `/file?path=${encodeURIComponent(target)}`)
-      message.success(res.data?.missing ? '文件已不存在，已刷新' : '已删除')
+      message.success(res.data?.missing ? t('file.alreadyMissingRefreshed') : t('file.deleted'))
       if (view === target) setView(null)
       refresh()
     } catch (e: any) {
-      message.error('删除失败：' + e.message)
+      message.error(t('file.deleteFailed', { message: e.message }))
       throw e
     }
   }
   const confirmDelete = (target: string, isDir: boolean) => {
     modal.confirm({
-      title: isDir ? '删除此空目录？' : '删除此文件？',
+      title: isDir ? t('file.deleteEmptyDirConfirm') : t('file.deleteFileConfirm'),
       content: target,
-      okText: '删除',
-      cancelText: '取消',
+      okText: t('file.delete'),
+      cancelText: t('common.cancel'),
       okButtonProps: { danger: true },
       onOk: () => deletePath(target),
     })
@@ -528,13 +597,12 @@ export default function FileBrowser({
     try {
       const res = await api('GET', `/file/stat?path=${encodeURIComponent(target)}`)
       if (res.data?.dir) {
-        setPath(target)
-        setView(null)
+        navigate(target)
       } else {
         setView(target)
       }
     } catch (e: any) {
-      message.error('无法打开引用文件：' + e.message)
+      message.error(t('file.openReferenceFailed', { message: e.message }))
     }
   }
 
@@ -559,31 +627,34 @@ export default function FileBrowser({
       if (q && !value.toLowerCase().includes(q) && !fileNameOf(value).toLowerCase().includes(q)) return
       list.push({ value, label })
     }
-    if (cur) add(cur, <PathOption kind="当前位置" path={cur} />)
-    if (data?.parent && data.parent !== cur) add(data.parent, <PathOption kind="上级目录" path={data.parent} />)
-    if (dir && dir !== cur) add(dir, <PathOption kind="工作目录" path={dir} />)
+    if (cur) add(cur, <PathOption kind={t('file.currentLocation')} path={cur} />)
+    if (data?.parent && data.parent !== cur) add(data.parent, <PathOption kind={t('file.parentDir')} path={data.parent} />)
+    if (dir && dir !== cur) add(dir, <PathOption kind={t('file.workingDir')} path={dir} />)
     for (const e of data?.entries || []) {
       const full = joinPath(cur || '/', e.name)
-      add(full, <PathOption kind={e.dir ? '目录' : '文件'} path={full} name={e.name} dir={e.dir} />)
+      add(full, <PathOption kind={e.dir ? t('file.directory') : t('common.file')} path={full} name={e.name} dir={e.dir} />)
     }
     return list.slice(0, 24)
   }, [cur, data?.entries, data?.parent, dir, pathDraft])
 
   const browserPane = (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg-container)', borderLeft: '1px solid var(--border-subtle)', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, height: '100%', minHeight: 0, width: '100%', background: 'var(--bg-container)', borderLeft: '1px solid var(--border-subtle)', position: 'relative', overflow: 'hidden' }}>
       <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
           <span style={{ color: accent }}><FolderIcon /></span>
-          <span style={{ color: 'var(--text-bright)', fontWeight: 600, fontSize: 13 }}>文件管理</span>
+          <span style={{ color: 'var(--text-bright)', fontWeight: 600, fontSize: 13 }}>{t('chat.fileManager')}</span>
           <span style={{ flex: 1 }} />
-          {onClose && <IconButton title="关闭文件栏" onClick={onClose}><CloseIcon /></IconButton>}
+          {onClose && <ClosePanelButton title={t('file.closePanel')} onClick={onClose} />}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <input ref={fileRef} type="file" multiple style={{ display: 'none' }}
             onChange={(e) => { if (e.target.files?.length) doUpload(e.target.files); e.target.value = '' }} />
-          <IconButton title="返回上级目录" disabled={!canUp} onClick={goUp}><FolderUpIcon /></IconButton>
-          <IconButton title="重新读取当前目录" onClick={refresh}><RefreshIcon /></IconButton>
-          <IconButton title="上传到当前目录" disabled={uploading || !cur} onClick={() => fileRef.current?.click()}>{uploading ? '…' : <UploadIcon />}</IconButton>
+          <IconButton title={t('file.back')} disabled={!canBack} onClick={goBack}><BackIcon /></IconButton>
+          <IconButton title={t('file.forward')} disabled={!canForward} onClick={goForward}><ForwardIcon /></IconButton>
+          <IconButton title={t('file.up')} disabled={!canUp} onClick={goUp}><FolderUpIcon /></IconButton>
+          <IconButton title={t('file.refreshDir')} onClick={refresh}><RefreshIcon /></IconButton>
+          <IconButton title={t('file.newFolder')} disabled={!cur} onClick={() => { setMkdirName(''); setMkdirOpen(true) }}><NewFolderIcon /></IconButton>
+          <IconButton title={t('file.uploadHere')} disabled={uploading || !cur} onClick={() => fileRef.current?.click()}>{uploading ? '…' : <UploadIcon />}</IconButton>
         </div>
       </div>
       <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)' }}>
@@ -599,15 +670,15 @@ export default function FileBrowser({
           <Input.Search
             size="small"
             allowClear
-            enterButton="打开"
+            enterButton={t('file.open')}
             onSearch={(v) => submitTypedPath(v)}
             onPressEnter={(e) => submitTypedPath((e.target as HTMLInputElement).value)}
-            placeholder="输入 /绝对路径 或 ./../相对路径"
+            placeholder={t('file.pathPlaceholder')}
             style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12 }}
           />
         </AutoComplete>
         <div style={{ marginTop: 4, color: 'var(--text-dimmer)', fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          回车打开 · 当前目录内容会自动提示
+          {t('file.pathHint')}
         </div>
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 0' }}>
@@ -615,7 +686,7 @@ export default function FileBrowser({
         {err && <div style={{ color: '#f85149', fontSize: 12, padding: '6px 10px' }}>{err}</div>}
         {canUp && (
           <div onClick={goUp} style={rowStyle()}>
-            <span style={{ color: 'var(--text-dim)' }}>↑</span><span style={{ color: 'var(--text-dim)' }}>上级目录</span>
+            <span style={{ color: 'var(--text-dim)' }}>↑</span><span style={{ color: 'var(--text-dim)' }}>{t('file.parentDir')}</span>
           </div>
         )}
         {data?.entries.map((e) => (
@@ -629,7 +700,7 @@ export default function FileBrowser({
             }}
             onClick={(ev) => {
               if ((ev.target as HTMLElement).closest('[data-file-action]')) return
-              e.dir ? setPath(joinPath(cur, e.name)) : setView(joinPath(cur, e.name))
+              e.dir ? navigate(joinPath(cur, e.name)) : setView(joinPath(cur, e.name))
             }}
             onContextMenu={(ev) => {
               ev.preventDefault()
@@ -642,13 +713,13 @@ export default function FileBrowser({
             {!e.dir && <span style={{ color: 'var(--text-dimmer)', fontSize: 11, flex: '0 0 auto' }}>{fmtSize(e.size)}</span>}
             {onInsertPath && (
               <span data-file-action>
-                <IconButton title="插入路径" onClick={() => onInsertPath(joinPath(cur, e.name))}>@</IconButton>
+                <IconButton title={t('file.insertPath')} onClick={() => onInsertPath(joinPath(cur, e.name))}>@</IconButton>
               </span>
             )}
             {!e.dir && (
               <>
                 <span data-file-action>
-                  <Tooltip title="下载">
+                  <Tooltip title={t('file.download')}>
                     <Button type="text" size="small" href={`/api/file/raw?path=${encodeURIComponent(joinPath(cur, e.name))}&dl=1`} download={e.name}
                       style={{ width: 24, height: 24, minWidth: 24, padding: 0, color: 'var(--text-dim)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><DownloadIcon /></Button>
                   </Tooltip>
@@ -657,13 +728,22 @@ export default function FileBrowser({
             )}
           </div>
         ))}
-        {data && data.entries.length === 0 && <div style={{ color: 'var(--text-dimmer)', fontSize: 12, padding: '6px 10px' }}>空目录</div>}
+        {data && data.entries.length === 0 && <div style={{ color: 'var(--text-dimmer)', fontSize: 12, padding: '6px 10px' }}>{t('file.emptyDirectory')}</div>}
       </div>
-      {layout === 'sidebar' && view && (
-        <div style={{ position: 'absolute', inset: 0, zIndex: 5, background: 'var(--bg-base)' }}>
-          <Viewer path={view} accent={accent} inline onClose={() => setView(null)} onOpenPath={openPath} />
+      <Modal
+        open={mkdirOpen}
+        title={t('file.newFolder')}
+        okText={t('file.create')}
+        cancelText={t('common.cancel')}
+        confirmLoading={mkdirBusy}
+        onOk={doMkdir}
+        onCancel={() => { setMkdirOpen(false); setMkdirName('') }}
+      >
+        <Input autoFocus value={mkdirName} onChange={(e) => setMkdirName(e.target.value)} onPressEnter={doMkdir} placeholder={t('file.folderName')} />
+        <div style={{ marginTop: 8, color: 'var(--text-dimmer)', fontSize: 12, wordBreak: 'break-all' }}>
+          {t('file.createUnder', { path: displayPath(cur) })}
         </div>
-      )}
+      </Modal>
     </div>
   )
 
@@ -678,11 +758,37 @@ export default function FileBrowser({
             <Viewer path={view} accent={accent} inline onClose={() => setView(null)} onOpenPath={openPath} onOpenAgent={onOpenAgent} />
           ) : (
             <div style={{ height: '100%', display: 'grid', placeItems: 'center', color: 'var(--text-dimmer)', fontSize: 13 }}>
-              选择左侧文件查看预览
+              {t('file.selectPreview')}
             </div>
           )}
         </div>
       </div>
+    )
+  }
+
+  if (layout === 'sidebar') {
+    return (
+      <>
+        {browserPane}
+        {view && (
+          <div
+            className="tt-file-detail"
+            style={{
+              position: 'fixed',
+              top: 0,
+              bottom: 0,
+              height: '100dvh',
+              right: 'min(420px, 92vw)',
+              zIndex: 1199,
+              background: 'var(--bg-base)',
+              borderLeft: '1px solid var(--border)',
+              boxShadow: 'var(--elevated-shadow)',
+            }}
+          >
+            <Viewer path={view} accent={accent} inline onClose={() => setView(null)} onOpenPath={openPath} />
+          </div>
+        )}
+      </>
     )
   }
 

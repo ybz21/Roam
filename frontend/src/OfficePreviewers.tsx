@@ -1,6 +1,8 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Spin } from 'antd'
+import { renderAsync } from 'docx-preview'
 import * as XLSX from 'xlsx-js-style'
+import { useI18n } from './i18n'
 
 interface CommonProps {
   src: string
@@ -9,6 +11,7 @@ interface CommonProps {
 }
 
 export function DocxFilePreview({ src, name, downloadUrl }: CommonProps) {
+  const { t } = useI18n()
   const hostRef = useRef<HTMLDivElement>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -23,7 +26,6 @@ export function DocxFilePreview({ src, name, downloadUrl }: CommonProps) {
 
     async function load() {
       try {
-        const { renderAsync } = await import('docx-preview')
         const res = await fetch(src)
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const blob = await res.blob()
@@ -46,7 +48,7 @@ export function DocxFilePreview({ src, name, downloadUrl }: CommonProps) {
         if (!cancelled) setLoading(false)
       } catch (e: any) {
         if (!cancelled) {
-          setError(e?.message || 'DOCX 预览失败')
+          setError(e?.message || t('office.docxFailed'))
           setLoading(false)
         }
       }
@@ -59,7 +61,7 @@ export function DocxFilePreview({ src, name, downloadUrl }: CommonProps) {
     }
   }, [src])
 
-  if (error) return <PreviewError title="DOCX 预览失败" detail={error} name={name} downloadUrl={downloadUrl} />
+  if (error) return <PreviewError title={t('office.docxFailed')} detail={error} name={name} downloadUrl={downloadUrl} />
   return (
     <div style={{ height: '100%', overflow: 'auto', background: '#eef1f5' }}>
       {loading && <Loading />}
@@ -171,6 +173,7 @@ function parseExcelFile(arrayBuffer: ArrayBuffer): SheetData[] {
 }
 
 export function ExcelFilePreview({ src, name, downloadUrl }: CommonProps) {
+  const { t } = useI18n()
   const [sheets, setSheets] = useState<SheetData[]>([])
   const [active, setActive] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -190,14 +193,14 @@ export function ExcelFilePreview({ src, name, downloadUrl }: CommonProps) {
         setSheets(parseExcelFile(buf))
         setActive(0)
       })
-      .catch((e) => !cancelled && setError(e?.message || 'Excel 预览失败'))
+      .catch((e) => !cancelled && setError(e?.message || t('office.excelFailed')))
       .finally(() => !cancelled && setLoading(false))
     return () => { cancelled = true }
   }, [src])
 
   const sheet = useMemo(() => sheets[active], [sheets, active])
   if (loading) return <Loading />
-  if (error || !sheet) return <PreviewError title="Excel 预览失败" detail={error || '未找到工作表'} name={name} downloadUrl={downloadUrl} />
+  if (error || !sheet) return <PreviewError title={t('office.excelFailed')} detail={error || t('office.sheetMissing')} name={name} downloadUrl={downloadUrl} />
 
   return (
     <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: '#fff' }}>
@@ -262,6 +265,7 @@ function SlideMarkup({ slide, scale }: { slide: SlideData; scale: number }) {
 }
 
 export function PptxFilePreview({ src, name, downloadUrl }: CommonProps) {
+  const { t } = useI18n()
   const containerRef = useRef<HTMLDivElement>(null)
   const [slides, setSlides] = useState<SlideData[]>([])
   const [loading, setLoading] = useState(true)
@@ -299,7 +303,7 @@ export function PptxFilePreview({ src, name, downloadUrl }: CommonProps) {
           return { html, width: size.width, height: size.height }
         }))
       } catch (e: any) {
-        if (!ac.signal.aborted) setError(e?.message || 'PPTX 预览失败')
+        if (!ac.signal.aborted) setError(e?.message || t('office.pptxFailed'))
       } finally {
         if (!ac.signal.aborted) setLoading(false)
       }
@@ -308,7 +312,7 @@ export function PptxFilePreview({ src, name, downloadUrl }: CommonProps) {
     return () => ac.abort()
   }, [src])
 
-  if (error) return <PreviewError title="PPTX 预览失败" detail={error} name={name} downloadUrl={downloadUrl} />
+  if (error) return <PreviewError title={t('office.pptxFailed')} detail={error} name={name} downloadUrl={downloadUrl} />
   return (
     <div ref={containerRef} style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       {loading ? <Loading /> : (
@@ -320,7 +324,7 @@ export function PptxFilePreview({ src, name, downloadUrl }: CommonProps) {
               const h = Math.max(Math.round(slide.height * scale), 1)
               return (
                 <section key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 11, color: '#667085' }}>第 {i + 1} 页</span>
+                  <span style={{ fontSize: 11, color: '#667085' }}>{t('office.page', { page: i + 1 })}</span>
                   <div style={{ width: w, height: h, overflow: 'hidden', background: '#fff', borderRadius: 8, boxShadow: '0 18px 45px rgba(15,23,42,.14)' }}>
                     <SlideMarkup slide={slide} scale={scale} />
                   </div>
@@ -339,12 +343,13 @@ function Loading() {
 }
 
 function PreviewError({ title, detail, name, downloadUrl }: { title: string; detail?: string; name: string; downloadUrl: string }) {
+  const { t } = useI18n()
   return (
     <div style={{ height: '100%', display: 'grid', placeItems: 'center', padding: 18, color: 'var(--text-dim)', textAlign: 'center' }}>
       <div>
         <div style={{ color: 'var(--text-bright)', fontWeight: 700, marginBottom: 8 }}>{title}</div>
         {detail && <div style={{ marginBottom: 14 }}>{detail}</div>}
-        <Button size="small" type="primary" href={downloadUrl} download={name}>下载文件</Button>
+        <Button size="small" type="primary" href={downloadUrl} download={name}>{t('file.downloadFile')}</Button>
       </div>
     </div>
   )

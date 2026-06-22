@@ -42,6 +42,26 @@ _session_exists() {
     "$TMUX_BIN" has-session -t "$1" 2>/dev/null
 }
 
+_tmux_send_prompt_submit() {
+    local target="$1" message="$2"
+    if "$TMUX_BIN" set-buffer -b ttmux-prompt "$message" 2>/dev/null \
+        && "$TMUX_BIN" paste-buffer -d -b ttmux-prompt -t "$target" 2>/dev/null; then
+        :
+    else
+        "$TMUX_BIN" send-keys -t "$target" "$message" 2>/dev/null || return 1
+    fi
+
+    # Claude/Codex TUI inputs can accept pasted text while staying in edit mode.
+    # Submit as separate key events, with a second Enter as a conservative fallback.
+    "$TMUX_BIN" send-keys -t "$target" Enter 2>/dev/null \
+        || "$TMUX_BIN" send-keys -t "$target" C-m 2>/dev/null \
+        || return 1
+    if [[ "${TTMUX_FORCE_PROMPT_SUBMIT:-1}" != "0" ]]; then
+        sleep "${TTMUX_PROMPT_SUBMIT_DELAY:-0.05}"
+        "$TMUX_BIN" send-keys -t "$target" Enter 2>/dev/null || true
+    fi
+}
+
 _swarm_names() {
     local db="${TTMUX_HOME}/meta.db"
     if [[ -f "$db" ]] && command -v sqlite3 >/dev/null 2>&1; then

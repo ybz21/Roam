@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react'
 import { Button, Modal, Space } from 'antd'
 import { api } from './api'
+import { useI18n } from './i18n'
 
 export interface Choice { num: number; label: string; selected: boolean }
 export interface Prompt { kind: 'select' | 'yesno'; question: string; choices: Choice[] }
@@ -71,6 +72,7 @@ function PromptActions({ p, accent, busy, choose, press }: {
   choose: (target: Choice) => void
   press: (keys: string[]) => void
 }) {
+  const { t } = useI18n()
   return (
     <>
       {p.question && <div style={{ color: 'var(--text-bright)', fontSize: 13, marginBottom: 8, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{p.question}</div>}
@@ -89,14 +91,14 @@ function PromptActions({ p, accent, busy, choose, press }: {
         </Space>
       ) : (
         <Space>
-          <Button disabled={busy} onClick={() => press(['y'])} style={{ color: '#3fb950', borderColor: '#3fb95066' }}>是 (y)</Button>
-          <Button disabled={busy} onClick={() => press(['n'])} style={{ color: '#f85149', borderColor: '#f8514966' }}>否 (n)</Button>
+          <Button disabled={busy} onClick={() => press(['y'])} style={{ color: '#3fb950', borderColor: '#3fb95066' }}>{t('prompt.yes')}</Button>
+          <Button disabled={busy} onClick={() => press(['n'])} style={{ color: '#f85149', borderColor: '#f8514966' }}>{t('prompt.no')}</Button>
         </Space>
       )}
       <Space size={4} style={{ marginTop: 8 }}>
-        <Button size="small" disabled={busy} onClick={() => press(['Up'])} title="上移">↑</Button>
-        <Button size="small" disabled={busy} onClick={() => press(['Down'])} title="下移">↓</Button>
-        <Button size="small" disabled={busy} onClick={() => press(['Enter'])}>⏎ 回车</Button>
+        <Button size="small" disabled={busy} onClick={() => press(['Up'])} title={t('prompt.up')}>↑</Button>
+        <Button size="small" disabled={busy} onClick={() => press(['Down'])} title={t('prompt.down')}>↓</Button>
+        <Button size="small" disabled={busy} onClick={() => press(['Enter'])}>{t('prompt.enter')}</Button>
         <Button size="small" disabled={busy} onClick={() => press(['Escape'])}>Esc</Button>
       </Space>
     </>
@@ -118,20 +120,18 @@ function usePromptControl(name: string) {
 
   const press = async (keys: string[]) => {
     setBusy(true)
-    try { await api('POST', `/sessions/${encodeURIComponent(name)}/keys`, { keys }) } catch {}
-    finally { setBusy(false) }
-    setTimeout(async () => { setP(await fetchPrompt(name)) }, 350)
+    try {
+      await api('POST', `/sessions/${encodeURIComponent(name)}/keys`, { keys })
+      setTimeout(async () => { setP(await fetchPrompt(name)) }, 350)
+    } catch (err) {
+      console.error('failed to send prompt keys', err)
+    } finally {
+      setBusy(false)
+    }
   }
 
   const choose = (target: Choice) => {
-    if (!p) return
-    const cur = Math.max(0, p.choices.findIndex((c) => c.selected))
-    const tgt = p.choices.findIndex((c) => c.num === target.num)
-    if (tgt < 0) return
-    const delta = tgt - cur
-    const keys = Array(Math.abs(delta)).fill(delta > 0 ? 'Down' : 'Up')
-    keys.push('Enter')
-    press(keys)
+    press([String(target.num), 'Enter'])
   }
 
   return { p, busy, press, choose }
@@ -147,12 +147,13 @@ async function fetchPrompt(name: string): Promise<Prompt | null> {
 // 选择框面板：检测到 TUI 提示时显示在输入框上方，点击即注入按键完成选择
 export function PromptPanel({ name, accent }: { name: string; accent: string }) {
   const { p, busy, press, choose } = usePromptControl(name)
+  const { t } = useI18n()
 
   if (!p) return null
 
   return (
     <div style={{ borderTop: `1px solid ${accent}55`, background: 'var(--bg-base)', padding: '10px 12px' }}>
-      <div style={{ color: accent, fontSize: 12, fontWeight: 600, marginBottom: 8 }}>● 需要你确认</div>
+      <div style={{ color: accent, fontSize: 12, fontWeight: 600, marginBottom: 8 }}>● {t('prompt.confirmRequired')}</div>
       <PromptActions p={p} accent={accent} busy={busy} choose={choose} press={press} />
     </div>
   )
@@ -160,16 +161,21 @@ export function PromptPanel({ name, accent }: { name: string; accent: string }) 
 
 export function PromptDialog({ name, accent, enabled = true }: { name: string; accent: string; enabled?: boolean }) {
   const { p, busy, press, choose } = usePromptControl(enabled ? name : '')
-  if (!enabled || !p) return null
+  const { t } = useI18n()
+  const [dismissedKey, setDismissedKey] = useState<string | null>(null)
+  const promptKey = p ? `${p.kind}:${p.question}:${p.choices.map((c) => `${c.num}:${c.label}`).join('|')}` : ''
+  if (!enabled || !p || dismissedKey === promptKey) return null
   return (
     <Modal
       open
-      title={<span style={{ color: accent }}>需要你确认</span>}
+      title={<span style={{ color: accent }}>{t('prompt.confirmRequired')}</span>}
       footer={null}
-      closable={false}
+      closable
+      onCancel={() => setDismissedKey(promptKey)}
       mask={false}
       width={520}
-      style={{ top: 84 }}
+      centered
+      styles={{ header: { textAlign: 'center' }, body: { paddingTop: 12 } }}
     >
       <PromptActions p={p} accent={accent} busy={busy} choose={choose} press={press} />
     </Modal>

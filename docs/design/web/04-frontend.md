@@ -4,6 +4,9 @@
 
 ## 1. 前端架构
 
+国际化是前端硬性要求：所有新增用户可见文案必须遵守
+[docs/development/i18n.md](../../development/i18n.md)，不得在组件里新增硬编码中英文文案。
+
 ```
 web/                        Vite 项目根
 ├── index.html

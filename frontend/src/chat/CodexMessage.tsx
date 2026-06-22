@@ -3,6 +3,7 @@
 import { memo } from 'react'
 import Markdown from '../Markdown'
 import { Collapsible, Diff, MONO, copyText, fmtTs, ToolResult } from './blocks'
+import { useI18n } from '../i18n'
 import type { Block, Msg } from './types'
 
 export const CODEX_ACCENT = '#10a37f' // OpenAI 绿
@@ -58,6 +59,7 @@ function messageText(m: Msg): string {
 }
 
 export const CodexBubble = memo(function CodexBubble({ m, results }: { m: Msg; results: Record<string, Block> }) {
+  const { t } = useI18n()
   const isUser = m.role === 'user'
   const isTool = m.role === 'tool'
   const align = isUser ? 'flex-end' : 'flex-start'
@@ -68,9 +70,9 @@ export const CodexBubble = memo(function CodexBubble({ m, results }: { m: Msg; r
       <div style={{ maxWidth: isUser ? '86%' : '100%', width: isUser ? 'auto' : '100%', background: bg, border, borderRadius: 12, padding: isTool ? 0 : '8px 12px', color: isUser ? '#fff' : 'var(--text-bright)', display: 'flex', flexDirection: 'column', gap: 6 }}>
         {m.blocks.map((b, i) => {
           if (b.kind === 'text') return <Markdown key={i} accent={isUser ? '#d6fff0' : CODEX_ACCENT}>{b.text || ''}</Markdown>
-          if (b.kind === 'thinking') return <Collapsible key={i} label="推理" text={b.text} color="var(--text-dim)" />
+          if (b.kind === 'thinking') return <Collapsible key={i} label={t('chat.reasoning')} text={b.text} color="var(--text-dim)" />
           if (b.kind === 'tool_use') return <ToolCard key={i} b={b} result={b.id ? results[b.id] : undefined} />
-          if (b.kind === 'tool_result') return <Collapsible key={i} label={b.isError ? '⚠ 输出（出错）' : '输出'} text={b.text} color={b.isError ? '#f85149' : 'var(--text-dim)'} />
+          if (b.kind === 'tool_result') return <Collapsible key={i} label={b.isError ? t('chat.outputError') : t('common.output')} text={b.text} color={b.isError ? '#f85149' : 'var(--text-dim)'} />
           if (b.text) return <Markdown key={i} accent={CODEX_ACCENT}>{b.text}</Markdown>
           return null
         })}
@@ -78,7 +80,7 @@ export const CodexBubble = memo(function CodexBubble({ m, results }: { m: Msg; r
       {!isTool && (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 10, color: 'var(--text-dimmer)', padding: '0 4px' }}>
           {m.ts && fmtTs(m.ts)}
-          <button className="cc-msg-copy" onClick={() => copyText(messageText(m))}>复制</button>
+          <button className="cc-msg-copy" onClick={() => copyText(messageText(m))}>{t('common.copy')}</button>
         </span>
       )}
     </div>

@@ -14,7 +14,7 @@ import (
 // GET /api/swarms —— 蜂群列表
 func (a *API) Swarms(c *gin.Context) { a.json(c, "swarm", "ls", "--json") }
 
-// POST /api/swarms —— 新建蜂群（默认自带 master 指挥；master=false 则 --no-master）
+// POST /api/swarms —— 新建蜂群（默认自带 Leader；master=false 则 --no-master，字段名为历史兼容）
 func (a *API) SwarmNew(c *gin.Context) {
 	var b struct {
 		Name   string `json:"name"`
@@ -46,7 +46,7 @@ func (a *API) SwarmAddMember(c *gin.Context) {
 		Model string `json:"model"`
 		Perm  string `json:"perm"`
 		Kind  string `json:"kind"` // claude(默认) | codex
-		Role  string `json:"role"` // master | worker（空=后端按"首个 agent 成员→master"决定）
+		Role  string `json:"role"` // leader | member（兼容 master | worker，空=后端按"首个 agent 成员→leader"决定）
 	}
 	if err := c.ShouldBindJSON(&b); err != nil || strings.TrimSpace(b.Name) == "" || strings.TrimSpace(b.Task) == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
@@ -78,16 +78,22 @@ func (a *API) SwarmAddMember(c *gin.Context) {
 	if role == "" {
 		hasMaster := false
 		for _, m := range st.Members {
-			if m.Role == "master" {
+			if m.Role == "leader" || m.Role == "master" {
 				hasMaster = true
 				break
 			}
 		}
 		if typ == "agent" && !hasMaster {
-			role = "master"
+			role = "leader"
 		} else {
-			role = "worker"
+			role = "member"
 		}
+	}
+	if role == "master" || role == "lead" {
+		role = "leader"
+	}
+	if role == "worker" {
+		role = "member"
 	}
 
 	// agent 成员：按角色渲染提示词模板，把原始任务包成完整 prompt（含 skill/swarm 协作格式）
@@ -99,7 +105,7 @@ func (a *API) SwarmAddMember(c *gin.Context) {
 			if m.Name != b.Name {
 				peers = append(peers, m.Name)
 			}
-			if m.Role == "master" {
+			if m.Role == "leader" || m.Role == "master" {
 				masterName = m.Name
 			}
 		}
@@ -201,6 +207,9 @@ func (a *API) SwarmSay(c *gin.Context) {
 	if b.Re != "" {
 		args = append(args, "--re", b.Re)
 	}
+	// Web 端 human 发言默认是给 Leader 看的控制面消息。CLI 层会把 --to leader
+	// 规范化为文本里的 @leader；旧 @master 仍由 CLI 兼容识别。
+	args = append(args, "--to", "leader")
 	args = append(args, b.Text)
 	a.text(c, args...)
 }

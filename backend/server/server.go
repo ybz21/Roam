@@ -74,7 +74,8 @@ func New(cfg Config) *gin.Engine {
 		g.GET("/file/preview", h.FilePreview) // 文件侧栏：Office 转 PDF 预览
 		g.GET("/file/stat", h.FileStat)
 		g.DELETE("/file", h.FileDelete)
-		g.POST("/upload", h.Upload) // 上传文件到指定目录（拖拽到对话框 / 文件侧栏）
+		g.POST("/file/mkdir", h.FileMkdir) // 文件侧栏：在当前目录新建子目录
+		g.POST("/upload", h.Upload)        // 上传文件到指定目录（拖拽到对话框 / 文件侧栏）
 
 		g.GET("/sessions", h.Sessions)
 		g.POST("/sessions", h.NewSession)
@@ -108,6 +109,20 @@ func New(cfg Config) *gin.Engine {
 		g.POST("/swarms/:n/task", h.SwarmTaskAdd)
 		g.PATCH("/swarms/:n/task/:id", h.SwarmTaskPatch)
 		g.DELETE("/swarms/:n/task/:id", h.SwarmTaskDelete)
+
+		g.GET("/football/players", h.FootballPlayers)
+		g.POST("/football/players", h.FootballPlayerCreate)
+		g.GET("/football/players/:id", h.FootballPlayer)
+		g.PATCH("/football/players/:id", h.FootballPlayerPatch)
+		g.DELETE("/football/players/:id", h.FootballPlayerDelete)
+		g.GET("/football/teams", h.FootballTeams)
+		g.POST("/football/teams", h.FootballTeamCreate)
+		g.GET("/football/teams/:id", h.FootballTeam)
+		g.PATCH("/football/teams/:id", h.FootballTeamPatch)
+		g.DELETE("/football/teams/:id", h.FootballTeamDelete)
+		g.PUT("/football/teams/:id/lineup", h.FootballTeamLineup)
+		g.GET("/football/transfers", h.FootballTransfers)
+		g.POST("/football/transfers", h.FootballTransferCreate)
 
 		g.GET("/env", h.Env)
 		g.PUT("/env", h.EnvSet)
