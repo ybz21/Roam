@@ -184,6 +184,10 @@ _swarm_session_live_status() {
         echo "running"
         return 0
     fi
+    if [[ "$recent" == *"✻"* && "$recent" != *"Worked for"* ]]; then
+        echo "running"
+        return 0
+    fi
     if [[ "$recent" == *"❯"* || "$recent" == *"›"* || "$recent" == *"⏵⏵"* ]]; then
         echo "idle"
         return 0
