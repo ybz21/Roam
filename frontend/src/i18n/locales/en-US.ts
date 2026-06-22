@@ -290,7 +290,6 @@ const enUS = {
   'swarm.topologyTitle': 'Topology · live dependency graph',
   'swarm.topology.view.office': 'Office',
   'swarm.topology.view.graph': 'Graph',
-  'swarm.officeTitle': 'Swarm Office',
   'swarm.topologyHelp': 'Click a node → terminal / linked focus',
   'swarm.noMembersAdd': 'No members yet (click "+ member" in the top right)',
   'swarm.pending': 'Pending',

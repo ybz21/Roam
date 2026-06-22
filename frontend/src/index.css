@@ -209,12 +209,6 @@ body {
   transform-origin: center;
   animation: swarm-node-pulse 1.8s ease-in-out infinite;
 }
-.swarm-office-title {
-  fill: var(--text-bright);
-  font-size: 24px;
-  font-weight: 800;
-  letter-spacing: 0;
-}
 .swarm-office-desk {
   position: relative;
   width: 100%;

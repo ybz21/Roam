@@ -358,9 +358,19 @@ function Topology({ detail, swarm, cards, posts, focus, onNode }: {
   const layout = useMemo(() => buildLayout(detail, swarm), [detail, swarm])
   const canvasW = Math.max(layout.w, Math.floor(viewport.w - 16), 420)
   const canvasH = Math.max(layout.h, Math.floor(viewport.h - 16), 320)
-  const initialOffsetX = Math.max(0, (canvasW - layout.w) / 2)
+  const bounds = useMemo(() => {
+    if (layout.nodes.length === 0) return { minX: 0, minY: 0, w: layout.w, h: layout.h }
+    const minX = Math.min(...layout.nodes.map((n) => n.x))
+    const minY = Math.min(...layout.nodes.map((n) => n.y))
+    const maxX = Math.max(...layout.nodes.map((n) => n.x + n.w))
+    const maxY = Math.max(...layout.nodes.map((n) => n.y + n.h))
+    return { minX, minY, w: maxX - minX, h: maxY - minY }
+  }, [layout.nodes, layout.w, layout.h])
+  const initialOffsetX = view === 'office' ? Math.max(0, (canvasW - bounds.w) / 2) - bounds.minX : Math.max(0, (canvasW - layout.w) / 2)
+  const initialOffsetY = view === 'office' ? Math.max(0, (canvasH - bounds.h) / 2) - bounds.minY : 0
   const [pos, setPos] = useState<Record<string, { x: number; y: number }>>({})
   const drag = useRef<{ name: string; dx: number; dy: number; sx: number; sy: number; moved: boolean } | null>(null)
+  const userPositioned = useRef(false)
   useEffect(() => {
     const el = wrapRef.current
     if (!el) return
@@ -371,10 +381,12 @@ function Topology({ detail, swarm, cards, posts, focus, onNode }: {
   useEffect(() => {
     setPos((prev) => {
       const next: Record<string, { x: number; y: number }> = {}
-      layout.nodes.forEach((n) => { next[n.name] = prev[n.name] || { x: n.x + initialOffsetX, y: n.y } })
+      layout.nodes.forEach((n) => {
+        next[n.name] = userPositioned.current && prev[n.name] ? prev[n.name] : { x: n.x + initialOffsetX, y: n.y + initialOffsetY }
+      })
       return next
     })
-  }, [layout.nodes, initialOffsetX])
+  }, [layout.nodes, initialOffsetX, initialOffsetY])
   const shown = useMemo(() => layout.nodes.map((n) => ({ ...n, x: pos[n.name]?.x ?? n.x, y: pos[n.name]?.y ?? n.y })), [layout.nodes, pos])
   const nodeByName = useMemo(() => Object.fromEntries(shown.map((n) => [n.name, n])), [shown])
   const pathFor = (e: { from: string; to: string; kind: 'cmd' | 'dep' }) => {
@@ -404,7 +416,10 @@ function Topology({ detail, swarm, cards, posts, focus, onNode }: {
     const nh = current?.h || 164
     const nx = Math.max(10, Math.min(canvasW - nw - 10, pt.x - d.dx))
     const ny = Math.max(10, Math.min(canvasH - nh - 10, pt.y - d.dy))
-    if (Math.abs(e.clientX - d.sx) + Math.abs(e.clientY - d.sy) > 4) d.moved = true
+    if (Math.abs(e.clientX - d.sx) + Math.abs(e.clientY - d.sy) > 4) {
+      d.moved = true
+      userPositioned.current = true
+    }
     setPos((p) => ({ ...p, [d.name]: { x: nx, y: ny } }))
   }
   const endDrag = (e: React.PointerEvent<SVGGElement>, name: string) => {
@@ -433,7 +448,7 @@ function Topology({ detail, swarm, cards, posts, focus, onNode }: {
                 <feDropShadow dx="0" dy="16" stdDeviation="10" floodColor="#000000" floodOpacity=".16" />
               </filter>
             </defs>
-            {view === 'office' && <OfficeBackdrop w={canvasW} h={canvasH} title={t('swarm.officeTitle')} />}
+            {view === 'office' && <OfficeBackdrop w={canvasW} h={canvasH} />}
             {view === 'graph' && layout.edges.map((e, i) => (
               <path key={i} d={pathFor(e)} fill="none" stroke={e.kind === 'cmd' ? C.fg2 : C.green} strokeWidth={e.kind === 'cmd' ? 1.2 : 1.7}
                 strokeDasharray={e.kind === 'cmd' ? '4 4' : undefined} opacity={e.kind === 'cmd' ? 0.55 : 0.95} markerEnd={e.kind === 'dep' ? 'url(#arr)' : undefined} />
@@ -501,13 +516,12 @@ function Topology({ detail, swarm, cards, posts, focus, onNode }: {
   )
 }
 
-function OfficeBackdrop({ w, h, title }: { w: number; h: number; title: string }) {
+function OfficeBackdrop({ w, h }: { w: number; h: number }) {
   const rightX = 24
   const workW = Math.max(240, w - rightX - 24)
   return (
     <g className="swarm-office-backdrop">
       <rect x="0" y="0" width={w} height={h} rx="18" fill="var(--bg-container)" />
-      <text x={w - 26} y="42" textAnchor="end" className="swarm-office-title">{title}</text>
       <g opacity=".34">
         <rect x={rightX} y="74" width={workW} height={Math.max(90, h - 104)} rx="12" fill="none" stroke="var(--border-subtle)" strokeDasharray="8 10" />
         {Array.from({ length: 4 }).map((_, i) => (

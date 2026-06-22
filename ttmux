@@ -1252,7 +1252,7 @@ _swarm_done_list() {
 }
 
 _swarm_session_live_status() {
-    local sess="$1" kind="${2:-claude}" dead scr tail
+    local sess="$1" kind="${2:-claude}" dead scr tail recent flat low
     if ! _session_exists "$sess"; then
         [[ -f "${TTMUX_LOGS}/${sess}.log" ]] && echo "done" || echo "exited"
         return 0
@@ -1265,15 +1265,22 @@ _swarm_session_live_status() {
 
     scr=$("$TMUX_BIN" capture-pane -t "$sess" -p -J -S -80 2>/dev/null || true)
     tail=$(printf '%s\n' "$scr" | tail -n 18)
-    if [[ "$tail" == *"Press enter"* || "$tail" == *"press enter"* || "$tail" == *"1. Yes"* || "$tail" == *"Do you want"* || "$tail" == *"Allow"* ]]; then
+    recent=$(printf '%s\n' "$tail" | tail -n 8)
+    flat=$(printf '%s' "$recent" | tr -d '[:space:]')
+    low="${flat,,}"
+    if [[ "$low" == *"pressenter"* || "$low" == *"pressente"* || "$low" == *"1.yes"* || "$low" == *"doyouwant"* || "$low" == *"allow"* || "$low" == *"approval"* ]]; then
         echo "waiting"
         return 0
     fi
-    if [[ "$tail" == *"❯"* || "$tail" == *"›"* || "$tail" == *"⏵⏵"* ]]; then
+    if [[ "$recent" == *"Cooking"* || "$recent" == *"Puzzling"* || "$recent" == *"Thinking"* || "$recent" == *"Working"* || "$recent" == *"Running"* || "$recent" == *"Executing"* ]]; then
+        echo "running"
+        return 0
+    fi
+    if [[ "$recent" == *"❯"* || "$recent" == *"›"* || "$recent" == *"⏵⏵"* ]]; then
         echo "idle"
         return 0
     fi
-    if [[ "$kind" == "codex" && "$tail" != *"Running"* && "$tail" != *"Thinking"* && "$tail" != *"Working"* ]]; then
+    if [[ "$kind" == "codex" ]]; then
         echo "idle"
         return 0
     fi

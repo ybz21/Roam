@@ -290,7 +290,6 @@ const zhCN = {
   'swarm.topologyTitle': '拓扑 · 实时依赖图',
   'swarm.topology.view.office': '办公室',
   'swarm.topology.view.graph': '依赖图',
-  'swarm.officeTitle': 'Swarm 办公室',
   'swarm.topologyHelp': '点节点 → 进终端/联动',
   'swarm.noMembersAdd': '还没有成员（点右上「+ 成员」添加）',
   'swarm.pending': '挂起',
