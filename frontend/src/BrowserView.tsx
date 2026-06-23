@@ -3,7 +3,7 @@
 //   收 {type:'frame', data, w, h} | {type:'pong', t} | {type:'error', msg}
 //   发 {type:'nav', url} | {type:'ping', t} | {type:'mouse'|'wheel'|'key', ...}（输入仅 control=1 生效）
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Button, Input, Space, Tag, App as AntApp } from 'antd'
+import { Button, Input, Select, Space, Tag, App as AntApp } from 'antd'
 import { api } from './api'
 import { useI18n } from './i18n'
 
@@ -69,6 +69,20 @@ const QUALITY_OPTS: { labelKey: string; value: Quality }[] = [
   { labelKey: 'browser.quality.standard', value: 50 },
   { labelKey: 'browser.quality.high', value: 80 },
   { labelKey: 'browser.quality.ultra', value: 92 },
+]
+
+// 手机模式设备档（栏目级配置，存 localStorage）。空 key = 桌面（不模拟）。
+// 维度是 CSS 像素视口，dpr 决定渲染像素密度；ua 让做 UA 嗅探的站点切到移动版。
+// 后端 screencast.go 按 ?mobile/mw/mh/dpr/ua 下发 CDP Emulation 覆盖。
+type Device = { key: string; nameKey: string; w: number; h: number; dpr: number; ua: string }
+const DKEY = 'ttmux.browser.device'
+const IOS_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+const DEVICES: Device[] = [
+  { key: 'iphone', nameKey: 'browser.device.iphone', w: 390, h: 844, dpr: 3, ua: IOS_UA },
+  { key: 'pixel', nameKey: 'browser.device.pixel', w: 412, h: 915, dpr: 2.625,
+    ua: 'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36' },
+  { key: 'ipad', nameKey: 'browser.device.ipad', w: 820, h: 1180, dpr: 2,
+    ua: 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' },
 ]
 
 function fmtRate(bytesPerSec: number) {
@@ -137,6 +151,9 @@ export default function BrowserView() {
     return Number(s) || 'auto'
   })
   const [levelName, setLevelName] = useState('') // 服务端当前生效档位名（自适应时显示）
+  // 手机模式：空 = 桌面；否则模拟对应机型视口（持久化）。切换不重连，发 emulate 消息现场切换
+  const [device, setDevice] = useState<string>(() => localStorage.getItem(DKEY) || '')
+  const deviceRef = useRef(device) // 供 ws.onopen 等回调读最新设备态
   // 画面旋转：0/90/180/270，持久化。手机竖屏看横屏浏览器时转 90°
   const [rotation, setRotation] = useState<number>(() => Number(localStorage.getItem(RKEY)) || 0)
   const [stage, setStage] = useState({ w: 0, h: 0 }) // 舞台尺寸，旋转时需据此对调 <img> 盒子宽高
@@ -155,6 +172,7 @@ export default function BrowserView() {
 
   // control 开关用 ref 同步，供事件回调读取最新值
   useEffect(() => { controlRef.current = control }, [control])
+  useEffect(() => { deviceRef.current = device }, [device])
 
   // 跟踪舞台尺寸：旋转 90/270 时 <img> 盒子宽高要对调，才能铺满竖屏
   useEffect(() => {
@@ -228,7 +246,21 @@ export default function BrowserView() {
     catch (e: any) { message.error(e.message) }
   }
 
-  // control / quality 变化都要重连（后端按 query 决定输入转发与画质）
+  // 当前设备 → emulate 消息载荷。桌面用观看区(stage)的原生 CSS 尺寸 + 真实 DPR，
+  // 镜像里的桌面布局就与你屏幕一致、随窗口自适应，不被 Chrome 启动窗口尺寸(1280×800)限死。
+  const emulatePayload = () => {
+    const dev = DEVICES.find((d) => d.key === deviceRef.current)
+    if (dev) return { type: 'emulate', mobile: true, mw: dev.w, mh: dev.h, dpr: dev.dpr, ua: dev.ua }
+    const el = stageRef.current
+    return {
+      type: 'emulate', mobile: false,
+      mw: el ? Math.round(el.clientWidth) : 0,
+      mh: el ? Math.round(el.clientHeight) : 0,
+      dpr: window.devicePixelRatio || 1,
+    }
+  }
+
+  // control / quality / target 变化才重连；设备/尺寸切换不重连（连上后发 emulate 消息）
   useEffect(() => {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
     const params = new URLSearchParams()
@@ -240,7 +272,7 @@ export default function BrowserView() {
     ws.binaryType = 'arraybuffer'
     wsRef.current = ws
     let objURL: string | null = null
-    ws.onopen = () => setConnected(true)
+    ws.onopen = () => { setConnected(true); ws.send(JSON.stringify(emulatePayload())) } // 连上即同步当前设备/尺寸
     ws.onclose = () => setConnected(false)
     ws.onmessage = (e) => {
       // 二进制 = 一帧：[w:u16][h:u16][seq:u16][jpeg...]；显示后回 ack 归还信用
@@ -276,12 +308,18 @@ export default function BrowserView() {
       if (objURL) URL.revokeObjectURL(objURL)
       ws.close()
     }
-  }, [control, quality, target])
+  }, [control, quality, target]) // device 切换不重连，靠下面的 emulate 消息现场切换
 
   const send = (o: any) => {
     const ws = wsRef.current
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(o))
   }
+
+  // 设备切换 / 观看区尺寸变化：在现有连接上发 emulate（同一 CDP 会话 set/clear），不重连
+  // → 无闪烁/无竞态，来回切也稳。桌面随窗口大小自适应（stage 变化即重发原生尺寸）。
+  useEffect(() => {
+    send(emulatePayload())
+  }, [device, stage.w, stage.h])
 
   const navigate = () => {
     if (!url) return
@@ -289,6 +327,7 @@ export default function BrowserView() {
   }
 
   const changeQuality = (v: Quality) => { setQuality(v); localStorage.setItem(QKEY, String(v)) }
+  const changeDevice = (v: string) => { setDevice(v); localStorage.setItem(DKEY, v) }
 
   // F12：打开 Chrome 自带 DevTools（经后端反代 /api/browser/cdp/*，直连该 tab 的 CDP）。
   // https 页面必须用 wss= 参数，否则 DevTools 起 ws:// 连接会被混合内容拦截。
@@ -509,6 +548,18 @@ export default function BrowserView() {
         />
         <Button size="small" onClick={navigate}>{t('browser.go')}</Button>
         <Button size="small" onClick={openDevtools} title={t('browser.devtoolsTitle')}>{t('browser.debug')}</Button>
+        {/* 手机模式：紧跟调试按钮。选机型即模拟移动视口（持久化、重连生效） */}
+        <Select
+          size="small"
+          value={device}
+          onChange={changeDevice}
+          title={t('browser.deviceTitle')}
+          style={{ width: 96, flex: '0 0 auto' }}
+          options={[
+            { value: '', label: t('browser.device.desktop') },
+            ...DEVICES.map((d) => ({ value: d.key, label: t(d.nameKey) })),
+          ]}
+        />
       </div>
       <style>{`
         .bv-ripple{position:absolute;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;

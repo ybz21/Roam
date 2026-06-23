@@ -5,10 +5,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Card, Tag, Empty, Segmented, Input, Select, Button, Drawer, Tooltip,
-  App as AntApp, Popconfirm, Modal, Space, Spin,
+  App as AntApp, Popconfirm, Modal, Space, Spin, AutoComplete,
 } from 'antd'
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
-import { api } from './api'
+import { api, upload } from './api'
+import { DirPicker, recentDirs, pushRecentDir } from './App'
 import { useI18n } from './i18n'
 import Markdown from './Markdown'
 
@@ -28,6 +29,7 @@ const isLeaderRole = (role?: string) => role === 'leader' || role === 'master'
 const isLeaderAuthor = (author?: string) => author === 'leader' || author === 'master'
 const authorLabel = (author: string, t: T) => isLeaderAuthor(author) ? t('swarm.master') : author
 const displayPostText = (text: string) => text.replace(/(^|\s)@master\b/g, '$1@leader')
+const memberNodeKind = (m: Member) => m.done ? 'done' : ['running', 'idle', 'waiting', 'done'].includes(m.status) ? m.status : 'exited'
 
 interface SwarmRow { id: string; name: string; goal: string; status: string; supervisor: string; created: string; total: number; alive: number; pending: number }
 interface Member { name: string; type: string; task: string; deps: string; done: number; status: string; session: string; kind?: string; role?: string }
@@ -131,13 +133,16 @@ function SwarmCard({ s, onOpen }: { s: SwarmRow; onOpen: (n: string) => void }) 
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ display: 'inline-flex', gap: 3, alignItems: 'center' }}>
+          {s.supervisor && <i title={s.supervisor} style={{ width: 8, height: 8, borderRadius: '50%', background: C.magenta }} />}
           {Array.from({ length: Math.min(s.alive, 10) }).map((_, i) => <i key={'a' + i} style={{ width: 8, height: 8, borderRadius: '50%', background: C.green }} />)}
           {Array.from({ length: Math.min(s.pending, 10) }).map((_, i) => <i key={'p' + i} style={{ width: 8, height: 8, borderRadius: '50%', background: C.amber }} />)}
           {Array.from({ length: Math.min(exited, 10) }).map((_, i) => <i key={'e' + i} style={{ width: 8, height: 8, borderRadius: '50%', background: C.line2 }} />)}
-          {s.total + s.pending === 0 && <span style={{ color: C.fg3, fontSize: 12 }}>{t('swarm.noMembers')}</span>}
+          {s.total + s.pending === 0 && !s.supervisor && <span style={{ color: C.fg3, fontSize: 12 }}>{t('swarm.noMembers')}</span>}
         </span>
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center', fontSize: 12, color: C.fg2 }}>
-          {s.alive > 0 && <span><b style={{ color: C.green }}>{s.alive}</b> {t('swarm.aliveShort')}</span>}
+          {s.supervisor && <span style={{ color: C.magenta }}>◆ {t('swarm.master')}</span>}
+          {(s.total + s.pending) > 0 && <span>{t('swarm.memberSummary', { total: s.total, alive: s.alive })}</span>}
+          {(s.total + s.pending) === 0 && !s.supervisor && <span style={{ color: C.fg3 }}>{t('swarm.noMembers')}</span>}
           {s.pending > 0 && <span style={{ color: C.amber }}>+{s.pending} {t('swarm.pendingUnlock')}</span>}
         </span>
       </div>
@@ -153,28 +158,71 @@ function NewSwarmModal({ open, onClose, onDone }: { open: boolean; onClose: () =
   const { message } = AntApp.useApp()
   const { t } = useI18n()
   const [name, setName] = useState(''); const [goal, setGoal] = useState(''); const [master, setMaster] = useState(true)
+  const [dir, setDir] = useState(''); const [pick, setPick] = useState(false)
+  const [files, setFiles] = useState<File[]>([])
   const [busy, setBusy] = useState(false)
-  useEffect(() => { if (open) { setName(''); setGoal(''); setMaster(true) } }, [open])
+  const fileRef = useRef<HTMLInputElement>(null)
+  const dirRef = useRef<HTMLInputElement | null>(null)
+  useEffect(() => { if (open) { setName(''); setGoal(''); setMaster(true); setDir(''); setFiles([]) } }, [open])
+  const addFiles = (fl: FileList | null) => { if (fl?.length) setFiles((prev) => [...prev, ...Array.from(fl)]) }
+  // webkitdirectory 非标准属性，React 类型里没有，用回调 ref 在 DOM 上补
+  const setDirInput = (el: HTMLInputElement | null) => {
+    if (el) { el.setAttribute('webkitdirectory', ''); el.setAttribute('directory', '') }
+    dirRef.current = el
+  }
   const ok = async () => {
     if (!name.trim()) return message.error(t('swarm.nameRequired'))
+    if (files.length && !dir.trim()) return message.error(t('swarm.dirRequiredForUpload'))
     setBusy(true)
     try {
-      await api('POST', '/swarms', { name: name.trim(), goal: goal.trim(), master })
+      const hasFiles = files.length > 0
+      // 默认带 Leader 的行为保持原样：无文档时 swarm new 内部原子拉起 Leader。
+      // 仅当要先上传文档时，才拆成 建群(不带 Leader)→上传→adopt，确保文档先就位。
+      await api('POST', '/swarms', { name: name.trim(), goal: goal.trim(), dir: dir.trim(), master: master && !hasFiles })
+      if (hasFiles) {
+        const r = await upload(dir.trim(), files)
+        message.success(t('swarm.uploaded', { count: r.saved.length, dir: r.dir }))
+        if (master) await api('POST', `/swarms/${encodeURIComponent(name.trim())}/adopt`, { dir: dir.trim() })
+      }
+      if (dir.trim()) pushRecentDir(dir.trim())
       message.success(master ? t('swarm.createdWithMaster') : t('swarm.created'))
       onClose(); onDone()
     } catch (e: any) { message.error(e.message) } finally { setBusy(false) }
   }
   return (
-    <Modal open={open} onCancel={onClose} onOk={ok} okText={t('file.create')} confirmLoading={busy} title={t('swarm.new')} destroyOnClose>
-      <Space direction="vertical" style={{ width: '100%' }}>
-        <Input placeholder={t('swarm.namePlaceholder')} value={name} onChange={(e) => setName(e.target.value)} autoFocus onPressEnter={ok} />
-        <Input.TextArea rows={2} placeholder={t('swarm.goalPlaceholder')} value={goal} onChange={(e) => setGoal(e.target.value)} />
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: C.fg2, fontSize: 13 }}>
-          <input type="checkbox" checked={master} onChange={(e) => setMaster(e.target.checked)} />
-          {t('swarm.autoMaster', { name: name || t('swarm.defaultName') })}
-        </label>
-      </Space>
-    </Modal>
+    <>
+      <Modal open={open} onCancel={onClose} onOk={ok} okText={t('file.create')} confirmLoading={busy} title={t('swarm.new')} destroyOnClose>
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <Input placeholder={t('swarm.namePlaceholder')} value={name} onChange={(e) => setName(e.target.value)} autoFocus onPressEnter={ok} />
+          <Input.TextArea rows={2} placeholder={t('swarm.goalPlaceholder')} value={goal} onChange={(e) => setGoal(e.target.value)} />
+          <Space.Compact style={{ width: '100%' }}>
+            <AutoComplete style={{ flex: 1 }} value={dir} onChange={setDir}
+              options={recentDirs().map((d) => ({ value: d }))}
+              filterOption={(input, opt) => String(opt?.value).toLowerCase().includes(input.toLowerCase())}
+              placeholder={t('swarm.dirPlaceholder')} />
+            <Button onClick={() => setPick(true)}>{t('common.browse')}</Button>
+          </Space.Compact>
+          <div>
+            <input ref={fileRef} type="file" multiple style={{ display: 'none' }}
+              onChange={(e) => { addFiles(e.target.files); e.target.value = '' }} />
+            <input ref={setDirInput} type="file" multiple style={{ display: 'none' }}
+              onChange={(e) => { addFiles(e.target.files); e.target.value = '' }} />
+            <Space wrap>
+              <Button size="small" onClick={() => fileRef.current?.click()}>{t('swarm.uploadFiles')}</Button>
+              <Button size="small" onClick={() => dirRef.current?.click()}>{t('swarm.uploadFolder')}</Button>
+              {files.length > 0 && (
+                <Tag closable color="blue" onClose={() => setFiles([])}>{t('swarm.filesSelected', { count: files.length })}</Tag>
+              )}
+            </Space>
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: C.fg2, fontSize: 13 }}>
+            <input type="checkbox" checked={master} onChange={(e) => setMaster(e.target.checked)} />
+            {t('swarm.autoMaster', { name: name || t('swarm.defaultName') })}
+          </label>
+        </Space>
+      </Modal>
+      <DirPicker open={pick} start={dir || undefined} onPick={(p) => { setDir(p); setPick(false) }} onClose={() => setPick(false)} />
+    </>
   )
 }
 
@@ -187,7 +235,6 @@ function SwarmDetail({ name, onBack, openTerm, onGone }: { name: string; onBack:
   const [posts, setPosts] = useState<Post[]>([])
   const [focus, setFocus] = useState<string | null>(null)   // 聚焦成员（跨面板联动）
   const [drawer, setDrawer] = useState<string | null>(null) // 抽屉里的成员
-  const [view, setView] = useState<'topo' | 'board' | 'plaza'>('topo')
   const [lowerView, setLowerView] = useState<'board' | 'inbox'>('board')
   const [narrow, setNarrow] = useState(false)
   const [adding, setAdding] = useState(false)
@@ -243,12 +290,16 @@ function SwarmDetail({ name, onBack, openTerm, onGone }: { name: string; onBack:
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '4px 2px 12px', flexWrap: 'wrap' }}>
         <a onClick={onBack} style={{ color: C.fg2 }}>← {t('nav.swarm')}</a>
         <span style={{ fontSize: 17, fontWeight: 700 }}>{name}</span>
-        {detail?.goal && <span style={{ color: C.fg2, fontSize: 13 }}>{detail.goal}</span>}
+        {detail?.goal && (
+          <Tooltip title={<div style={{ maxHeight: '60vh', overflow: 'auto', whiteSpace: 'pre-wrap' }}>{detail.goal}</div>} overlayStyle={{ maxWidth: 520 }}>
+            <span style={{ color: C.fg2, fontSize: 13, maxWidth: 420, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{detail.goal}</span>
+          </Tooltip>
+        )}
         {detail && statusTag(detail.status, t)}
         {detail?.supervisor && <span style={{ color: C.magenta, fontSize: 12 }}>◆ {detail.supervisor}</span>}
         {detail && (
           <span style={{ color: C.fg2, fontSize: 12 }}>
-            {t('swarm.memberSummary', { total: detail.members.length, alive: detail.members.filter((m) => m.status === 'running').length })}{detail.pending.length ? <> · <span style={{ color: C.amber }}>{t('swarm.pendingSummary', { count: detail.pending.length })}</span></> : null}
+            {t('swarm.memberSummary', { total: detail.members.length, alive: detail.members.filter((m) => ['running', 'idle', 'waiting'].includes(m.status)).length })}{detail.pending.length ? <> · <span style={{ color: C.amber }}>{t('swarm.pendingSummary', { count: detail.pending.length })}</span></> : null}
           </span>
         )}
         {detail && (
@@ -261,13 +312,12 @@ function SwarmDetail({ name, onBack, openTerm, onGone }: { name: string; onBack:
       </div>
 
       {!detail ? <div style={{ flex: 1, display: 'grid', placeItems: 'center' }}><Spin /></div> : narrow ? (
-        <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr) auto minmax(0, 1fr)', gap: 10 }}>
-          <Segmented block value={view} onChange={(v) => setView(v as any)} style={{ marginBottom: 10 }}
-            options={[{ label: t('swarm.topology'), value: 'topo' }, { label: t('swarm.plaza'), value: 'plaza' }]} />
-          <div style={{ minHeight: 0 }}>{view === 'plaza' ? plaza : topo}</div>
+        <div style={{ flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 10, paddingBottom: 4 }}>
+          <div style={{ flex: '0 0 320px', minHeight: 0 }}>{topo}</div>
+          <div style={{ flex: '0 0 280px', minHeight: 0 }}>{plaza}</div>
           <Segmented block value={lowerView} onChange={(v) => setLowerView(v as any)}
             options={[{ label: t('swarm.board'), value: 'board' }, { label: t('swarm.inbox'), value: 'inbox' }]} />
-          <div style={{ minHeight: 0 }}>{lowerView === 'inbox' ? inbox : board}</div>
+          <div style={{ flex: '0 0 330px', minHeight: 0 }}>{lowerView === 'inbox' ? inbox : board}</div>
         </div>
       ) : (
         <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateRows: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12 }}>
@@ -314,7 +364,7 @@ function AddMemberModal({ open, name, members, onClose, onDone }: { open: boolea
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ color: C.fg2, fontSize: 12, whiteSpace: 'nowrap' }}>{t('swarm.engine')}</span>
             <Segmented value={kind} onChange={(v) => setKind(v as string)}
-              options={[{ label: '🤖 Claude', value: 'claude' }, { label: '✦ Codex', value: 'codex' }]} />
+              options={[{ label: '✳ Claude', value: 'claude' }, { label: '✸ Codex', value: 'codex' }]} />
             <span style={{ flex: 1 }} />
             <Tag color={willBeLeader ? 'magenta' : 'default'} bordered={false}>
               {willBeLeader ? `◆ ${t('swarm.masterFirst')}` : t('swarm.member')}
@@ -353,12 +403,24 @@ function Topology({ detail, swarm, cards, posts, focus, onNode }: {
   const { t } = useI18n()
   const wrapRef = useRef<HTMLDivElement>(null)
   const [viewport, setViewport] = useState({ w: 0, h: 0 })
-  const layout = useMemo(() => buildLayout(detail, swarm), [detail, swarm])
-  const canvasW = Math.max(layout.w, Math.floor(viewport.w - 16), 420)
-  const canvasH = Math.max(layout.h, Math.floor(viewport.h - 16), 320)
-  const initialOffsetX = Math.max(0, (canvasW - layout.w) / 2)
+  const [view, setView] = useState<'office' | 'graph'>('office')
+  const compactOffice = view === 'office' && viewport.w > 0 && viewport.w < 560
+  const layout = useMemo(() => buildLayout(detail, swarm, compactOffice), [detail, swarm, compactOffice])
+  const canvasW = Math.max(layout.w, Math.floor(viewport.w - 16), view === 'office' ? 320 : 420)
+  const canvasH = Math.max(layout.h, Math.floor(viewport.h - 16), view === 'office' ? 280 : 320)
+  const bounds = useMemo(() => {
+    if (layout.nodes.length === 0) return { minX: 0, minY: 0, w: layout.w, h: layout.h }
+    const minX = Math.min(...layout.nodes.map((n) => n.x))
+    const minY = Math.min(...layout.nodes.map((n) => n.y))
+    const maxX = Math.max(...layout.nodes.map((n) => n.x + n.w))
+    const maxY = Math.max(...layout.nodes.map((n) => n.y + n.h))
+    return { minX, minY, w: maxX - minX, h: maxY - minY }
+  }, [layout.nodes, layout.w, layout.h])
+  const initialOffsetX = view === 'office' ? Math.max(0, (canvasW - bounds.w) / 2) - bounds.minX : Math.max(0, (canvasW - layout.w) / 2)
+  const initialOffsetY = view === 'office' ? Math.max(0, (canvasH - bounds.h) / 2) - bounds.minY : 0
   const [pos, setPos] = useState<Record<string, { x: number; y: number }>>({})
   const drag = useRef<{ name: string; dx: number; dy: number; sx: number; sy: number; moved: boolean } | null>(null)
+  const userPositioned = useRef(false)
   useEffect(() => {
     const el = wrapRef.current
     if (!el) return
@@ -367,12 +429,18 @@ function Topology({ detail, swarm, cards, posts, focus, onNode }: {
     return () => ro.disconnect()
   }, [])
   useEffect(() => {
+    userPositioned.current = false
+    setPos({})
+  }, [view, compactOffice])
+  useEffect(() => {
     setPos((prev) => {
       const next: Record<string, { x: number; y: number }> = {}
-      layout.nodes.forEach((n) => { next[n.name] = prev[n.name] || { x: n.x + initialOffsetX, y: n.y } })
+      layout.nodes.forEach((n) => {
+        next[n.name] = userPositioned.current && prev[n.name] ? prev[n.name] : { x: n.x + initialOffsetX, y: n.y + initialOffsetY }
+      })
       return next
     })
-  }, [layout.nodes, initialOffsetX])
+  }, [layout.nodes, initialOffsetX, initialOffsetY])
   const shown = useMemo(() => layout.nodes.map((n) => ({ ...n, x: pos[n.name]?.x ?? n.x, y: pos[n.name]?.y ?? n.y })), [layout.nodes, pos])
   const nodeByName = useMemo(() => Object.fromEntries(shown.map((n) => [n.name, n])), [shown])
   const pathFor = (e: { from: string; to: string; kind: 'cmd' | 'dep' }) => {
@@ -402,7 +470,10 @@ function Topology({ detail, swarm, cards, posts, focus, onNode }: {
     const nh = current?.h || 164
     const nx = Math.max(10, Math.min(canvasW - nw - 10, pt.x - d.dx))
     const ny = Math.max(10, Math.min(canvasH - nh - 10, pt.y - d.dy))
-    if (Math.abs(e.clientX - d.sx) + Math.abs(e.clientY - d.sy) > 4) d.moved = true
+    if (Math.abs(e.clientX - d.sx) + Math.abs(e.clientY - d.sy) > 4) {
+      d.moved = true
+      userPositioned.current = true
+    }
     setPos((p) => ({ ...p, [d.name]: { x: nx, y: ny } }))
   }
   const endDrag = (e: React.PointerEvent<SVGGElement>, name: string) => {
@@ -412,51 +483,85 @@ function Topology({ detail, swarm, cards, posts, focus, onNode }: {
     if (!d?.moved) onNode(name)
   }
   return (
-    <Panel title={<><span>{t('swarm.topologyTitle')}</span></>} extra={<span style={{ fontSize: 11, color: C.fg3 }}>{t('swarm.topologyHelp')}</span>}>
+    <Panel title={<><span>{t('swarm.topologyTitle')}</span></>} extra={<Space size={6} wrap>
+      <Segmented size="small" value={view} onChange={(v) => setView(v as 'office' | 'graph')}
+        options={[{ label: t('swarm.topology.view.office'), value: 'office' }, { label: t('swarm.topology.view.graph'), value: 'graph' }]} />
+      <span style={{ fontSize: 11, color: C.fg3 }}>{t('swarm.topologyHelp')}</span>
+    </Space>}>
       <div ref={wrapRef} style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 8 }}>
         {layout.nodes.length === 0 ? <Empty description={t('swarm.noMembersAdd')} image={Empty.PRESENTED_IMAGE_SIMPLE} /> : (
           <svg viewBox={`0 0 ${canvasW} ${canvasH}`} width={canvasW} height={canvasH} preserveAspectRatio="xMinYMin meet"
-            style={{ display: 'block', margin: '0 auto', width: '100%', height: '100%', minHeight: 300, touchAction: 'none' }}>
+            style={{ display: 'block', margin: '0 auto', width: '100%', height: '100%', minHeight: view === 'office' ? 260 : 300, touchAction: 'none' }}>
             <defs>
               <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill={C.green} /></marker>
               <filter id="nodeGlow" x="-20%" y="-20%" width="140%" height="140%">
                 <feGaussianBlur stdDeviation="3" result="blur" />
                 <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
               </filter>
+              <filter id="officeShadow" x="-30%" y="-30%" width="160%" height="160%">
+                <feDropShadow dx="0" dy="16" stdDeviation="10" floodColor="#000000" floodOpacity=".16" />
+              </filter>
             </defs>
-            {layout.edges.map((e, i) => (
+            {view === 'office' && <OfficeBackdrop w={canvasW} h={canvasH} />}
+            {view === 'graph' && layout.edges.map((e, i) => (
               <path key={i} d={pathFor(e)} fill="none" stroke={e.kind === 'cmd' ? C.fg2 : C.green} strokeWidth={e.kind === 'cmd' ? 1.2 : 1.7}
                 strokeDasharray={e.kind === 'cmd' ? '4 4' : undefined} opacity={e.kind === 'cmd' ? 0.55 : 0.95} markerEnd={e.kind === 'dep' ? 'url(#arr)' : undefined} />
             ))}
             {shown.map((n) => {
-              const col = nodeColor(n.kind)
+              const col = nodeColor(n)
               const dim = focus && focus !== n.name && n.role !== 'leader'
               const running = n.kind === 'running'
               const assigned = cards.filter((c) => c.assignee === n.name)
               const lastPost = posts.filter((p) => p.author === n.name).slice(-1)[0]
+              const labelPad = view === 'office' ? 24 : 0
               return (
                 <g key={n.name} className="swarm-topology-node" style={{ cursor: 'grab', opacity: dim ? 0.35 : 1 }}
                   onPointerDown={(e) => startDrag(e, n)} onPointerMove={moveDrag} onPointerUp={(e) => endDrag(e, n.name)} onPointerCancel={() => { drag.current = null }}>
                   {running && <rect className="swarm-topology-pulse" x={n.x - 5} y={n.y - 5} width={n.w + 10} height={n.h + 10} rx={14} fill="none" stroke={col} strokeWidth={1.4} filter="url(#nodeGlow)" />}
-                  <foreignObject x={n.x} y={n.y} width={n.w} height={n.h}>
-                    <div className={`swarm-node-card ${running ? 'is-running' : ''} ${n.kind === 'pending' ? 'is-pending' : ''}`} style={{ ['--node-accent' as any]: col }}>
-                      <div className="swarm-node-head">
-                        <span className="swarm-node-mark">{nodeIcon(n)}</span>
-                        <span className="swarm-node-name">{isLeaderRole(n.mrole) ? '◆ ' : ''}{n.name}</span>
-                        <span className="swarm-node-status">{nodeStatus(n, t)}</span>
+                  {/* office 视图名字药丸浮在节点上方(top:-18px)，顶部留出 labelPad 高度并允许溢出，否则会被 foreignObject 裁掉 */}
+                  <foreignObject x={n.x} y={n.y - labelPad} width={n.w} height={n.h + labelPad} style={{ overflow: 'visible' }}>
+                    <div style={{ height: '100%', paddingTop: labelPad, boxSizing: 'border-box' }}>
+                    {view === 'office' ? (
+                      <div className={`swarm-office-desk ${n.w < 220 ? 'is-compact' : ''} ${running ? 'is-running' : ''} ${n.kind === 'idle' ? 'is-idle' : ''} ${n.kind === 'waiting' ? 'is-waiting' : ''}`} style={{ ['--node-accent' as any]: col }}>
+                        <div className="swarm-office-label">
+                          <b>{isLeaderRole(n.mrole) ? `◆ ${n.name}` : n.name}</b>
+                          <span>{nodeStatus(n, t)}</span>
+                        </div>
+                        <div className="swarm-office-surface">
+                          <div className={`swarm-office-monitor is-${screenKind(n)}`}><span>{n.mkind || 'agent'}</span></div>
+                          <div className="swarm-office-tower" />
+                          <div className="swarm-office-keyboard" />
+                        </div>
+                        <div className="swarm-office-chair">
+                          <div className={`swarm-office-agent hat-${memberHatStyle(n)}`} style={{ ['--hat-color' as any]: memberHatColor(n) }}><span /><i /><em /></div>
+                        </div>
+                        <div className="swarm-office-shadow" />
+                        <div className="swarm-office-stats">
+                          <span>{t('swarm.nodeCardsShort', { count: assigned.length })}</span>
+                          <span>{t('swarm.nodePostsShort', { count: posts.filter((p) => p.author === n.name).length })}</span>
+                        </div>
                       </div>
-                      <div className="swarm-node-meta">
-                        <span>{nodeRole(n, t)}</span>
-                        {n.mkind && <span>{n.mkind}</span>}
-                        {n.session && <span>{n.session}</span>}
+                    ) : (
+                      <div className={`swarm-node-card ${running ? 'is-running' : ''} ${n.kind === 'idle' ? 'is-idle' : ''} ${n.kind === 'waiting' ? 'is-waiting' : ''} ${n.kind === 'pending' ? 'is-pending' : ''}`} style={{ ['--node-accent' as any]: col }}>
+                        <div className="swarm-node-head">
+                          <span className="swarm-node-mark">{nodeIcon(n)}</span>
+                          <span className="swarm-node-name">{isLeaderRole(n.mrole) ? '◆ ' : ''}{n.name}</span>
+                          <span className="swarm-node-status">{nodeStatus(n, t)}</span>
+                        </div>
+                        <div className="swarm-node-meta">
+                          <span>{nodeRole(n, t)}</span>
+                          {n.mkind && <span>{n.mkind}</span>}
+                          {n.session && <span>{n.session}</span>}
+                        </div>
+                        {n.task && <div className="swarm-node-task">{n.task}</div>}
+                        <div className="swarm-node-foot">
+                          <span>{t('swarm.nodeCardsShort', { count: assigned.length })}</span>
+                          <span>{t('swarm.nodePostsShort', { count: posts.filter((p) => p.author === n.name).length })}</span>
+                          {n.deps && <span>{t('swarm.nodeDepsShort', { deps: n.deps })}</span>}
+                        </div>
+                        {lastPost && <div className="swarm-node-last">{lastPost.text}</div>}
                       </div>
-                      {n.task && <div className="swarm-node-task">{n.task}</div>}
-                      <div className="swarm-node-foot">
-                        <span>{t('swarm.nodeCardsShort', { count: assigned.length })}</span>
-                        <span>{t('swarm.nodePostsShort', { count: posts.filter((p) => p.author === n.name).length })}</span>
-                        {n.deps && <span>{t('swarm.nodeDepsShort', { deps: n.deps })}</span>}
-                      </div>
-                      {lastPost && <div className="swarm-node-last">{lastPost.text}</div>}
+                    )}
                     </div>
                   </foreignObject>
                 </g>
@@ -469,12 +574,55 @@ function Topology({ detail, swarm, cards, posts, focus, onNode }: {
   )
 }
 
-function nodeColor(kind: string) {
-  return kind === 'running' || kind === 'done' ? C.green : kind === 'pending' ? C.amber : kind === 'failed' ? C.red : kind === 'leader' ? C.magenta : C.fg2
+function OfficeBackdrop({ w, h }: { w: number; h: number }) {
+  const rightX = 24
+  const workW = Math.max(240, w - rightX - 24)
+  return (
+    <g className="swarm-office-backdrop">
+      <rect x="0" y="0" width={w} height={h} rx="18" fill="var(--bg-container)" />
+      <g opacity=".34">
+        <rect x={rightX} y="74" width={workW} height={Math.max(90, h - 104)} rx="12" fill="none" stroke="var(--border-subtle)" strokeDasharray="8 10" />
+        {Array.from({ length: 4 }).map((_, i) => (
+          <line key={i} x1={rightX + 34} x2={rightX + workW - 34} y1={118 + i * 98} y2={118 + i * 98} stroke="var(--border-subtle)" />
+        ))}
+      </g>
+    </g>
+  )
+}
+
+const MEMBER_COLORS = ['#58a6ff', '#3fb950', '#d2a8ff', '#39c5cf', '#ff7b72', '#f2cc60', '#a5d6ff', '#db6d28']
+const MEMBER_HAT_COLORS = ['#f2cc60', '#58a6ff', '#d2a8ff']
+function stableIndex(name: string, mod: number) {
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0
+  return h % mod
+}
+function memberColor(name: string) {
+  return MEMBER_COLORS[stableIndex(name, MEMBER_COLORS.length)]
+}
+function memberHatColor(n: any) {
+  if (n.role === 'leader' || isLeaderRole(n.mrole)) return '#f85149'
+  return MEMBER_HAT_COLORS[stableIndex(n.name || '', MEMBER_HAT_COLORS.length)]
+}
+function memberHatStyle(n: any) {
+  if (n.role === 'leader' || isLeaderRole(n.mrole)) return 'leader'
+  return String(stableIndex(n.name || '', 3))
+}
+function screenKind(n: any) {
+  return n.mkind === 'codex' ? 'codex' : 'claude'
+}
+function nodeColor(n: any) {
+  const kind = n.kind
+  if (kind === 'pending') return C.amber
+  if (kind === 'failed') return C.red
+  if (kind === 'exited') return C.fg2
+  if (kind === 'leader' && !n.name) return C.magenta
+  return memberColor(n.name || kind)
 }
 function nodeIcon(n: any) {
   if (n.role === 'leader') return '◆'
   if (n.kind === 'done') return '✔'
+  if (n.kind === 'waiting') return '?'
   if (n.kind === 'pending') return '⏳'
   if (n.kind === 'failed') return '✕'
   return '●'
@@ -482,6 +630,8 @@ function nodeIcon(n: any) {
 function nodeStatus(n: any, t: T) {
   if (n.kind === 'pending') return t('swarm.pending')
   if (n.kind === 'running') return t('common.running')
+  if (n.kind === 'idle') return t('terminal.status.idle')
+  if (n.kind === 'waiting') return t('swarm.waiting')
   if (n.kind === 'done') return t('common.done')
   if (n.kind === 'failed') return t('common.failed')
   return t('swarm.exited')
@@ -493,21 +643,27 @@ function nodeRole(n: any, t: T) {
 }
 
 // 分层布局：leader 顶部；成员按 deps 深度分层
-function buildLayout(detail: Detail | null, swarm: string) {
-  const NW = 240, NH = 164, GX = 34, GY = 78, TOP = 14, MASTER_H = 154
+function buildLayout(detail: Detail | null, swarm: string, compact = false) {
+  const NW = compact ? 176 : 240
+  const NH = compact ? 132 : 164
+  const GX = compact ? 14 : 34
+  const GY = compact ? 42 : 78
+  const TOP = compact ? 8 : 14
+  const MASTER_H = compact ? 124 : 154
   if (!detail) return { nodes: [], edges: [], w: 400, h: 280 }
   type N = { name: string; role: 'leader' | 'member' | 'pending'; kind: string; deps: string; session: string; task?: string; x: number; y: number; w: number; h: number; mrole?: string; mkind?: string }
   // leader 顶点优先用 role=leader 的成员（它从分层行里排除，只在顶部画一次）
   const masterMember = detail.members.find((m) => isLeaderRole(m.role))
   const members = detail.members.filter((m) => m !== masterMember).map((m) => ({
     name: m.name, role: 'member' as const, deps: m.deps, session: m.session, task: m.task,
-    kind: m.done ? 'done' : m.status === 'running' ? 'running' : m.status === 'done' ? 'done' : 'exited',
+    kind: memberNodeKind(m),
     mrole: m.role, mkind: m.kind, // 成员级 角色(master/worker) 与 引擎(claude/codex)
   }))
   const pendings = detail.pending.map((p) => ({ name: p.name, role: 'pending' as const, deps: p.deps, session: `${swarm}-${p.name}`, kind: 'pending' }))
   const all = [...members, ...pendings]
-  // 注意：只有 leader、还没 member 时 all 为空，但仍要把 leader 顶点画出来，不能空返回
-  if (all.length === 0 && !masterMember) return { nodes: [], edges: [], w: 400, h: 280 }
+  // 注意：只有 leader、还没 member 时 all 为空，但仍要把 leader 顶点画出来，不能空返回。
+  // supervisor(cc-<群>) 也是 leader，没有 role=leader 成员时要靠它兜底，否则新建带 Leader 的群看不到任何节点。
+  if (all.length === 0 && !masterMember && !detail.supervisor) return { nodes: [], edges: [], w: 400, h: 280 }
   const byName: Record<string, any> = {}; all.forEach((n) => (byName[n.name] = n))
   const memo: Record<string, number> = {}
   const depth = (name: string, seen = new Set<string>()): number => {
@@ -527,9 +683,7 @@ function buildLayout(detail: Detail | null, swarm: string) {
   // leader 顶部居中：优先 role=leader 成员；否则 supervisor(cc Leader)；都没有则不画幽灵节点
   const masterName = masterMember ? masterMember.name : detail.supervisor
   if (masterName) {
-    const mk = masterMember
-      ? (masterMember.done ? 'done' : masterMember.status === 'running' ? 'running' : masterMember.status === 'done' ? 'done' : 'exited')
-      : 'leader'
+    const mk = masterMember ? memberNodeKind(masterMember) : 'leader'
     nodes.push({ name: masterName, role: 'leader', kind: mk, deps: '', session: masterMember ? masterMember.session : detail.supervisor, task: masterMember?.task || detail.goal, x: w / 2 - NW / 2, y: TOP, w: NW, h: MASTER_H, mkind: masterMember?.kind })
   }
   layerKeys.forEach((k, li) => {
@@ -793,14 +947,16 @@ function NodeDrawer({ swarm, member, detail, cards, posts, openTerm, onClose, on
 
   const myCards = cards.filter((c) => c.assignee === member)
   const myPosts = posts.filter((p) => p.author === member)
-  const color = isMaster ? C.magenta : pend ? C.amber : m?.done ? C.green : m?.status === 'running' ? C.green : C.fg2
+  const color = isMaster ? C.magenta : pend ? C.amber : m?.done ? C.green : m?.status === 'running' ? C.green : m?.status === 'idle' ? C.blue : m?.status === 'waiting' ? C.amber : C.fg2
+  const tagStatus = m?.done ? 'done' : (m?.status || 'exited')
+  const tagColor = tagStatus === 'running' ? 'processing' : tagStatus === 'idle' ? 'blue' : tagStatus === 'waiting' ? 'warning' : tagStatus === 'done' ? 'success' : 'default'
 
   return (
     <Drawer open={!!member} onClose={onClose} width={drawerW} title={
       <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <i style={{ width: 8, height: 8, borderRadius: '50%', background: color }} />
         <b>{member}</b>
-        {isMaster ? <Tag color="blue">{t('swarm.master')}</Tag> : pend ? <Tag color="warning">{t('swarm.pending')}</Tag> : <Tag color={m?.status === 'running' ? 'processing' : 'default'}>{m?.done ? t('common.done') : m?.status}</Tag>}
+        {isMaster ? <Tag color="blue">{t('swarm.master')}</Tag> : pend ? <Tag color="warning">{t('swarm.pending')}</Tag> : <Tag color={tagColor}>{nodeStatus({ kind: tagStatus }, t)}</Tag>}
       </span>
     }>
       {member && (

@@ -411,9 +411,9 @@ function Viewer({
                 : isMd && !source
                   ? <div style={{ height: previewHeight, overflow: 'auto' }}><Markdown accent={accent} resolveHref={resolvePreviewHref} onLinkClick={openPreviewLink}>{data.content}</Markdown></div>
                   : ext === 'json'
-                    ? previewShell(t('file.jsonPreview'), <div style={{ height: previewHeight, overflow: 'auto', padding: 12 }}><Markdown accent={accent}>{fence('json', formatJSON(data.content))}</Markdown></div>)
+                    ? previewShell(t('file.jsonPreview'), <div style={{ height: previewHeight, boxSizing: 'border-box', overflow: 'auto', padding: 12 }}><Markdown accent={accent} fill>{fence('json', formatJSON(data.content))}</Markdown></div>)
                     : codeLang
-                      ? previewShell(t('file.codePreview', { lang: codeLang.toUpperCase() }), <div style={{ height: previewHeight, overflow: 'auto', padding: 12 }}><Markdown accent={accent}>{fence(codeLang, data.content)}</Markdown></div>)
+                      ? previewShell(t('file.codePreview', { lang: codeLang.toUpperCase() }), <div style={{ height: previewHeight, boxSizing: 'border-box', overflow: 'auto', padding: 12 }}><Markdown accent={accent} fill>{fence(codeLang, data.content)}</Markdown></div>)
                       : codePre(data.content)}
               {data.truncated && <div style={{ color: '#d29922', fontSize: 12, marginTop: 6 }}>⚠ {t('file.truncatedLong')}</div>}
             </>

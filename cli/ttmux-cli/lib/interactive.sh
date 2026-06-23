@@ -280,6 +280,7 @@ _interactive() {
                 if [[ -n "$sname" ]]; then
                     if _session_exists "$sname"; then
                         msg_warn "会话 ${bold}${sname}${reset} 已存在，正在附加..."
+                        _tmux_fit "$sname"
                         "$TMUX_BIN" attach-session -t "$sname"
                     else
                         msg_info "创建会话 ${bold}${sname}${reset}"
@@ -294,6 +295,7 @@ _interactive() {
             3)
                 target=$(_pick_session "附加到会话") || { _interactive_pause; continue; }
                 msg_info "附加到 ${bold}${target}${reset}"
+                _tmux_fit "$target"
                 "$TMUX_BIN" attach-session -t "$target"
                 ;;
             4)

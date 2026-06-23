@@ -25,14 +25,16 @@ export default function Markdown({
   accent = '#58a6ff',
   resolveHref,
   onLinkClick,
+  fill,
 }: {
   children: string
   accent?: string
   resolveHref?: (href: string, kind: 'link' | 'image') => string
   onLinkClick?: (href: string, event: MouseEvent<HTMLAnchorElement>) => void
+  fill?: boolean // 整块代码/JSON 预览：让唯一的代码块撑满父容器高度
 }) {
   return (
-    <div style={{ fontSize: 13.5, lineHeight: 1.55, wordBreak: 'break-word' }}>
+    <div style={{ fontSize: 13.5, lineHeight: 1.55, wordBreak: 'break-word', height: fill ? '100%' : undefined }}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[[rehypeHighlight, { detect: true, ignoreMissing: true }]]}
@@ -60,7 +62,7 @@ export default function Markdown({
             // 块级代码复用对话里的 CodeBox（hover 复制 + 主题色 + 语法高亮）
             if (block) {
               const raw = (node ? nodeText(node) : String(children)).replace(/\n$/, '')
-              return <CodeBox text={raw} max={420} className={`hljs ${cls}`}>{children}</CodeBox>
+              return <CodeBox text={raw} max={420} fill={fill} className={`hljs ${cls}`}>{children}</CodeBox>
             }
             return <code style={inlineCode}>{children}</code>
           },

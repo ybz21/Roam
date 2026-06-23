@@ -34,6 +34,7 @@ case "$cmd" in
             name="$1"
             if _session_exists "$name"; then
                 msg_warn "会话 ${bold}${name}${reset} 已存在，正在附加..."
+                _tmux_fit "$name"
                 "$TMUX_BIN" attach-session -t "$name"
             else
                 msg_info "创建会话 ${bold}${name}${reset}"
@@ -53,6 +54,7 @@ case "$cmd" in
         fi
         if _session_exists "$target"; then
             msg_info "附加到 ${bold}${target}${reset}"
+            _tmux_fit "$target"
             "$TMUX_BIN" attach-session -t "$target"
         else
             msg_err "会话 ${bold}${target}${reset} 不存在"

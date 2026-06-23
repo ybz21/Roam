@@ -15,6 +15,34 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// utf8Env 保证 tmux 客户端 locale 为 UTF-8。tmux 按客户端 LC_ALL/LC_CTYPE/LANG 是否含 UTF-8
+// 决定能否渲染中文等宽字符，pane 里的 ls 也依赖它正确输出文件名；后端进程常跑在 C/POSIX
+// locale 下（服务化部署），不补就会满屏乱码。仅在现有 locale 非 UTF-8 时追加 C.UTF-8，尊重已有设置。
+func utf8Env(env []string) []string {
+	get := func(k string) (string, bool) {
+		p := k + "="
+		for i := len(env) - 1; i >= 0; i-- { // 后出现的覆盖前面的
+			if strings.HasPrefix(env[i], p) {
+				return env[i][len(p):], true
+			}
+		}
+		return "", false
+	}
+	eff := ""
+	if v, ok := get("LC_ALL"); ok && v != "" {
+		eff = v
+	} else if v, ok := get("LC_CTYPE"); ok && v != "" {
+		eff = v
+	} else if v, ok := get("LANG"); ok {
+		eff = v
+	}
+	u := strings.ToUpper(eff)
+	if strings.Contains(u, "UTF-8") || strings.Contains(u, "UTF8") {
+		return env
+	}
+	return append(env, "LC_ALL=C.UTF-8")
+}
+
 // tmuxScroll 通过 tmux copy-mode 滚动会话的真实历史（attach 用全屏，xterm 本地缓冲为空）。
 func tmuxScroll(name, dir string, lines int) {
 	if lines <= 0 {
@@ -58,13 +86,19 @@ func Handler(c *gin.Context) {
 	}
 	defer conn.Close()
 
-	// 开启该会话的鼠标模式：网页里点击即可切换 tmux 窗格焦点、拖边框可调大小。
-	// 仅作用于该会话（-t name），不影响 CLI 里的其它 tmux。
-	// 滚轮已被前端拦截走 copy-mode，不与此冲突；要本地选中复制可用 Shift+拖拽。
-	_ = exec.Command("tmux", "set-option", "-t", name, "mouse", "on").Run()
+	// 关闭该会话的 tmux 鼠标模式：让鼠标拖动直接成为 xterm 本地选区（松开自动复制 / Ctrl+C 复制），
+	// 右键也只弹前端菜单，不再被转发给 tmux 多弹一个菜单。
+	// 代价：点击切换窗格 / 拖边框调大小失效；滚轮翻历史由前端单独拦截处理，不受影响。
+	_ = exec.Command("tmux", "set-option", "-t", name, "mouse", "off").Run()
+
+	// 窗口尺寸跟随「最近活跃的客户端」，而非被所有 attach 客户端里最小的那个限制。
+	// 同一会话被多处 attach（网页多标签 / 手机+桌面 / CLI）时，默认会缩到最小客户端，
+	// 表现为当前这个明明很宽却渲染成左侧窄条；latest + aggressive-resize 让在用的客户端尺寸生效。
+	_ = exec.Command("tmux", "set-option", "-t", name, "window-size", "latest").Run()
+	_ = exec.Command("tmux", "set-window-option", "-t", name, "aggressive-resize", "on").Run()
 
 	cmd := exec.Command("tmux", "attach", "-t", name)
-	cmd.Env = append(os.Environ(), "TERM=xterm-256color")
+	cmd.Env = utf8Env(append(os.Environ(), "TERM=xterm-256color"))
 	ptmx, err := creackpty.Start(cmd)
 	if err != nil {
 		conn.WriteMessage(websocket.TextMessage, []byte("\r\n[无法连接会话: "+name+"]\r\n"))

@@ -134,6 +134,22 @@ func alive() bool {
 	return resp.StatusCode == http.StatusOK
 }
 
+// browserUA 取这台 Chrome 的原生 User-Agent（/json/version 的 "User-Agent" 字段）。
+// 用于手机模式切回桌面时复位 UA——CDP 没有 clearUserAgentOverride，只能再 set 回默认值。
+func browserUA() string {
+	resp, err := http.Get(CDPBase + "/json/version")
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	var v struct {
+		UserAgent string `json:"User-Agent"`
+	}
+	_ = json.Unmarshal(b, &v)
+	return v.UserAgent
+}
+
 // listPages 返回所有 page 类型的标签页（过滤掉 service worker / iframe 等其它 target）。
 func listPages() []target {
 	resp, err := http.Get(CDPBase + "/json")

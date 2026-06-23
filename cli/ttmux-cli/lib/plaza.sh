@@ -117,6 +117,23 @@ _plaza_say() {
         VALUES(datetime('now','localtime'),'$(_sqe "$author")','$(_sqe "$kind")',${reval},'$(_sqe "$text")');
         SELECT last_insert_rowid();")
     msg_ok "#${id} 已发布 ${dim}(${author}/${kind})${reset}"
+    if [[ -n "$to" && "$to" != "human" ]]; then
+        _swarm_member_touch_busy "$swarm" "$to"
+    fi
+    if [[ "$text" =~ (^|[[:space:]])@all($|[[:space:][:punct:]]) ]]; then
+        _swarm_member_touch_busy "$swarm" all
+    fi
+    if [[ "$text" =~ (^|[[:space:]])@(leader|master|lead)($|[[:space:][:punct:]]) ]]; then
+        _swarm_member_touch_busy "$swarm" leader
+    fi
+    local db_members mention
+    db_members=$(sqlite3 "$db" "SELECT name FROM members WHERE IFNULL(pending,0)=0;" 2>/dev/null || true)
+    while IFS= read -r mention; do
+        [[ -n "$mention" ]] || continue
+        if [[ "$text" =~ (^|[[:space:]])@${mention}($|[[:space:][:punct:]]) ]]; then
+            _swarm_member_touch_busy "$swarm" "$mention"
+        fi
+    done <<< "$db_members"
     _plaza_notify_master "$swarm" "$id" "$author" "$kind" "$text"
 }
 

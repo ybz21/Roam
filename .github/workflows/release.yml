@@ -1,0 +1,44 @@
+name: release
+
+# Build and publish prebuilt CLI artifacts so `curl | bash` installs can
+# download them (the generated ttmux/chrome are no longer committed).
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/ttmux-cli-go/go.mod
+          cache-dependency-path: cli/ttmux-cli-go/go.sum
+
+      - name: Build ttmux binaries (CGO off, all targets)
+        working-directory: cli/ttmux-cli-go
+        run: |
+          mkdir -p dist
+          for t in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 freebsd/amd64; do
+            os=${t%/*}; arch=${t#*/}
+            echo "building ttmux-$os-$arch"
+            CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -o "dist/ttmux-$os-$arch" ./cmd/ttmux-cli-go
+          done
+
+      - name: Build chrome (bash, arch-independent)
+        run: |
+          bash cli/chrome-cli/build.sh
+          cp chrome cli/ttmux-cli-go/dist/chrome
+
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: cli/ttmux-cli-go/dist/*
+          fail_on_unmatched_files: true

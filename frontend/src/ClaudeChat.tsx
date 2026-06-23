@@ -16,7 +16,7 @@ export default function ClaudeChat({ name, file, dir, onBack }: { name: string; 
   return (
     <ChatShell
       name={name} dir={dir} accent="#58a6ff" error={err}
-      title={<span style={{ color: '#58a6ff', fontWeight: 600 }}>🤖 Claude Code</span>}
+      title={<span style={{ color: '#58a6ff', fontWeight: 600 }}>✳ Claude Code</span>}
       placeholder={t('chat.claudePlaceholder')}
       onBack={onBack}
       onRefresh={refresh}

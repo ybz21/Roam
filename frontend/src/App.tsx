@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   Layout, Menu, Button, Card, List, Tag, Form, Input, Select, Segmented,
-  Statistic, Row, Col, Space, Popconfirm, Empty, Modal, Grid, App as AntApp, Typography, Spin, Tooltip, Dropdown, Checkbox, Progress, AutoComplete,
+  Statistic, Row, Col, Space, Popconfirm, Empty, Modal, Grid, App as AntApp, Typography, Spin, Tooltip, Dropdown, Checkbox, Progress, AutoComplete, Radio,
 } from 'antd'
 import { QRCodeSVG } from 'qrcode.react'
 import { api, setUnauthorizedHandler } from './api'
@@ -15,11 +15,13 @@ import ClaudeChat from './ClaudeChat'
 import CodexChat from './CodexChat'
 import FileBrowser from './FileBrowser'
 import FloatingFileDrawer from './FloatingFileDrawer'
+import GitPanel from './GitPanel'
 import BrowserView from './BrowserView'
 import Swarm from './Swarm'
 import UpdateBanner from './UpdateBanner'
 import { useThemeMode } from './theme'
 import { useI18n } from './i18n'
+import { usePwaInstall } from './install'
 import { PromptDialog, detectPrompt } from './prompt'
 import { copyText } from './chat/blocks'
 
@@ -227,6 +229,40 @@ export default function App() {
     if (hasSider) { setDockOpen(true); setDockMax(false) } // 桌面：拉出右侧停靠栏（压缩页面到左）
     else setOverlay(true)           // 手机/平板：全屏
   }
+  const renameOpenTerm = (oldName: string, newName: string) => {
+    if (oldName === newName) return
+    setTerms((ts) => Array.from(new Set(ts.map((t) => (t === oldName ? newName : t)))))
+    setActive((a) => (a === oldName ? newName : a))
+    setStatusMap((m) => {
+      if (!(oldName in m)) return m
+      const { [oldName]: oldValue, ...rest } = m
+      return { ...rest, [newName]: oldValue }
+    })
+    setClaudeMap((m) => {
+      if (!(oldName in m)) return m
+      const { [oldName]: oldValue, ...rest } = m
+      return { ...rest, [newName]: oldValue }
+    })
+    setClaudeView((m) => {
+      if (!(oldName in m)) return m
+      const { [oldName]: oldValue, ...rest } = m
+      return { ...rest, [newName]: oldValue }
+    })
+    setCodexMap((m) => {
+      if (!(oldName in m)) return m
+      const { [oldName]: oldValue, ...rest } = m
+      return { ...rest, [newName]: oldValue }
+    })
+    setCodexView((m) => {
+      if (!(oldName in m)) return m
+      const { [oldName]: oldValue, ...rest } = m
+      return { ...rest, [newName]: oldValue }
+    })
+    if (termRefs.current[oldName]) {
+      termRefs.current[newName] = termRefs.current[oldName]
+      delete termRefs.current[oldName]
+    }
+  }
   const closeTerm = (name: string) => {
     setTerms((ts) => {
       const next = ts.filter((t) => t !== name)
@@ -264,6 +300,7 @@ export default function App() {
       termRefs={termRefs} sendKey={sendKey}
       claudeMap={claudeMap} claudeView={claudeView} setClaudeView={setClaudeView}
       codexMap={codexMap} codexView={codexView} setCodexView={setCodexView}
+      onRename={renameOpenTerm}
       onCollapse={() => { setOverlay(false); setDockOpen(false) }}
     />
   )
@@ -271,7 +308,7 @@ export default function App() {
   const pages: any = {
     overview: <Overview go={go} openTerm={openTerm} kanna={kanna} />,
     swarm: <Swarm openTerm={openTerm} initialSwarm={swarmSub || undefined} onNav={(n) => { location.hash = n ? '#/swarm/' + encodeURIComponent(n) : '#/swarm' }} />,
-    sessions: <Sessions openTerm={openTerm} />,
+    sessions: <Sessions openTerm={openTerm} closeTerm={closeTerm} />,
     files: <FilesPage openTerm={openTerm} />,
     settings: <EnvPage />,
     browser: <BrowserView />,
@@ -290,7 +327,7 @@ export default function App() {
   )
 
   return (
-    <Layout style={{ minHeight: '100dvh', background: 'var(--bg-base)' }}>
+    <Layout style={{ height: '100dvh', overflow: 'hidden', background: 'var(--bg-base)' }}>
       <UpdateBanner />
       {hasSider && !dockMax && (
         <Sider collapsible trigger={null} collapsed={collapsed} collapsedWidth={64}
@@ -312,7 +349,7 @@ export default function App() {
               )}
             </div>
             <div style={{ flex: 1, overflowY: 'auto' }}>{menu}</div>
-            {/* 底部：全屏（上）+ 折叠 + 退出（下），始终竖向堆叠 */}
+            {/* 底部：全屏 + 折叠 + 退出，始终竖向堆叠（安装到桌面只放在设置页）*/}
             <div style={{ borderTop: '1px solid var(--border-subtle)', padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
               {fsSupported && (
                 <Button type="text" block onClick={toggleFs} style={{ color: 'var(--text-dim)', textAlign: collapsed ? 'center' : 'left' }}
@@ -467,10 +504,13 @@ function SoloTerminal({ name }: { name: string }) {
         termRefs={termRefs} sendKey={(seq) => termRefs.current[name]?.send(seq)}
         claudeMap={claudeMap} claudeView={claudeView} setClaudeView={setClaudeView}
         codexMap={codexMap} codexView={codexView} setCodexView={setCodexView}
+        onRename={(_, newName) => { location.hash = '#/term/' + encodeURIComponent(newName) }}
       />
     </div>
   )
 }
+
+const PROMPT_OFF_KEY = 'ttmux-prompt-popup-off' // 弹框提醒按会话名记忆的本地存储键
 
 // ── 终端面板（多标签 + 工具栏 + 快捷键栏），桌面右栏与手机覆盖层共用 ──
 function TerminalPane(props: {
@@ -481,8 +521,9 @@ function TerminalPane(props: {
   sendKey: (seq: string) => void; onCollapse?: () => void
   claudeMap: Record<string, ClaudeInfo>; claudeView: Record<string, boolean>; setClaudeView: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
   codexMap: Record<string, ClaudeInfo>; codexView: Record<string, boolean>; setCodexView: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
+  onRename: (oldName: string, newName: string) => void
 }) {
-  const { terms, active, setActive, closeTerm, fontSize, setFontSize, statusMap, setStatus, termRefs, sendKey, onCollapse, claudeMap, claudeView, setClaudeView, codexMap, codexView, setCodexView } = props
+  const { terms, active, setActive, closeTerm, fontSize, setFontSize, statusMap, setStatus, termRefs, sendKey, onCollapse, claudeMap, claudeView, setClaudeView, codexMap, codexView, setCodexView, onRename } = props
   const { message } = AntApp.useApp()
   const { t } = useI18n()
   const st = active ? statusMap[active] : undefined
@@ -503,14 +544,31 @@ function TerminalPane(props: {
   const tapKey = (seq: string) => { flushLine(); if (isTouch) sendRaw(seq); else sendKey(seq) } // 控制键：先 flush 待发文本
   const noBlur = isTouch ? (e: React.MouseEvent) => e.preventDefault() : undefined        // 点按钮不夺走输入框焦点（软键盘保持）
 
+  // 弹框提醒开关：按会话名记忆是否关闭 PromptDialog 自动弹框（仍可在底部面板手动响应）。
+  const [promptOff, setPromptOff] = useState<Record<string, boolean>>(() => {
+    try { return JSON.parse(localStorage.getItem(PROMPT_OFF_KEY) || '{}') } catch { return {} }
+  })
+  const togglePromptOff = () => {
+    if (!active) return
+    setPromptOff((m) => {
+      const next = { ...m, [active]: !m[active] }
+      try { localStorage.setItem(PROMPT_OFF_KEY, JSON.stringify(next)) } catch {}
+      return next
+    })
+  }
+
   // 文件侧栏（终端视图下也可用）：定位到当前会话的工作目录
   const [showFiles, setShowFiles] = useState(false)
+  const [showGit, setShowGit] = useState(false)
   const [cwd, setCwd] = useState('')
+  // 文件栏与 Git 面板共用右侧抽屉位，互斥显示。
+  const toggleFiles = () => setShowFiles((s) => { if (!s) setShowGit(false); return !s })
+  const toggleGit = () => setShowGit((s) => { if (!s) setShowFiles(false); return !s })
   const [ctx, setCtx] = useState<{ x: number; y: number; session: string; selection: string } | null>(null)
   const [pasteOpen, setPasteOpen] = useState(false)
   const [pasteSession, setPasteSession] = useState('')
   const [pasteText, setPasteText] = useState('')
-  const [selTip, setSelTip] = useState<{ x: number; y: number; session: string; selection: string } | null>(null)
+  const [renameSession, setRenameSession] = useState<string | null>(null)
   useEffect(() => {
     if (!active) { setCwd(''); return }
     // 优先用 claude/codex 已知工作目录，否则查会话 pane 当前路径
@@ -558,8 +616,23 @@ function TerminalPane(props: {
       openManualPaste(session)
     }
   }
+  const selText = ctx?.selection?.trim() || ''
+  const selPreview = selText.replace(/\s+/g, ' ').slice(0, 28)
   const ctxItems = ctx ? [
-    ...(ctx.selection ? [{ key: 'copy', label: t('terminal.copySelected') }] : []),
+    ...(selText ? [
+      {
+        key: 'copy',
+        label: (
+          <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8 }}>
+            <span style={{ fontWeight: 600 }}>{t('terminal.copySelected')}</span>
+            <span style={{ color: 'var(--text-dimmer)', fontSize: 12, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              “{selPreview}{selText.length > selPreview.length ? '…' : ''}”
+            </span>
+          </span>
+        ),
+      },
+      { type: 'divider' as const },
+    ] : []),
     { key: 'paste', label: t('terminal.pasteClipboard') },
     { key: 'manual-paste', label: t('terminal.manualPaste') },
     { type: 'divider' as const },
@@ -567,15 +640,24 @@ function TerminalPane(props: {
     { key: 'bottom', label: t('terminal.toBottom') },
     { key: 'reconnect', label: t('terminal.reconnect') },
     { type: 'divider' as const },
-    { key: PFX + '[', label: t('terminal.tmuxCopyMode') },
-    { key: PFX + 'w', label: t('terminal.tmuxWindowList') },
-    { key: PFX + '%', label: t('terminal.tmuxSplitVertical') },
-    { key: PFX + '"', label: t('terminal.tmuxSplitHorizontal') },
+    {
+      key: 'tmux',
+      label: 'tmux',
+      children: [
+        { key: PFX + '[', label: t('terminal.tmuxCopyMode') },
+        { key: PFX + 'w', label: t('terminal.tmuxWindowList') },
+        { key: PFX + '%', label: t('terminal.tmuxSplitVertical') },
+        { key: PFX + '"', label: t('terminal.tmuxSplitHorizontal') },
+      ],
+    },
+    { type: 'divider' as const },
+    { key: 'cancel', label: t('common.cancel') },
   ] : []
   const onCtxClick = ({ key }: { key: string }) => {
     if (!ctx) return
     const h = termRefs.current[ctx.session]
-    if (key === 'copy') copyText(ctx.selection)
+    if (key === 'cancel') { /* 仅关闭菜单 */ }
+    else if (key === 'copy') { copyText(ctx.selection); message.success(t('common.copied')); h?.clearSelection() }
     else if (key === 'paste') pasteClipboard(ctx.session)
     else if (key === 'manual-paste') openManualPaste(ctx.session)
     else if (key === 'scroll-up') h?.scroll(-12)
@@ -584,13 +666,6 @@ function TerminalPane(props: {
     else h?.send(key)
     setCtx(null)
   }
-  const copySelectionTip = () => {
-    if (!selTip) return
-    copyText(selTip.selection)
-    message.success(t('common.copied'))
-    setSelTip(null)
-  }
-
   if (terms.length === 0) {
     return (
       <div style={{ flex: 1, display: 'grid', placeItems: 'center', color: 'var(--text-dim)' }}>
@@ -604,7 +679,7 @@ function TerminalPane(props: {
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      {active && <PromptDialog name={active} accent={codexMap[active]?.running ? '#10a37f' : '#58a6ff'} enabled={!inChat} />}
+      {active && <PromptDialog name={active} accent={codexMap[active]?.running ? '#10a37f' : '#58a6ff'} enabled={!inChat && !promptOff[active]} />}
       <Modal
         open={pasteOpen}
         title={t('terminal.pasteTitle')}
@@ -629,6 +704,7 @@ function TerminalPane(props: {
           {t('terminal.pasteHelp')}
         </div>
       </Modal>
+      <RenameSessionModal session={renameSession} onClose={() => setRenameSession(null)} onDone={onRename} />
       <Dropdown
         open={!!ctx}
         trigger={[]}
@@ -638,26 +714,6 @@ function TerminalPane(props: {
       >
         <span style={{ position: 'fixed', left: ctx?.x ?? -1000, top: ctx?.y ?? -1000, width: 1, height: 1, pointerEvents: 'none' }} />
       </Dropdown>
-      {selTip && (
-        <div
-          style={{
-            position: 'fixed',
-            left: Math.min(selTip.x + 8, window.innerWidth - 88),
-            top: Math.max(8, selTip.y - 42),
-            zIndex: 1200,
-            display: 'flex',
-            gap: 4,
-            padding: 4,
-            border: '1px solid var(--border)',
-            borderRadius: 8,
-            background: 'var(--bg-elevated)',
-            boxShadow: 'var(--elevated-shadow)',
-          }}
-        >
-          <Button size="small" type="primary" onMouseDown={(e) => e.preventDefault()} onClick={copySelectionTip}>{t('common.copy')}</Button>
-          <Button size="small" type="text" onMouseDown={(e) => e.preventDefault()} onClick={() => setSelTip(null)}>×</Button>
-        </div>
-      )}
       {/* 标签栏 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 8px', borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
         {onCollapse && <Button size="small" type="text" style={{ color: 'var(--text-dim)' }} onClick={onCollapse}>✕ {t('common.collapse')}</Button>}
@@ -669,7 +725,7 @@ function TerminalPane(props: {
             }}>
             <i style={{ width: 7, height: 7, borderRadius: '50%', background: termNeedsInput[termName] ? '#d29922' : (statusMap[termName] === 'connected' ? '#3fb950' : statusMap[termName] === 'connecting' ? '#d29922' : '#f85149') }} />
             {termNeedsInput[termName] && <span title={t('prompt.confirmRequired')} style={{ color: '#d29922', fontSize: 12, fontWeight: 600 }}>{t('session.waiting')}</span>}
-            {claudeMap[termName]?.running && <span title={t('session.runningClaude')}>🤖</span>}
+            {claudeMap[termName]?.running && <span title={t('session.runningClaude')} style={{ color: '#58a6ff' }}>✳</span>}
             {codexMap[termName]?.running && <span title={t('session.runningCodex')} style={{ color: '#10a37f' }}>✸</span>}
             {termName}
             <a onClick={(e) => { e.stopPropagation(); closeTerm(termName) }} style={{ color: 'var(--text-dim)' }}>×</a>
@@ -686,7 +742,7 @@ function TerminalPane(props: {
         {active && claudeMap[active]?.running && (
           <Tooltip title={t('chat.switchToClaude')}>
             <Button size="small" type={claudeView[active] ? 'primary' : 'default'}
-              onClick={() => setClaudeView((v) => ({ ...v, [active!]: !v[active!] }))}>🤖 Claude</Button>
+              onClick={() => setClaudeView((v) => ({ ...v, [active!]: !v[active!] }))}>✳ Claude</Button>
           </Tooltip>
         )}
         {active && codexMap[active]?.running && (
@@ -708,8 +764,23 @@ function TerminalPane(props: {
             <Button size="small" onClick={() => window.open(`/#/term/${encodeURIComponent(active)}`, '_blank')}>↗ {t('terminal.newTab')}</Button>
           </Tooltip>
         )}
+        {active && (
+          <Button size="small" onClick={() => setRenameSession(active)}>{t('session.rename')}</Button>
+        )}
+        {active && (
+          <Tooltip title={promptOff[active] ? t('prompt.popupOff') : t('prompt.popupOn')}>
+            <Button size="small" type={promptOff[active] ? 'default' : 'primary'} ghost={!promptOff[active]}
+              onClick={togglePromptOff}>{promptOff[active] ? '🔕' : '🔔'} {t('prompt.popup')}</Button>
+          </Tooltip>
+        )}
         <Tooltip title={t('terminal.fileBrowserTitle')}>
-          <Button size="small" type={showFiles ? 'primary' : 'default'} onClick={() => setShowFiles((s) => !s)}>📁 {t('chat.files')}</Button>
+          <Button size="small" type={showFiles ? 'primary' : 'default'} onClick={toggleFiles}>📁 {t('chat.files')}</Button>
+        </Tooltip>
+        <Tooltip title={t('terminal.gitPanelTitle')}>
+          <Button size="small" type={showGit ? 'primary' : 'default'} onClick={toggleGit}
+            icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: '-2px' }}><circle cx="6" cy="6" r="2.3" /><circle cx="6" cy="18" r="2.3" /><circle cx="18" cy="8" r="2.3" /><path d="M6 8.3v7.4" /><path d="M18 10.3a6 6 0 0 1-6 6H8.3" /></svg>}>
+            {t('git.title')}
+          </Button>
         </Tooltip>
         <span style={{ flex: 1 }} />
         <Tooltip title={t('terminal.scrollHistory')}><Button size="small" onClick={() => active && termRefs.current[active]?.scroll(-12)}>▲</Button></Tooltip>
@@ -726,8 +797,8 @@ function TerminalPane(props: {
           {terms.map((termName) => (
             <div key={termName} style={{ position: 'absolute', inset: 0, display: termName === active ? 'block' : 'none', padding: 6 }}>
               <Term ref={(h) => { termRefs.current[termName] = h }} name={termName} fontSize={fontSize} active={termName === active} onStatus={(s) => setStatus(termName, s)}
-                onContextMenu={({ x, y, selection }) => { setActive(termName); setSelTip(null); setCtx({ x, y, session: termName, selection }) }}
-                onSelectionMenu={({ x, y, selection }) => { setActive(termName); setCtx(null); setSelTip({ x, y, session: termName, selection }) }} />
+                onContextMenu={({ x, y, selection }) => { setActive(termName); setCtx({ x, y, session: termName, selection }) }}
+                onSelectionMenu={({ selection }) => { setActive(termName); setCtx(null); if (selection.trim()) { copyText(selection); message.success(t('common.copied')) } }} />
               {claudeView[termName] && claudeMap[termName]?.running && (
                 <div style={{ position: 'absolute', inset: 0 }}>
                   <ClaudeChat name={termName} file={claudeMap[termName].file} dir={claudeMap[termName].dir} onBack={() => setClaudeView((v) => ({ ...v, [termName]: false }))} />
@@ -744,6 +815,9 @@ function TerminalPane(props: {
       </div>
       <FloatingFileDrawer open={showFiles}>
         <FileBrowser dir={cwd} accent="#58a6ff" onClose={() => setShowFiles(false)} />
+      </FloatingFileDrawer>
+      <FloatingFileDrawer open={showGit}>
+        <GitPanel dir={cwd} accent="#58a6ff" onClose={() => setShowGit(false)} />
       </FloatingFileDrawer>
 
       {/* 移动端文字输入框：软键盘/输入法在 xterm 里会丢字，这里整行可靠发送到 PTY。
@@ -1023,13 +1097,13 @@ function Tasks({ openTerm, kanna }: { openTerm: (n: string) => void; kanna?: str
 // ── 服务器目录选择器 ──
 // 最近用过的工作目录（localStorage 持久化），作为目录选择器的快捷候选
 const RECENT_DIRS_KEY = 'ttmux_recent_dirs'
-function recentDirs(): string[] { try { return JSON.parse(localStorage.getItem(RECENT_DIRS_KEY) || '[]') } catch { return [] } }
+export function recentDirs(): string[] { try { return JSON.parse(localStorage.getItem(RECENT_DIRS_KEY) || '[]') } catch { return [] } }
 export function pushRecentDir(d: string) {
   if (!d || !d.trim()) return
   try { localStorage.setItem(RECENT_DIRS_KEY, JSON.stringify([d.trim(), ...recentDirs().filter((x) => x !== d.trim())].slice(0, 8))) } catch {}
 }
 
-function DirPicker({ open, start, onPick, onClose }: { open: boolean; start?: string; onPick: (p: string) => void; onClose: () => void }) {
+export function DirPicker({ open, start, onPick, onClose }: { open: boolean; start?: string; onPick: (p: string) => void; onClose: () => void }) {
   const [data, setData] = useState<any>({ path: '', parent: '', dirs: [] })
   const [recent, setRecent] = useState<string[]>([])
   const { message } = AntApp.useApp()
@@ -1070,12 +1144,17 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
   const [name, setName] = useState('')
   const [dir, setDir] = useState('')
   const [pick, setPick] = useState(false)
+  const [agent, setAgent] = useState<'none' | 'claude' | 'codex'>('none')
   const { message } = AntApp.useApp()
   const { t } = useI18n()
-  useEffect(() => { if (open) { setName(''); setDir('') } }, [open])
+  useEffect(() => { if (open) { setName(''); setDir(''); setAgent('none') } }, [open])
   const ok = async () => {
     if (!name.trim()) return message.error(t('session.nameRequired'))
-    try { await api('POST', '/sessions', { name: name.trim(), dir: dir.trim() }); pushRecentDir(dir); message.success(t('session.created')); onClose(); onDone(name.trim()) }
+    try {
+      await api('POST', '/sessions', { name: name.trim(), dir: dir.trim() })
+      if (agent !== 'none') await api('POST', '/tasks/_/send', { sess: name.trim(), msg: agent })
+      pushRecentDir(dir); message.success(t('session.created')); onClose(); onDone(name.trim())
+    }
     catch (e: any) { message.error(e.message) }
   }
   return (
@@ -1090,6 +1169,11 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
               placeholder={t('session.dirPlaceholder')} />
             <Button onClick={() => setPick(true)}>{t('common.browse')}</Button>
           </Space.Compact>
+          <Radio.Group value={agent} onChange={(e) => setAgent(e.target.value)} optionType="button" buttonStyle="solid">
+            <Radio.Button value="none">{t('session.agentNone')}</Radio.Button>
+            <Radio.Button value="claude">{t('session.agentClaude')}</Radio.Button>
+            <Radio.Button value="codex">{t('session.agentCodex')}</Radio.Button>
+          </Radio.Group>
         </Space>
       </Modal>
       <DirPicker open={pick} start={dir || undefined} onPick={(p) => { setDir(p); setPick(false) }} onClose={() => setPick(false)} />
@@ -1097,8 +1181,35 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
   )
 }
 
+function RenameSessionModal({ session, onClose, onDone }: { session: string | null; onClose: () => void; onDone: (oldName: string, newName: string) => void }) {
+  const [name, setName] = useState('')
+  const { message } = AntApp.useApp()
+  const { t } = useI18n()
+  useEffect(() => { if (session) setName(session) }, [session])
+  const ok = async () => {
+    if (!session) return
+    const next = name.trim()
+    if (!next) return message.error(t('session.nameRequired'))
+    try {
+      await api('PATCH', `/sessions/${encodeURIComponent(session)}`, { name: next })
+      message.success(t('session.renamed'))
+      onClose()
+      onDone(session, next)
+    } catch (e: any) {
+      message.error(e.message)
+    }
+  }
+  return (
+    <Modal open={!!session} onCancel={onClose} onOk={ok} okText={t('session.rename')} title={t('session.renameTitle')} destroyOnClose>
+      <Space direction="vertical" style={{ width: '100%' }}>
+        <Input placeholder={t('session.namePlaceholder')} value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+      </Space>
+    </Modal>
+  )
+}
+
 // ── 会话（可新建/指定目录 / 进终端 / 关闭） ──
-function Sessions({ openTerm }: { openTerm: (n: string) => void }) {
+function Sessions({ openTerm, closeTerm }: { openTerm: (n: string) => void; closeTerm: (n: string) => void }) {
   const [list, setList] = useState<any[]>([])
   const [cc, setCc] = useState<Record<string, boolean>>({})
   const [cx, setCx] = useState<Record<string, boolean>>({})
@@ -1164,7 +1275,7 @@ function Sessions({ openTerm }: { openTerm: (n: string) => void }) {
     const t = setInterval(checkPrompts, 4000)
     return () => { stop = true; clearInterval(t) }
   }, [list])
-  const kill = async (n: string) => { try { await api('DELETE', '/sessions/' + encodeURIComponent(n)); message.success(t('session.closed')); load() } catch (e: any) { message.error(e.message) } }
+  const kill = async (n: string) => { try { await api('DELETE', '/sessions/' + encodeURIComponent(n)); message.success(t('session.closed')); closeTerm(n); load() } catch (e: any) { message.error(e.message) } }
   const goSwarm = (sw: string) => { location.hash = '#/swarm/' + encodeURIComponent(sw) }
 
   // ── 筛选 / 搜索 ──
@@ -1224,7 +1335,7 @@ function Sessions({ openTerm }: { openTerm: (n: string) => void }) {
                       <span style={{ fontWeight: 600, color: 'var(--text-bright)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.name}>{s.name}</span>
                       {sw && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>{t('nav.swarm')}:{sw.swarm}{sw.role === 'leader' ? `·${t('swarm.master')}` : ''}</Tag>}
                       {waiting && <Tag color="warning" style={{ margin: 0, flex: '0 0 auto' }}>{t('session.waiting')}</Tag>}
-                      {cc[s.name] && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>🤖 Claude</Tag>}
+                      {cc[s.name] && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>✳ Claude</Tag>}
                       {cx[s.name] && <Tag color="green" style={{ margin: 0, flex: '0 0 auto' }}>✸ Codex</Tag>}
                       {!sw && !agent && <Tag style={{ margin: 0, flex: '0 0 auto' }}>{connected ? t('terminal.status.connected') : t('terminal.status.idle')}</Tag>}
                       <span style={{ color: 'var(--text-dim)', fontSize: 12, flex: '0 0 auto', whiteSpace: 'nowrap' }}>{t('session.windows', { count: s.windows })}</span>
@@ -1261,6 +1372,7 @@ function EnvPage() {
   const { message, modal } = AntApp.useApp()
   const { mode, setMode } = useThemeMode()
   const { t, locale, setLocale } = useI18n()
+  const { installed: pwaInstalled, install: doInstall, guide: installGuide } = usePwaInstall()
   const load = () => api('GET', '/env').then(setList).catch(() => {})
   useEffect(() => { load() }, [])
   const add = () => {
@@ -1288,8 +1400,8 @@ function EnvPage() {
             value={mode}
             onChange={(v) => setMode(v as 'light' | 'dark')}
             options={[
-              { label: `☀ ${t('common.lightTheme')}`, value: 'light' },
               { label: `☾ ${t('common.darkTheme')}`, value: 'dark' },
+              { label: `☀ ${t('common.lightTheme')}`, value: 'light' },
             ]}
           />
           <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('settings.themeHelp')}</span>
@@ -1300,13 +1412,22 @@ function EnvPage() {
           <Select
             value={locale}
             onChange={setLocale}
-            options={[{ value: 'zh-CN', label: '中文' }, { value: 'en-US', label: 'English' }]}
+            options={[{ value: 'en-US', label: 'English' }, { value: 'zh-CN', label: '中文' }]}
             aria-label={t('settings.language')}
             style={{ width: 180 }}
           />
           <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('settings.languageHelp')}</span>
         </Space>
       </Card>
+      <Card title={t('install.settingsTitle')}>
+        <Space align="center" wrap>
+          {pwaInstalled
+            ? <span style={{ color: 'var(--text-bright)' }}>✓ {t('install.installed')}</span>
+            : <Button type="primary" onClick={doInstall}>{t('install.button')}</Button>}
+          <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('install.settingsHelp')}</span>
+        </Space>
+      </Card>
+      {installGuide}
       <Card title={t('env.globalVariables')} extra={<Space>
         <Button onClick={add}>+ {t('env.add')}</Button>
         <Button onClick={async () => { try { await api('POST', '/env/push'); message.success(t('env.pushed')) } catch (e: any) { message.error(e.message) } }}>{t('env.pushToSessions')}</Button>

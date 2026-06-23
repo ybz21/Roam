@@ -159,6 +159,91 @@ _swarm_done_list() {
     sqlite3 "$db" "SELECT name FROM members WHERE done=1 ORDER BY name;"
 }
 
+_swarm_busy_dir() {
+    local d; d=$(_swarm_dir "$1") || return 1
+    echo "${d}/busy"
+}
+
+_swarm_member_touch_busy() {
+    local swarm="$1" member="$2" db dir now targets
+    [[ -n "$swarm" && -n "$member" ]] || return 0
+    db=$(_swarm_db_of "$swarm" 2>/dev/null) || return 0
+    dir=$(_swarm_busy_dir "$swarm" 2>/dev/null) || return 0
+    mkdir -p "$dir"
+    now=$(date +%s)
+    case "$member" in
+        leader|master|lead)
+            targets=$(sqlite3 "$db" "SELECT name FROM members WHERE role IN ('leader','master') AND IFNULL(pending,0)=0;" 2>/dev/null || true)
+            ;;
+        all)
+            targets=$(sqlite3 "$db" "SELECT name FROM members WHERE IFNULL(pending,0)=0;" 2>/dev/null || true)
+            ;;
+        *)
+            targets="$member"
+            ;;
+    esac
+    local m
+    while IFS= read -r m; do
+        [[ -n "$m" ]] || continue
+        printf '%s\n' "$now" > "${dir}/${m}.busy"
+    done <<< "$targets"
+}
+
+_swarm_member_busy_recent() {
+    local swarm="$1" member="$2" dir f ts now ttl="${TTMUX_SWARM_BUSY_TTL:-45}"
+    dir=$(_swarm_busy_dir "$swarm" 2>/dev/null) || return 1
+    f="${dir}/${member}.busy"
+    [[ -f "$f" ]] || return 1
+    ts=$(<"$f")
+    [[ "$ts" =~ ^[0-9]+$ ]] || return 1
+    now=$(date +%s)
+    (( now - ts <= ttl ))
+}
+
+_swarm_session_live_status() {
+    local swarm="$1" member="$2" sess="$3" kind="${4:-claude}" dead scr tail recent flat low
+    if ! _session_exists "$sess"; then
+        [[ -f "${TTMUX_LOGS}/${sess}.log" ]] && echo "done" || echo "exited"
+        return 0
+    fi
+    dead=$("$TMUX_BIN" display-message -t "$sess" -p '#{pane_dead}' 2>/dev/null || echo 0)
+    if [[ "$dead" == "1" ]]; then
+        echo "done"
+        return 0
+    fi
+
+    scr=$("$TMUX_BIN" capture-pane -t "$sess" -p -J -S -80 2>/dev/null || true)
+    tail=$(printf '%s\n' "$scr" | tail -n 18)
+    recent=$(printf '%s\n' "$tail" | tail -n 8)
+    flat=$(printf '%s' "$recent" | tr -d '[:space:]')
+    low="${flat,,}"
+    if [[ "$low" == *"pressenter"* || "$low" == *"pressente"* || "$low" == *"1.yes"* || "$low" == *"doyouwant"* || "$low" == *"allow"* || "$low" == *"approval"* ]]; then
+        echo "waiting"
+        return 0
+    fi
+    if [[ "$recent" == *"Cooking"* || "$recent" == *"Puzzling"* || "$recent" == *"Thinking"* || "$recent" == *"Working"* || "$recent" == *"Running"* || "$recent" == *"Executing"* ]]; then
+        echo "running"
+        return 0
+    fi
+    if [[ "$recent" == *"✻"* && "$recent" != *"Worked for"* ]]; then
+        echo "running"
+        return 0
+    fi
+    if [[ "$recent" != *"Worked for"* ]] && _swarm_member_busy_recent "$swarm" "$member"; then
+        echo "running"
+        return 0
+    fi
+    if [[ "$recent" == *"❯"* || "$recent" == *"›"* || "$recent" == *"⏵⏵"* ]]; then
+        echo "idle"
+        return 0
+    fi
+    if [[ "$kind" == "codex" ]]; then
+        echo "idle"
+        return 0
+    fi
+    echo "running"
+}
+
 # ── 依赖门控：pending 成员 <-> members.pending 列 + 规格列(type/task/workdir/model/perm) ──
 # 有依赖且未满足的成员 pending=1 不 spawn；满足后 _swarm_activate 取规格真正 spawn、置 pending=0。
 
@@ -500,10 +585,11 @@ _swarm_status_json() {
         while IFS=$'\x1f' read -r -d $'\x1e' mname mtype mtask mdeps mdone mkind mrole; do
             [[ -n "$mname" ]] || continue
             local sess="${name}-${mname}" lst="exited"
-            if _session_exists "$sess"; then
-                local dead; dead=$("$TMUX_BIN" display-message -t "$sess" -p '#{pane_dead}' 2>/dev/null || echo 0)
-                if [[ "$dead" == "1" ]]; then lst="done"; else lst="running"; fi
-            elif [[ -f "${TTMUX_LOGS}/${sess}.log" ]]; then lst="done"; fi
+            if [[ "${mdone:-0}" == "1" ]]; then
+                lst="done"
+            else
+                lst=$(_swarm_session_live_status "$name" "$mname" "$sess" "$mkind")
+            fi
             (( first )) || printf ','
             first=0
             printf '{"name":"%s","type":"%s","task":"%s","deps":"%s","done":%s,"kind":"%s","role":"%s","status":"%s","session":"%s"}' \

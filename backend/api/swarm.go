@@ -19,6 +19,7 @@ func (a *API) SwarmNew(c *gin.Context) {
 	var b struct {
 		Name   string `json:"name"`
 		Goal   string `json:"goal"`
+		Dir    string `json:"dir"` // 工作目录(可空)：建群即 mkdir，Leader/上传都落到这里
 		Master *bool  `json:"master"`
 	}
 	if err := c.ShouldBindJSON(&b); err != nil || strings.TrimSpace(b.Name) == "" {
@@ -29,8 +30,48 @@ func (a *API) SwarmNew(c *gin.Context) {
 	if b.Goal != "" {
 		args = append(args, "--goal", b.Goal)
 	}
+	if strings.TrimSpace(b.Dir) != "" {
+		args = append(args, "--dir", b.Dir)
+	}
 	if b.Master != nil && !*b.Master {
 		args = append(args, "--no-master")
+	} else if p := renderLeaderKickoff(promptCtx{
+		Swarm: b.Name, Goal: b.Goal, Member: "cc-" + b.Name,
+		Workdir: b.Dir, SkillsDir: skillsDir(),
+	}); p != "" {
+		// 自动拉起的 Leader 用 auto_leader.md.tmpl 当开场白（含目标/工作目录/可用 skill/职责），
+		// 而不是裸 /cc-swarm —— 否则 Leader 容易自己闷头实现、不拆任务派活。
+		args = append(args, "--leader-prompt", p)
+	}
+	a.text(c, args...)
+}
+
+// POST /api/swarms/:n/adopt —— 拉起/接管 Leader（指挥）会话。
+// 用于「先建群+上传文档、再起 Leader」的时序：建群时传 master=false，上传完文档后再调本接口。
+func (a *API) SwarmAdopt(c *gin.Context) {
+	var b struct {
+		Dir string `json:"dir"`
+	}
+	_ = c.ShouldBindJSON(&b) // body 可空
+	n := c.Param("n")
+	args := []string{"swarm", "adopt", n}
+	if strings.TrimSpace(b.Dir) != "" {
+		args = append(args, "--dir", b.Dir)
+	}
+	// 取 goal 渲染 Leader 开场白（auto_leader.md.tmpl），随 --prompt 下发
+	goal := ""
+	if out, err := a.TT.Run("swarm", "status", n, "--json"); err == nil {
+		var st struct {
+			Goal string `json:"goal"`
+		}
+		_ = json.Unmarshal([]byte(out), &st)
+		goal = st.Goal
+	}
+	if p := renderLeaderKickoff(promptCtx{
+		Swarm: n, Goal: goal, Member: "cc-" + n,
+		Workdir: b.Dir, SkillsDir: skillsDir(),
+	}); p != "" {
+		args = append(args, "--prompt", p)
 	}
 	a.text(c, args...)
 }

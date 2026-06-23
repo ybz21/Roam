@@ -17,9 +17,19 @@ cat > "${FAKE_BIN}/tmux" <<'FAKE_TMUX'
 #!/usr/bin/env bash
 echo "$*" >> "${FAKE_TMUX_LOG:?}"
 case "${1:-}" in
-  display-message) exit 1 ;;
+  display-message)
+    case "$*" in *pane_dead*) echo 0; exit 0 ;; *) exit 1 ;; esac
+    ;;
+  capture-pane)
+    case "$*" in
+      *listen-case-oldlead*) echo "❯"; exit 0 ;;
+      *listen-case-oldmember*) echo "Press enter"; exit 0 ;;
+      *listen-case-oldrun*) echo "✻ Puzzling…"; exit 0 ;;
+      *) exit 0 ;;
+    esac
+    ;;
   has-session)
-    case "$*" in *"cc-listen-case"*) exit 0 ;; *) exit 1 ;; esac
+    case "$*" in *"cc-listen-case"*|*"listen-case-oldlead"*|*"listen-case-oldmember"*|*"listen-case-oldrun"*) exit 0 ;; *) exit 1 ;; esac
     ;;
   list-sessions) exit 0 ;;
   send-keys) exit 0 ;;
@@ -85,10 +95,13 @@ echo -e "${bold}[准备]${reset}"
 pass "创建蜂群"
 
 swarm_id=$(sqlite3 "${TTMUX_HOME}/meta.db" "SELECT id FROM swarms WHERE name='listen-case';")
-sqlite3 "${TTMUX_HOME}/swarms/${swarm_id}/swarm.db" "INSERT INTO members(name,type,task,role,pending,done) VALUES('oldlead','agent','旧 leader','master',0,0),('oldmember','agent','旧 member','worker',0,0);"
+sqlite3 "${TTMUX_HOME}/swarms/${swarm_id}/swarm.db" "INSERT INTO members(name,type,task,role,pending,done) VALUES('oldlead','agent','旧 leader','master',0,0),('oldmember','agent','旧 member','worker',0,0),('oldrun','agent','运行中 member','worker',0,0);"
 status_json=$("$TTMUX" swarm status listen-case --json)
 assert_contains "$status_json" '"role":"leader"' "旧 role=master 迁移为 leader"
 assert_contains "$status_json" '"role":"member"' "旧 role=worker 迁移为 member"
+assert_contains "$status_json" '"status":"idle"' "空闲 agent 状态显示为 idle"
+assert_contains "$status_json" '"status":"waiting"' "待确认 agent 状态显示为 waiting"
+assert_contains "$status_json" '"status":"running"' "Claude 活动状态显示为 running"
 
 card=$("$TTMUX" swarm task add listen-case "前端返工" --assignee web 2>/dev/null)
 [[ "$card" == "t1" ]] && pass "创建并派卡 t1 → web" || fail "创建卡片: got '${card}'"
@@ -97,6 +110,8 @@ card=$("$TTMUX" swarm task add listen-case "前端返工" --assignee web 2>/dev/
 "$TTMUX" swarm say listen-case --as leader --to web --kind decide "#${card} 补空状态" >/dev/null
 "$TTMUX" swarm say listen-case --as api --kind note "普通进度" >/dev/null
 pass "写入 leader/web/普通三类广场消息"
+status_json=$("$TTMUX" swarm status listen-case --json)
+assert_contains "$status_json" '"name":"oldlead","type":"agent","task":"旧 leader","deps":"","done":0,"kind":"claude","role":"leader","status":"running"' "发给 leader 后短期显示 running"
 echo ""
 
 echo -e "${bold}[@mention 写入]${reset}"

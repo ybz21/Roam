@@ -1,2 +1,10 @@
 .env
 /ScreenShot_*.png
+/tmp/
+/cli/ttmux-cli-go/ttmux-cli-go
+/cli/ttmux-cli-go/dist/
+
+# Generated CLI artifacts — built on install (cli/*/build.sh / go build),
+# never committed.
+/ttmux
+/chrome

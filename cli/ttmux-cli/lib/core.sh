@@ -42,6 +42,15 @@ _session_exists() {
     "$TMUX_BIN" has-session -t "$1" 2>/dev/null
 }
 
+# 让窗口尺寸跟随「最近活跃的客户端」，而非被所有 attach 客户端里最小的那个限制。
+# 同一会话被多处 attach（网页多标签 / 手机+桌面 / 多个 CLI）时，默认会缩到最小客户端，
+# 当前这个明明很宽却渲染成左侧窄条。attach 前对目标会话设上即可（与后端 pty 行为一致）。
+_tmux_fit() {
+    [[ -n "$1" ]] || return 0
+    "$TMUX_BIN" set-option -t "$1" window-size latest 2>/dev/null || true
+    "$TMUX_BIN" set-window-option -t "$1" aggressive-resize on 2>/dev/null || true
+}
+
 _tmux_send_prompt_submit() {
     local target="$1" message="$2"
     if "$TMUX_BIN" set-buffer -b ttmux-prompt "$message" 2>/dev/null \

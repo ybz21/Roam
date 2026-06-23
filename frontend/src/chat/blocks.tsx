@@ -25,17 +25,18 @@ export function copyText(s: string) {
 }
 
 // text 始终用于复制；children(可选)是已高亮的节点，传入时渲染它而非纯文本。
-export function CodeBox({ text, max = 320, className, children }: { text: string; max?: number; className?: string; children?: ReactNode }) {
+// fill：整块预览面板里使用，代码框撑满父容器高度（去掉 maxHeight 上限）。
+export function CodeBox({ text, max = 320, fill, className, children }: { text: string; max?: number; fill?: boolean; className?: string; children?: ReactNode }) {
   const [copied, setCopied] = useState(false)
   const { t } = useI18n()
   const onCopy = (e: ReactMouseEvent) => { e.stopPropagation(); copyText(text); setCopied(true); setTimeout(() => setCopied(false), 1200) }
   return (
-    <div style={{ position: 'relative' }} className="cc-codebox">
+    <div style={{ position: 'relative', height: fill ? '100%' : undefined }} className="cc-codebox">
       <button onClick={onCopy} title={t('common.copy')} className="cc-copy"
         style={{ position: 'absolute', top: 6, right: 6, zIndex: 1, border: '1px solid var(--border)', background: 'var(--bg-container)', color: copied ? '#3fb950' : 'var(--text-dim)', borderRadius: 6, fontSize: 11, lineHeight: 1, padding: '3px 7px', cursor: 'pointer' }}>
         {copied ? `✓ ${t('common.copied')}` : t('common.copy')}
       </button>
-      <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: '6px 0 0', maxHeight: max, overflow: 'auto', background: 'var(--bg-base)', padding: 8, borderRadius: 6, fontFamily: MONO, fontSize: 12, lineHeight: 1.5, color: 'var(--text-bright)' }}>
+      <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: fill ? 0 : '6px 0 0', height: fill ? '100%' : undefined, maxHeight: fill ? 'none' : max, boxSizing: 'border-box', overflow: 'auto', background: 'var(--bg-base)', padding: 8, borderRadius: 6, fontFamily: MONO, fontSize: 12, lineHeight: 1.5, color: 'var(--text-bright)' }}>
         <code className={className}>{children ?? text}</code>
       </pre>
     </div>

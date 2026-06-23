@@ -40,6 +40,18 @@ func renderMemberPrompt(ctx promptCtx) string {
 	if ctx.Role == "leader" || ctx.Role == "master" {
 		name = "master.md.tmpl"
 	}
+	return renderPrompt(name, ctx)
+}
+
+// renderLeaderKickoff 渲染「自动拉起的 Leader」开场白（swarm new / adopt 时用）。
+// 与 master.md.tmpl 不同：它没有起步任务，要从目标走完整生命周期（拆任务→派活→巡检→集成），
+// 所以单独用 auto_leader.md.tmpl，并强调「编排而非单干」。失败返回空串，CLI 回退到 /cc-swarm。
+func renderLeaderKickoff(ctx promptCtx) string {
+	return renderPrompt("auto_leader.md.tmpl", ctx)
+}
+
+// renderPrompt 读取并渲染 prompts/<name>（TTMUX_PROMPT_DIR 可覆盖内置模板）。
+func renderPrompt(name string, ctx promptCtx) string {
 	var raw []byte
 	if dir := os.Getenv("TTMUX_PROMPT_DIR"); dir != "" {
 		if data, err := os.ReadFile(filepath.Join(dir, name)); err == nil {
