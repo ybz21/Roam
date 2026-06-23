@@ -35,6 +35,13 @@ func (a *API) SwarmNew(c *gin.Context) {
 	}
 	if b.Master != nil && !*b.Master {
 		args = append(args, "--no-master")
+	} else if p := renderLeaderKickoff(promptCtx{
+		Swarm: b.Name, Goal: b.Goal, Member: "cc-" + b.Name,
+		Workdir: b.Dir, SkillsDir: skillsDir(),
+	}); p != "" {
+		// 自动拉起的 Leader 用 auto_leader.md.tmpl 当开场白（含目标/工作目录/可用 skill/职责），
+		// 而不是裸 /cc-swarm —— 否则 Leader 容易自己闷头实现、不拆任务派活。
+		args = append(args, "--leader-prompt", p)
 	}
 	a.text(c, args...)
 }
@@ -46,9 +53,25 @@ func (a *API) SwarmAdopt(c *gin.Context) {
 		Dir string `json:"dir"`
 	}
 	_ = c.ShouldBindJSON(&b) // body 可空
-	args := []string{"swarm", "adopt", c.Param("n")}
+	n := c.Param("n")
+	args := []string{"swarm", "adopt", n}
 	if strings.TrimSpace(b.Dir) != "" {
 		args = append(args, "--dir", b.Dir)
+	}
+	// 取 goal 渲染 Leader 开场白（auto_leader.md.tmpl），随 --prompt 下发
+	goal := ""
+	if out, err := a.TT.Run("swarm", "status", n, "--json"); err == nil {
+		var st struct {
+			Goal string `json:"goal"`
+		}
+		_ = json.Unmarshal([]byte(out), &st)
+		goal = st.Goal
+	}
+	if p := renderLeaderKickoff(promptCtx{
+		Swarm: n, Goal: goal, Member: "cc-" + n,
+		Workdir: b.Dir, SkillsDir: skillsDir(),
+	}); p != "" {
+		args = append(args, "--prompt", p)
 	}
 	a.text(c, args...)
 }

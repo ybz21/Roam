@@ -127,6 +127,7 @@ chrome — 浏览器自动化（Playwright over CDP，驱动 ttmux Web 镜像那
             --timeout <ms>（默认 15000）  --cdp <地址>
   截图选项: --viewport 1280x800  --wait <ms>  --clip x,y,w,h  --fast
             --fresh --goto <url>（临时干净 Chrome 截图）  --quality <1-100>（jpg）
+            --mobile（手机视口=iPhone）  --device iphone|iphone-se|pixel|ipad（指定机型）
             默认截图失败时自动降级到 CDP 截图；所有路径受 --timeout 约束
   环境变量: TTMUX_CHROME_CDP=http://127.0.0.1:9222  TTMUX_CHROME_SCALE=2
 EOF

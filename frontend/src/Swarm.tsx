@@ -133,13 +133,16 @@ function SwarmCard({ s, onOpen }: { s: SwarmRow; onOpen: (n: string) => void }) 
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ display: 'inline-flex', gap: 3, alignItems: 'center' }}>
+          {s.supervisor && <i title={s.supervisor} style={{ width: 8, height: 8, borderRadius: '50%', background: C.magenta }} />}
           {Array.from({ length: Math.min(s.alive, 10) }).map((_, i) => <i key={'a' + i} style={{ width: 8, height: 8, borderRadius: '50%', background: C.green }} />)}
           {Array.from({ length: Math.min(s.pending, 10) }).map((_, i) => <i key={'p' + i} style={{ width: 8, height: 8, borderRadius: '50%', background: C.amber }} />)}
           {Array.from({ length: Math.min(exited, 10) }).map((_, i) => <i key={'e' + i} style={{ width: 8, height: 8, borderRadius: '50%', background: C.line2 }} />)}
-          {s.total + s.pending === 0 && <span style={{ color: C.fg3, fontSize: 12 }}>{t('swarm.noMembers')}</span>}
+          {s.total + s.pending === 0 && !s.supervisor && <span style={{ color: C.fg3, fontSize: 12 }}>{t('swarm.noMembers')}</span>}
         </span>
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center', fontSize: 12, color: C.fg2 }}>
-          {s.alive > 0 && <span><b style={{ color: C.green }}>{s.alive}</b> {t('swarm.aliveShort')}</span>}
+          {s.supervisor && <span style={{ color: C.magenta }}>◆ {t('swarm.master')}</span>}
+          {(s.total + s.pending) > 0 && <span>{t('swarm.memberSummary', { total: s.total, alive: s.alive })}</span>}
+          {(s.total + s.pending) === 0 && !s.supervisor && <span style={{ color: C.fg3 }}>{t('swarm.noMembers')}</span>}
           {s.pending > 0 && <span style={{ color: C.amber }}>+{s.pending} {t('swarm.pendingUnlock')}</span>}
         </span>
       </div>

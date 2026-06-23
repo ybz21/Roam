@@ -110,7 +110,7 @@ func cmdNew(rt runtime.Runtime, st *swarmcore.Store, args []string, w io.Writer)
 		ui.Warn(w, "蜂群 %s 已存在", ui.Bold(name))
 		return fmt.Errorf("exists")
 	}
-	goal, noMaster, dir := "", false, ""
+	goal, noMaster, dir, leaderPrompt := "", false, "", ""
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
 		case "--goal":
@@ -121,6 +121,11 @@ func cmdNew(rt runtime.Runtime, st *swarmcore.Store, args []string, w io.Writer)
 		case "--dir":
 			if i+1 < len(args) {
 				dir = args[i+1]
+				i++
+			}
+		case "--leader-prompt":
+			if i+1 < len(args) {
+				leaderPrompt = args[i+1]
 				i++
 			}
 		case "--no-master":
@@ -147,7 +152,7 @@ func cmdNew(rt runtime.Runtime, st *swarmcore.Store, args []string, w io.Writer)
 			if !ui.AgentMode() {
 				fmt.Fprintf(w, "   %s拉起 Leader cc-%s …%s\n", ui.P().Dim, name, ui.P().Reset)
 			}
-			_ = adopt(rt, st, name, "", dir, w)
+			_ = adopt(rt, st, name, "", dir, leaderPrompt, w)
 		} else {
 			ui.Info(w, "未检测到 claude，未拉起 Leader；稍后手动: %s", ui.Dim("ttmux swarm adopt "+name))
 		}
@@ -319,14 +324,30 @@ func cmdArchive(rt runtime.Runtime, st *swarmcore.Store, args []string, w io.Wri
 
 func cmdRemove(rt runtime.Runtime, st *swarmcore.Store, args []string, w io.Writer) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: ttmux swarm rm <name>")
+		return fmt.Errorf("usage: ttmux swarm rm <name> [--yes]")
 	}
-	name := args[0]
+	name := ""
+	yes := false
+	for _, a := range args {
+		switch a {
+		case "--yes", "-y":
+			yes = true
+		default:
+			if name == "" {
+				name = a
+			}
+		}
+	}
+	if name == "" {
+		return fmt.Errorf("usage: ttmux swarm rm <name> [--yes]")
+	}
 	if !st.Exists(name) {
 		ui.Err(w, "蜂群不存在: %s", name)
 		return fmt.Errorf("not found")
 	}
-	if !ui.Confirm("确定彻底删除蜂群 " + ui.Bold(name) + "(含会话与元数据)?") {
+	// --yes (or agent mode) skips the /dev/tty confirm so agents/scripts can
+	// delete non-interactively.
+	if !yes && !ui.AgentMode() && !ui.Confirm("确定彻底删除蜂群 "+ui.Bold(name)+"(含会话与元数据)?") {
 		ui.Info(w, "已取消")
 		return nil
 	}

@@ -10,6 +10,7 @@ export interface TermHandle {
   fit: () => void
   copy: () => boolean
   selection: () => string
+  clearSelection: () => void
   reconnect: () => void
   scroll: (lines: number) => void
   toBottom: () => void
@@ -106,6 +107,7 @@ const Term = forwardRef<TermHandle, {
       return !!sel
     },
     selection: () => termRef.current?.getSelection() || '',
+    clearSelection: () => termRef.current?.clearSelection(),
     reconnect: () => { try { wsRef.current?.close() } catch {} }, // onclose 触发自动重连
     scroll: (lines) => sendScroll(lines < 0 ? 'up' : 'down', Math.abs(lines)),
     toBottom: () => sendScroll('bottom', 0),
@@ -126,6 +128,25 @@ const Term = forwardRef<TermHandle, {
     termRef.current = term
     fitRef.current = fit
     setTimeout(() => { try { fit.fit() } catch {} }, 0)
+
+    // Ctrl/Cmd+C 智能复制：有选区 → 复制并清除选区（交上层弹「已复制」），无选区 → 放行发 ^C 中断。
+    // Ctrl/Cmd+Shift+C 始终复制（与浏览器习惯一致）。返回 false 表示该按键不再发给终端。
+    term.attachCustomKeyEventHandler((e) => {
+      if (e.type !== 'keydown') return true
+      const isC = e.key === 'c' || e.key === 'C'
+      if (!isC) return true
+      const copyCombo = (e.ctrlKey && e.shiftKey) || (e.metaKey && !e.ctrlKey) // Ctrl+Shift+C 或 Cmd+C
+      const plainCtrlC = e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey
+      if (!copyCombo && !plainCtrlC) return true
+      const sel = term.getSelection()
+      if (sel && sel.trim()) {
+        onSelectionMenu?.({ x: 0, y: 0, selection: sel })
+        term.clearSelection()
+        return false // 已复制，不把按键发给终端
+      }
+      // 无选区：复制组合键吞掉（避免误发中断），普通 Ctrl+C 放行去中断进程
+      return !copyCombo
+    })
 
     // 跟随全局黑/白主题：监听 <html data-theme> 变化，热更新终端配色
     const themeObs = new MutationObserver(() => { try { term.options.theme = xtermTheme() } catch {} })
@@ -172,9 +193,13 @@ const Term = forwardRef<TermHandle, {
       const sel = termRef.current?.getSelection() || ''
       onContextMenu?.({ x: e.clientX, y: e.clientY, selection: sel })
     }
+    // 捕获阶段独占右键 mousedown，阻止 xterm 把它转发给 tmux（tmux 鼠标模式开时会另弹一个菜单）。
+    // 这样无论后端鼠标模式开关，右键都只剩前端这一个菜单。
+    const onMouseDownCapture = (e: MouseEvent) => { if (e.button === 2) e.stopPropagation() }
     el.addEventListener('touchstart', onTS, { passive: true, capture: true })
     el.addEventListener('touchmove', onTM, { passive: false, capture: true })
     el.addEventListener('wheel', onWheel, { passive: false, capture: true })
+    el.addEventListener('mousedown', onMouseDownCapture, { capture: true })
     el.addEventListener('mouseup', onMouseUp)
     el.addEventListener('touchend', onTouchEnd)
     el.addEventListener('contextmenu', onCtx)
@@ -190,6 +215,7 @@ const Term = forwardRef<TermHandle, {
       el.removeEventListener('touchstart', onTS, { capture: true } as any)
       el.removeEventListener('touchmove', onTM, { capture: true } as any)
       el.removeEventListener('wheel', onWheel, { capture: true } as any)
+      el.removeEventListener('mousedown', onMouseDownCapture, { capture: true } as any)
       el.removeEventListener('mouseup', onMouseUp)
       el.removeEventListener('touchend', onTouchEnd)
       el.removeEventListener('contextmenu', onCtx)

@@ -39,6 +39,8 @@ chrome goto https://example.com   # 打开网址
 chrome text h1                     # 取文本
 chrome eval "document.title"       # 页面内执行 JS
 chrome screenshot shot.png --full  # 整页截图
+chrome screenshot shot.png --mobile             # 手机视口（iPhone）截图
+chrome screenshot shot.png --device pixel       # 指定机型: iphone|iphone-se|pixel|ipad
 chrome screenshot shot.png --fresh --goto https://example.com --viewport 1280x800
 chrome tabs                        # 列标签页
 chrome help                        # 全部动词与选项

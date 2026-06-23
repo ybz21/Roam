@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"ttmux-cli-go/internal/command/spawn"
@@ -52,8 +53,12 @@ func hasClaude() bool {
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
 // adopt writes supervisor metadata and brings up (or reuses) a cc-<swarm>
-// commander session running /cc-swarm (mirrors _swarm_adopt).
-func adopt(rt runtime.Runtime, st *swarmcore.Store, swarm, cc, dir string, w io.Writer) error {
+// commander session. The Leader's kickoff prompt is `prompt` when non-empty —
+// the web layer renders prompts/master.md.tmpl and passes it via --prompt so
+// the Leader gets a real briefing (身份/目标/工作目录/可用 skill/职责) instead of
+// quietly implementing the whole goal solo. When empty (terminal-only adopt),
+// it falls back to the bare /cc-swarm playbook invocation (mirrors _swarm_adopt).
+func adopt(rt runtime.Runtime, st *swarmcore.Store, swarm, cc, dir, prompt string, w io.Writer) error {
 	if !st.Exists(swarm) {
 		ui.Err(w, "蜂群不存在: %s", swarm)
 		return fmt.Errorf("not found")
@@ -70,12 +75,16 @@ func adopt(rt runtime.Runtime, st *swarmcore.Store, swarm, cc, dir string, w io.
 	_ = st.MetaSet(swarm, "supervisor", cc)
 	_ = st.MetaSet(swarm, "status", "running")
 	goal := st.MetaGet(swarm, "goal")
-	invoke := "/cc-swarm --swarm " + swarm
-	if goal != "" {
-		invoke += " " + goal
+	kickoff := strings.TrimSpace(prompt)
+	if kickoff == "" {
+		kickoff = "/cc-swarm --swarm " + swarm
+		if goal != "" {
+			kickoff += " " + goal
+		}
 	}
 	if rt.HasSession(cc) {
-		_ = rt.Tmux("send-keys", "-t", cc, invoke, "C-m")
+		// 已有会话：用粘贴缓冲提交（send-keys 会把多行 prompt 的换行当回车提前执行）
+		sendPromptSubmit(rt, cc, kickoff)
 		ui.Ok(w, "已让现有会话 %s 接管蜂群 %s", ui.Bold(cc), ui.Bold(swarm))
 		return nil
 	}
@@ -83,7 +92,11 @@ func adopt(rt runtime.Runtime, st *swarmcore.Store, swarm, cc, dir string, w io.
 	rt.InjectEnv(cc)
 	_ = rt.Tmux("pipe-pane", "-t", cc, "-o", "cat >> '"+rt.LogFile(cc)+"'")
 	_ = writeEmpty(rt.LogFile(cc))
-	runCmd := "cd '" + dir + "' && " + claudeBin() + " " + shellQuote(invoke)
+	// 把（可能多行的）kickoff 落盘再用 "$(cat …)" 注入，避免换行被 send-keys 当成回车提前执行
+	bf := filepath.Join(rt.DataDir, "cc-swarm", cc+".brief.md")
+	_ = os.MkdirAll(filepath.Dir(bf), 0o755)
+	_ = os.WriteFile(bf, []byte(kickoff), 0o644)
+	runCmd := "cd " + shellQuote(dir) + " && " + claudeBin() + " \"$(cat " + shellQuote(bf) + ")\""
 	_ = rt.Tmux("send-keys", "-t", cc, runCmd, "C-m")
 	ui.Ok(w, "已拉起指挥会话 %s 接管蜂群 %s", ui.Bold(cc), ui.Bold(swarm))
 	if goal != "" {
@@ -94,19 +107,21 @@ func adopt(rt runtime.Runtime, st *swarmcore.Store, swarm, cc, dir string, w io.
 
 func cmdAdopt(rt runtime.Runtime, st *swarmcore.Store, args []string, w io.Writer) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: ttmux swarm adopt <name> [--by <session>] [--dir <dir>]")
+		return fmt.Errorf("usage: ttmux swarm adopt <name> [--by <session>] [--dir <dir>] [--prompt <text>]")
 	}
 	swarm := args[0]
-	cc, dir := "", "."
+	cc, dir, prompt := "", ".", ""
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
 		case "--by":
 			cc, i = next(args, i)
 		case "--dir":
 			dir, i = next(args, i)
+		case "--prompt":
+			prompt, i = next(args, i)
 		}
 	}
-	return adopt(rt, st, swarm, cc, dir, w)
+	return adopt(rt, st, swarm, cc, dir, prompt, w)
 }
 
 type swarmListItem struct {

@@ -100,27 +100,32 @@ if [[ -f "${SCRIPT_DIR}/skills/sync-skills.sh" ]]; then
     # 本地安装：复用 skills/sync-skills.sh（与开发模式 start-all.sh 同一套合并逻辑）
     bash "${SCRIPT_DIR}/skills/sync-skills.sh" "$SKILL_DIR" >/dev/null && info "skills 已安装 (ttmux, cc-swarm)"
 else
-    # curl|bash 无本地文件：从 GitHub 下载合并
-    if curl -fsSL "https://raw.githubusercontent.com/${REPO}/${BRANCH}/skills/ttmux/SKILL.md" \
-            -o /tmp/ttmux-skill.md 2>/dev/null; then
-        mv /tmp/ttmux-skill.md "${SKILL_DIR}/ttmux.md"
-        info "ttmux skill 已安装"
-    fi
+    # curl|bash 无本地文件：从 GitHub 下载合并。
+    # 技能须为目录形式 <名>/SKILL.md（扁平 <名>.md 不被 Claude Code v2.1+ 识别）。
+    # 目标：Claude + (存在则) Codex —— codex 成员/指挥也能用。
+    SKILL_TARGETS=("$SKILL_DIR")
+    [[ -d "${HOME}/.codex" ]] && SKILL_TARGETS+=("${HOME}/.codex/skills")
+
     local_tmp=$(mktemp -d); all_ok=true
+    curl -fsSL "https://raw.githubusercontent.com/${REPO}/${BRANCH}/skills/ttmux/SKILL.md" \
+        -o "${local_tmp}/ttmux.md" 2>/dev/null || all_ok=false
     curl -fsSL "https://raw.githubusercontent.com/${REPO}/${BRANCH}/skills/cc-swarm/SKILL.md" \
-        -o "${local_tmp}/SKILL.md" 2>/dev/null || all_ok=false
+        -o "${local_tmp}/cc-swarm.md" 2>/dev/null || all_ok=false
     for d in $CC_SWARM_DOCS; do
         $all_ok || break
         curl -fsSL "https://raw.githubusercontent.com/${REPO}/${BRANCH}/skills/cc-swarm/docs/${d}.md" \
-            -o "${local_tmp}/${d}.md" 2>/dev/null || { all_ok=false; break; }
+            -o "${local_tmp}/doc-${d}.md" 2>/dev/null && \
+            { printf '\n\n' >> "${local_tmp}/cc-swarm.md"; cat "${local_tmp}/doc-${d}.md" >> "${local_tmp}/cc-swarm.md"; }
     done
     if $all_ok; then
-        dest="${SKILL_DIR}/cc-swarm.md"
-        cat "${local_tmp}/SKILL.md" > "$dest"
-        for d in $CC_SWARM_DOCS; do
-            [[ -f "${local_tmp}/${d}.md" ]] && { printf '\n\n' >> "$dest"; cat "${local_tmp}/${d}.md" >> "$dest"; }
+        for sd in "${SKILL_TARGETS[@]}"; do
+            mkdir -p "$sd"
+            rm -f "${sd}/ttmux.md" "${sd}/cc-swarm.md"   # 清历史扁平文件
+            mkdir -p "${sd}/ttmux" "${sd}/cc-swarm"
+            cp "${local_tmp}/ttmux.md" "${sd}/ttmux/SKILL.md"
+            cp "${local_tmp}/cc-swarm.md" "${sd}/cc-swarm/SKILL.md"
         done
-        info "cc-swarm skill 已安装"
+        info "skills 已安装 (ttmux, cc-swarm)"
     fi
     rm -rf "$local_tmp"
 fi

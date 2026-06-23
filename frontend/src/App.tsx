@@ -156,8 +156,6 @@ export default function App() {
   const go = (k: string) => { location.hash = '#/' + k } // hash 路由：/#/xxx
   const { mode, toggle: toggleTheme } = useThemeMode()
   const { t } = useI18n()
-  const { installable: canInstall, install: doInstall, guide: installGuide } = usePwaInstall()
-  const installIcon = svg(<><path d="M12 3v11" /><path d="m7.5 10.5 4.5 4.5 4.5-4.5" /><path d="M5 20h14" /></>)
   const themeIcon = mode === 'dark'
     ? svg(<><circle cx="12" cy="12" r="4.2" /><path d="M12 2v2.2M12 19.8V22M4.2 4.2l1.6 1.6M18.2 18.2l1.6 1.6M2 12h2.2M19.8 12H22M4.2 19.8l1.6-1.6M18.2 5.8l1.6-1.6" /></>)
     : svg(<><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z" /></>)
@@ -310,7 +308,7 @@ export default function App() {
   const pages: any = {
     overview: <Overview go={go} openTerm={openTerm} kanna={kanna} />,
     swarm: <Swarm openTerm={openTerm} initialSwarm={swarmSub || undefined} onNav={(n) => { location.hash = n ? '#/swarm/' + encodeURIComponent(n) : '#/swarm' }} />,
-    sessions: <Sessions openTerm={openTerm} />,
+    sessions: <Sessions openTerm={openTerm} closeTerm={closeTerm} />,
     files: <FilesPage openTerm={openTerm} />,
     settings: <EnvPage />,
     browser: <BrowserView />,
@@ -329,7 +327,7 @@ export default function App() {
   )
 
   return (
-    <Layout style={{ minHeight: '100dvh', background: 'var(--bg-base)' }}>
+    <Layout style={{ height: '100dvh', overflow: 'hidden', background: 'var(--bg-base)' }}>
       <UpdateBanner />
       {hasSider && !dockMax && (
         <Sider collapsible trigger={null} collapsed={collapsed} collapsedWidth={64}
@@ -351,13 +349,8 @@ export default function App() {
               )}
             </div>
             <div style={{ flex: 1, overflowY: 'auto' }}>{menu}</div>
-            {/* 底部：安装到桌面（仅未安装时）+ 全屏 + 折叠 + 退出，始终竖向堆叠 */}
+            {/* 底部：全屏 + 折叠 + 退出，始终竖向堆叠（安装到桌面只放在设置页）*/}
             <div style={{ borderTop: '1px solid var(--border-subtle)', padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {canInstall && (
-                <Button type="text" block onClick={doInstall} style={{ color: '#58a6ff', textAlign: collapsed ? 'center' : 'left' }} title={t('install.button')}>
-                  {collapsed ? installIcon : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{installIcon}{t('install.button')}</span>}
-                </Button>
-              )}
               {fsSupported && (
                 <Button type="text" block onClick={toggleFs} style={{ color: 'var(--text-dim)', textAlign: collapsed ? 'center' : 'left' }}
                   title={isFs ? t('common.exitFullscreen') : t('common.fullscreen')}>
@@ -453,7 +446,6 @@ export default function App() {
           ))}
           {/* 主题/全屏/退出折叠进「更多」，省出底栏空间 */}
           <Dropdown placement="top" trigger={['click']} menu={{ items: [
-            ...(canInstall ? [{ key: 'install', icon: installIcon, label: t('install.button'), onClick: doInstall }] : []),
             { key: 'theme', icon: themeIcon, label: mode === 'dark' ? t('common.lightTheme') : t('common.darkTheme'), onClick: toggleTheme },
             ...(fsSupported ? [{ key: 'fs', icon: fsIcon, label: isFs ? t('common.exitFullscreen') : t('common.fullscreen'), onClick: toggleFs }] : []),
             { type: 'divider' as const },
@@ -466,9 +458,6 @@ export default function App() {
           </Dropdown>
         </nav>
       )}
-
-      {/* PWA iOS「添加到主屏幕」图文引导弹窗（仅 iOS 点击安装时弹出）*/}
-      {installGuide}
 
       {/* 手机/平板：全屏会话覆盖层（桌面用右侧停靠栏，不走这里）*/}
       {isMobile && overlay && (
@@ -521,6 +510,8 @@ function SoloTerminal({ name }: { name: string }) {
   )
 }
 
+const PROMPT_OFF_KEY = 'ttmux-prompt-popup-off' // 弹框提醒按会话名记忆的本地存储键
+
 // ── 终端面板（多标签 + 工具栏 + 快捷键栏），桌面右栏与手机覆盖层共用 ──
 function TerminalPane(props: {
   terms: string[]; active: string | null; setActive: (n: string) => void; closeTerm: (n: string) => void
@@ -553,6 +544,19 @@ function TerminalPane(props: {
   const tapKey = (seq: string) => { flushLine(); if (isTouch) sendRaw(seq); else sendKey(seq) } // 控制键：先 flush 待发文本
   const noBlur = isTouch ? (e: React.MouseEvent) => e.preventDefault() : undefined        // 点按钮不夺走输入框焦点（软键盘保持）
 
+  // 弹框提醒开关：按会话名记忆是否关闭 PromptDialog 自动弹框（仍可在底部面板手动响应）。
+  const [promptOff, setPromptOff] = useState<Record<string, boolean>>(() => {
+    try { return JSON.parse(localStorage.getItem(PROMPT_OFF_KEY) || '{}') } catch { return {} }
+  })
+  const togglePromptOff = () => {
+    if (!active) return
+    setPromptOff((m) => {
+      const next = { ...m, [active]: !m[active] }
+      try { localStorage.setItem(PROMPT_OFF_KEY, JSON.stringify(next)) } catch {}
+      return next
+    })
+  }
+
   // 文件侧栏（终端视图下也可用）：定位到当前会话的工作目录
   const [showFiles, setShowFiles] = useState(false)
   const [showGit, setShowGit] = useState(false)
@@ -565,7 +569,6 @@ function TerminalPane(props: {
   const [pasteSession, setPasteSession] = useState('')
   const [pasteText, setPasteText] = useState('')
   const [renameSession, setRenameSession] = useState<string | null>(null)
-  const [selTip, setSelTip] = useState<{ x: number; y: number; session: string; selection: string } | null>(null)
   useEffect(() => {
     if (!active) { setCwd(''); return }
     // 优先用 claude/codex 已知工作目录，否则查会话 pane 当前路径
@@ -613,8 +616,23 @@ function TerminalPane(props: {
       openManualPaste(session)
     }
   }
+  const selText = ctx?.selection?.trim() || ''
+  const selPreview = selText.replace(/\s+/g, ' ').slice(0, 28)
   const ctxItems = ctx ? [
-    ...(ctx.selection ? [{ key: 'copy', label: t('terminal.copySelected') }] : []),
+    ...(selText ? [
+      {
+        key: 'copy',
+        label: (
+          <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8 }}>
+            <span style={{ fontWeight: 600 }}>{t('terminal.copySelected')}</span>
+            <span style={{ color: 'var(--text-dimmer)', fontSize: 12, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              “{selPreview}{selText.length > selPreview.length ? '…' : ''}”
+            </span>
+          </span>
+        ),
+      },
+      { type: 'divider' as const },
+    ] : []),
     { key: 'paste', label: t('terminal.pasteClipboard') },
     { key: 'manual-paste', label: t('terminal.manualPaste') },
     { type: 'divider' as const },
@@ -622,15 +640,24 @@ function TerminalPane(props: {
     { key: 'bottom', label: t('terminal.toBottom') },
     { key: 'reconnect', label: t('terminal.reconnect') },
     { type: 'divider' as const },
-    { key: PFX + '[', label: t('terminal.tmuxCopyMode') },
-    { key: PFX + 'w', label: t('terminal.tmuxWindowList') },
-    { key: PFX + '%', label: t('terminal.tmuxSplitVertical') },
-    { key: PFX + '"', label: t('terminal.tmuxSplitHorizontal') },
+    {
+      key: 'tmux',
+      label: 'tmux',
+      children: [
+        { key: PFX + '[', label: t('terminal.tmuxCopyMode') },
+        { key: PFX + 'w', label: t('terminal.tmuxWindowList') },
+        { key: PFX + '%', label: t('terminal.tmuxSplitVertical') },
+        { key: PFX + '"', label: t('terminal.tmuxSplitHorizontal') },
+      ],
+    },
+    { type: 'divider' as const },
+    { key: 'cancel', label: t('common.cancel') },
   ] : []
   const onCtxClick = ({ key }: { key: string }) => {
     if (!ctx) return
     const h = termRefs.current[ctx.session]
-    if (key === 'copy') copyText(ctx.selection)
+    if (key === 'cancel') { /* 仅关闭菜单 */ }
+    else if (key === 'copy') { copyText(ctx.selection); message.success(t('common.copied')); h?.clearSelection() }
     else if (key === 'paste') pasteClipboard(ctx.session)
     else if (key === 'manual-paste') openManualPaste(ctx.session)
     else if (key === 'scroll-up') h?.scroll(-12)
@@ -639,13 +666,6 @@ function TerminalPane(props: {
     else h?.send(key)
     setCtx(null)
   }
-  const copySelectionTip = () => {
-    if (!selTip) return
-    copyText(selTip.selection)
-    message.success(t('common.copied'))
-    setSelTip(null)
-  }
-
   if (terms.length === 0) {
     return (
       <div style={{ flex: 1, display: 'grid', placeItems: 'center', color: 'var(--text-dim)' }}>
@@ -659,7 +679,7 @@ function TerminalPane(props: {
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      {active && <PromptDialog name={active} accent={codexMap[active]?.running ? '#10a37f' : '#58a6ff'} enabled={!inChat} />}
+      {active && <PromptDialog name={active} accent={codexMap[active]?.running ? '#10a37f' : '#58a6ff'} enabled={!inChat && !promptOff[active]} />}
       <Modal
         open={pasteOpen}
         title={t('terminal.pasteTitle')}
@@ -694,26 +714,6 @@ function TerminalPane(props: {
       >
         <span style={{ position: 'fixed', left: ctx?.x ?? -1000, top: ctx?.y ?? -1000, width: 1, height: 1, pointerEvents: 'none' }} />
       </Dropdown>
-      {selTip && (
-        <div
-          style={{
-            position: 'fixed',
-            left: Math.min(selTip.x + 8, window.innerWidth - 88),
-            top: Math.max(8, selTip.y - 42),
-            zIndex: 1200,
-            display: 'flex',
-            gap: 4,
-            padding: 4,
-            border: '1px solid var(--border)',
-            borderRadius: 8,
-            background: 'var(--bg-elevated)',
-            boxShadow: 'var(--elevated-shadow)',
-          }}
-        >
-          <Button size="small" type="primary" onMouseDown={(e) => e.preventDefault()} onClick={copySelectionTip}>{t('common.copy')}</Button>
-          <Button size="small" type="text" onMouseDown={(e) => e.preventDefault()} onClick={() => setSelTip(null)}>×</Button>
-        </div>
-      )}
       {/* 标签栏 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 8px', borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
         {onCollapse && <Button size="small" type="text" style={{ color: 'var(--text-dim)' }} onClick={onCollapse}>✕ {t('common.collapse')}</Button>}
@@ -767,6 +767,12 @@ function TerminalPane(props: {
         {active && (
           <Button size="small" onClick={() => setRenameSession(active)}>{t('session.rename')}</Button>
         )}
+        {active && (
+          <Tooltip title={promptOff[active] ? t('prompt.popupOff') : t('prompt.popupOn')}>
+            <Button size="small" type={promptOff[active] ? 'default' : 'primary'} ghost={!promptOff[active]}
+              onClick={togglePromptOff}>{promptOff[active] ? '🔕' : '🔔'} {t('prompt.popup')}</Button>
+          </Tooltip>
+        )}
         <Tooltip title={t('terminal.fileBrowserTitle')}>
           <Button size="small" type={showFiles ? 'primary' : 'default'} onClick={toggleFiles}>📁 {t('chat.files')}</Button>
         </Tooltip>
@@ -791,8 +797,8 @@ function TerminalPane(props: {
           {terms.map((termName) => (
             <div key={termName} style={{ position: 'absolute', inset: 0, display: termName === active ? 'block' : 'none', padding: 6 }}>
               <Term ref={(h) => { termRefs.current[termName] = h }} name={termName} fontSize={fontSize} active={termName === active} onStatus={(s) => setStatus(termName, s)}
-                onContextMenu={({ x, y, selection }) => { setActive(termName); setSelTip(null); setCtx({ x, y, session: termName, selection }) }}
-                onSelectionMenu={({ x, y, selection }) => { setActive(termName); setCtx(null); setSelTip({ x, y, session: termName, selection }) }} />
+                onContextMenu={({ x, y, selection }) => { setActive(termName); setCtx({ x, y, session: termName, selection }) }}
+                onSelectionMenu={({ selection }) => { setActive(termName); setCtx(null); if (selection.trim()) { copyText(selection); message.success(t('common.copied')) } }} />
               {claudeView[termName] && claudeMap[termName]?.running && (
                 <div style={{ position: 'absolute', inset: 0 }}>
                   <ClaudeChat name={termName} file={claudeMap[termName].file} dir={claudeMap[termName].dir} onBack={() => setClaudeView((v) => ({ ...v, [termName]: false }))} />
@@ -1203,7 +1209,7 @@ function RenameSessionModal({ session, onClose, onDone }: { session: string | nu
 }
 
 // ── 会话（可新建/指定目录 / 进终端 / 关闭） ──
-function Sessions({ openTerm }: { openTerm: (n: string) => void }) {
+function Sessions({ openTerm, closeTerm }: { openTerm: (n: string) => void; closeTerm: (n: string) => void }) {
   const [list, setList] = useState<any[]>([])
   const [cc, setCc] = useState<Record<string, boolean>>({})
   const [cx, setCx] = useState<Record<string, boolean>>({})
@@ -1269,7 +1275,7 @@ function Sessions({ openTerm }: { openTerm: (n: string) => void }) {
     const t = setInterval(checkPrompts, 4000)
     return () => { stop = true; clearInterval(t) }
   }, [list])
-  const kill = async (n: string) => { try { await api('DELETE', '/sessions/' + encodeURIComponent(n)); message.success(t('session.closed')); load() } catch (e: any) { message.error(e.message) } }
+  const kill = async (n: string) => { try { await api('DELETE', '/sessions/' + encodeURIComponent(n)); message.success(t('session.closed')); closeTerm(n); load() } catch (e: any) { message.error(e.message) } }
   const goSwarm = (sw: string) => { location.hash = '#/swarm/' + encodeURIComponent(sw) }
 
   // ── 筛选 / 搜索 ──
@@ -1394,8 +1400,8 @@ function EnvPage() {
             value={mode}
             onChange={(v) => setMode(v as 'light' | 'dark')}
             options={[
-              { label: `☀ ${t('common.lightTheme')}`, value: 'light' },
               { label: `☾ ${t('common.darkTheme')}`, value: 'dark' },
+              { label: `☀ ${t('common.lightTheme')}`, value: 'light' },
             ]}
           />
           <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('settings.themeHelp')}</span>
@@ -1406,7 +1412,7 @@ function EnvPage() {
           <Select
             value={locale}
             onChange={setLocale}
-            options={[{ value: 'zh-CN', label: '中文' }, { value: 'en-US', label: 'English' }]}
+            options={[{ value: 'en-US', label: 'English' }, { value: 'zh-CN', label: '中文' }]}
             aria-label={t('settings.language')}
             style={{ width: 180 }}
           />

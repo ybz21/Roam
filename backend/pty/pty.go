@@ -86,10 +86,10 @@ func Handler(c *gin.Context) {
 	}
 	defer conn.Close()
 
-	// 开启该会话的鼠标模式：网页里点击即可切换 tmux 窗格焦点、拖边框可调大小。
-	// 仅作用于该会话（-t name），不影响 CLI 里的其它 tmux。
-	// 滚轮已被前端拦截走 copy-mode，不与此冲突；要本地选中复制可用 Shift+拖拽。
-	_ = exec.Command("tmux", "set-option", "-t", name, "mouse", "on").Run()
+	// 关闭该会话的 tmux 鼠标模式：让鼠标拖动直接成为 xterm 本地选区（松开自动复制 / Ctrl+C 复制），
+	// 右键也只弹前端菜单，不再被转发给 tmux 多弹一个菜单。
+	// 代价：点击切换窗格 / 拖边框调大小失效；滚轮翻历史由前端单独拦截处理，不受影响。
+	_ = exec.Command("tmux", "set-option", "-t", name, "mouse", "off").Run()
 
 	// 窗口尺寸跟随「最近活跃的客户端」，而非被所有 attach 客户端里最小的那个限制。
 	// 同一会话被多处 attach（网页多标签 / 手机+桌面 / CLI）时，默认会缩到最小客户端，

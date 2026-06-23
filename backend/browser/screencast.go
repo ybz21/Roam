@@ -66,6 +66,13 @@ func atoiDefault(s string, d int) int {
 	return d
 }
 
+func atofDefault(s string, d float64) float64 {
+	if f, err := strconv.ParseFloat(s, 64); err == nil {
+		return f
+	}
+	return d
+}
+
 // lvl 是一档画质/分辨率/帧率组合；自适应在 ladder 上上下移动。
 type lvl struct {
 	q, w, h, nth int
@@ -156,6 +163,7 @@ func Handler(c *gin.Context) {
 	conn := &cdp{ws: back}
 	control := c.Query("control") == "1"
 	auto := c.Query("auto") == "1"
+	defaultUA := browserUA() // 浏览器原生 UA，切回桌面时用它复位（CDP 没有 clearUserAgentOverride）
 
 	// gorilla 不支持并发写同一连接：帧/控制/pong 都经此串行化
 	var fmu sync.Mutex
@@ -206,6 +214,66 @@ func Handler(c *gin.Context) {
 		})
 	}
 	conn.send("Page.enable", nil)
+
+	// 手机模式：把本镜像连接对应的渲染器切到移动视口（设备指标/触摸/UA 覆盖作用于整个
+	// page 渲染，故镜像里看到的就是真实移动端布局，agent 用 chrome-cli 截同一页也是移动端）。
+	//
+	// 关键设计：设备切换【不重连】，由前端在本条 WS 上发 {type:'emulate'} 消息现场切换。
+	// 因为 CDP 的 setDeviceMetricsOverride 是「会话级」——clearDeviceMetricsOverride 只能撤销
+	// 【本会话】设的覆盖，撤不掉别会话留的。若每次切换都重连，旧会话的 defer 清理与新连接会
+	// 抢跑（来回切尤其容易卡住）。改成同一会话 set/clear，既不泄漏也无竞态。
+	applyMobile := func(mw, mh int, dpr float64, ua string) {
+		conn.send("Emulation.setDeviceMetricsOverride", map[string]any{
+			"width": mw, "height": mh, "deviceScaleFactor": dpr, "mobile": true,
+			"screenWidth": mw, "screenHeight": mh,
+		})
+		conn.send("Emulation.setTouchEmulationEnabled", map[string]any{"enabled": true, "maxTouchPoints": 5})
+		conn.send("Emulation.setEmitTouchEventsForMouse", map[string]any{"enabled": true, "configuration": "mobile"})
+		if ua != "" { // 设备 UA 由前端按机型下发，后端只透传
+			conn.send("Emulation.setUserAgentOverride", map[string]any{"userAgent": ua})
+		}
+	}
+	// 桌面模式：用观看端的原生尺寸（前端下发的 CSS 宽高 + 真实 DPR）覆盖视口，使镜像里的
+	// 桌面布局与你屏幕一致、随窗口大小自适应——不再被 Chrome 启动时的 --window-size(1280×800) 限死。
+	// w<=0 时退化为 clearMobile（彻底不覆盖，用 Chrome 原生窗口尺寸）。
+	applyDesktop := func(w, h int, dpr float64) {
+		if w <= 0 || h <= 0 {
+			conn.send("Emulation.clearDeviceMetricsOverride", nil)
+		} else {
+			conn.send("Emulation.setDeviceMetricsOverride", map[string]any{
+				"width": w, "height": h, "deviceScaleFactor": dpr, "mobile": false,
+				"screenWidth": w, "screenHeight": h,
+			})
+		}
+		conn.send("Emulation.setTouchEmulationEnabled", map[string]any{"enabled": false})
+		conn.send("Emulation.setEmitTouchEventsForMouse", map[string]any{"enabled": false})
+		if defaultUA != "" { // 复位 UA，否则从手机切回桌面 navigator.userAgent 还卡在手机 UA
+			conn.send("Emulation.setUserAgentOverride", map[string]any{"userAgent": defaultUA})
+		}
+	}
+	clearAll := func() {
+		conn.send("Emulation.clearDeviceMetricsOverride", nil)
+		conn.send("Emulation.setTouchEmulationEnabled", map[string]any{"enabled": false})
+		conn.send("Emulation.setEmitTouchEventsForMouse", map[string]any{"enabled": false})
+		if defaultUA != "" {
+			conn.send("Emulation.setUserAgentOverride", map[string]any{"userAgent": defaultUA})
+		}
+	}
+	overrideOn := false // 本会话当前是否设了任何视口覆盖；仅在主消息 goroutine 与其后的 defer 读写
+	// prevMobile/prevUA 记当前生效的「机型态」，用于判断 emulate 是否真切换了设备/UA → 需要
+	// reload 页面让 UA 嗅探的站点改出移动版（仅尺寸变化即桌面 resize 不 reload，避免刷屏）。
+	prevMobile, prevUA := false, ""
+	if c.Query("mobile") == "1" { // 初始态兜底（一般由前端连上后发 emulate 决定）
+		applyMobile(atoiDefault(c.Query("mw"), 390), atoiDefault(c.Query("mh"), 844), atofDefault(c.Query("dpr"), 3), c.Query("ua"))
+		overrideOn = true
+		prevMobile, prevUA = true, c.Query("ua")
+	}
+	// 断开前清掉本会话覆盖（在 back.Close 之前，conn 仍可写）→ 不泄漏给后续镜像 / chrome-cli / DevTools。
+	defer func() {
+		if overrideOn {
+			clearAll()
+		}
+	}()
 	applyLevel(cur)
 
 	shutdown := func() {
@@ -346,6 +414,11 @@ func Handler(c *gin.Context) {
 			URL       string  `json:"url"`
 			T         float64 `json:"t"`
 			N         uint16  `json:"n"` // ack 的帧序号
+			Mobile    bool    `json:"mobile"` // emulate：true=手机模式
+			MW        int     `json:"mw"`     // 移动视口宽（CSS px）
+			MH        int     `json:"mh"`     // 移动视口高
+			DPR       float64 `json:"dpr"`    // 设备像素比
+			UA        string  `json:"ua"`     // 移动 UA
 		}
 		if json.Unmarshal(data, &ev) != nil {
 			continue
@@ -374,6 +447,35 @@ func Handler(c *gin.Context) {
 		case "nav":
 			if ev.URL != "" {
 				conn.send("Page.navigate", map[string]any{"url": ev.URL})
+			}
+			continue
+		case "emulate": // 设备切换：同一会话现场 set/clear，不重连 → 无泄漏/无竞态
+			// 机型/UA 真变了才 reload（让 UA 嗅探站点切移动/桌面版）；纯尺寸变化(桌面 resize)不 reload
+			needReload := ev.Mobile != prevMobile || ev.UA != prevUA
+			if ev.Mobile {
+				mw, mh, dpr := ev.MW, ev.MH, ev.DPR
+				if mw == 0 {
+					mw = 390
+				}
+				if mh == 0 {
+					mh = 844
+				}
+				if dpr == 0 {
+					dpr = 3
+				}
+				applyMobile(mw, mh, dpr, ev.UA)
+				overrideOn = true
+			} else { // 桌面：按观看端原生尺寸覆盖视口（mw/mh<=0 则彻底清除覆盖）
+				dpr := ev.DPR
+				if dpr == 0 {
+					dpr = 1
+				}
+				applyDesktop(ev.MW, ev.MH, dpr)
+				overrideOn = ev.MW > 0 && ev.MH > 0
+			}
+			prevMobile, prevUA = ev.Mobile, ev.UA
+			if needReload { // UA 已先于此设好，reload 的首个请求即带新 UA → 服务端出对应版本
+				conn.send("Page.reload", nil)
 			}
 			continue
 		}
