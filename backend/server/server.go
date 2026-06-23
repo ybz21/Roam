@@ -77,6 +77,14 @@ func New(cfg Config) *gin.Engine {
 		g.POST("/file/mkdir", h.FileMkdir) // 文件侧栏：在当前目录新建子目录
 		g.POST("/upload", h.Upload)        // 上传文件到指定目录（拖拽到对话框 / 文件侧栏）
 
+		g.GET("/git/status", h.GitStatus)     // Git 面板：当前工作目录所属仓库状态
+		g.GET("/git/diff", h.GitDiff)         // Git 面板：单文件差异
+		g.POST("/git/stage", h.GitStage)      // 暂存
+		g.POST("/git/unstage", h.GitUnstage)  // 取消暂存
+		g.POST("/git/discard", h.GitDiscard)  // 放弃改动
+		g.POST("/git/commit", h.GitCommit)    // 提交（可选 push）
+		g.POST("/git/op", h.GitOp)            // push / pull / fetch / sync
+
 		g.GET("/sessions", h.Sessions)
 		g.POST("/sessions", h.NewSession)
 		g.PATCH("/sessions/:name", h.RenameSession)
@@ -101,6 +109,7 @@ func New(cfg Config) *gin.Engine {
 		g.POST("/swarms", h.SwarmNew)
 		g.GET("/swarms/:n", h.SwarmStatus)
 		g.DELETE("/swarms/:n", h.SwarmArchive)
+		g.POST("/swarms/:n/adopt", h.SwarmAdopt)
 		g.POST("/swarms/:n/members", h.SwarmAddMember)
 		g.POST("/swarms/:n/done", h.SwarmDone)
 		g.POST("/swarms/:n/activate", h.SwarmActivate)

@@ -347,13 +347,30 @@ func (a *API) Upload(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "NO_FILE"}})
 		return
 	}
+	// paths[i] 与 files[i] 平行：上传文件夹时存相对路径(保留层级)，普通文件为空。
+	// Go 的 multipart 会用 filepath.Base 抹掉 fh.Filename 的路径，故层级只能靠它传。
+	paths := form.Value["paths"]
 	saved := []string{}
-	for _, fh := range files {
-		name := filepath.Base(fh.Filename) // 去掉任何路径成分，防穿越
-		if name == "" || name == "." || name == ".." {
+	for i, fh := range files {
+		name := fh.Filename
+		if i < len(paths) && strings.TrimSpace(paths[i]) != "" {
+			name = paths[i]
+		}
+		// 用 Clean("/"+name) 把任何 .. 折叠到根再去掉前导 /，杜绝路径穿越。
+		rel := filepath.Clean("/" + filepath.ToSlash(name))
+		rel = strings.TrimPrefix(rel, "/")
+		if rel == "" || rel == "." {
 			continue
 		}
-		dest := uniquePath(filepath.Join(dir, name))
+		dest := uniquePath(filepath.Join(dir, rel))
+		// 双保险：清理后仍须落在 dir 之内
+		if r, err := filepath.Rel(dir, dest); err != nil || r == ".." || strings.HasPrefix(r, ".."+string(os.PathSeparator)) {
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "WRITE_ERROR", "message": err.Error()}})
+			return
+		}
 		if err := c.SaveUploadedFile(fh, dest); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "WRITE_ERROR", "message": err.Error()}})
 			return

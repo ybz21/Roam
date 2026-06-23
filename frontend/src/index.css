@@ -155,6 +155,10 @@ body {
 @media (pointer: coarse) { .cc-dl { opacity: .6; } }
 .cc-filerow { border-radius: 6px; margin: 1px 4px; }
 .cc-filerow:hover { background: rgba(88, 166, 255, .08); }
+/* Git 分组标题上的操作按钮：平时半透明，hover 分组时变实 */
+.cc-git-section-act .cc-dl { opacity: .5; }
+.cc-git-section:hover .cc-git-section-act .cc-dl { opacity: 1; }
+.cc-dl:hover { background: rgba(255, 255, 255, .08); color: var(--text-bright) !important; }
 .cc-filerow .ant-btn { color: var(--text-dim); }
 .cc-filerow .ant-btn:hover { color: var(--text-bright) !important; background: rgba(255, 255, 255, .06) !important; }
 

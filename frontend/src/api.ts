@@ -28,7 +28,12 @@ export async function api(method: string, path: string, body?: any): Promise<any
 export async function upload(dir: string, files: FileList | File[]): Promise<{ dir: string; saved: string[] }> {
   const form = new FormData()
   form.append('dir', dir)
-  Array.from(files).forEach((f) => form.append('files', f))
+  // Go 的 multipart 会用 filepath.Base 抹掉上传文件名里的路径，所以文件夹层级要靠
+  // 独立的 paths 字段平行传：第 i 个 file 对应第 i 个 path(相对路径，普通文件为空)。
+  Array.from(files).forEach((f) => {
+    form.append('files', f)
+    form.append('paths', (f as any).webkitRelativePath || '')
+  })
   const r = await fetch('/api/upload', { method: 'POST', body: form })
   if (r.status === 401) { onUnauth(); throw new Error('UNAUTHORIZED') }
   const data = await r.json().catch(() => null)

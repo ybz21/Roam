@@ -19,6 +19,7 @@ func (a *API) SwarmNew(c *gin.Context) {
 	var b struct {
 		Name   string `json:"name"`
 		Goal   string `json:"goal"`
+		Dir    string `json:"dir"` // 工作目录(可空)：建群即 mkdir，Leader/上传都落到这里
 		Master *bool  `json:"master"`
 	}
 	if err := c.ShouldBindJSON(&b); err != nil || strings.TrimSpace(b.Name) == "" {
@@ -29,8 +30,25 @@ func (a *API) SwarmNew(c *gin.Context) {
 	if b.Goal != "" {
 		args = append(args, "--goal", b.Goal)
 	}
+	if strings.TrimSpace(b.Dir) != "" {
+		args = append(args, "--dir", b.Dir)
+	}
 	if b.Master != nil && !*b.Master {
 		args = append(args, "--no-master")
+	}
+	a.text(c, args...)
+}
+
+// POST /api/swarms/:n/adopt —— 拉起/接管 Leader（指挥）会话。
+// 用于「先建群+上传文档、再起 Leader」的时序：建群时传 master=false，上传完文档后再调本接口。
+func (a *API) SwarmAdopt(c *gin.Context) {
+	var b struct {
+		Dir string `json:"dir"`
+	}
+	_ = c.ShouldBindJSON(&b) // body 可空
+	args := []string{"swarm", "adopt", c.Param("n")}
+	if strings.TrimSpace(b.Dir) != "" {
+		args = append(args, "--dir", b.Dir)
 	}
 	a.text(c, args...)
 }

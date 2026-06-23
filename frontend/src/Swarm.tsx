@@ -5,10 +5,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Card, Tag, Empty, Segmented, Input, Select, Button, Drawer, Tooltip,
-  App as AntApp, Popconfirm, Modal, Space, Spin,
+  App as AntApp, Popconfirm, Modal, Space, Spin, AutoComplete,
 } from 'antd'
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
-import { api } from './api'
+import { api, upload } from './api'
+import { DirPicker, recentDirs, pushRecentDir } from './App'
 import { useI18n } from './i18n'
 import Markdown from './Markdown'
 
@@ -154,28 +155,71 @@ function NewSwarmModal({ open, onClose, onDone }: { open: boolean; onClose: () =
   const { message } = AntApp.useApp()
   const { t } = useI18n()
   const [name, setName] = useState(''); const [goal, setGoal] = useState(''); const [master, setMaster] = useState(true)
+  const [dir, setDir] = useState(''); const [pick, setPick] = useState(false)
+  const [files, setFiles] = useState<File[]>([])
   const [busy, setBusy] = useState(false)
-  useEffect(() => { if (open) { setName(''); setGoal(''); setMaster(true) } }, [open])
+  const fileRef = useRef<HTMLInputElement>(null)
+  const dirRef = useRef<HTMLInputElement | null>(null)
+  useEffect(() => { if (open) { setName(''); setGoal(''); setMaster(true); setDir(''); setFiles([]) } }, [open])
+  const addFiles = (fl: FileList | null) => { if (fl?.length) setFiles((prev) => [...prev, ...Array.from(fl)]) }
+  // webkitdirectory 非标准属性，React 类型里没有，用回调 ref 在 DOM 上补
+  const setDirInput = (el: HTMLInputElement | null) => {
+    if (el) { el.setAttribute('webkitdirectory', ''); el.setAttribute('directory', '') }
+    dirRef.current = el
+  }
   const ok = async () => {
     if (!name.trim()) return message.error(t('swarm.nameRequired'))
+    if (files.length && !dir.trim()) return message.error(t('swarm.dirRequiredForUpload'))
     setBusy(true)
     try {
-      await api('POST', '/swarms', { name: name.trim(), goal: goal.trim(), master })
+      const hasFiles = files.length > 0
+      // 默认带 Leader 的行为保持原样：无文档时 swarm new 内部原子拉起 Leader。
+      // 仅当要先上传文档时，才拆成 建群(不带 Leader)→上传→adopt，确保文档先就位。
+      await api('POST', '/swarms', { name: name.trim(), goal: goal.trim(), dir: dir.trim(), master: master && !hasFiles })
+      if (hasFiles) {
+        const r = await upload(dir.trim(), files)
+        message.success(t('swarm.uploaded', { count: r.saved.length, dir: r.dir }))
+        if (master) await api('POST', `/swarms/${encodeURIComponent(name.trim())}/adopt`, { dir: dir.trim() })
+      }
+      if (dir.trim()) pushRecentDir(dir.trim())
       message.success(master ? t('swarm.createdWithMaster') : t('swarm.created'))
       onClose(); onDone()
     } catch (e: any) { message.error(e.message) } finally { setBusy(false) }
   }
   return (
-    <Modal open={open} onCancel={onClose} onOk={ok} okText={t('file.create')} confirmLoading={busy} title={t('swarm.new')} destroyOnClose>
-      <Space direction="vertical" style={{ width: '100%' }}>
-        <Input placeholder={t('swarm.namePlaceholder')} value={name} onChange={(e) => setName(e.target.value)} autoFocus onPressEnter={ok} />
-        <Input.TextArea rows={2} placeholder={t('swarm.goalPlaceholder')} value={goal} onChange={(e) => setGoal(e.target.value)} />
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: C.fg2, fontSize: 13 }}>
-          <input type="checkbox" checked={master} onChange={(e) => setMaster(e.target.checked)} />
-          {t('swarm.autoMaster', { name: name || t('swarm.defaultName') })}
-        </label>
-      </Space>
-    </Modal>
+    <>
+      <Modal open={open} onCancel={onClose} onOk={ok} okText={t('file.create')} confirmLoading={busy} title={t('swarm.new')} destroyOnClose>
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <Input placeholder={t('swarm.namePlaceholder')} value={name} onChange={(e) => setName(e.target.value)} autoFocus onPressEnter={ok} />
+          <Input.TextArea rows={2} placeholder={t('swarm.goalPlaceholder')} value={goal} onChange={(e) => setGoal(e.target.value)} />
+          <Space.Compact style={{ width: '100%' }}>
+            <AutoComplete style={{ flex: 1 }} value={dir} onChange={setDir}
+              options={recentDirs().map((d) => ({ value: d }))}
+              filterOption={(input, opt) => String(opt?.value).toLowerCase().includes(input.toLowerCase())}
+              placeholder={t('swarm.dirPlaceholder')} />
+            <Button onClick={() => setPick(true)}>{t('common.browse')}</Button>
+          </Space.Compact>
+          <div>
+            <input ref={fileRef} type="file" multiple style={{ display: 'none' }}
+              onChange={(e) => { addFiles(e.target.files); e.target.value = '' }} />
+            <input ref={setDirInput} type="file" multiple style={{ display: 'none' }}
+              onChange={(e) => { addFiles(e.target.files); e.target.value = '' }} />
+            <Space wrap>
+              <Button size="small" onClick={() => fileRef.current?.click()}>{t('swarm.uploadFiles')}</Button>
+              <Button size="small" onClick={() => dirRef.current?.click()}>{t('swarm.uploadFolder')}</Button>
+              {files.length > 0 && (
+                <Tag closable color="blue" onClose={() => setFiles([])}>{t('swarm.filesSelected', { count: files.length })}</Tag>
+              )}
+            </Space>
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: C.fg2, fontSize: 13 }}>
+            <input type="checkbox" checked={master} onChange={(e) => setMaster(e.target.checked)} />
+            {t('swarm.autoMaster', { name: name || t('swarm.defaultName') })}
+          </label>
+        </Space>
+      </Modal>
+      <DirPicker open={pick} start={dir || undefined} onPick={(p) => { setDir(p); setPick(false) }} onClose={() => setPick(false)} />
+    </>
   )
 }
 

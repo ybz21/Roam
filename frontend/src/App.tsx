@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   Layout, Menu, Button, Card, List, Tag, Form, Input, Select, Segmented,
-  Statistic, Row, Col, Space, Popconfirm, Empty, Modal, Grid, App as AntApp, Typography, Spin, Tooltip, Dropdown, Checkbox, Progress, AutoComplete,
+  Statistic, Row, Col, Space, Popconfirm, Empty, Modal, Grid, App as AntApp, Typography, Spin, Tooltip, Dropdown, Checkbox, Progress, AutoComplete, Radio,
 } from 'antd'
 import { QRCodeSVG } from 'qrcode.react'
 import { api, setUnauthorizedHandler } from './api'
@@ -15,11 +15,13 @@ import ClaudeChat from './ClaudeChat'
 import CodexChat from './CodexChat'
 import FileBrowser from './FileBrowser'
 import FloatingFileDrawer from './FloatingFileDrawer'
+import GitPanel from './GitPanel'
 import BrowserView from './BrowserView'
 import Swarm from './Swarm'
 import UpdateBanner from './UpdateBanner'
 import { useThemeMode } from './theme'
 import { useI18n } from './i18n'
+import { usePwaInstall } from './install'
 import { PromptDialog, detectPrompt } from './prompt'
 import { copyText } from './chat/blocks'
 
@@ -154,6 +156,8 @@ export default function App() {
   const go = (k: string) => { location.hash = '#/' + k } // hash 路由：/#/xxx
   const { mode, toggle: toggleTheme } = useThemeMode()
   const { t } = useI18n()
+  const { installable: canInstall, install: doInstall, guide: installGuide } = usePwaInstall()
+  const installIcon = svg(<><path d="M12 3v11" /><path d="m7.5 10.5 4.5 4.5 4.5-4.5" /><path d="M5 20h14" /></>)
   const themeIcon = mode === 'dark'
     ? svg(<><circle cx="12" cy="12" r="4.2" /><path d="M12 2v2.2M12 19.8V22M4.2 4.2l1.6 1.6M18.2 18.2l1.6 1.6M2 12h2.2M19.8 12H22M4.2 19.8l1.6-1.6M18.2 5.8l1.6-1.6" /></>)
     : svg(<><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z" /></>)
@@ -347,8 +351,13 @@ export default function App() {
               )}
             </div>
             <div style={{ flex: 1, overflowY: 'auto' }}>{menu}</div>
-            {/* 底部：全屏（上）+ 折叠 + 退出（下），始终竖向堆叠 */}
+            {/* 底部：安装到桌面（仅未安装时）+ 全屏 + 折叠 + 退出，始终竖向堆叠 */}
             <div style={{ borderTop: '1px solid var(--border-subtle)', padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {canInstall && (
+                <Button type="text" block onClick={doInstall} style={{ color: '#58a6ff', textAlign: collapsed ? 'center' : 'left' }} title={t('install.button')}>
+                  {collapsed ? installIcon : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{installIcon}{t('install.button')}</span>}
+                </Button>
+              )}
               {fsSupported && (
                 <Button type="text" block onClick={toggleFs} style={{ color: 'var(--text-dim)', textAlign: collapsed ? 'center' : 'left' }}
                   title={isFs ? t('common.exitFullscreen') : t('common.fullscreen')}>
@@ -444,6 +453,7 @@ export default function App() {
           ))}
           {/* 主题/全屏/退出折叠进「更多」，省出底栏空间 */}
           <Dropdown placement="top" trigger={['click']} menu={{ items: [
+            ...(canInstall ? [{ key: 'install', icon: installIcon, label: t('install.button'), onClick: doInstall }] : []),
             { key: 'theme', icon: themeIcon, label: mode === 'dark' ? t('common.lightTheme') : t('common.darkTheme'), onClick: toggleTheme },
             ...(fsSupported ? [{ key: 'fs', icon: fsIcon, label: isFs ? t('common.exitFullscreen') : t('common.fullscreen'), onClick: toggleFs }] : []),
             { type: 'divider' as const },
@@ -456,6 +466,9 @@ export default function App() {
           </Dropdown>
         </nav>
       )}
+
+      {/* PWA iOS「添加到主屏幕」图文引导弹窗（仅 iOS 点击安装时弹出）*/}
+      {installGuide}
 
       {/* 手机/平板：全屏会话覆盖层（桌面用右侧停靠栏，不走这里）*/}
       {isMobile && overlay && (
@@ -542,7 +555,11 @@ function TerminalPane(props: {
 
   // 文件侧栏（终端视图下也可用）：定位到当前会话的工作目录
   const [showFiles, setShowFiles] = useState(false)
+  const [showGit, setShowGit] = useState(false)
   const [cwd, setCwd] = useState('')
+  // 文件栏与 Git 面板共用右侧抽屉位，互斥显示。
+  const toggleFiles = () => setShowFiles((s) => { if (!s) setShowGit(false); return !s })
+  const toggleGit = () => setShowGit((s) => { if (!s) setShowFiles(false); return !s })
   const [ctx, setCtx] = useState<{ x: number; y: number; session: string; selection: string } | null>(null)
   const [pasteOpen, setPasteOpen] = useState(false)
   const [pasteSession, setPasteSession] = useState('')
@@ -751,7 +768,13 @@ function TerminalPane(props: {
           <Button size="small" onClick={() => setRenameSession(active)}>{t('session.rename')}</Button>
         )}
         <Tooltip title={t('terminal.fileBrowserTitle')}>
-          <Button size="small" type={showFiles ? 'primary' : 'default'} onClick={() => setShowFiles((s) => !s)}>📁 {t('chat.files')}</Button>
+          <Button size="small" type={showFiles ? 'primary' : 'default'} onClick={toggleFiles}>📁 {t('chat.files')}</Button>
+        </Tooltip>
+        <Tooltip title={t('terminal.gitPanelTitle')}>
+          <Button size="small" type={showGit ? 'primary' : 'default'} onClick={toggleGit}
+            icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: '-2px' }}><circle cx="6" cy="6" r="2.3" /><circle cx="6" cy="18" r="2.3" /><circle cx="18" cy="8" r="2.3" /><path d="M6 8.3v7.4" /><path d="M18 10.3a6 6 0 0 1-6 6H8.3" /></svg>}>
+            {t('git.title')}
+          </Button>
         </Tooltip>
         <span style={{ flex: 1 }} />
         <Tooltip title={t('terminal.scrollHistory')}><Button size="small" onClick={() => active && termRefs.current[active]?.scroll(-12)}>▲</Button></Tooltip>
@@ -786,6 +809,9 @@ function TerminalPane(props: {
       </div>
       <FloatingFileDrawer open={showFiles}>
         <FileBrowser dir={cwd} accent="#58a6ff" onClose={() => setShowFiles(false)} />
+      </FloatingFileDrawer>
+      <FloatingFileDrawer open={showGit}>
+        <GitPanel dir={cwd} accent="#58a6ff" onClose={() => setShowGit(false)} />
       </FloatingFileDrawer>
 
       {/* 移动端文字输入框：软键盘/输入法在 xterm 里会丢字，这里整行可靠发送到 PTY。
@@ -1065,13 +1091,13 @@ function Tasks({ openTerm, kanna }: { openTerm: (n: string) => void; kanna?: str
 // ── 服务器目录选择器 ──
 // 最近用过的工作目录（localStorage 持久化），作为目录选择器的快捷候选
 const RECENT_DIRS_KEY = 'ttmux_recent_dirs'
-function recentDirs(): string[] { try { return JSON.parse(localStorage.getItem(RECENT_DIRS_KEY) || '[]') } catch { return [] } }
+export function recentDirs(): string[] { try { return JSON.parse(localStorage.getItem(RECENT_DIRS_KEY) || '[]') } catch { return [] } }
 export function pushRecentDir(d: string) {
   if (!d || !d.trim()) return
   try { localStorage.setItem(RECENT_DIRS_KEY, JSON.stringify([d.trim(), ...recentDirs().filter((x) => x !== d.trim())].slice(0, 8))) } catch {}
 }
 
-function DirPicker({ open, start, onPick, onClose }: { open: boolean; start?: string; onPick: (p: string) => void; onClose: () => void }) {
+export function DirPicker({ open, start, onPick, onClose }: { open: boolean; start?: string; onPick: (p: string) => void; onClose: () => void }) {
   const [data, setData] = useState<any>({ path: '', parent: '', dirs: [] })
   const [recent, setRecent] = useState<string[]>([])
   const { message } = AntApp.useApp()
@@ -1112,12 +1138,17 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
   const [name, setName] = useState('')
   const [dir, setDir] = useState('')
   const [pick, setPick] = useState(false)
+  const [agent, setAgent] = useState<'none' | 'claude' | 'codex'>('none')
   const { message } = AntApp.useApp()
   const { t } = useI18n()
-  useEffect(() => { if (open) { setName(''); setDir('') } }, [open])
+  useEffect(() => { if (open) { setName(''); setDir(''); setAgent('none') } }, [open])
   const ok = async () => {
     if (!name.trim()) return message.error(t('session.nameRequired'))
-    try { await api('POST', '/sessions', { name: name.trim(), dir: dir.trim() }); pushRecentDir(dir); message.success(t('session.created')); onClose(); onDone(name.trim()) }
+    try {
+      await api('POST', '/sessions', { name: name.trim(), dir: dir.trim() })
+      if (agent !== 'none') await api('POST', '/tasks/_/send', { sess: name.trim(), msg: agent })
+      pushRecentDir(dir); message.success(t('session.created')); onClose(); onDone(name.trim())
+    }
     catch (e: any) { message.error(e.message) }
   }
   return (
@@ -1132,6 +1163,11 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
               placeholder={t('session.dirPlaceholder')} />
             <Button onClick={() => setPick(true)}>{t('common.browse')}</Button>
           </Space.Compact>
+          <Radio.Group value={agent} onChange={(e) => setAgent(e.target.value)} optionType="button" buttonStyle="solid">
+            <Radio.Button value="none">{t('session.agentNone')}</Radio.Button>
+            <Radio.Button value="claude">{t('session.agentClaude')}</Radio.Button>
+            <Radio.Button value="codex">{t('session.agentCodex')}</Radio.Button>
+          </Radio.Group>
         </Space>
       </Modal>
       <DirPicker open={pick} start={dir || undefined} onPick={(p) => { setDir(p); setPick(false) }} onClose={() => setPick(false)} />
@@ -1330,6 +1366,7 @@ function EnvPage() {
   const { message, modal } = AntApp.useApp()
   const { mode, setMode } = useThemeMode()
   const { t, locale, setLocale } = useI18n()
+  const { installed: pwaInstalled, install: doInstall, guide: installGuide } = usePwaInstall()
   const load = () => api('GET', '/env').then(setList).catch(() => {})
   useEffect(() => { load() }, [])
   const add = () => {
@@ -1376,6 +1413,15 @@ function EnvPage() {
           <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('settings.languageHelp')}</span>
         </Space>
       </Card>
+      <Card title={t('install.settingsTitle')}>
+        <Space align="center" wrap>
+          {pwaInstalled
+            ? <span style={{ color: 'var(--text-bright)' }}>✓ {t('install.installed')}</span>
+            : <Button type="primary" onClick={doInstall}>{t('install.button')}</Button>}
+          <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('install.settingsHelp')}</span>
+        </Space>
+      </Card>
+      {installGuide}
       <Card title={t('env.globalVariables')} extra={<Space>
         <Button onClick={add}>+ {t('env.add')}</Button>
         <Button onClick={async () => { try { await api('POST', '/env/push'); message.success(t('env.pushed')) } catch (e: any) { message.error(e.message) } }}>{t('env.pushToSessions')}</Button>
