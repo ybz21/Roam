@@ -22,3 +22,11 @@ TTMUX_HOME="${TTMUX_HOME:-${HOME}/.ttmux}"
 
 mkdir -p "$TTMUX_LOGS" "$TTMUX_GROUPS" "$TTMUX_META" "$TTMUX_SWARMS"
 
+# 保证 locale 为 UTF-8：tmux 按客户端 LC_*/LANG 是否含 UTF-8 决定能否渲染中文，
+# pane 里的 ls 也依赖它正确输出文件名。非 UTF-8(如 C/POSIX)时补 C.UTF-8 并导出给 tmux 子进程，
+# 避免中文乱码；已是 UTF-8 则尊重现有设置。
+case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in
+    *UTF-8*|*UTF8*|*utf-8*|*utf8*) : ;;
+    *) export LC_ALL=C.UTF-8 ;;
+esac
+

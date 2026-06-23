@@ -57,9 +57,14 @@ const Term = forwardRef<TermHandle, {
   const retry = useRef<any>()
 
   const sendResize = () => {
-    const t = termRef.current, ws = wsRef.current, fit = fitRef.current
-    if (!t || !fit) return
+    const t = termRef.current, ws = wsRef.current, fit = fitRef.current, el = elRef.current
+    if (!t || !fit || !el) return
+    // 未激活的标签是 display:none、尺寸为 0：此时 fit 拿不到真实宽度，会让终端停在默认 80 列，
+    // tmux 便渲染成左侧窄条。隐藏或尚未布局时跳过，等可见(切回标签)再 fit。
+    if (el.offsetParent === null || el.clientWidth === 0 || el.clientHeight === 0) return
     try {
+      const dims = fit.proposeDimensions()
+      if (!dims || !isFinite(dims.cols) || !isFinite(dims.rows) || dims.cols < 2 || dims.rows < 2) return
       fit.fit()
       if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'resize', cols: t.cols, rows: t.rows }))
     } catch {}
@@ -201,8 +206,14 @@ const Term = forwardRef<TermHandle, {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fontSize])
 
+  // 切回该标签：display 从 none → block，需在浏览器完成布局后再 fit。单次 setTimeout 易踩竞态，
+  // 用 rAF 连续重试几帧，确保可见终端按真实宽度铺满（修复"会话变窄条"）。
   useEffect(() => {
-    if (active) setTimeout(() => { sendResize(); termRef.current?.focus() }, 40)
+    if (!active) return
+    let raf = 0, n = 0
+    const tick = () => { sendResize(); if (n === 0) termRef.current?.focus(); if (++n < 4) raf = requestAnimationFrame(tick) }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active])
 
