@@ -130,6 +130,19 @@ if [ -n "${pids// /}" ]; then
   kill -9 $pids 2>/dev/null || true
 fi
 
+# ── 2.5 编译 ttmux CLI (Go) → ./ttmux ───────────────────────────
+# ttmux 是生成物(已 gitignore)，后端经 TTMUX_BIN=$(pwd)/ttmux 调用它取数据/下命令。
+# 这里增量构建，确保开发时 ./ttmux 总是跟工作区一致(否则界面取不到数据)。
+TTMUX_SRC=cli/ttmux-cli-go
+if [ -d "$TTMUX_SRC/cmd/ttmux-cli-go" ]; then
+  if [ ! -f ttmux ] || [ "$(find "$TTMUX_SRC" -name '*.go' -newer ttmux 2>/dev/null | head -1)" ]; then
+    echo "==> 编译 ttmux CLI (Go) → ./ttmux..."
+    (cd "$TTMUX_SRC" && CGO_ENABLED=0 go build -o ../../ttmux ./cmd/ttmux-cli-go)
+  else
+    echo "==> ttmux CLI 无变更，跳过编译"
+  fi
+fi
+
 # ── 3. 编译后端（增量）──────────────────────────────────────────
 BIN=backend/ttmux-web
 # 检测 .go 与 go:embed 的资源(*.tmpl/*.html)变更，避免改模板却跳过编译
