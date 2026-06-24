@@ -7,6 +7,7 @@ import FileBrowser from '../FileBrowser'
 import FloatingFileDrawer from '../FloatingFileDrawer'
 import { PromptPanel, detectPrompt } from '../prompt'
 import { useI18n } from '../i18n'
+import { VoiceInput } from './VoiceInput'
 import type { Msg } from './types'
 
 export function ChatShell({ name, dir, accent, title, placeholder, onBack, onRefresh, messages, renderMessage, pending, busy, error }: {
@@ -156,6 +157,8 @@ export function ChatShell({ name, dir, accent, title, placeholder, onBack, onRef
           {busy && <Button danger title={t('chat.stopTitle')} onClick={stop}>{t('chat.stop')}</Button>}
           <Button type="primary" loading={sending} onClick={send} style={{ background: accent, borderColor: accent }}>{t('common.send')}</Button>
         </div>
+        {/* 右下角悬浮语音按钮：长按说话，识别后回填到输入框，由用户再编辑/发送 */}
+        <VoiceInput accent={accent} onResult={(text) => setInput((v) => (v ? v.replace(/\s*$/, ' ') : '') + text + ' ')} />
       </div>
       <FloatingFileDrawer open={showFiles}>
         <FileBrowser dir={dir} accent={accent} onClose={() => setShowFiles(false)} onInsertPath={insertPath} />

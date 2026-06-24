@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 #
-# cli/chrome-cli/build.sh — 把 driver.mjs 内联进 launcher.sh，生成单文件 仓库根/chrome
+# cli/chrome-cli/build.sh — 把 driver.mjs 内联进 launcher.sh，生成单文件 chrome
 #
-# 开发时改 driver.mjs / launcher.sh，然后跑本脚本重新生成根目录的 chrome。
-# 根 chrome 是生成物，请勿手改。
+# 输出路径：$1（缺省 ~/.local/bin/chrome）。直接产出到系统 PATH，不在仓库根留产物。
+# 开发想生成到别处自测：bash cli/chrome-cli/build.sh /tmp/chrome
 #
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-OUT="${SCRIPT_DIR}/../../chrome"   # 仓库根（cli/chrome-cli → ../../）
+OUT="${1:-${HOME}/.local/bin/chrome}"
+mkdir -p "$(dirname "$OUT")"
 
 [[ -f "${SCRIPT_DIR}/launcher.sh" ]] || { echo "✘ 缺少 launcher.sh"; exit 1; }
 [[ -f "${SCRIPT_DIR}/driver.mjs"  ]] || { echo "✘ 缺少 driver.mjs"; exit 1; }

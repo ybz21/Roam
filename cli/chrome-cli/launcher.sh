@@ -89,6 +89,7 @@ _ensure_browser() {
     local args=(--remote-debugging-port=9222 --remote-debugging-address=127.0.0.1
         --remote-allow-origins=* --user-data-dir=/tmp/ttmux-chrome
         --no-first-run --no-default-browser-check
+        --ignore-certificate-errors
         --force-device-scale-factor="${TTMUX_CHROME_SCALE:-2}")
     [ "$(uname -s 2>/dev/null || echo unknown)" != "Darwin" ] && [ -z "${DISPLAY:-}" ] && args+=(--headless=new --window-size=1280,800)
     _info "拉起 Chrome（调试端口 9222）..."

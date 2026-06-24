@@ -8,7 +8,7 @@ ttmux 的 Web 控制台后端，是 ttmux CLI 的薄封装：读 = 调 `ttmux <c
 
 ```bash
 # 在仓库根目录（构建前端 → 编译后端 → 启动）
-./start-all.sh
+./start.sh --dev
 ```
 
 配置走仓库根目录的 **`.env`**（见 `.env.example`），真实环境变量优先于 `.env`：

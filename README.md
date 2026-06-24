@@ -90,14 +90,29 @@ your local command line or browser was closed.
 
 ## Install And Start
 
+Install the CLI and build the Web console with one line:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ybz21/ttmux/main/install.sh | bash
 ```
 
+`install.sh` is a thin orchestrator over `scripts/` — a preflight system check
+plus three modules: **[1]** ttmux CLI + skills, **[2]** chrome + Node + Playwright,
+**[3]** the backend build (frontend `dist` + Go binary). It installs `ttmux` and
+`chrome` to `~/.local/bin` and builds the Web console artifacts, but **does not
+start anything**. Run through `curl | bash` it fetches the modules from GitHub on
+demand; inside a clone it sources them locally. `TTMUX_SKIP_BACKEND=1` installs
+only the CLI/chrome.
+
+Then start the Web console from a checkout:
+
 ```bash
 cp .env.example .env
-./start-all.sh
+./start.sh             # start the built artifacts (no recompile)
+# ./start.sh --dev     # development: rebuild frontend + backend each run
 ```
+
+`start.sh` also takes `stop` / `status` / `logs` / `fg`.
 
 By default the Web console listens on `0.0.0.0:13579`, so devices on the same LAN
 can reach it. Change the password before real use:
@@ -109,6 +124,10 @@ TTMUX_WEB_PASSWORD=change-this-to-a-strong-password
 For remote access, prefer Tailscale, Cloudflare Tunnel, SSH forwarding, or frp.
 Do not expose the Web console directly to the public Internet without a tunnel,
 a strong password, and 2FA.
+
+Exposing Roam through **frp with HTTPS** — required so mobile voice input and
+clipboard keep working through the tunnel — is covered in
+[docs/deploy/frp.md](docs/deploy/frp.md).
 
 Full deployment notes are in [docs/install/README.md](docs/install/README.md).
 
@@ -164,7 +183,7 @@ bash cli/chrome-cli/build.sh
 Build and run the Web console:
 
 ```bash
-./start-all.sh fg
+./start.sh --dev fg
 ```
 
 Frontend only:

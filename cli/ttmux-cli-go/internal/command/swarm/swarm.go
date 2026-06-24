@@ -220,20 +220,12 @@ func cmdAdd(rt runtime.Runtime, st *swarmcore.Store, args []string, w io.Writer)
 			spec.Role = "member"
 		}
 	}
+	// 软依赖：记录依赖关系（供拓扑连线 + 写进成员 prompt 协调），但**不挂起**——
+	// 成员一建出来就立即起会话开工，缺上游产出时自己去广场等/问（见 worker.md.tmpl 的依赖段）。
 	if deps != "" {
 		if err := st.DepSet(swarm, member, deps); err != nil {
 			return err
 		}
-	}
-	// Dependency gate: hold as pending if deps are unmet.
-	if deps != "" && !st.DepsSatisfied(swarm, member) {
-		if err := st.SetPending(swarm, spec); err != nil {
-			return err
-		}
-		_ = st.MetaSet(swarm, "status", "running")
-		ui.Info(w, "成员 %s (%s/%s) %s: %s", ui.Bold(member), spec.Type, spec.Role, "已挂起", ui.Dim(trunc(spec.Task, 60)))
-		fmt.Fprintf(w, "   %s等待依赖完成: %s%s\n", ui.P().Dim, deps, ui.P().Reset)
-		return nil
 	}
 	ok, err := launchMember(rt, swarm, spec, w)
 	if err != nil {

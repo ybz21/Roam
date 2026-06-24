@@ -70,19 +70,33 @@ Roam 的重点不是“多一个终端工具”，而是让开发机变成一个
 
 ## 安装与启动
 
+一行安装 CLI 并构建 Web 控制台：
+
 ```bash
-# 一键安装
 curl -fsSL https://raw.githubusercontent.com/ybz21/ttmux/main/install.sh | bash
 ```
 
+`install.sh` 是 `scripts/` 之上的瘦编排器——先做系统检查，再跑三个模块：
+**[1]** ttmux CLI + skills、**[2]** chrome + Node + Playwright、**[3]** 构建后端
+（前端 `dist` + Go 二进制）。它把 `ttmux`/`chrome` 装到 `~/.local/bin` 并构建好
+产物，但**不启动任何服务**。经 `curl | bash` 运行时按需从 GitHub 拉各模块，在
+clone 里则直接 source 本地模块。`TTMUX_SKIP_BACKEND=1` 只装 CLI/chrome。
+
+然后在仓库目录里启动 Web 控制台：
+
 ```bash
-# 启动 Web 控制台
 cp .env.example .env
-./start-all.sh
+./start.sh             # 直接启动已构建产物（不重新编译）
+# ./start.sh --dev     # 开发模式：每次重新编译前端+后端
 ```
+
+`start.sh` 还支持 `stop` / `status` / `logs` / `fg`。
 
 默认监听 `0.0.0.0:13579`，局域网设备可以直接访问。正式使用前请修改 `.env` 里的
 访问口令；远程访问建议走 Tailscale、Cloudflare Tunnel、SSH forwarding 或 frp。
+
+通过 **frp 暴露并保持 HTTPS**（让手机语音输入、剪贴板经隧道仍可用）的配置见
+**[docs/deploy/frp.md](docs/deploy/frp.md)**（中英双语）。
 
 完整安装、部署、远程访问和命令行自动化说明见 **[docs/install/](docs/install/)**。
 

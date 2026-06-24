@@ -27,7 +27,7 @@ type promptCtx struct {
 	RoleTrait                       string // prompts/roles/<subrole>.md 渲染前注入（角色工作方式）
 }
 
-// skillsDir 返回 agent 自动加载 skill 的目录（install.sh / start-all.sh 同步到此）。
+// skillsDir 返回 agent 自动加载 skill 的目录（install.sh / start.sh --dev 同步到此）。
 func skillsDir() string {
 	if d := os.Getenv("TTMUX_SKILLS_DIR"); d != "" {
 		return d

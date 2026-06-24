@@ -140,10 +140,11 @@ export default function BrowserView() {
   const addrFocused = useRef(false) // 地址栏聚焦时不被轮询回写覆盖
   // 标签页（复用同一台 Chrome）
   const [tabs, setTabs] = useState<TabInfo[]>([])
+  const tabsRef = useRef<TabInfo[]>([]) // 供 ws.onmessage 等闭包读到最新标签集（识别新开的那个）
   const [target, setTarget] = useState('') // 当前镜像的标签页 id；空 = 第一个
   // 导航起始页地址（后端 /api/me 提供，形如 http://127.0.0.1:<port>/home）；
   // 新标签默认开它、可点「主页」回到它。默认值按当前端口兜底。
-  const [home, setHome] = useState(`http://127.0.0.1:${location.port || '8080'}/home`)
+  const [home, setHome] = useState(`${location.protocol}//127.0.0.1:${location.port || '8080'}/home`)
   // 栏目级清晰度配置（持久化）；默认自适应
   const [quality, setQuality] = useState<Quality>(() => {
     const s = localStorage.getItem(QKEY)
@@ -173,6 +174,7 @@ export default function BrowserView() {
   // control 开关用 ref 同步，供事件回调读取最新值
   useEffect(() => { controlRef.current = control }, [control])
   useEffect(() => { deviceRef.current = device }, [device])
+  useEffect(() => { tabsRef.current = tabs }, [tabs])
 
   // 跟踪舞台尺寸：旋转 90/270 时 <img> 盒子宽高要对调，才能铺满竖屏
   useEffect(() => {
@@ -239,6 +241,26 @@ export default function BrowserView() {
     api('POST', `/browser/tabs/${id}/activate`).catch(() => {})
   }
 
+  // 被镜像页打开了新窗口/标签（后端 windowOpen 事件触发）：找出新出现的那个并把镜像切过去。
+  // 新 target 可能略晚于事件才出现在 /json 列表里，故短重试几次。
+  const followNewTab = async () => {
+    const known = new Set(tabsRef.current.map((t) => t.id))
+    for (let i = 0; i < 8; i++) {
+      try {
+        const r = await api('GET', '/browser/tabs')
+        const list: TabInfo[] = r?.data || []
+        const fresh = list.find((t) => !known.has(t.id))
+        if (fresh) {
+          setTabs((prev) => mergeTabs(prev, list))
+          switchTab(fresh.id) // 切镜像 + 前置，画面随之跳到新标签
+          return
+        }
+        setTabs((prev) => mergeTabs(prev, list))
+      } catch {}
+      await new Promise((res) => setTimeout(res, 200))
+    }
+  }
+
   // 作用于当前标签的导航控制
   const act = async (suffix: string, body?: any) => {
     if (!target) return
@@ -294,6 +316,18 @@ export default function BrowserView() {
       if (msg.type === 'error') { message.error(msg.msg); return }
       if (msg.type === 'pong') { setLatency(Math.round(performance.now() - msg.t)); return }
       if (msg.type === 'level') { setLevelName(msg.name || ''); return }
+      // 被镜像页打开了新窗口/标签 → 镜像跟过去（点 target=_blank 链接、window.open 等）
+      if (msg.type === 'newtab') { followNewTab(); return }
+      // 复制选区回包：把远端页面当前选区文本写进本设备剪贴板（需安全上下文，HTTPS 默认已开）
+      if (msg.type === 'copied') {
+        const text: string = msg.text || ''
+        if (!text) { message.info(t('browser.noSelection')); return }
+        navigator.clipboard?.writeText(text).then(
+          () => message.success(t('browser.copied')),
+          () => message.error(t('browser.copyFailed')),
+        )
+        return
+      }
     }
     // 每秒打一次 ping 测 RTT，并结算带宽/帧率
     const ping = setInterval(() => {
@@ -454,8 +488,24 @@ export default function BrowserView() {
     send({ type: 'mouse', sub: 'down', x, y, button: 'left', modifiers: 0 })
     send({ type: 'mouse', sub: 'up', x, y, button: 'left', modifiers: 0 })
   }
+  // 复制选区：让后端取远端页面 window.getSelection()，回包后写进本设备剪贴板（见 onmessage 'copied'）
+  const copySelection = () => send({ type: 'copy' })
+  // 粘贴：读本机剪贴板发到远端焦点框。注意——画面是普通 <div>（非可编辑），浏览器不会给它派发
+  // paste 事件，所以不能靠 onPaste；keydown 本身是用户手势，安全上下文下可直接 readText。
+  const pasteFromClipboard = () => {
+    // 非安全上下文(http 局域网)下 navigator.clipboard 为 undefined，先兜底提示，避免 .then 抛错
+    if (!navigator.clipboard?.readText) { message.error(t('browser.pasteFailed')); return }
+    navigator.clipboard.readText().then(
+      (text) => { if (text) send({ type: 'paste', text }) },
+      () => message.error(t('browser.pasteFailed')),
+    )
+  }
   const onKey = (e: React.KeyboardEvent) => {
     if (!controlRef.current) return
+    const mod = e.ctrlKey || e.metaKey
+    // 复制/粘贴走「跨屏」桥，不把组合键转发给远端：用本机剪贴板，不碰远端那台机器的剪贴板
+    if (mod && (e.key === 'v' || e.key === 'V')) { e.preventDefault(); pasteFromClipboard(); return }
+    if (mod && (e.key === 'c' || e.key === 'C')) { e.preventDefault(); copySelection(); return }
     e.preventDefault()
     // 可打印字符（无 Ctrl/Meta 组合）→ insertText；其余 → 特殊键事件
     if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {

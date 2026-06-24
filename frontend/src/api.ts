@@ -40,3 +40,14 @@ export async function upload(dir: string, files: FileList | File[]): Promise<{ d
   if (!r.ok) throw new Error(data?.error?.message || data?.error?.code || 'HTTP ' + r.status)
   return data.data
 }
+
+// 上传录音(WAV)做语音识别，返回识别出的文本。服务商与密钥由后端配置。
+export async function transcribe(audio: Blob): Promise<string> {
+  const form = new FormData()
+  form.append('audio', audio, 'audio.wav')
+  const r = await fetch('/api/speech/transcribe', { method: 'POST', body: form })
+  if (r.status === 401) { onUnauth(); throw new Error('UNAUTHORIZED') }
+  const data = await r.json().catch(() => null)
+  if (!r.ok) throw new Error(data?.error?.message || data?.error?.code || 'HTTP ' + r.status)
+  return data?.data?.text || ''
+}

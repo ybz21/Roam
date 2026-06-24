@@ -24,6 +24,7 @@ import { useI18n } from './i18n'
 import { usePwaInstall } from './install'
 import { PromptDialog, detectPrompt } from './prompt'
 import { copyText } from './chat/blocks'
+import { VoiceInput } from './chat/VoiceInput'
 
 interface ClaudeInfo { running: boolean; file?: string; dir?: string }
 
@@ -149,7 +150,6 @@ function FilesPage({ openTerm }: { openTerm: (name: string) => void }) {
 
 export default function App() {
   const [authed, setAuthed] = useState<boolean | null>(null)
-  const [kanna, setKanna] = useState('')
   const [route, setRoute] = useState(() => normalizeRoute(location.hash.replace(/^#\/?/, '') || 'sessions'))
   const tab = route.split('/')[0]                                  // 基础页（swarm/leave → swarm）
   const swarmSub = tab === 'swarm' && route.includes('/') ? decodeURIComponent(route.slice(route.indexOf('/') + 1)) : '' // 深链选中的蜂群
@@ -192,7 +192,7 @@ export default function App() {
 
   useEffect(() => {
     setUnauthorizedHandler(() => setAuthed(false))
-    api('GET', '/me').then((r) => { setAuthed(true); setKanna(r?.data?.kanna || '') }).catch(() => setAuthed(false))
+    api('GET', '/me').then(() => { setAuthed(true) }).catch(() => setAuthed(false))
   }, [])
 
   // hash 路由：URL #/xxx 与当前页同步（支持前进/后退、刷新保持、收藏分享）
@@ -306,7 +306,7 @@ export default function App() {
   )
 
   const pages: any = {
-    overview: <Overview go={go} openTerm={openTerm} kanna={kanna} />,
+    overview: <Overview go={go} openTerm={openTerm} />,
     swarm: <Swarm openTerm={openTerm} initialSwarm={swarmSub || undefined} onNav={(n) => { location.hash = n ? '#/swarm/' + encodeURIComponent(n) : '#/swarm' }} />,
     sessions: <Sessions openTerm={openTerm} closeTerm={closeTerm} />,
     files: <FilesPage openTerm={openTerm} />,
@@ -539,8 +539,11 @@ function TerminalPane(props: {
   const isTouch = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches
   const [line, setLine] = useState('')
   const sendRaw = (s: string) => { if (active) termRefs.current[active]?.send(s, true) } // keepFocus：不抢 xterm 焦点 → 软键盘不收起
-  const flushLine = () => { if (line) { sendRaw(line); setLine('') } }                  // 把输入框待发文本先送出（不带回车）
-  const submitLine = () => { sendRaw(line + '\r'); setLine('') }                         // 整行 + 回车
+  // 滚上去看历史会让 tmux 进 copy-mode，此时输入被它截走（要先按「底」才生效）。
+  // 输入框聚焦/发送前先回到底部退出 copy-mode，省去手动按「底」。
+  const exitCopyMode = () => { if (active) termRefs.current[active]?.toBottom() }
+  const flushLine = () => { if (line) { exitCopyMode(); sendRaw(line); setLine('') } }   // 把输入框待发文本先送出（不带回车）
+  const submitLine = () => { exitCopyMode(); sendRaw(line + '\r'); setLine('') }          // 整行 + 回车
   const tapKey = (seq: string) => { flushLine(); if (isTouch) sendRaw(seq); else sendKey(seq) } // 控制键：先 flush 待发文本
   const noBlur = isTouch ? (e: React.MouseEvent) => e.preventDefault() : undefined        // 点按钮不夺走输入框焦点（软键盘保持）
 
@@ -787,7 +790,6 @@ function TerminalPane(props: {
         <Tooltip title={t('terminal.toBottom')}><Button size="small" onClick={() => active && termRefs.current[active]?.toBottom()}>{t('terminal.bottomShort')}</Button></Tooltip>
         <Tooltip title={t('terminal.decreaseFont')}><Button size="small" onClick={() => setFontSize(Math.max(10, fontSize - 1))}>A-</Button></Tooltip>
         <Tooltip title={t('terminal.increaseFont')}><Button size="small" onClick={() => setFontSize(Math.min(22, fontSize + 1))}>A+</Button></Tooltip>
-        <Tooltip title={t('terminal.copySelection')}><Button size="small" onClick={() => { const ok = active && termRefs.current[active]?.copy(); message[ok ? 'success' : 'info'](ok ? t('common.copied') : t('terminal.selectTextFirst')) }}>{t('common.copy')}</Button></Tooltip>
         <Tooltip title={t('terminal.reconnect')}><Button size="small" onClick={() => active && termRefs.current[active]?.reconnect()}>{t('terminal.reconnectShort')}</Button></Tooltip>
       </div>
 
@@ -798,7 +800,8 @@ function TerminalPane(props: {
             <div key={termName} style={{ position: 'absolute', inset: 0, display: termName === active ? 'block' : 'none', padding: 6 }}>
               <Term ref={(h) => { termRefs.current[termName] = h }} name={termName} fontSize={fontSize} active={termName === active} onStatus={(s) => setStatus(termName, s)}
                 onContextMenu={({ x, y, selection }) => { setActive(termName); setCtx({ x, y, session: termName, selection }) }}
-                onSelectionMenu={({ selection }) => { setActive(termName); setCtx(null); if (selection.trim()) { copyText(selection); message.success(t('common.copied')) } }} />
+                onSelectionMenu={({ selection }) => { setActive(termName); setCtx(null); if (selection.trim()) { copyText(selection); message.success(t('common.copied')) } }}
+                onPaste={() => { setActive(termName); pasteClipboard(termName) }} />
               {claudeView[termName] && claudeMap[termName]?.running && (
                 <div style={{ position: 'absolute', inset: 0 }}>
                   <ClaudeChat name={termName} file={claudeMap[termName].file} dir={claudeMap[termName].dir} onBack={() => setClaudeView((v) => ({ ...v, [termName]: false }))} />
@@ -808,6 +811,10 @@ function TerminalPane(props: {
                 <div style={{ position: 'absolute', inset: 0 }}>
                   <CodexChat name={termName} file={codexMap[termName].file} dir={codexMap[termName].dir} onBack={() => setCodexView((v) => ({ ...v, [termName]: false }))} />
                 </div>
+              )}
+              {/* 终端页右下角悬浮语音按钮：识别后字面量打进 pane，用户复查后自行回车（对话视图打开时由其自带按钮接管） */}
+              {!claudeView[termName] && !codexView[termName] && (
+                <VoiceInput accent="#58a6ff" onResult={(text) => { api('POST', `/sessions/${encodeURIComponent(termName)}/type`, { text }).catch((e: any) => message.error(e.message)) }} />
               )}
             </div>
           ))}
@@ -826,6 +833,7 @@ function TerminalPane(props: {
         <div style={{ display: 'flex', gap: 6, padding: '8px 8px 0' }}>
           <Input
             value={line}
+            onFocus={exitCopyMode}
             onChange={(e) => setLine(e.target.value)}
             onPressEnter={(e) => { if ((e.nativeEvent as any).isComposing) return; submitLine() }}
             placeholder={t('terminal.mobileInputPlaceholder')}
@@ -935,7 +943,7 @@ function StatTile({ icon, label, value, accent, onClick }: {
   )
 }
 
-function Overview({ go, openTerm, kanna }: { go: (k: string) => void; openTerm: (n: string) => void; kanna?: string }) {
+function Overview({ go, openTerm }: { go: (k: string) => void; openTerm: (n: string) => void }) {
   const { t } = useI18n()
   const [info, setInfo] = useState<any>(null)
   const [swarms, setSwarms] = useState<any[]>([])
@@ -1028,7 +1036,7 @@ function Overview({ go, openTerm, kanna }: { go: (k: string) => void; openTerm: 
 }
 
 // ── 任务（命令 + Agent 统一） ──
-function Tasks({ openTerm, kanna }: { openTerm: (n: string) => void; kanna?: string }) {
+function Tasks({ openTerm }: { openTerm: (n: string) => void }) {
   const [groups, setGroups] = useState<any[]>([])
   const [detail, setDetail] = useState<Record<string, any>>({})
   const [open, setOpen] = useState<string | null>(null)
@@ -1069,9 +1077,6 @@ function Tasks({ openTerm, kanna }: { openTerm: (n: string) => void; kanna?: str
                 renderItem={(t: any) => (
                   <List.Item actions={[
                     <a key="t" onClick={() => openTerm(t.name)}>{t('common.terminal')}</a>,
-                    ...(kanna && t.type === 'agent'
-                      ? [<a key="k" href={kanna} target="_blank" rel="noreferrer">Kanna ↗</a>]
-                      : []),
                   ]}>
                     <List.Item.Meta
                       title={<Space><span>{t.name}</span><TypeTag type={t.type} /><StatusTag status={t.status} code={t.exit_code} /></Space>}
@@ -1419,6 +1424,7 @@ function EnvPage() {
           <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('settings.languageHelp')}</span>
         </Space>
       </Card>
+      <SpeechCard />
       <Card title={t('install.settingsTitle')}>
         <Space align="center" wrap>
           {pwaInstalled
@@ -1442,6 +1448,81 @@ function EnvPage() {
       </Card>
       <TwoFactorCard />
     </Space>
+  )
+}
+
+// ── 语音输入(ASR)配置：选服务商并填密钥，持久化到后端 speech-config.json ──
+const SPEECH_DEFAULTS = {
+  openai: { baseURL: 'https://api.openai.com/v1', model: 'whisper-1' },
+  volcano: { resourceId: 'volc.bigasr.auc_turbo', endpoint: 'https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash' },
+}
+function normalizeSpeech(d: any) {
+  const c = d || {}
+  return {
+    provider: c.provider || '',
+    openai: {
+      baseURL: c.openai?.baseURL || SPEECH_DEFAULTS.openai.baseURL,
+      apiKey: c.openai?.apiKey || '',
+      model: c.openai?.model || SPEECH_DEFAULTS.openai.model,
+      language: c.openai?.language || '',
+    },
+    volcano: {
+      appId: c.volcano?.appId || '',
+      accessToken: c.volcano?.accessToken || '',
+      resourceId: c.volcano?.resourceId || SPEECH_DEFAULTS.volcano.resourceId,
+      endpoint: c.volcano?.endpoint || SPEECH_DEFAULTS.volcano.endpoint,
+    },
+  }
+}
+function SpeechCard() {
+  const { message } = AntApp.useApp()
+  const { t } = useI18n()
+  const [cfg, setCfg] = useState<any>(() => normalizeSpeech(null))
+  const [saving, setSaving] = useState(false)
+  useEffect(() => { api('GET', '/speech/config').then((r) => setCfg(normalizeSpeech(r?.data))).catch(() => {}) }, [])
+  const setOpenAI = (k: string, v: string) => setCfg((c: any) => ({ ...c, openai: { ...c.openai, [k]: v } }))
+  const setVolc = (k: string, v: string) => setCfg((c: any) => ({ ...c, volcano: { ...c.volcano, [k]: v } }))
+  const save = async () => {
+    setSaving(true)
+    try { await api('PUT', '/speech/config', cfg); message.success(t('settings.speechSaved')) }
+    catch (e: any) { message.error(e.message) }
+    finally { setSaving(false) }
+  }
+  return (
+    <Card title={t('settings.speech')}>
+      <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+        <Space align="center" wrap>
+          <Select
+            value={cfg.provider || ''}
+            style={{ width: 220 }}
+            onChange={(v) => setCfg((c: any) => ({ ...c, provider: v }))}
+            options={[
+              { value: '', label: t('settings.speechProviderNone') },
+              { value: 'openai', label: 'OpenAI' },
+              { value: 'volcano', label: 'Volcano Engine' },
+            ]}
+          />
+          <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('settings.speechHelp')}</span>
+        </Space>
+        {cfg.provider === 'openai' && (
+          <Space direction="vertical" size="small" style={{ width: '100%', maxWidth: 520 }}>
+            <Input addonBefore={t('settings.speechBaseUrl')} value={cfg.openai.baseURL} onChange={(e) => setOpenAI('baseURL', e.target.value)} />
+            <Input.Password addonBefore={t('settings.speechApiKey')} value={cfg.openai.apiKey} onChange={(e) => setOpenAI('apiKey', e.target.value)} />
+            <Input addonBefore={t('settings.speechModel')} value={cfg.openai.model} onChange={(e) => setOpenAI('model', e.target.value)} />
+            <Input addonBefore={t('settings.speechLanguage')} placeholder={t('common.optional')} value={cfg.openai.language} onChange={(e) => setOpenAI('language', e.target.value)} />
+          </Space>
+        )}
+        {cfg.provider === 'volcano' && (
+          <Space direction="vertical" size="small" style={{ width: '100%', maxWidth: 520 }}>
+            <Input addonBefore={t('settings.volcanoAppId')} value={cfg.volcano.appId} onChange={(e) => setVolc('appId', e.target.value)} />
+            <Input.Password addonBefore={t('settings.volcanoAccessToken')} value={cfg.volcano.accessToken} onChange={(e) => setVolc('accessToken', e.target.value)} />
+            <Input addonBefore={t('settings.volcanoResourceId')} value={cfg.volcano.resourceId} onChange={(e) => setVolc('resourceId', e.target.value)} />
+            <Input addonBefore={t('settings.volcanoEndpoint')} value={cfg.volcano.endpoint} onChange={(e) => setVolc('endpoint', e.target.value)} />
+          </Space>
+        )}
+        <Button type="primary" loading={saving} onClick={save}>{t('settings.save')}</Button>
+      </Space>
+    </Card>
   )
 }
 

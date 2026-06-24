@@ -30,7 +30,6 @@ type Config struct {
 	TTmuxBin    string
 	LogsDir     string
 	FrontendDir string // frontend/dist 的路径；为空或不存在时用内嵌回退页
-	KannaURL    string // 可选：kanna（Claude Code 精美 UI）地址
 	BrowserHome string // 浏览器导航起始页地址（供 Chrome 当默认主页）
 	DataDir     string // 数据目录（导航页站点列表等持久化到此）
 	Password    string
@@ -47,7 +46,7 @@ func New(cfg Config) *gin.Engine {
 
 	tt := ttmux.New(cfg.TTmuxBin)
 	a := auth.New(cfg.Password, cfg.TOTPSecret, cfg.TOTPState, cfg.LockAfter, cfg.LockSecs)
-	h := api.New(tt, cfg.KannaURL, cfg.BrowserHome)
+	h := api.New(tt, cfg.BrowserHome, cfg.DataDir)
 	hub := stream.New(tt, cfg.LogsDir)
 
 	// 公开端点
@@ -91,6 +90,7 @@ func New(cfg Config) *gin.Engine {
 		g.DELETE("/sessions/:name", h.KillSession)
 		g.GET("/sessions/:name/capture", h.Capture)
 		g.POST("/sessions/:name/keys", h.Keys)                       // 注入原始按键（响应 TUI 选择框）
+		g.POST("/sessions/:name/type", h.SessionType)                // 字面量打字进 pane（终端页语音回填）
 		g.GET("/sessions/:name/cwd", h.SessionCwd)                   // 会话工作目录（文件侧栏定位）
 		g.GET("/sessions/:name/claude", h.ClaudeStatus)              // 检测是否在跑 claude
 		g.GET("/sessions/:name/transcript", h.ClaudeTranscript)      // 读 claude 对话记录
@@ -105,6 +105,7 @@ func New(cfg Config) *gin.Engine {
 		g.POST("/tasks/:g/send", h.Send)
 
 		// 蜂群(swarm)：建群/加成员/管理 + 广场/看板
+		g.GET("/swarm/subroles", h.SwarmSubroles)
 		g.GET("/swarms", h.Swarms)
 		g.POST("/swarms", h.SwarmNew)
 		g.GET("/swarms/:n", h.SwarmStatus)
@@ -138,6 +139,10 @@ func New(cfg Config) *gin.Engine {
 		g.PUT("/env", h.EnvSet)
 		g.DELETE("/env/:key", h.EnvDelete)
 		g.POST("/env/push", h.EnvPush)
+
+		g.GET("/speech/config", h.GetSpeechConfig)       // 语音识别(ASR)服务商配置
+		g.PUT("/speech/config", h.SetSpeechConfig)       //
+		g.POST("/speech/transcribe", h.SpeechTranscribe) // 上传录音 → 返回识别文本
 
 		g.GET("/2fa/qr", a.TOTPQR)            // 当前状态 + 密钥二维码
 		g.GET("/2fa/gen", a.TOTPGen)          // 生成新密钥（开启前扫码用）
@@ -180,7 +185,7 @@ func mountWeb(r *gin.Engine, frontendDir string) {
 		r.Static("/assets", filepath.Join(frontendDir, "assets"))
 		log.Printf("前端: React (磁盘 %s)", frontendDir)
 	} else {
-		log.Printf("前端: 内嵌回退页 —— 运行 ./start-all.sh 会构建 React")
+		log.Printf("前端: 内嵌回退页 —— 运行 ./start.sh --dev 会构建 React")
 	}
 
 	serve := func(c *gin.Context) {

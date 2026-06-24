@@ -2,7 +2,7 @@
 #
 # skills/sync-skills.sh — 把仓库 skills/ 安装到 Claude Code 与 Codex 的技能目录。
 #
-# 单一真源：install.sh(本地分支) 与 start-all.sh(开发模式) 共用这套合并逻辑，
+# 单一真源：install.sh(本地分支) 与 start.sh --dev(开发模式) 共用这套合并逻辑，
 # 避免两处重复。curl|bash 安装(无本地文件)时 install.sh 走自己的 GitHub 下载分支。
 #
 #   用法: bash skills/sync-skills.sh [Claude技能目录]   # 默认 ~/.claude/skills

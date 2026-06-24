@@ -23,6 +23,9 @@ import (
 func main() {
 	addrFlag := flag.String("addr", "", "监听地址，如 0.0.0.0:8080（覆盖 TTMUX_WEB_BIND）")
 	webFlag := flag.String("web", "", "前端构建产物目录 frontend/dist（覆盖自动探测）")
+	tlsFlag := flag.Bool("tls", false, "启用自签 HTTPS（也可用 TTMUX_WEB_TLS=1）；手机用麦克风/剪贴板需安全上下文")
+	tlsCertFlag := flag.String("tls-cert", "", "TLS 证书路径（缺省 <data>/tls/cert.pem，缺失则自动生成）")
+	tlsKeyFlag := flag.String("tls-key", "", "TLS 私钥路径（缺省 <data>/tls/key.pem，缺失则自动生成）")
 	flag.Parse()
 
 	bin := envOr("TTMUX_BIN", "ttmux")
@@ -50,18 +53,27 @@ func main() {
 		totp = ""
 	}
 
+	// TLS：-tls 或 TTMUX_WEB_TLS 真值开启。证书缺失则就地生成自签证书（SAN 覆盖本机 IP）。
+	tlsOn := *tlsFlag || isTruthy(os.Getenv("TTMUX_WEB_TLS"))
+	certPath := firstNonEmpty(*tlsCertFlag, os.Getenv("TTMUX_WEB_TLS_CERT"), filepath.Join(dataDir(), "tls", "cert.pem"))
+	keyPath := firstNonEmpty(*tlsKeyFlag, os.Getenv("TTMUX_WEB_TLS_KEY"), filepath.Join(dataDir(), "tls", "key.pem"))
+	scheme := "http"
+	if tlsOn {
+		scheme = "https"
+	}
+
 	// 导航起始页挂在本服务的公开路由 /home 上（免登录，供被投屏的 Chrome 当默认主页）。
 	// Chrome 与本服务同机，统一用回环地址访问（绑定即便是 0.0.0.0 也走 127.0.0.1）。
-	homeURL := "http://127.0.0.1:8080/home"
-	if _, port, err := net.SplitHostPort(bind); err == nil && port != "" {
-		homeURL = "http://127.0.0.1:" + port + "/home"
+	port := "8080"
+	if _, p, err := net.SplitHostPort(bind); err == nil && p != "" {
+		port = p
 	}
+	homeURL := scheme + "://127.0.0.1:" + port + "/home"
 
 	cfg := server.Config{
 		TTmuxBin:    bin,
 		LogsDir:     logsDir(),
 		FrontendDir: fdir,
-		KannaURL:    os.Getenv("TTMUX_KANNA_URL"),
 		BrowserHome: homeURL,
 		DataDir:     dataDir(),
 		Password:    pw,
@@ -82,10 +94,33 @@ func main() {
 		os.Exit(0)
 	}()
 
+	if tlsOn {
+		gen, err := ensureSelfSignedCert(certPath, keyPath)
+		if err != nil {
+			log.Fatalf("生成/读取自签 TLS 证书失败: %v", err)
+		}
+		if gen {
+			log.Printf("已生成自签 TLS 证书: %s", certPath)
+		}
+		log.Printf("ttmux-web 监听 https://%s  (ttmux=%s；自签证书，手机首访点「继续前往」信任)", bind, bin)
+		if err := r.RunTLS(bind, certPath, keyPath); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	log.Printf("ttmux-web 监听 http://%s  (ttmux=%s)", bind, bin)
 	if err := r.Run(bind); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// isTruthy 判定环境变量是否为「开启」语义；空/0/off/false/no 视为关闭。
+func isTruthy(s string) bool {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "", "0", "off", "false", "no":
+		return false
+	}
+	return true
 }
 
 func envOr(k, d string) string {

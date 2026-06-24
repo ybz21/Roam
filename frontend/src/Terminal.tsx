@@ -49,7 +49,8 @@ const Term = forwardRef<TermHandle, {
   onStatus?: (s: TermStatus) => void
   onContextMenu?: (e: { x: number; y: number; selection: string }) => void
   onSelectionMenu?: (e: { x: number; y: number; selection: string }) => void
-}>(function Term({ name, fontSize, active, onStatus, onContextMenu, onSelectionMenu }, ref) {
+  onPaste?: () => void // Ctrl+Shift+V / Cmd+V：交父组件走应用粘贴（读剪贴板→失败弹手动框）
+}>(function Term({ name, fontSize, active, onStatus, onContextMenu, onSelectionMenu, onPaste }, ref) {
   const elRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal>()
   const fitRef = useRef<FitAddon>()
@@ -133,6 +134,14 @@ const Term = forwardRef<TermHandle, {
     // Ctrl/Cmd+Shift+C 始终复制（与浏览器习惯一致）。返回 false 表示该按键不再发给终端。
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== 'keydown') return true
+      // Ctrl+Shift+V / Cmd+V：接管粘贴。xterm 原生 paste 依赖浏览器 paste 事件，在局域网
+      // http(非安全上下文)读不到剪贴板，这里统一交给应用：能读则读、读不到弹手动粘贴框。
+      const isV = e.key === 'v' || e.key === 'V'
+      if (isV && ((e.ctrlKey && e.shiftKey && !e.altKey) || (e.metaKey && !e.ctrlKey && !e.altKey))) {
+        e.preventDefault()
+        onPaste?.()
+        return false // 吞掉，避免 xterm 再触发一次原生 paste 造成重复
+      }
       const isC = e.key === 'c' || e.key === 'C'
       if (!isC) return true
       const copyCombo = (e.ctrlKey && e.shiftKey) || (e.metaKey && !e.ctrlKey) // Ctrl+Shift+C 或 Cmd+C

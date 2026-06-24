@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 #
-# cli/ttmux-cli/build.sh — 把 lib/*.sh 按顺序拼接成单文件 仓库根/ttmux
+# cli/ttmux-cli/build.sh — 把 lib/*.sh 按顺序拼接成单文件 ttmux（bash 回退版）
 #
-# 开发时改 cli/ttmux-cli/lib/*.sh，然后跑本脚本重新生成根目录的 ttmux。
-# 根 ttmux 是生成物，请勿手改。
+# 输出路径：$1（缺省 ~/.local/bin/ttmux）。直接产出到系统 PATH，不在仓库根留产物。
+# 开发想生成到别处自测：bash cli/ttmux-cli/build.sh /tmp/ttmux
 #
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="${SCRIPT_DIR}/lib"
-OUT="${SCRIPT_DIR}/../../ttmux"   # 仓库根（cli/ttmux-cli → ../../）
+OUT="${1:-${HOME}/.local/bin/ttmux}"
+mkdir -p "$(dirname "$OUT")"
 
 # 拼接顺序（必须 00-header 在最前、99-main 在最后）
 MODULES=(

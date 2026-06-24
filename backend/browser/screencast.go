@@ -55,6 +55,16 @@ func (c *cdp) send(method string, params map[string]any) {
 	_ = c.ws.WriteJSON(map[string]any{"id": c.id, "method": method, "params": params})
 }
 
+// sendID 同 send，但返回本次请求的 CDP id，用于在响应读取循环里匹配回包（复制选区取返回值）。
+func (c *cdp) sendID(method string, params map[string]any) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.id++
+	id := c.id
+	_ = c.ws.WriteJSON(map[string]any{"id": id, "method": method, "params": params})
+	return id
+}
+
 func fail(front *websocket.Conn, msg string) {
 	_ = front.WriteJSON(map[string]any{"type": "error", "msg": msg})
 }
@@ -194,6 +204,7 @@ func Handler(c *gin.Context) {
 		ewma    float64          // deliveryMs 的指数滑动平均（自适应控制信号）
 		level   = autoStart      // 当前档位（仅 auto 模式移动）
 		closed  bool
+		copyReqID int            // 复制选区的 Runtime.evaluate 请求 id；读取循环据此匹配回包(0=无在途)
 	)
 
 	// 初始档：auto 用阶梯，手动用前端给的 q（分辨率给足，质量听用户）
@@ -292,6 +303,7 @@ func Handler(c *gin.Context) {
 				return
 			}
 			var msg struct {
+				ID     int    `json:"id"`
 				Method string `json:"method"`
 				Params struct {
 					Data      string `json:"data"`
@@ -301,8 +313,33 @@ func Handler(c *gin.Context) {
 						DeviceHeight float64 `json:"deviceHeight"`
 					} `json:"metadata"`
 				} `json:"params"`
+				Result struct {
+					Result struct {
+						Value string `json:"value"`
+					} `json:"result"`
+				} `json:"result"`
 			}
-			if json.Unmarshal(data, &msg) != nil || msg.Method != "Page.screencastFrame" {
+			if json.Unmarshal(data, &msg) != nil {
+				continue
+			}
+			if msg.Method != "Page.screencastFrame" {
+				// 被镜像页打开新窗口/标签（target=_blank、window.open、表单提交等）→ 通知前端跟过去
+				if msg.Method == "Page.windowOpen" {
+					_ = writeJSON(map[string]any{"type": "newtab"})
+					continue
+				}
+				// 非帧消息：可能是「复制选区」的 Runtime.evaluate 回包，按 id 匹配后转发给前端
+				if msg.ID != 0 {
+					mu.Lock()
+					hit := copyReqID != 0 && msg.ID == copyReqID
+					if hit {
+						copyReqID = 0
+					}
+					mu.Unlock()
+					if hit {
+						_ = writeJSON(map[string]any{"type": "copied", "text": msg.Result.Result.Value})
+					}
+				}
 				continue
 			}
 			conn.send("Page.screencastFrameAck", map[string]any{"sessionId": msg.Params.SessionID})
@@ -483,6 +520,27 @@ func Handler(c *gin.Context) {
 			continue
 		}
 		switch ev.Type {
+		case "paste": // 本地 → 浏览器：把你本机剪贴板文本写进远端当前焦点元素（比模拟按键更可靠）
+			if ev.Text != "" {
+				conn.send("Input.insertText", map[string]any{"text": ev.Text})
+			}
+			continue
+		case "copy": // 浏览器 → 本地：取远端页面当前选区文本，回包后前端写进本机剪贴板
+			id := conn.sendID("Runtime.evaluate", map[string]any{
+				// 取页面当前选区：① window 选区(选正文，最常见) ② 焦点 input/textarea 选区
+				// ③ 兜底扫描所有 input/textarea——表单控件选区不进 window.getSelection，且失焦后
+				//    selectionStart/End 仍留在元素上，故按元素扫描比依赖 activeElement 当前聚焦更稳。
+				"expression": `(function(){var s=window.getSelection().toString();if(s)return s;` +
+					`function pick(a){return a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA')&&a.selectionStart!=null&&a.selectionEnd>a.selectionStart?a.value.substring(a.selectionStart,a.selectionEnd):'';}` +
+					`var r=pick(document.activeElement);if(r)return r;` +
+					`var els=document.querySelectorAll('input,textarea');` +
+					`for(var i=0;i<els.length;i++){r=pick(els[i]);if(r)return r;}return '';})()`,
+				"returnByValue": true,
+			})
+			mu.Lock()
+			copyReqID = id
+			mu.Unlock()
+			continue
 		case "mouse":
 			t := map[string]string{"down": "mousePressed", "up": "mouseReleased", "move": "mouseMoved"}[ev.Sub]
 			if t == "" {

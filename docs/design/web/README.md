@@ -22,7 +22,7 @@
 已落地并可运行（前后端分离）：
 - 前端 [`../../../frontend/`](../../../frontend/) — React + Vite + Antd 三端响应式 SPA，含 xterm.js 终端。
 - 后端 [`../../../backend/`](../../../backend/README.md) — Go + Gin，按包分层（cmd/server/api/ttmux/pty/stream/auth）。
-- 仓库根 `./start-all.sh` 一键：构建前端 → 编译后端 → 启动（后端从磁盘代理 `frontend/dist`）。
+- 仓库根 `./start.sh --dev` 一键：构建前端 → 编译后端 → 启动（后端从磁盘代理 `frontend/dist`）。
 
 详见 [06-roadmap](./06-roadmap.md)。
 

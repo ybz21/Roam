@@ -8,7 +8,8 @@
 
 {{.Task}}
 {{if .Deps}}
-> 依赖：{{.Deps}}（依赖就绪后才轮到你）
+> 你依赖：**{{.Deps}}**。现在就开工——能并行的部分（脚手架、接口约定、mock、自测）先做起来；
+> 真正需要 {{.Deps}} 的产出时，去广场看它是否已播报/`swarm done`，没有就 `--to leader|{{.Deps}} --kind ask` 问，**别凭空臆造接口**。
 {{end}}{{if .RoleTrait}}
 ## 你的工作方式（{{.SubroleLabel}}）
 

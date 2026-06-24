@@ -6,7 +6,7 @@
 
 | 阶段 | 内容 | 状态 |
 |---|---|---|
-| **M0 — 脚手架** | 前后端分离工程（`frontend/` + `backend/`）+ `start-all.sh` 一键启动 | ✅ 已完成 |
+| **M0 — 脚手架** | 前后端分离工程（`frontend/` + `backend/`）+ `start.sh --dev` 一键启动 | ✅ 已完成 |
 | **M1 — 看 + 控** | **认证**（登录/Cookie/防爆破）+ sessions/tasks/env/info + 创建/收集/send/kill（调 `--json`） | ✅ 已完成 |
 | **M1.5 — React SPA** | React+Vite+Antd 三端响应式 `AppShell`（手机底部 Tab / 平板可收起 Sider / 电脑常驻 Sider）；后端从磁盘代理 `frontend/dist` | ✅ 已完成 |
 | **M3 — 终端** | xterm.js + PTY 桥接（`creack/pty` + `gorilla/websocket`，`tmux attach`）+ 手机快捷键栏 | ✅ 已完成（多终端分屏/重连待补） |

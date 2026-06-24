@@ -97,6 +97,12 @@ func Handler(c *gin.Context) {
 	_ = exec.Command("tmux", "set-option", "-t", name, "window-size", "latest").Run()
 	_ = exec.Command("tmux", "set-window-option", "-t", name, "aggressive-resize", "on").Run()
 
+	// 新连接一律退出可能残留的 copy-mode：copy-mode 是会话级状态，会跨 attach/重连存活。
+	// 上次滚动历史进了 copy-mode 后断线重连时，本连接的 inCopy 会重置为 false，但 tmux 仍停在
+	// copy-mode，键入被导航键吃掉到不了 shell（表现为「要先按底才能输入」）。这里让新客户端
+	// 一律从实时提示符开始。
+	_ = exec.Command("tmux", "send-keys", "-t", name, "-X", "cancel").Run()
+
 	cmd := exec.Command("tmux", "attach", "-t", name)
 	cmd.Env = utf8Env(append(os.Environ(), "TERM=xterm-256color"))
 	ptmx, err := creackpty.Start(cmd)
@@ -129,6 +135,11 @@ func Handler(c *gin.Context) {
 		}
 	}()
 
+	// 跟踪本连接是否处于 tmux copy-mode（向上滚动会进入）。一旦进入，键入会被 copy-mode
+	// 当导航键吃掉、到不了 shell，且新输出不再跟随到底。所以真实键入前先退出 copy-mode，
+	// 让任意按键都像真实终端那样跳回实时提示符。
+	inCopy := false
+
 	// ws → pty（文本帧若为 resize 控制消息则调整窗口大小，否则当作键入）
 	for {
 		mt, data, err := conn.ReadMessage()
@@ -150,9 +161,15 @@ func Handler(c *gin.Context) {
 					continue
 				case "scroll":
 					tmuxScroll(name, ctrl.Dir, ctrl.Lines)
+					inCopy = ctrl.Dir != "bottom" // up/down 仍在 copy-mode；bottom 已 cancel 退出
 					continue
 				}
 			}
+		}
+		// 有真实键入：若还停在 copy-mode，先退出回到底部，否则按键会被吃掉、打不到 shell。
+		if inCopy {
+			tmuxScroll(name, "bottom", 0)
+			inCopy = false
 		}
 		if _, err := ptmx.Write(data); err != nil {
 			return

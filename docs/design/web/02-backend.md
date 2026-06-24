@@ -20,7 +20,7 @@ ttmux/
 │   ├── pty/           终端 PTY 桥接（tmux attach ↔ WebSocket，creack/pty）
 │   ├── stream/        SSE 状态推送 + 日志 tail（WebSocket）
 │   └── auth/          token 签发/校验、防爆破、认证中间件
-└── start-all.sh       构建前端 → 编译后端 → 启动（后端代理 frontend/dist）
+└── start.sh --dev       构建前端 → 编译后端 → 启动（后端代理 frontend/dist）
 ```
 
 **关键依赖**：`gin-gonic/gin`（路由）、`creack/pty`（PTY）、`gorilla/websocket`（WS）。

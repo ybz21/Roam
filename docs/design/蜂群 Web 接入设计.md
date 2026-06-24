@@ -328,7 +328,7 @@ swarm task rm     <群> <卡id>
 ## 9. 验证（端到端）
 1. **CLI**：隔离 tmux socket 建群→建卡→拖列(move)→发言(say)→feed --json，断言 JSON 字段；沿用既有 swarm 测试方式(`tests/`)。
 2. **后端**：`go build ./...`；起服务后 `curl` 走一遍 §5 路由，核对 JSON / 写操作返回。
-3. **前端**：`npm run build` 通过；`start-all.sh` 起全栈，浏览器进「蜂群」页，列表→详情→广场发言→看板拖卡，核对回写。
+3. **前端**：`npm run build` 通过；`start.sh --dev` 起全栈，浏览器进「蜂群」页，列表→详情→广场发言→看板拖卡，核对回写。
 
 ## 10. 残留问题（实现时按默认推进，可纠偏）
 1. 看板卡 id 生成用 SQLite 取 `MAX` 自增（无 `board/seq` 文件）；并发建卡靠 WAL 事务。

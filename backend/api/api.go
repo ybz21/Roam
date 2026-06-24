@@ -17,13 +17,13 @@ import (
 
 type API struct {
 	TT          *ttmux.Client
-	KannaURL    string // 可选：Claude Code 精美 UI（kanna）的地址；为空则前端不显示入口
 	BrowserHome string // 浏览器导航起始页地址（供前端设为默认主页）
 	Football    *FootballStore
+	Speech      *SpeechStore // 语音识别(ASR)配置 + 转录
 }
 
-func New(tt *ttmux.Client, kannaURL, browserHome string) *API {
-	return &API{TT: tt, KannaURL: kannaURL, BrowserHome: browserHome, Football: NewFootballStore()}
+func New(tt *ttmux.Client, browserHome, dataDir string) *API {
+	return &API{TT: tt, BrowserHome: browserHome, Football: NewFootballStore(), Speech: NewSpeechStore(dataDir)}
 }
 
 // json 透传 ttmux 的 --json 输出
@@ -47,7 +47,7 @@ func (a *API) text(c *gin.Context, args ...string) {
 }
 
 func (a *API) Me(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"data": gin.H{"authed": true, "kanna": a.KannaURL, "browserHome": a.BrowserHome}})
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"authed": true, "browserHome": a.BrowserHome}})
 }
 func (a *API) Info(c *gin.Context) { a.json(c, "info", "--json") }
 
@@ -170,6 +170,20 @@ func (a *API) SessionCwd(c *gin.Context) {
 		dir = strings.TrimSpace(string(out))
 	}
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"dir": dir}})
+}
+
+// SessionType POST /sessions/:name/type —— 把文本字面量打进当前 pane（不追加回车）。
+// 供终端页语音识别后回填用：内容停在输入行，用户复查/编辑后自行按 Enter 发送。
+func (a *API) SessionType(c *gin.Context) {
+	name := c.Param("name")
+	var b struct {
+		Text string `json:"text"`
+	}
+	if err := c.ShouldBindJSON(&b); err != nil || b.Text == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
+		return
+	}
+	a.text(c, "send-keys", "-t", name, "-l", b.Text)
 }
 
 // Tasks（命令 + Agent 统一）
