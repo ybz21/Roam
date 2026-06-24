@@ -18,18 +18,25 @@ DEST="${1:-${HOME}/.claude/skills}"
 TARGETS=("$DEST")
 [[ -d "${HOME}/.codex" ]] && TARGETS+=("${HOME}/.codex/skills")
 
-# cc-swarm 子文档拼接顺序(生命周期)；与 install.sh 的 GitHub 下载分支保持一致。
+# 子文档拼接顺序；与 scripts/install-ttmux.sh 的 GitHub 下载分支保持一致。
 CC_SWARM_DOCS="intake decompose spawn patrol approve test-push review concurrency integrate memory"
+DEV_ROLES_DOCS="plaza board chrome pm architect frontend backend fullstack qa designer reviewer devops docs"
 
-# cc-swarm：SKILL.md + docs/*.md 先合并到临时文件，再分发到各目标。
-tmp_cc="$(mktemp)"
-if [[ -f "${SRC}/cc-swarm/SKILL.md" ]]; then
-    cat "${SRC}/cc-swarm/SKILL.md" > "$tmp_cc"
-    for doc in $CC_SWARM_DOCS; do
-        f="${SRC}/cc-swarm/docs/${doc}.md"; [[ -f "$f" ]] || f="${SRC}/cc-swarm/${doc}.md"
-        [[ -f "$f" ]] && { printf '\n\n' >> "$tmp_cc"; cat "$f" >> "$tmp_cc"; }
+# 把一个 skill 的 SKILL.md + docs/<doc>.md 合并到 $1（输出文件）。
+merge_skill() {  # <out> <skill名> <doc顺序…>
+    local out="$1" name="$2"; shift 2
+    [[ -f "${SRC}/${name}/SKILL.md" ]] || return 0
+    cat "${SRC}/${name}/SKILL.md" > "$out"
+    local doc f
+    for doc in "$@"; do
+        f="${SRC}/${name}/docs/${doc}.md"; [[ -f "$f" ]] || f="${SRC}/${name}/${doc}.md"
+        [[ -f "$f" ]] && { printf '\n\n' >> "$out"; cat "$f" >> "$out"; }
     done
-fi
+}
+
+# cc-swarm / dev-roles：SKILL.md + docs/*.md 先合并到临时文件，再分发到各目标。
+tmp_cc="$(mktemp)"; merge_skill "$tmp_cc" cc-swarm $CC_SWARM_DOCS
+tmp_dr="$(mktemp)"; merge_skill "$tmp_dr" dev-roles $DEV_ROLES_DOCS
 
 for d in "${TARGETS[@]}"; do
     mkdir -p "$d"
@@ -44,6 +51,11 @@ for d in "${TARGETS[@]}"; do
         mkdir -p "${d}/cc-swarm"
         cp "$tmp_cc" "${d}/cc-swarm/SKILL.md"
     fi
-    echo "✔ skills 已同步到 ${d} (ttmux/SKILL.md, cc-swarm/SKILL.md)"
+    # dev-roles skill（SKILL.md + 各角色子文档合并；供 swarm leader 拆班子）
+    if [[ -s "$tmp_dr" ]]; then
+        mkdir -p "${d}/dev-roles"
+        cp "$tmp_dr" "${d}/dev-roles/SKILL.md"
+    fi
+    echo "✔ skills 已同步到 ${d} (ttmux/SKILL.md, cc-swarm/SKILL.md, dev-roles/SKILL.md)"
 done
-rm -f "$tmp_cc"
+rm -f "$tmp_cc" "$tmp_dr"

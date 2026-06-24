@@ -82,16 +82,24 @@ const RowAct = ({ title, danger, onClick, children }: { title: string; danger?: 
   </Tooltip>
 )
 
-function GitRow({ f, accent, active, kind, onOpen, onStage, onUnstage, onDiscard }: {
-  f: GitFile; accent: string; active: boolean; kind: 'staged' | 'changes' | 'untracked'
+function GitRow({ f, accent, active, kind, root, onOpen, onStage, onUnstage, onDiscard }: {
+  f: GitFile; accent: string; active: boolean; kind: 'staged' | 'changes' | 'untracked'; root?: string
   onOpen: () => void; onStage: () => void; onUnstage: () => void; onDiscard: () => void
 }) {
   const { t } = useI18n()
   const code = (f.index !== ' ' && f.index !== '?') ? f.index : f.work
   const badge = f.untracked ? 'U' : (code || '?')
   const subdir = f.path.includes('/') ? f.path.slice(0, f.path.lastIndexOf('/')) : ''
+  // f.path 相对仓库根；拼成绝对路径供拖到终端时识别（与文件面板一致的拖拽载荷）。
+  const fullPath = root ? root.replace(/\/$/, '') + '/' + f.path : f.path
   return (
     <div className="cc-filerow" onClick={onOpen}
+      draggable
+      onDragStart={(ev) => {
+        ev.dataTransfer.setData('application/x-ttmux-path', fullPath)
+        ev.dataTransfer.setData('text/plain', fullPath)
+        ev.dataTransfer.effectAllowed = 'copy'
+      }}
       style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px 4px 10px', cursor: 'pointer', fontSize: 13, userSelect: 'none', background: active ? 'rgba(88,166,255,.12)' : undefined }}>
       <span style={{ width: 16, flex: '0 0 auto', textAlign: 'center', fontFamily: 'ui-monospace, monospace', fontWeight: 700, color: statusColor(badge) }}>{badge}</span>
       <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-bright)' }} title={f.path}>
@@ -298,19 +306,19 @@ export default function GitPanel({ dir, accent = '#58a6ff', onClose }: { dir?: s
 
         <Section title={t('git.staged')} count={staged.length}
           extra={<RowAct title={t('git.unstageAll')} onClick={unstageAll}><MinusIcon /></RowAct>}>
-          {staged.map((f) => <GitRow key={'s' + f.path} f={f} accent={accent} kind="staged" active={pick?.file === f.path && pick.staged}
+          {staged.map((f) => <GitRow key={'s' + f.path} f={f} accent={accent} root={root} kind="staged" active={pick?.file === f.path && pick.staged}
             onOpen={() => setPick({ file: f.path, staged: true, untracked: false, label: f.path })}
             onStage={() => {}} onUnstage={() => unstage([f.path])} onDiscard={() => {}} />)}
         </Section>
         <Section title={t('git.changes')} count={changed.length}
           extra={<><RowAct title={t('git.discardAll')} danger onClick={discardAll}><DiscardIcon /></RowAct><RowAct title={t('git.stageAll')} onClick={() => stage(changed.map((f) => f.path))}><PlusIcon /></RowAct></>}>
-          {changed.map((f) => <GitRow key={'c' + f.path} f={f} accent={accent} kind="changes" active={pick?.file === f.path && !pick.staged && !pick.untracked}
+          {changed.map((f) => <GitRow key={'c' + f.path} f={f} accent={accent} root={root} kind="changes" active={pick?.file === f.path && !pick.staged && !pick.untracked}
             onOpen={() => setPick({ file: f.path, staged: false, untracked: false, label: f.path })}
             onStage={() => stage([f.path])} onUnstage={() => {}} onDiscard={() => discardFile(f)} />)}
         </Section>
         <Section title={t('git.untracked')} count={untracked.length}
           extra={<RowAct title={t('git.stageAll')} onClick={() => stage(untracked.map((f) => f.path))}><PlusIcon /></RowAct>}>
-          {untracked.map((f) => <GitRow key={'u' + f.path} f={f} accent={accent} kind="untracked" active={pick?.file === f.path}
+          {untracked.map((f) => <GitRow key={'u' + f.path} f={f} accent={accent} root={root} kind="untracked" active={pick?.file === f.path}
             onOpen={() => setPick(pickOf(f))}
             onStage={() => stage([f.path])} onUnstage={() => {}} onDiscard={() => discardFile(f)} />)}
         </Section>

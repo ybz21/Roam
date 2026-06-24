@@ -35,7 +35,7 @@ ttmux_skills() {
     mkdir -p "$SKILL_DIR"
     if [[ -f "${SCRIPT_DIR}/skills/sync-skills.sh" ]]; then
         # 本地安装：复用 skills/sync-skills.sh（与开发模式 start.sh --dev 同一套合并逻辑）
-        bash "${SCRIPT_DIR}/skills/sync-skills.sh" "$SKILL_DIR" >/dev/null && info "skills 已安装 (ttmux, cc-swarm)"
+        bash "${SCRIPT_DIR}/skills/sync-skills.sh" "$SKILL_DIR" >/dev/null && info "skills 已安装 (ttmux, cc-swarm, dev-roles)"
         return 0
     fi
     # curl|bash 无本地文件：从 GitHub 下载合并。
@@ -49,6 +49,8 @@ ttmux_skills() {
         -o "${local_tmp}/ttmux.md" 2>/dev/null || all_ok=false
     curl -fsSL "https://raw.githubusercontent.com/${REPO}/${BRANCH}/skills/cc-swarm/SKILL.md" \
         -o "${local_tmp}/cc-swarm.md" 2>/dev/null || all_ok=false
+    curl -fsSL "https://raw.githubusercontent.com/${REPO}/${BRANCH}/skills/dev-roles/SKILL.md" \
+        -o "${local_tmp}/dev-roles.md" 2>/dev/null || all_ok=false
     local d
     for d in $CC_SWARM_DOCS; do
         $all_ok || break
@@ -56,16 +58,24 @@ ttmux_skills() {
             -o "${local_tmp}/doc-${d}.md" 2>/dev/null && \
             { printf '\n\n' >> "${local_tmp}/cc-swarm.md"; cat "${local_tmp}/doc-${d}.md" >> "${local_tmp}/cc-swarm.md"; }
     done
+    # dev-roles 各角色子文档（顺序与 skills/sync-skills.sh 的 DEV_ROLES_DOCS 保持一致）
+    for d in plaza board chrome pm architect frontend backend fullstack qa designer reviewer devops docs; do
+        $all_ok || break
+        curl -fsSL "https://raw.githubusercontent.com/${REPO}/${BRANCH}/skills/dev-roles/docs/${d}.md" \
+            -o "${local_tmp}/dr-${d}.md" 2>/dev/null && \
+            { printf '\n\n' >> "${local_tmp}/dev-roles.md"; cat "${local_tmp}/dr-${d}.md" >> "${local_tmp}/dev-roles.md"; }
+    done
     if $all_ok; then
         local sd
         for sd in "${SKILL_TARGETS[@]}"; do
             mkdir -p "$sd"
             rm -f "${sd}/ttmux.md" "${sd}/cc-swarm.md"   # 清历史扁平文件
-            mkdir -p "${sd}/ttmux" "${sd}/cc-swarm"
+            mkdir -p "${sd}/ttmux" "${sd}/cc-swarm" "${sd}/dev-roles"
             cp "${local_tmp}/ttmux.md" "${sd}/ttmux/SKILL.md"
             cp "${local_tmp}/cc-swarm.md" "${sd}/cc-swarm/SKILL.md"
+            cp "${local_tmp}/dev-roles.md" "${sd}/dev-roles/SKILL.md"
         done
-        info "skills 已安装 (ttmux, cc-swarm)"
+        info "skills 已安装 (ttmux, cc-swarm, dev-roles)"
     fi
     rm -rf "$local_tmp"
 }

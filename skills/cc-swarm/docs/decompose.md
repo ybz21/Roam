@@ -46,6 +46,9 @@
 > `--subrole` 可选 `pm|architect|frontend|backend|fullstack|qa|designer|reviewer|devops|docs`（也可自定义字符串）；
 > 它决定子会话拿到的**角色化 prompt**（产品偏需求/验收、测试偏用例/回归…），`--duty` 是该成员长期负责的范围。
 > 拆任务时就想清楚"这支班子需要哪些角色"，别一律无差别 member。
+>
+> **怎么选角色看 [`dev-roles` skill](../dev-roles/SKILL.md)**：每个角色的 scope（负责什么/产出/边界）、
+> 按项目规模选哪些角色、角色间怎么靠接口契约并行协作，都在那里。
 
 > **把任务图落到看板**：拆完后，每个子任务在看板上建一张卡，作为全群可见的分工底账：
 > ```bash

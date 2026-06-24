@@ -567,6 +567,39 @@ function TerminalPane(props: {
   // 文件栏与 Git 面板共用右侧抽屉位，互斥显示。
   const toggleFiles = () => setShowFiles((s) => { if (!s) setShowGit(false); return !s })
   const toggleGit = () => setShowGit((s) => { if (!s) setShowFiles(false); return !s })
+
+  // 从文件/Git 面板把文件拖到终端 → 插入为 @绝对路径。
+  const [dragOver, setDragOver] = useState(false)
+  // 拖拽载荷就是文件绝对路径，原样作为 @mention（不转相对路径）。
+  const toMention = (raw: string) => {
+    const p = raw.trim()
+    return p ? '@' + p : ''
+  }
+  const readDropPath = (e: React.DragEvent) =>
+    e.dataTransfer.getData('application/x-ttmux-path') || e.dataTransfer.getData('text/plain') || ''
+  const isPathDrag = (e: React.DragEvent) => e.dataTransfer.types.includes('application/x-ttmux-path')
+  const allowPathDrop = (e: React.DragEvent) => {
+    if (!isPathDrag(e)) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+  }
+  // 拖到终端区：直接把 @路径 送进当前会话（claude/codex TUI 或 shell 提示符的光标处）。
+  const onTermDrop = (e: React.DragEvent) => {
+    if (!isPathDrag(e)) return
+    e.preventDefault()
+    setDragOver(false)
+    const mention = toMention(readDropPath(e))
+    if (!mention || !active) return
+    exitCopyMode()
+    termRefs.current[active]?.send(mention + ' ', true)
+  }
+  // 拖到移动端输入框：追加到待编辑文本，用户可改后再发。
+  const onInputDrop = (e: React.DragEvent) => {
+    if (!isPathDrag(e)) return
+    e.preventDefault()
+    const mention = toMention(readDropPath(e))
+    if (mention) setLine((l) => (l ? l.replace(/\s*$/, ' ') : '') + mention + ' ')
+  }
   const [ctx, setCtx] = useState<{ x: number; y: number; session: string; selection: string } | null>(null)
   const [pasteOpen, setPasteOpen] = useState(false)
   const [pasteSession, setPasteSession] = useState('')
@@ -793,8 +826,19 @@ function TerminalPane(props: {
         <Tooltip title={t('terminal.reconnect')}><Button size="small" onClick={() => active && termRefs.current[active]?.reconnect()}>{t('terminal.reconnectShort')}</Button></Tooltip>
       </div>
 
-      {/* 终端区（所有标签常驻，仅激活可见，保留滚动历史） */}
-      <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+      {/* 终端区（所有标签常驻，仅激活可见，保留滚动历史）。
+          支持从文件/Git 面板把文件拖进来 → 以 @相对路径 注入当前会话。 */}
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', position: 'relative' }}
+        onDragOver={(e) => { if (isPathDrag(e)) { allowPathDrop(e); setDragOver(true) } }}
+        onDragLeave={(e) => { if (e.currentTarget === e.target) setDragOver(false) }}
+        onDrop={onTermDrop}>
+        {dragOver && (
+          <div style={{
+            position: 'absolute', inset: 0, zIndex: 5, pointerEvents: 'none',
+            border: '2px dashed #58a6ff', borderRadius: 8, background: 'rgba(88,166,255,.08)',
+            display: 'grid', placeItems: 'center', color: '#58a6ff', fontSize: 14, fontWeight: 600,
+          }}>{t('terminal.dropToMention')}</div>
+        )}
         <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
           {terms.map((termName) => (
             <div key={termName} style={{ position: 'absolute', inset: 0, display: termName === active ? 'block' : 'none', padding: 6 }}>
@@ -830,7 +874,7 @@ function TerminalPane(props: {
       {/* 移动端文字输入框：软键盘/输入法在 xterm 里会丢字，这里整行可靠发送到 PTY。
           对话视图(Claude/Codex)有自己的输入框，这里隐藏避免双输入框。 */}
       {isTouch && !inChat && (
-        <div style={{ display: 'flex', gap: 6, padding: '8px 8px 0' }}>
+        <div style={{ display: 'flex', gap: 6, padding: '8px 8px 0' }} onDragOver={allowPathDrop} onDrop={onInputDrop}>
           <Input
             value={line}
             onFocus={exitCopyMode}

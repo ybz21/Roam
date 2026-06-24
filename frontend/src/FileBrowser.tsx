@@ -1,11 +1,17 @@
 // 文件侧栏 —— 在 Claude / Codex 对话页右侧浏览工作目录、查看文件内容（类似 codex 右侧边栏）。
 // 单层可导航列表：目录在前可进入、↑ 回上级、点文件在弹层里查看正文。
-import { type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { type MouseEvent, type ReactNode, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { AutoComplete, Button, Input, Modal, Space, Spin, App as AntApp, Tooltip } from 'antd'
 import { api, upload } from './api'
 import Markdown from './Markdown'
-import { DocxFilePreview, ExcelFilePreview, PptxFilePreview } from './OfficePreviewers'
 import { useI18n } from './i18n'
+
+// Office 预览（docx-preview / xlsx / pptx）依赖很重，只有真正打开 Office 文件才需要：
+// 懒加载使其不进入首屏包，按需异步取。
+const OfficePreviewers = () => import('./OfficePreviewers')
+const DocxFilePreview = lazy(() => OfficePreviewers().then((m) => ({ default: m.DocxFilePreview })))
+const ExcelFilePreview = lazy(() => OfficePreviewers().then((m) => ({ default: m.ExcelFilePreview })))
+const PptxFilePreview = lazy(() => OfficePreviewers().then((m) => ({ default: m.PptxFilePreview })))
 
 const IMG_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'avif', 'svg']
 const MD_EXT = ['md', 'markdown', 'mdx']
@@ -379,11 +385,11 @@ function Viewer({
       ) : isPdf ? (
         previewShell(t('file.pdfPreview'), <iframe title={name} src={rawUrl} style={{ width: '100%', height: '100%', border: 0, background: '#fff' }} />)
       ) : isDocxPreview ? (
-        previewShell(t('file.wordPreview'), <DocxFilePreview src={rawUrl} name={name} downloadUrl={downloadUrl} />)
+        previewShell(t('file.wordPreview'), <Suspense fallback={<Spin />}><DocxFilePreview src={rawUrl} name={name} downloadUrl={downloadUrl} /></Suspense>)
       ) : isExcelPreview ? (
-        previewShell(t('file.excelPreview'), <ExcelFilePreview src={rawUrl} name={name} downloadUrl={downloadUrl} />)
+        previewShell(t('file.excelPreview'), <Suspense fallback={<Spin />}><ExcelFilePreview src={rawUrl} name={name} downloadUrl={downloadUrl} /></Suspense>)
       ) : isPptxPreview ? (
-        previewShell(t('file.pptPreview'), <PptxFilePreview src={rawUrl} name={name} downloadUrl={downloadUrl} />)
+        previewShell(t('file.pptPreview'), <Suspense fallback={<Spin />}><PptxFilePreview src={rawUrl} name={name} downloadUrl={downloadUrl} /></Suspense>)
       ) : isOffice ? (
         previewShell(t('file.officePreview'), (
           <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>

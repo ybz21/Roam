@@ -168,6 +168,7 @@ export default function BrowserView() {
   const [ripples, setRipples] = useState<{ id: number; x: number; y: number }[]>([])
   const ripIdRef = useRef(0)
   const lastMoveRef = useRef(0)
+  const dragRef = useRef({ x: 0, y: 0, active: false, moved: false }) // 拖动框选：起点(页面坐标)+是否真的移动过
   const wheelRef = useRef({ x: 0, y: 0, dx: 0, dy: 0, m: 0, timer: 0 as any })
   const touchRef = useRef({ x: 0, y: 0, t: 0, moved: false })
 
@@ -322,10 +323,9 @@ export default function BrowserView() {
       if (msg.type === 'copied') {
         const text: string = msg.text || ''
         if (!text) { message.info(t('browser.noSelection')); return }
-        navigator.clipboard?.writeText(text).then(
-          () => message.success(t('browser.copied')),
-          () => message.error(t('browser.copyFailed')),
-        )
+        // 选区已存进后端「浏览器内部剪贴板」，Ctrl+V 必能用；这里顺手写本机剪贴板（成功则外部也能粘，失败忽略）
+        navigator.clipboard?.writeText?.(text).catch(() => {})
+        message.success(t('browser.copied'))
         return
       }
     }
@@ -416,8 +416,14 @@ export default function BrowserView() {
   const onMouse = (sub: string) => (e: React.MouseEvent) => {
     if (!controlRef.current) return
     e.preventDefault()
-    if (sub === 'down') { stageRef.current?.focus(); addRipple(e) } // 拿焦点 + 涟漪
-    send({ type: 'mouse', sub, ...mapXY(e), button: 'left', modifiers: mods(e) })
+    const pt = mapXY(e)
+    if (sub === 'down') { stageRef.current?.focus(); addRipple(e); dragRef.current = { x: pt.x, y: pt.y, active: true, moved: false } } // 拿焦点 + 涟漪 + 记拖动起点
+    send({ type: 'mouse', sub, x: pt.x, y: pt.y, button: 'left', buttons: sub === 'down' ? 1 : 0, modifiers: mods(e) })
+    if (sub === 'up') {
+      const d = dragRef.current
+      if (d.active && d.moved) send({ type: 'select', x1: d.x, y1: d.y, x2: pt.x, y2: pt.y }) // 拖动结束 → 定稿选区
+      d.active = false
+    }
   }
   // 移动节流：低带宽下高频 move 会挤占上行，限到 ~45ms 一发
   const onMove = (e: React.MouseEvent) => {
@@ -425,7 +431,15 @@ export default function BrowserView() {
     const now = performance.now()
     if (now - lastMoveRef.current < 45) return
     lastMoveRef.current = now
-    send({ type: 'mouse', sub: 'move', ...mapXY(e), modifiers: mods(e) })
+    const pt = mapXY(e)
+    // buttons 透传：移动时带住左键 Chrome 才认作拖动（拖滑块/画布/框选都靠它）
+    send({ type: 'mouse', sub: 'move', x: pt.x, y: pt.y, buttons: e.buttons, modifiers: mods(e) })
+    // 按住左键拖动 → 实时框选（headless 合成拖选无效，发起止坐标让远端用 caretRangeFromPoint 建 Range）
+    const d = dragRef.current
+    if (d.active && (e.buttons & 1) && Math.abs(pt.x - d.x) + Math.abs(pt.y - d.y) > 3) {
+      d.moved = true
+      send({ type: 'select', x1: d.x, y1: d.y, x2: pt.x, y2: pt.y })
+    }
   }
   const queueWheel = (x: number, y: number, deltaX: number, deltaY: number, modifiers = 0) => {
     // 画面旋转后，屏幕滚动方向也要逆旋转回页面坐标系，手势才跟视觉一致
@@ -493,11 +507,13 @@ export default function BrowserView() {
   // 粘贴：读本机剪贴板发到远端焦点框。注意——画面是普通 <div>（非可编辑），浏览器不会给它派发
   // paste 事件，所以不能靠 onPaste；keydown 本身是用户手势，安全上下文下可直接 readText。
   const pasteFromClipboard = () => {
-    // 非安全上下文(http 局域网)下 navigator.clipboard 为 undefined，先兜底提示，避免 .then 抛错
-    if (!navigator.clipboard?.readText) { message.error(t('browser.pasteFailed')); return }
-    navigator.clipboard.readText().then(
-      (text) => { if (text) send({ type: 'paste', text }) },
-      () => message.error(t('browser.pasteFailed')),
+    // 先试本机剪贴板（外部复制的内容）；读不到/无权限/非安全上下文 → 发空 paste，
+    // 后端用「浏览器内部剪贴板」兜底（内部 Ctrl+C 存的），所以内部复制粘贴永远能跑。
+    const p = navigator.clipboard?.readText?.()
+    if (!p) { send({ type: 'paste' }); return }
+    p.then(
+      (text) => send(text ? { type: 'paste', text } : { type: 'paste' }),
+      () => send({ type: 'paste' }),
     )
   }
   const onKey = (e: React.KeyboardEvent) => {

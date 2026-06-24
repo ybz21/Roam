@@ -157,6 +157,13 @@ func Handler(c *gin.Context) {
 			if json.Unmarshal(data, &ctrl) == nil && ctrl.Type != "" {
 				switch ctrl.Type {
 				case "resize":
+					// 防御异常尺寸：前端布局未就绪 / 面板折叠 / 离屏挂载时可能发来极窄的 cols(如 2)。
+					// 因 window-size=latest，这会把共享会话挤成「窄条」，且客户端断开后仍卡住——
+					// swarm 的 leader/成员会话(claude/codex TUI)会因此渲染崩坏，连 @leader 的消息都进不了输入框。
+					// 低于阈值视为无效，忽略本次 resize（保持原尺寸，不被挤窄）。
+					if ctrl.Cols < 20 || ctrl.Rows < 6 {
+						continue
+					}
 					_ = creackpty.Setsize(ptmx, &creackpty.Winsize{Rows: ctrl.Rows, Cols: ctrl.Cols})
 					continue
 				case "scroll":

@@ -17,6 +17,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -39,6 +40,13 @@ var upgrader = websocket.Upgrader{
 		i := strings.Index(origin, "://")
 		return i >= 0 && origin[i+3:] == r.Host
 	},
+}
+
+// browserClip 是「浏览器内部剪贴板」：Ctrl+C 存远端当前选区，Ctrl+V 在前端读不到本机剪贴板
+// （无权限/非安全上下文）时用它兜底 insertText。全局共享 → A 标签复制、B 标签粘贴也通。
+var browserClip struct {
+	mu   sync.Mutex
+	text string
 }
 
 // cdp 是到单个 page 目标的 CDP 连接；WriteJSON 非并发安全，故加锁串行写。
@@ -337,7 +345,11 @@ func Handler(c *gin.Context) {
 					}
 					mu.Unlock()
 					if hit {
-						_ = writeJSON(map[string]any{"type": "copied", "text": msg.Result.Result.Value})
+						txt := msg.Result.Result.Value
+						browserClip.mu.Lock() // 存进浏览器内部剪贴板，供 Ctrl+V 兜底（不依赖本机剪贴板）
+						browserClip.text = txt
+						browserClip.mu.Unlock()
+						_ = writeJSON(map[string]any{"type": "copied", "text": txt})
 					}
 				}
 				continue
@@ -443,6 +455,11 @@ func Handler(c *gin.Context) {
 			X         float64 `json:"x"`
 			Y         float64 `json:"y"`
 			Button    string  `json:"button"`
+			Buttons   int     `json:"buttons"` // 当前按下的鼠标键位掩码(1=左)，move 带上才算拖动
+			X1        float64 `json:"x1"`      // select：拖动起点（页面 CSS 坐标）
+			Y1        float64 `json:"y1"`
+			X2        float64 `json:"x2"` // select：拖动当前点/终点
+			Y2        float64 `json:"y2"`
 			DeltaX    float64 `json:"deltaX"`
 			DeltaY    float64 `json:"deltaY"`
 			Key       string  `json:"key"`
@@ -520,9 +537,15 @@ func Handler(c *gin.Context) {
 			continue
 		}
 		switch ev.Type {
-		case "paste": // 本地 → 浏览器：把你本机剪贴板文本写进远端当前焦点元素（比模拟按键更可靠）
-			if ev.Text != "" {
-				conn.send("Input.insertText", map[string]any{"text": ev.Text})
+		case "paste": // 把文本写进远端当前焦点元素（比模拟按键更可靠）
+			text := ev.Text
+			if text == "" { // 前端没带本机剪贴板文本（读不到/无权限）→ 用浏览器内部剪贴板兜底（内部 Ctrl+C 存的）
+				browserClip.mu.Lock()
+				text = browserClip.text
+				browserClip.mu.Unlock()
+			}
+			if text != "" {
+				conn.send("Input.insertText", map[string]any{"text": text})
 			}
 			continue
 		case "copy": // 浏览器 → 本地：取远端页面当前选区文本，回包后前端写进本机剪贴板
@@ -555,8 +578,19 @@ func Handler(c *gin.Context) {
 				p["button"] = btn
 				p["buttons"] = 1
 				p["clickCount"] = 1
+			} else {
+				// 移动时带住按下的键位（1=左键），否则 Chrome 当成悬停 → 拖滑块/画布/拖拽都失效
+				p["buttons"] = ev.Buttons
 			}
 			conn.send("Input.dispatchMouseEvent", p)
+		case "select": // 拖动框选：headless 下合成鼠标拖选无效，改用 caretRangeFromPoint 按起止坐标在远端建 Range
+			conn.send("Runtime.evaluate", map[string]any{
+				"expression": fmt.Sprintf(`(function(x1,y1,x2,y2){var s=window.getSelection();s.removeAllRanges();`+
+					`var a=document.caretRangeFromPoint(x1,y1),b=document.caretRangeFromPoint(x2,y2);if(!a||!b)return;`+
+					`var r=document.createRange();r.setStart(a.startContainer,a.startOffset);r.setEnd(b.startContainer,b.startOffset);`+
+					`if(r.collapsed){r.setStart(b.startContainer,b.startOffset);r.setEnd(a.startContainer,a.startOffset);}`+
+					`s.addRange(r);})(%g,%g,%g,%g)`, ev.X1, ev.Y1, ev.X2, ev.Y2),
+			})
 		case "wheel":
 			conn.send("Input.dispatchMouseEvent", map[string]any{
 				"type": "mouseWheel", "x": ev.X, "y": ev.Y,
