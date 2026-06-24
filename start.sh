@@ -153,7 +153,7 @@ elif [ ! -x "$BIN" ]; then
 fi
 
 # ── 启动 ─────────────────────────────────────────────────────────
-echo "==> 启动 ttmux-web  $SCHEME://$BIND  （口令: $TTMUX_WEB_PASSWORD）"
+echo "==> 启动 ttmux-web  $SCHEME://$BIND  （口令: ${TTMUX_WEB_PASSWORD}）"
 [ -n "$LAN" ] && echo "==> 手机/平板（同 WiFi）: $SCHEME://$LAN:$PORT"
 [ "$SCHEME" = https ] && echo "    （自签证书：手机首次访问点「高级 → 继续前往」即可，之后语音/剪贴板可用；如需 http 设 TTMUX_WEB_TLS=0）"
 
@@ -168,5 +168,5 @@ daemon_start "$BIN" -web "$(pwd)/frontend/dist" -addr "$BIND" "$@"
 sleep 1
 pids="$(port_pids)"
 [ -n "${pids// /}" ] && echo "$pids" | tr ' ' '\n' | head -1 > "$PIDFILE"
-echo "==> 已后台守护运行（日志: $LOG）"
+echo "==> 已后台守护运行（日志: ${LOG}）"
 echo "    停止: bash start.sh stop   状态: bash start.sh status   日志: bash start.sh logs"
