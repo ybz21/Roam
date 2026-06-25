@@ -43,6 +43,11 @@ func utf8Env(env []string) []string {
 	return append(env, "LC_ALL=C.UTF-8")
 }
 
+// SanitizeSessionName 替换 tmux 会话名中的 '.' 和 ':'，避免 -t 解析出错。
+func SanitizeSessionName(name string) string {
+	return strings.NewReplacer(".", "_", ":", "_").Replace(name)
+}
+
 // tmuxScroll 通过 tmux copy-mode 滚动会话的真实历史（attach 用全屏，xterm 本地缓冲为空）。
 func tmuxScroll(name, dir string, lines int) {
 	if lines <= 0 {
@@ -106,7 +111,7 @@ var upgrader = websocket.Upgrader{
 
 // Handler 处理 /api/term/:name 的 WebSocket 升级与 PTY 桥接。
 func Handler(c *gin.Context) {
-	name := c.Param("name")
+	name := SanitizeSessionName(c.Param("name"))
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		return

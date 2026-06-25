@@ -77,6 +77,18 @@ func (a *API) FS(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"path": p, "parent": filepath.Dir(p), "dirs": dirs}})
 }
 
+// SanitizeSessionName 把 tmux 不允许出现在会话名中的字符替换掉。
+// tmux 自身会把 '.' 和 ':' 替换为 '_'，这里提前做同样的事，
+// 避免后续 -t 引用时 '.' 被解析为 session.window.pane 分隔符而报错。
+func SanitizeSessionName(name string) string {
+	return strings.NewReplacer(".", "_", ":", "_").Replace(name)
+}
+
+// sessionParam 读取路由 :name 参数并净化（点号/冒号 → 下划线）。
+func sessionParam(c *gin.Context) string {
+	return SanitizeSessionName(c.Param("name"))
+}
+
 // Sessions
 func (a *API) Sessions(c *gin.Context) { a.json(c, "ls", "--json") }
 func (a *API) NewSession(c *gin.Context) {
@@ -88,24 +100,30 @@ func (a *API) NewSession(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
 		return
 	}
+	b.Name = SanitizeSessionName(b.Name)
 	// 创建 detached 会话（转发给 tmux），可指定工作目录 -c
 	args := []string{"new-session", "-d", "-s", b.Name}
 	if strings.TrimSpace(b.Dir) != "" {
 		args = append(args, "-c", b.Dir)
 	}
-	a.text(c, args...)
+	out, err := a.TT.Run(args...)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "TTMUX_ERROR", "message": ttmux.StripANSI(out)}})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": ttmux.StripANSI(out), "name": b.Name})
 }
 
 func (a *API) RenameSession(c *gin.Context) {
 	var b struct {
 		Name string `json:"name"`
 	}
-	oldName := strings.TrimSpace(c.Param("name"))
+	oldName := sessionParam(c)
 	if err := c.ShouldBindJSON(&b); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
 		return
 	}
-	newName := strings.TrimSpace(b.Name)
+	newName := SanitizeSessionName(strings.TrimSpace(b.Name))
 	if oldName == "" || newName == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
 		return
@@ -114,13 +132,18 @@ func (a *API) RenameSession(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"name": newName}})
 		return
 	}
-	a.text(c, "rename-session", "-t", oldName, newName)
+	out, err := a.TT.Run("rename-session", "-t", oldName, newName)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "TTMUX_ERROR", "message": ttmux.StripANSI(out)}})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"name": newName}})
 }
 
 // 用 tmux kill-session（转发），避开 ttmux kill 的交互式 y/N 确认（后端无 tty）
-func (a *API) KillSession(c *gin.Context) { a.text(c, "kill-session", "-t", c.Param("name")) }
+func (a *API) KillSession(c *gin.Context) { a.text(c, "kill-session", "-t", sessionParam(c)) }
 func (a *API) Capture(c *gin.Context) {
-	a.text(c, "capture", c.Param("name"), "--lines", c.DefaultQuery("lines", "200"))
+	a.text(c, "capture", sessionParam(c), "--lines", c.DefaultQuery("lines", "200"))
 }
 
 // 允许注入的具名按键（其余只允许单个字母/数字）。用于在专业渲染模式下响应 TUI 选择框。
@@ -134,7 +157,7 @@ var allowedKeys = map[string]bool{
 // 之所以单列一个端点：/tasks/_/send 只能发「文本+回车」，无法发方向键/裸数字/Esc，
 // 而 Claude/Codex 的权限确认/选项菜单需要这些键来选择。
 func (a *API) Keys(c *gin.Context) {
-	name := c.Param("name")
+	name := sessionParam(c)
 	var b struct {
 		Keys []string `json:"keys"`
 	}
@@ -164,7 +187,7 @@ func (a *API) Keys(c *gin.Context) {
 
 // SessionCwd GET /sessions/:name/cwd —— 返回会话活动 pane 的工作目录（供文件侧栏定位根）。
 func (a *API) SessionCwd(c *gin.Context) {
-	out, err := exec.Command("tmux", "display-message", "-p", "-t", c.Param("name"), "#{pane_current_path}").Output()
+	out, err := exec.Command("tmux", "display-message", "-p", "-t", sessionParam(c), "#{pane_current_path}").Output()
 	dir := ""
 	if err == nil {
 		dir = strings.TrimSpace(string(out))
@@ -175,7 +198,7 @@ func (a *API) SessionCwd(c *gin.Context) {
 // SessionType POST /sessions/:name/type —— 把文本字面量打进当前 pane（不追加回车）。
 // 供终端页语音识别后回填用：内容停在输入行，用户复查/编辑后自行按 Enter 发送。
 func (a *API) SessionType(c *gin.Context) {
-	name := c.Param("name")
+	name := sessionParam(c)
 	var b struct {
 		Text string `json:"text"`
 	}
@@ -201,6 +224,7 @@ func (a *API) Send(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
 		return
 	}
+	b.Sess = SanitizeSessionName(b.Sess)
 	// 分两步注入：先字面文本(-l，不解释按键名)，停顿一下，再单独回车。
 	// 否则像 Codex 这类 TUI 会把「文本+回车」当成一次粘贴，把回车并进去变成换行而非提交。
 	if _, err := a.TT.Run("send-keys", "-t", b.Sess, "-l", b.Msg); err != nil {
