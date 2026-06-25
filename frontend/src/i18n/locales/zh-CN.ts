@@ -536,6 +536,17 @@ const zhCN = {
   'settings.volcanoEndpoint': '接口地址',
   'settings.speechSaved': '语音设置已保存',
   'settings.save': '保存',
+  'settings.saved': '设置已保存',
+  'settings.tabGeneral': '通用',
+  'settings.tabSpeech': '语音',
+  'settings.tabPreferences': '偏好同步',
+  'settings.tabEnv': '环境变量',
+  'settings.agentCommands': 'Agent 命令',
+  'settings.agentCommandsHelp': '自定义启动 Claude Code 和 Codex 的 shell 命令。例如用 "cc -w" 代替 "claude"。',
+  'settings.prefsOverview': '跨设备同步的偏好',
+  'settings.prefsOverviewHelp': '这些偏好存储在服务端，所有设备共享。首次登录时会自动从浏览器本地存储迁移。',
+  'settings.prefsKey': '键',
+  'settings.prefsValue': '值',
 }
 
 export default zhCN

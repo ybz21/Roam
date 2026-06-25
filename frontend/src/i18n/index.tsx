@@ -1,6 +1,7 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import zhCN from './locales/zh-CN'
 import enUS from './locales/en-US'
+import { usePreferences, savePreferences } from '../preferences'
 
 export type Locale = 'zh-CN' | 'en-US'
 type Dict = Record<string, string>
@@ -48,10 +49,18 @@ function interpolate(template: string, vars?: Record<string, string | number>) {
 }
 
 export function I18nProvider({ children }: { children: ReactNode }) {
+  const [prefs] = usePreferences()
   const [locale, setLocaleState] = useState<Locale>(detectLocale)
+
+  useEffect(() => {
+    const synced = normalizeLocale(prefs.locale)
+    if (synced) setLocaleState(synced)
+  }, [prefs.locale])
+
   const value = useMemo<I18nValue>(() => {
     const setLocale = (next: Locale) => {
       setLocaleState(next)
+      savePreferences({ locale: next })
       try { localStorage.setItem(STORAGE_KEY, next) } catch {}
       document.documentElement.lang = next
     }

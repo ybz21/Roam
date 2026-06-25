@@ -19,11 +19,12 @@ type API struct {
 	TT          *ttmux.Client
 	BrowserHome string // 浏览器导航起始页地址（供前端设为默认主页）
 	Football    *FootballStore
-	Speech      *SpeechStore // 语音识别(ASR)配置 + 转录
+	Speech      *SpeechStore      // 语音识别(ASR)配置 + 转录
+	Prefs       *PreferencesStore // 用户偏好（主题/语言/Agent 命令等）
 }
 
 func New(tt *ttmux.Client, browserHome, dataDir string) *API {
-	return &API{TT: tt, BrowserHome: browserHome, Football: NewFootballStore(), Speech: NewSpeechStore(dataDir)}
+	return &API{TT: tt, BrowserHome: browserHome, Football: NewFootballStore(), Speech: NewSpeechStore(dataDir), Prefs: NewPreferencesStore(dataDir)}
 }
 
 // json 透传 ttmux 的 --json 输出

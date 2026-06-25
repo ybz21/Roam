@@ -5,7 +5,7 @@
 // 终端：多标签 / 字号调节 / 复制 / 更多快捷键 / 断线自动重连。
 import { useEffect, useRef, useState } from 'react'
 import {
-  Layout, Menu, Button, Card, List, Tag, Form, Input, Select, Segmented,
+  Layout, Menu, Button, Card, List, Tag, Form, Input, Select, Segmented, Tabs, Descriptions,
   Statistic, Row, Col, Space, Popconfirm, Empty, Modal, Grid, App as AntApp, Typography, Spin, Tooltip, Dropdown, Checkbox, Progress, AutoComplete, Radio,
 } from 'antd'
 import { QRCodeSVG } from 'qrcode.react'
@@ -22,6 +22,7 @@ import UpdateBanner from './UpdateBanner'
 import { useThemeMode } from './theme'
 import { useI18n } from './i18n'
 import { usePwaInstall } from './install'
+import { usePreferences, savePreferences, loadPreferences } from './preferences'
 import { PromptDialog, detectPrompt } from './prompt'
 import { copyText } from './chat/blocks'
 import { VoiceInput } from './chat/VoiceInput'
@@ -126,12 +127,14 @@ function shellQuote(s: string): string {
 function FilesPage({ openTerm }: { openTerm: (name: string) => void }) {
   const { message } = AntApp.useApp()
   const { t } = useI18n()
+  const [prefs] = usePreferences()
   const openAgent = async (kind: 'claude' | 'codex', file: string) => {
     const base = pathBasename(file).replace(/[^a-zA-Z0-9_.-]+/g, '-').slice(0, 28) || 'file'
     const name = `${kind}-${base}-${Date.now().toString(36).slice(-5)}`
     const dir = pathDirname(file)
     const prompt = `请打开并查看这个文件：${file}`
-    const cmd = `${kind === 'claude' ? 'claude' : 'codex'} ${shellQuote(prompt)}`
+    const agentCmd = kind === 'claude' ? (prefs.claudeCommand || 'claude') : (prefs.codexCommand || 'codex')
+    const cmd = `${agentCmd} ${shellQuote(prompt)}`
     try {
       await api('POST', '/sessions', { name, dir })
       await api('POST', '/tasks/_/send', { sess: name, msg: cmd })
@@ -192,7 +195,7 @@ export default function App() {
 
   useEffect(() => {
     setUnauthorizedHandler(() => setAuthed(false))
-    api('GET', '/me').then(() => { setAuthed(true) }).catch(() => setAuthed(false))
+    api('GET', '/me').then(() => { setAuthed(true); loadPreferences() }).catch(() => setAuthed(false))
   }, [])
 
   // hash 路由：URL #/xxx 与当前页同步（支持前进/后退、刷新保持、收藏分享）
@@ -217,7 +220,7 @@ export default function App() {
   }, [authed, terms])
 
   if (authed === null) return <div style={{ height: '100dvh', display: 'grid', placeItems: 'center' }}><Spin size="large" /></div>
-  if (!authed) return <Login onOk={() => { setAuthed(true); go('overview') }} />
+  if (!authed) return <Login onOk={() => { setAuthed(true); loadPreferences(); go('overview') }} />
 
   // 独立单终端页（新标签全屏打开）：hash 路由 #/term/<会话名>
   const soloName = tab === 'term' && route.includes('/') ? decodeURIComponent(route.slice(route.indexOf('/') + 1)) : ''
@@ -548,13 +551,18 @@ function TerminalPane(props: {
   const noBlur = isTouch ? (e: React.MouseEvent) => e.preventDefault() : undefined        // 点按钮不夺走输入框焦点（软键盘保持）
 
   // 弹框提醒开关：按会话名记忆是否关闭 PromptDialog 自动弹框（仍可在底部面板手动响应）。
+  const [prefsData] = usePreferences()
   const [promptOff, setPromptOff] = useState<Record<string, boolean>>(() => {
     try { return JSON.parse(localStorage.getItem(PROMPT_OFF_KEY) || '{}') } catch { return {} }
   })
+  useEffect(() => {
+    if (prefsData.promptPopupOff && Object.keys(prefsData.promptPopupOff).length > 0) setPromptOff(prefsData.promptPopupOff)
+  }, [prefsData.promptPopupOff])
   const togglePromptOff = () => {
     if (!active) return
     setPromptOff((m) => {
       const next = { ...m, [active]: !m[active] }
+      savePreferences({ promptPopupOff: next })
       try { localStorage.setItem(PROMPT_OFF_KEY, JSON.stringify(next)) } catch {}
       return next
     })
@@ -1175,12 +1183,19 @@ function Tasks({ openTerm }: { openTerm: (n: string) => void }) {
 }
 
 // ── 服务器目录选择器 ──
-// 最近用过的工作目录（localStorage 持久化），作为目录选择器的快捷候选
+// 最近用过的工作目录（服务端偏好 + localStorage 兜底），作为目录选择器的快捷候选
+import { getPreferences } from './preferences'
 const RECENT_DIRS_KEY = 'ttmux_recent_dirs'
-export function recentDirs(): string[] { try { return JSON.parse(localStorage.getItem(RECENT_DIRS_KEY) || '[]') } catch { return [] } }
+export function recentDirs(): string[] {
+  const fromPrefs = getPreferences().recentDirs
+  if (fromPrefs && fromPrefs.length > 0) return fromPrefs
+  try { return JSON.parse(localStorage.getItem(RECENT_DIRS_KEY) || '[]') } catch { return [] }
+}
 export function pushRecentDir(d: string) {
   if (!d || !d.trim()) return
-  try { localStorage.setItem(RECENT_DIRS_KEY, JSON.stringify([d.trim(), ...recentDirs().filter((x) => x !== d.trim())].slice(0, 8))) } catch {}
+  const dirs = [d.trim(), ...recentDirs().filter((x) => x !== d.trim())].slice(0, 8)
+  savePreferences({ recentDirs: dirs })
+  try { localStorage.setItem(RECENT_DIRS_KEY, JSON.stringify(dirs)) } catch {}
 }
 
 export function DirPicker({ open, start, onPick, onClose }: { open: boolean; start?: string; onPick: (p: string) => void; onClose: () => void }) {
@@ -1227,12 +1242,16 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
   const [agent, setAgent] = useState<'none' | 'claude' | 'codex'>('none')
   const { message } = AntApp.useApp()
   const { t } = useI18n()
+  const [prefs] = usePreferences()
   useEffect(() => { if (open) { setName(''); setDir(''); setAgent('none') } }, [open])
   const ok = async () => {
     if (!name.trim()) return message.error(t('session.nameRequired'))
     try {
       await api('POST', '/sessions', { name: name.trim(), dir: dir.trim() })
-      if (agent !== 'none') await api('POST', '/tasks/_/send', { sess: name.trim(), msg: agent })
+      if (agent !== 'none') {
+        const cmd = agent === 'claude' ? (prefs.claudeCommand || 'claude') : (prefs.codexCommand || 'codex')
+        await api('POST', '/tasks/_/send', { sess: name.trim(), msg: cmd })
+      }
       pushRecentDir(dir); message.success(t('session.created')); onClose(); onDone(name.trim())
     }
     catch (e: any) { message.error(e.message) }
@@ -1446,7 +1465,62 @@ function Sessions({ openTerm, closeTerm }: { openTerm: (n: string) => void; clos
   )
 }
 
-// ── Env ──
+// ── Agent 命令配置 ──
+function AgentCommandsCard() {
+  const { message } = AntApp.useApp()
+  const { t } = useI18n()
+  const [prefs, setPrefs] = usePreferences()
+  const [claudeCmd, setClaudeCmd] = useState(prefs.claudeCommand || 'claude')
+  const [codexCmd, setCodexCmd] = useState(prefs.codexCommand || 'codex')
+  useEffect(() => { setClaudeCmd(prefs.claudeCommand || 'claude') }, [prefs.claudeCommand])
+  useEffect(() => { setCodexCmd(prefs.codexCommand || 'codex') }, [prefs.codexCommand])
+  const save = () => {
+    setPrefs({ claudeCommand: claudeCmd.trim() || 'claude', codexCommand: codexCmd.trim() || 'codex' })
+    message.success(t('settings.saved'))
+  }
+  return (
+    <Card title={t('settings.agentCommands')}>
+      <Space direction="vertical" size="small" style={{ width: '100%', maxWidth: 520 }}>
+        <Input addonBefore="Claude" value={claudeCmd} onChange={(e) => setClaudeCmd(e.target.value)} placeholder="claude" />
+        <Input addonBefore="Codex" value={codexCmd} onChange={(e) => setCodexCmd(e.target.value)} placeholder="codex" />
+        <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('settings.agentCommandsHelp')}</span>
+        <Button type="primary" onClick={save}>{t('settings.save')}</Button>
+      </Space>
+    </Card>
+  )
+}
+
+// ── 偏好同步概览 ──
+function PreferencesOverview() {
+  const { t } = useI18n()
+  const [prefs] = usePreferences()
+  const items: { key: string; label: string; value: string }[] = [
+    { key: 'theme', label: 'theme', value: prefs.theme || 'dark' },
+    { key: 'locale', label: 'locale', value: prefs.locale || 'zh-CN' },
+    { key: 'browserQuality', label: 'browserQuality', value: prefs.browserQuality || 'auto' },
+    { key: 'browserDevice', label: 'browserDevice', value: prefs.browserDevice || '(desktop)' },
+    { key: 'browserRotate', label: 'browserRotate', value: prefs.browserRotate || '0' },
+    { key: 'claudeCommand', label: 'claudeCommand', value: prefs.claudeCommand || 'claude' },
+    { key: 'codexCommand', label: 'codexCommand', value: prefs.codexCommand || 'codex' },
+    { key: 'recentDirs', label: 'recentDirs', value: (prefs.recentDirs || []).join(', ') || '(empty)' },
+    { key: 'promptPopupOff', label: 'promptPopupOff', value: JSON.stringify(prefs.promptPopupOff || {}) },
+    { key: '_migrated', label: '_migrated', value: String(prefs._migrated ?? false) },
+  ]
+  return (
+    <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+      <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('settings.prefsOverviewHelp')}</span>
+      <Descriptions bordered size="small" column={1}>
+        {items.map((it) => (
+          <Descriptions.Item key={it.key} label={<code>{it.label}</code>}>
+            <code style={{ color: 'var(--text-dim)', wordBreak: 'break-all' }}>{it.value}</code>
+          </Descriptions.Item>
+        ))}
+      </Descriptions>
+    </Space>
+  )
+}
+
+// ── Env / Settings ──
 function EnvPage() {
   const [list, setList] = useState<any[]>([])
   const { message, modal } = AntApp.useApp()
@@ -1473,56 +1547,64 @@ function EnvPage() {
     })
   }
   return (
-    <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-      <Card title={t('settings.appearance')}>
-        <Space align="center" wrap>
-          <Segmented
-            value={mode}
-            onChange={(v) => setMode(v as 'light' | 'dark')}
-            options={[
-              { label: `☾ ${t('common.darkTheme')}`, value: 'dark' },
-              { label: `☀ ${t('common.lightTheme')}`, value: 'light' },
-            ]}
-          />
-          <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('settings.themeHelp')}</span>
+    <Tabs defaultActiveKey="general" style={{ width: '100%' }} items={[
+      { key: 'general', label: t('settings.tabGeneral'), children: (
+        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+          <Card title={t('settings.appearance')}>
+            <Space align="center" wrap>
+              <Segmented
+                value={mode}
+                onChange={(v) => setMode(v as 'light' | 'dark')}
+                options={[
+                  { label: `☾ ${t('common.darkTheme')}`, value: 'dark' },
+                  { label: `☀ ${t('common.lightTheme')}`, value: 'light' },
+                ]}
+              />
+              <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('settings.themeHelp')}</span>
+            </Space>
+          </Card>
+          <Card title={t('settings.language')}>
+            <Space align="center" wrap>
+              <Select
+                value={locale}
+                onChange={setLocale}
+                options={[{ value: 'en-US', label: 'English' }, { value: 'zh-CN', label: '中文' }]}
+                aria-label={t('settings.language')}
+                style={{ width: 180 }}
+              />
+              <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('settings.languageHelp')}</span>
+            </Space>
+          </Card>
+          <AgentCommandsCard />
+          <Card title={t('install.settingsTitle')}>
+            <Space align="center" wrap>
+              {pwaInstalled
+                ? <span style={{ color: 'var(--text-bright)' }}>✓ {t('install.installed')}</span>
+                : <Button type="primary" onClick={doInstall}>{t('install.button')}</Button>}
+              <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('install.settingsHelp')}</span>
+            </Space>
+          </Card>
+          {installGuide}
+          <TwoFactorCard />
         </Space>
-      </Card>
-      <Card title={t('settings.language')}>
-        <Space align="center" wrap>
-          <Select
-            value={locale}
-            onChange={setLocale}
-            options={[{ value: 'en-US', label: 'English' }, { value: 'zh-CN', label: '中文' }]}
-            aria-label={t('settings.language')}
-            style={{ width: 180 }}
-          />
-          <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('settings.languageHelp')}</span>
-        </Space>
-      </Card>
-      <SpeechCard />
-      <Card title={t('install.settingsTitle')}>
-        <Space align="center" wrap>
-          {pwaInstalled
-            ? <span style={{ color: 'var(--text-bright)' }}>✓ {t('install.installed')}</span>
-            : <Button type="primary" onClick={doInstall}>{t('install.button')}</Button>}
-          <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('install.settingsHelp')}</span>
-        </Space>
-      </Card>
-      {installGuide}
-      <Card title={t('env.globalVariables')} extra={<Space>
-        <Button onClick={add}>+ {t('env.add')}</Button>
-        <Button onClick={async () => { try { await api('POST', '/env/push'); message.success(t('env.pushed')) } catch (e: any) { message.error(e.message) } }}>{t('env.pushToSessions')}</Button>
-      </Space>}>
-        {list.length === 0 ? <Empty description={t('env.empty')} /> : (
-          <List dataSource={list} renderItem={(kv: any) => (
-            <List.Item actions={[<Popconfirm key="d" title={t('env.deleteConfirm')} onConfirm={async () => { try { await api('DELETE', '/env/' + encodeURIComponent(kv.key)); message.success(t('file.deleted')); load() } catch (e: any) { message.error(e.message) } }}><a style={{ color: '#f85149' }}>{t('file.delete')}</a></Popconfirm>]}>
-              <List.Item.Meta title={<code>{kv.key}</code>} description={<code style={{ color: 'var(--text-dim)' }}>{kv.value}</code>} />
-            </List.Item>
-          )} />
-        )}
-      </Card>
-      <TwoFactorCard />
-    </Space>
+      )},
+      { key: 'speech', label: t('settings.tabSpeech'), children: <SpeechCard /> },
+      { key: 'preferences', label: t('settings.tabPreferences'), children: <PreferencesOverview /> },
+      { key: 'env', label: t('settings.tabEnv'), children: (
+        <Card title={t('env.globalVariables')} extra={<Space>
+          <Button onClick={add}>+ {t('env.add')}</Button>
+          <Button onClick={async () => { try { await api('POST', '/env/push'); message.success(t('env.pushed')) } catch (e: any) { message.error(e.message) } }}>{t('env.pushToSessions')}</Button>
+        </Space>}>
+          {list.length === 0 ? <Empty description={t('env.empty')} /> : (
+            <List dataSource={list} renderItem={(kv: any) => (
+              <List.Item actions={[<Popconfirm key="d" title={t('env.deleteConfirm')} onConfirm={async () => { try { await api('DELETE', '/env/' + encodeURIComponent(kv.key)); message.success(t('file.deleted')); load() } catch (e: any) { message.error(e.message) } }}><a style={{ color: '#f85149' }}>{t('file.delete')}</a></Popconfirm>]}>
+                <List.Item.Meta title={<code>{kv.key}</code>} description={<code style={{ color: 'var(--text-dim)' }}>{kv.value}</code>} />
+              </List.Item>
+            )} />
+          )}
+        </Card>
+      )},
+    ]} />
   )
 }
 

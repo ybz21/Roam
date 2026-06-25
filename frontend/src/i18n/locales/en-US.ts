@@ -536,6 +536,17 @@ const enUS = {
   'settings.volcanoEndpoint': 'Endpoint',
   'settings.speechSaved': 'Voice settings saved',
   'settings.save': 'Save',
+  'settings.saved': 'Settings saved',
+  'settings.tabGeneral': 'General',
+  'settings.tabSpeech': 'Voice',
+  'settings.tabPreferences': 'Synced Preferences',
+  'settings.tabEnv': 'Environment',
+  'settings.agentCommands': 'Agent Commands',
+  'settings.agentCommandsHelp': 'Customize the shell commands used to launch Claude Code and Codex. For example, use "cc -w" instead of "claude".',
+  'settings.prefsOverview': 'Cross-device synced preferences',
+  'settings.prefsOverviewHelp': 'These preferences are stored on the server and shared across all devices. On first login, values are automatically migrated from browser local storage.',
+  'settings.prefsKey': 'Key',
+  'settings.prefsValue': 'Value',
 }
 
 export default enUS
