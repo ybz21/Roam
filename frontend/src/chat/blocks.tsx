@@ -70,16 +70,30 @@ export function Collapsible({ label, text, color, open: dflt = false }: { label:
 
 // 彩色 diff：+ 绿 / - 红 / @@,*** 紫。既能渲染补丁文本，也能渲染手动拼的 +/- 行。
 export function Diff({ text, max = 360 }: { text: string; max?: number }) {
+  const [copied, setCopied] = useState(false)
+  const { t } = useI18n()
+  const onCopy = (e: ReactMouseEvent) => {
+    e.stopPropagation()
+    copyText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1200)
+  }
   return (
-    <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: max, overflow: 'auto', fontFamily: MONO, fontSize: 12, lineHeight: 1.45 }}>
-      {text.split('\n').map((l, i) => {
-        let color = 'var(--text-bright)'
-        if (l.startsWith('+') && !l.startsWith('+++')) color = '#3fb950'
-        else if (l.startsWith('-') && !l.startsWith('---')) color = '#f85149'
-        else if (l.startsWith('@@') || l.startsWith('***')) color = '#d2a8ff'
-        return <div key={i} style={{ color }}>{l || ' '}</div>
-      })}
-    </pre>
+    <div style={{ position: 'relative' }} className="cc-codebox">
+      <button onClick={onCopy} title={t('common.copy')} className="cc-copy"
+        style={{ position: 'absolute', top: 6, right: 6, zIndex: 1, border: '1px solid var(--border)', background: 'var(--bg-container)', color: copied ? '#3fb950' : 'var(--text-dim)', borderRadius: 6, fontSize: 11, lineHeight: 1, padding: '3px 7px', cursor: 'pointer' }}>
+        {copied ? `✓ ${t('common.copied')}` : t('common.copy')}
+      </button>
+      <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: max, overflow: 'auto', fontFamily: MONO, fontSize: 12, lineHeight: 1.45, paddingRight: 54 }}>
+        {text.split('\n').map((l, i) => {
+          let color = 'var(--text-bright)'
+          if (l.startsWith('+') && !l.startsWith('+++')) color = '#3fb950'
+          else if (l.startsWith('-') && !l.startsWith('---')) color = '#f85149'
+          else if (l.startsWith('@@') || l.startsWith('***')) color = '#d2a8ff'
+          return <div key={i} style={{ color }}>{l || ' '}</div>
+        })}
+      </pre>
+    </div>
   )
 }
 

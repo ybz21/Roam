@@ -2,7 +2,7 @@
 //   shell/exec_command → 终端命令卡片；apply_patch → 彩色 diff；reasoning → 折叠「推理」。
 import { memo } from 'react'
 import Markdown from '../Markdown'
-import { Collapsible, Diff, MONO, copyText, fmtTs, ToolResult } from './blocks'
+import { CodeBox, Collapsible, Diff, MONO, copyText, fmtTs, ToolResult } from './blocks'
 import { useI18n } from '../i18n'
 import type { Block, Msg } from './types'
 
@@ -36,9 +36,9 @@ function ToolCard({ b, result }: { b: Block; result?: Block }) {
           {b.input && <Diff text={b.input} />}
         </>
       ) : cmd ? (
-        <div style={{ fontFamily: MONO }}>
-          <span style={{ color: CODEX_ACCENT }}>❯</span>{' '}
-          <span style={{ color: 'var(--text-bright)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{cmd}</span>
+        <div>
+          <div style={{ fontFamily: MONO, color: CODEX_ACCENT, fontWeight: 600, fontSize: 12.5 }}>❯ shell</div>
+          <CodeBox text={cmd} max={180} />
         </div>
       ) : (
         <div>
