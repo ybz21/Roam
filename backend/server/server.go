@@ -85,7 +85,6 @@ func New(cfg Config) *gin.Engine {
 		g.POST("/git/commit", h.GitCommit)   // 提交（可选 push）
 		g.POST("/git/op", h.GitOp)           // push / pull / fetch / sync
 
-
 		g.GET("/sessions", h.Sessions)
 		g.POST("/sessions", h.NewSession)
 		g.PATCH("/sessions/:name", h.RenameSession)
