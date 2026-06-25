@@ -658,7 +658,7 @@ function TerminalPane(props: {
     message.loading({ content: t('terminal.imageUploading'), key: 'img-paste', duration: 0 })
     try {
       const res = await upload('/tmp', files)
-      sendPaste(session, res.saved.join(' '))
+      sendPaste(session, res.saved.map((p: string) => '@' + p).join(' '))
       message.success({ content: t('terminal.imagePasted', { count: files.length }), key: 'img-paste' })
     } catch (e: any) {
       message.error({ content: t('terminal.imageUploadFailed', { message: e.message }), key: 'img-paste' })
@@ -1067,16 +1067,18 @@ function Overview({ go, openTerm }: { go: (k: string) => void; openTerm: (n: str
       </div>
 
       {/* 统计磁贴 */}
-      <Row gutter={[14, 14]}>
-        <Col xs={12} sm={6}><StatTile icon={ICONS.sessions} label={t('nav.sessions')} value={info?.sessions ?? sessions.length} accent="#58a6ff" onClick={() => go('sessions')} /></Col>
-        <Col xs={12} sm={6}><StatTile icon={ICONS.swarm} label={t('nav.swarm')} value={swarms.length} accent="#58a6ff" onClick={() => go('swarm')} /></Col>
-        <Col xs={12} sm={6}><StatTile icon={ICONS.swarm} label={t('overview.activeMembers')} value={aliveMembers} accent="#3fb950" onClick={() => go('swarm')} /></Col>
-        <Col xs={12} sm={6}><StatTile icon={ICONS.overview} label={t('overview.pendingUnlock')} value={pendingMembers} accent="#d29922" onClick={() => go('swarm')} /></Col>
-      </Row>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
+        {[
+          { icon: ICONS.sessions, label: t('nav.sessions'), value: info?.sessions ?? sessions.length, accent: '#58a6ff', onClick: () => go('sessions') },
+          { icon: ICONS.swarm, label: t('nav.swarm'), value: swarms.length, accent: '#58a6ff', onClick: () => go('swarm') },
+          { icon: ICONS.swarm, label: t('overview.activeMembers'), value: aliveMembers, accent: '#3fb950', onClick: () => go('swarm') },
+          { icon: ICONS.overview, label: t('overview.pendingUnlock'), value: pendingMembers, accent: '#d29922', onClick: () => go('swarm') },
+        ].map((p, i) => <div key={i} style={{ flex: '1 1 140px', minWidth: 140 }}><StatTile {...p} /></div>)}
+      </div>
 
       {/* 蜂群 + 会话 双栏 */}
-      <Row gutter={[14, 14]}>
-        <Col xs={24} lg={12}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
+        <div style={{ flex: '1 1 360px', minWidth: 280 }}>
           <Card title={<Space><span style={{ color: '#58a6ff' }}>◆</span>{t('nav.swarm')}</Space>} extra={<a onClick={() => go('swarm')}>{t('common.all')} →</a>}>
             {swarms.length === 0 ? <Empty description={t('overview.noSwarms')} /> : (
               <Space direction="vertical" size={10} style={{ width: '100%' }}>
@@ -1097,8 +1099,8 @@ function Overview({ go, openTerm }: { go: (k: string) => void; openTerm: (n: str
               </Space>
             )}
           </Card>
-        </Col>
-        <Col xs={24} lg={12}>
+        </div>
+        <div style={{ flex: '1 1 360px', minWidth: 280 }}>
           <Card title={t('nav.sessions')} extra={<a onClick={() => go('sessions')}>{t('common.all')} →</a>}>
             {sessions.length === 0 ? <Empty description={t('session.noActive')} /> : (
               <List size="small" dataSource={sessions.slice(0, 6)} renderItem={(s: any) => (
@@ -1114,8 +1116,8 @@ function Overview({ go, openTerm }: { go: (k: string) => void; openTerm: (n: str
               )} />
             )}
           </Card>
-        </Col>
-      </Row>
+        </div>
+      </div>
     </Space>
   )
 }
