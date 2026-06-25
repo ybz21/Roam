@@ -84,7 +84,9 @@ func ensureChrome() error {
 		"--force-device-scale-factor=" + envOr("TTMUX_CHROME_SCALE", "2"),
 	}
 	if runtime.GOOS != "darwin" && os.Getenv("DISPLAY") == "" { // 无显示器（服务器）→ 无头，screencast 同样可用
-		args = append(args, "--headless=new", "--window-size=1280,800")
+		args = append(args, "--headless=new", "--window-size="+envOr("TTMUX_CHROME_WINDOW", "1920,1080"))
+	} else if envOr("TTMUX_CHROME_FULLSCREEN", "1") != "0" { // 宿主机有显示器：默认全屏启动，画面铺满宿主屏幕
+		args = append(args, "--start-fullscreen")
 	}
 	args = append(args, "about:blank")
 	cmd := exec.Command(chromeExecutable(), args...)
