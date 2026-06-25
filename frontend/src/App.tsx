@@ -1576,7 +1576,7 @@ function SpeechCard() {
 function BrowserCard() {
   const { message } = AntApp.useApp()
   const { t } = useI18n()
-  const [cfg, setCfg] = useState<any>({ windowSize: '1920,1080', fullscreen: true, scale: '2', profile: '/tmp/ttmux-chrome', bin: '' })
+  const [cfg, setCfg] = useState<any>({ headless: 'auto', windowSize: '1920,1080', fullscreen: true, scale: '2', profile: '/tmp/ttmux-chrome', bin: '' })
   const [saving, setSaving] = useState(false)
   const [relaunching, setRelaunching] = useState(false)
   useEffect(() => { api('GET', '/browser/config').then((r) => { if (r?.data) setCfg(r.data) }).catch(() => {}) }, [])
@@ -1601,6 +1601,19 @@ function BrowserCard() {
     <Card title={t('settings.browser')}>
       <Space direction="vertical" size="middle" style={{ width: '100%' }}>
         <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('settings.browserHelp')}</span>
+        <Space align="center" wrap>
+          <span>{t('settings.browserMode')}</span>
+          <Segmented
+            value={cfg.headless || 'auto'}
+            onChange={(v) => set('headless', v)}
+            options={[
+              { value: 'auto', label: t('settings.browserModeAuto') },
+              { value: 'on', label: t('settings.browserModeHeadless') },
+              { value: 'off', label: t('settings.browserModeHeadful') },
+            ]}
+          />
+          <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('settings.browserModeHelp')}</span>
+        </Space>
         <Space direction="vertical" size="small" style={{ width: '100%', maxWidth: 560 }}>
           <Input addonBefore={t('settings.browserWindow')} value={cfg.windowSize} placeholder="1920,1080" onChange={(e) => set('windowSize', e.target.value)} />
           <Space align="center">

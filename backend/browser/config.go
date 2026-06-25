@@ -15,6 +15,7 @@ import (
 
 // Config 是可在 UI 里调的 Chrome 启动项。字符串空 / Fullscreen 为 nil = 未设，回落到 env/默认。
 type Config struct {
+	Headless   string `json:"headless"`   // "auto"(按有无显示器自动) | "on"(强制无头) | "off"(强制有头)
 	WindowSize string `json:"windowSize"` // headless 初始窗口，如 "1920,1080"
 	Fullscreen *bool  `json:"fullscreen"` // headful 是否全屏启动(--start-fullscreen)
 	Scale      string `json:"scale"`      // --force-device-scale-factor
@@ -89,6 +90,7 @@ func effectiveConfig() Config {
 		fs = false
 	}
 	return Config{
+		Headless:   pick(c.Headless, "", "auto"),
 		WindowSize: pick(c.WindowSize, os.Getenv("TTMUX_CHROME_WINDOW"), "1920,1080"),
 		Fullscreen: &fs,
 		Scale:      pick(c.Scale, os.Getenv("TTMUX_CHROME_SCALE"), "2"),

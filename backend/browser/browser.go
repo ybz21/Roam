@@ -87,9 +87,13 @@ func ensureChrome() error {
 		// 高 DPI 渲染：像素密度翻倍但 CSS 布局不变 → 画面更清晰
 		"--force-device-scale-factor=" + cfg.Scale,
 	}
-	if runtime.GOOS != "darwin" && os.Getenv("DISPLAY") == "" { // 无显示器（服务器）→ 无头，screencast 同样可用
+	// 无头/有头：auto=按有无显示器自动判断；on=强制无头；off=强制有头。
+	// 强制有头但无显示器(DISPLAY 空)时 Chrome 会起不来——属用户显式选择。
+	headless := cfg.Headless == "on" ||
+		(cfg.Headless != "off" && runtime.GOOS != "darwin" && os.Getenv("DISPLAY") == "")
+	if headless { // screencast 在无头下同样可用
 		args = append(args, "--headless=new", "--window-size="+cfg.WindowSize)
-	} else if cfg.Fullscreen != nil && *cfg.Fullscreen { // 宿主机有显示器：全屏启动，画面铺满宿主屏幕
+	} else if cfg.Fullscreen != nil && *cfg.Fullscreen { // 有头：全屏启动，画面铺满宿主屏幕
 		args = append(args, "--start-fullscreen")
 	}
 	args = append(args, "about:blank")
