@@ -33,30 +33,36 @@ jobs:
             const marker = '<!-- ttmux-automated-review -->'
             const issue_number = context.issue.number
             const { owner, repo } = context.repo
-            const comments = await github.paginate(github.rest.issues.listComments, {
-              owner,
-              repo,
-              issue_number,
-              per_page: 100,
-            })
-            const existing = comments.find(comment =>
-              comment.user.type === 'Bot' && comment.body.includes(marker)
-            )
             const nextBody = `${marker}\n${body}`
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner,
-                repo,
-                comment_id: existing.id,
-                body: nextBody,
-              })
-            } else {
-              await github.rest.issues.createComment({
+            // 来自 fork 的 PR 拿到的 GITHUB_TOKEN 是只读的，发评论会 403。
+            // 这种情况下别让整个 job 失败——审查正文已写进 step summary，降级为告警即可。
+            try {
+              const comments = await github.paginate(github.rest.issues.listComments, {
                 owner,
                 repo,
                 issue_number,
-                body: nextBody,
+                per_page: 100,
               })
+              const existing = comments.find(comment =>
+                comment.user.type === 'Bot' && comment.body.includes(marker)
+              )
+              if (existing) {
+                await github.rest.issues.updateComment({
+                  owner,
+                  repo,
+                  comment_id: existing.id,
+                  body: nextBody,
+                })
+              } else {
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number,
+                  body: nextBody,
+                })
+              }
+            } catch (e) {
+              core.warning(`跳过发表审查评论（fork PR 的令牌通常只读，无法评论）：${e.message}`)
             }
 
       - name: Fail on blocking findings
