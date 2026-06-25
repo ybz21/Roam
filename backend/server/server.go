@@ -85,8 +85,6 @@ func New(cfg Config) *gin.Engine {
 		g.POST("/git/commit", h.GitCommit)   // 提交（可选 push）
 		g.POST("/git/op", h.GitOp)           // push / pull / fetch / sync
 
-		g.GET("/upgrade/check", h.UpgradeCheck)  // 自升级：检查远端是否有新提交
-		g.POST("/upgrade/apply", h.UpgradeApply) // 自升级：拉取并重启
 
 		g.GET("/sessions", h.Sessions)
 		g.POST("/sessions", h.NewSession)
