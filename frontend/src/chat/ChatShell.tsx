@@ -145,7 +145,7 @@ export function ChatShell({ name, dir, accent, title, placeholder, onBack, onRef
         {/* 交互式选择框（权限确认/选项菜单）：检测到才显示，可点选 */}
         <PromptPanel name={name} accent={accent} />
         {errMsg && <div style={{ color: '#f85149', fontSize: 12, padding: '2px 12px' }}>{errMsg}</div>}
-        <div style={{ display: 'flex', gap: 8, padding: 10, borderTop: '1px solid var(--border)', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 8, padding: 10, borderTop: '1px solid var(--border)', alignItems: 'flex-end' }}>
           <input ref={fileRef} type="file" multiple style={{ display: 'none' }}
             onChange={(e) => { if (e.target.files?.length) doUpload(e.target.files); e.target.value = '' }} />
           <Button title={t('chat.uploadToCwd')} loading={uploading} onClick={() => fileRef.current?.click()}>📎</Button>
