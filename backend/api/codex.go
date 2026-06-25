@@ -102,7 +102,7 @@ func newestCodexRollout(cwd string) string {
 
 // CodexStatus GET /sessions/:name/codex —— 检测会话是否在跑 codex，并定位其 rollout。
 func (a *API) CodexStatus(c *gin.Context) {
-	dir := paneToolDir(c.Param("name"), cmdlineHasCodex)
+	dir := paneToolDir(sessionParam(c), cmdlineHasCodex)
 	if dir == "" {
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"running": false}})
 		return
@@ -249,7 +249,7 @@ func parseCodexLine(line string) *cMsg {
 func (a *API) CodexTranscript(c *gin.Context) {
 	file := c.Query("file")
 	if file == "" {
-		if dir := paneToolDir(c.Param("name"), cmdlineHasCodex); dir != "" {
+		if dir := paneToolDir(sessionParam(c), cmdlineHasCodex); dir != "" {
 			file = newestCodexRollout(dir)
 		}
 	}
