@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/gin-gonic/gin"
@@ -24,11 +26,12 @@ type Config struct {
 }
 
 var cfgStore struct {
-	mu   sync.Mutex
-	file string // 空 = 未初始化（未配 dataDir），此时只用 env/默认
+	mu       sync.Mutex
+	file     string // 空 = 未初始化（未配 dataDir），此时只用 env/默认
+	portFile string // 自动选择的 CDP 端口记录文件
 }
 
-// InitConfig 设定配置文件路径，由 server.New 用 dataDir 调一次。
+// InitConfig 设定配置文件路径，由 server.New 用 dataDir 调一次；并恢复上次记录的 CDP 端口。
 func InitConfig(dataDir string) {
 	if dataDir == "" {
 		return
@@ -36,7 +39,40 @@ func InitConfig(dataDir string) {
 	_ = os.MkdirAll(dataDir, 0o755)
 	cfgStore.mu.Lock()
 	cfgStore.file = filepath.Join(dataDir, "browser-config.json")
+	cfgStore.portFile = filepath.Join(dataDir, "browser-cdp-port")
 	cfgStore.mu.Unlock()
+	// 恢复上次用的端口：重启后端后优先在该端口找仍存活的 Chrome（attach 而非另起）。
+	if !cdpFixed {
+		if p := recordedPort(); p > 0 {
+			CDPBase = "http://127.0.0.1:" + strconv.Itoa(p)
+		}
+	}
+}
+
+// recordPort / recordedPort 持久化自动选择的 CDP 端口，重启复用，避免反复换端口开多个 Chrome。
+func recordPort(port int) {
+	cfgStore.mu.Lock()
+	f := cfgStore.portFile
+	cfgStore.mu.Unlock()
+	if f == "" {
+		return
+	}
+	_ = os.WriteFile(f, []byte(strconv.Itoa(port)), 0o600)
+}
+
+func recordedPort() int {
+	cfgStore.mu.Lock()
+	f := cfgStore.portFile
+	cfgStore.mu.Unlock()
+	if f == "" {
+		return 0
+	}
+	b, err := os.ReadFile(f)
+	if err != nil {
+		return 0
+	}
+	n, _ := strconv.Atoi(strings.TrimSpace(string(b)))
+	return n
 }
 
 // loadConfig 读取持久化的原始配置（未设字段保持空/nil）；文件不存在或未初始化时返回零值。
@@ -102,6 +138,14 @@ func effectiveConfig() Config {
 // GetConfig 返回当前生效配置（已填默认值，便于 UI 直接展示）。
 func GetConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": effectiveConfig()})
+}
+
+// Health 报告 Chrome 当前是否可用、CDP 地址、最近一次启动失败原因，供前端在「连不上」时显示为什么。
+func Health(c *gin.Context) {
+	statusMu.Lock()
+	e := lastErr
+	statusMu.Unlock()
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"alive": alive(), "cdp": CDPBase, "error": e}})
 }
 
 // SetConfig 整体覆盖保存配置（不立即重启 Chrome；调 /browser/relaunch 才换上新参数）。

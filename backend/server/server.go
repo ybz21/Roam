@@ -165,6 +165,7 @@ func New(cfg Config) *gin.Engine {
 		g.GET("/browser/config", browser.GetConfig)               // Chrome 启动配置：读
 		g.PUT("/browser/config", browser.SetConfig)               // Chrome 启动配置：存
 		g.POST("/browser/relaunch", browser.Relaunch)             // 按新配置重启 Chrome
+		g.GET("/browser/health", browser.Health)                  // Chrome 是否可用 + 启动失败原因
 		g.GET("/stream/status", hub.Status)
 		g.GET("/logs/:name", hub.Logs)
 	}

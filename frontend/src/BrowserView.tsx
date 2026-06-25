@@ -136,6 +136,7 @@ export default function BrowserView() {
   const control = true // 始终接管（鼠标/键盘转发给 Chrome）
   const controlRef = useRef(true)
   const [connected, setConnected] = useState(false)
+  const [healthMsg, setHealthMsg] = useState('') // 连不上时的原因（后端 /browser/health 的 error）
   const [url, setUrl] = useState('')
   const addrFocused = useRef(false) // 地址栏聚焦时不被轮询回写覆盖
   // 标签页（复用同一台 Chrome）
@@ -295,8 +296,12 @@ export default function BrowserView() {
     ws.binaryType = 'arraybuffer'
     wsRef.current = ws
     let objURL: string | null = null
-    ws.onopen = () => { setConnected(true); ws.send(JSON.stringify(emulatePayload())) } // 连上即同步当前设备/尺寸
-    ws.onclose = () => setConnected(false)
+    ws.onopen = () => { setConnected(true); setHealthMsg(''); ws.send(JSON.stringify(emulatePayload())) } // 连上即同步当前设备/尺寸
+    ws.onclose = () => {
+      setConnected(false)
+      // 连不上时问后端为什么（Chrome 启动失败原因），显示给用户而非干瞪黑屏
+      api('GET', '/browser/health').then((r) => { if (!r?.data?.alive) setHealthMsg(r?.data?.error || '') }).catch(() => {})
+    }
     ws.onmessage = (e) => {
       // 二进制 = 一帧：[w:u16][h:u16][seq:u16][jpeg...]；显示后回 ack 归还信用
       if (typeof e.data !== 'string') {
@@ -664,6 +669,20 @@ export default function BrowserView() {
         {ripples.map((p) => (
           <span key={p.id} className="bv-ripple" style={{ left: p.x, top: p.y }} />
         ))}
+        {/* 连不上且后端报了原因：覆盖一层提示，省得用户对着黑屏猜 */}
+        {!connected && healthMsg && (
+          <div style={{
+            position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 24, pointerEvents: 'none',
+          }}>
+            <div style={{
+              maxWidth: 520, padding: '12px 16px', borderRadius: 8, background: 'rgba(0,0,0,.72)',
+              border: '1px solid #f8514955', color: '#ffb4a8', fontSize: 13, lineHeight: 1.6, textAlign: 'center',
+            }}>
+              {t('browser.launchFailed')}<br />{healthMsg}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
