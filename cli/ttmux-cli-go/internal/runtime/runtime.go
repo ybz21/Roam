@@ -11,14 +11,14 @@ import (
 )
 
 type Runtime struct {
-	HomeDir    string
-	DataDir    string
-	LogsDir    string
-	GroupsDir  string
-	MetaDir    string
-	EnvFile    string
-	TmuxBin    string
-	Now        func() time.Time
+	HomeDir   string
+	DataDir   string
+	LogsDir   string
+	GroupsDir string
+	MetaDir   string
+	EnvFile   string
+	TmuxBin   string
+	Now       func() time.Time
 }
 
 func New() Runtime {

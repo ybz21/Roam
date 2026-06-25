@@ -1,6 +1,7 @@
 // Package stream 提供实时通道：
-//   Status — SSE，定期推送 tasks + sessions 快照（前端免轮询）
-//   Logs   — WebSocket，tail -f 指定会话日志
+//
+//	Status — SSE，定期推送 tasks + sessions 快照（前端免轮询）
+//	Logs   — WebSocket，tail -f 指定会话日志
 package stream
 
 import (

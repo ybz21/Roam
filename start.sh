@@ -41,7 +41,7 @@ if [[ "$TTMUX_BIN" == */* && ! -x "$TTMUX_BIN" ]]; then
   echo "==> TTMUX_BIN=$TTMUX_BIN 不存在，回退用 PATH 上的 ttmux"
   export TTMUX_BIN=ttmux
 fi
-export TTMUX_WEB_PASSWORD="${TTMUX_WEB_PASSWORD:-BladeAI2026!!}"
+# 登录口令在子命令(stop/status/logs)处理之后再解析，避免这些操作也触发生成/写 .env。
 # 自签 HTTPS：默认开启。手机经局域网用麦克风(语音)/剪贴板(一键粘贴)需「安全上下文」，
 # 纯 http 会被浏览器禁用这些能力。设 TTMUX_WEB_TLS=0 可退回 http。证书由后端就地生成。
 export TTMUX_WEB_TLS="${TTMUX_WEB_TLS:-1}"
@@ -103,6 +103,27 @@ case "${1:-}" in
     exec tail -n 100 -f "$LOG" ;;
 esac
 
+# ── 登录口令：用户可通过环境变量或 .env 自定义；未配置时首次启动随机生成并写回 .env ──
+# 改密码：编辑 .env 里的 TTMUX_WEB_PASSWORD（或导出同名环境变量）后重启即可。
+PW_GENERATED=0
+if [ -z "${TTMUX_WEB_PASSWORD:-}" ]; then
+  if command -v openssl >/dev/null 2>&1; then
+    TTMUX_WEB_PASSWORD="ttmux-$(openssl rand -hex 4)"
+  else
+    TTMUX_WEB_PASSWORD="ttmux-$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)"
+  fi
+  # 持久化到 .env（gitignored），让用户能查看/修改：已有键则替换其值，否则追加。
+  touch .env
+  if grep -qE '^[[:space:]]*TTMUX_WEB_PASSWORD=' .env; then
+    tmp="$(mktemp)"
+    sed -E "s|^[[:space:]]*TTMUX_WEB_PASSWORD=.*|TTMUX_WEB_PASSWORD=${TTMUX_WEB_PASSWORD}|" .env > "$tmp" && mv "$tmp" .env
+  else
+    printf '\n# 自动生成的登录口令（可在本文件修改后重启生效）\nTTMUX_WEB_PASSWORD=%s\n' "$TTMUX_WEB_PASSWORD" >> .env
+  fi
+  PW_GENERATED=1
+fi
+export TTMUX_WEB_PASSWORD
+
 BIN=backend/ttmux-web
 
 # ── dev：刷新 CLI/chrome/skills（跳过后端，交给本脚本增量编译）──────
@@ -154,6 +175,10 @@ fi
 
 # ── 启动 ─────────────────────────────────────────────────────────
 echo "==> 启动 ttmux-web  $SCHEME://$BIND  （口令: ${TTMUX_WEB_PASSWORD}）"
+if [ "$PW_GENERATED" = 1 ]; then
+  echo "    ★ 已为你随机生成登录口令并写入 .env：${TTMUX_WEB_PASSWORD}"
+  echo "      改密码：编辑 .env 的 TTMUX_WEB_PASSWORD（或设同名环境变量）后重启。"
+fi
 [ -n "$LAN" ] && echo "==> 手机/平板（同 WiFi）: $SCHEME://$LAN:$PORT"
 [ "$SCHEME" = https ] && echo "    （自签证书：手机首次访问点「高级 → 继续前往」即可，之后语音/剪贴板可用；如需 http 设 TTMUX_WEB_TLS=0）"
 

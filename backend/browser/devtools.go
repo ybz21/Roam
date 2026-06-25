@@ -2,10 +2,13 @@
 // 反向代理给用户浏览器打开。
 //
 // 镜像端只看到画面帧，真正的 F12 由 Chrome 调试端口直接提供：
-//   /devtools/inspector.html        DevTools 前端静态资源
-//   /devtools/page/<tabId>          该标签页的 CDP WebSocket（DevTools 连它干活）
+//
+//	/devtools/inspector.html        DevTools 前端静态资源
+//	/devtools/page/<tabId>          该标签页的 CDP WebSocket（DevTools 连它干活）
+//
 // 二者都在 127.0.0.1:9222，用户浏览器够不到 → 经本代理转发：
-//   /api/browser/cdp/*  →  http://127.0.0.1:9222/*
+//
+//	/api/browser/cdp/*  →  http://127.0.0.1:9222/*
 //
 // httputil.ReverseProxy 自 Go 1.12 起原生支持 WebSocket 升级，HTTP 资源与
 // CDP 帧通道一把代理即可。两处关键改写见 Director。

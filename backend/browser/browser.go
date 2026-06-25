@@ -74,22 +74,34 @@ func ensureChrome() error {
 	if alive() {
 		return nil
 	}
+	cfg := effectiveConfig() // Settings 里存的值 > env > 默认
 	args := []string{
 		"--remote-debugging-port=9222",
 		"--remote-debugging-address=127.0.0.1",
 		"--remote-allow-origins=*",
-		"--user-data-dir=/tmp/ttmux-chrome",
+		// profile 目录：默认隔离的临时 profile（不带你真实 Chrome 的登录/cookie/扩展）。
+		// 想复用真实登录态：把 profile 指到真实目录，但需先完全退出你平时的 Chrome（同 profile
+		// 不能两实例同时占用），且 Google 登录可能被「浏览器不安全」拦。
+		"--user-data-dir=" + cfg.Profile,
 		"--no-first-run", "--no-default-browser-check",
-		// 高 DPI 渲染：像素密度翻倍但 CSS 布局不变 → 画面更清晰（可用 TTMUX_CHROME_SCALE 调）
-		"--force-device-scale-factor=" + envOr("TTMUX_CHROME_SCALE", "2"),
+		// 高 DPI 渲染：像素密度翻倍但 CSS 布局不变 → 画面更清晰
+		"--force-device-scale-factor=" + cfg.Scale,
 	}
-	if runtime.GOOS != "darwin" && os.Getenv("DISPLAY") == "" { // 无显示器（服务器）→ 无头，screencast 同样可用
-		args = append(args, "--headless=new", "--window-size="+envOr("TTMUX_CHROME_WINDOW", "1920,1080"))
-	} else if envOr("TTMUX_CHROME_FULLSCREEN", "1") != "0" { // 宿主机有显示器：默认全屏启动，画面铺满宿主屏幕
+	// 无头/有头：auto=按有无显示器自动判断；on=强制无头；off=强制有头。
+	// 强制有头但无显示器(DISPLAY 空)时 Chrome 会起不来——属用户显式选择。
+	headless := cfg.Headless == "on" ||
+		(cfg.Headless != "off" && runtime.GOOS != "darwin" && os.Getenv("DISPLAY") == "")
+	if headless { // screencast 在无头下同样可用
+		args = append(args, "--headless=new", "--window-size="+cfg.WindowSize)
+	} else if cfg.Fullscreen != nil && *cfg.Fullscreen { // 有头：全屏启动，画面铺满宿主屏幕
 		args = append(args, "--start-fullscreen")
 	}
 	args = append(args, "about:blank")
-	cmd := exec.Command(chromeExecutable(), args...)
+	exe := cfg.Bin
+	if exe == "" {
+		exe = chromeExecutable()
+	}
+	cmd := exec.Command(exe, args...)
 	// 不继承本进程的 stdout/stderr：避免 Chrome 日志刷屏，也避免持有管道导致父进程读阻塞
 	cmd.Stdout = nil
 	cmd.Stderr = nil
