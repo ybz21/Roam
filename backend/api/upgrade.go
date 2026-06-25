@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -48,7 +49,13 @@ func (a *API) UpgradeCheck(c *gin.Context) {
 
 	runGit(ctx, root, "fetch", "--prune")
 
-	remote := "origin/" + branch
+	// 用实际配置的上游分支（支持 fork 等非 origin 远端），回退到 origin/<branch>
+	remote := ""
+	if upOut, err := runGit(ctx, root, "rev-parse", "--abbrev-ref", branch+"@{upstream}"); err == nil {
+		remote = strings.TrimSpace(upOut)
+	} else {
+		remote = "origin/" + branch
+	}
 	if _, err := runGit(ctx, root, "rev-parse", "--verify", remote); err != nil {
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"available": false, "branch": branch}})
 		return
@@ -103,12 +110,15 @@ func (a *API) UpgradeApply(c *gin.Context) {
 	if _, serr := os.Stat(startScript); serr == nil {
 		go func() {
 			time.Sleep(500 * time.Millisecond)
+			// --dev: git pull 后源码已变，必须重新编译前后端
 			cmd := exec.Command("bash", startScript, "--dev")
 			cmd.Dir = root
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-			cmd.Start()
+			if err := cmd.Start(); err != nil {
+				log.Printf("upgrade: restart failed: %v", err)
+			}
 		}()
 	}
 

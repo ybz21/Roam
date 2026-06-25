@@ -29,23 +29,21 @@ export default function UpgradeBanner() {
     return () => { stop = true; clearInterval(timer) }
   }, [])
 
-  if (!info?.available || phase === 'restarting') {
-    if (phase === 'restarting') {
-      return (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 3000,
-          display: 'grid', placeItems: 'center',
-          background: 'rgba(0,0,0,.65)', backdropFilter: 'blur(4px)',
-        }}>
-          <div style={{ textAlign: 'center', color: '#fff' }}>
-            <Spin size="large" />
-            <div style={{ marginTop: 16, fontSize: 15 }}>{t('upgrade.reconnecting')}</div>
-          </div>
+  if (phase === 'restarting') {
+    return (
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 3000,
+        display: 'grid', placeItems: 'center',
+        background: 'rgba(0,0,0,.65)', backdropFilter: 'blur(4px)',
+      }}>
+        <div style={{ textAlign: 'center', color: '#fff' }}>
+          <Spin size="large" />
+          <div style={{ marginTop: 16, fontSize: 15 }}>{t('upgrade.reconnecting')}</div>
         </div>
-      )
-    }
-    return null
+      </div>
+    )
   }
+  if (!info?.available) return null
 
   const handleUpgrade = async () => {
     setPhase('pulling')
