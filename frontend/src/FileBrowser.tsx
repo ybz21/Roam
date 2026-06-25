@@ -1,7 +1,7 @@
 // 文件侧栏 —— 在 Claude / Codex 对话页右侧浏览工作目录、查看文件内容（类似 codex 右侧边栏）。
 // 单层可导航列表：目录在前可进入、↑ 回上级、点文件在弹层里查看正文。
 import { type MouseEvent, type ReactNode, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
-import { AutoComplete, Button, Input, Modal, Space, Spin, App as AntApp, Tooltip } from 'antd'
+import { AutoComplete, Button, Dropdown, Input, Modal, Space, Spin, App as AntApp, Tooltip } from 'antd'
 import { api, upload } from './api'
 import Markdown from './Markdown'
 import { useI18n } from './i18n'
@@ -32,8 +32,31 @@ function fileNameOf(path: string): string {
   return path.split('/').pop() || 'download'
 }
 
-interface Entry { name: string; dir: boolean; size: number }
+interface Entry { name: string; dir: boolean; size: number; mtime: number; ctime: number }
 interface Dir { path: string; parent: string; entries: Entry[] }
+
+type SortKey = 'name' | 'kind' | 'mtime' | 'ctime' | 'size'
+
+function entryExt(name: string): string {
+  const i = name.lastIndexOf('.')
+  return i > 0 ? name.slice(i + 1).toLowerCase() : ''
+}
+
+function sortEntries(entries: Entry[], key: SortKey): Entry[] {
+  const sorted = [...entries]
+  sorted.sort((a, b) => {
+    // ponytail: dirs always first, secondary sort by key
+    if (a.dir !== b.dir) return a.dir ? -1 : 1
+    switch (key) {
+      case 'name': return a.name.localeCompare(b.name)
+      case 'kind': return entryExt(a.name).localeCompare(entryExt(b.name)) || a.name.localeCompare(b.name)
+      case 'mtime': return b.mtime - a.mtime || a.name.localeCompare(b.name)
+      case 'ctime': return b.ctime - a.ctime || a.name.localeCompare(b.name)
+      case 'size': return b.size - a.size || a.name.localeCompare(b.name)
+    }
+  })
+  return sorted
+}
 
 function fmtSize(n: number): string {
   if (n < 1024) return n + ' B'
@@ -206,6 +229,9 @@ const EyeIcon = () => (
 )
 const EyeOffIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9.9 4.2A10.9 10.9 0 0 1 12 4c6.5 0 10 7 10 7a17.7 17.7 0 0 1-3 3.7" /><path d="M6.6 6.6A17.6 17.6 0 0 0 2 11s3.5 7 10 7a10.6 10.6 0 0 0 4.4-.9" /><path d="m2 2 20 20" /><path d="M9.5 9.5a3 3 0 0 0 4.2 4.2" /></svg>
+)
+const SortIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h7" /><path d="M3 12h10" /><path d="M3 18h14" /><path d="M18 6v12" /><path d="m15 15 3 3 3-3" /></svg>
 )
 const IconButton = ({ title, children, danger, onClick, disabled, width = 24 }: { title: string; children: React.ReactNode; danger?: boolean; onClick?: (e: React.MouseEvent) => void; disabled?: boolean; width?: number | string }) => (
   <Tooltip title={title}>
@@ -507,6 +533,7 @@ export default function FileBrowser({
   const [mkdirName, setMkdirName] = useState('')
   const [mkdirBusy, setMkdirBusy] = useState(false)
   const [showHidden, setShowHidden] = useState(false) // 隐藏文件（点号开头）默认不显示，眼睛开关切换
+  const [sortKey, setSortKey] = useState<SortKey>('name')
   const fileRef = useRef<HTMLInputElement>(null)
   const { message, modal } = AntApp.useApp()
   const { t } = useI18n()
@@ -555,7 +582,7 @@ export default function FileBrowser({
   const refresh = () => setTick((t) => t + 1)
   const goUp = () => { if (data && canUp) navigate(data.parent) }
   // 隐藏文件（点号开头）默认过滤掉；眼睛开关开启后全部显示。
-  const visibleEntries = (data?.entries || []).filter((e) => showHidden || !e.name.startsWith('.'))
+  const visibleEntries = sortEntries((data?.entries || []).filter((e) => showHidden || !e.name.startsWith('.')), sortKey)
   const hiddenCount = (data?.entries.length || 0) - visibleEntries.length
 
   useEffect(() => {
@@ -670,6 +697,11 @@ export default function FileBrowser({
           <IconButton title={t('file.up')} disabled={!canUp} onClick={goUp}><FolderUpIcon /></IconButton>
           <IconButton title={t('file.refreshDir')} onClick={refresh}><RefreshIcon /></IconButton>
           <IconButton title={showHidden ? t('file.hideHidden') : t('file.showHidden')} onClick={() => setShowHidden((s) => !s)}>{showHidden ? <EyeIcon /> : <EyeOffIcon />}</IconButton>
+          <Dropdown menu={{ items: ([['name', 'file.sort.name'], ['kind', 'file.sort.kind'], ['mtime', 'file.sort.mtime'], ['ctime', 'file.sort.ctime'], ['size', 'file.sort.size']] as const).map(([k, label]) => ({ key: k, label: t(label), style: k === sortKey ? { color: accent, fontWeight: 600 } : undefined, onClick: () => setSortKey(k) })) }} trigger={['click']}>
+            <Tooltip title={t('file.sort')}>
+              <Button type="text" size="small" style={{ width: 24, height: 24, minWidth: 24, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><SortIcon /></Button>
+            </Tooltip>
+          </Dropdown>
           <IconButton title={t('file.newFolder')} disabled={!cur} onClick={() => { setMkdirName(''); setMkdirOpen(true) }}><NewFolderIcon /></IconButton>
           <IconButton title={t('file.uploadHere')} disabled={uploading || !cur} onClick={() => fileRef.current?.click()}>{uploading ? '…' : <UploadIcon />}</IconButton>
         </div>

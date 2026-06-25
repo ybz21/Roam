@@ -21,9 +21,11 @@ import (
 )
 
 type fileEntry struct {
-	Name string `json:"name"`
-	Dir  bool   `json:"dir"`
-	Size int64  `json:"size"`
+	Name  string `json:"name"`
+	Dir   bool   `json:"dir"`
+	Size  int64  `json:"size"`
+	Mtime int64  `json:"mtime"`
+	Ctime int64  `json:"ctime"`
 }
 
 // Files GET /files?path=<dir> —— 列出目录内容（目录在前，按名排序）。
@@ -41,11 +43,13 @@ func (a *API) Files(c *gin.Context) {
 	}
 	list := []fileEntry{}
 	for _, e := range entries {
-		var size int64
+		var size, mtime, ctime int64
 		if info, err := e.Info(); err == nil {
 			size = info.Size()
+			mtime = info.ModTime().Unix()
+			ctime = fileCtime(info)
 		}
-		list = append(list, fileEntry{Name: e.Name(), Dir: e.IsDir(), Size: size})
+		list = append(list, fileEntry{Name: e.Name(), Dir: e.IsDir(), Size: size, Mtime: mtime, Ctime: ctime})
 	}
 	sort.Slice(list, func(i, j int) bool {
 		if list[i].Dir != list[j].Dir {
