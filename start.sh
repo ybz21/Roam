@@ -148,7 +148,11 @@ if [ "$DEV" = 1 ]; then
   fi
   cd ..
 elif [ ! -f frontend/dist/index.html ]; then
-  echo "✘ 未找到 frontend/dist —— 先构建：bash install.sh   或   bash start.sh --dev"; exit 1
+  echo "==> 未找到 frontend/dist，自动编译前端..."
+  (cd frontend && [ -d node_modules ] || npm install && npx vite build)
+elif [ "$(find frontend/src frontend/index.html frontend/vite.config.ts -newer frontend/dist/index.html 2>/dev/null | head -1)" ]; then
+  echo "==> 检测到前端源码变更，自动重新编译..."
+  (cd frontend && npx vite build)
 fi
 
 # ── 杀掉旧进程 ───────────────────────────────────────────────────

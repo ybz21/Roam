@@ -181,7 +181,41 @@ const Term = forwardRef<TermHandle, {
     const themeObs = new MutationObserver(() => { try { term.options.theme = xtermTheme() } catch {} })
     themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
 
-    const dataDisp = term.onData((d) => { const ws = wsRef.current; if (ws && ws.readyState === 1) ws.send(d) })
+    // ponytail: IME 切英文时 macOS commit 未选中拼音（"s c p"），xterm 发给 pty 造成垃圾。
+    // composition 期间吞掉所有 onData；compositionend 后吞掉 xterm 延迟发出的 finalize 数据，
+    // 如果是纯拼音则去空格重发，中文则原样放行。
+    // 升级路径：patch xterm CompositionHelper。
+    const textarea = elRef.current!.querySelector('textarea')
+    let composing = false
+    let pendingReplace: string | null = null // compositionend 后等待替换的拼音
+    const onCompStart = () => { composing = true; pendingReplace = null }
+    const onCompEnd = (e: CompositionEvent) => {
+      composing = false
+      const data = e.data || ''
+      // 纯 ASCII 字母+空格 = 拼音未选中候选词（切换输入法触发）
+      if (data && /^[a-zA-Z][a-zA-Z ]*$/.test(data)) {
+        pendingReplace = data.replace(/ /g, '')
+      }
+      // 中文：pendingReplace 保持 null，xterm finalize 的 onData 正常放行
+    }
+    if (textarea) {
+      textarea.addEventListener('compositionstart', onCompStart)
+      textarea.addEventListener('compositionend', onCompEnd)
+    }
+
+    const dataDisp = term.onData((d) => {
+      const ws = wsRef.current
+      if (!ws || ws.readyState !== 1) return
+      if (composing) return // composition 期间吞掉（xterm 中间态）
+      if (pendingReplace !== null) {
+        // compositionend 后 xterm finalize 发出的数据 → 替换为去空格版
+        const replace = pendingReplace
+        pendingReplace = null
+        ws.send(replace)
+        return
+      }
+      ws.send(d)
+    })
     const ro = new ResizeObserver(() => sendResize())
     if (elRef.current) ro.observe(elRef.current)
     window.addEventListener('resize', sendResize)
@@ -271,6 +305,10 @@ const Term = forwardRef<TermHandle, {
       el.removeEventListener('touchend', onTouchEnd)
       el.removeEventListener('contextmenu', onCtx)
       el.removeEventListener('paste', onPasteCapture, { capture: true } as any)
+      if (textarea) {
+        textarea.removeEventListener('compositionstart', onCompStart)
+        textarea.removeEventListener('compositionend', onCompEnd)
+      }
       dataDisp.dispose()
       try { wsRef.current?.close() } catch {}
       term.dispose()

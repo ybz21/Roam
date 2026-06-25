@@ -5,7 +5,7 @@
 // 终端：多标签 / 字号调节 / 复制 / 更多快捷键 / 断线自动重连。
 import { useEffect, useRef, useState } from 'react'
 import {
-  Layout, Menu, Button, Card, List, Tag, Form, Input, Select, Segmented,
+  Layout, Menu, Button, Card, List, Tag, Form, Input, Select, Segmented, Tabs, Descriptions,
   Statistic, Row, Col, Space, Popconfirm, Empty, Modal, Grid, App as AntApp, Typography, Spin, Tooltip, Dropdown, Checkbox, Progress, AutoComplete, Radio, Switch,
 } from 'antd'
 import { QRCodeSVG } from 'qrcode.react'
@@ -22,6 +22,7 @@ import UpdateBanner from './UpdateBanner'
 import { useThemeMode } from './theme'
 import { useI18n } from './i18n'
 import { usePwaInstall } from './install'
+import { usePreferences, savePreferences, loadPreferences } from './preferences'
 import { PromptDialog, detectPrompt } from './prompt'
 import { copyText } from './chat/blocks'
 import { VoiceInput } from './chat/VoiceInput'
@@ -126,12 +127,14 @@ function shellQuote(s: string): string {
 function FilesPage({ openTerm }: { openTerm: (name: string) => void }) {
   const { message } = AntApp.useApp()
   const { t } = useI18n()
+  const [prefs] = usePreferences()
   const openAgent = async (kind: 'claude' | 'codex', file: string) => {
     const base = pathBasename(file).replace(/[^a-zA-Z0-9_.-]+/g, '-').slice(0, 28) || 'file'
     const name = `${kind}-${base}-${Date.now().toString(36).slice(-5)}`
     const dir = pathDirname(file)
     const prompt = `请打开并查看这个文件：${file}`
-    const cmd = `${kind === 'claude' ? 'claude' : 'codex'} ${shellQuote(prompt)}`
+    const agentCmd = kind === 'claude' ? (prefs.claudeCommand || 'claude') : (prefs.codexCommand || 'codex')
+    const cmd = `${agentCmd} ${shellQuote(prompt)}`
     try {
       const res = await api('POST', '/sessions', { name, dir })
       const actual = res.name || name
@@ -182,6 +185,8 @@ export default function App() {
   const [overlay, setOverlay] = useState(false) // 手机/平板全屏终端
   const [dockOpen, setDockOpen] = useState(true) // 桌面：右侧终端停靠栏是否展开
   const [dockMax, setDockMax] = useState(false)  // 桌面：终端栏向左扩展（遮住会话列表）
+  const [customDockWidth, setCustomDockWidth] = useState<number | null>(null)
+  const resizing = useRef(false)
   const [fontSize, setFontSize] = useState(13)
   const [statusMap, setStatusMap] = useState<Record<string, TermStatus>>({})
   const termRefs = useRef<Record<string, TermHandle | null>>({})
@@ -193,7 +198,7 @@ export default function App() {
 
   useEffect(() => {
     setUnauthorizedHandler(() => setAuthed(false))
-    api('GET', '/me').then(() => { setAuthed(true) }).catch(() => setAuthed(false))
+    api('GET', '/me').then(() => { setAuthed(true); loadPreferences() }).catch(() => setAuthed(false))
   }, [])
 
   // hash 路由：URL #/xxx 与当前页同步（支持前进/后退、刷新保持、收藏分享）
@@ -218,7 +223,7 @@ export default function App() {
   }, [authed, terms])
 
   if (authed === null) return <div style={{ height: '100dvh', display: 'grid', placeItems: 'center' }}><Spin size="large" /></div>
-  if (!authed) return <Login onOk={() => { setAuthed(true); go('overview') }} />
+  if (!authed) return <Login onOk={() => { setAuthed(true); loadPreferences(); go('overview') }} />
 
   // 独立单终端页（新标签全屏打开）：hash 路由 #/term/<会话名>
   const soloName = tab === 'term' && route.includes('/') ? decodeURIComponent(route.slice(route.indexOf('/') + 1)) : ''
@@ -278,7 +283,8 @@ export default function App() {
   }
   const anyClaude = terms.some((t) => claudeMap[t]?.running || codexMap[t]?.running)
   const docked = hasSider && terms.length > 0 && dockOpen // 桌面停靠栏已展开
-  const dockPageWidth = tab === 'sessions' || tab === 'overview' || tab === 'swarm' || tab === 'settings' ? 420 : 300
+  const defaultDockWidth = tab === 'sessions' || tab === 'overview' || tab === 'swarm' || tab === 'settings' ? 420 : 300
+  const dockPageWidth = customDockWidth ?? defaultDockWidth
   const setStatus = (name: string, s: TermStatus) => setStatusMap((m) => ({ ...m, [name]: s }))
   const sendKey = (seq: string) => active && termRefs.current[active]?.send(seq)
 
@@ -354,24 +360,21 @@ export default function App() {
               )}
             </div>
             <div style={{ flex: 1, overflowY: 'auto' }}>{menu}</div>
-            {/* 底部：全屏 + 折叠 + 退出，始终竖向堆叠（安装到桌面只放在设置页）*/}
-            <div style={{ borderTop: '1px solid var(--border-subtle)', padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ borderTop: '1px solid var(--border-subtle)', padding: 8, display: 'flex', flexDirection: collapsed ? 'column' : 'row', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
               {fsSupported && (
-                <Button type="text" block onClick={toggleFs} style={{ color: 'var(--text-dim)', textAlign: collapsed ? 'center' : 'left' }}
-                  title={isFs ? t('common.exitFullscreen') : t('common.fullscreen')}>
-                  {collapsed ? fsIcon : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{fsIcon}{isFs ? t('common.exitFullscreen') : t('common.fullscreen')}</span>}
-                </Button>
+                <Tooltip title={isFs ? t('common.exitFullscreen') : t('common.fullscreen')} placement="top">
+                  <Button type="text" onClick={toggleFs} style={{ color: 'var(--text-dim)' }} icon={fsIcon} />
+                </Tooltip>
               )}
-              <Button type="text" block onClick={() => setCollapsed((c) => !c)} style={{ color: 'var(--text-dim)' }}
-                title={collapsed ? t('common.expand') : t('common.collapse')}>
-                {svg(collapsed
-                  ? <><polyline points="9 6 15 12 9 18" /></>
-                  : <><polyline points="15 6 9 12 15 18" /></>)}
-              </Button>
+              <Tooltip title={collapsed ? t('common.expand') : t('common.collapse')} placement="top">
+                <Button type="text" onClick={() => setCollapsed((c) => !c)} style={{ color: 'var(--text-dim)' }}
+                  icon={svg(collapsed ? <><polyline points="9 6 15 12 9 18" /></> : <><polyline points="15 6 9 12 15 18" /></>)} />
+              </Tooltip>
               <Popconfirm title={t('common.logoutConfirm')} okText={t('common.logout')} cancelText={t('common.cancel')} onConfirm={logout} placement="topRight">
-                <Button type="text" block style={{ color: 'var(--text-dim)', textAlign: collapsed ? 'center' : 'left' }} title={t('common.logout')}>
-                  {collapsed ? svg(<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></>) : t('common.logout')}
-                </Button>
+                <Tooltip title={t('common.logout')} placement="top">
+                  <Button type="text" style={{ color: 'var(--text-dim)' }}
+                    icon={svg(<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></>)} />
+                </Tooltip>
               </Popconfirm>
             </div>
           </div>
@@ -387,43 +390,63 @@ export default function App() {
             width: docked && tab !== 'browser' && tab !== 'files' ? (dockMax ? 0 : dockPageWidth) : 'auto', minWidth: 0,
             height: '100dvh', overflow: tab === 'browser' || tab === 'files' ? 'hidden' : 'auto',
             padding: 0,
-            transition: 'flex-basis .2s, width .2s',
+            transition: customDockWidth != null ? 'none' : 'flex-basis .2s, width .2s',
           }}>
             {pageNode}
           </Content>
 
-          {/* 角标把手：上半=向左扩展（关→开→遮住会话列表），下半=向右收起；都带图标+文字 */}
+          {/* 拖拽把手 + 展开/收起按钮 */}
           {hasSider && terms.length > 0 && (
             <div style={{
               flex: '0 0 22px', background: 'var(--bg-container)', borderLeft: '1px solid var(--border)',
               display: 'flex', flexDirection: 'column', color: anyClaude ? '#58a6ff' : 'var(--text-dim)', userSelect: 'none',
             }}>
-              {/* 上半：向左扩展 */}
-              <div onClick={() => (dockOpen ? setDockMax(true) : setDockOpen(true))}
-                title={!dockOpen ? t('terminal.expandTitle') : t('terminal.expandLeftTitle')}
-                style={{
-                  flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5,
-                  borderBottom: '1px solid var(--border)', cursor: dockMax ? 'default' : 'pointer', opacity: dockMax ? 0.3 : 1,
-                }}>
-                {/* 双箭头向左 = 扩展/展开面板 */}
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M13 6 L7 12 L13 18" /><path d="M18 6 L12 12 L18 18" />
+              {/* 中间：拖拽调整宽度 */}
+              <div
+                style={{ flex: 1, cursor: 'col-resize', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                title={t('common.dragToResize') || 'Drag to resize'}
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  resizing.current = true
+                  const siderWidth = collapsed ? 64 : 208
+                  const startX = e.clientX
+                  const startW = dockPageWidth
+                  const onMove = (ev: MouseEvent) => {
+                    if (!resizing.current) return
+                    const delta = ev.clientX - startX
+                    const next = Math.max(280, Math.min(window.innerWidth - siderWidth - 200, startW + delta))
+                    setCustomDockWidth(next)
+                  }
+                  const onUp = () => { resizing.current = false; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
+                  window.addEventListener('mousemove', onMove)
+                  window.addEventListener('mouseup', onUp)
+                }}
+              >
+                <svg width="6" height="24" viewBox="0 0 6 24" fill="currentColor" opacity="0.5">
+                  <circle cx="1.5" cy="6" r="1.5" /><circle cx="4.5" cy="6" r="1.5" />
+                  <circle cx="1.5" cy="12" r="1.5" /><circle cx="4.5" cy="12" r="1.5" />
+                  <circle cx="1.5" cy="18" r="1.5" /><circle cx="4.5" cy="18" r="1.5" />
                 </svg>
-                <span style={{ writingMode: 'vertical-rl', letterSpacing: 1, fontSize: 11, fontWeight: 600 }}>{dockOpen ? t('common.extend') : t('common.expand')}</span>
-                <span style={{ fontSize: 10, background: '#1f6feb', color: '#fff', borderRadius: 8, padding: '0 4px', lineHeight: 1.35 }}>{terms.length}</span>
               </div>
-              {/* 下半：向右收起 */}
-              <div onClick={() => (dockMax ? setDockMax(false) : setDockOpen(false))}
-                title={dockMax ? t('terminal.restoreTitle') : t('terminal.collapseRightTitle')}
-                style={{
-                  flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5,
-                  cursor: dockOpen ? 'pointer' : 'default', opacity: dockOpen ? 1 : 0.3,
-                }}>
-                {/* 双箭头向右 = 收起/还原面板 */}
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M11 6 L17 12 L11 18" /><path d="M6 6 L12 12 L6 18" />
-                </svg>
-                <span style={{ writingMode: 'vertical-rl', letterSpacing: 1, fontSize: 11, fontWeight: 600 }}>{dockMax ? t('common.restore') : t('common.collapse')}</span>
+              {/* 底部按钮区 */}
+              <div style={{ borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '6px 0' }}>
+                <Tooltip title={!dockOpen ? t('terminal.expandTitle') : t('terminal.expandLeftTitle')} placement="left">
+                  <div onClick={() => (dockOpen ? setDockMax(true) : setDockOpen(true))}
+                    style={{ cursor: dockMax ? 'default' : 'pointer', opacity: dockMax ? 0.3 : 1, padding: 4 }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M13 6 L7 12 L13 18" /><path d="M18 6 L12 12 L18 18" />
+                    </svg>
+                  </div>
+                </Tooltip>
+                <span style={{ fontSize: 10, background: '#1f6feb', color: '#fff', borderRadius: 8, padding: '0 4px', lineHeight: 1.35 }}>{terms.length}</span>
+                <Tooltip title={dockMax ? t('terminal.restoreTitle') : t('terminal.collapseRightTitle')} placement="left">
+                  <div onClick={() => (dockMax ? setDockMax(false) : setDockOpen(false))}
+                    style={{ cursor: dockOpen ? 'pointer' : 'default', opacity: dockOpen ? 1 : 0.3, padding: 4 }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M11 6 L17 12 L11 18" /><path d="M6 6 L12 12 L6 18" />
+                    </svg>
+                  </div>
+                </Tooltip>
               </div>
             </div>
           )}
@@ -555,13 +578,18 @@ function TerminalPane(props: {
   const noBlur = isTouch ? (e: React.MouseEvent) => e.preventDefault() : undefined        // 点按钮不夺走输入框焦点（软键盘保持）
 
   // 弹框提醒开关：按会话名记忆是否关闭 PromptDialog 自动弹框（仍可在底部面板手动响应）。
+  const [prefsData] = usePreferences()
   const [promptOff, setPromptOff] = useState<Record<string, boolean>>(() => {
     try { return JSON.parse(localStorage.getItem(PROMPT_OFF_KEY) || '{}') } catch { return {} }
   })
+  useEffect(() => {
+    if (prefsData.promptPopupOff && Object.keys(prefsData.promptPopupOff).length > 0) setPromptOff(prefsData.promptPopupOff)
+  }, [prefsData.promptPopupOff])
   const togglePromptOff = () => {
     if (!active) return
     setPromptOff((m) => {
       const next = { ...m, [active]: !m[active] }
+      savePreferences({ promptPopupOff: next })
       try { localStorage.setItem(PROMPT_OFF_KEY, JSON.stringify(next)) } catch {}
       return next
     })
@@ -655,7 +683,7 @@ function TerminalPane(props: {
     message.loading({ content: t('terminal.imageUploading'), key: 'img-paste', duration: 0 })
     try {
       const res = await upload('/tmp', files)
-      sendPaste(session, res.saved.join(' '))
+      sendPaste(session, res.saved.map((p: string) => '@' + p).join(' '))
       message.success({ content: t('terminal.imagePasted', { count: files.length }), key: 'img-paste' })
     } catch (e: any) {
       message.error({ content: t('terminal.imageUploadFailed', { message: e.message }), key: 'img-paste' })
@@ -809,7 +837,7 @@ function TerminalPane(props: {
       </div>
 
       {/* 工具栏 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)', flexWrap: 'wrap' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-dim)', fontSize: 12 }}>
           <i style={{ width: 8, height: 8, borderRadius: '50%', background: dot }} />
           {activeNeedsInput ? t('session.waiting') : st === 'connected' ? t('terminal.status.connected') : st === 'connecting' ? t('terminal.status.connecting') : t('terminal.status.disconnected')}
@@ -1066,23 +1094,25 @@ function Overview({ go, openTerm }: { go: (k: string) => void; openTerm: (n: str
       </div>
 
       {/* 统计磁贴 */}
-      <Row gutter={[14, 14]}>
-        <Col xs={12} sm={6}><StatTile icon={ICONS.sessions} label={t('nav.sessions')} value={info?.sessions ?? sessions.length} accent="#58a6ff" onClick={() => go('sessions')} /></Col>
-        <Col xs={12} sm={6}><StatTile icon={ICONS.swarm} label={t('nav.swarm')} value={swarms.length} accent="#58a6ff" onClick={() => go('swarm')} /></Col>
-        <Col xs={12} sm={6}><StatTile icon={ICONS.swarm} label={t('overview.activeMembers')} value={aliveMembers} accent="#3fb950" onClick={() => go('swarm')} /></Col>
-        <Col xs={12} sm={6}><StatTile icon={ICONS.overview} label={t('overview.pendingUnlock')} value={pendingMembers} accent="#d29922" onClick={() => go('swarm')} /></Col>
-      </Row>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
+        {[
+          { icon: ICONS.sessions, label: t('nav.sessions'), value: info?.sessions ?? sessions.length, accent: '#58a6ff', onClick: () => go('sessions') },
+          { icon: ICONS.swarm, label: t('nav.swarm'), value: swarms.length, accent: '#58a6ff', onClick: () => go('swarm') },
+          { icon: ICONS.swarm, label: t('overview.activeMembers'), value: aliveMembers, accent: '#3fb950', onClick: () => go('swarm') },
+          { icon: ICONS.overview, label: t('overview.pendingUnlock'), value: pendingMembers, accent: '#d29922', onClick: () => go('swarm') },
+        ].map((p, i) => <div key={i} style={{ flex: '1 1 140px', minWidth: 140 }}><StatTile {...p} /></div>)}
+      </div>
 
       {/* 蜂群 + 会话 双栏 */}
-      <Row gutter={[14, 14]}>
-        <Col xs={24} lg={12}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
+        <div style={{ flex: '1 1 360px', minWidth: 280 }}>
           <Card title={<Space><span style={{ color: '#58a6ff' }}>◆</span>{t('nav.swarm')}</Space>} extra={<a onClick={() => go('swarm')}>{t('common.all')} →</a>}>
             {swarms.length === 0 ? <Empty description={t('overview.noSwarms')} /> : (
               <Space direction="vertical" size={10} style={{ width: '100%' }}>
                 {swarms.slice(0, 5).map((s: any) => (
                   <div key={s.id || s.name} onClick={() => go('swarm')}
                     style={{ cursor: 'pointer', padding: '10px 12px', borderRadius: 10, background: 'var(--bg-base)', border: '1px solid var(--border-subtle)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' }}>
                       <span style={{ fontWeight: 600, color: 'var(--text-bright)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
                       <span style={{ flex: '0 0 auto' }}><SwarmStatusTag status={s.status} /></span>
                       {s.supervisor && <Text type="secondary" style={{ fontSize: 12, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>◆{s.supervisor}</Text>}
@@ -1096,8 +1126,8 @@ function Overview({ go, openTerm }: { go: (k: string) => void; openTerm: (n: str
               </Space>
             )}
           </Card>
-        </Col>
-        <Col xs={24} lg={12}>
+        </div>
+        <div style={{ flex: '1 1 360px', minWidth: 280 }}>
           <Card title={t('nav.sessions')} extra={<a onClick={() => go('sessions')}>{t('common.all')} →</a>}>
             {sessions.length === 0 ? <Empty description={t('session.noActive')} /> : (
               <List size="small" dataSource={sessions.slice(0, 6)} renderItem={(s: any) => (
@@ -1113,8 +1143,8 @@ function Overview({ go, openTerm }: { go: (k: string) => void; openTerm: (n: str
               )} />
             )}
           </Card>
-        </Col>
-      </Row>
+        </div>
+      </div>
     </Space>
   )
 }
@@ -1184,12 +1214,19 @@ function Tasks({ openTerm }: { openTerm: (n: string) => void }) {
 }
 
 // ── 服务器目录选择器 ──
-// 最近用过的工作目录（localStorage 持久化），作为目录选择器的快捷候选
+// 最近用过的工作目录（服务端偏好 + localStorage 兜底），作为目录选择器的快捷候选
+import { getPreferences } from './preferences'
 const RECENT_DIRS_KEY = 'ttmux_recent_dirs'
-export function recentDirs(): string[] { try { return JSON.parse(localStorage.getItem(RECENT_DIRS_KEY) || '[]') } catch { return [] } }
+export function recentDirs(): string[] {
+  const fromPrefs = getPreferences().recentDirs
+  if (fromPrefs && fromPrefs.length > 0) return fromPrefs
+  try { return JSON.parse(localStorage.getItem(RECENT_DIRS_KEY) || '[]') } catch { return [] }
+}
 export function pushRecentDir(d: string) {
   if (!d || !d.trim()) return
-  try { localStorage.setItem(RECENT_DIRS_KEY, JSON.stringify([d.trim(), ...recentDirs().filter((x) => x !== d.trim())].slice(0, 8))) } catch {}
+  const dirs = [d.trim(), ...recentDirs().filter((x) => x !== d.trim())].slice(0, 8)
+  savePreferences({ recentDirs: dirs })
+  try { localStorage.setItem(RECENT_DIRS_KEY, JSON.stringify(dirs)) } catch {}
 }
 
 export function DirPicker({ open, start, onPick, onClose }: { open: boolean; start?: string; onPick: (p: string) => void; onClose: () => void }) {
@@ -1236,13 +1273,17 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
   const [agent, setAgent] = useState<'none' | 'claude' | 'codex'>('none')
   const { message } = AntApp.useApp()
   const { t } = useI18n()
+  const [prefs] = usePreferences()
   useEffect(() => { if (open) { setName(''); setDir(''); setAgent('none') } }, [open])
   const ok = async () => {
     if (!name.trim()) return message.error(t('session.nameRequired'))
     try {
       const res = await api('POST', '/sessions', { name: name.trim(), dir: dir.trim() })
       const actual = res.name || name.trim()
-      if (agent !== 'none') await api('POST', '/tasks/_/send', { sess: actual, msg: agent })
+      if (agent !== 'none') {
+        const cmd = agent === 'claude' ? (prefs.claudeCommand || 'claude') : (prefs.codexCommand || 'codex')
+        await api('POST', '/tasks/_/send', { sess: actual, msg: cmd })
+      }
       pushRecentDir(dir); message.success(t('session.created')); onClose(); onDone(actual)
     }
     catch (e: any) { message.error(e.message) }
@@ -1394,19 +1435,20 @@ function Sessions({ openTerm, closeTerm }: { openTerm: (n: string) => void; clos
       title={<Space size={8}>{t('nav.sessions')}<Tag style={{ margin: 0 }}>{cnt('all')}</Tag></Space>}
       extra={<Button type="primary" onClick={() => setNewOpen(true)}>+ {t('session.new')}</Button>}
     >
-      {/* 工具条：搜索 + 类型筛选 */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginBottom: 14 }}>
+      {/* 工具条：搜索 + 类型筛选（两行） */}
+      <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
         <Input allowClear value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('session.searchPlaceholder')}
-          style={{ width: 220, maxWidth: '100%' }}
           prefix={svg(<><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></>)} />
-        <Segmented value={filter} onChange={(v) => setFilter(v as any)} options={[
-          { label: `${t('common.all')} ${cnt('all')}`, value: 'all' },
-          { label: `${t('session.waiting')} ${cnt('waiting')}`, value: 'waiting' },
-          { label: `Claude ${cnt('claude')}`, value: 'claude' },
-          { label: `Codex ${cnt('codex')}`, value: 'codex' },
-          { label: `${t('nav.swarm')} ${cnt('swarm')}`, value: 'swarm' },
-          { label: `${t('terminal.status.idle')} ${cnt('idle')}`, value: 'idle' },
-        ]} />
+        <div style={{ overflowX: 'auto' }}>
+          <Segmented block value={filter} onChange={(v) => setFilter(v as any)} size="small" options={[
+            { label: `${t('common.all')} ${cnt('all')}`, value: 'all' },
+            { label: `${t('session.waiting')} ${cnt('waiting')}`, value: 'waiting' },
+            { label: `Claude ${cnt('claude')}`, value: 'claude' },
+            { label: `Codex ${cnt('codex')}`, value: 'codex' },
+            { label: `${t('nav.swarm')} ${cnt('swarm')}`, value: 'swarm' },
+            { label: `${t('terminal.status.idle')} ${cnt('idle')}`, value: 'idle' },
+          ]} />
+        </div>
       </div>
 
       {list.length === 0 ? <Empty description={t('session.noActive')} />
@@ -1421,7 +1463,7 @@ function Sessions({ openTerm, closeTerm }: { openTerm: (n: string) => void; clos
                 // 整行点击直接进入终端；右侧操作区 stopPropagation 不触发进入
                 <List.Item style={{ padding: '10px 8px', cursor: 'pointer' }} onClick={() => openTerm(s.name)}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1, flexWrap: 'wrap' }}>
                       <i title={waiting ? t('prompt.confirmRequired') : connected ? t('terminal.status.connected') : t('terminal.status.idle')} style={{ width: 8, height: 8, borderRadius: '50%', flex: '0 0 8px', background: waiting ? '#d29922' : connected ? '#3fb950' : 'var(--text-dimmer)' }} />
                       <span style={{ fontWeight: 600, color: 'var(--text-bright)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.name}>{s.name}</span>
                       {sw && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>{t('nav.swarm')}:{sw.swarm}{sw.role === 'leader' ? `·${t('swarm.master')}` : ''}</Tag>}
@@ -1457,7 +1499,62 @@ function Sessions({ openTerm, closeTerm }: { openTerm: (n: string) => void; clos
   )
 }
 
-// ── Env ──
+// ── Agent 命令配置 ──
+function AgentCommandsCard() {
+  const { message } = AntApp.useApp()
+  const { t } = useI18n()
+  const [prefs, setPrefs] = usePreferences()
+  const [claudeCmd, setClaudeCmd] = useState(prefs.claudeCommand || 'claude')
+  const [codexCmd, setCodexCmd] = useState(prefs.codexCommand || 'codex')
+  useEffect(() => { setClaudeCmd(prefs.claudeCommand || 'claude') }, [prefs.claudeCommand])
+  useEffect(() => { setCodexCmd(prefs.codexCommand || 'codex') }, [prefs.codexCommand])
+  const save = () => {
+    setPrefs({ claudeCommand: claudeCmd.trim() || 'claude', codexCommand: codexCmd.trim() || 'codex' })
+    message.success(t('settings.saved'))
+  }
+  return (
+    <Card title={t('settings.agentCommands')}>
+      <Space direction="vertical" size="small" style={{ width: '100%', maxWidth: 520 }}>
+        <Input addonBefore="Claude" value={claudeCmd} onChange={(e) => setClaudeCmd(e.target.value)} />
+        <Input addonBefore="Codex" value={codexCmd} onChange={(e) => setCodexCmd(e.target.value)} />
+        <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('settings.agentCommandsHelp')}</span>
+        <Button type="primary" onClick={save}>{t('settings.save')}</Button>
+      </Space>
+    </Card>
+  )
+}
+
+// ── 偏好同步概览 ──
+function PreferencesOverview() {
+  const { t } = useI18n()
+  const [prefs] = usePreferences()
+  const items: { key: string; label: string; value: string }[] = [
+    { key: 'theme', label: 'theme', value: prefs.theme || 'dark' },
+    { key: 'locale', label: 'locale', value: prefs.locale || 'zh-CN' },
+    { key: 'browserQuality', label: 'browserQuality', value: prefs.browserQuality || 'auto' },
+    { key: 'browserDevice', label: 'browserDevice', value: prefs.browserDevice || '(desktop)' },
+    { key: 'browserRotate', label: 'browserRotate', value: prefs.browserRotate || '0' },
+    { key: 'claudeCommand', label: 'claudeCommand', value: prefs.claudeCommand || 'claude' },
+    { key: 'codexCommand', label: 'codexCommand', value: prefs.codexCommand || 'codex' },
+    { key: 'recentDirs', label: 'recentDirs', value: (prefs.recentDirs || []).join(', ') || '(empty)' },
+    { key: 'promptPopupOff', label: 'promptPopupOff', value: JSON.stringify(prefs.promptPopupOff || {}) },
+    { key: '_migrated', label: '_migrated', value: String(prefs._migrated ?? false) },
+  ]
+  return (
+    <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+      <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('settings.prefsOverviewHelp')}</span>
+      <Descriptions bordered size="small" column={1}>
+        {items.map((it) => (
+          <Descriptions.Item key={it.key} label={<code>{it.label}</code>}>
+            <code style={{ color: 'var(--text-dim)', wordBreak: 'break-all' }}>{it.value}</code>
+          </Descriptions.Item>
+        ))}
+      </Descriptions>
+    </Space>
+  )
+}
+
+// ── Env / Settings ──
 function EnvPage() {
   const [list, setList] = useState<any[]>([])
   const { message, modal } = AntApp.useApp()
@@ -1484,57 +1581,65 @@ function EnvPage() {
     })
   }
   return (
-    <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-      <Card title={t('settings.appearance')}>
-        <Space align="center" wrap>
-          <Segmented
-            value={mode}
-            onChange={(v) => setMode(v as 'light' | 'dark')}
-            options={[
-              { label: `☾ ${t('common.darkTheme')}`, value: 'dark' },
-              { label: `☀ ${t('common.lightTheme')}`, value: 'light' },
-            ]}
-          />
-          <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('settings.themeHelp')}</span>
+    <Tabs defaultActiveKey="general" style={{ width: '100%' }} items={[
+      { key: 'general', label: t('settings.tabGeneral'), children: (
+        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+          <Card title={t('settings.appearance')}>
+            <Space align="center" wrap>
+              <Segmented
+                value={mode}
+                onChange={(v) => setMode(v as 'light' | 'dark')}
+                options={[
+                  { label: `☾ ${t('common.darkTheme')}`, value: 'dark' },
+                  { label: `☀ ${t('common.lightTheme')}`, value: 'light' },
+                ]}
+              />
+              <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('settings.themeHelp')}</span>
+            </Space>
+          </Card>
+          <Card title={t('settings.language')}>
+            <Space align="center" wrap>
+              <Select
+                value={locale}
+                onChange={setLocale}
+                options={[{ value: 'en-US', label: 'English' }, { value: 'zh-CN', label: '中文' }]}
+                aria-label={t('settings.language')}
+                style={{ width: 180 }}
+              />
+              <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('settings.languageHelp')}</span>
+            </Space>
+          </Card>
+          <AgentCommandsCard />
+          <Card title={t('install.settingsTitle')}>
+            <Space align="center" wrap>
+              {pwaInstalled
+                ? <span style={{ color: 'var(--text-bright)' }}>✓ {t('install.installed')}</span>
+                : <Button type="primary" onClick={doInstall}>{t('install.button')}</Button>}
+              <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('install.settingsHelp')}</span>
+            </Space>
+          </Card>
+          {installGuide}
+          <TwoFactorCard />
         </Space>
-      </Card>
-      <Card title={t('settings.language')}>
-        <Space align="center" wrap>
-          <Select
-            value={locale}
-            onChange={setLocale}
-            options={[{ value: 'en-US', label: 'English' }, { value: 'zh-CN', label: '中文' }]}
-            aria-label={t('settings.language')}
-            style={{ width: 180 }}
-          />
-          <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('settings.languageHelp')}</span>
-        </Space>
-      </Card>
-      <SpeechCard />
-      <BrowserCard />
-      <Card title={t('install.settingsTitle')}>
-        <Space align="center" wrap>
-          {pwaInstalled
-            ? <span style={{ color: 'var(--text-bright)' }}>✓ {t('install.installed')}</span>
-            : <Button type="primary" onClick={doInstall}>{t('install.button')}</Button>}
-          <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('install.settingsHelp')}</span>
-        </Space>
-      </Card>
-      {installGuide}
-      <Card title={t('env.globalVariables')} extra={<Space>
-        <Button onClick={add}>+ {t('env.add')}</Button>
-        <Button onClick={async () => { try { await api('POST', '/env/push'); message.success(t('env.pushed')) } catch (e: any) { message.error(e.message) } }}>{t('env.pushToSessions')}</Button>
-      </Space>}>
-        {list.length === 0 ? <Empty description={t('env.empty')} /> : (
-          <List dataSource={list} renderItem={(kv: any) => (
-            <List.Item actions={[<Popconfirm key="d" title={t('env.deleteConfirm')} onConfirm={async () => { try { await api('DELETE', '/env/' + encodeURIComponent(kv.key)); message.success(t('file.deleted')); load() } catch (e: any) { message.error(e.message) } }}><a style={{ color: '#f85149' }}>{t('file.delete')}</a></Popconfirm>]}>
-              <List.Item.Meta title={<code>{kv.key}</code>} description={<code style={{ color: 'var(--text-dim)' }}>{kv.value}</code>} />
-            </List.Item>
-          )} />
-        )}
-      </Card>
-      <TwoFactorCard />
-    </Space>
+      )},
+      { key: 'speech', label: t('settings.tabSpeech'), children: <SpeechCard /> },
+      { key: 'browser', label: t('settings.browser'), children: <BrowserCard /> },
+      { key: 'preferences', label: t('settings.tabPreferences'), children: <PreferencesOverview /> },
+      { key: 'env', label: t('settings.tabEnv'), children: (
+        <Card title={t('env.globalVariables')} extra={<Space>
+          <Button onClick={add}>+ {t('env.add')}</Button>
+          <Button onClick={async () => { try { await api('POST', '/env/push'); message.success(t('env.pushed')) } catch (e: any) { message.error(e.message) } }}>{t('env.pushToSessions')}</Button>
+        </Space>}>
+          {list.length === 0 ? <Empty description={t('env.empty')} /> : (
+            <List dataSource={list} renderItem={(kv: any) => (
+              <List.Item actions={[<Popconfirm key="d" title={t('env.deleteConfirm')} onConfirm={async () => { try { await api('DELETE', '/env/' + encodeURIComponent(kv.key)); message.success(t('file.deleted')); load() } catch (e: any) { message.error(e.message) } }}><a style={{ color: '#f85149' }}>{t('file.delete')}</a></Popconfirm>]}>
+                <List.Item.Meta title={<code>{kv.key}</code>} description={<code style={{ color: 'var(--text-dim)' }}>{kv.value}</code>} />
+              </List.Item>
+            )} />
+          )}
+        </Card>
+      )},
+    ]} />
   )
 }
 

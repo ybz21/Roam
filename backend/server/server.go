@@ -143,6 +143,8 @@ func New(cfg Config) *gin.Engine {
 
 		g.GET("/speech/config", h.GetSpeechConfig)       // 语音识别(ASR)服务商配置
 		g.PUT("/speech/config", h.SetSpeechConfig)       //
+		g.GET("/preferences", h.GetPreferences)          // 用户偏好（主题/语言/Agent 命令等）
+		g.PUT("/preferences", h.SetPreferences)          //
 		g.POST("/speech/transcribe", h.SpeechTranscribe) // 上传录音 → 返回识别文本
 
 		g.GET("/2fa/qr", a.TOTPQR)            // 当前状态 + 密钥二维码
