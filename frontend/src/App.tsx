@@ -282,14 +282,6 @@ export default function App() {
   const setStatus = (name: string, s: TermStatus) => setStatusMap((m) => ({ ...m, [name]: s }))
   const sendKey = (seq: string) => active && termRefs.current[active]?.send(seq)
 
-  // ponytail: dock 展开/收缩/最大化后，等 CSS transition 结束再 fit 活动终端，
-  // 否则 xterm 在动画中途拿到的尺寸不准，终端显示不完整（Issue #11）。
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (active) termRefs.current[active]?.fit()
-    }, 250) // 略长于 transition: .2s
-    return () => clearTimeout(timer)
-  }, [dockOpen, dockMax])
 
   // 全屏切换（标准 API + webkit 兜底）。不支持的浏览器（如 iOS Safari）隐藏按钮，改走「添加到主屏幕」
   const docEl: any = document.documentElement
@@ -438,7 +430,9 @@ export default function App() {
 
           {/* 右侧终端停靠栏（桌面）：常驻挂载以保留连接，收起时宽度归零 */}
           {hasSider && terms.length > 0 && (
-            <div style={{
+            <div
+              onTransitionEnd={() => window.dispatchEvent(new Event('resize'))}
+              style={{
               flex: dockOpen ? 1 : '0 0 0px', minWidth: dockOpen ? 480 : 0,
               width: dockOpen ? 'auto' : 0, overflow: 'hidden', transition: 'flex-basis .2s, min-width .2s',
               display: 'flex', flexDirection: 'column', background: 'var(--bg-term)',
