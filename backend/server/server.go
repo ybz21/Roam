@@ -47,6 +47,7 @@ func New(cfg Config) *gin.Engine {
 	tt := ttmux.New(cfg.TTmuxBin)
 	a := auth.New(cfg.Password, cfg.TOTPSecret, cfg.TOTPState, cfg.LockAfter, cfg.LockSecs)
 	h := api.New(tt, cfg.BrowserHome, cfg.DataDir)
+	browser.InitConfig(cfg.DataDir) // Chrome 启动配置持久化到 dataDir
 	hub := stream.New(tt, cfg.LogsDir)
 
 	// 公开端点
@@ -76,13 +77,13 @@ func New(cfg Config) *gin.Engine {
 		g.POST("/file/mkdir", h.FileMkdir) // 文件侧栏：在当前目录新建子目录
 		g.POST("/upload", h.Upload)        // 上传文件到指定目录（拖拽到对话框 / 文件侧栏）
 
-		g.GET("/git/status", h.GitStatus)     // Git 面板：当前工作目录所属仓库状态
-		g.GET("/git/diff", h.GitDiff)         // Git 面板：单文件差异
-		g.POST("/git/stage", h.GitStage)      // 暂存
-		g.POST("/git/unstage", h.GitUnstage)  // 取消暂存
-		g.POST("/git/discard", h.GitDiscard)  // 放弃改动
-		g.POST("/git/commit", h.GitCommit)    // 提交（可选 push）
-		g.POST("/git/op", h.GitOp)            // push / pull / fetch / sync
+		g.GET("/git/status", h.GitStatus)    // Git 面板：当前工作目录所属仓库状态
+		g.GET("/git/diff", h.GitDiff)        // Git 面板：单文件差异
+		g.POST("/git/stage", h.GitStage)     // 暂存
+		g.POST("/git/unstage", h.GitUnstage) // 取消暂存
+		g.POST("/git/discard", h.GitDiscard) // 放弃改动
+		g.POST("/git/commit", h.GitCommit)   // 提交（可选 push）
+		g.POST("/git/op", h.GitOp)           // push / pull / fetch / sync
 
 		g.GET("/sessions", h.Sessions)
 		g.POST("/sessions", h.NewSession)
@@ -163,6 +164,9 @@ func New(cfg Config) *gin.Engine {
 		g.POST("/browser/tabs/:id/activate", browser.TabActivate) // 在 Chrome 里前置
 		g.POST("/browser/tabs/:id/navigate", browser.TabNavigate) // 导航到 URL
 		g.Any("/browser/cdp/*path", browser.DevToolsProxy)        // 反代 Chrome 自带 DevTools(F12) + CDP ws
+		g.GET("/browser/config", browser.GetConfig)               // Chrome 启动配置：读
+		g.PUT("/browser/config", browser.SetConfig)               // Chrome 启动配置：存
+		g.POST("/browser/relaunch", browser.Relaunch)             // 按新配置重启 Chrome
 		g.GET("/stream/status", hub.Status)
 		g.GET("/logs/:name", hub.Logs)
 	}

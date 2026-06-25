@@ -60,6 +60,33 @@ func tmuxScroll(name, dir string, lines int) {
 	}
 }
 
+func tmuxSelectPaneAt(name string, col, row int) {
+	if col < 0 || row < 0 {
+		return
+	}
+	out, err := exec.Command("tmux", "list-panes", "-t", name, "-F", "#{pane_id}\t#{pane_left}\t#{pane_top}\t#{pane_width}\t#{pane_height}").Output()
+	if err != nil {
+		return
+	}
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		parts := strings.Split(line, "\t")
+		if len(parts) != 5 {
+			continue
+		}
+		left, err1 := strconv.Atoi(parts[1])
+		top, err2 := strconv.Atoi(parts[2])
+		width, err3 := strconv.Atoi(parts[3])
+		height, err4 := strconv.Atoi(parts[4])
+		if err1 != nil || err2 != nil || err3 != nil || err4 != nil {
+			continue
+		}
+		if col >= left && col < left+width && row >= top && row < top+height {
+			_ = exec.Command("tmux", "select-pane", "-t", parts[0]).Run()
+			return
+		}
+	}
+}
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
 	WriteBufferSize: 4096,
@@ -86,9 +113,8 @@ func Handler(c *gin.Context) {
 	}
 	defer conn.Close()
 
-	// 关闭该会话的 tmux 鼠标模式：让鼠标拖动直接成为 xterm 本地选区（松开自动复制 / Ctrl+C 复制），
-	// 右键也只弹前端菜单，不再被转发给 tmux 多弹一个菜单。
-	// 代价：点击切换窗格 / 拖边框调大小失效；滚轮翻历史由前端单独拦截处理，不受影响。
+	// 关闭 tmux 鼠标模式，保留浏览器/xterm 原生拖选复制体验。
+	// Web 端需要点击切换 pane 时，会发送 select-pane 控制消息，由后端按点击坐标选择窗格。
 	_ = exec.Command("tmux", "set-option", "-t", name, "mouse", "off").Run()
 
 	// 窗口尺寸跟随「最近活跃的客户端」，而非被所有 attach 客户端里最小的那个限制。
@@ -156,6 +182,8 @@ func Handler(c *gin.Context) {
 				Rows  uint16 `json:"rows"`
 				Dir   string `json:"dir"`
 				Lines int    `json:"lines"`
+				Col   int    `json:"col"`
+				Row   int    `json:"row"`
 			}
 			if json.Unmarshal(data, &ctrl) == nil && ctrl.Type != "" {
 				switch ctrl.Type {
@@ -172,6 +200,9 @@ func Handler(c *gin.Context) {
 				case "scroll":
 					tmuxScroll(name, ctrl.Dir, ctrl.Lines)
 					inCopy = ctrl.Dir != "bottom" // up/down 仍在 copy-mode；bottom 已 cancel 退出
+					continue
+				case "select-pane":
+					tmuxSelectPaneAt(name, ctrl.Col, ctrl.Row)
 					continue
 				}
 			}

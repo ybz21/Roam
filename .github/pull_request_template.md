@@ -2,14 +2,14 @@
 
 - 
 
-## Checks
+## Validation
 
-- [ ] User-facing UI copy is internationalized through `useI18n()` / locale keys.
-- [ ] New or changed locale keys exist in both `zh-CN` and `en-US`.
-- [ ] No new hardcoded UI text in JSX, modal, toast, placeholder, tooltip, or empty state.
-- [ ] Ran `cd frontend && npm run i18n:check` when frontend UI changed.
-- [ ] Ran relevant build/tests.
+- [ ] `scripts/quality/check.sh full`
+- [ ] Manual validation notes included, if UI or terminal behavior changed
 
-## Notes
+## Compliance
 
-- 
+- [ ] No secrets, tokens, private URLs, or local `.env` values are committed
+- [ ] User-facing frontend text is routed through the i18n layer
+- [ ] Runtime behavior changes include tests or a clear validation note
+- [ ] Generated files are updated only when their source files changed

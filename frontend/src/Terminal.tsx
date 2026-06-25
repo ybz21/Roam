@@ -79,6 +79,17 @@ const Term = forwardRef<TermHandle, {
     if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'scroll', dir, lines }))
   }
 
+  const selectPaneAt = (e: MouseEvent) => {
+    if (e.button !== 0) return
+    const t = termRef.current, el = elRef.current, ws = wsRef.current
+    if (!t || !el || !ws || ws.readyState !== 1 || t.cols <= 0 || t.rows <= 0) return
+    const rect = el.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) return
+    const col = Math.max(0, Math.min(t.cols - 1, Math.floor(((e.clientX - rect.left) / rect.width) * t.cols)))
+    const row = Math.max(0, Math.min(t.rows - 1, Math.floor(((e.clientY - rect.top) / rect.height) * t.rows)))
+    ws.send(JSON.stringify({ type: 'select-pane', col, row }))
+  }
+
   const connect = () => {
     if (unmounted.current) return
     onStatus?.('connecting')
@@ -213,7 +224,13 @@ const Term = forwardRef<TermHandle, {
     }
     // 捕获阶段独占右键 mousedown，阻止 xterm 把它转发给 tmux（tmux 鼠标模式开时会另弹一个菜单）。
     // 这样无论后端鼠标模式开关，右键都只剩前端这一个菜单。
-    const onMouseDownCapture = (e: MouseEvent) => { if (e.button === 2) e.stopPropagation() }
+    const onMouseDownCapture = (e: MouseEvent) => {
+      if (e.button === 2) {
+        e.stopPropagation()
+        return
+      }
+      selectPaneAt(e)
+    }
     el.addEventListener('touchstart', onTS, { passive: true, capture: true })
     el.addEventListener('touchmove', onTM, { passive: false, capture: true })
     el.addEventListener('wheel', onWheel, { passive: false, capture: true })

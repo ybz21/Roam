@@ -13,7 +13,7 @@ ttmux 的 Web 控制台后端，是 ttmux CLI 的薄封装：读 = 调 `ttmux <c
 
 配置走仓库根目录的 **`.env`**（见 `.env.example`），真实环境变量优先于 `.env`：
 ```
-TTMUX_WEB_PASSWORD=BladeAI2026!!   # 登录口令（默认值）
+TTMUX_WEB_PASSWORD=                 # 登录口令；留空则 start.sh 首次启动随机生成并写回 .env
 TTMUX_WEB_BIND=0.0.0.0:8080        # 监听地址（默认监听所有网卡，手机同 WiFi 可访问）
 ```
 > ⚠ 默认监听 `0.0.0.0`，局域网内任何设备可访问——请使用强口令；外网访问走 Tailscale / Cloudflare Tunnel，不要直开公网端口。

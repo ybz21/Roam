@@ -79,15 +79,15 @@ func (a *API) SwarmAdopt(c *gin.Context) {
 // POST /api/swarms/:n/members —— 加成员(默认 agent cc)
 func (a *API) SwarmAddMember(c *gin.Context) {
 	var b struct {
-		Name  string `json:"name"`
-		Type  string `json:"type"`
-		Task  string `json:"task"`
-		Dir   string `json:"dir"`
-		Deps  string `json:"deps"`
-		Model string `json:"model"`
-		Perm  string `json:"perm"`
-		Kind    string `json:"kind"` // claude(默认) | codex
-		Role    string `json:"role"` // leader | member（兼容 master | worker，空=后端按"首个 agent 成员→leader"决定）
+		Name    string `json:"name"`
+		Type    string `json:"type"`
+		Task    string `json:"task"`
+		Dir     string `json:"dir"`
+		Deps    string `json:"deps"`
+		Model   string `json:"model"`
+		Perm    string `json:"perm"`
+		Kind    string `json:"kind"`    // claude(默认) | codex
+		Role    string `json:"role"`    // leader | member（兼容 master | worker，空=后端按"首个 agent 成员→leader"决定）
 		Subrole string `json:"subrole"` // 细分角色 key（pm/frontend/qa…，自定义原样）
 		Duty    string `json:"duty"`    // 长期职责
 	}

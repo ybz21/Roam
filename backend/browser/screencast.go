@@ -1,16 +1,19 @@
 // screencast.go：/api/browser/stream 的 WebSocket 桥。
 //
 // 传输优化（针对 frp / 低带宽场景）：
+//
 //   - 二进制帧：JPEG 字节直接走 WS binary（省掉 base64 的 33% 膨胀 + 两端编解码）
 //     帧格式 = [w:u16 LE][h:u16 LE][seq:u16 LE][jpeg...]
+//
 //   - 信用背压：服务端只保留「最新一帧」，慢链路时丢弃中间帧；客户端每显示一帧回
 //     {type:'ack',n:seq} 归还信用，服务端凭信用发下一帧 → 端到端在途帧被限在 window 内，
 //     杜绝旧帧在内核/frp 缓冲里排队回放（"越点越卡"的根因）。
+//
 //   - 自适应码率（?auto=1）：以「发出→收到 ack」的耗时(deliveryMs)为信号，太慢降档、
 //     有余量升档，动态调 JPEG 质量 / 分辨率(maxWidth/Height) / everyNthFrame。
 //
-//	CDP  → 前端：Page.startScreencast 的 JPEG 帧（二进制）
-//	前端 → CDP：鼠标/键盘/滚轮/导航（仅 ?control=1 时转发输入；默认只读镜像）
+//     CDP  → 前端：Page.startScreencast 的 JPEG 帧（二进制）
+//     前端 → CDP：鼠标/键盘/滚轮/导航（仅 ?control=1 时转发输入；默认只读镜像）
 package browser
 
 import (
@@ -205,14 +208,14 @@ func Handler(c *gin.Context) {
 		w, h int
 	}
 	var (
-		pending *pend            // 最新一帧（未发出的），新帧覆盖旧帧 = latest-only 丢帧
-		credits = window         // 可发帧的信用，发一帧 -1，收到 ack +1
-		seq     uint16           // 帧序号（与 ack 对应）
-		sentAt  = map[uint16]int64{} // seq → 发出时刻，用于算 deliveryMs
-		ewma    float64          // deliveryMs 的指数滑动平均（自适应控制信号）
-		level   = autoStart      // 当前档位（仅 auto 模式移动）
-		closed  bool
-		copyReqID int            // 复制选区的 Runtime.evaluate 请求 id；读取循环据此匹配回包(0=无在途)
+		pending   *pend                // 最新一帧（未发出的），新帧覆盖旧帧 = latest-only 丢帧
+		credits   = window             // 可发帧的信用，发一帧 -1，收到 ack +1
+		seq       uint16               // 帧序号（与 ack 对应）
+		sentAt    = map[uint16]int64{} // seq → 发出时刻，用于算 deliveryMs
+		ewma      float64              // deliveryMs 的指数滑动平均（自适应控制信号）
+		level     = autoStart          // 当前档位（仅 auto 模式移动）
+		closed    bool
+		copyReqID int // 复制选区的 Runtime.evaluate 请求 id；读取循环据此匹配回包(0=无在途)
 	)
 
 	// 初始档：auto 用阶梯，手动用前端给的 q（分辨率给足，质量听用户）
@@ -467,7 +470,7 @@ func Handler(c *gin.Context) {
 			Modifiers int     `json:"modifiers"`
 			URL       string  `json:"url"`
 			T         float64 `json:"t"`
-			N         uint16  `json:"n"` // ack 的帧序号
+			N         uint16  `json:"n"`      // ack 的帧序号
 			Mobile    bool    `json:"mobile"` // emulate：true=手机模式
 			MW        int     `json:"mw"`     // 移动视口宽（CSS px）
 			MH        int     `json:"mh"`     // 移动视口高

@@ -1,0 +1,36 @@
+name: Bug Report
+description: Report a reproducible Roam issue.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction Steps
+      description: List the exact steps needed to reproduce the issue.
+      placeholder: |
+        1. Start Roam with ...
+        2. Open ...
+        3. Click ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, browser, Go/Node versions, deployment mode, and tunnel/proxy if relevant.
+    validations:
+      required: true
