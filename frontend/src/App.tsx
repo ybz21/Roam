@@ -43,9 +43,26 @@ const NAV = [
 ]
 
 // 旧链接兼容：/#/env 重定向到 /#/settings
-function normalizeRoute(route: string): string {
+function normalizeRoute(raw: string): string {
+  const route = raw.split('?')[0]
   if (route === 'env' || route.startsWith('env/')) return 'settings' + route.slice(3)
   return route
+}
+
+function getHashParams(): URLSearchParams {
+  const h = location.hash
+  const qi = h.indexOf('?')
+  return new URLSearchParams(qi >= 0 ? h.slice(qi + 1) : '')
+}
+
+function setHashParams(params: Record<string, string>) {
+  const h = location.hash
+  const base = (h.split('?')[0]) || '#/sessions'
+  const sp = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) { if (v) sp.set(k, v) }
+  const qs = sp.toString()
+  const next = qs ? base + '?' + qs : base
+  if (h !== next) history.replaceState(null, '', next)
 }
 
 // 线性图标（无 emoji，currentColor 描边）
@@ -157,7 +174,11 @@ export default function App() {
   const [route, setRoute] = useState(() => normalizeRoute(location.hash.replace(/^#\/?/, '') || 'sessions'))
   const tab = route.split('/')[0]                                  // 基础页（swarm/leave → swarm）
   const swarmSub = tab === 'swarm' && route.includes('/') ? decodeURIComponent(route.slice(route.indexOf('/') + 1)) : '' // 深链选中的蜂群
-  const go = (k: string) => { location.hash = '#/' + k } // hash 路由：/#/xxx
+  const go = (k: string) => {
+    const qi = location.hash.indexOf('?')
+    const qs = qi >= 0 ? location.hash.slice(qi) : ''
+    location.hash = '#/' + k + qs
+  }
   const { mode, toggle: toggleTheme } = useThemeMode()
   const { t } = useI18n()
   const themeIcon = mode === 'dark'
@@ -179,9 +200,15 @@ export default function App() {
     }
   }, [])
 
-  // 多终端状态
-  const [terms, setTerms] = useState<string[]>([])
-  const [active, setActive] = useState<string | null>(null)
+  // 多终端状态（从 URL 恢复）
+  const [terms, setTerms] = useState<string[]>(() => {
+    const t = getHashParams().get('terms')
+    return t ? t.split(',').map(decodeURIComponent).filter(Boolean) : []
+  })
+  const [active, setActive] = useState<string | null>(() => {
+    const a = getHashParams().get('active')
+    return a ? decodeURIComponent(a) : null
+  })
   const [overlay, setOverlay] = useState(false) // 手机/平板全屏终端
   const [dockOpen, setDockOpen] = useState(true) // 桌面：右侧终端停靠栏是否展开
   const [dockMax, setDockMax] = useState(false)  // 桌面：终端栏向左扩展（遮住会话列表）
@@ -200,6 +227,14 @@ export default function App() {
     setUnauthorizedHandler(() => setAuthed(false))
     api('GET', '/me').then(() => { setAuthed(true); loadPreferences() }).catch(() => setAuthed(false))
   }, [])
+
+  // 终端状态同步到 URL，刷新后可恢复
+  useEffect(() => {
+    setHashParams({
+      terms: terms.map(encodeURIComponent).join(','),
+      active: active ? encodeURIComponent(active) : '',
+    })
+  }, [terms, active])
 
   // hash 路由：URL #/xxx 与当前页同步（支持前进/后退、刷新保持、收藏分享）
   useEffect(() => {
