@@ -12,6 +12,7 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -106,13 +107,34 @@ func newestCodexRollout(cwd string) string {
 }
 
 // CodexStatus GET /sessions/:name/codex —— 检测会话是否在跑 codex，并定位其 rollout。
+// 如果某个 pane 的进程树同时命中 claude，说明 codex 是 Claude Code 的子进程，不算独立运行。
 func (a *API) CodexStatus(c *gin.Context) {
-	dir := paneToolDir(sessionParam(c), cmdlineHasCodex)
-	if dir == "" {
+	name := sessionParam(c)
+	out, err := exec.Command("tmux", "list-panes", "-t", name, "-F", "#{pane_pid}\t#{pane_current_path}").Output()
+	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"running": false}})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": gin.H{"running": true, "dir": dir, "file": newestCodexRollout(dir)}})
+	children := procChildren()
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		parts := strings.SplitN(line, "\t", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		pid, err := strconv.Atoi(parts[0])
+		if err != nil {
+			continue
+		}
+		if treeMatch(pid, children, 0, cmdlineHasClaude) {
+			continue
+		}
+		if treeMatch(pid, children, 0, cmdlineHasCodex) {
+			dir := parts[1]
+			c.JSON(http.StatusOK, gin.H{"data": gin.H{"running": true, "dir": dir, "file": newestCodexRollout(dir)}})
+			return
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"running": false}})
 }
 
 // ── rollout JSONL → 可渲染对话（复用 claude.go 的 cBlock/cMsg/clip）──

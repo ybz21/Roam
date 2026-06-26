@@ -7,10 +7,12 @@ export interface Preferences {
   browserQuality: string
   browserDevice: string
   browserRotate: string
-  promptPopupOff: Record<string, boolean>
+  promptPopupOff: boolean
   recentDirs: string[]
   claudeCommand: string
   codexCommand: string
+  quickCommands: string[]
+  showVoiceButton: boolean
   _migrated: boolean
 }
 
@@ -20,10 +22,12 @@ const DEFAULTS: Preferences = {
   browserQuality: 'auto',
   browserDevice: '',
   browserRotate: '0',
-  promptPopupOff: {},
+  promptPopupOff: false,
   recentDirs: [],
   claudeCommand: 'claude',
   codexCommand: 'codex',
+  quickCommands: [],
+  showVoiceButton: true,
   _migrated: false,
 }
 
@@ -55,11 +59,6 @@ function migrateFromLocalStorage() {
 
     const rotate = localStorage.getItem('ttmux.browser.rotate')
     if (rotate) cache.browserRotate = rotate
-
-    try {
-      const popup = JSON.parse(localStorage.getItem('ttmux-prompt-popup-off') || '{}')
-      if (popup && typeof popup === 'object' && !Array.isArray(popup)) cache.promptPopupOff = popup
-    } catch {}
 
     try {
       const dirs = JSON.parse(localStorage.getItem('ttmux_recent_dirs') || '[]')
