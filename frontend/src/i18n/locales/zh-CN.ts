@@ -560,6 +560,7 @@ const zhCN = {
   'settings.agentCommands': 'Agent 命令',
   'settings.agentCommandsHelp': '自定义启动 Claude Code 和 Codex 的 shell 命令。例如用 "cc -w" 代替 "claude"。',
   'quickCmd.add': '添加快捷输入',
+  'quickCmd.addOk': '添加',
   'settings.quickCommands': '快捷命令',
   'settings.quickCommandsHelp': '自定义移动端终端输入的快捷命令按钮，点击即可快速填入。',
   'settings.quickCommandPlaceholder': '输入命令，如 git status',

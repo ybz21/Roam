@@ -998,7 +998,7 @@ function TerminalPane(props: {
             modal.confirm({
               title: t('settings.quickCommands'),
               content: <Input placeholder={t('settings.quickCommandPlaceholder')} onChange={(e) => (val = e.target.value)} autoFocus />,
-              okText: t('file.create'),
+              okText: t('quickCmd.addOk'),
               onOk: () => {
                 const v = val.trim()
                 if (!v) return
@@ -1631,13 +1631,13 @@ function PreferencesOverview() {
     { key: 'theme', value: prefs.theme || 'dark' },
     { key: 'locale', value: prefs.locale || 'zh-CN' },
     { key: 'browserQuality', value: prefs.browserQuality || 'auto' },
-    { key: 'browserDevice', value: prefs.browserDevice || '(desktop)' },
+    { key: 'browserDevice', value: prefs.browserDevice || t('common.empty') },
     { key: 'browserRotate', value: prefs.browserRotate || '0' },
     { key: 'claudeCommand', value: prefs.claudeCommand || 'claude' },
     { key: 'codexCommand', value: prefs.codexCommand || 'codex' },
-    { key: 'quickCommands', value: (prefs.quickCommands || []).join(', ') || '(empty)' },
+    { key: 'quickCommands', value: (prefs.quickCommands || []).join(', ') || t('common.empty') },
     { key: 'showVoiceButton', value: String(prefs.showVoiceButton !== false) },
-    { key: 'recentDirs', value: (prefs.recentDirs || []).join(', ') || '(empty)' },
+    { key: 'recentDirs', value: (prefs.recentDirs || []).join(', ') || t('common.empty') },
     { key: 'promptPopupOff', value: String(!!prefs.promptPopupOff) },
     { key: '_migrated', value: String(prefs._migrated ?? false) },
   ]
