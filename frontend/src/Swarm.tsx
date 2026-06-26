@@ -131,22 +131,22 @@ function SwarmCard({ s, onOpen }: { s: SwarmRow; onOpen: (n: string) => void }) 
       <div style={{ color: s.goal ? C.fg2 : C.fg3, fontSize: 13, marginBottom: 12, minHeight: 19, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
         {s.goal || t('overview.noGoal')}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ display: 'inline-flex', gap: 3, alignItems: 'center' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ display: 'inline-flex', gap: 3, alignItems: 'center', flexWrap: 'wrap' }}>
           {s.supervisor && <i title={s.supervisor} style={{ width: 8, height: 8, borderRadius: '50%', background: C.magenta }} />}
           {Array.from({ length: Math.min(s.alive, 10) }).map((_, i) => <i key={'a' + i} style={{ width: 8, height: 8, borderRadius: '50%', background: C.green }} />)}
           {Array.from({ length: Math.min(s.pending, 10) }).map((_, i) => <i key={'p' + i} style={{ width: 8, height: 8, borderRadius: '50%', background: C.amber }} />)}
           {Array.from({ length: Math.min(exited, 10) }).map((_, i) => <i key={'e' + i} style={{ width: 8, height: 8, borderRadius: '50%', background: C.line2 }} />)}
           {s.total + s.pending === 0 && !s.supervisor && <span style={{ color: C.fg3, fontSize: 12 }}>{t('swarm.noMembers')}</span>}
         </span>
-        <span style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center', fontSize: 12, color: C.fg2 }}>
+        <span style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center', fontSize: 12, color: C.fg2, flexWrap: 'wrap' }}>
           {s.supervisor && <span style={{ color: C.magenta }}>◆ {t('swarm.master')}</span>}
           {(s.total + s.pending) > 0 && <span>{t('swarm.memberSummary', { total: s.total, alive: s.alive })}</span>}
           {(s.total + s.pending) === 0 && !s.supervisor && <span style={{ color: C.fg3 }}>{t('swarm.noMembers')}</span>}
           {s.pending > 0 && <span style={{ color: C.amber }}>+{s.pending} {t('swarm.pendingUnlock')}</span>}
         </span>
       </div>
-      <div style={{ marginTop: 10, paddingTop: 9, borderTop: `1px solid ${C.line}`, display: 'flex', alignItems: 'center', fontSize: 11.5, color: C.fg3 }}>
+      <div style={{ marginTop: 10, paddingTop: 9, borderTop: `1px solid ${C.line}`, display: 'flex', alignItems: 'center', fontSize: 11.5, color: C.fg3, flexWrap: 'wrap', gap: 4 }}>
         <span style={{ color: s.supervisor ? C.magenta : C.fg3 }}>{s.supervisor ? `◆ ${s.supervisor}` : t('swarm.noSupervisor')}</span>
         <span style={{ marginLeft: 'auto' }}>{(s.created || '').slice(5, 16)}</span>
       </div>

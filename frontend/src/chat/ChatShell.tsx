@@ -141,7 +141,7 @@ export function ChatShell({ name, dir, accent, title, placeholder, onBack, onRef
             {dropMode === 'path' ? t('chat.dropInsertPath') : t('chat.dropUpload')}
           </div>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
           {title}
           <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{name}</span>
           <span style={{ flex: 1 }} />

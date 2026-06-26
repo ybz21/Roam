@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button, Input, Select, Space, Tag, App as AntApp } from 'antd'
 import { api } from './api'
 import { useI18n } from './i18n'
+import { usePreferences, savePreferences } from './preferences'
 
 interface TabInfo { id: string; title: string; url: string }
 
@@ -129,6 +130,7 @@ function mergeTabs(prev: TabInfo[], incoming: TabInfo[]): TabInfo[] {
 export default function BrowserView() {
   const { message } = AntApp.useApp()
   const { t } = useI18n()
+  const [prefs] = usePreferences()
   const imgRef = useRef<HTMLImageElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
   const wsRef = useRef<WebSocket | null>(null)
@@ -148,16 +150,16 @@ export default function BrowserView() {
   const [home, setHome] = useState(`${location.protocol}//127.0.0.1:${location.port || '8080'}/home`)
   // 栏目级清晰度配置（持久化）；默认自适应
   const [quality, setQuality] = useState<Quality>(() => {
-    const s = localStorage.getItem(QKEY)
+    const s = prefs.browserQuality || localStorage.getItem(QKEY)
     if (s == null || s === 'auto') return 'auto'
     return Number(s) || 'auto'
   })
   const [levelName, setLevelName] = useState('') // 服务端当前生效档位名（自适应时显示）
   // 手机模式：空 = 桌面；否则模拟对应机型视口（持久化）。切换不重连，发 emulate 消息现场切换
-  const [device, setDevice] = useState<string>(() => localStorage.getItem(DKEY) || '')
+  const [device, setDevice] = useState<string>(() => prefs.browserDevice || localStorage.getItem(DKEY) || '')
   const deviceRef = useRef(device) // 供 ws.onopen 等回调读最新设备态
   // 画面旋转：0/90/180/270，持久化。手机竖屏看横屏浏览器时转 90°
-  const [rotation, setRotation] = useState<number>(() => Number(localStorage.getItem(RKEY)) || 0)
+  const [rotation, setRotation] = useState<number>(() => Number(prefs.browserRotate || localStorage.getItem(RKEY)) || 0)
   const [stage, setStage] = useState({ w: 0, h: 0 }) // 舞台尺寸，旋转时需据此对调 <img> 盒子宽高
   // 实时指标
   const [latency, setLatency] = useState<number | null>(null)
@@ -190,7 +192,7 @@ export default function BrowserView() {
   }, [])
 
   // 旋转：每次 +90°，循环 0→90→180→270→0，持久化
-  const rotate = () => setRotation((r) => { const n = (r + 90) % 360; localStorage.setItem(RKEY, String(n)); return n })
+  const rotate = () => setRotation((r) => { const n = (r + 90) % 360; savePreferences({ browserRotate: String(n) }); try { localStorage.setItem(RKEY, String(n)) } catch {}; return n })
   const rotated = rotation === 90 || rotation === 270
 
   // 取导航起始页地址（后端按 TTMUX_HOME_BIND 算出）
@@ -365,8 +367,8 @@ export default function BrowserView() {
     act('navigate', { url: smartUrl(url) })
   }
 
-  const changeQuality = (v: Quality) => { setQuality(v); localStorage.setItem(QKEY, String(v)) }
-  const changeDevice = (v: string) => { setDevice(v); localStorage.setItem(DKEY, v) }
+  const changeQuality = (v: Quality) => { setQuality(v); savePreferences({ browserQuality: String(v) }); try { localStorage.setItem(QKEY, String(v)) } catch {} }
+  const changeDevice = (v: string) => { setDevice(v); savePreferences({ browserDevice: v }); try { localStorage.setItem(DKEY, v) } catch {} }
 
   // F12：打开 Chrome 自带 DevTools（经后端反代 /api/browser/cdp/*，直连该 tab 的 CDP）。
   // https 页面必须用 wss= 参数，否则 DevTools 起 ws:// 连接会被混合内容拦截。

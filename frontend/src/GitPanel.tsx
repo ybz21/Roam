@@ -328,7 +328,7 @@ export default function GitPanel({ dir, accent = '#58a6ff', onClose }: { dir?: s
             {status.commits.map((cm) => (
               <div key={cm.hash} style={{ padding: '4px 10px', fontSize: 12, lineHeight: 1.4 }}>
                 <div style={{ color: 'var(--text-bright)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={cm.subject}>{cm.subject}</div>
-                <div style={{ color: 'var(--text-dimmer)', fontSize: 11, display: 'flex', gap: 8 }}>
+                <div style={{ color: 'var(--text-dimmer)', fontSize: 11, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <span style={{ fontFamily: 'ui-monospace, monospace', color: accent }}>{cm.short}</span>
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cm.author}</span>
                   <span style={{ flex: '0 0 auto' }}>{cm.when}</span>

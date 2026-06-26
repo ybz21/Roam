@@ -1,11 +1,12 @@
 // 主题（黑/白）切换：单一 mode 状态，持久化到 localStorage。
 // 所有应用级颜色从 THEME_TOKENS 出发，同时喂给 CSS 变量和 Antd ConfigProvider。
 // 组件只使用 var(--...) 或语义常量，不再各自判断黑白主题。
-import { createContext, useContext, useLayoutEffect, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useLayoutEffect, useState, type ReactNode } from 'react'
 import { ConfigProvider, theme as antdTheme } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import enUS from 'antd/locale/en_US'
 import { useI18n } from './i18n'
+import { usePreferences, savePreferences } from './preferences'
 
 export type ThemeMode = 'dark' | 'light'
 const KEY = 'ttmux-theme'
@@ -159,15 +160,21 @@ function applyCssVars(mode: ThemeMode) {
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const { locale } = useI18n()
-  const [mode, setMode] = useState<ThemeMode>(() => {
+  const [prefs] = usePreferences()
+  const [mode, setModeLocal] = useState<ThemeMode>(() => {
     try { const v = localStorage.getItem(KEY); if (v === 'light' || v === 'dark') return v } catch {}
     return 'dark'
   })
-  useLayoutEffect(() => {
-    try { localStorage.setItem(KEY, mode) } catch {}
-    applyCssVars(mode)
-  }, [mode])
-  const toggle = () => setMode((m) => (m === 'dark' ? 'light' : 'dark'))
+  useEffect(() => {
+    if (prefs.theme && (prefs.theme === 'dark' || prefs.theme === 'light')) setModeLocal(prefs.theme)
+  }, [prefs.theme])
+  useLayoutEffect(() => { applyCssVars(mode) }, [mode])
+  const setMode = (m: ThemeMode) => {
+    setModeLocal(m)
+    savePreferences({ theme: m })
+    try { localStorage.setItem(KEY, m) } catch {}
+  }
+  const toggle = () => setMode(mode === 'dark' ? 'light' : 'dark')
   return (
     <ThemeCtx.Provider value={{ mode, toggle, setMode }}>
       <ConfigProvider locale={locale === 'en-US' ? enUS : zhCN} theme={buildTheme(mode)}>{children}</ConfigProvider>
