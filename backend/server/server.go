@@ -32,6 +32,7 @@ type Config struct {
 	FrontendDir string // frontend/dist 的路径；为空或不存在时用内嵌回退页
 	BrowserHome string // 浏览器导航起始页地址（供 Chrome 当默认主页）
 	DataDir     string // 数据目录（导航页站点列表等持久化到此）
+	TLSCertPath string // 自签证书路径（供「下载证书」端点下发；TLS 关闭时为空）
 	Password    string
 	TOTPSecret  string // 可选：两步验证密钥（base32）初始种子；UI 可覆盖
 	TOTPState   string // 两步验证状态持久化文件路径
@@ -54,6 +55,24 @@ func New(cfg Config) *gin.Engine {
 	r.POST("/api/login", a.Login)
 	r.POST("/api/logout", a.Logout)
 	r.GET("/api/pubconfig", a.PubConfig) // 登录页据此决定是否要动态码
+
+	// 下载自签证书（免登录）：手机装为受信任证书后即把本站当安全上下文，
+	// 可装成全屏 PWA、麦克风/剪贴板可用。TLS 关闭或证书不存在时返回 404。
+	r.GET("/cert.crt", func(c *gin.Context) {
+		if cfg.TLSCertPath == "" {
+			c.String(404, "TLS 未启用，无证书可下载")
+			return
+		}
+		pem, err := os.ReadFile(cfg.TLSCertPath)
+		if err != nil {
+			c.String(404, "证书不存在")
+			return
+		}
+		// application/x-x509-ca-cert：安卓据此弹出「安装 CA 证书」流程。
+		c.Header("Content-Type", "application/x-x509-ca-cert")
+		c.Header("Content-Disposition", `attachment; filename="ttmux-ca.crt"`)
+		c.Data(200, "application/x-x509-ca-cert", pem)
+	})
 
 	// 导航起始页（免登录）：供被投屏的 Chrome 当默认主页，因此不能挂在认证组里
 	hm := home.New(cfg.DataDir)

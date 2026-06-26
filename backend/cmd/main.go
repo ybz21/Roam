@@ -57,6 +57,8 @@ func main() {
 	tlsOn := *tlsFlag || isTruthy(os.Getenv("TTMUX_WEB_TLS"))
 	certPath := firstNonEmpty(*tlsCertFlag, os.Getenv("TTMUX_WEB_TLS_CERT"), filepath.Join(dataDir(), "tls", "cert.pem"))
 	keyPath := firstNonEmpty(*tlsKeyFlag, os.Getenv("TTMUX_WEB_TLS_KEY"), filepath.Join(dataDir(), "tls", "key.pem"))
+	// 「下载证书」端点下发的是根 CA（手机装它），而非服务器叶子证书。
+	caCertPath := filepath.Join(filepath.Dir(certPath), "ca-cert.pem")
 	scheme := "http"
 	if tlsOn {
 		scheme = "https"
@@ -76,6 +78,7 @@ func main() {
 		FrontendDir: fdir,
 		BrowserHome: homeURL,
 		DataDir:     dataDir(),
+		TLSCertPath: tlsCertPathIf(tlsOn, caCertPath),
 		Password:    pw,
 		TOTPSecret:  totp,
 		TOTPState:   filepath.Join(dataDir(), "totp.json"),
@@ -135,6 +138,14 @@ func firstNonEmpty(vals ...string) string {
 		if v != "" {
 			return v
 		}
+	}
+	return ""
+}
+
+// tlsCertPathIf 仅在 TLS 开启时返回证书路径，供「下载证书」端点下发；关闭时返回空（端点 404）。
+func tlsCertPathIf(on bool, path string) string {
+	if on {
+		return path
 	}
 	return ""
 }

@@ -360,21 +360,24 @@ export default function App() {
               )}
             </div>
             <div style={{ flex: 1, overflowY: 'auto' }}>{menu}</div>
-            <div style={{ borderTop: '1px solid var(--border-subtle)', padding: 8, display: 'flex', flexDirection: collapsed ? 'column' : 'row', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+            {/* 底部：收起 在上，其次 全屏，最后 退出，始终竖向堆叠（展开带文字，折叠仅图标居中）。*/}
+            <div style={{ borderTop: '1px solid var(--border-subtle)', padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <Button type="text" block onClick={() => setCollapsed((c) => !c)} style={{ color: 'var(--text-dim)', textAlign: collapsed ? 'center' : 'left' }}
+                title={collapsed ? t('common.expand') : t('common.collapse')}>
+                {(() => { const icon = svg(collapsed ? <><polyline points="9 6 15 12 9 18" /></> : <><polyline points="15 6 9 12 15 18" /></>)
+                  return collapsed ? icon : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{icon}{t('common.collapse')}</span> })()}
+              </Button>
               {fsSupported && (
-                <Tooltip title={isFs ? t('common.exitFullscreen') : t('common.fullscreen')} placement="top">
-                  <Button type="text" onClick={toggleFs} style={{ color: 'var(--text-dim)' }} icon={fsIcon} />
-                </Tooltip>
+                <Button type="text" block onClick={toggleFs} style={{ color: 'var(--text-dim)', textAlign: collapsed ? 'center' : 'left' }}
+                  title={isFs ? t('common.exitFullscreen') : t('common.fullscreen')}>
+                  {collapsed ? fsIcon : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{fsIcon}{isFs ? t('common.exitFullscreen') : t('common.fullscreen')}</span>}
+                </Button>
               )}
-              <Tooltip title={collapsed ? t('common.expand') : t('common.collapse')} placement="top">
-                <Button type="text" onClick={() => setCollapsed((c) => !c)} style={{ color: 'var(--text-dim)' }}
-                  icon={svg(collapsed ? <><polyline points="9 6 15 12 9 18" /></> : <><polyline points="15 6 9 12 15 18" /></>)} />
-              </Tooltip>
               <Popconfirm title={t('common.logoutConfirm')} okText={t('common.logout')} cancelText={t('common.cancel')} onConfirm={logout} placement="topRight">
-                <Tooltip title={t('common.logout')} placement="top">
-                  <Button type="text" style={{ color: 'var(--text-dim)' }}
-                    icon={svg(<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></>)} />
-                </Tooltip>
+                <Button type="text" block style={{ color: 'var(--text-dim)', textAlign: collapsed ? 'center' : 'left' }} title={t('common.exit')}>
+                  {(() => { const icon = svg(<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></>)
+                    return collapsed ? icon : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{icon}{t('common.exit')}</span> })()}
+                </Button>
               </Popconfirm>
             </div>
           </div>
@@ -395,15 +398,28 @@ export default function App() {
             {pageNode}
           </Content>
 
-          {/* 拖拽把手 + 展开/收起按钮 */}
+          {/* 角标把手：上半=向左扩展（大点击区），中间细条=拖拽调宽，下半=向右收起（大点击区）。*/}
           {hasSider && terms.length > 0 && (
             <div style={{
-              flex: '0 0 22px', background: 'var(--bg-container)', borderLeft: '1px solid var(--border)',
+              flex: '0 0 18px', background: 'var(--bg-container)', borderLeft: '1px solid var(--border)',
               display: 'flex', flexDirection: 'column', color: anyClaude ? '#58a6ff' : 'var(--text-dim)', userSelect: 'none',
             }}>
-              {/* 中间：拖拽调整宽度 */}
+              {/* 上半：向左扩展 / 展开 —— 占据上半区，点击区大 */}
+              <div onClick={() => (dockOpen ? setDockMax(true) : setDockOpen(true))}
+                title={!dockOpen ? t('terminal.expandTitle') : t('terminal.expandLeftTitle')}
+                style={{
+                  flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5,
+                  borderBottom: '1px solid var(--border)', cursor: dockMax ? 'default' : 'pointer', opacity: dockMax ? 0.3 : 1,
+                }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M13 6 L7 12 L13 18" /><path d="M18 6 L12 12 L18 18" />
+                </svg>
+                <span style={{ writingMode: 'vertical-rl', letterSpacing: 1, fontSize: 11, fontWeight: 600 }}>{dockOpen ? t('common.extend') : t('common.expand')}</span>
+                <span style={{ fontSize: 10, background: '#1f6feb', color: '#fff', borderRadius: 8, padding: '0 4px', lineHeight: 1.35 }}>{terms.length}</span>
+              </div>
+              {/* 中间：拖拽调整宽度（占中间 1/3，三等分） */}
               <div
-                style={{ flex: 1, cursor: 'col-resize', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                style={{ flex: 1, cursor: 'col-resize', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid var(--border)' }}
                 title={t('common.dragToResize') || 'Drag to resize'}
                 onMouseDown={(e) => {
                   e.preventDefault()
@@ -422,31 +438,25 @@ export default function App() {
                   window.addEventListener('mouseup', onUp)
                 }}
               >
-                <svg width="6" height="24" viewBox="0 0 6 24" fill="currentColor" opacity="0.5">
+                <svg width="6" height="48" viewBox="0 0 6 48" fill="currentColor" opacity="0.5">
                   <circle cx="1.5" cy="6" r="1.5" /><circle cx="4.5" cy="6" r="1.5" />
-                  <circle cx="1.5" cy="12" r="1.5" /><circle cx="4.5" cy="12" r="1.5" />
-                  <circle cx="1.5" cy="18" r="1.5" /><circle cx="4.5" cy="18" r="1.5" />
+                  <circle cx="1.5" cy="14" r="1.5" /><circle cx="4.5" cy="14" r="1.5" />
+                  <circle cx="1.5" cy="22" r="1.5" /><circle cx="4.5" cy="22" r="1.5" />
+                  <circle cx="1.5" cy="30" r="1.5" /><circle cx="4.5" cy="30" r="1.5" />
+                  <circle cx="1.5" cy="38" r="1.5" /><circle cx="4.5" cy="38" r="1.5" />
                 </svg>
               </div>
-              {/* 底部按钮区 */}
-              <div style={{ borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '6px 0' }}>
-                <Tooltip title={!dockOpen ? t('terminal.expandTitle') : t('terminal.expandLeftTitle')} placement="left">
-                  <div onClick={() => (dockOpen ? setDockMax(true) : setDockOpen(true))}
-                    style={{ cursor: dockMax ? 'default' : 'pointer', opacity: dockMax ? 0.3 : 1, padding: 4 }}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M13 6 L7 12 L13 18" /><path d="M18 6 L12 12 L18 18" />
-                    </svg>
-                  </div>
-                </Tooltip>
-                <span style={{ fontSize: 10, background: '#1f6feb', color: '#fff', borderRadius: 8, padding: '0 4px', lineHeight: 1.35 }}>{terms.length}</span>
-                <Tooltip title={dockMax ? t('terminal.restoreTitle') : t('terminal.collapseRightTitle')} placement="left">
-                  <div onClick={() => (dockMax ? setDockMax(false) : setDockOpen(false))}
-                    style={{ cursor: dockOpen ? 'pointer' : 'default', opacity: dockOpen ? 1 : 0.3, padding: 4 }}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M11 6 L17 12 L11 18" /><path d="M6 6 L12 12 L6 18" />
-                    </svg>
-                  </div>
-                </Tooltip>
+              {/* 下半：向右收起 / 还原 —— 占据下半区，点击区大 */}
+              <div onClick={() => (dockMax ? setDockMax(false) : setDockOpen(false))}
+                title={dockMax ? t('terminal.restoreTitle') : t('terminal.collapseRightTitle')}
+                style={{
+                  flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5,
+                  cursor: dockOpen ? 'pointer' : 'default', opacity: dockOpen ? 1 : 0.3,
+                }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M11 6 L17 12 L11 18" /><path d="M6 6 L12 12 L6 18" />
+                </svg>
+                <span style={{ writingMode: 'vertical-rl', letterSpacing: 1, fontSize: 11, fontWeight: 600 }}>{dockMax ? t('common.restore') : t('common.collapse')}</span>
               </div>
             </div>
           )}
@@ -1554,6 +1564,40 @@ function PreferencesOverview() {
   )
 }
 
+// ── 下载自签证书 + 安卓信任引导 ──
+// 自签 HTTPS 下，安卓 Chrome 把站点判为不安全 → 不给「安装应用」、无法全屏 PWA。
+// 把证书装为「受信任凭据」后即成安全上下文，便能装成全屏 PWA、用麦克风/剪贴板。
+function CertDownloadButton() {
+  const { t } = useI18n()
+  const [open, setOpen] = useState(false)
+  const isHttps = typeof location !== 'undefined' && location.protocol === 'https:'
+  const steps = [
+    t('install.certStep1'),
+    t('install.certStep2'),
+    t('install.certStep3'),
+    t('install.certStep4'),
+  ]
+  return (
+    <>
+      <Button onClick={() => setOpen(true)}>{t('install.downloadCert')}</Button>
+      <Modal open={open} onCancel={() => setOpen(false)} title={t('install.certModalTitle')}
+        footer={[
+          <Button key="c" onClick={() => setOpen(false)}>{t('common.cancel')}</Button>,
+          <Button key="d" type="primary" href="/cert.crt" download="ttmux-ca.crt" onClick={() => { /* 浏览器直接下载 */ }}>{t('install.downloadCert')}</Button>,
+        ]}>
+        <div style={{ color: 'var(--text-dim)', fontSize: 13, lineHeight: 1.7 }}>
+          <p style={{ marginTop: 0 }}>{t('install.certWhy')}</p>
+          <ol style={{ paddingLeft: 20, margin: '8px 0' }}>
+            {steps.map((s, i) => <li key={i} style={{ marginBottom: 4 }}>{s}</li>)}
+          </ol>
+          {!isHttps && <p style={{ color: '#d29922' }}>{t('install.certHttpNote')}</p>}
+          <p style={{ marginBottom: 0, color: 'var(--text-dimmer)' }}>{t('install.certIosNote')}</p>
+        </div>
+      </Modal>
+    </>
+  )
+}
+
 // ── Env / Settings ──
 function EnvPage() {
   const [list, setList] = useState<any[]>([])
@@ -1615,6 +1659,7 @@ function EnvPage() {
               {pwaInstalled
                 ? <span style={{ color: 'var(--text-bright)' }}>✓ {t('install.installed')}</span>
                 : <Button type="primary" onClick={doInstall}>{t('install.button')}</Button>}
+              <CertDownloadButton />
               <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('install.settingsHelp')}</span>
             </Space>
           </Card>
@@ -1622,8 +1667,8 @@ function EnvPage() {
           <TwoFactorCard />
         </Space>
       )},
-      { key: 'speech', label: t('settings.tabSpeech'), children: <SpeechCard /> },
       { key: 'browser', label: t('settings.browser'), children: <BrowserCard /> },
+      { key: 'speech', label: t('settings.tabSpeech'), children: <SpeechCard /> },
       { key: 'preferences', label: t('settings.tabPreferences'), children: <PreferencesOverview /> },
       { key: 'env', label: t('settings.tabEnv'), children: (
         <Card title={t('env.globalVariables')} extra={<Space>
