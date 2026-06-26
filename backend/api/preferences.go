@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -9,19 +10,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
-
-type Preferences struct {
-	Theme          string          `json:"theme"`
-	Locale         string          `json:"locale"`
-	BrowserQuality string          `json:"browserQuality"`
-	BrowserDevice  string          `json:"browserDevice"`
-	BrowserRotate  string          `json:"browserRotate"`
-	PromptPopupOff map[string]bool `json:"promptPopupOff"`
-	RecentDirs     []string        `json:"recentDirs"`
-	ClaudeCommand  string          `json:"claudeCommand"`
-	CodexCommand   string          `json:"codexCommand"`
-	Migrated       bool            `json:"_migrated"`
-}
 
 type PreferencesStore struct {
 	file string
@@ -33,20 +21,27 @@ func NewPreferencesStore(dataDir string) *PreferencesStore {
 	return &PreferencesStore{file: filepath.Join(dataDir, "preferences.json")}
 }
 
-func (s *PreferencesStore) get() Preferences {
+func (s *PreferencesStore) get() map[string]interface{} {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var p Preferences
+	var p map[string]interface{}
 	if b, err := os.ReadFile(s.file); err == nil {
 		_ = json.Unmarshal(b, &p)
+	}
+	if p == nil {
+		p = map[string]interface{}{}
 	}
 	return p
 }
 
-func (s *PreferencesStore) set(p Preferences) error {
+func (s *PreferencesStore) set(raw json.RawMessage) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	b, _ := json.MarshalIndent(p, "", "  ")
+	var m map[string]interface{}
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return err
+	}
+	b, _ := json.MarshalIndent(m, "", "  ")
 	tmp := s.file + ".tmp"
 	if err := os.WriteFile(tmp, b, 0o644); err != nil {
 		return err
@@ -56,7 +51,7 @@ func (s *PreferencesStore) set(p Preferences) error {
 
 func (a *API) GetPreferences(c *gin.Context) {
 	if a.Prefs == nil {
-		c.JSON(http.StatusOK, gin.H{"data": Preferences{}})
+		c.JSON(http.StatusOK, gin.H{"data": map[string]interface{}{}})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": a.Prefs.get()})
@@ -67,12 +62,12 @@ func (a *API) SetPreferences(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "NO_STORE"}})
 		return
 	}
-	var in Preferences
-	if err := c.ShouldBindJSON(&in); err != nil {
+	raw, err := io.ReadAll(c.Request.Body)
+	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
 		return
 	}
-	if err := a.Prefs.set(in); err != nil {
+	if err := a.Prefs.set(raw); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "WRITE_ERROR", "message": err.Error()}})
 		return
 	}
