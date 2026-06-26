@@ -36,7 +36,7 @@ export default function UpdateBanner() {
 
   if (!stale || dismissed) return null
   return (
-    <div style={{ position: 'fixed', left: '50%', bottom: 18, transform: 'translateX(-50%)', zIndex: 2000, display: 'flex', alignItems: 'center', gap: 12, background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 14px', boxShadow: 'var(--elevated-shadow)', color: 'var(--text-bright)', fontSize: 13 }}>
+    <div style={{ position: 'fixed', left: '50%', bottom: 18, transform: 'translateX(-50%)', zIndex: 2000, display: 'flex', alignItems: 'center', gap: 12, background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 14px', boxShadow: 'var(--elevated-shadow)', color: 'var(--text-bright)', fontSize: 13, flexWrap: 'wrap', maxWidth: '90vw' }}>
       <span>🔄 {t('update.newVersion')}</span>
       <a onClick={() => location.reload()} style={{ color: '#58a6ff', fontWeight: 600 }}>{t('common.refresh')}</a>
       <a onClick={() => setDismissed(true)} style={{ color: 'var(--text-dim)' }}>{t('update.later')}</a>

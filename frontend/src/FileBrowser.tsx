@@ -5,6 +5,7 @@ import { AutoComplete, Button, Dropdown, Input, Modal, Space, Spin, App as AntAp
 import { api, upload } from './api'
 import Markdown from './Markdown'
 import { useI18n } from './i18n'
+import { recentDirs } from './App'
 
 // Office 预览（docx-preview / xlsx / pptx）依赖很重，只有真正打开 Office 文件才需要：
 // 懒加载使其不进入首屏包，按需异步取。
@@ -707,6 +708,26 @@ export default function FileBrowser({
         </div>
       </div>
       <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)' }}>
+        {(() => {
+          const chips: { label: string; path: string }[] = []
+          const seen = new Set<string>()
+          const add = (label: string, path: string) => { if (path && !seen.has(path)) { seen.add(path); chips.push({ label, path }) } }
+          if (dir) add(t('file.workingDir'), dir)
+          for (const rd of recentDirs()) { if (rd !== dir) add(fileNameOf(rd), rd) }
+          return chips.length > 0 ? (
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
+              {chips.map((c) => (
+                <Tooltip key={c.path} title={c.path}>
+                  <span onClick={() => navigate(c.path)} style={{
+                    cursor: 'pointer', fontSize: 11, padding: '1px 8px', borderRadius: 4,
+                    background: c.path === cur ? '#1f6feb' : 'var(--bg-base)', color: c.path === cur ? '#fff' : 'var(--text-dim)',
+                    border: '1px solid var(--border-subtle)', whiteSpace: 'nowrap',
+                  }}>{c.label}</span>
+                </Tooltip>
+              ))}
+            </div>
+          ) : null
+        })()}
         <AutoComplete
           value={pathDraft}
           options={pathOptions}
