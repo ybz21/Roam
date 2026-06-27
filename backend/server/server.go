@@ -200,6 +200,8 @@ func New(cfg Config) *gin.Engine {
 		g.GET("/phone/config", phone.GetConfig)        // 后端目标配置：读
 		g.PUT("/phone/config", phone.SetConfig)        // 后端目标配置：存并连接
 		g.POST("/phone/connect", phone.Connect)        // 按当前配置测试连接
+		g.GET("/phone/platforms", phone.Platforms)     // 各平台安装/支持状态(设置页开关)
+		g.POST("/phone/install", phone.Install)        // 按需(插件化)安装某平台依赖
 
 		g.GET("/stream/status", hub.Status)
 		g.GET("/logs/:name", hub.Logs)

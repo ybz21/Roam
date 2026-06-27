@@ -1657,12 +1657,19 @@ function CertDownloadButton() {
 function PhoneSettingsCard() {
   const { t } = useI18n()
   const { message } = AntApp.useApp()
-  const [platform, setPlatform] = useState<'android' | 'ios'>('android')
+  const [platform, setPlatform] = useState<'android' | 'ios'>('android') // 当前激活平台
   const [mode, setMode] = useState('local')          // android 子模式
   const [address, setAddress] = useState('localhost:5555')
   const [resolution, setResolution] = useState('')   // android only
+  const [installed, setInstalled] = useState<{ android: boolean; ios: boolean }>({ android: false, ios: false })
+  const [iosSupported, setIosSupported] = useState(false)
+  const [installing, setInstalling] = useState<'android' | 'ios' | null>(null)
+  const [installLog, setInstallLog] = useState('')
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
+  const loadPlatforms = () => api('GET', '/phone/platforms').then((r) => {
+    if (r?.data) { setInstalled({ android: !!r.data.android?.installed, ios: !!r.data.ios?.installed }); setIosSupported(!!r.data.ios?.supported) }
+  }).catch(() => {})
   useEffect(() => {
     api('GET', '/phone/config').then((r) => {
       if (r?.data) {
@@ -1670,6 +1677,7 @@ function PhoneSettingsCard() {
         setMode(r.data.mode || 'local'); setAddress(r.data.address || ''); setResolution(r.data.resolution || '')
       }
     }).catch(() => {})
+    loadPlatforms()
   }, [])
   const applyHealth = (h: any) => {
     if (h?.ok) setStatus({ ok: true, text: h.device || 'OK' })
@@ -1680,6 +1688,21 @@ function PhoneSettingsCard() {
     setPlatform(p)
     if (p === 'ios') { setMode('simulator'); setAddress('') }
     else { setMode('local'); setAddress('localhost:5555') }
+  }
+  // 开关：只处理「打开」(互斥,始终一个激活)。未装依赖则先按需(插件化)安装,装好才激活。
+  const toggle = async (p: 'android' | 'ios', on: boolean) => {
+    if (!on || platform === p || installing) return
+    if (!installed[p]) {
+      setInstalling(p); setInstallLog('')
+      try {
+        const r = await api('POST', '/phone/install', { platform: p })
+        setInstallLog(r?.data?.log || r?.error || '')
+        if (!r?.data?.installed) { message.error(t('phone.installFailed')); setInstalling(null); return }
+        setInstalled((s) => ({ ...s, [p]: true })); message.success(t('phone.installed'))
+      } catch (e: any) { message.error(e.message); setInstalling(null); return }
+      setInstalling(null)
+    }
+    changePlatform(p)
   }
   const changeMode = (m: string) => { setMode(m); if (m === 'local') setAddress('localhost:5555') }
   const save = async () => {
@@ -1694,24 +1717,20 @@ function PhoneSettingsCard() {
     try { const r = await api('POST', '/phone/connect'); applyHealth(r?.data) }
     catch (e: any) { message.error(e.message) } finally { setBusy(false) }
   }
+  const platformRow = (p: 'android' | 'ios', label: string) => (
+    <Space align="center">
+      <Switch checked={platform === p} loading={installing === p} onChange={(on) => toggle(p, on)} />
+      <b style={{ color: 'var(--text-bright)' }}>{label}</b>
+      <Tag color={installed[p] ? 'green' : 'default'}>{installed[p] ? t('phone.installedTag') : t('phone.notInstalled')}</Tag>
+      {p === 'ios' && !iosSupported && <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('phone.iosMacOnly')}</span>}
+    </Space>
+  )
   return (
     <Card title={t('settings.phoneTitle')}>
       <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-        {/* 第一层：平台 */}
-        <Space direction="vertical" size={4} style={{ width: '100%' }}>
-          <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>{t('phone.platform')}</span>
-          <Segmented
-            value={platform}
-            onChange={(v) => changePlatform(v as 'android' | 'ios')}
-            options={[
-              { label: t('phone.platform.android'), value: 'android' },
-              { label: t('phone.platform.ios'), value: 'ios' },
-            ]}
-          />
-        </Space>
-
-        {/* 第二层：Android = 来源 + 地址 + 分辨率；iOS = 模拟器 UDID */}
-        {platform === 'android' ? (
+        {/* Android 开关 + 配置 */}
+        {platformRow('android', t('phone.platform.android'))}
+        {platform === 'android' && (
           <>
             <Space direction="vertical" size={4} style={{ width: '100%' }}>
               <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>{t('phone.source')}</span>
@@ -1749,12 +1768,21 @@ function PhoneSettingsCard() {
               <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('phone.resHelp')}</span>
             </Space>
           </>
-        ) : (
+        )}
+
+        {/* iOS 开关 + 配置 */}
+        {platformRow('ios', t('phone.platform.ios'))}
+        {platform === 'ios' && (
           <Space direction="vertical" size={4} style={{ width: '100%' }}>
             <Input value={address} onChange={(e) => setAddress(e.target.value)}
               placeholder={t('phone.addrPlaceholderIOS')} style={{ maxWidth: 320 }} />
             <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('phone.addrHelpIOS')}</span>
           </Space>
+        )}
+
+        {/* 按需安装日志 */}
+        {installLog && (
+          <pre style={{ maxHeight: 140, overflow: 'auto', margin: 0, padding: 8, fontSize: 11, lineHeight: 1.5, background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 6, whiteSpace: 'pre-wrap' }}>{installLog}</pre>
         )}
 
         <Space wrap>

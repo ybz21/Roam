@@ -63,7 +63,6 @@ load lib/github.sh
 load preflight.sh
 load install-ttmux.sh
 load install-chrome.sh
-load install-phone.sh
 load install-backend.sh
 
 # ── 主流程 ───────────────────────────────────────────────────────
@@ -74,8 +73,8 @@ echo ""
 preflight            # 平台横幅 + tmux + 建目录
 module_ttmux         # [1/3]
 module_chrome        # [2/3]
-module_phone         # 手机后端依赖（自适应）
 module_backend       # [3/3]（只构建，不启动）
+# 注：手机后端依赖（adb / idb）不在此预装；由设置页「手机」平台开关按需安装（scripts/install-phone.sh）。
 
 # PATH 提示
 if [[ ":$PATH:" != *":${INSTALL_DIR}:"* ]]; then
