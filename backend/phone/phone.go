@@ -8,6 +8,8 @@
 // Web 端输入 + 设备生命周期」，具体自动化命令交给模型。
 package phone
 
+import "errors"
+
 // Status 是设备可用性，回显到 UI（连不上时 Error 给原因）。
 type Status struct {
 	OK       bool   `json:"ok"`
@@ -61,8 +63,30 @@ var (
 // 注意：后端由「模式」决定而非主机系统——这样 Mac 上既能选 iOS 模拟器，也能选远程 redroid/Android 真机；
 // Linux 上选 iOS 会在 Ensure/Health 明确报「未找到 xcrun」。
 func Current() Device {
-	if getConfig().Platform == "ios" {
+	switch getConfig().Platform {
+	case "ios":
 		return iosImpl
+	case "android":
+		return androidImpl
+	default: // "" = 两个开关都关 → 未启用
+		return disabledDevice{}
 	}
-	return androidImpl
 }
+
+// disabledDevice：手机未启用（设置里 Android/iOS 开关都关）时的占位，所有操作给清晰提示。
+var errDisabled = errors.New("手机未启用（在设置里打开 Android 或 iOS）")
+
+type disabledDevice struct{}
+
+func (disabledDevice) Ensure() error { return errDisabled }
+func (disabledDevice) Health() Status {
+	return Status{OK: false, Platform: "none", Error: errDisabled.Error()}
+}
+func (disabledDevice) CaptureJPEG(int) ([]byte, int, int, error) { return nil, 0, 0, errDisabled }
+func (disabledDevice) Tap(int, int) error                        { return errDisabled }
+func (disabledDevice) Swipe(int, int, int, int, int) error       { return errDisabled }
+func (disabledDevice) Text(string) error                         { return errDisabled }
+func (disabledDevice) Key(string) error                          { return errDisabled }
+func (disabledDevice) Apps() ([]App, error)                      { return nil, errDisabled }
+func (disabledDevice) Launch(string) error                       { return errDisabled }
+func (disabledDevice) UIDump() ([]Element, error)                { return nil, errDisabled }

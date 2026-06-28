@@ -1657,7 +1657,7 @@ function CertDownloadButton() {
 function PhoneSettingsCard() {
   const { t } = useI18n()
   const { message } = AntApp.useApp()
-  const [platform, setPlatform] = useState<'android' | 'ios'>('android') // 当前激活平台
+  const [platform, setPlatform] = useState<'android' | 'ios' | ''>('android') // 当前激活平台（''=都关=未启用）
   const [mode, setMode] = useState('local')          // android 子模式
   const [address, setAddress] = useState('localhost:5555')
   const [resolution, setResolution] = useState('')   // android only
@@ -1673,25 +1673,32 @@ function PhoneSettingsCard() {
   useEffect(() => {
     api('GET', '/phone/config').then((r) => {
       if (r?.data) {
-        setPlatform(r.data.platform === 'ios' ? 'ios' : 'android')
+        const p = r.data.platform
+        setPlatform(p === 'ios' ? 'ios' : p === 'android' ? 'android' : '')
         setMode(r.data.mode || 'local'); setAddress(r.data.address || ''); setResolution(r.data.resolution || '')
       }
     }).catch(() => {})
     loadPlatforms()
   }, [])
+  // 持久化指定平台配置（开关即时生效，无需再点保存）
+  const persist = async (p: 'android' | 'ios' | '', m: string, addr: string) => {
+    try {
+      const r = await api('PUT', '/phone/config', { platform: p, mode: m, address: addr.trim(), resolution })
+      applyHealth(r?.data?.health)
+    } catch (e: any) { message.error(e.message) }
+  }
   const applyHealth = (h: any) => {
     if (h?.ok) setStatus({ ok: true, text: h.device || 'OK' })
     else setStatus({ ok: false, text: h?.error || t('phone.disconnected') })
   }
-  // 切平台：带平台默认值（Android→本地 redroid；iOS→模拟器 booted）
-  const changePlatform = (p: 'android' | 'ios') => {
-    setPlatform(p)
-    if (p === 'ios') { setMode('simulator'); setAddress('') }
-    else { setMode('local'); setAddress('localhost:5555') }
-  }
-  // 开关：只处理「打开」(互斥,始终一个激活)。未装依赖则先按需(插件化)安装,装好才激活。
+  // 开关：开=激活该平台(互斥,自动关另一个;未装依赖先按需安装);关=禁用(置「未启用」)。即时持久化。
   const toggle = async (p: 'android' | 'ios', on: boolean) => {
-    if (!on || platform === p || installing) return
+    if (installing) return
+    if (!on) { // 关掉当前平台 → 未启用
+      if (platform === p) { setPlatform(''); persist('', mode, address) }
+      return
+    }
+    if (platform === p) return
     if (!installed[p]) {
       setInstalling(p); setInstallLog('')
       try {
@@ -1702,7 +1709,10 @@ function PhoneSettingsCard() {
       } catch (e: any) { message.error(e.message); setInstalling(null); return }
       setInstalling(null)
     }
-    changePlatform(p)
+    const m = p === 'ios' ? 'simulator' : 'local'
+    const addr = p === 'ios' ? '' : 'localhost:5555'
+    setPlatform(p); setMode(m); setAddress(addr)
+    persist(p, m, addr)
   }
   const changeMode = (m: string) => { setMode(m); if (m === 'local') setAddress('localhost:5555') }
   const save = async () => {

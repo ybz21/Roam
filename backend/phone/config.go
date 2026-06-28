@@ -74,9 +74,15 @@ func InitConfig(dataDir string) {
 	_ = os.MkdirAll(dataDir, 0o755)
 	cfgStore.file = filepath.Join(dataDir, "phone-config.json")
 	if b, err := os.ReadFile(cfgStore.file); err == nil {
+		// 用 map 判断 "platform" 键是否存在：存在(哪怕为"")就尊重(允许"未启用")；
+		// 不存在=旧配置(平台曾编码在 mode 里)→ 迁移。
+		var raw map[string]json.RawMessage
 		var c Config
-		if json.Unmarshal(b, &c) == nil && (c.Platform != "" || c.Mode != "") {
-			cfgStore.cur = migrate(c)
+		if json.Unmarshal(b, &raw) == nil && json.Unmarshal(b, &c) == nil {
+			if _, has := raw["platform"]; !has {
+				c = migrate(c)
+			}
+			cfgStore.cur = c
 		}
 	}
 }
@@ -88,7 +94,7 @@ func getConfig() Config {
 }
 
 func setConfig(c Config) {
-	c = migrate(c)
+	// 允许 Platform=="" 表示「未启用」（两个开关都关）；不再强制回落到 android。
 	if c.Platform == "android" && c.Mode == "" {
 		c.Mode = "local"
 	}
