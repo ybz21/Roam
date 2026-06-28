@@ -73,7 +73,8 @@ const Term = forwardRef<TermHandle, {
     } catch {}
   }
 
-  // 通过 tmux copy-mode 滚动会话真实历史（attach 是全屏，xterm 本地缓冲为空）
+  // 滚动会话历史：attach 是全屏、xterm 本地缓冲为空，统一交后端处理——
+  // 普通屏走 tmux copy-mode，备用屏(全屏 TUI)由后端合成滚轮序列喂给应用滚自己的缓冲。
   const sendScroll = (dir: string, lines: number) => {
     const ws = wsRef.current
     if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'scroll', dir, lines }))
@@ -220,7 +221,7 @@ const Term = forwardRef<TermHandle, {
     if (elRef.current) ro.observe(elRef.current)
     window.addEventListener('resize', sendResize)
 
-    // 滚动 tmux 历史：触摸滑动 + 鼠标滚轮 → 发 scroll 控制（后端走 copy-mode）
+    // 滚动会话历史：触摸滑动 + 鼠标滚轮 → 发 scroll 控制（后端按普通屏/备用屏分流，见 sendScroll）
     const el = elRef.current!
     let lastY = 0
     let acc = 0

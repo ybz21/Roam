@@ -4,6 +4,7 @@ package pty
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
@@ -48,21 +49,71 @@ func SanitizeSessionName(name string) string {
 	return strings.NewReplacer(".", "_", ":", "_").Replace(name)
 }
 
-// tmuxScroll 通过 tmux copy-mode 滚动会话的真实历史（attach 用全屏，xterm 本地缓冲为空）。
-func tmuxScroll(name, dir string, lines int) {
+// paneAltSize 读活动 pane 是否处于备用屏(alternate screen)及其尺寸。
+// alternate_on=1 表示当前跑的是全屏 TUI（Claude Code / Codex / vim / less 等）。
+func paneAltSize(name string) (alt bool, w, h int) {
+	out, err := exec.Command("tmux", "display-message", "-p", "-t", name, "-F", "#{alternate_on} #{pane_width} #{pane_height}").Output()
+	if err != nil {
+		return false, 0, 0
+	}
+	parts := strings.Fields(strings.TrimSpace(string(out)))
+	if len(parts) != 3 {
+		return false, 0, 0
+	}
+	w, _ = strconv.Atoi(parts[1])
+	h, _ = strconv.Atoi(parts[2])
+	return parts[0] == "1", w, h
+}
+
+// altScreenWheel 给备用屏 TUI 合成 SGR 滚轮序列并作为输入发给应用，让它滚自己的缓冲。
+// 备用屏没有 tmux scrollback，copy-mode 滚不动；而全屏 TUI（Claude/Codex）普遍开了
+// SGR 鼠标上报(1006)，直接喂滚轮字节即可。坐标取 pane 中心；wheel 只有按下(M)无释放。
+func altScreenWheel(name, dir string, notches, w, h int) {
+	btn := 64 // wheel up
+	if dir != "up" {
+		btn = 65 // wheel down
+	}
+	col, row := w/2, h/2
+	if col < 1 {
+		col = 1
+	}
+	if row < 1 {
+		row = 1
+	}
+	seq := fmt.Sprintf("\x1b[<%d;%d;%dM", btn, col, row)
+	_ = exec.Command("tmux", "send-keys", "-t", name, "-l", "--", strings.Repeat(seq, notches)).Run()
+}
+
+// tmuxScroll 滚动会话历史，返回本连接是否仍停在 tmux copy-mode（供 handler 决定真实键入前是否需退出）。
+//   - 普通屏：走 tmux copy-mode 滚真实 scrollback（attach 全屏，xterm 本地缓冲为空）。
+//   - 备用屏(全屏 TUI)：copy-mode 无效，改合成滚轮序列发给应用，让它滚自己的对话缓冲。
+func tmuxScroll(name, dir string, lines int) (inCopyMode bool) {
 	if lines <= 0 {
 		lines = 1
+	}
+	if alt, w, h := paneAltSize(name); alt {
+		switch dir {
+		case "up", "down":
+			altScreenWheel(name, dir, lines, w, h)
+		case "bottom":
+			// 全屏 TUI 无统一「到底」键；连发若干次向下滚轮，应用会在底部自然钳住。
+			altScreenWheel(name, "down", 200, w, h)
+		}
+		return false // 没进 tmux copy-mode
 	}
 	n := strconv.Itoa(lines)
 	switch dir {
 	case "up":
 		_ = exec.Command("tmux", "copy-mode", "-t", name).Run()
 		_ = exec.Command("tmux", "send-keys", "-t", name, "-N", n, "-X", "scroll-up").Run()
+		return true
 	case "down":
 		_ = exec.Command("tmux", "send-keys", "-t", name, "-N", n, "-X", "scroll-down").Run()
+		return true
 	case "bottom":
 		_ = exec.Command("tmux", "send-keys", "-t", name, "-X", "cancel").Run() // 退出 copy-mode 回到最新
 	}
+	return false
 }
 
 // tmuxSelectPaneAt 把前端点击的单元格坐标(col,row)映射到所在 pane 并激活它。
@@ -206,8 +257,8 @@ func Handler(c *gin.Context) {
 					_ = creackpty.Setsize(ptmx, &creackpty.Winsize{Rows: ctrl.Rows, Cols: ctrl.Cols})
 					continue
 				case "scroll":
-					tmuxScroll(name, ctrl.Dir, ctrl.Lines)
-					inCopy = ctrl.Dir != "bottom" // up/down 仍在 copy-mode；bottom 已 cancel 退出
+					// 普通屏走 copy-mode 才需在真实键入前退出；备用屏 TUI 喂的是滚轮，inCopyMode=false。
+					inCopy = tmuxScroll(name, ctrl.Dir, ctrl.Lines)
 					continue
 				case "select-pane":
 					tmuxSelectPaneAt(name, ctrl.Col, ctrl.Row)

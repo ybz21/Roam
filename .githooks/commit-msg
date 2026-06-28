@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# commit-msg —— 校验提交信息符合 Conventional Commits 规范。
+#
+# 约定格式（详见 docs/development/commit-convention.md）：
+#   <type>(<scope>)<!>: <description>
+# 例：
+#   feat(tls): 自签证书拆分根 CA + 叶子
+#   fix(mobile): 软键盘悬浮不再挤压布局
+#   docs: 补充 README 安装步骤
+#
+# description 用中英文均可（仓库默认中文）。校验只看结构，不看语言。
+set -euo pipefail
+
+MSG_FILE="$1"
+
+# 取第一条非注释、非空行作为标题。
+header="$(grep -vE '^\s*#' "$MSG_FILE" | grep -vE '^\s*$' | head -n 1 || true)"
+
+# 这些自动生成 / 特殊提交直接放行，不做规范校验。
+case "$header" in
+  "Merge "*|"Revert "*|"Reapply "*|"fixup! "*|"squash! "*|"amend! "*)
+    exit 0 ;;
+esac
+
+# Conventional Commits 允许的类型。
+types='build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test'
+
+# <type> 可选 (<scope>)，可选 ! 表示破坏性变更，冒号后必须有空格 + 描述。
+pattern="^(${types})(\([a-z0-9._/-]+\))?(!)?: .+"
+
+if [[ ! "$header" =~ $pattern ]]; then
+  cat >&2 <<EOF
+✗ 提交信息不符合 Conventional Commits 规范。
+
+  你的标题：$header
+
+  期望格式：<type>(<scope>): <描述>
+  允许的 type：${types//|/, }
+
+  示例：
+    feat(tls): 自签证书拆分根 CA + 叶子
+    fix(mobile): 软键盘悬浮不再挤压布局
+    docs: 补充 README 安装步骤
+    refactor(cli)!: 重命名 swarm done 子命令（破坏性）
+
+  详见 docs/development/commit-convention.md
+EOF
+  exit 1
+fi
+
+# 软提示：标题过长（含 type 前缀）建议 ≤ 72 字符，但不阻断。
+if (( ${#header} > 72 )); then
+  echo "ℹ 提示：标题 ${#header} 字符，建议精简到 72 以内（不阻断提交）。" >&2
+fi
+
+exit 0

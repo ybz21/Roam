@@ -13,10 +13,11 @@ import (
 )
 
 type sessionInfo struct {
-	Name     string `json:"name"`
-	Windows  int    `json:"windows"`
-	Created  string `json:"created"`
-	Attached int    `json:"attached"`
+	Name         string `json:"name"`
+	Windows      int    `json:"windows"`
+	Created      string `json:"created"`
+	Attached     int    `json:"attached"`
+	LastActivity string `json:"last_activity"`
 }
 
 type infoJSON struct {
@@ -28,7 +29,7 @@ type infoJSON struct {
 }
 
 func ListJSON(rt runtime.Runtime, exclude map[string]bool, w io.Writer) error {
-	out, err := rt.TmuxOutput("list-sessions", "-F", "#{session_name}\t#{session_windows}\t#{session_created}\t#{session_attached}")
+	out, err := rt.TmuxOutput("list-sessions", "-F", "#{session_name}\t#{session_windows}\t#{session_created}\t#{session_attached}\t#{session_activity}")
 	if err != nil && strings.TrimSpace(out) == "" {
 		_, _ = io.WriteString(w, "[]\n")
 		return nil
@@ -47,11 +48,16 @@ func ListJSON(rt runtime.Runtime, exclude map[string]bool, w io.Writer) error {
 		}
 		windows, _ := strconv.Atoi(parts[1])
 		attached, _ := strconv.Atoi(parts[3])
+		lastActivity := ""
+		if len(parts) > 4 {
+			lastActivity = parts[4]
+		}
 		sessions = append(sessions, sessionInfo{
-			Name:     parts[0],
-			Windows:  windows,
-			Created:  parts[2],
-			Attached: attached,
+			Name:         parts[0],
+			Windows:      windows,
+			Created:      parts[2],
+			Attached:     attached,
+			LastActivity: lastActivity,
 		})
 	}
 	return json.NewEncoder(w).Encode(sessions)

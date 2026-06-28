@@ -1,5 +1,8 @@
 // 语音识别(ASR)：接收前端录音(WAV)，转发到所配置的服务商并返回识别文本。
-// 支持 OpenAI(Whisper/transcriptions 兼容接口) 与 火山引擎(大模型录音识别·极速版)。
+// 支持 OpenAI(Whisper/transcriptions 兼容接口) 与 火山引擎(豆包大模型录音识别)：
+//
+//	标准版 volc.bigasr.auc(submit→query 异步) / 极速版 volc.bigasr.auc_turbo(flash 一次性同步)，按 resourceId 自动选路。
+//
 // 服务商密钥持久化到 <dataDir>/speech-config.json，单独管理，不走 env(避免被 push 进 shell 会话)。
 package api
 
@@ -11,6 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -35,8 +39,8 @@ type OpenAISpeech struct {
 type VolcanoSpeech struct {
 	AppID       string `json:"appId"`       // 火山控制台 App ID
 	AccessToken string `json:"accessToken"` // 火山控制台 Access Token
-	ResourceID  string `json:"resourceId"`  // 默认 volc.bigasr.auc_turbo(大模型极速版)
-	Endpoint    string `json:"endpoint"`    // 默认极速版 flash 接口
+	ResourceID  string `json:"resourceId"`  // 默认 volc.bigasr.auc(大模型录音识别·标准版)；含 _turbo 走极速版
+	Endpoint    string `json:"endpoint"`    // 默认标准版 submit 接口(极速版用 recognize/flash)
 }
 
 type SpeechConfig struct {
@@ -132,6 +136,10 @@ func (a *API) SpeechTranscribe(c *gin.Context) {
 		return
 	}
 
+	// 诊断：记录上传音频体积/时长/峰值响度，便于判断「识别空」是客户端录到静音还是服务端没认出。
+	peak, durSec := wavStats(audio)
+	log.Printf("[speech] upload provider=%s name=%q bytes=%d dur=%.1fs peak=%.3f", cfg.Provider, fh.Filename, len(audio), durSec, peak)
+
 	var text string
 	switch cfg.Provider {
 	case "openai":
@@ -143,9 +151,11 @@ func (a *API) SpeechTranscribe(c *gin.Context) {
 		return
 	}
 	if err != nil {
+		log.Printf("[speech] asr error: %v", err)
 		c.JSON(http.StatusBadGateway, gin.H{"error": gin.H{"code": "ASR_ERROR", "message": err.Error()}})
 		return
 	}
+	log.Printf("[speech] result text=%q", strings.TrimSpace(text))
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"text": strings.TrimSpace(text)}})
 }
 
@@ -214,22 +224,9 @@ func transcribeOpenAI(cfg OpenAISpeech, audio []byte, filename string) (string, 
 	return r.Text, nil
 }
 
-// transcribeVolcano 走火山引擎「大模型录音识别·极速版」(v3 flash) 同步接口。
-// 鉴权用请求头携带 App Key / Access Key / Resource Id；音频以 base64 放进 JSON。
-func transcribeVolcano(cfg VolcanoSpeech, audio []byte) (string, error) {
-	if cfg.AppID == "" || cfg.AccessToken == "" {
-		return "", fmt.Errorf("volcano credentials not set")
-	}
-	endpoint := cfg.Endpoint
-	if endpoint == "" {
-		endpoint = "https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash"
-	}
-	resourceID := cfg.ResourceID
-	if resourceID == "" {
-		resourceID = "volc.bigasr.auc_turbo"
-	}
-
-	reqBody := map[string]any{
+// 火山大模型识别请求体(标准版 submit / 极速版 flash 同构)：音频以 base64 放进 JSON。
+func volcanoReqBody(audio []byte) []byte {
+	b, _ := json.Marshal(map[string]any{
 		"user": map[string]any{"uid": "ttmux"},
 		"audio": map[string]any{
 			"format": "wav",
@@ -240,35 +237,34 @@ func transcribeVolcano(cfg VolcanoSpeech, audio []byte) (string, error) {
 			"enable_itn":  true,
 			"enable_punc": true,
 		},
-	}
-	b, _ := json.Marshal(reqBody)
-	req, err := http.NewRequest("POST", endpoint, bytes.NewReader(b))
+	})
+	return b
+}
+
+// volcanoPost 发一次火山接口调用，返回状态码头(X-Api-Status-Code)、消息头与响应体。
+// 鉴权统一用请求头携带 App Key / Access Key / Resource Id；同一 reqID 用于 submit→query 关联。
+func volcanoPost(client *http.Client, url string, cfg VolcanoSpeech, resourceID, reqID string, payload []byte) (code, msg string, body []byte, err error) {
+	req, err := http.NewRequest("POST", url, bytes.NewReader(payload))
 	if err != nil {
-		return "", err
+		return "", "", nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Api-App-Key", cfg.AppID)
 	req.Header.Set("X-Api-Access-Key", cfg.AccessToken)
 	req.Header.Set("X-Api-Resource-Id", resourceID)
-	req.Header.Set("X-Api-Request-Id", randomID())
+	req.Header.Set("X-Api-Request-Id", reqID)
 	req.Header.Set("X-Api-Sequence", "-1")
-
-	resp, err := (&http.Client{Timeout: 120 * time.Second}).Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return "", "", nil, err
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
+	body, _ = io.ReadAll(resp.Body)
+	return resp.Header.Get("X-Api-Status-Code"), resp.Header.Get("X-Api-Message"), body, nil
+}
 
-	// 极速版的成功/失败码放在响应头(20000000 表示成功)。
-	if code := resp.Header.Get("X-Api-Status-Code"); code != "" && code != "20000000" {
-		msg := resp.Header.Get("X-Api-Message")
-		return "", fmt.Errorf("volcano %s: %s %s", code, msg, truncate(string(body), 200))
-	}
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("volcano http %d: %s", resp.StatusCode, truncate(string(body), 300))
-	}
-
+// volcanoText 解析识别结果体 {"result":{"text":"..."}}（标准版与极速版同构）。
+func volcanoText(body []byte) (string, error) {
 	var r struct {
 		Result struct {
 			Text string `json:"text"`
@@ -278,6 +274,98 @@ func transcribeVolcano(cfg VolcanoSpeech, audio []byte) (string, error) {
 		return "", fmt.Errorf("parse volcano resp: %w", err)
 	}
 	return r.Result.Text, nil
+}
+
+// transcribeVolcano 调火山引擎豆包大模型录音识别，按 resourceId 自动选路：
+// 含 _turbo → 极速版(flash 一次性同步)；否则 → 标准版(submit→query 异步)。
+func transcribeVolcano(cfg VolcanoSpeech, audio []byte) (string, error) {
+	if cfg.AppID == "" || cfg.AccessToken == "" {
+		return "", fmt.Errorf("volcano credentials not set")
+	}
+	resourceID := cfg.ResourceID
+	if resourceID == "" {
+		resourceID = "volc.bigasr.auc"
+	}
+	if strings.Contains(resourceID, "turbo") {
+		return transcribeVolcanoFlash(cfg, resourceID, audio)
+	}
+	return transcribeVolcanoStandard(cfg, resourceID, audio)
+}
+
+// transcribeVolcanoStandard 走标准版：先 submit 提交任务，再轮询 query 拿结果。
+// 状态码在响应头：20000000 成功、20000003 静音/无语音(终态，文本为空)、
+// 20000001/20000002 处理中/排队中(继续轮询)，其余按错误处理。
+func transcribeVolcanoStandard(cfg VolcanoSpeech, resourceID string, audio []byte) (string, error) {
+	submitURL := cfg.Endpoint
+	if submitURL == "" {
+		submitURL = "https://openspeech.bytedance.com/api/v3/auc/bigmodel/submit"
+	}
+	queryURL := strings.TrimSuffix(submitURL, "/submit") + "/query"
+	reqID := randomID()
+	client := &http.Client{Timeout: 30 * time.Second}
+
+	code, msg, body, err := volcanoPost(client, submitURL, cfg, resourceID, reqID, volcanoReqBody(audio))
+	if err != nil {
+		return "", err
+	}
+	if code != "" && code != "20000000" {
+		return "", fmt.Errorf("volcano submit %s: %s %s", code, msg, truncate(string(body), 200))
+	}
+
+	// 轮询 query：标准版异步，识别完成才返回终态码。最长约 30s。
+	for i := 0; i < 50; i++ {
+		time.Sleep(600 * time.Millisecond)
+		code, msg, body, err = volcanoPost(client, queryURL, cfg, resourceID, reqID, []byte("{}"))
+		if err != nil {
+			return "", err
+		}
+		switch code {
+		case "20000000", "20000003": // 完成(有文本 / 静音空文本)
+			return volcanoText(body)
+		case "20000001", "20000002", "": // 处理中 / 排队中
+			continue
+		default:
+			return "", fmt.Errorf("volcano query %s: %s %s", code, msg, truncate(string(body), 200))
+		}
+	}
+	return "", fmt.Errorf("volcano query timeout")
+}
+
+// transcribeVolcanoFlash 走极速版「大模型录音识别·极速版」(v3 flash) 一次性同步接口。
+func transcribeVolcanoFlash(cfg VolcanoSpeech, resourceID string, audio []byte) (string, error) {
+	endpoint := cfg.Endpoint
+	if endpoint == "" {
+		endpoint = "https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash"
+	}
+	client := &http.Client{Timeout: 120 * time.Second}
+	code, msg, body, err := volcanoPost(client, endpoint, cfg, resourceID, randomID(), volcanoReqBody(audio))
+	if err != nil {
+		return "", err
+	}
+	// 极速版成功/失败码放在响应头(20000000 表示成功)。
+	if code != "" && code != "20000000" {
+		return "", fmt.Errorf("volcano %s: %s %s", code, msg, truncate(string(body), 200))
+	}
+	return volcanoText(body)
+}
+
+// wavStats 估算 16k 单声道 16bit PCM WAV 的峰值响度(0~1)与时长(秒)，用于诊断静音上传。
+func wavStats(b []byte) (peak float64, durSec float64) {
+	if len(b) <= 44 {
+		return 0, 0
+	}
+	pcm := b[44:]
+	mx := 0
+	for i := 0; i+1 < len(pcm); i += 2 {
+		s := int(int16(uint16(pcm[i]) | uint16(pcm[i+1])<<8))
+		if s < 0 {
+			s = -s
+		}
+		if s > mx {
+			mx = s
+		}
+	}
+	return float64(mx) / 32768.0, float64(len(pcm)/2) / 16000.0
 }
 
 func randomID() string {

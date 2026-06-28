@@ -18,6 +18,7 @@ import (
 	"ttmux-web/auth"
 	"ttmux-web/browser"
 	"ttmux-web/home"
+	"ttmux-web/phone"
 	"ttmux-web/pty"
 	"ttmux-web/stream"
 	"ttmux-web/ttmux"
@@ -49,6 +50,7 @@ func New(cfg Config) *gin.Engine {
 	a := auth.New(cfg.Password, cfg.TOTPSecret, cfg.TOTPState, cfg.LockAfter, cfg.LockSecs)
 	h := api.New(tt, cfg.BrowserHome, cfg.DataDir)
 	browser.InitConfig(cfg.DataDir) // Chrome 启动配置持久化到 dataDir
+	phone.InitConfig(cfg.DataDir)   // 手机后端配置（本地/远程 redroid/真机）持久化到 dataDir
 	hub := stream.New(tt, cfg.LogsDir)
 
 	// 公开端点
@@ -187,6 +189,20 @@ func New(cfg Config) *gin.Engine {
 		g.PUT("/browser/config", browser.SetConfig)               // Chrome 启动配置：存
 		g.POST("/browser/relaunch", browser.Relaunch)             // 按新配置重启 Chrome
 		g.GET("/browser/health", browser.Health)                  // Chrome 是否可用 + 启动失败原因
+
+		// 手机镜像（Linux→Android adb；其它平台 health 明示不支持）
+		g.GET("/phone/stream", phone.Handler)          // 镜像手机画面 + 转发输入
+		g.GET("/phone/health", phone.Health)           // 设备可用性 + 平台 + 目标
+		g.GET("/phone/apps", phone.Apps)               // 列出 App
+		g.POST("/phone/apps/:id/launch", phone.Launch) // 启动 App
+		g.POST("/phone/key", phone.Key)                // 系统键 back/home/enter...
+		g.GET("/phone/ui", phone.UI)                   // 当前屏幕元素结构
+		g.GET("/phone/config", phone.GetConfig)        // 后端目标配置：读
+		g.PUT("/phone/config", phone.SetConfig)        // 后端目标配置：存并连接
+		g.POST("/phone/connect", phone.Connect)        // 按当前配置测试连接
+		g.GET("/phone/platforms", phone.Platforms)     // 各平台安装/支持状态(设置页开关)
+		g.POST("/phone/install", phone.Install)        // 按需(插件化)安装某平台依赖
+
 		g.GET("/stream/status", hub.Status)
 		g.GET("/logs/:name", hub.Logs)
 	}
