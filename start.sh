@@ -11,6 +11,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 export PATH="$HOME/.bun/bin:$HOME/.local/bin:$PATH"
+export LANG="${LANG:-en_US.UTF-8}"
 
 # ── 解析 --dev（与子命令分离）────────────────────────────────────
 DEV=0; ARGS=()
