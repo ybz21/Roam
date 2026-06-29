@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// 开发期把 /api（含 WebSocket）代理到后端 Gin（:8080）
+// 开发期把 /api（含 WebSocket）代理到后端 Gin（:13579）
 export default defineConfig({
   plugins: [react()],
   build: {
@@ -31,7 +31,7 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': { target: 'http://127.0.0.1:8080', changeOrigin: true, ws: true },
+      '/api': { target: 'http://127.0.0.1:13579', changeOrigin: true, ws: true },
     },
   },
 })

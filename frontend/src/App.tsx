@@ -17,6 +17,7 @@ import FileBrowser from './FileBrowser'
 import FloatingFileDrawer from './FloatingFileDrawer'
 import GitPanel from './GitPanel'
 import BrowserView from './BrowserView'
+import PhoneView from './PhoneView'
 import Swarm from './Swarm'
 import UpdateBanner from './UpdateBanner'
 import { useThemeMode } from './theme'
@@ -39,6 +40,7 @@ const NAV = [
   { key: 'swarm', labelKey: 'nav.swarm' },
   { key: 'files', labelKey: 'nav.files' },
   { key: 'browser', labelKey: 'nav.browser' },
+  { key: 'phone', labelKey: 'nav.phone' },
   { key: 'settings', labelKey: 'nav.env' },
 ]
 
@@ -77,6 +79,7 @@ const ICONS: Record<string, any> = {
   files: svg(<><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><path d="M7 12h10" /><path d="M7 16h6" /></>),
   settings: svg(<><line x1="4" y1="7" x2="20" y2="7" /><circle cx="9" cy="7" r="2.3" /><line x1="4" y1="17" x2="20" y2="17" /><circle cx="15" cy="17" r="2.3" /></>),
   browser: svg(<><rect x="3" y="4" width="18" height="16" rx="2" /><line x1="3" y1="9" x2="21" y2="9" /><circle cx="6" cy="6.5" r="0.6" /><circle cx="8.4" cy="6.5" r="0.6" /></>),
+  phone: svg(<><rect x="6" y="2" width="12" height="20" rx="2.5" /><line x1="10" y1="18.5" x2="14" y2="18.5" /></>),
 }
 
 
@@ -139,6 +142,23 @@ function pathBasename(path: string): string {
 
 function shellQuote(s: string): string {
   return `'${s.replace(/'/g, `'\\''`)}'`
+}
+
+// tmux 给的是 Unix 秒。转成「刚刚 / N 分钟前 …」相对时间，title 里再挂绝对时间。
+function relTime(sec: string | number | undefined, t: (k: string, v?: Record<string, string | number>) => string): string {
+  const n = typeof sec === 'string' ? parseInt(sec, 10) : sec
+  if (!n || !Number.isFinite(n)) return '—'
+  const diff = Math.max(0, Math.floor(Date.now() / 1000 - n))
+  if (diff < 60) return t('time.justNow')
+  if (diff < 3600) return t('time.minutesAgo', { count: Math.floor(diff / 60) })
+  if (diff < 86400) return t('time.hoursAgo', { count: Math.floor(diff / 3600) })
+  return t('time.daysAgo', { count: Math.floor(diff / 86400) })
+}
+
+function absTime(sec: string | number | undefined): string {
+  const n = typeof sec === 'string' ? parseInt(sec, 10) : sec
+  if (!n || !Number.isFinite(n)) return ''
+  return new Date(n * 1000).toLocaleString()
 }
 
 function FilesPage({ openTerm }: { openTerm: (name: string) => void }) {
@@ -361,9 +381,10 @@ export default function App() {
     files: <FilesPage openTerm={openTerm} />,
     settings: <EnvPage />,
     browser: <BrowserView />,
+    phone: <PhoneView />,
   }
   const page = pages[tab] || pages.sessions
-  const pageNode = tab === 'browser'
+  const pageNode = tab === 'browser' || tab === 'phone'
     ? page
     : <div className={`tt-page tt-page-${tab}${isMobile ? ' tt-page-mobile' : ''}`}>{page}</div>
 
@@ -429,7 +450,7 @@ export default function App() {
             // 终端弹出时左侧页面保留可读宽度；继续向左扩展(dockMax)则收到 0、被终端遮住
             flex: docked && tab !== 'browser' && tab !== 'files' ? (dockMax ? '0 0 0px' : `0 0 ${dockPageWidth}px`) : 1,
             width: docked && tab !== 'browser' && tab !== 'files' ? (dockMax ? 0 : dockPageWidth) : 'auto', minWidth: 0,
-            height: '100dvh', overflow: tab === 'browser' || tab === 'files' ? 'hidden' : 'auto',
+            height: '100dvh', overflow: tab === 'browser' || tab === 'phone' || tab === 'files' ? 'hidden' : 'auto',
             padding: 0,
             transition: customDockWidth != null ? 'none' : 'flex-basis .2s, width .2s',
           }}>
@@ -1194,7 +1215,7 @@ function Overview({ go, openTerm }: { go: (k: string) => void; openTerm: (n: str
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minWidth: 0 }}>
                     <div style={{ minWidth: 0, flex: 1 }}>
                       <div style={{ color: 'var(--text-bright)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.name}>{s.name}</div>
-                      <div style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap' }}>{t('session.windows', { count: s.windows })} · {s.attached == 1 ? t('terminal.status.connected') : t('terminal.status.idle')}</div>
+                      <div style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap' }} title={`${t('session.createdAt')} ${absTime(s.created)} · ${t('session.lastActivity')} ${absTime(s.last_activity)}`}>{t('session.windows', { count: s.windows })} · {s.attached == 1 ? t('terminal.status.connected') : t('terminal.status.idle')} · {t('session.lastActivity')} {relTime(s.last_activity, t)}</div>
                     </div>
                     <a onClick={() => openTerm(s.name)} style={{ flex: '0 0 auto', whiteSpace: 'nowrap' }}>{t('common.terminal')}</a>
                   </div>
@@ -1502,15 +1523,39 @@ function Sessions({ openTerm, closeTerm }: { openTerm: (n: string) => void; clos
   const filtered = list.filter((s: any) => (!ql || s.name.toLowerCase().includes(ql)) && match(s, filter))
   const cnt = (f: typeof filter) => list.filter((s: any) => match(s, f)).length
 
+  // ── 排序：名称 / 创建时间 / 最后响应时间，可切升降序 ──
+  const [sortBy, setSortBy] = useState<'name' | 'created' | 'activity'>('activity')
+  const [sortAsc, setSortAsc] = useState(false)
+  const num = (v: any) => parseInt(v, 10) || 0
+  const sorted = [...filtered].sort((a: any, b: any) => {
+    const d = sortBy === 'name'
+      ? a.name.localeCompare(b.name)
+      : num(a[sortBy === 'created' ? 'created' : 'last_activity']) - num(b[sortBy === 'created' ? 'created' : 'last_activity'])
+    return sortAsc ? d : -d
+  })
+
   return (
     <Card
       title={<Space size={8}>{t('nav.sessions')}<Tag style={{ margin: 0 }}>{cnt('all')}</Tag></Space>}
       extra={<Button type="primary" onClick={() => setNewOpen(true)}>+ {t('session.new')}</Button>}
     >
-      {/* 工具条：搜索 + 类型筛选（两行） */}
+      {/* 工具条：搜索 + 排序同一行，类型筛选另起一行 */}
       <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <Input allowClear value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('session.searchPlaceholder')}
-          prefix={svg(<><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></>)} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Input allowClear value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('session.searchPlaceholder')}
+            style={{ flex: 1, minWidth: 0 }}
+            prefix={svg(<><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></>)} />
+          <Select value={sortBy} onChange={(v) => setSortBy(v)} title={t('session.sortBy')}
+            style={{ width: 120, flex: '0 0 auto' }} options={[
+              { label: t('session.sortActivity'), value: 'activity' },
+              { label: t('session.sortCreated'), value: 'created' },
+              { label: t('session.sortName'), value: 'name' },
+            ]} />
+          <Button onClick={() => setSortAsc((v) => !v)} style={{ flex: '0 0 auto' }}
+            title={sortAsc ? t('session.sortAsc') : t('session.sortDesc')}>
+            {sortAsc ? '↑' : '↓'}
+          </Button>
+        </div>
         <div style={{ overflowX: 'auto' }}>
           <Segmented block value={filter} onChange={(v) => setFilter(v as any)} size="small" options={[
             { label: `${t('common.all')} ${cnt('all')}`, value: 'all' },
@@ -1526,7 +1571,7 @@ function Sessions({ openTerm, closeTerm }: { openTerm: (n: string) => void; clos
       {list.length === 0 ? <Empty description={t('session.noActive')} />
         : filtered.length === 0 ? <Empty description={t('session.noMatches')} />
           : (
-            <List dataSource={filtered} renderItem={(s: any) => {
+            <List dataSource={sorted} renderItem={(s: any) => {
               const sw = swarmMap[s.name]
               const connected = s.attached == 1
               const agent = cc[s.name] ? 'claude' : cx[s.name] ? 'codex' : null
@@ -1535,15 +1580,24 @@ function Sessions({ openTerm, closeTerm }: { openTerm: (n: string) => void; clos
                 // 整行点击直接进入终端；右侧操作区 stopPropagation 不触发进入
                 <List.Item style={{ padding: '10px 8px', cursor: 'pointer' }} onClick={() => openTerm(s.name)}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
                       <i title={waiting ? t('prompt.confirmRequired') : connected ? t('terminal.status.connected') : t('terminal.status.idle')} style={{ width: 8, height: 8, borderRadius: '50%', flex: '0 0 8px', background: waiting ? '#d29922' : connected ? '#3fb950' : 'var(--text-dimmer)' }} />
-                      <span style={{ fontWeight: 600, color: 'var(--text-bright)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.name}>{s.name}</span>
-                      {sw && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>{t('nav.swarm')}:{sw.swarm}{sw.role === 'leader' ? `·${t('swarm.master')}` : ''}</Tag>}
-                      {waiting && <Tag color="warning" style={{ margin: 0, flex: '0 0 auto' }}>{t('session.waiting')}</Tag>}
-                      {cc[s.name] && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>✳ Claude</Tag>}
-                      {cx[s.name] && <Tag color="green" style={{ margin: 0, flex: '0 0 auto' }}>✸ Codex</Tag>}
-                      {!sw && !agent && <Tag style={{ margin: 0, flex: '0 0 auto' }}>{connected ? t('terminal.status.connected') : t('terminal.status.idle')}</Tag>}
-                      <span style={{ color: 'var(--text-dim)', fontSize: 12, flex: '0 0 auto', whiteSpace: 'nowrap' }}>{t('session.windows', { count: s.windows })}</span>
+                      <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' }}>
+                          <span style={{ fontWeight: 600, color: 'var(--text-bright)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.name}>{s.name}</span>
+                          {sw && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>{t('nav.swarm')}:{sw.swarm}{sw.role === 'leader' ? `·${t('swarm.master')}` : ''}</Tag>}
+                          {waiting && <Tag color="warning" style={{ margin: 0, flex: '0 0 auto' }}>{t('session.waiting')}</Tag>}
+                          {cc[s.name] && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>✳ Claude</Tag>}
+                          {cx[s.name] && <Tag color="green" style={{ margin: 0, flex: '0 0 auto' }}>✸ Codex</Tag>}
+                          {!sw && !agent && <Tag style={{ margin: 0, flex: '0 0 auto' }}>{connected ? t('terminal.status.connected') : t('terminal.status.idle')}</Tag>}
+                          <span style={{ color: 'var(--text-dim)', fontSize: 12, flex: '0 0 auto', whiteSpace: 'nowrap' }}>{t('session.windows', { count: s.windows })}</span>
+                        </div>
+                        <div style={{ color: 'var(--text-dimmer)', fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          <span title={absTime(s.created)}>{t('session.createdAt')} {relTime(s.created, t)}</span>
+                          <span style={{ margin: '0 6px' }}>·</span>
+                          <span title={absTime(s.last_activity)}>{t('session.lastActivity')} {relTime(s.last_activity, t)}</span>
+                        </div>
+                      </div>
                     </div>
                     <div onClick={(e) => e.stopPropagation()} style={{ marginLeft: 'auto', display: 'flex', gap: 14, alignItems: 'center', flex: '0 0 auto', whiteSpace: 'nowrap' }}>
                       {sw && <a onClick={() => goSwarm(sw.swarm)}>{t('session.swarmPage')}</a>}
@@ -1709,6 +1763,158 @@ function CertDownloadButton() {
 }
 
 // ── Env / Settings ──
+// 手机/Android 后端配置：本地 redroid / 远程 redroid / 真机 三选一 + adb 地址。
+function PhoneSettingsCard() {
+  const { t } = useI18n()
+  const { message } = AntApp.useApp()
+  const [platform, setPlatform] = useState<'android' | 'ios' | ''>('android') // 当前激活平台（''=都关=未启用）
+  const [mode, setMode] = useState('local')          // android 子模式
+  const [address, setAddress] = useState('localhost:5555')
+  const [resolution, setResolution] = useState('')   // android only
+  const [installed, setInstalled] = useState<{ android: boolean; ios: boolean }>({ android: false, ios: false })
+  const [iosSupported, setIosSupported] = useState(false)
+  const [installing, setInstalling] = useState<'android' | 'ios' | null>(null)
+  const [installLog, setInstallLog] = useState('')
+  const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const loadPlatforms = () => api('GET', '/phone/platforms').then((r) => {
+    if (r?.data) { setInstalled({ android: !!r.data.android?.installed, ios: !!r.data.ios?.installed }); setIosSupported(!!r.data.ios?.supported) }
+  }).catch(() => {})
+  useEffect(() => {
+    api('GET', '/phone/config').then((r) => {
+      if (r?.data) {
+        const p = r.data.platform
+        setPlatform(p === 'ios' ? 'ios' : p === 'android' ? 'android' : '')
+        setMode(r.data.mode || 'local'); setAddress(r.data.address || ''); setResolution(r.data.resolution || '')
+      }
+    }).catch(() => {})
+    loadPlatforms()
+  }, [])
+  // 持久化指定平台配置（开关即时生效，无需再点保存）
+  const persist = async (p: 'android' | 'ios' | '', m: string, addr: string) => {
+    try {
+      const r = await api('PUT', '/phone/config', { platform: p, mode: m, address: addr.trim(), resolution })
+      applyHealth(r?.data?.health)
+    } catch (e: any) { message.error(e.message) }
+  }
+  const applyHealth = (h: any) => {
+    if (h?.ok) setStatus({ ok: true, text: h.device || 'OK' })
+    else setStatus({ ok: false, text: h?.error || t('phone.disconnected') })
+  }
+  // 开关：开=激活该平台(互斥,自动关另一个;未装依赖先按需安装);关=禁用(置「未启用」)。即时持久化。
+  const toggle = async (p: 'android' | 'ios', on: boolean) => {
+    if (installing) return
+    if (!on) { // 关掉当前平台 → 未启用
+      if (platform === p) { setPlatform(''); persist('', mode, address) }
+      return
+    }
+    if (platform === p) return
+    if (!installed[p]) {
+      setInstalling(p); setInstallLog('')
+      try {
+        const r = await api('POST', '/phone/install', { platform: p })
+        setInstallLog(r?.data?.log || r?.error || '')
+        if (!r?.data?.installed) { message.error(t('phone.installFailed')); setInstalling(null); return }
+        setInstalled((s) => ({ ...s, [p]: true })); message.success(t('phone.installed'))
+      } catch (e: any) { message.error(e.message); setInstalling(null); return }
+      setInstalling(null)
+    }
+    const m = p === 'ios' ? 'simulator' : 'local'
+    const addr = p === 'ios' ? '' : 'localhost:5555'
+    setPlatform(p); setMode(m); setAddress(addr)
+    persist(p, m, addr)
+  }
+  const changeMode = (m: string) => { setMode(m); if (m === 'local') setAddress('localhost:5555') }
+  const save = async () => {
+    setBusy(true)
+    try {
+      const r = await api('PUT', '/phone/config', { platform, mode, address: address.trim(), resolution })
+      applyHealth(r?.data?.health); message.success(t('phone.saved'))
+    } catch (e: any) { message.error(e.message) } finally { setBusy(false) }
+  }
+  const test = async () => {
+    setBusy(true)
+    try { const r = await api('POST', '/phone/connect'); applyHealth(r?.data) }
+    catch (e: any) { message.error(e.message) } finally { setBusy(false) }
+  }
+  const platformRow = (p: 'android' | 'ios', label: string) => (
+    <Space align="center">
+      <Switch checked={platform === p} loading={installing === p} onChange={(on) => toggle(p, on)} />
+      <b style={{ color: 'var(--text-bright)' }}>{label}</b>
+      <Tag color={installed[p] ? 'green' : 'default'}>{installed[p] ? t('phone.installedTag') : t('phone.notInstalled')}</Tag>
+      {p === 'ios' && !iosSupported && <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('phone.iosMacOnly')}</span>}
+    </Space>
+  )
+  return (
+    <Card title={t('settings.phoneTitle')}>
+      <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+        {/* Android 开关 + 配置 */}
+        {platformRow('android', t('phone.platform.android'))}
+        {platform === 'android' && (
+          <>
+            <Space direction="vertical" size={4} style={{ width: '100%' }}>
+              <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>{t('phone.source')}</span>
+              <Segmented
+                value={mode}
+                onChange={(v) => changeMode(v as string)}
+                options={[
+                  { label: t('phone.mode.local'), value: 'local' },
+                  { label: t('phone.mode.remote'), value: 'remote' },
+                  { label: t('phone.mode.device'), value: 'device' },
+                ]}
+              />
+            </Space>
+            {mode !== 'local' && (
+              <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                <Input value={address} onChange={(e) => setAddress(e.target.value)}
+                  placeholder={t('phone.addrPlaceholder')} style={{ maxWidth: 320 }} />
+                <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>
+                  {mode === 'remote' ? t('phone.addrHelpRemote') : t('phone.addrHelpDevice')}
+                </span>
+              </Space>
+            )}
+            <Space direction="vertical" size={4} style={{ width: '100%' }}>
+              <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>{t('phone.resolution')}</span>
+              <Segmented
+                value={resolution || 'phone'}
+                onChange={(v) => setResolution((v as string) === 'phone' ? '' : (v as string))}
+                options={[
+                  { label: t('phone.res.phone'), value: 'phone' },
+                  { label: t('phone.res.tablet'), value: 'tablet' },
+                  { label: t('phone.res.tabletLand'), value: 'tablet-land' },
+                  { label: t('phone.res.tabletLarge'), value: 'tablet-large' },
+                ]}
+              />
+              <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('phone.resHelp')}</span>
+            </Space>
+          </>
+        )}
+
+        {/* iOS 开关 + 配置 */}
+        {platformRow('ios', t('phone.platform.ios'))}
+        {platform === 'ios' && (
+          <Space direction="vertical" size={4} style={{ width: '100%' }}>
+            <Input value={address} onChange={(e) => setAddress(e.target.value)}
+              placeholder={t('phone.addrPlaceholderIOS')} style={{ maxWidth: 320 }} />
+            <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('phone.addrHelpIOS')}</span>
+          </Space>
+        )}
+
+        {/* 按需安装日志 */}
+        {installLog && (
+          <pre style={{ maxHeight: 140, overflow: 'auto', margin: 0, padding: 8, fontSize: 11, lineHeight: 1.5, background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 6, whiteSpace: 'pre-wrap' }}>{installLog}</pre>
+        )}
+
+        <Space wrap>
+          <Button type="primary" loading={busy} onClick={save}>{t('phone.save')}</Button>
+          <Button loading={busy} onClick={test}>{t('phone.test')}</Button>
+          {status && <Tag color={status.ok ? 'green' : 'red'}>{status.ok ? '✓ ' : ''}{status.text}</Tag>}
+        </Space>
+      </Space>
+    </Card>
+  )
+}
+
 function EnvPage() {
   const [list, setList] = useState<any[]>([])
   const { message, modal } = AntApp.useApp()
@@ -1780,6 +1986,7 @@ function EnvPage() {
         </Space>
       )},
       { key: 'browser', label: t('settings.browser'), children: <BrowserCard /> },
+      { key: 'phone', label: t('settings.phone'), children: <PhoneSettingsCard /> },
       { key: 'speech', label: t('settings.tabSpeech'), children: <SpeechCard /> },
       { key: 'preferences', label: t('settings.tabPreferences'), children: <PreferencesOverview /> },
       { key: 'env', label: t('settings.tabEnv'), children: (
@@ -1803,7 +2010,7 @@ function EnvPage() {
 // ── 语音输入(ASR)配置：选服务商并填密钥，持久化到后端 speech-config.json ──
 const SPEECH_DEFAULTS = {
   openai: { baseURL: 'https://api.openai.com/v1', model: 'whisper-1' },
-  volcano: { resourceId: 'volc.bigasr.auc_turbo', endpoint: 'https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash' },
+  volcano: { resourceId: 'volc.bigasr.auc', endpoint: 'https://openspeech.bytedance.com/api/v3/auc/bigmodel/submit' },
 }
 function normalizeSpeech(d: any) {
   const c = d || {}

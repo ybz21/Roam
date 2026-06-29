@@ -21,7 +21,7 @@ import (
 )
 
 func main() {
-	addrFlag := flag.String("addr", "", "监听地址，如 0.0.0.0:8080（覆盖 TTMUX_WEB_BIND）")
+	addrFlag := flag.String("addr", "", "监听地址，如 0.0.0.0:13579（覆盖 TTMUX_WEB_BIND）")
 	webFlag := flag.String("web", "", "前端构建产物目录 frontend/dist（覆盖自动探测）")
 	tlsFlag := flag.Bool("tls", false, "启用自签 HTTPS（也可用 TTMUX_WEB_TLS=1）；手机用麦克风/剪贴板需安全上下文")
 	tlsCertFlag := flag.String("tls-cert", "", "TLS 证书路径（缺省 <data>/tls/cert.pem，缺失则自动生成）")
@@ -29,7 +29,7 @@ func main() {
 	flag.Parse()
 
 	bin := envOr("TTMUX_BIN", "ttmux")
-	bind := firstNonEmpty(*addrFlag, os.Getenv("TTMUX_WEB_BIND"), "0.0.0.0:8080")
+	bind := firstNonEmpty(*addrFlag, os.Getenv("TTMUX_WEB_BIND"), "0.0.0.0:13579")
 	fdir := *webFlag
 	if fdir == "" {
 		fdir = frontendDir()
@@ -66,7 +66,7 @@ func main() {
 
 	// 导航起始页挂在本服务的公开路由 /home 上（免登录，供被投屏的 Chrome 当默认主页）。
 	// Chrome 与本服务同机，统一用回环地址访问（绑定即便是 0.0.0.0 也走 127.0.0.1）。
-	port := "8080"
+	port := "13579"
 	if _, p, err := net.SplitHostPort(bind); err == nil && p != "" {
 		port = p
 	}

@@ -56,6 +56,13 @@ for d in "${TARGETS[@]}"; do
         mkdir -p "${d}/dev-roles"
         cp "$tmp_dr" "${d}/dev-roles/SKILL.md"
     fi
-    echo "✔ skills 已同步到 ${d} (ttmux/SKILL.md, cc-swarm/SKILL.md, dev-roles/SKILL.md)"
+    # babysit-pr skill：SKILL.md + 同目录脚本 wait-codex-review.sh 一并拷贝
+    if [[ -f "${SRC}/babysit-pr/SKILL.md" ]]; then
+        mkdir -p "${d}/babysit-pr"
+        cp "${SRC}/babysit-pr/SKILL.md" "${d}/babysit-pr/SKILL.md"
+        cp "${SRC}/babysit-pr/wait-codex-review.sh" "${d}/babysit-pr/wait-codex-review.sh"
+        chmod +x "${d}/babysit-pr/wait-codex-review.sh"
+    fi
+    echo "✔ skills 已同步到 ${d} (ttmux, cc-swarm, dev-roles, babysit-pr)"
 done
 rm -f "$tmp_cc" "$tmp_dr"

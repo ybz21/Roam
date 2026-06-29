@@ -1,0 +1,32 @@
+# redroid (Remote anDROID) —— ttmux「手机」标签的 Android 后端（参考/手动用）。
+#
+# ⚠ 推荐用自适应脚本,它会按宿主机能力(ashmem/GPU 厂商)自动选版本与渲染模式,
+#   并生成实际 compose 到 ~/.ttmux/android/docker-compose.yml:
+#       bash scripts/android-redroid.sh up
+#   本文件仅作参考/手动起停的静态示例。
+#
+# 关键事实(本仓库实测,内核 6.x):
+#   - Android 16 的 system_server 硬依赖 ashmem(/dev/ashmem)。主线内核 6.x 已移除 ashmem,
+#     故 16 无法开机(zygote 崩 "Failed to create ashmem")。Android 15 及以下走 memfd,正常。
+#   - guest(swiftshader 软件渲染)在 15/16 上易崩 SurfaceFlinger。有 Intel/AMD 核显时用
+#     gpu_mode=host + 对应 renderD 节点(NVIDIA 不适用 redroid host 模式)。
+
+services:
+  redroid:
+    image: redroid/redroid:15.0.0_64only-latest   # 本内核可开机的最高版本(16 缺 ashmem)
+    container_name: ttmux-redroid
+    privileged: true                 # binderfs / ashmem 需要
+    ports:
+      - "5555:5555"                  # adb；adb connect localhost:5555
+    volumes:
+      - ${HOME}/.ttmux/android/data:/data   # 数据持久化(bind mount)
+    devices:
+      - /dev/dri:/dev/dri            # 宿主 GPU(host 渲染模式需要)
+    command:
+      - androidboot.redroid_width=720
+      - androidboot.redroid_height=1280
+      - androidboot.redroid_dpi=320
+      - androidboot.redroid_gpu_mode=host
+      # Intel 核显渲染节点;换机用 `cat /sys/class/drm/renderD*/device/vendor`(0x8086=Intel,0x1002=AMD)确认
+      - androidboot.redroid_gpu_node=/dev/dri/renderD128
+    restart: unless-stopped
