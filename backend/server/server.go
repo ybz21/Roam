@@ -44,6 +44,7 @@ type Config struct {
 func New(cfg Config) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
+	r.UseRawPath = true
 	r.Use(gin.Recovery())
 
 	tt := ttmux.New(cfg.TTmuxBin)
