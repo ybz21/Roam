@@ -28,7 +28,7 @@ func newAndroidDevice() *androidDevice { return &androidDevice{} }
 // 配置里的 Address（host:port 即 adb connect 后的 serial，或 USB serial）；
 // 留空则回落 ANDROID_SERIAL（device 模式默认单设备时为空 = adb 默认设备）。
 func (d *androidDevice) target() string {
-	if a := getConfig().Address; a != "" {
+	if a := androidCfg().Address; a != "" {
 		return a
 	}
 	return os.Getenv("ANDROID_SERIAL")
@@ -120,28 +120,34 @@ func (d *androidDevice) connectIfNetwork() {
 	}
 }
 
+// keepAwake 让被镜像设备保持常亮：USB/充电时不灭屏，避免锁屏导致镜像黑屏。
+// best-effort，不阻断（真机需已授权 USB 调试；redroid 上同样无害）。
+func (d *androidDevice) keepAwake() {
+	_, _ = d.shell(3*time.Second, "svc", "power", "stayon", "true")
+}
+
 func (d *androidDevice) Ensure() error {
 	if _, err := exec.LookPath("adb"); err != nil {
 		return errors.New("未找到 adb（装 Android SDK platform-tools）")
 	}
 	d.connectIfNetwork()
-	if d.state() == "device" {
-		return nil
-	}
-	// 没就绪：再连一次 + 等一小会（远程/无线可能正在连）。不主动拉起模拟器。
-	d.connectIfNetwork()
-	_, _ = d.run(8*time.Second, "wait-for-device")
 	if d.state() != "device" {
-		return errors.New("无已就绪的 Android 设备（adb devices 看不到 device；先连真机或起模拟器/redroid）")
-	}
-	// 等开机完成，避免黑屏帧
-	for i := 0; i < 20; i++ {
-		out, _ := d.shell(3*time.Second, "getprop", "sys.boot_completed")
-		if strings.TrimSpace(string(out)) == "1" {
-			break
+		// 没就绪：再连一次 + 等一小会（远程/无线可能正在连）。不主动拉起模拟器。
+		d.connectIfNetwork()
+		_, _ = d.run(8*time.Second, "wait-for-device")
+		if d.state() != "device" {
+			return errors.New("无已就绪的 Android 设备（adb devices 看不到 device；先连真机或起模拟器/redroid）")
 		}
-		time.Sleep(300 * time.Millisecond)
+		// 等开机完成，避免黑屏帧
+		for i := 0; i < 20; i++ {
+			out, _ := d.shell(3*time.Second, "getprop", "sys.boot_completed")
+			if strings.TrimSpace(string(out)) == "1" {
+				break
+			}
+			time.Sleep(300 * time.Millisecond)
+		}
 	}
+	d.keepAwake() // 连上即设常亮，镜像不因锁屏黑屏
 	return nil
 }
 
@@ -149,14 +155,14 @@ func (d *androidDevice) Health() Status {
 	if _, err := exec.LookPath("adb"); err != nil {
 		return Status{OK: false, Platform: "android", Error: "未找到 adb（装 Android SDK platform-tools）"}
 	}
-	d.connectIfNetwork()
-	cfg := getConfig()
+	// Health 只查状态、不主动 adb connect（保持轻快，供状态轮询）；连接由 /phone/connect 或 Ensure 做。
+	ac := androidCfg()
 	if d.state() != "device" {
-		where := cfg.Address
+		where := ac.Address
 		if where == "" {
 			where = "默认设备"
 		}
-		return Status{OK: false, Platform: "android", Error: "连不上 Android（" + modeLabel(cfg.Mode) + "：" + where + "）"}
+		return Status{OK: false, Platform: "android", Error: "连不上 Android（" + modeLabel(ac.Mode) + "：" + where + "）"}
 	}
 	model := ""
 	if out, err := d.shell(3*time.Second, "getprop", "ro.product.model"); err == nil {

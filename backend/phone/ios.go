@@ -12,7 +12,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"image"
 	"image/jpeg"
+	_ "image/png" // 真机 idb 截图是 PNG，注册解码器
+	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -26,7 +29,7 @@ func newIOSDevice() *iosDevice { return &iosDevice{} }
 
 // target 返回模拟器/设备 UDID；配置 Address 为空时用 "booted"（当前已启动的那台）。
 func (d *iosDevice) target() string {
-	if a := strings.TrimSpace(getConfig().Address); a != "" {
+	if a := strings.TrimSpace(iosCfg().Address); a != "" {
 		return a
 	}
 	return "booted"
@@ -77,11 +80,17 @@ func (d *iosDevice) idb(timeout time.Duration, args ...string) ([]byte, error) {
 
 var udidRe = regexp.MustCompile(`\(([0-9A-Fa-f-]{36})\) \(Booted\)`)
 
-// resolveUDID 把 "booted" 解析成具体 UDID（idb 需要具体 UDID）；已是 UDID 则原样返回。
+// isDevice 真机(物理 iPhone)模式 —— 截图/启动走 idb；模拟器模式走 simctl。
+func (d *iosDevice) isDevice() bool { return iosCfg().Mode == "device" }
+
+// resolveUDID 解析目标 UDID：真机/指定 UDID 原样返回；模拟器留空("booted")时找当前已启动的。
 func (d *iosDevice) resolveUDID() string {
 	t := d.target()
 	if t != "booted" && t != "" {
 		return t
+	}
+	if d.isDevice() {
+		return "" // 真机必须显式给 UDID（从设备列表里选）
 	}
 	out, err := d.simctl(4*time.Second, "list", "devices", "booted")
 	if err != nil {
@@ -99,18 +108,37 @@ func (d *iosDevice) Ensure() error {
 	if _, err := exec.LookPath("xcrun"); err != nil {
 		return fmt.Errorf("未找到 xcrun（装 Xcode 命令行工具）")
 	}
-	// 指定了具体 UDID 但没启动 → 尝试 boot
+	if d.isDevice() { // 真机：不 boot，需 idb 且选了 UDID
+		if !haveIDB() {
+			return fmt.Errorf("iOS 真机需 idb（brew install idb-companion && pip install fb-idb）")
+		}
+		if d.resolveUDID() == "" {
+			return fmt.Errorf("未选择 iOS 真机（在设置里从设备列表选一台 UDID）")
+		}
+		return nil
+	}
+	// 模拟器：指定了 UDID 但没启动 → 尝试 boot
 	if t := d.target(); t != "booted" && t != "" && d.resolveUDID() == "" {
 		_, _ = d.simctl(60*time.Second, "boot", t)
 		_, _ = d.simctl(120*time.Second, "bootstatus", t, "-b")
 	}
 	if !d.booted() {
-		return fmt.Errorf("无已启动的 iOS 模拟器（xcrun simctl boot <udid>，或在设置里填模拟器 UDID）")
+		return fmt.Errorf("无已启动的 iOS 模拟器（先启动，或在设置里选模拟器 UDID）")
 	}
 	return nil
 }
 
 func (d *iosDevice) Health() Status {
+	if d.isDevice() {
+		if !haveIDB() {
+			return Status{OK: false, Platform: "ios", Error: "iOS 真机需 idb（brew install idb-companion && pip install fb-idb）"}
+		}
+		udid := d.resolveUDID()
+		if udid == "" {
+			return Status{OK: false, Platform: "ios", Error: "未选择 iOS 真机"}
+		}
+		return Status{OK: true, Platform: "ios", Device: udid}
+	}
 	if _, err := exec.LookPath("xcrun"); err != nil {
 		return Status{OK: false, Platform: "ios", Error: "未找到 xcrun（装 Xcode 命令行工具）"}
 	}
@@ -125,8 +153,39 @@ func (d *iosDevice) Health() Status {
 	return Status{OK: true, Platform: "ios", Device: udid}
 }
 
-// CaptureJPEG 用 simctl 截图为 JPEG（直出 stdout），再读尺寸。
+// CaptureJPEG：模拟器走 simctl(直出 jpeg)；真机走 idb screenshot(临时文件,PNG)→转 JPEG。
 func (d *iosDevice) CaptureJPEG(quality int) ([]byte, int, int, error) {
+	if quality < 10 {
+		quality = 10
+	} else if quality > 100 {
+		quality = 100
+	}
+	if d.isDevice() {
+		tmp, err := os.CreateTemp("", "ttmux-ios-*.png")
+		if err != nil {
+			return nil, 0, 0, err
+		}
+		name := tmp.Name()
+		_ = tmp.Close()
+		defer os.Remove(name)
+		if _, err := d.idb(8*time.Second, "screenshot", name); err != nil {
+			return nil, 0, 0, err
+		}
+		raw, err := os.ReadFile(name)
+		if err != nil {
+			return nil, 0, 0, err
+		}
+		img, _, err := image.Decode(bytes.NewReader(raw))
+		if err != nil {
+			return nil, 0, 0, fmt.Errorf("解码真机截图失败: %w", err)
+		}
+		var buf bytes.Buffer
+		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: quality}); err != nil {
+			return nil, 0, 0, err
+		}
+		b := img.Bounds()
+		return buf.Bytes(), b.Dx(), b.Dy(), nil
+	}
 	out, err := d.simctl(8*time.Second, "io", d.target(), "screenshot", "--type", "jpeg", "-")
 	if err != nil {
 		return nil, 0, 0, err
@@ -238,6 +297,10 @@ func (d *iosDevice) Apps() ([]App, error) {
 func (d *iosDevice) Launch(id string) error {
 	if id == "" {
 		return fmt.Errorf("缺少 bundleId")
+	}
+	if d.isDevice() { // 真机走 idb launch（simctl 管不到物理机）
+		_, err := d.idb(8*time.Second, "launch", id)
+		return err
 	}
 	_, err := d.simctl(8*time.Second, "launch", d.target(), id)
 	return err

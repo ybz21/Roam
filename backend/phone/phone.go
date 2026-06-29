@@ -63,7 +63,7 @@ var (
 // 注意：后端由「模式」决定而非主机系统——这样 Mac 上既能选 iOS 模拟器，也能选远程 redroid/Android 真机；
 // Linux 上选 iOS 会在 Ensure/Health 明确报「未找到 xcrun」。
 func Current() Device {
-	switch getConfig().Platform {
+	switch getConfig().Active {
 	case "ios":
 		return iosImpl
 	case "android":

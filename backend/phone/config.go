@@ -1,12 +1,10 @@
-// config.go：手机后端目标的可配置项，持久化到 <dataDir>/phone-config.json，由设置页管理。
+// config.go：手机后端配置，持久化到 <dataDir>/phone-config.json，由设置页两张卡片管理。
 //
-// 三种模式(对应设置页「手机/Android」)：
+// 嵌套结构：Android 与 iOS 各存各的设置（互不覆盖），Active 决定哪个平台在驱动镜像。
 //
-//	local   本地 redroid —— 同机容器，默认 adb 地址 localhost:5555
-//	remote  远程 redroid —— 另一台机器(如 ARM 主机/Jetson)上的 redroid，填它的 adb 地址 host:port
-//	device  真机 —— 无线调试填 host:port；USB 调试填 adb serial（留空=默认单设备）
-//
-// host:port 形式的地址在 Ensure 时会先 `adb connect`（幂等），之后用它当 -s 目标。
+//	Android: mode=local|remote|device + address(adb host:port/serial) + resolution
+//	iOS:     mode=simulator|device + address(模拟器/设备 UDID)
+//	Active:  android|ios|""（空=都不启用）
 package phone
 
 import (
@@ -17,24 +15,33 @@ import (
 	"sync"
 )
 
-type Config struct {
-	Platform string `json:"platform"` // android | ios（决定用哪个后端）
-	Mode     string `json:"mode"`     // android: local | remote | device（ios 下忽略）
-	Address  string `json:"address"`  // android: adb host:port / USB serial；ios: 模拟器 UDID（空=booted）
-	// Resolution: 设备显示分辨率预设(adb wm size/density)，仅 Android 有效。
-	// "" / "phone" = 原生(reset)；其余见 ResolutionPresets。设置页可选。
+// AndroidCfg 是 Android 卡片的设置。
+type AndroidCfg struct {
+	Mode       string `json:"mode"`    // local | remote | device
+	Address    string `json:"address"` // adb host:port / USB serial
 	Resolution string `json:"resolution,omitempty"`
+}
+
+// IOSCfg 是 iOS 卡片的设置。
+type IOSCfg struct {
+	Mode    string `json:"mode"`    // simulator | device
+	Address string `json:"address"` // 模拟器/真机 UDID（空=booted/未选）
+}
+
+type Config struct {
+	Active  string     `json:"active"` // android | ios | ""（驱动镜像的平台）
+	Android AndroidCfg `json:"android"`
+	IOS     IOSCfg     `json:"ios"`
 }
 
 // resPreset 是一组 adb wm size/density 取值。
 type resPreset struct{ Size, Density string }
 
-// ResolutionPresets: 设置页可选的设备分辨率档(平板等)。
-// key 不在表里(含 "" / "phone")= 还原设备原生分辨率。
+// ResolutionPresets: 设置页可选的设备分辨率档(平板等)。key 不在表里(含 "" / "phone")= 还原原生。
 var ResolutionPresets = map[string]resPreset{
-	"tablet":       {Size: "1200x1920", Density: "240"}, // 10" 平板竖屏
-	"tablet-land":  {Size: "1920x1200", Density: "240"}, // 10" 平板横屏
-	"tablet-large": {Size: "2560x1600", Density: "280"}, // 大平板
+	"tablet":       {Size: "1200x1920", Density: "240"},
+	"tablet-land":  {Size: "1920x1200", Density: "240"},
+	"tablet-large": {Size: "2560x1600", Density: "280"},
 }
 
 var cfgStore struct {
@@ -43,27 +50,21 @@ var cfgStore struct {
 	cur  Config
 }
 
-// 默认：macOS 默认 iOS 模拟器；其它默认本地 redroid（Android）。
+// 默认：macOS 默认激活 iOS；其它默认激活 Android（本地 redroid）。两边都给好默认子配置。
 func defaultConfig() Config {
-	if runtime.GOOS == "darwin" {
-		return Config{Platform: "ios", Mode: "simulator", Address: ""}
+	c := Config{
+		Android: AndroidCfg{Mode: "local", Address: "localhost:5555"},
+		IOS:     IOSCfg{Mode: "simulator"},
 	}
-	return Config{Platform: "android", Mode: "local", Address: "localhost:5555"}
-}
-
-// migrate 兼容旧配置：早期 Platform 字段不存在，平台编码在 Mode 里（mode=="ios"）。
-func migrate(c Config) Config {
-	if c.Platform == "" {
-		if c.Mode == "ios" {
-			c.Platform, c.Mode = "ios", "simulator"
-		} else {
-			c.Platform = "android"
-		}
+	if runtime.GOOS == "darwin" {
+		c.Active = "ios"
+	} else {
+		c.Active = "android"
 	}
 	return c
 }
 
-// InitConfig 设定配置文件路径并加载已存配置，由 server.New 用 dataDir 调一次。
+// InitConfig 加载配置：新结构(含 android 键)直接用；旧扁平结构(含 platform 键)迁移；都没有用默认。
 func InitConfig(dataDir string) {
 	cfgStore.mu.Lock()
 	defer cfgStore.mu.Unlock()
@@ -73,17 +74,38 @@ func InitConfig(dataDir string) {
 	}
 	_ = os.MkdirAll(dataDir, 0o755)
 	cfgStore.file = filepath.Join(dataDir, "phone-config.json")
-	if b, err := os.ReadFile(cfgStore.file); err == nil {
-		// 用 map 判断 "platform" 键是否存在：存在(哪怕为"")就尊重(允许"未启用")；
-		// 不存在=旧配置(平台曾编码在 mode 里)→ 迁移。
-		var raw map[string]json.RawMessage
+	b, err := os.ReadFile(cfgStore.file)
+	if err != nil {
+		return
+	}
+	var probe map[string]json.RawMessage
+	_ = json.Unmarshal(b, &probe)
+	if _, isNew := probe["android"]; isNew {
 		var c Config
-		if json.Unmarshal(b, &raw) == nil && json.Unmarshal(b, &c) == nil {
-			if _, has := raw["platform"]; !has {
-				c = migrate(c)
-			}
+		if json.Unmarshal(b, &c) == nil {
 			cfgStore.cur = c
 		}
+		return
+	}
+	if _, isOld := probe["platform"]; isOld { // 迁移旧扁平 {platform,mode,address,resolution}
+		var old struct{ Platform, Mode, Address, Resolution string }
+		_ = json.Unmarshal(b, &old)
+		c := defaultConfig()
+		c.Active = old.Platform // ""→未启用
+		switch old.Platform {
+		case "ios":
+			c.IOS.Mode = "simulator"
+			c.IOS.Address = old.Address
+		case "android":
+			if old.Mode != "" {
+				c.Android.Mode = old.Mode
+			}
+			if old.Address != "" {
+				c.Android.Address = old.Address
+			}
+			c.Android.Resolution = old.Resolution
+		}
+		cfgStore.cur = c
 	}
 }
 
@@ -93,10 +115,16 @@ func getConfig() Config {
 	return cfgStore.cur
 }
 
+// 当前激活平台的子配置便捷读取（Device 实现 / handlers 用）。
+func androidCfg() AndroidCfg { return getConfig().Android }
+func iosCfg() IOSCfg         { return getConfig().IOS }
+
 func setConfig(c Config) {
-	// 允许 Platform=="" 表示「未启用」（两个开关都关）；不再强制回落到 android。
-	if c.Platform == "android" && c.Mode == "" {
-		c.Mode = "local"
+	if c.Android.Mode == "" {
+		c.Android.Mode = "local"
+	}
+	if c.IOS.Mode == "" {
+		c.IOS.Mode = "simulator"
 	}
 	cfgStore.mu.Lock()
 	cfgStore.cur = c

@@ -41,6 +41,25 @@ func buildFrame(jpeg []byte, w, h int, seq uint16) []byte {
 	return b
 }
 
+func nowMs() int64 { return time.Now().UnixMilli() }
+
+// lvl 是一档自适应参数：JPEG 质量 + 两帧最小间隔(控帧率)。与 browser 对齐（自动/标清/高清/超清）。
+// 手机这边只调质量+帧率（不改分辨率，避免每帧 resize 的 CPU）。
+type lvl struct {
+	q, interval int
+	name        string
+}
+
+var ladder = []lvl{
+	{30, 220, "省流"},
+	{45, 150, "流畅"},
+	{60, 110, "标清"},
+	{78, 90, "高清"},
+	{90, 75, "超清"},
+}
+
+const autoStart = 2 // 自适应初始档（标清）
+
 func atoiQuery(c *gin.Context, key string, def int) int {
 	if v := c.Query(key); v != "" {
 		n := 0
@@ -93,7 +112,8 @@ func Handler(c *gin.Context) {
 		return
 	}
 	control := c.Query("control") == "1"
-	quality := atoiQuery(c, "q", 50)
+	auto := c.Query("auto") == "1"
+	manualQ := atoiQuery(c, "q", 50)
 
 	// gorilla 不支持并发写：帧/pong 经此串行
 	var wmu sync.Mutex
@@ -113,6 +133,10 @@ func Handler(c *gin.Context) {
 	cond := sync.NewCond(&mu)
 	credits := window
 	closed := false
+	// 自适应状态（mu 保护）：level=当前档；ewma=送达耗时滑动平均；sentAt=帧发出时刻。
+	level := autoStart
+	var ewma float64
+	sentAt := map[uint16]int64{}
 	shutdown := func() {
 		mu.Lock()
 		if !closed {
@@ -120,6 +144,14 @@ func Handler(c *gin.Context) {
 			cond.Broadcast()
 		}
 		mu.Unlock()
+	}
+	// curParams 取当前该用的质量与帧间隔：auto 走阶梯，否则用手动 q。
+	curParams := func() (int, time.Duration) {
+		if auto {
+			l := ladder[level]
+			return l.q, time.Duration(l.interval) * time.Millisecond
+		}
+		return manualQ, 90 * time.Millisecond
 	}
 
 	// 读循环：ack 归还信用 + 处理输入 + pong
@@ -135,6 +167,15 @@ func Handler(c *gin.Context) {
 				mu.Lock()
 				if credits < window {
 					credits++
+				}
+				if t0, ok := sentAt[m.N]; ok { // 送达耗时 → ewma（自适应信号）
+					d := float64(nowMs() - t0)
+					if ewma == 0 {
+						ewma = d
+					} else {
+						ewma = ewma*0.7 + d*0.3
+					}
+					delete(sentAt, m.N)
 				}
 				cond.Signal()
 				mu.Unlock()
@@ -160,8 +201,46 @@ func Handler(c *gin.Context) {
 		}
 	}()
 
-	// 截屏推流：有信用才截一帧（按需截屏 = 天然背压）。两帧间留最小间隔，避免空跑刷 adb。
-	const minInterval = 90 * time.Millisecond
+	// 自适应控制环（仅 auto）：按 ewma 升降档，并把当前档名推给前端显示。
+	if auto {
+		_ = writeJSON(map[string]any{"type": "level", "name": ladder[level].name})
+		go func() {
+			t := time.NewTicker(1500 * time.Millisecond)
+			defer t.Stop()
+			up := 0
+			for range t.C {
+				mu.Lock()
+				if closed {
+					mu.Unlock()
+					return
+				}
+				e, lv := ewma, level
+				mu.Unlock()
+				if e == 0 {
+					continue
+				}
+				next := lv
+				switch {
+				case e > 350 && lv > 0: // 太慢 → 立刻降档
+					next, up = lv-1, 0
+				case e < 130 && lv < len(ladder)-1: // 有余量 → 连两次才升档（防抖）
+					if up++; up >= 2 {
+						next, up = lv+1, 0
+					}
+				default:
+					up = 0
+				}
+				if next != lv {
+					mu.Lock()
+					level, ewma = next, 0
+					mu.Unlock()
+					_ = writeJSON(map[string]any{"type": "level", "name": ladder[next].name})
+				}
+			}
+		}()
+	}
+
+	// 截屏推流：有信用才截一帧（按需截屏 = 天然背压）。两帧间留间隔控帧率。
 	var seq uint16
 	for {
 		mu.Lock()
@@ -173,10 +252,11 @@ func Handler(c *gin.Context) {
 			return
 		}
 		credits--
+		q, interval := curParams()
 		mu.Unlock()
 
 		start := time.Now()
-		jpg, w, h, err := dev.CaptureJPEG(quality)
+		jpg, w, h, err := dev.CaptureJPEG(q)
 		if err != nil {
 			// 截图失败（设备掉线等）：还回信用，提示前端，稍候重试
 			mu.Lock()
@@ -186,12 +266,16 @@ func Handler(c *gin.Context) {
 			time.Sleep(500 * time.Millisecond)
 			continue
 		}
+		mu.Lock()
 		seq++
-		if writeBin(buildFrame(jpg, w, h, seq)) != nil {
+		s := seq
+		sentAt[s] = nowMs()
+		mu.Unlock()
+		if writeBin(buildFrame(jpg, w, h, s)) != nil {
 			return
 		}
-		if d := time.Since(start); d < minInterval {
-			time.Sleep(minInterval - d)
+		if d := time.Since(start); d < interval {
+			time.Sleep(interval - d)
 		}
 	}
 }
