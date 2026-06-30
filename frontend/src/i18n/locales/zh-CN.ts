@@ -127,7 +127,6 @@ const zhCN = {
   'session.renameTitle': '重命名会话',
   'session.renamed': '已重命名',
   'session.nameRequired': '请输入名称',
-  'session.nameInvalidChars': '会话名不能包含 / . : 这些特殊字符',
   'session.created': '已创建',
   'session.namePlaceholder': '会话名称，如 work',
   'session.agentNone': '不启动',

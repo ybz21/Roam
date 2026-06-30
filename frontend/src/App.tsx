@@ -1357,7 +1357,6 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
   useEffect(() => { if (open) { setName(''); setDir(''); setAgent('none') } }, [open])
   const ok = async () => {
     if (!name.trim()) return message.error(t('session.nameRequired'))
-    if (/[\/\.:]/.test(name.trim())) return message.error(t('session.nameInvalidChars'))
     try {
       const res = await api('POST', '/sessions', { name: name.trim(), dir: dir.trim() })
       const actual = res.name || name.trim()
@@ -1415,7 +1414,6 @@ function RenameSessionModal({ session, onClose, onDone }: { session: string | nu
     if (!session) return
     const next = name.trim()
     if (!next) return message.error(t('session.nameRequired'))
-    if (/[\/\.:]/.test(next)) return message.error(t('session.nameInvalidChars'))
     try {
       const res = await api('PATCH', `/sessions/${encodeURIComponent(session)}`, { name: next })
       const actual = res.data?.name || next
