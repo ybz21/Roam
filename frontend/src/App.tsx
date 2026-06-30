@@ -245,7 +245,10 @@ export default function App() {
 
   useEffect(() => {
     setUnauthorizedHandler(() => setAuthed(false))
-    api('GET', '/me').then(() => { setAuthed(true); loadPreferences() }).catch(() => setAuthed(false))
+    api('GET', '/me').then(() => {
+      setAuthed(true); loadPreferences()
+      navigator.clipboard?.readText?.().catch(() => {})
+    }).catch(() => setAuthed(false))
   }, [])
 
   // 终端状态同步到 URL，刷新后可恢复
@@ -633,6 +636,7 @@ function TerminalPane(props: {
   // 合成缓冲里不提交，onData 不触发 → 打完字发不出去。触摸设备改用独立输入框：整行送 PTY。
   const isTouch = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches
   const [line, setLine] = useState('')
+  const mobileInputRef = useRef<import('antd').InputRef>(null)
   const sendRaw = (s: string) => { if (active) termRefs.current[active]?.send(s, true) } // keepFocus：不抢 xterm 焦点 → 软键盘不收起
   // 滚上去看历史会让 tmux 进 copy-mode，此时输入被它截走（要先按「底」才生效）。
   // 输入框聚焦/发送前先回到底部退出 copy-mode，省去手动按「底」。
@@ -1003,6 +1007,7 @@ function TerminalPane(props: {
       {isTouch && !inChat && (
         <div style={{ display: 'flex', gap: 6, padding: '8px 8px 0' }} onDragOver={allowPathDrop} onDrop={onInputDrop}>
           <Input
+            ref={mobileInputRef}
             value={line}
             onFocus={exitCopyMode}
             onChange={(e) => setLine(e.target.value)}
@@ -1020,7 +1025,7 @@ function TerminalPane(props: {
         <div style={{ display: 'flex', gap: 6, padding: 8, borderTop: '1px solid var(--border)', overflowX: 'auto' }}>
           <Button type="primary" onMouseDown={noBlur} onClick={() => (isTouch ? submitLine() : sendKey('\r'))}>Enter</Button>
           {(prefsData.quickCommands || []).map((cmd) => (
-            <Button key={cmd} onMouseDown={noBlur} onClick={() => isTouch ? setLine(cmd) : sendRaw(cmd)} style={{ flex: '0 0 auto' }}>{cmd}</Button>
+            <Button key={cmd} onMouseDown={noBlur} onClick={() => { if (isTouch) { setLine(cmd); requestAnimationFrame(() => mobileInputRef.current?.focus()) } else { sendRaw(cmd) } }} style={{ flex: '0 0 auto' }}>{cmd}</Button>
           ))}
           {KEYS.map(([label, seq]) => (
             <Button key={label} onMouseDown={noBlur} onClick={() => tapKey(seq)} style={{ flex: '0 0 auto' }}>{label}</Button>
