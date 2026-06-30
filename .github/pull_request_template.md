@@ -4,7 +4,7 @@
 
 ## Validation
 
-- [ ] `scripts/quality/check.sh full`
+- [ ] `scripts/dev/quality/check.sh full`
 - [ ] Manual validation notes included, if UI or terminal behavior changed
 
 ## Compliance

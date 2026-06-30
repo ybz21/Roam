@@ -202,7 +202,7 @@ xcrun simctl io booted screenshot shot.png
 `host:port` 形式在 `Ensure` 时先幂等 `adb connect` 再当 `-s` 目标。API：`GET/PUT /phone/config`、`POST /phone/connect`。
 旧配置（mode 曾编码平台）自动迁移：`mode=ios`→`{ios,simulator}`，其余→`{android, mode}`。
 
-**依赖按平台自适应安装**：`scripts/install-phone.sh`（已并入 `install.sh`）——Linux 装 `adb`；macOS 装 `idb`+`adb`（Mac 同时支持 iOS 模拟器与接 Android 真机）。
+**依赖按平台自适应安装**：`scripts/phone/install-phone.sh`（已并入 `install.sh`）——Linux 装 `adb`；macOS 装 `idb`+`adb`（Mac 同时支持 iOS 模拟器与接 Android 真机）。
 
 > **反模拟器 App（同花顺/东方财富等）的正解 = 远程 redroid 跑在 ARM64 主机**，或真机。x86 上 arm 翻译会被 native 检测识破（详见调研记录）。
 > **Jetson 实测**：ARM64 合适,但 NVIDIA L4T 内核 `CONFIG_KPROBES` 未开、无 `CONFIG_ANDROID_BINDER` → 现成内核装不了 binder（anbox 模块需 kprobes），**要重编内核**(加 `CONFIG_ANDROID_BINDER_IPC=m`+`CONFIG_ANDROID_BINDERFS=m`+`CONFIG_KPROBES=y`)才能跑 redroid。

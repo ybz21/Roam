@@ -51,7 +51,7 @@ BREAKING CHANGE: swarm done 改名为 swarm finish，旧命令移除。
 ## 启用校验
 
 ```bash
-bash scripts/install-git-hooks.sh
+bash scripts/dev/install-git-hooks.sh
 ```
 
 它会：

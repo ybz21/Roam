@@ -2,11 +2,11 @@
 # Unified repository quality gate for local hooks and CI.
 #
 # Usage:
-#   scripts/quality/check.sh quick   # pre-commit friendly
-#   scripts/quality/check.sh full    # CI / release gate
+#   scripts/dev/quality/check.sh quick   # pre-commit friendly
+#   scripts/dev/quality/check.sh full    # CI / release gate
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 MODE="${1:-full}"
 
 cd "$ROOT"
@@ -30,7 +30,7 @@ tracked_source_files() {
 }
 
 section "Shell syntax"
-shell_files="$(git ls-files '*.sh' 'cli/ttmux-cli/build.sh' 'cli/ttmux-cli/lib/*.sh' 'scripts/*.sh' 'scripts/lib/*.sh' 'scripts/quality/*.sh')"
+shell_files="$(git ls-files '*.sh' 'cli/ttmux-cli/build.sh' 'cli/ttmux-cli/lib/*.sh' 'scripts/*.sh')"
 if [ -n "$shell_files" ]; then
   while IFS= read -r f; do
     [ -f "$f" ] || continue

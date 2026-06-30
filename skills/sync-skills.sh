@@ -18,7 +18,7 @@ DEST="${1:-${HOME}/.claude/skills}"
 TARGETS=("$DEST")
 [[ -d "${HOME}/.codex" ]] && TARGETS+=("${HOME}/.codex/skills")
 
-# 子文档拼接顺序；与 scripts/install-ttmux.sh 的 GitHub 下载分支保持一致。
+# 子文档拼接顺序；与 scripts/install/install-ttmux.sh 的 GitHub 下载分支保持一致。
 CC_SWARM_DOCS="intake decompose spawn patrol approve test-push review concurrency integrate memory"
 DEV_ROLES_DOCS="plaza board chrome pm architect frontend backend fullstack qa designer reviewer devops docs"
 

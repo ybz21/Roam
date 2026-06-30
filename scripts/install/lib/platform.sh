@@ -1,4 +1,4 @@
-# scripts/lib/platform.sh — 平台/架构检测 + 包管理辅助。source 时自动跑检测。
+# scripts/install/lib/platform.sh — 平台/架构检测 + 包管理辅助。source 时自动跑检测。
 # 暴露变量：OS(mac|wsl|linux|other) IS_WSL PKG(apt|dnf|pacman|brew) SUDO ARCH_H PLAT_H
 # 暴露函数：can_autoinstall pkg_cmd pkg_do node_major go_ver_ok
 # shellcheck shell=bash

@@ -1,4 +1,4 @@
-# scripts/install-chrome.sh — [2/3] chrome：2.1 node · 2.2 playwright · 2.3 chrome CLI。
+# scripts/install/install-chrome.sh — [2/3] chrome：2.1 node · 2.2 playwright · 2.3 chrome CLI。
 # 注：playwright 依赖经 `chrome setup` 安装，需 CLI 先就位，
 #     故实际执行顺序为 node(2.1) → chrome CLI(2.3) → playwright(2.2)。
 # 依赖：lib/common, lib/platform, lib/github；编排器导出 CHROME_BUILD/INSTALL_DIR。

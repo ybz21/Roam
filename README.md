@@ -162,15 +162,15 @@ does not become a tool manual. When needed, see
 Install the repository Git hooks once per clone:
 
 ```bash
-bash scripts/install-git-hooks.sh
+bash scripts/dev/install-git-hooks.sh
 ```
 
 The pre-commit hook runs the quick quality gate. CI runs the full gate on pushes
 and pull requests:
 
 ```bash
-scripts/quality/check.sh quick
-scripts/quality/check.sh full
+scripts/dev/quality/check.sh quick
+scripts/dev/quality/check.sh full
 ```
 
 Build and run the Web console:

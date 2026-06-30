@@ -14,7 +14,7 @@ Codex 会自动读 diff、留下 inline review thread，并在 PR body 上用表
 3. 安装后，新开的 PR 会在一两分钟内收到 Codex 的自动 review。
 4. （可选）在仓库 **Settings → Branches** 给 `main` 加保护规则，把 CI 的 `quality` / `i18n` 等 check 设为必需，确保人和机器都过了才合并。
 
-> 与已有的 `.github/workflows/pr-review.yml`（`scripts/quality/review.sh` 的策略审查）并存：
+> 与已有的 `.github/workflows/pr-review.yml`（`scripts/dev/quality/review.sh` 的策略审查）并存：
 > 那条是仓库自带的**规则审查**（i18n、密钥、生成物等硬性策略），Codex 是**语义审查**（逻辑、边界、设计）。
 > 两者互补，都会在 PR 上留评论。
 

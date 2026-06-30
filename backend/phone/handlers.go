@@ -48,7 +48,7 @@ func Platforms(c *gin.Context) {
 	}})
 }
 
-// Install 按需(插件化)安装某平台依赖:开关打开时由前端触发,跑 scripts/install-phone.sh <platform>。
+// Install 按需(插件化)安装某平台依赖:开关打开时由前端触发,跑 scripts/phone/install-phone.sh <platform>。
 func Install(c *gin.Context) {
 	var body struct {
 		Platform string `json:"platform"`
@@ -62,9 +62,9 @@ func Install(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"installed": true, "log": "依赖已就绪"}})
 		return
 	}
-	script := findScript("install-phone.sh")
+	script := findScript("phone/install-phone.sh")
 	if script == "" {
-		c.JSON(http.StatusOK, gin.H{"error": "找不到 scripts/install-phone.sh,请手动安装依赖（Android: adb；iOS: idb）"})
+		c.JSON(http.StatusOK, gin.H{"error": "找不到 scripts/phone/install-phone.sh,请手动安装依赖（Android: adb；iOS: idb）"})
 		return
 	}
 	out, _ := runCmd(180*time.Second, "bash", script, body.Platform)
@@ -77,15 +77,15 @@ func redroidRunning() bool {
 	return err == nil && strings.Contains(string(out), "ttmux-redroid")
 }
 
-// runRedroid 跑 scripts/android-redroid.sh <action>（up 含开机等待故超时给足）。
+// runRedroid 跑 scripts/phone/android-redroid.sh <action>（up 含开机等待故超时给足）。
 func runRedroid(c *gin.Context, action string, timeout time.Duration) {
 	if !inPath("docker") {
 		c.JSON(http.StatusOK, gin.H{"error": "未找到 docker（本地 redroid 需要）"})
 		return
 	}
-	s := findScript("android-redroid.sh")
+	s := findScript("phone/android-redroid.sh")
 	if s == "" {
-		c.JSON(http.StatusOK, gin.H{"error": "找不到 scripts/android-redroid.sh"})
+		c.JSON(http.StatusOK, gin.H{"error": "找不到 scripts/phone/android-redroid.sh"})
 		return
 	}
 	out, _ := runCmd(timeout, "bash", s, action)
@@ -212,14 +212,14 @@ func Auto(c *gin.Context) {
 	log := ""
 	// 1. 依赖
 	if !platformInstalled(cfg.Active) {
-		if s := findScript("install-phone.sh"); s != "" {
+		if s := findScript("phone/install-phone.sh"); s != "" {
 			out, _ := runCmd(180*time.Second, "bash", s, cfg.Active)
 			log += string(out) + "\n"
 		}
 	}
 	// 2. 起设备（仅能起停的来源）
 	if cfg.Active == "android" && cfg.Android.Mode == "local" && !redroidRunning() {
-		if s := findScript("android-redroid.sh"); s != "" {
+		if s := findScript("phone/android-redroid.sh"); s != "" {
 			out, _ := runCmd(240*time.Second, "bash", s, "up")
 			log += string(out) + "\n"
 		}

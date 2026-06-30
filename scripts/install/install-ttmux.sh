@@ -1,4 +1,4 @@
-# scripts/install-ttmux.sh — [1/3] ttmux CLI 二进制 + skills + Tab 补全。
+# scripts/install/install-ttmux.sh — [1/3] ttmux CLI 二进制 + skills + Tab 补全。
 # 依赖：lib/common, lib/platform, lib/github；编排器导出 GO_SRC/TTMUX_BUILD/SKILL_DIR/CC_SWARM_DOCS/INSTALL_DIR/REPO/BRANCH。
 # shellcheck shell=bash
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# scripts/install-phone.sh [android|ios|auto] — 按需(插件化)安装手机后端依赖。
+# scripts/phone/install-phone.sh [android|ios|auto] — 按需(插件化)安装手机后端依赖。
 #
 # 不在 install.sh 主流程预装;由设置页「手机」的平台开关触发(后端 POST /phone/install),
-# 或手动 `bash scripts/install-phone.sh android`。
+# 或手动 `bash scripts/phone/install-phone.sh android`。
 #   android → 确保 adb(platform-tools)
 #   ios     → 确保 idb(idb-companion + fb-idb，仅 macOS)
 #

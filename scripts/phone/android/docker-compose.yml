@@ -2,7 +2,7 @@
 #
 # ⚠ 推荐用自适应脚本,它会按宿主机能力(ashmem/GPU 厂商)自动选版本与渲染模式,
 #   并生成实际 compose 到 ~/.ttmux/android/docker-compose.yml:
-#       bash scripts/android-redroid.sh up
+#       bash scripts/phone/android-redroid.sh up
 #   本文件仅作参考/手动起停的静态示例。
 #
 # 关键事实(本仓库实测,内核 6.x):

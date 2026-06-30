@@ -1,4 +1,4 @@
-# scripts/lib/common.sh — 公共：颜色 + 日志助手。被 install.sh 及各模块 source。
+# scripts/install/lib/common.sh — 公共：颜色 + 日志助手。被 install.sh 及各模块 source。
 # 纯函数库，无副作用（不要在此 set -e / 跑检测）。
 # shellcheck shell=bash
 

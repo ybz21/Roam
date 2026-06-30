@@ -76,7 +76,7 @@ bash wait-codex-review.sh {owner/repo} {pr_number}
 1. 解析失败 check 名称列表
 2. `gh pr checks {pr} --repo {owner/repo} --json name,state,detailsUrl --jq '.[] | select(.state == "FAILURE" or .state == "ERROR")'` 取详情
 3. `gh run view {run_id} --repo {owner/repo} --log-failed` 看失败日志
-4. 本仓库 CI 常见失败点：`scripts/quality/check.sh full`（Go fmt/test、前端 `npm run i18n:check` / `typecheck` / `build`）、`pr-review.yml` 的策略审查。先在本地复现：`scripts/quality/check.sh full`
+4. 本仓库 CI 常见失败点：`scripts/dev/quality/check.sh full`（Go fmt/test、前端 `npm run i18n:check` / `typecheck` / `build`）、`pr-review.yml` 的策略审查。先在本地复现：`scripts/dev/quality/check.sh full`
 5. 修复后提交推送，回到步骤 2
 
 #### 3b. 合并冲突（退出码 4）
@@ -127,7 +127,7 @@ gh api repos/{owner}/{repo}/pulls/{pr}/comments/{comment_id}
 如果有代码修改：
 
 1. 确认当前分支与 PR 的 `headRefName` 一致
-2. **先跑质量门**：`scripts/quality/check.sh quick`（或涉及前端/运行时行为时 `full`）
+2. **先跑质量门**：`scripts/dev/quality/check.sh quick`（或涉及前端/运行时行为时 `full`）
 3. 提交推送：
 
 ```bash
@@ -148,6 +148,6 @@ commit message 遵循仓库 [Conventional Commits 规范](../../docs/development
 - **必须 resolve thread**。只回复不 resolve 会让 comment 无限重现。
 - **回复必须先用 `>` 引用并用中文完整解释问题**，不要只写一句短标题。
 - **用户可见前端文案必须走 i18n 层**（见 `AGENTS.md` / `docs/development/i18n.md`），不要为了修 review 引入硬编码中英文。
-- 每次修复后跑 `scripts/quality/check.sh`（quick 或 full）。
+- 每次修复后跑 `scripts/dev/quality/check.sh`（quick 或 full）。
 - Reply 使用中文；commit message 遵循 Conventional Commits。
 - 如果 PR 的 repo 不在当前目录，所有 `gh` 命令带 `--repo` 参数。

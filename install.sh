@@ -2,13 +2,13 @@
 #
 # ttmux 部署编排器（瘦壳）。真正的逻辑在 scripts/ 下分模块：
 #
-#   scripts/lib/common.sh      颜色 + 日志助手
-#   scripts/lib/platform.sh    平台/架构检测 + 包管理辅助
-#   scripts/lib/github.sh      release 下载助手
-#   scripts/preflight.sh       系统检查（tmux / 目录）
-#   scripts/install-ttmux.sh   [1/3] ttmux CLI + skills + 补全
-#   scripts/install-chrome.sh  [2/3] node + playwright + chrome CLI
-#   scripts/install-backend.sh [3/3] 构建后端产物（dist + 二进制），不启动
+#   scripts/install/lib/common.sh      颜色 + 日志助手
+#   scripts/install/lib/platform.sh    平台/架构检测 + 包管理辅助
+#   scripts/install/lib/github.sh      release 下载助手
+#   scripts/install/preflight.sh       系统检查（tmux / 目录）
+#   scripts/install/install-ttmux.sh   [1/3] ttmux CLI + skills + 补全
+#   scripts/install/install-chrome.sh  [2/3] node + playwright + chrome CLI
+#   scripts/install/install-backend.sh [3/3] 构建后端产物（dist + 二进制），不启动
 #
 # 一行安装（k3s 风格）：
 #   curl -sfL https://raw.githubusercontent.com/ybz21/ttmux/main/install.sh | bash
@@ -57,13 +57,13 @@ load() {  # <scripts/ 下的相对路径>
     source "$dst"
 }
 
-load lib/common.sh
-load lib/platform.sh
-load lib/github.sh
-load preflight.sh
-load install-ttmux.sh
-load install-chrome.sh
-load install-backend.sh
+load install/lib/common.sh
+load install/lib/platform.sh
+load install/lib/github.sh
+load install/preflight.sh
+load install/install-ttmux.sh
+load install/install-chrome.sh
+load install/install-backend.sh
 
 # ── 主流程 ───────────────────────────────────────────────────────
 echo ""
@@ -74,7 +74,7 @@ preflight            # 平台横幅 + tmux + 建目录
 module_ttmux         # [1/3]
 module_chrome        # [2/3]
 module_backend       # [3/3]（只构建，不启动）
-# 注：手机后端依赖（adb / idb）不在此预装；由设置页「手机」平台开关按需安装（scripts/install-phone.sh）。
+# 注：手机后端依赖（adb / idb）不在此预装；由设置页「手机」平台开关按需安装（scripts/phone/install-phone.sh）。
 
 # PATH 提示
 if [[ ":$PATH:" != *":${INSTALL_DIR}:"* ]]; then

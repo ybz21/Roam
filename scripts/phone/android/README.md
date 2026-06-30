@@ -5,9 +5,9 @@
 ## 一键起停（自适应，推荐）
 
 ```bash
-bash scripts/android-redroid.sh up         # 自适应：探测宿主机 → 选版本/渲染 → 起容器 → 等开机
-bash scripts/android-redroid.sh status      # 容器 + adb + 实际选用的配置
-bash scripts/android-redroid.sh down        # 停（数据保留）
+bash scripts/phone/android-redroid.sh up         # 自适应：探测宿主机 → 选版本/渲染 → 起容器 → 等开机
+bash scripts/phone/android-redroid.sh status      # 容器 + adb + 实际选用的配置
+bash scripts/phone/android-redroid.sh down        # 停（数据保留）
 ```
 
 脚本会**按宿主机能力自适应**：

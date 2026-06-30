@@ -15,9 +15,9 @@ Allowed exceptions are listed in the i18n standard. If a change intentionally le
 
 ## Quality Gate
 
-- Run `scripts/quality/check.sh quick` before committing local changes.
-- Run `scripts/quality/check.sh full` before opening or updating a PR with runtime behavior changes.
-- Install the tracked Git hooks with `bash scripts/install-git-hooks.sh`; it sets `core.hooksPath=.githooks` and `commit.template=.gitmessage`.
+- Run `scripts/dev/quality/check.sh quick` before committing local changes.
+- Run `scripts/dev/quality/check.sh full` before opening or updating a PR with runtime behavior changes.
+- Install the tracked Git hooks with `bash scripts/dev/install-git-hooks.sh`; it sets `core.hooksPath=.githooks` and `commit.template=.gitmessage`.
 - Do not commit `.env`, generated dependency folders, coverage output, or hard-coded secrets.
 
 ## Commit Convention

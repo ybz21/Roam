@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# scripts/android-redroid.sh — 自适应起停 ttmux「手机」标签的 Android 后端(redroid)。
+# scripts/phone/android-redroid.sh — 自适应起停 ttmux「手机」标签的 Android 后端(redroid)。
 #
 # 「自适应」= 探测宿主机能力,自动挑一套能开机的配置:
 #   - binder:  未加载则 sudo modprobe(redroid 必需)
@@ -11,11 +11,11 @@
 #   数据挂载到 ~/.ttmux/android/data(bind mount),容器删了数据仍在。
 #
 # 用法:
-#   bash scripts/android-redroid.sh up [版本]   # 自适应起(已在跑则秒级复用);版本默认 16,无 ashmem 自动回退 15
-#   bash scripts/android-redroid.sh down         # 只停不删(容器/数据保留,下次 up 秒级 start)
-#   bash scripts/android-redroid.sh rm           # 删容器(数据仍在)
-#   bash scripts/android-redroid.sh status       # 容器 + adb + 选用的配置
-#   bash scripts/android-redroid.sh connect       # 仅重连 adb
+#   bash scripts/phone/android-redroid.sh up [版本]   # 自适应起(已在跑则秒级复用);版本默认 16,无 ashmem 自动回退 15
+#   bash scripts/phone/android-redroid.sh down         # 只停不删(容器/数据保留,下次 up 秒级 start)
+#   bash scripts/phone/android-redroid.sh rm           # 删容器(数据仍在)
+#   bash scripts/phone/android-redroid.sh status       # 容器 + adb + 选用的配置
+#   bash scripts/phone/android-redroid.sh connect       # 仅重连 adb
 #
 # 仅 Linux。需 Docker;加载 binder 那步需 sudo。
 set -euo pipefail
@@ -83,7 +83,7 @@ gen_compose() {
     local w="${TTMUX_ANDROID_W:-720}" h="${TTMUX_ANDROID_H:-1280}" dpi="${TTMUX_ANDROID_DPI:-320}"
     mkdir -p "${DATA_DIR}/data"
     {
-        echo "# 由 scripts/android-redroid.sh 按宿主机能力自适应生成,请勿手改。"
+        echo "# 由 scripts/phone/android-redroid.sh 按宿主机能力自适应生成,请勿手改。"
         echo "services:"
         echo "  redroid:"
         echo "    image: ${image}"
