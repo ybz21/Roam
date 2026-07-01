@@ -155,13 +155,25 @@ if [ "$DEV" = 1 ] && [ -f install.sh ]; then
   TTMUX_SKIP_BACKEND=1 bash install.sh || { echo "✘ install.sh 失败"; exit 1; }
 fi
 
-# ── 前端：dev 增量编译；非 dev 直接用 install.sh 产物 ─────────────
-if [ "$DEV" = 1 ]; then
-  cd frontend
+# ── 前端依赖：仅目录存在不代表依赖完整 ───────────────────────────
+# node_modules 可能是旧的：package.json 新增依赖后（如 @monaco-editor/react）
+# 若只判断目录是否存在就会跳过安装，vite build 随即因找不到新依赖而失败。
+# 因此当 node_modules 缺失，或 package-lock.json/package.json 比 node_modules 新时，重新安装。
+ensure_frontend_deps() {
   if [ ! -d node_modules ]; then
     echo "==> 安装前端依赖..."
     npm install
+  elif [ package-lock.json -nt node_modules ] || [ package.json -nt node_modules ]; then
+    echo "==> 检测到依赖清单变更，重新安装前端依赖..."
+    npm install
   fi
+}
+export -f ensure_frontend_deps  # 供 (cd frontend && ...) 子 shell 调用
+
+# ── 前端：dev 增量编译；非 dev 直接用 install.sh 产物 ─────────────
+if [ "$DEV" = 1 ]; then
+  cd frontend
+  ensure_frontend_deps
   if [ ! -f dist/index.html ] || [ "$(find src index.html vite.config.ts -newer dist/index.html 2>/dev/null | head -1)" ]; then
     echo "==> 编译前端 (frontend/)..."
     npx vite build
@@ -172,10 +184,10 @@ if [ "$DEV" = 1 ]; then
   cd ..
 elif [ ! -f frontend/dist/index.html ]; then
   echo "==> 未找到 frontend/dist，自动编译前端..."
-  (cd frontend && [ -d node_modules ] || npm install && npx vite build)
+  (cd frontend && ensure_frontend_deps && npx vite build)
 elif [ "$(find frontend/src frontend/index.html frontend/vite.config.ts -newer frontend/dist/index.html 2>/dev/null | head -1)" ]; then
   echo "==> 检测到前端源码变更，自动重新编译..."
-  (cd frontend && npx vite build)
+  (cd frontend && ensure_frontend_deps && npx vite build)
 fi
 
 # ── 杀掉旧进程 ───────────────────────────────────────────────────
