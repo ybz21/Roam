@@ -683,6 +683,12 @@ function TerminalPane(props: {
 
   // 从文件/Git 面板把文件拖到终端 → 插入为 @绝对路径。
   const [dragOver, setDragOver] = useState(false)
+  useEffect(() => {
+    const clear = () => setDragOver(false)
+    document.addEventListener('dragend', clear)
+    document.addEventListener('drop', clear, true)
+    return () => { document.removeEventListener('dragend', clear); document.removeEventListener('drop', clear, true) }
+  }, [])
   // 拖拽载荷就是文件绝对路径，原样作为 @mention（不转相对路径）。
   const toMention = (raw: string) => {
     const p = raw.trim()

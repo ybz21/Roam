@@ -1,7 +1,7 @@
 // 统一「文件工作区」：左侧文件浏览器(可拖拽调宽) + VSCode 式多文件编辑 tab + Monaco 编辑器。
 // 支持左右双栏(编辑组 A/B)：拖 tab 到另一栏、或从文件树拖文件到某栏；会话(终端)作为固定首 tab 常驻 A 栏。
 // 两处复用：独立 Files 页（纯文件）与新标签 SoloTerminal（会话经 leading* 槽传入）。
-import { type ReactNode, Fragment, useRef, useState } from 'react'
+import { type ReactNode, Fragment, useEffect, useRef, useState } from 'react'
 import { App as AntApp } from 'antd'
 import FileBrowser, { Viewer, FileTypeIcon } from './FileBrowser'
 import { useI18n } from './i18n'
@@ -55,6 +55,12 @@ export default function FileWorkspace({
   const [focus, setFocus] = useState<Group>('A')
   const [dirtyFiles, setDirtyFiles] = useState<Set<string>>(new Set())
   const [dropHint, setDropHint] = useState<Group | 'split' | null>(null) // 拖拽落点提示
+  useEffect(() => {
+    const clear = () => setDropHint(null)
+    document.addEventListener('dragend', clear)
+    document.addEventListener('drop', clear, true)
+    return () => { document.removeEventListener('dragend', clear); document.removeEventListener('drop', clear, true) }
+  }, [])
   const split = filesB.length > 0
 
   const filesOf = (g: Group) => (g === 'A' ? filesA : filesB)
