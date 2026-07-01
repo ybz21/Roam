@@ -250,6 +250,8 @@ const enUS = {
   'file.closeUnsavedTitle': 'Close without saving?',
   'file.closeWithoutSaving': 'Close without saving',
   'file.dragResize': 'Drag to resize',
+  'file.splitHere': 'Drop here to split',
+  'file.swapPanes': 'Swap left/right',
   'file.searchFiles': 'Search files by name (recursive, regex/glob)',
   'file.searchPlaceholder': 'Filter files — text, glob or regex (e.g. a*.py)…',
   'file.noMatches': 'No matching files',

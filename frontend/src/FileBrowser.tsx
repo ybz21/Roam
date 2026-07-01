@@ -408,7 +408,8 @@ export function Viewer({
 
   useEffect(() => {
     if (isImg || isPdf || isOffice) return // 图片/PDF/Office 直接走 raw 或专用面板
-    setData(null); setErr(''); setSource(false); setDraft('')
+    // tab 语境的 markdown 默认进编辑器（源码），点眼睛才切预览；非 tab（有头部）默认渲染。
+    setData(null); setErr(''); setSource(!!tabbed && MD_EXT.includes(extOf(path))); setDraft('')
     api('GET', `/file?path=${encodeURIComponent(path)}`).then((r) => { setData(r.data); setDraft(r.data?.content || '') }).catch((e) => setErr(e.message))
   }, [path, isImg, isPdf, isOffice])
 
@@ -528,8 +529,9 @@ export function Viewer({
                 : isMd && !source
                   ? <div style={{ height: previewHeight, overflow: 'auto' }}><Markdown accent={accent} resolveHref={resolvePreviewHref} onLinkClick={openPreviewLink}>{data.content}</Markdown></div>
                   : (
-                    // 文本/代码/JSON/Markdown(源码) → Monaco 编辑器（行号、语法高亮、可编辑；截断的大文件只读）
-                    <div style={{ height: previewHeight, border: '1px solid var(--border-subtle)', borderRadius: 8, overflow: 'hidden' }}>
+                    // 文本/代码/JSON/Markdown(源码) → Monaco 编辑器（行号、语法高亮、可编辑；截断的大文件只读）。
+                    // tab 语境下全屏无边框，背景由 CodeEditor 统一成应用底色。
+                    <div style={{ height: previewHeight, border: tabbed ? 'none' : '1px solid var(--border-subtle)', borderRadius: tabbed ? 0 : 8, overflow: 'hidden' }}>
                       <Suspense fallback={<div style={{ height: '100%', display: 'grid', placeItems: 'center' }}><Spin /></div>}>
                         <CodeEditor value={draft} language={monacoLangOf(path)} dark={mode === 'dark'} readOnly={!editable} onChange={setDraft} onSave={() => saveRef.current()} />
                       </Suspense>
@@ -557,8 +559,20 @@ export function Viewer({
   if (inline) {
     return (
       <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg-base)' }}>
-        <div style={{ padding: tabbed ? '4px 8px' : '9px 12px', borderBottom: '1px solid var(--border-subtle)' }}>{titleNode}</div>
-        <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', padding: tabbed ? '8px 8px 8px' : 12 }}>{bodyNode}</div>
+        {/* 编辑器 tab 语境(tabbed)：文件名/操作已由外层 tab 承担 → 去掉整条标题栏，编辑器全屏。保存用 Ctrl/Cmd+S。 */}
+        {!tabbed && <div style={{ padding: '9px 12px', borderBottom: '1px solid var(--border-subtle)' }}>{titleNode}</div>}
+        <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', padding: tabbed ? 0 : 12, position: 'relative' }}>
+          {bodyNode}
+          {/* tab 语境无头部：markdown 用右上角悬浮眼睛在「源码/预览」间切换 */}
+          {tabbed && isMd && data && !data.binary && (
+            <Tooltip title={source ? t('file.rendered') : t('file.source')} placement="left">
+              <button type="button" onClick={() => setSource((s) => !s)}
+                style={{ position: 'absolute', top: 8, right: 12, zIndex: 10, width: 30, height: 30, borderRadius: 6, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border-subtle)', background: source ? 'var(--bg-container)' : accent, color: source ? 'var(--text-dim)' : '#fff' }}>
+                {source ? <EyeIcon /> : <CodeIcon />}
+              </button>
+            </Tooltip>
+          )}
+        </div>
       </div>
     )
   }
@@ -584,6 +598,40 @@ function formatJSON(text: string): string {
 
 function fence(lang: string, content: string): string {
   return '```' + lang + '\n' + content + '\n```'
+}
+
+// 统一：把文件绝对路径写进拖拽载荷（对话框识别 application/x-ttmux-path，其余认 text/plain）。
+function startPathDrag(ev: React.DragEvent, full: string) {
+  ev.dataTransfer.setData('application/x-ttmux-path', full)
+  ev.dataTransfer.setData('text/plain', full)
+  ev.dataTransfer.effectAllowed = 'copy'
+}
+
+// 统一：一行文件/目录的图标 + 名称 + 大小 + @插入 + 下载。平铺列表与树共用（外层容器各自处理缩进/展开）。
+function FileRowBody({ full, name, isDir, size, accent, onInsertPath }: {
+  full: string; name: string; isDir: boolean; size: number; accent: string; onInsertPath?: (p: string) => void
+}) {
+  const { t } = useI18n()
+  return (
+    <>
+      <span style={{ color: isDir ? accent : 'var(--text-dimmer)', flex: '0 0 auto', display: 'inline-flex', width: 22, justifyContent: 'center' }}>{isDir ? <FolderIcon /> : <FileTypeIcon name={name} />}</span>
+      <span style={{ color: 'var(--text-bright)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+      {!isDir && <span style={{ color: 'var(--text-dimmer)', fontSize: 11, flex: '0 0 auto' }}>{fmtSize(size)}</span>}
+      {onInsertPath && (
+        <span data-file-action>
+          <IconButton title={t('file.insertPath')} onClick={() => onInsertPath(full)}>@</IconButton>
+        </span>
+      )}
+      {!isDir && (
+        <span data-file-action>
+          <Tooltip title={t('file.download')}>
+            <Button type="text" size="small" href={`/api/file/raw?path=${encodeURIComponent(full)}&dl=1`} download={name}
+              style={{ width: 24, height: 24, minWidth: 24, padding: 0, color: 'var(--text-dim)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><DownloadIcon /></Button>
+          </Tooltip>
+        </span>
+      )}
+    </>
+  )
 }
 
 // VSCode 风格可展开目录树：以 root 为根，子目录首次展开时懒加载（复用 GET /files?path=）。
@@ -636,36 +684,24 @@ function FileTree({
         <Fragment key={full}>
           <div className="cc-filerow"
             draggable
-            onDragStart={(ev) => {
-              ev.dataTransfer.setData('application/x-ttmux-path', full)
-              ev.dataTransfer.setData('text/plain', full)
-              ev.dataTransfer.effectAllowed = 'copy'
-            }}
+            onDragStart={(ev) => startPathDrag(ev, full)}
             onClick={(ev) => {
               if ((ev.target as HTMLElement).closest('[data-file-action]')) return
               e.dir ? toggleDir(full) : onOpenFile(full)
             }}
             onContextMenu={(ev) => { ev.preventDefault(); ev.stopPropagation(); onDeleteEntry(full, e.dir) }}
-            style={{ ...rowStyle(), gap: 4, paddingLeft: 8 + depth * 14, background: full === selected ? '#1f6feb22' : undefined }}>
-            <span style={{ flex: '0 0 auto', width: 14, display: 'inline-flex', justifyContent: 'center', color: 'var(--text-dim)' }}>
-              {e.dir ? <Chevron open={!!isOpen} /> : null}
-            </span>
-            <span style={{ color: e.dir ? accent : 'var(--text-dimmer)', flex: '0 0 auto', display: 'inline-flex', width: 22, justifyContent: 'center' }}>{e.dir ? <FolderIcon /> : <FileTypeIcon name={e.name} />}</span>
-            <span style={{ color: 'var(--text-bright)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name}</span>
-            {!e.dir && <span style={{ color: 'var(--text-dimmer)', fontSize: 11, flex: '0 0 auto' }}>{fmtSize(e.size)}</span>}
-            {onInsertPath && (
-              <span data-file-action>
-                <IconButton title={t('file.insertPath')} onClick={() => onInsertPath(full)}>@</IconButton>
+            style={{ ...rowStyle(), gap: 0, padding: 0, alignItems: 'stretch', minHeight: 26, background: full === selected ? '#1f6feb22' : undefined }}>
+            {/* VSCode 式层级缩进导引线：每深一层一条竖线，逐行拼成连续的层级线 */}
+            <span style={{ flex: '0 0 auto', width: 8 }} />
+            {Array.from({ length: depth }).map((_, i) => (
+              <span key={i} aria-hidden style={{ flex: '0 0 auto', width: 14, boxSizing: 'border-box', borderLeft: '1px solid var(--border-subtle)' }} />
+            ))}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0, padding: '4px 8px 4px 2px' }}>
+              <span style={{ flex: '0 0 auto', width: 14, display: 'inline-flex', justifyContent: 'center', color: 'var(--text-dim)' }}>
+                {e.dir ? <Chevron open={!!isOpen} /> : null}
               </span>
-            )}
-            {!e.dir && (
-              <span data-file-action>
-                <Tooltip title={t('file.download')}>
-                  <Button type="text" size="small" href={`/api/file/raw?path=${encodeURIComponent(full)}&dl=1`} download={e.name}
-                    style={{ width: 24, height: 24, minWidth: 24, padding: 0, color: 'var(--text-dim)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><DownloadIcon /></Button>
-                </Tooltip>
-              </span>
-            )}
+              <FileRowBody full={full} name={e.name} isDir={e.dir} size={e.size} accent={accent} onInsertPath={onInsertPath} />
+            </div>
           </div>
           {isOpen && (
             loading[full]
@@ -721,14 +757,13 @@ export default function FileBrowser({
   const [results, setResults] = useState<{ path: string; name: string; rel: string }[] | null>(null)
   const [searching, setSearching] = useState(false)
   const [searchTrunc, setSearchTrunc] = useState(false)
-  // 平铺列表 / VSCode 树 两种展示，仅会话内面板（sidebar/dock）可切；localStorage 记住选择。
-  // dock（新标签左侧）默认树模式，其余默认平铺；Files 页（split）始终平铺不带切换钮。
-  const canToggleView = layout !== 'split'
+  // 平铺列表 / VSCode 树 两种展示，所有文件面板都可切；localStorage 记住选择。
+  // dock（新标签左侧）与 split（独立 Files 页）默认树模式，会话右侧抽屉(sidebar)默认平铺。
+  const canToggleView = true
   const [browseMode, setBrowseMode] = useState<'flat' | 'tree'>(() => {
-    if (!canToggleView) return 'flat'
     const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('ttmux.fileBrowseMode') : null
     if (saved === 'tree' || saved === 'flat') return saved
-    return layout === 'dock' ? 'tree' : 'flat'
+    return layout === 'sidebar' ? 'flat' : 'tree'
   })
   useEffect(() => {
     if (canToggleView && typeof localStorage !== 'undefined') localStorage.setItem('ttmux.fileBrowseMode', browseMode)
@@ -908,7 +943,7 @@ export default function FileBrowser({
           <span style={{ flex: 1 }} />
           {onClose && <ClosePanelButton title={t('file.closePanel')} onClick={onClose} />}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'nowrap', overflowX: 'auto' }}>
           <input ref={fileRef} type="file" multiple style={{ display: 'none' }}
             onChange={(e) => { if (e.target.files?.length) doUpload(e.target.files); e.target.value = '' }} />
           <IconButton title={t('file.back')} disabled={!canBack} onClick={goBack}><BackIcon /></IconButton>
@@ -996,7 +1031,7 @@ export default function FileBrowser({
               {searchTrunc && <div style={{ color: '#d29922', fontSize: 11, padding: '4px 10px' }}>{t('file.searchTruncated')}</div>}
               {(results || []).map((r) => (
                 <div key={r.path} className="cc-filerow" draggable title={r.rel}
-                  onDragStart={(ev) => { ev.dataTransfer.setData('application/x-ttmux-path', r.path); ev.dataTransfer.setData('text/plain', r.path); ev.dataTransfer.effectAllowed = 'copy' }}
+                  onDragStart={(ev) => startPathDrag(ev, r.path)}
                   onClick={() => openFile(r.path)}
                   style={{ ...rowStyle(), background: r.path === sel ? '#1f6feb22' : undefined }}>
                   <span style={{ color: 'var(--text-dimmer)', flex: '0 0 auto', display: 'inline-flex', width: 25, justifyContent: 'center' }}><FileTypeIcon name={r.name} /></span>
@@ -1019,45 +1054,22 @@ export default function FileBrowser({
         )}
         {browseMode === 'tree' ? (
           <FileTree root={cur} rootEntries={data?.entries || []} accent={accent} showHidden={showHidden} sortKey={sortKey} tick={tick} selected={sel} onOpenFile={openFile} onDeleteEntry={confirmDelete} onInsertPath={onInsertPath} />
-        ) : visibleEntries.map((e) => (
-          <div key={e.name} className="cc-filerow"
-            draggable
-            onDragStart={(ev) => {
-              const full = joinPath(cur, e.name)
-              ev.dataTransfer.setData('application/x-ttmux-path', full) // 给对话框识别用
-              ev.dataTransfer.setData('text/plain', full)
-              ev.dataTransfer.effectAllowed = 'copy'
-            }}
-            onClick={(ev) => {
-              if ((ev.target as HTMLElement).closest('[data-file-action]')) return
-              e.dir ? navigate(joinPath(cur, e.name)) : openFile(joinPath(cur, e.name))
-            }}
-            onContextMenu={(ev) => {
-              ev.preventDefault()
-              ev.stopPropagation()
-              confirmDelete(joinPath(cur, e.name), e.dir)
-            }}
-            style={{ ...rowStyle(), background: !e.dir && joinPath(cur, e.name) === sel ? '#1f6feb22' : undefined }}>
-            <span style={{ color: e.dir ? accent : 'var(--text-dimmer)', flex: '0 0 auto', display: 'inline-flex', width: 25, justifyContent: 'center' }}>{e.dir ? <FolderIcon /> : <FileTypeIcon name={e.name} />}</span>
-            <span style={{ color: e.dir ? 'var(--text-bright)' : 'var(--text-bright)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name}</span>
-            {!e.dir && <span style={{ color: 'var(--text-dimmer)', fontSize: 11, flex: '0 0 auto' }}>{fmtSize(e.size)}</span>}
-            {onInsertPath && (
-              <span data-file-action>
-                <IconButton title={t('file.insertPath')} onClick={() => onInsertPath(joinPath(cur, e.name))}>@</IconButton>
-              </span>
-            )}
-            {!e.dir && (
-              <>
-                <span data-file-action>
-                  <Tooltip title={t('file.download')}>
-                    <Button type="text" size="small" href={`/api/file/raw?path=${encodeURIComponent(joinPath(cur, e.name))}&dl=1`} download={e.name}
-                      style={{ width: 24, height: 24, minWidth: 24, padding: 0, color: 'var(--text-dim)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><DownloadIcon /></Button>
-                  </Tooltip>
-                </span>
-              </>
-            )}
-          </div>
-        ))}
+        ) : visibleEntries.map((e) => {
+          const full = joinPath(cur, e.name)
+          return (
+            <div key={e.name} className="cc-filerow"
+              draggable
+              onDragStart={(ev) => startPathDrag(ev, full)}
+              onClick={(ev) => {
+                if ((ev.target as HTMLElement).closest('[data-file-action]')) return
+                e.dir ? navigate(full) : openFile(full)
+              }}
+              onContextMenu={(ev) => { ev.preventDefault(); ev.stopPropagation(); confirmDelete(full, e.dir) }}
+              style={{ ...rowStyle(), background: !e.dir && full === sel ? '#1f6feb22' : undefined }}>
+              <FileRowBody full={full} name={e.name} isDir={e.dir} size={e.size} accent={accent} onInsertPath={onInsertPath} />
+            </div>
+          )
+        })}
         {data && data.entries.length === 0 && <div style={{ color: 'var(--text-dimmer)', fontSize: 12, padding: '6px 10px' }}>{t('file.emptyDirectory')}</div>}
         {browseMode !== 'tree' && data && data.entries.length > 0 && visibleEntries.length === 0 && (
           <div style={{ color: 'var(--text-dimmer)', fontSize: 12, padding: '6px 10px' }}>{t('file.allHidden', { count: hiddenCount })}</div>

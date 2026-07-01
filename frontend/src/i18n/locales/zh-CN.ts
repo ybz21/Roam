@@ -250,6 +250,8 @@ const zhCN = {
   'file.closeUnsavedTitle': '关闭未保存的文件？',
   'file.closeWithoutSaving': '不保存并关闭',
   'file.dragResize': '拖拽调整宽度',
+  'file.splitHere': '拖到这里分栏',
+  'file.swapPanes': '左右易位',
   'file.searchFiles': '按文件名递归搜索（支持 glob/正则）',
   'file.searchPlaceholder': '搜索文件 —— 文字、通配或正则（如 a*.py）…',
   'file.noMatches': '没有匹配的文件',

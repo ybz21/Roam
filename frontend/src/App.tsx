@@ -13,7 +13,8 @@ import { api, upload, makeClipboardImageFile, setUnauthorizedHandler } from './a
 import Term, { TermHandle, TermStatus } from './Terminal'
 import ClaudeChat from './ClaudeChat'
 import CodexChat from './CodexChat'
-import FileBrowser, { Viewer, FileTypeIcon } from './FileBrowser'
+import FileBrowser from './FileBrowser'
+import FileWorkspace from './FileWorkspace'
 import FloatingFileDrawer from './FloatingFileDrawer'
 import GitPanel from './GitPanel'
 import BrowserView from './BrowserView'
@@ -188,8 +189,8 @@ function FilesPage({ openTerm }: { openTerm: (name: string) => void }) {
     }
   }
   return (
-    <div style={{ height: '100%', minHeight: 0 }}>
-      <FileBrowser accent="#58a6ff" layout="split" onOpenAgent={openAgent} />
+    <div style={{ height: '100%', minHeight: 0, display: 'flex' }}>
+      <FileWorkspace dir="" accent="#58a6ff" onOpenAgent={openAgent} />
     </div>
   )
 }
@@ -672,63 +673,8 @@ function TerminalPane(props: {
   }
 
   // 文件侧栏（终端视图下也可用）：定位到当前会话的工作目录。左侧停靠时默认展开。
+  // 编辑器多 tab / 打开的文件 / 拖拽调宽等都下沉到 <FileWorkspace>（左侧停靠时用），这里只保留 showFiles。
   const [showFiles, setShowFiles] = useState(fileDock === 'left')
-  // VSCode 式编辑器 tab（仅左侧停靠的独立全屏页）：第一个 tab 永远是当前会话，
-  // 点文件浏览器里的文件 → 在会话 tab 右边开/激活一个文件 tab。activeFile=null 表示会话 tab。
-  const [openFiles, setOpenFiles] = useState<string[]>([])
-  const [activeFile, setActiveFile] = useState<string | null>(null)
-  const [dirtyFiles, setDirtyFiles] = useState<Set<string>>(new Set()) // 有未保存改动的文件 tab
-  const setFileDirty = (p: string, dirty: boolean) => setDirtyFiles((prev) => {
-    if (prev.has(p) === dirty) return prev
-    const n = new Set(prev)
-    dirty ? n.add(p) : n.delete(p)
-    return n
-  })
-  const openFileTab = (p: string) => {
-    setOpenFiles((prev) => (prev.includes(p) ? prev : [...prev, p]))
-    setActiveFile(p)
-  }
-  const doCloseFileTab = (p: string) => {
-    const i = openFiles.indexOf(p)
-    const next = openFiles.filter((x) => x !== p)
-    setOpenFiles(next)
-    setFileDirty(p, false)
-    if (activeFile === p) setActiveFile(next[i - 1] ?? next[i] ?? null) // 关掉激活 tab → 落到左邻，否则会话 tab
-  }
-  const closeFileTab = (p: string) => {
-    if (dirtyFiles.has(p)) {
-      modal.confirm({
-        title: t('file.closeUnsavedTitle'),
-        content: pathBasename(p),
-        okText: t('file.closeWithoutSaving'),
-        cancelText: t('common.cancel'),
-        okButtonProps: { danger: true },
-        onOk: () => doCloseFileTab(p),
-      })
-    } else doCloseFileTab(p)
-  }
-  // 正在看文件 tab（左侧停靠全屏页）：底部会话输入/快捷键栏此时隐藏（#3）
-  const viewingFile = fileDock === 'left' && activeFile !== null
-  // 左侧文件停靠栏宽度：可拖拽调整，记 localStorage
-  const [dockW, setDockW] = useState(() => { const s = Number(localStorage.getItem('ttmux.fileDockW')); return s >= 160 && s <= 640 ? s : 280 })
-  const dockWRef = useRef(dockW)
-  dockWRef.current = dockW
-  const startDockResize = (e: React.PointerEvent) => {
-    e.preventDefault()
-    const startX = e.clientX, startW = dockW
-    document.body.style.userSelect = 'none'
-    document.body.style.cursor = 'col-resize'
-    const move = (ev: PointerEvent) => setDockW(Math.min(640, Math.max(160, startW + ev.clientX - startX)))
-    const up = () => {
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', up)
-      document.body.style.userSelect = ''
-      document.body.style.cursor = ''
-      localStorage.setItem('ttmux.fileDockW', String(dockWRef.current))
-    }
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', up)
-  }
   const [showGit, setShowGit] = useState(false)
   const [cwd, setCwd] = useState('')
   // 文件栏与 Git 面板共用右侧抽屉位，互斥显示。
@@ -754,6 +700,7 @@ function TerminalPane(props: {
   const onTermDrop = (e: React.DragEvent) => {
     if (!isPathDrag(e)) return
     e.preventDefault()
+    e.stopPropagation() // 别再冒泡到 FileWorkspace 的分栏 drop：拖到终端=注入@，不触发分栏
     setDragOver(false)
     const mention = toMention(readDropPath(e))
     if (!mention || !active) return
@@ -912,6 +859,159 @@ function TerminalPane(props: {
     )
   }
 
+  // ── 会话（终端）各部件抽成局部 JSX：左侧停靠走 <FileWorkspace> 的槽位，右侧抽屉走原地布局，二者共用同一份 ──
+  const sessionTab = (
+    <>
+      <i style={{ width: 7, height: 7, borderRadius: '50%', background: active && statusMap[active] === 'connected' ? '#3fb950' : '#d29922' }} />
+      {active}
+    </>
+  )
+  const tabStrip = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 8px', borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
+      {onCollapse && <Button size="small" type="text" style={{ color: 'var(--text-dim)' }} onClick={onCollapse}>✕ {t('common.collapse')}</Button>}
+      {terms.map((termName) => (
+        <span key={termName} onClick={() => setActive(termName)}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap',
+            background: termName === active ? '#1f6feb33' : 'transparent', border: termName === active ? '1px solid #1f6feb' : '1px solid var(--border)', color: 'var(--text-bright)',
+          }}>
+          <i style={{ width: 7, height: 7, borderRadius: '50%', background: termNeedsInput[termName] ? '#d29922' : (statusMap[termName] === 'connected' ? '#3fb950' : statusMap[termName] === 'connecting' ? '#d29922' : '#f85149') }} />
+          {termNeedsInput[termName] && <span title={t('prompt.confirmRequired')} style={{ color: '#d29922', fontSize: 12, fontWeight: 600 }}>{t('session.waiting')}</span>}
+          {claudeMap[termName]?.running && <span title={t('session.runningClaude')} style={{ color: '#58a6ff' }}>✳</span>}
+          {codexMap[termName]?.running && <span title={t('session.runningCodex')} style={{ color: '#10a37f' }}>✸</span>}
+          {termName}
+          <a onClick={(e) => { e.stopPropagation(); closeTerm(termName) }} style={{ color: 'var(--text-dim)' }}>×</a>
+        </span>
+      ))}
+    </div>
+  )
+  const sessionToolbar = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)', flexWrap: 'wrap' }}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-dim)', fontSize: 12 }}>
+        <i style={{ width: 8, height: 8, borderRadius: '50%', background: dot }} />
+        {activeNeedsInput ? t('session.waiting') : st === 'connected' ? t('terminal.status.connected') : st === 'connecting' ? t('terminal.status.connecting') : t('terminal.status.disconnected')}
+      </span>
+      {active && claudeMap[active]?.running && (
+        <Tooltip title={t('chat.switchToClaude')}>
+          <Button size="small" type={claudeView[active] ? 'primary' : 'default'}
+            onClick={() => setClaudeView((v) => ({ ...v, [active!]: !v[active!] }))}>✳ Claude</Button>
+        </Tooltip>
+      )}
+      {active && codexMap[active]?.running && (
+        <Tooltip title={t('chat.switchToCodex')}>
+          <Button size="small" type={codexView[active] ? 'primary' : 'default'}
+            style={codexView[active] ? { background: '#10a37f', borderColor: '#10a37f' } : {}}
+            onClick={() => setCodexView((v) => ({ ...v, [active!]: !v[active!] }))}>✸ Codex</Button>
+        </Tooltip>
+      )}
+      <Dropdown trigger={['click']} menu={{ items: tmuxMenu(t) as any, onClick: ({ key }) => sendKey(key) }} placement="bottomLeft">
+        <Button size="small" type="primary" ghost>tmux ▾</Button>
+      </Dropdown>
+      {active && (
+        <Tooltip title={t('terminal.openInNewTabTitle')}>
+          <Button size="small" onClick={() => window.open(`/#/term/${encodeURIComponent(active)}`, '_blank')}>↗ {t('terminal.newTab')}</Button>
+        </Tooltip>
+      )}
+      {active && <Button size="small" onClick={() => setRenameSession(active)}>{t('session.rename')}</Button>}
+      <Tooltip title={promptOff ? t('prompt.popupOff') : t('prompt.popupOn')}>
+        <Button size="small" type={promptOff ? 'default' : 'primary'} ghost={!promptOff} onClick={togglePromptOff}>{promptOff ? '🔕' : '🔔'} {t('prompt.popup')}</Button>
+      </Tooltip>
+      <Tooltip title={t('terminal.fileBrowserTitle')}>
+        <Button size="small" type={showFiles ? 'primary' : 'default'} onClick={toggleFiles}>📁 {t('chat.files')}</Button>
+      </Tooltip>
+      <Tooltip title={t('terminal.gitPanelTitle')}>
+        <Button size="small" type={showGit ? 'primary' : 'default'} onClick={toggleGit}
+          icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: '-2px' }}><circle cx="6" cy="6" r="2.3" /><circle cx="6" cy="18" r="2.3" /><circle cx="18" cy="8" r="2.3" /><path d="M6 8.3v7.4" /><path d="M18 10.3a6 6 0 0 1-6 6H8.3" /></svg>}>
+          {t('git.title')}
+        </Button>
+      </Tooltip>
+      <Tooltip title={showVoice ? t('voice.hideButton') : t('voice.showButton')}>
+        <Button size="small" type={showVoice ? 'primary' : 'default'} onClick={() => setShowVoice((v) => !v)}>🎤</Button>
+      </Tooltip>
+      <span style={{ flex: 1 }} />
+      <Tooltip title={t('terminal.scrollHistory')}><Button size="small" onClick={() => active && termRefs.current[active]?.scroll(-12)}>▲</Button></Tooltip>
+      <Tooltip title={t('terminal.toBottom')}><Button size="small" onClick={() => active && termRefs.current[active]?.toBottom()}>{t('terminal.bottomShort')}</Button></Tooltip>
+      <Tooltip title={t('terminal.decreaseFont')}><Button size="small" onClick={() => setFontSize(Math.max(10, fontSize - 1))}>A-</Button></Tooltip>
+      <Tooltip title={t('terminal.increaseFont')}><Button size="small" onClick={() => setFontSize(Math.min(22, fontSize + 1))}>A+</Button></Tooltip>
+      <Tooltip title={t('terminal.reconnect')}><Button size="small" onClick={() => active && termRefs.current[active]?.reconnect()}>{t('terminal.reconnectShort')}</Button></Tooltip>
+    </div>
+  )
+  const terminalArea = (
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', position: 'relative' }}
+      onDragOver={(e) => { if (isPathDrag(e)) { e.stopPropagation(); allowPathDrop(e); setDragOver(true) } }}
+      onDragLeave={(e) => { if (e.currentTarget === e.target) setDragOver(false) }}
+      onDrop={onTermDrop}>
+      {dragOver && (
+        <div style={{
+          position: 'absolute', inset: 0, zIndex: 5, pointerEvents: 'none',
+          border: '2px dashed #58a6ff', borderRadius: 8, background: 'rgba(88,166,255,.08)',
+          display: 'grid', placeItems: 'center', color: '#58a6ff', fontSize: 14, fontWeight: 600,
+        }}>{t('terminal.dropToMention')}</div>
+      )}
+      <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+        {terms.map((termName) => (
+          <div key={termName} style={{ position: 'absolute', inset: 0, display: termName === active ? 'block' : 'none', padding: 6 }}>
+            <Term ref={(h) => { termRefs.current[termName] = h }} name={termName} fontSize={fontSize} active={termName === active} onStatus={(s) => setStatus(termName, s)}
+              onContextMenu={({ x, y, selection }) => { setActive(termName); setCtx({ x, y, session: termName, selection }) }}
+              onSelectionMenu={({ selection }) => { setActive(termName); setCtx(null); if (selection.trim()) { copyText(selection); message.success(t('common.copied')) } }}
+              onPaste={() => { setActive(termName); pasteClipboard(termName) }}
+              onImagePaste={(files) => { setActive(termName); pasteImage(termName, files) }} />
+            {claudeView[termName] && claudeMap[termName]?.running && (
+              <div style={{ position: 'absolute', inset: 0 }}>
+                <ClaudeChat name={termName} file={claudeMap[termName].file} dir={claudeMap[termName].dir} onBack={() => setClaudeView((v) => ({ ...v, [termName]: false }))} />
+              </div>
+            )}
+            {codexView[termName] && codexMap[termName]?.running && (
+              <div style={{ position: 'absolute', inset: 0 }}>
+                <CodexChat name={termName} file={codexMap[termName].file} dir={codexMap[termName].dir} onBack={() => setCodexView((v) => ({ ...v, [termName]: false }))} />
+              </div>
+            )}
+            {showVoice && !claudeView[termName] && !codexView[termName] && (
+              <VoiceInput accent="#58a6ff" onResult={(text) => { api('POST', `/sessions/${encodeURIComponent(termName)}/type`, { text }).catch((e: any) => message.error(e.message)) }} />
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+  const sessionBottom = (
+    <>
+      {isTouch && !inChat && (
+        <div style={{ display: 'flex', gap: 6, padding: '8px 8px 0' }} onDragOver={allowPathDrop} onDrop={onInputDrop}>
+          <Input ref={mobileInputRef} value={line} onFocus={exitCopyMode} onChange={(e) => setLine(e.target.value)}
+            onPressEnter={(e) => { if ((e.nativeEvent as any).isComposing) return; submitLine() }}
+            placeholder={t('terminal.mobileInputPlaceholder')} allowClear autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} />
+          <Button type="primary" onMouseDown={noBlur} onClick={submitLine}>{t('common.send')}</Button>
+        </div>
+      )}
+      {!inChat && (
+        <div style={{ display: 'flex', gap: 6, padding: 8, borderTop: '1px solid var(--border)', overflowX: 'auto' }}>
+          <Button type="primary" onMouseDown={noBlur} onClick={() => (isTouch ? submitLine() : sendKey('\r'))}>Enter</Button>
+          {(prefsData.quickCommands || []).map((cmd) => (
+            <Button key={cmd} onMouseDown={noBlur} onClick={() => { if (isTouch) { setLine(cmd); requestAnimationFrame(() => mobileInputRef.current?.focus()) } else { sendRaw(cmd) } }} style={{ flex: '0 0 auto' }}>{cmd}</Button>
+          ))}
+          {KEYS.map(([label, seq]) => (
+            <Button key={label} onMouseDown={noBlur} onClick={() => tapKey(seq)} style={{ flex: '0 0 auto' }}>{label}</Button>
+          ))}
+          <Button onMouseDown={noBlur} style={{ flex: '0 0 auto', borderStyle: 'dashed' }} onClick={() => {
+            let val = ''
+            modal.confirm({
+              title: t('settings.quickCommands'),
+              content: <Input placeholder={t('settings.quickCommandPlaceholder')} onChange={(e) => (val = e.target.value)} autoFocus />,
+              okText: t('quickCmd.addOk'),
+              onOk: () => {
+                const v = val.trim()
+                if (!v) return
+                if ((prefsData.quickCommands || []).includes(v)) return
+                savePreferences({ quickCommands: [...(prefsData.quickCommands || []), v] })
+              },
+            })
+          }}>{t('quickCmd.add')}</Button>
+        </div>
+      )}
+    </>
+  )
+
   return (
     // paddingBottom=env(keyboard-inset-height)：软键盘悬浮覆盖时(见 main.tsx/index.html)，
     // 把整块内容抬到键盘之上，让底部输入条/快捷键栏不被遮住。桌面无虚拟键盘 → 0，无影响。
@@ -959,180 +1059,25 @@ function TerminalPane(props: {
           <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.5, background: 'var(--brand-grad)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Roam</span>
         </div>
       )}
-      {/* 内容主体：左侧文件停靠（贯通上下） + 右侧会话列 */}
-      <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-        {fileDock === 'left' && showFiles && (
-          <>
-            <div style={{ flex: `0 0 ${dockW}px`, minWidth: 0, minHeight: 0, display: 'flex' }}>
-              <FileBrowser dir={cwd} accent="#58a6ff" layout="dock" onClose={() => setShowFiles(false)} onOpenFile={openFileTab} selectedPath={activeFile} />
-            </div>
-            {/* 拖拽调宽的分隔条 */}
-            <div onPointerDown={startDockResize} title={t('file.dragResize')}
-              style={{ flex: '0 0 5px', cursor: 'col-resize', background: 'var(--border)', touchAction: 'none' }} />
-          </>
-        )}
-        <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-      {/* VSCode 式编辑器 tab 条（右列最上）：第一个永远是当前会话，其后是点开的文件 tab */}
-      {fileDock === 'left' && (
-        <div style={{ display: 'flex', alignItems: 'stretch', borderBottom: '1px solid var(--border)', overflowX: 'auto', background: 'var(--bg-container)' }}>
-          <div onClick={() => setActiveFile(null)} title={active || ''}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, borderRight: '1px solid var(--border)',
-              color: activeFile === null ? 'var(--text-bright)' : 'var(--text-dim)',
-              background: activeFile === null ? 'var(--bg-base)' : 'transparent',
-              borderTop: `2px solid ${activeFile === null ? '#58a6ff' : 'transparent'}`,
-            }}>
-            <i style={{ width: 7, height: 7, borderRadius: '50%', background: active && statusMap[active] === 'connected' ? '#3fb950' : '#d29922' }} />
-            {active}
+      {/* 内容主体：左侧走 <FileWorkspace>（文件树 + 编辑器多 tab）；右侧抽屉走原地布局。
+          会话（终端）各部件用上面抽出的 sessionTab/sessionToolbar/terminalArea/sessionBottom 复用。 */}
+      {fileDock === 'left' ? (
+        <FileWorkspace
+          dir={cwd} accent="#58a6ff"
+          explorerOpen={showFiles} onExplorerClose={() => setShowFiles(false)}
+          leadingTitle={active || ''} leadingTab={sessionTab}
+          leadingContent={terminalArea} chrome={sessionToolbar} footer={sessionBottom}
+        />
+      ) : (
+        <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+          <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+            {tabStrip}
+            {sessionToolbar}
+            {terminalArea}
+            {sessionBottom}
           </div>
-          {openFiles.map((f) => {
-            const isDirty = dirtyFiles.has(f)
-            return (
-              <div key={f} onClick={() => setActiveFile(f)} title={f}
-                className={`cc-filetab${isDirty ? ' dirty' : ''}`}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 3, padding: '5px 8px 5px 10px', cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, borderRight: '1px solid var(--border)',
-                  color: activeFile === f ? 'var(--text-bright)' : 'var(--text-dim)',
-                  background: activeFile === f ? 'var(--bg-base)' : 'transparent',
-                  borderTop: `2px solid ${activeFile === f ? '#58a6ff' : 'transparent'}`,
-                }}>
-                <span style={{ display: 'inline-flex', transform: 'scale(0.72)' }}><FileTypeIcon name={f} /></span>
-                <span style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>{pathBasename(f)}</span>
-                {/* 关闭：脏文件平时显示橙点、hover tab 时变 ×（VSCode 行为）；干净文件常显 × */}
-                <a className="cc-tabx" onClick={(e) => { e.stopPropagation(); closeFileTab(f) }} title={isDirty ? t('file.unsaved') : t('file.closeTab')}>
-                  <span className="dot">●</span><span className="x">×</span>
-                </a>
-              </div>
-            )
-          })}
         </div>
       )}
-      {/* 标签栏（多会话）：单会话全屏页已用顶部标题栏代替，这里隐藏 */}
-      {fileDock !== 'left' && (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 8px', borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
-        {onCollapse && <Button size="small" type="text" style={{ color: 'var(--text-dim)' }} onClick={onCollapse}>✕ {t('common.collapse')}</Button>}
-        {terms.map((termName) => (
-          <span key={termName} onClick={() => setActive(termName)}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap',
-              background: termName === active ? '#1f6feb33' : 'transparent', border: termName === active ? '1px solid #1f6feb' : '1px solid var(--border)', color: 'var(--text-bright)',
-            }}>
-            <i style={{ width: 7, height: 7, borderRadius: '50%', background: termNeedsInput[termName] ? '#d29922' : (statusMap[termName] === 'connected' ? '#3fb950' : statusMap[termName] === 'connecting' ? '#d29922' : '#f85149') }} />
-            {termNeedsInput[termName] && <span title={t('prompt.confirmRequired')} style={{ color: '#d29922', fontSize: 12, fontWeight: 600 }}>{t('session.waiting')}</span>}
-            {claudeMap[termName]?.running && <span title={t('session.runningClaude')} style={{ color: '#58a6ff' }}>✳</span>}
-            {codexMap[termName]?.running && <span title={t('session.runningCodex')} style={{ color: '#10a37f' }}>✸</span>}
-            {termName}
-            <a onClick={(e) => { e.stopPropagation(); closeTerm(termName) }} style={{ color: 'var(--text-dim)' }}>×</a>
-          </span>
-        ))}
-      </div>
-      )}
-
-      {/* 工具栏：终端控制条，只属会话（第一个 tab）——看文件 tab 时隐藏 */}
-      {!viewingFile && (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)', flexWrap: 'wrap' }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-dim)', fontSize: 12 }}>
-          <i style={{ width: 8, height: 8, borderRadius: '50%', background: dot }} />
-          {activeNeedsInput ? t('session.waiting') : st === 'connected' ? t('terminal.status.connected') : st === 'connecting' ? t('terminal.status.connecting') : t('terminal.status.disconnected')}
-        </span>
-        {active && claudeMap[active]?.running && (
-          <Tooltip title={t('chat.switchToClaude')}>
-            <Button size="small" type={claudeView[active] ? 'primary' : 'default'}
-              onClick={() => setClaudeView((v) => ({ ...v, [active!]: !v[active!] }))}>✳ Claude</Button>
-          </Tooltip>
-        )}
-        {active && codexMap[active]?.running && (
-          <Tooltip title={t('chat.switchToCodex')}>
-            <Button size="small" type={codexView[active] ? 'primary' : 'default'}
-              style={codexView[active] ? { background: '#10a37f', borderColor: '#10a37f' } : {}}
-              onClick={() => setCodexView((v) => ({ ...v, [active!]: !v[active!] }))}>✸ Codex</Button>
-          </Tooltip>
-        )}
-        <Dropdown
-          trigger={['click']}
-          menu={{ items: tmuxMenu(t) as any, onClick: ({ key }) => sendKey(key) }}
-          placement="bottomLeft"
-        >
-          <Button size="small" type="primary" ghost>tmux ▾</Button>
-        </Dropdown>
-        {active && (
-          <Tooltip title={t('terminal.openInNewTabTitle')}>
-            <Button size="small" onClick={() => window.open(`/#/term/${encodeURIComponent(active)}`, '_blank')}>↗ {t('terminal.newTab')}</Button>
-          </Tooltip>
-        )}
-        {active && (
-          <Button size="small" onClick={() => setRenameSession(active)}>{t('session.rename')}</Button>
-        )}
-        <Tooltip title={promptOff ? t('prompt.popupOff') : t('prompt.popupOn')}>
-          <Button size="small" type={promptOff ? 'default' : 'primary'} ghost={!promptOff}
-            onClick={togglePromptOff}>{promptOff ? '🔕' : '🔔'} {t('prompt.popup')}</Button>
-        </Tooltip>
-        <Tooltip title={t('terminal.fileBrowserTitle')}>
-          <Button size="small" type={showFiles ? 'primary' : 'default'} onClick={toggleFiles}>📁 {t('chat.files')}</Button>
-        </Tooltip>
-        <Tooltip title={t('terminal.gitPanelTitle')}>
-          <Button size="small" type={showGit ? 'primary' : 'default'} onClick={toggleGit}
-            icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: '-2px' }}><circle cx="6" cy="6" r="2.3" /><circle cx="6" cy="18" r="2.3" /><circle cx="18" cy="8" r="2.3" /><path d="M6 8.3v7.4" /><path d="M18 10.3a6 6 0 0 1-6 6H8.3" /></svg>}>
-            {t('git.title')}
-          </Button>
-        </Tooltip>
-        <Tooltip title={showVoice ? t('voice.hideButton') : t('voice.showButton')}>
-          <Button size="small" type={showVoice ? 'primary' : 'default'} onClick={() => setShowVoice((v) => !v)}>🎤</Button>
-        </Tooltip>
-        <span style={{ flex: 1 }} />
-        <Tooltip title={t('terminal.scrollHistory')}><Button size="small" onClick={() => active && termRefs.current[active]?.scroll(-12)}>▲</Button></Tooltip>
-        <Tooltip title={t('terminal.toBottom')}><Button size="small" onClick={() => active && termRefs.current[active]?.toBottom()}>{t('terminal.bottomShort')}</Button></Tooltip>
-        <Tooltip title={t('terminal.decreaseFont')}><Button size="small" onClick={() => setFontSize(Math.max(10, fontSize - 1))}>A-</Button></Tooltip>
-        <Tooltip title={t('terminal.increaseFont')}><Button size="small" onClick={() => setFontSize(Math.min(22, fontSize + 1))}>A+</Button></Tooltip>
-        <Tooltip title={t('terminal.reconnect')}><Button size="small" onClick={() => active && termRefs.current[active]?.reconnect()}>{t('terminal.reconnectShort')}</Button></Tooltip>
-      </div>
-      )}
-
-      {/* 终端区（所有标签常驻，仅激活可见，保留滚动历史）。
-          支持从文件/Git 面板把文件拖进来 → 以 @相对路径 注入当前会话。 */}
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', position: 'relative' }}
-        onDragOver={(e) => { if (isPathDrag(e)) { allowPathDrop(e); setDragOver(true) } }}
-        onDragLeave={(e) => { if (e.currentTarget === e.target) setDragOver(false) }}
-        onDrop={onTermDrop}>
-        {dragOver && (
-          <div style={{
-            position: 'absolute', inset: 0, zIndex: 5, pointerEvents: 'none',
-            border: '2px dashed #58a6ff', borderRadius: 8, background: 'rgba(88,166,255,.08)',
-            display: 'grid', placeItems: 'center', color: '#58a6ff', fontSize: 14, fontWeight: 600,
-          }}>{t('terminal.dropToMention')}</div>
-        )}
-        <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
-          {terms.map((termName) => (
-            <div key={termName} style={{ position: 'absolute', inset: 0, display: termName === active ? 'block' : 'none', padding: 6 }}>
-              <Term ref={(h) => { termRefs.current[termName] = h }} name={termName} fontSize={fontSize} active={termName === active} onStatus={(s) => setStatus(termName, s)}
-                onContextMenu={({ x, y, selection }) => { setActive(termName); setCtx({ x, y, session: termName, selection }) }}
-                onSelectionMenu={({ selection }) => { setActive(termName); setCtx(null); if (selection.trim()) { copyText(selection); message.success(t('common.copied')) } }}
-                onPaste={() => { setActive(termName); pasteClipboard(termName) }}
-                onImagePaste={(files) => { setActive(termName); pasteImage(termName, files) }} />
-              {claudeView[termName] && claudeMap[termName]?.running && (
-                <div style={{ position: 'absolute', inset: 0 }}>
-                  <ClaudeChat name={termName} file={claudeMap[termName].file} dir={claudeMap[termName].dir} onBack={() => setClaudeView((v) => ({ ...v, [termName]: false }))} />
-                </div>
-              )}
-              {codexView[termName] && codexMap[termName]?.running && (
-                <div style={{ position: 'absolute', inset: 0 }}>
-                  <CodexChat name={termName} file={codexMap[termName].file} dir={codexMap[termName].dir} onBack={() => setCodexView((v) => ({ ...v, [termName]: false }))} />
-                </div>
-              )}
-              {/* 终端页右下角悬浮语音按钮：识别后字面量打进 pane，用户复查后自行回车（对话视图打开时由其自带按钮接管） */}
-              {showVoice && !claudeView[termName] && !codexView[termName] && (
-                <VoiceInput accent="#58a6ff" onResult={(text) => { api('POST', `/sessions/${encodeURIComponent(termName)}/type`, { text }).catch((e: any) => message.error(e.message)) }} />
-              )}
-            </div>
-          ))}
-          {/* 文件 tab：每个都常驻挂载（保留未保存编辑/滚动），仅激活的覆盖在终端上方 */}
-          {fileDock === 'left' && openFiles.map((f) => (
-            <div key={f} style={{ position: 'absolute', inset: 0, zIndex: 6, background: 'var(--bg-base)', display: activeFile === f ? 'block' : 'none' }}>
-              <Viewer path={f} accent="#58a6ff" inline tabbed active={activeFile === f} onClose={() => closeFileTab(f)} onOpenPath={openFileTab} onDirtyChange={setFileDirty} />
-            </div>
-          ))}
-        </div>
-      </div>
       {fileDock === 'right' && (
         <FloatingFileDrawer open={showFiles}>
           <FileBrowser dir={cwd} accent="#58a6ff" onClose={() => setShowFiles(false)} />
@@ -1141,53 +1086,6 @@ function TerminalPane(props: {
       <FloatingFileDrawer open={showGit}>
         <GitPanel dir={cwd} accent="#58a6ff" onClose={() => setShowGit(false)} />
       </FloatingFileDrawer>
-
-      {/* 移动端文字输入框：软键盘/输入法在 xterm 里会丢字，这里整行可靠发送到 PTY。
-          对话视图(Claude/Codex)有自己的输入框，这里隐藏避免双输入框。 */}
-      {isTouch && !inChat && !viewingFile && (
-        <div style={{ display: 'flex', gap: 6, padding: '8px 8px 0' }} onDragOver={allowPathDrop} onDrop={onInputDrop}>
-          <Input
-            ref={mobileInputRef}
-            value={line}
-            onFocus={exitCopyMode}
-            onChange={(e) => setLine(e.target.value)}
-            onPressEnter={(e) => { if ((e.nativeEvent as any).isComposing) return; submitLine() }}
-            placeholder={t('terminal.mobileInputPlaceholder')}
-            allowClear
-            autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
-          />
-          <Button type="primary" onMouseDown={noBlur} onClick={submitLine}>{t('common.send')}</Button>
-        </div>
-      )}
-
-      {/* 快捷键栏：对话视图/查看文件 tab 时隐藏（这条输入/快捷键栏只属会话，见 #3） */}
-      {!inChat && !viewingFile && (
-        <div style={{ display: 'flex', gap: 6, padding: 8, borderTop: '1px solid var(--border)', overflowX: 'auto' }}>
-          <Button type="primary" onMouseDown={noBlur} onClick={() => (isTouch ? submitLine() : sendKey('\r'))}>Enter</Button>
-          {(prefsData.quickCommands || []).map((cmd) => (
-            <Button key={cmd} onMouseDown={noBlur} onClick={() => { if (isTouch) { setLine(cmd); requestAnimationFrame(() => mobileInputRef.current?.focus()) } else { sendRaw(cmd) } }} style={{ flex: '0 0 auto' }}>{cmd}</Button>
-          ))}
-          {KEYS.map(([label, seq]) => (
-            <Button key={label} onMouseDown={noBlur} onClick={() => tapKey(seq)} style={{ flex: '0 0 auto' }}>{label}</Button>
-          ))}
-          <Button onMouseDown={noBlur} style={{ flex: '0 0 auto', borderStyle: 'dashed' }} onClick={() => {
-            let val = ''
-            modal.confirm({
-              title: t('settings.quickCommands'),
-              content: <Input placeholder={t('settings.quickCommandPlaceholder')} onChange={(e) => (val = e.target.value)} autoFocus />,
-              okText: t('quickCmd.addOk'),
-              onOk: () => {
-                const v = val.trim()
-                if (!v) return
-                if ((prefsData.quickCommands || []).includes(v)) return
-                savePreferences({ quickCommands: [...(prefsData.quickCommands || []), v] })
-              },
-            })
-          }}>{t('quickCmd.add')}</Button>
-        </div>
-      )}
-        </div>
-      </div>
     </div>
   )
 }

@@ -31,12 +31,21 @@ export default function CodeEditor({
   onChange: (v: string) => void
   onSave: () => void
 }) {
+  // 让编辑器背景/装订线/缩略图跟应用统一（用 --bg-base，避免 Monaco 默认灰底跟四周不一致）。
+  const appBg = (typeof getComputedStyle !== 'undefined'
+    ? getComputedStyle(document.documentElement).getPropertyValue('--bg-base').trim()
+    : '') || (dark ? '#0d1117' : '#ffffff')
   return (
     <Editor
       height="100%"
       value={value}
       language={language}
-      theme={dark ? 'vs-dark' : 'vs'}
+      theme={dark ? 'roam-dark' : 'roam-light'}
+      beforeMount={(m) => {
+        const colors = { 'editor.background': appBg, 'editorGutter.background': appBg, 'minimap.background': appBg, 'editorStickyScroll.background': appBg }
+        m.editor.defineTheme('roam-dark', { base: 'vs-dark', inherit: true, rules: [], colors })
+        m.editor.defineTheme('roam-light', { base: 'vs', inherit: true, rules: [], colors })
+      }}
       onChange={(v) => onChange(v ?? '')}
       onMount={(editor, m) => {
         // Ctrl/Cmd+S 保存（onSave 读最新 draft，见 Viewer）
@@ -47,11 +56,11 @@ export default function CodeEditor({
         fontSize: 13,
         minimap: { enabled: true }, // 右侧代码缩略图：显示整段代码长度与当前所在位置（VSCode 同款）
         lineNumbers: 'on',
-        // 收紧行号与代码之间的缝隙：关掉字形边距/折叠栏、行号只留 2 位宽、去掉行装饰留白
+        // 行号装订线：关掉字形边距/折叠栏（那才是之前的大缝隙），保留 VSCode 同款行号↔代码间距
         glyphMargin: false,
         folding: false,
-        lineNumbersMinChars: 2,
-        lineDecorationsWidth: 2,
+        lineNumbersMinChars: 3,
+        lineDecorationsWidth: 10,
         scrollBeyondLastLine: false,
         automaticLayout: true,
         tabSize: 2,
