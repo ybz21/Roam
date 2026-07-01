@@ -9,10 +9,15 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
+
+// installMu 串行化平台依赖安装：避免前端多次点/多标签并发触发多个 brew install，
+// 互相撞下载锁导致全部失败、UI 卡住。第二个请求直接快速返回“安装进行中”。
+var installMu sync.Mutex
 
 func inPath(name string) bool { _, err := exec.LookPath(name); return err == nil }
 
@@ -65,6 +70,16 @@ func Install(c *gin.Context) {
 	script := findScript("phone/install-phone.sh")
 	if script == "" {
 		c.JSON(http.StatusOK, gin.H{"error": "找不到 scripts/phone/install-phone.sh,请手动安装依赖（Android: adb；iOS: idb）"})
+		return
+	}
+	if !installMu.TryLock() {
+		c.JSON(http.StatusOK, gin.H{"error": "已有依赖安装在进行中，请稍候（勿重复点击）"})
+		return
+	}
+	defer installMu.Unlock()
+	// 上锁后二次确认：可能刚好被上一个安装装好了，避免多余的一趟 brew。
+	if platformInstalled(body.Platform) {
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"installed": true, "log": "依赖已就绪"}})
 		return
 	}
 	out, _ := runCmd(180*time.Second, "bash", script, body.Platform)
