@@ -1823,7 +1823,20 @@ function PhoneSettingsCard() {
   useEffect(() => { cfgRef.current = cfg }, [cfg])
 
   const loadStatus = () => api('GET', '/phone/status').then((r) => { if (r?.data) setStatus(r.data) }).catch(() => {})
-  const loadDevices = (p: 'android' | 'ios') => api('GET', `/phone/devices?platform=${p}`).then((r) => { if (r?.data) setDevs((s) => ({ ...s, [p]: r.data })) }).catch(() => {})
+  // autofill=true（手动「刷新设备」时）：拿到列表后，若当前 address 为空或不在列表里
+  // （如真机模式残留的 localhost:5555），自动填第一台设备的 serial 并持久化；已匹配则不动。
+  // 本地 redroid 模式无地址输入框，不做自动填充。
+  const loadDevices = (p: 'android' | 'ios', autofill = false) =>
+    api('GET', `/phone/devices?platform=${p}`).then((r) => {
+      if (!r?.data) return
+      const list = r.data as any[]
+      setDevs((s) => ({ ...s, [p]: list }))
+      if (!autofill || !list.length) return
+      const cur = cfgRef.current[p] as any
+      if (p === 'android' && cur.mode === 'local') return // 本地 redroid 地址固定
+      const matched = list.some((d) => d.id === cur.address)
+      if (!cur.address || !matched) patch(p, { address: list[0].id })
+    }).catch(() => {})
   const loadPlatforms = () => api('GET', '/phone/platforms').then((r) => { if (r?.data) setPlat({ android: { installed: !!r.data.android?.installed }, ios: { installed: !!r.data.ios?.installed, supported: !!r.data.ios?.supported } }) }).catch(() => {})
   useEffect(() => {
     api('GET', '/phone/config').then((r) => { if (r?.data) setCfg({ ...PHONE_DEFAULT, ...r.data, android: { ...PHONE_DEFAULT.android, ...r.data.android }, ios: { ...PHONE_DEFAULT.ios, ...r.data.ios } }) }).catch(() => {})
@@ -1897,10 +1910,16 @@ function PhoneSettingsCard() {
           {needAddr && (
             <Space direction="vertical" size={4} style={{ width: '100%' }}>
               <Space.Compact style={{ width: '100%', maxWidth: 380 }}>
-                <AutoComplete value={c.address} onChange={(a) => editAddr(p, a)} onBlur={blurPersist} options={opts} style={{ width: '100%' }}
-                  placeholder={isA ? t('phone.addrPlaceholder') : t('phone.addrPlaceholderIOS')}
-                  filterOption={(i, o) => String(o?.value || '').toLowerCase().includes(i.toLowerCase())} />
-                <Button onClick={() => loadDevices(p)}>{t('phone.refreshDevices')}</Button>
+                {/* 多台设备：下拉选（防手滑输错 serial）；0/1 台：可输入（支持无线 host:port 手填）。 */}
+                {opts.length >= 2 ? (
+                  <Select value={c.address || undefined} onChange={(a) => patch(p, { address: a })} options={opts} style={{ width: '100%' }}
+                    placeholder={isA ? t('phone.addrPlaceholder') : t('phone.addrPlaceholderIOS')} />
+                ) : (
+                  <AutoComplete value={c.address} onChange={(a) => editAddr(p, a)} onBlur={blurPersist} options={opts} style={{ width: '100%' }}
+                    placeholder={isA ? t('phone.addrPlaceholder') : t('phone.addrPlaceholderIOS')}
+                    filterOption={(i, o) => String(o?.value || '').toLowerCase().includes(i.toLowerCase())} />
+                )}
+                <Button onClick={() => loadDevices(p, true)}>{t('phone.refreshDevices')}</Button>
               </Space.Compact>
               <span style={dim}>{isA ? (c.mode === 'remote' ? t('phone.addrHelpRemote') : t('phone.addrHelpDevice')) : t('phone.addrHelpIOS')}</span>
             </Space>
