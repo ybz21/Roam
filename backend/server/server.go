@@ -18,6 +18,7 @@ import (
 	"ttmux-web/auth"
 	"ttmux-web/browser"
 	"ttmux-web/home"
+	"ttmux-web/phone"
 	"ttmux-web/pty"
 	"ttmux-web/stream"
 	"ttmux-web/ttmux"
@@ -43,12 +44,14 @@ type Config struct {
 func New(cfg Config) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
+	r.UseRawPath = true
 	r.Use(gin.Recovery())
 
 	tt := ttmux.New(cfg.TTmuxBin)
 	a := auth.New(cfg.Password, cfg.TOTPSecret, cfg.TOTPState, cfg.LockAfter, cfg.LockSecs)
 	h := api.New(tt, cfg.BrowserHome, cfg.DataDir)
 	browser.InitConfig(cfg.DataDir) // Chrome 启动配置持久化到 dataDir
+	phone.InitConfig(cfg.DataDir)   // 手机后端配置（本地/远程 redroid/真机）持久化到 dataDir
 	hub := stream.New(tt, cfg.LogsDir)
 
 	// 公开端点
@@ -89,6 +92,8 @@ func New(cfg Config) *gin.Engine {
 		g.GET("/fs", h.FS)
 		g.GET("/files", h.Files)              // 文件侧栏：列目录
 		g.GET("/file", h.File)                // 文件侧栏：读文件
+		g.POST("/file/save", h.FileSave)      // 文件侧栏：编辑器保存（覆盖写入既有文件）
+		g.GET("/file/search", h.FileSearch)   // 文件侧栏：从当前目录递归按文件名搜索
 		g.GET("/file/raw", h.FileRaw)         // 文件侧栏：原始字节（图片预览 / ?dl=1 下载）
 		g.GET("/file/preview", h.FilePreview) // 文件侧栏：Office 转 PDF 预览
 		g.GET("/file/stat", h.FileStat)
@@ -187,6 +192,27 @@ func New(cfg Config) *gin.Engine {
 		g.PUT("/browser/config", browser.SetConfig)               // Chrome 启动配置：存
 		g.POST("/browser/relaunch", browser.Relaunch)             // 按新配置重启 Chrome
 		g.GET("/browser/health", browser.Health)                  // Chrome 是否可用 + 启动失败原因
+
+		// 手机镜像（Linux→Android adb；其它平台 health 明示不支持）
+		g.GET("/phone/stream", phone.Handler)          // 镜像手机画面 + 转发输入
+		g.GET("/phone/health", phone.Health)           // 设备可用性 + 平台 + 目标
+		g.GET("/phone/apps", phone.Apps)               // 列出 App
+		g.POST("/phone/apps/:id/launch", phone.Launch) // 启动 App
+		g.POST("/phone/key", phone.Key)                // 系统键 back/home/enter...
+		g.GET("/phone/ui", phone.UI)                   // 当前屏幕元素结构
+		g.GET("/phone/config", phone.GetConfig)        // 后端目标配置：读
+		g.PUT("/phone/config", phone.SetConfig)        // 后端目标配置：存（不自动连接）
+		g.GET("/phone/status", phone.StatusInfo)       // 单一状态源：依赖/运行/连接
+		g.GET("/phone/devices", phone.Devices)         // 可用目标设备列表(adb/idb)
+		g.GET("/phone/platforms", phone.Platforms)     // 各平台安装/支持状态(开关)
+		g.POST("/phone/install", phone.Install)        // 按需(插件化)安装依赖
+		g.POST("/phone/start", phone.Start)            // 运行层：起设备(本地 redroid/iOS 模拟器)
+		g.POST("/phone/stop", phone.Stop)              // 运行层：停设备
+		g.POST("/phone/connect", phone.Connect)        // 连接层：adb connect(网络目标)
+		g.POST("/phone/disconnect", phone.Disconnect)  // 连接层：adb disconnect
+		g.POST("/phone/test", phone.Test)              // 测试连接(Ensure+Health)
+		g.POST("/phone/auto", phone.Auto)              // 一键：装依赖→起设备→连接→测试
+
 		g.GET("/stream/status", hub.Status)
 		g.GET("/logs/:name", hub.Logs)
 	}

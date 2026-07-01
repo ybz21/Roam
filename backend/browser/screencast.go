@@ -208,14 +208,19 @@ func Handler(c *gin.Context) {
 		w, h int
 	}
 	var (
-		pending   *pend                // 最新一帧（未发出的），新帧覆盖旧帧 = latest-only 丢帧
-		credits   = window             // 可发帧的信用，发一帧 -1，收到 ack +1
-		seq       uint16               // 帧序号（与 ack 对应）
-		sentAt    = map[uint16]int64{} // seq → 发出时刻，用于算 deliveryMs
-		ewma      float64              // deliveryMs 的指数滑动平均（自适应控制信号）
-		level     = autoStart          // 当前档位（仅 auto 模式移动）
-		closed    bool
-		copyReqID int // 复制选区的 Runtime.evaluate 请求 id；读取循环据此匹配回包(0=无在途)
+		pending      *pend                // 最新一帧（未发出的），新帧覆盖旧帧 = latest-only 丢帧
+		credits      = window             // 可发帧的信用，发一帧 -1，收到 ack +1
+		seq          uint16               // 帧序号（与 ack 对应）
+		sentAt       = map[uint16]int64{} // seq → 发出时刻，用于算 deliveryMs
+		ewma         float64              // deliveryMs 的指数滑动平均（自适应控制信号）
+		level        = autoStart          // 当前档位（仅 auto 模式移动）
+		closed       bool
+		frameW       = 1280 // 最近一帧/视口 CSS 宽高；强制截图回包没有 metadata，用它补帧头。
+		frameH       = 800
+		frameDPR     = 1.0            // 当前视口 deviceScaleFactor；强制截图按它对齐 startScreencast 的像素分辨率
+		copyReqID    int              // 复制选区的 Runtime.evaluate 请求 id；读取循环据此匹配回包(0=无在途)
+		forcedReqIDs = map[int]bool{} // Page.captureScreenshot 请求 id；macOS 全屏 Space 下补偿停产帧
+		lastStreamMs int64            // 最近一帧 startScreencast 推流帧到达时刻(ms)；流帧还活跃时丢弃强制帧
 	)
 
 	// 初始档：auto 用阶梯，手动用前端给的 q（分辨率给足，质量听用户）
@@ -235,6 +240,111 @@ func Handler(c *gin.Context) {
 			"maxWidth": l.w, "maxHeight": l.h, "everyNthFrame": l.nth,
 		})
 	}
+	setFrameSize := func(w, h int) {
+		if w <= 0 || h <= 0 {
+			return
+		}
+		mu.Lock()
+		frameW, frameH = w, h
+		mu.Unlock()
+	}
+	setFrameDPR := func(dpr float64) {
+		if dpr <= 0 {
+			return
+		}
+		mu.Lock()
+		frameDPR = dpr
+		mu.Unlock()
+	}
+	forceFrame := func() {
+		q := cur.q
+		maxW, maxH := cur.w, cur.h
+		mu.Lock()
+		if closed {
+			mu.Unlock()
+			return
+		}
+		if auto {
+			if level >= 0 && level < len(ladder) {
+				q = ladder[level].q
+				maxW, maxH = ladder[level].w, ladder[level].h
+			}
+		}
+		vw, vh, dpr := frameW, frameH, frameDPR
+		mu.Unlock()
+		params := map[string]any{
+			"format":      "jpeg",
+			"quality":     q,
+			"fromSurface": true,
+		}
+		// 关键：把强制截图裁到「当前模拟视口(CSS 宽高)」并按 startScreencast 相同的缩放系数出图，
+		// 使强制帧与流帧的像素分辨率/裁剪范围完全一致。否则打字时(每个可打印字符都补一发强制帧)
+		// 强制帧走整表面全分辨率、流帧走 maxWidth/Height 降采样，两者高频交替 → 画面忽清忽糊/尺寸
+		// 微跳，主观即「打字时画面抖动」。scale = min(dpr, maxW/vw, maxH/vh) 正是 startScreencast
+		// 把 视口×dpr 塞进 maxWidth×maxHeight 的缩放比。
+		if vw > 0 && vh > 0 && dpr > 0 {
+			s := dpr
+			if maxW > 0 {
+				if r := float64(maxW) / float64(vw); r < s {
+					s = r
+				}
+			}
+			if maxH > 0 {
+				if r := float64(maxH) / float64(vh); r < s {
+					s = r
+				}
+			}
+			params["clip"] = map[string]any{"x": 0, "y": 0, "width": vw, "height": vh, "scale": s}
+		}
+		id := conn.sendID("Page.captureScreenshot", params)
+		mu.Lock()
+		forcedReqIDs[id] = true
+		mu.Unlock()
+	}
+	var refreshMu sync.Mutex
+	refreshVersion := 0
+	lastForced := time.Time{}
+	scheduleForceFrame := func() {
+		refreshMu.Lock()
+		refreshVersion++
+		version := refreshVersion
+		lead := time.Since(lastForced) >= 90*time.Millisecond
+		if lead {
+			lastForced = time.Now()
+		}
+		refreshMu.Unlock()
+
+		capturePair := func() {
+			forceFrame()
+			time.Sleep(180 * time.Millisecond)
+			forceFrame()
+		}
+		if lead {
+			go func() {
+				time.Sleep(55 * time.Millisecond)
+				capturePair()
+			}()
+		}
+		go func() {
+			time.Sleep(150 * time.Millisecond)
+			refreshMu.Lock()
+			if version == refreshVersion && time.Since(lastForced) >= 90*time.Millisecond {
+				lastForced = time.Now()
+				refreshMu.Unlock()
+				capturePair()
+				return
+			}
+			refreshMu.Unlock()
+		}()
+	}
+	scheduleForceFrames := func(count int, gap time.Duration) {
+		go func() {
+			for i := 0; i < count; i++ {
+				scheduleForceFrame()
+				time.Sleep(gap)
+			}
+		}()
+	}
 	conn.send("Page.enable", nil)
 
 	// 手机模式：把本镜像连接对应的渲染器切到移动视口（设备指标/触摸/UA 覆盖作用于整个
@@ -245,6 +355,8 @@ func Handler(c *gin.Context) {
 	// 【本会话】设的覆盖，撤不掉别会话留的。若每次切换都重连，旧会话的 defer 清理与新连接会
 	// 抢跑（来回切尤其容易卡住）。改成同一会话 set/clear，既不泄漏也无竞态。
 	applyMobile := func(mw, mh int, dpr float64, ua string) {
+		setFrameSize(mw, mh)
+		setFrameDPR(dpr)
 		conn.send("Emulation.setDeviceMetricsOverride", map[string]any{
 			"width": mw, "height": mh, "deviceScaleFactor": dpr, "mobile": true,
 			"screenWidth": mw, "screenHeight": mh,
@@ -262,6 +374,8 @@ func Handler(c *gin.Context) {
 		if w <= 0 || h <= 0 {
 			conn.send("Emulation.clearDeviceMetricsOverride", nil)
 		} else {
+			setFrameSize(w, h)
+			setFrameDPR(dpr)
 			conn.send("Emulation.setDeviceMetricsOverride", map[string]any{
 				"width": w, "height": h, "deviceScaleFactor": dpr, "mobile": false,
 				"screenWidth": w, "screenHeight": h,
@@ -325,6 +439,7 @@ func Handler(c *gin.Context) {
 					} `json:"metadata"`
 				} `json:"params"`
 				Result struct {
+					Data   string `json:"data"`
 					Result struct {
 						Value string `json:"value"`
 					} `json:"result"`
@@ -346,6 +461,11 @@ func Handler(c *gin.Context) {
 					if hit {
 						copyReqID = 0
 					}
+					forced := forcedReqIDs[msg.ID]
+					if forced {
+						delete(forcedReqIDs, msg.ID)
+					}
+					w, h := frameW, frameH
 					mu.Unlock()
 					if hit {
 						txt := msg.Result.Result.Value
@@ -354,12 +474,31 @@ func Handler(c *gin.Context) {
 						browserClip.mu.Unlock()
 						_ = writeJSON(map[string]any{"type": "copied", "text": txt})
 					}
+					if forced && msg.Result.Data != "" {
+						mu.Lock()
+						// 流帧还在活跃推送（如页面加载中，startScreencast 每帧都在更新）→ 丢弃这发强制帧。
+						// captureScreenshot 延迟高于推流，加载期它常带着较旧内容、晚于更新的流帧才到，
+						// 盖掉新帧就会让画面在新旧快照间来回跳（「加载那一两秒抖动」的根因）。
+						// 强制帧只在流帧真停产(>250ms 没来，如 macOS 全屏 Space)时兜底。
+						if !closed && nowMs()-lastStreamMs >= 250 {
+							pending = &pend{b64: msg.Result.Data, w: w, h: h}
+							cond.Signal()
+						}
+						mu.Unlock()
+					}
 				}
 				continue
 			}
 			conn.send("Page.screencastFrameAck", map[string]any{"sessionId": msg.Params.SessionID})
 			mu.Lock()
-			pending = &pend{b64: msg.Params.Data, w: int(msg.Params.Metadata.DeviceWidth), h: int(msg.Params.Metadata.DeviceHeight)}
+			w, h := int(msg.Params.Metadata.DeviceWidth), int(msg.Params.Metadata.DeviceHeight)
+			if w > 0 && h > 0 {
+				frameW, frameH = w, h
+			} else {
+				w, h = frameW, frameH
+			}
+			pending = &pend{b64: msg.Params.Data, w: w, h: h}
+			lastStreamMs = nowMs() // 记推流帧到达时刻：流帧活跃时强制帧让位（见上方 forced 分支）
 			cond.Signal()
 			mu.Unlock()
 		}
@@ -504,7 +643,11 @@ func Handler(c *gin.Context) {
 		case "nav":
 			if ev.URL != "" {
 				conn.send("Page.navigate", map[string]any{"url": ev.URL})
+				scheduleForceFrames(8, 250*time.Millisecond)
 			}
+			continue
+		case "refresh":
+			scheduleForceFrames(8, 250*time.Millisecond)
 			continue
 		case "emulate": // 设备切换：同一会话现场 set/clear，不重连 → 无泄漏/无竞态
 			// 机型/UA 真变了才 reload（让 UA 嗅探站点切移动/桌面版）；纯尺寸变化(桌面 resize)不 reload
@@ -549,6 +692,7 @@ func Handler(c *gin.Context) {
 			}
 			if text != "" {
 				conn.send("Input.insertText", map[string]any{"text": text})
+				scheduleForceFrame()
 			}
 			continue
 		case "copy": // 浏览器 → 本地：取远端页面当前选区文本，回包后前端写进本机剪贴板
@@ -586,6 +730,9 @@ func Handler(c *gin.Context) {
 				p["buttons"] = ev.Buttons
 			}
 			conn.send("Input.dispatchMouseEvent", p)
+			if ev.Sub != "move" {
+				scheduleForceFrame()
+			}
 		case "select": // 拖动框选：headless 下合成鼠标拖选无效，改用 caretRangeFromPoint 按起止坐标在远端建 Range
 			conn.send("Runtime.evaluate", map[string]any{
 				"expression": fmt.Sprintf(`(function(x1,y1,x2,y2){var s=window.getSelection();s.removeAllRanges();`+
@@ -594,16 +741,19 @@ func Handler(c *gin.Context) {
 					`if(r.collapsed){r.setStart(b.startContainer,b.startOffset);r.setEnd(a.startContainer,a.startOffset);}`+
 					`s.addRange(r);})(%g,%g,%g,%g)`, ev.X1, ev.Y1, ev.X2, ev.Y2),
 			})
+			scheduleForceFrame()
 		case "wheel":
 			conn.send("Input.dispatchMouseEvent", map[string]any{
 				"type": "mouseWheel", "x": ev.X, "y": ev.Y,
 				"deltaX": ev.DeltaX, "deltaY": ev.DeltaY, "modifiers": ev.Modifiers,
 			})
+			scheduleForceFrame()
 		case "key":
 			// 可打印字符直接 insertText（最可靠，能写进输入框/contenteditable）
 			if ev.Sub == "char" {
 				if ev.Text != "" {
 					conn.send("Input.insertText", map[string]any{"text": ev.Text})
+					scheduleForceFrame()
 				}
 				continue
 			}
@@ -622,6 +772,9 @@ func Handler(c *gin.Context) {
 				p["text"] = text
 			}
 			conn.send("Input.dispatchKeyEvent", p)
+			if ev.Sub == "up" {
+				scheduleForceFrame()
+			}
 		}
 	}
 }

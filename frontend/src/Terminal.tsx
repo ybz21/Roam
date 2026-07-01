@@ -14,6 +14,8 @@ export interface TermHandle {
   reconnect: () => void
   scroll: (lines: number) => void
   toBottom: () => void
+  // 按视口坐标激活该处的 tmux pane（分窗时拖放/点击定位到正确窗格）
+  selectPaneAt: (clientX: number, clientY: number) => void
 }
 
 // xterm 不认 CSS var()，需具体色值：读 <html> 上的同名变量，随黑/白主题切换。
@@ -73,22 +75,23 @@ const Term = forwardRef<TermHandle, {
     } catch {}
   }
 
-  // 通过 tmux copy-mode 滚动会话真实历史（attach 是全屏，xterm 本地缓冲为空）
+  // 滚动会话历史：attach 是全屏、xterm 本地缓冲为空，统一交后端处理——
+  // 普通屏走 tmux copy-mode，备用屏(全屏 TUI)由后端合成滚轮序列喂给应用滚自己的缓冲。
   const sendScroll = (dir: string, lines: number) => {
     const ws = wsRef.current
     if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'scroll', dir, lines }))
   }
 
-  const selectPaneAt = (e: MouseEvent) => {
-    if (e.button !== 0) return
+  const selectPaneAtClient = (clientX: number, clientY: number) => {
     const t = termRef.current, el = elRef.current, ws = wsRef.current
     if (!t || !el || !ws || ws.readyState !== 1 || t.cols <= 0 || t.rows <= 0) return
     const rect = el.getBoundingClientRect()
     if (rect.width <= 0 || rect.height <= 0) return
-    const col = Math.max(0, Math.min(t.cols - 1, Math.floor(((e.clientX - rect.left) / rect.width) * t.cols)))
-    const row = Math.max(0, Math.min(t.rows - 1, Math.floor(((e.clientY - rect.top) / rect.height) * t.rows)))
+    const col = Math.max(0, Math.min(t.cols - 1, Math.floor(((clientX - rect.left) / rect.width) * t.cols)))
+    const row = Math.max(0, Math.min(t.rows - 1, Math.floor(((clientY - rect.top) / rect.height) * t.rows)))
     ws.send(JSON.stringify({ type: 'select-pane', col, row }))
   }
+  const selectPaneAt = (e: MouseEvent) => { if (e.button === 0) selectPaneAtClient(e.clientX, e.clientY) }
 
   const connect = () => {
     if (unmounted.current) return
@@ -124,6 +127,7 @@ const Term = forwardRef<TermHandle, {
     reconnect: () => { try { wsRef.current?.close() } catch {} }, // onclose 触发自动重连
     scroll: (lines) => sendScroll(lines < 0 ? 'up' : 'down', Math.abs(lines)),
     toBottom: () => sendScroll('bottom', 0),
+    selectPaneAt: (clientX, clientY) => selectPaneAtClient(clientX, clientY),
   }))
 
   useEffect(() => {
@@ -220,7 +224,7 @@ const Term = forwardRef<TermHandle, {
     if (elRef.current) ro.observe(elRef.current)
     window.addEventListener('resize', sendResize)
 
-    // 滚动 tmux 历史：触摸滑动 + 鼠标滚轮 → 发 scroll 控制（后端走 copy-mode）
+    // 滚动会话历史：触摸滑动 + 鼠标滚轮 → 发 scroll 控制（后端按普通屏/备用屏分流，见 sendScroll）
     const el = elRef.current!
     let lastY = 0
     let acc = 0

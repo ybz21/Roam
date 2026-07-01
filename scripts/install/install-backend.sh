@@ -1,4 +1,4 @@
-# scripts/install-backend.sh — [3/3] 构建后端服务产物（前端 dist + 后端二进制）。
+# scripts/install/install-backend.sh — [3/3] 构建后端服务产物（前端 dist + 后端二进制）。
 # 只构建、不启动：启动交给 start.sh（bash start.sh 直接起；--dev 每次重编）。
 # 仅本地 checkout 可用；curl|bash 远程无源码则跳过。
 # 依赖：lib/common, lib/platform；编排器导出 SCRIPT_DIR。环境开关 TTMUX_SKIP_BACKEND=1 跳过。

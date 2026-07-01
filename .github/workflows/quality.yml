@@ -33,4 +33,4 @@ jobs:
         run: npm ci
 
       - name: Run quality gate
-        run: scripts/quality/check.sh full
+        run: scripts/dev/quality/check.sh full

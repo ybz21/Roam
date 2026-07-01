@@ -1,4 +1,4 @@
-# scripts/lib/github.sh — GitHub Releases 下载助手。依赖编排器导出的 REPO / INSTALL_DIR。
+# scripts/install/lib/github.sh — GitHub Releases 下载助手。依赖编排器导出的 REPO / INSTALL_DIR。
 # shellcheck shell=bash
 
 # 目标平台标识（用于 release 资产名 ttmux-<os>-<arch>，覆盖 x86/arm × linux/mac）

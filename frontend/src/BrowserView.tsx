@@ -265,10 +265,18 @@ export default function BrowserView() {
     }
   }
 
+  const send = (o: any) => {
+    const ws = wsRef.current
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(o))
+  }
+
   // 作用于当前标签的导航控制
   const act = async (suffix: string, body?: any) => {
     if (!target) return
-    try { await api('POST', `/browser/tabs/${target}/${suffix}`, body) }
+    try {
+      await api('POST', `/browser/tabs/${target}/${suffix}`, body)
+      send({ type: 'refresh' })
+    }
     catch (e: any) { message.error(e.message) }
   }
 
@@ -350,11 +358,6 @@ export default function BrowserView() {
       ws.close()
     }
   }, [control, quality, target]) // device 切换不重连，靠下面的 emulate 消息现场切换
-
-  const send = (o: any) => {
-    const ws = wsRef.current
-    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(o))
-  }
 
   // 设备切换 / 观看区尺寸变化：在现有连接上发 emulate（同一 CDP 会话 set/clear），不重连
   // → 无闪烁/无竞态，来回切也稳。桌面随窗口大小自适应（stage 变化即重发原生尺寸）。

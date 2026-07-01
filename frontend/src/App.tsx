@@ -14,9 +14,11 @@ import Term, { TermHandle, TermStatus } from './Terminal'
 import ClaudeChat from './ClaudeChat'
 import CodexChat from './CodexChat'
 import FileBrowser from './FileBrowser'
+import FileWorkspace from './FileWorkspace'
 import FloatingFileDrawer from './FloatingFileDrawer'
 import GitPanel from './GitPanel'
 import BrowserView from './BrowserView'
+import PhoneView from './PhoneView'
 import Swarm from './Swarm'
 import UpdateBanner from './UpdateBanner'
 import { useThemeMode } from './theme'
@@ -39,6 +41,7 @@ const NAV = [
   { key: 'swarm', labelKey: 'nav.swarm' },
   { key: 'files', labelKey: 'nav.files' },
   { key: 'browser', labelKey: 'nav.browser' },
+  { key: 'phone', labelKey: 'nav.phone' },
   { key: 'settings', labelKey: 'nav.env' },
 ]
 
@@ -77,6 +80,12 @@ const ICONS: Record<string, any> = {
   files: svg(<><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><path d="M7 12h10" /><path d="M7 16h6" /></>),
   settings: svg(<><line x1="4" y1="7" x2="20" y2="7" /><circle cx="9" cy="7" r="2.3" /><line x1="4" y1="17" x2="20" y2="17" /><circle cx="15" cy="17" r="2.3" /></>),
   browser: svg(<><rect x="3" y="4" width="18" height="16" rx="2" /><line x1="3" y1="9" x2="21" y2="9" /><circle cx="6" cy="6.5" r="0.6" /><circle cx="8.4" cy="6.5" r="0.6" /></>),
+  phone: svg(<><rect x="6" y="2" width="12" height="20" rx="2.5" /><line x1="10" y1="18.5" x2="14" y2="18.5" /></>),
+  github: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M12 2C6.48 2 2 6.58 2 12.26c0 4.5 2.87 8.32 6.84 9.67.5.1.68-.22.68-.49 0-.24-.01-.87-.01-1.71-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.49-1.11-1.49-.91-.64.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.36-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.27 2.75 1.05a9.36 9.36 0 0 1 2.5-.34c.85 0 1.71.12 2.5.34 1.91-1.32 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.81-4.57 5.06.36.32.68.94.68 1.9 0 1.37-.01 2.48-.01 2.82 0 .27.18.6.69.49A10.02 10.02 0 0 0 22 12.26C22 6.58 17.52 2 12 2z" />
+    </svg>
+  ),
 }
 
 
@@ -141,6 +150,23 @@ function shellQuote(s: string): string {
   return `'${s.replace(/'/g, `'\\''`)}'`
 }
 
+// tmux 给的是 Unix 秒。转成「刚刚 / N 分钟前 …」相对时间，title 里再挂绝对时间。
+function relTime(sec: string | number | undefined, t: (k: string, v?: Record<string, string | number>) => string): string {
+  const n = typeof sec === 'string' ? parseInt(sec, 10) : sec
+  if (!n || !Number.isFinite(n)) return '—'
+  const diff = Math.max(0, Math.floor(Date.now() / 1000 - n))
+  if (diff < 60) return t('time.justNow')
+  if (diff < 3600) return t('time.minutesAgo', { count: Math.floor(diff / 60) })
+  if (diff < 86400) return t('time.hoursAgo', { count: Math.floor(diff / 3600) })
+  return t('time.daysAgo', { count: Math.floor(diff / 86400) })
+}
+
+function absTime(sec: string | number | undefined): string {
+  const n = typeof sec === 'string' ? parseInt(sec, 10) : sec
+  if (!n || !Number.isFinite(n)) return ''
+  return new Date(n * 1000).toLocaleString()
+}
+
 function FilesPage({ openTerm }: { openTerm: (name: string) => void }) {
   const { message } = AntApp.useApp()
   const { t } = useI18n()
@@ -163,8 +189,8 @@ function FilesPage({ openTerm }: { openTerm: (name: string) => void }) {
     }
   }
   return (
-    <div style={{ height: '100%', minHeight: 0 }}>
-      <FileBrowser accent="#58a6ff" layout="split" onOpenAgent={openAgent} />
+    <div style={{ height: '100%', minHeight: 0, display: 'flex' }}>
+      <FileWorkspace dir="" accent="#58a6ff" onOpenAgent={openAgent} />
     </div>
   )
 }
@@ -225,7 +251,10 @@ export default function App() {
 
   useEffect(() => {
     setUnauthorizedHandler(() => setAuthed(false))
-    api('GET', '/me').then(() => { setAuthed(true); loadPreferences() }).catch(() => setAuthed(false))
+    api('GET', '/me').then(() => {
+      setAuthed(true); loadPreferences()
+      navigator.clipboard?.readText?.().catch(() => {})
+    }).catch(() => setAuthed(false))
   }, [])
 
   // 终端状态同步到 URL，刷新后可恢复
@@ -318,7 +347,7 @@ export default function App() {
   }
   const anyClaude = terms.some((t) => claudeMap[t]?.running || codexMap[t]?.running)
   const docked = hasSider && terms.length > 0 && dockOpen // 桌面停靠栏已展开
-  const defaultDockWidth = tab === 'sessions' || tab === 'overview' || tab === 'swarm' || tab === 'settings' ? 420 : 300
+  const defaultDockWidth = tab === 'sessions' || tab === 'overview' || tab === 'swarm' || tab === 'settings' || tab === 'phone' ? 420 : 300
   const dockPageWidth = customDockWidth ?? defaultDockWidth
   const setStatus = (name: string, s: TermStatus) => setStatusMap((m) => ({ ...m, [name]: s }))
   const sendKey = (seq: string) => active && termRefs.current[active]?.send(seq)
@@ -358,8 +387,11 @@ export default function App() {
     files: <FilesPage openTerm={openTerm} />,
     settings: <EnvPage />,
     browser: <BrowserView />,
+    phone: <PhoneView />,
+    about: <AboutPage />,
   }
   const page = pages[tab] || pages.sessions
+  // browser 全幅(自带工具栏铺满)；phone 与概览/会话一致走 tt-page（同 16px 留白 + 满高，见 tt-page-phone）。
   const pageNode = tab === 'browser'
     ? page
     : <div className={`tt-page tt-page-${tab}${isMobile ? ' tt-page-mobile' : ''}`}>{page}</div>
@@ -397,6 +429,10 @@ export default function App() {
             <div style={{ flex: 1, overflowY: 'auto' }}>{menu}</div>
             {/* 底部：收起 在上，其次 全屏，最后 退出，始终竖向堆叠（展开带文字，折叠仅图标居中）。*/}
             <div style={{ borderTop: '1px solid var(--border-subtle)', padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <Button type="text" block onClick={() => go('about')} title={t('nav.about')}
+                style={{ color: tab === 'about' ? '#58a6ff' : 'var(--text-dim)', textAlign: collapsed ? 'center' : 'left' }}>
+                {collapsed ? ICONS.github : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{ICONS.github}{t('nav.about')}</span>}
+              </Button>
               <Button type="text" block onClick={() => setCollapsed((c) => !c)} style={{ color: 'var(--text-dim)', textAlign: collapsed ? 'center' : 'left' }}
                 title={collapsed ? t('common.expand') : t('common.collapse')}>
                 {(() => { const icon = svg(collapsed ? <><polyline points="9 6 15 12 9 18" /></> : <><polyline points="15 6 9 12 15 18" /></>)
@@ -426,7 +462,7 @@ export default function App() {
             // 终端弹出时左侧页面保留可读宽度；继续向左扩展(dockMax)则收到 0、被终端遮住
             flex: docked && tab !== 'browser' && tab !== 'files' ? (dockMax ? '0 0 0px' : `0 0 ${dockPageWidth}px`) : 1,
             width: docked && tab !== 'browser' && tab !== 'files' ? (dockMax ? 0 : dockPageWidth) : 'auto', minWidth: 0,
-            height: '100dvh', overflow: tab === 'browser' || tab === 'files' ? 'hidden' : 'auto',
+            height: '100dvh', overflow: tab === 'browser' || tab === 'phone' || tab === 'files' ? 'hidden' : 'auto',
             padding: 0,
             transition: customDockWidth != null ? 'none' : 'flex-basis .2s, width .2s',
           }}>
@@ -523,6 +559,7 @@ export default function App() {
           <Dropdown placement="top" trigger={['click']} menu={{ items: [
             { key: 'theme', icon: themeIcon, label: mode === 'dark' ? t('common.lightTheme') : t('common.darkTheme'), onClick: toggleTheme },
             ...(fsSupported ? [{ key: 'fs', icon: fsIcon, label: isFs ? t('common.exitFullscreen') : t('common.fullscreen'), onClick: toggleFs }] : []),
+            { key: 'about', icon: ICONS.github, label: t('nav.about'), onClick: () => go('about') },
             { type: 'divider' as const },
             { key: 'logout', danger: true, label: t('common.logout'), onClick: () => Modal.confirm({ title: t('common.logoutConfirm'), okText: t('common.logout'), cancelText: t('common.cancel'), okButtonProps: { danger: true }, onOk: logout }) },
           ] }}>
@@ -580,6 +617,7 @@ function SoloTerminal({ name }: { name: string }) {
         claudeMap={claudeMap} claudeView={claudeView} setClaudeView={setClaudeView}
         codexMap={codexMap} codexView={codexView} setCodexView={setCodexView}
         onRename={(_, newName) => { location.hash = '#/term/' + encodeURIComponent(newName) }}
+        fileDock="left"
       />
     </div>
   )
@@ -595,8 +633,10 @@ function TerminalPane(props: {
   claudeMap: Record<string, ClaudeInfo>; claudeView: Record<string, boolean>; setClaudeView: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
   codexMap: Record<string, ClaudeInfo>; codexView: Record<string, boolean>; setCodexView: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
   onRename: (oldName: string, newName: string) => void
+  fileDock?: 'right' | 'left'   // 文件面板停靠：'right'=右侧浮动抽屉（默认），'left'=左侧 VSCode 栏（新标签全屏页）
 }) {
   const { terms, active, setActive, closeTerm, fontSize, setFontSize, statusMap, setStatus, termRefs, sendKey, onCollapse, claudeMap, claudeView, setClaudeView, codexMap, codexView, setCodexView, onRename } = props
+  const fileDock = props.fileDock || 'right'
   const { message, modal } = AntApp.useApp()
   const { t } = useI18n()
   const st = active ? statusMap[active] : undefined
@@ -611,6 +651,7 @@ function TerminalPane(props: {
   // 合成缓冲里不提交，onData 不触发 → 打完字发不出去。触摸设备改用独立输入框：整行送 PTY。
   const isTouch = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches
   const [line, setLine] = useState('')
+  const mobileInputRef = useRef<import('antd').InputRef>(null)
   const sendRaw = (s: string) => { if (active) termRefs.current[active]?.send(s, true) } // keepFocus：不抢 xterm 焦点 → 软键盘不收起
   // 滚上去看历史会让 tmux 进 copy-mode，此时输入被它截走（要先按「底」才生效）。
   // 输入框聚焦/发送前先回到底部退出 copy-mode，省去手动按「底」。
@@ -631,8 +672,9 @@ function TerminalPane(props: {
     savePreferences({ showVoiceButton: next })
   }
 
-  // 文件侧栏（终端视图下也可用）：定位到当前会话的工作目录
-  const [showFiles, setShowFiles] = useState(false)
+  // 文件侧栏（终端视图下也可用）：定位到当前会话的工作目录。左侧停靠时默认展开。
+  // 编辑器多 tab / 打开的文件 / 拖拽调宽等都下沉到 <FileWorkspace>（左侧停靠时用），这里只保留 showFiles。
+  const [showFiles, setShowFiles] = useState(fileDock === 'left')
   const [showGit, setShowGit] = useState(false)
   const [cwd, setCwd] = useState('')
   // 文件栏与 Git 面板共用右侧抽屉位，互斥显示。
@@ -658,9 +700,12 @@ function TerminalPane(props: {
   const onTermDrop = (e: React.DragEvent) => {
     if (!isPathDrag(e)) return
     e.preventDefault()
+    e.stopPropagation() // 别再冒泡到 FileWorkspace 的分栏 drop：拖到终端=注入@，不触发分栏
     setDragOver(false)
     const mention = toMention(readDropPath(e))
     if (!mention || !active) return
+    // 分窗(tmux split pane)时：先按落点坐标激活对应 pane，@路径才会注入到拖放的那个窗格。
+    termRefs.current[active]?.selectPaneAt(e.clientX, e.clientY)
     exitCopyMode()
     termRefs.current[active]?.send(mention + ' ', true)
   }
@@ -814,6 +859,159 @@ function TerminalPane(props: {
     )
   }
 
+  // ── 会话（终端）各部件抽成局部 JSX：左侧停靠走 <FileWorkspace> 的槽位，右侧抽屉走原地布局，二者共用同一份 ──
+  const sessionTab = (
+    <>
+      <i style={{ width: 7, height: 7, borderRadius: '50%', background: active && statusMap[active] === 'connected' ? '#3fb950' : '#d29922' }} />
+      {active}
+    </>
+  )
+  const tabStrip = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 8px', borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
+      {onCollapse && <Button size="small" type="text" style={{ color: 'var(--text-dim)' }} onClick={onCollapse}>✕ {t('common.collapse')}</Button>}
+      {terms.map((termName) => (
+        <span key={termName} onClick={() => setActive(termName)}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap',
+            background: termName === active ? '#1f6feb33' : 'transparent', border: termName === active ? '1px solid #1f6feb' : '1px solid var(--border)', color: 'var(--text-bright)',
+          }}>
+          <i style={{ width: 7, height: 7, borderRadius: '50%', background: termNeedsInput[termName] ? '#d29922' : (statusMap[termName] === 'connected' ? '#3fb950' : statusMap[termName] === 'connecting' ? '#d29922' : '#f85149') }} />
+          {termNeedsInput[termName] && <span title={t('prompt.confirmRequired')} style={{ color: '#d29922', fontSize: 12, fontWeight: 600 }}>{t('session.waiting')}</span>}
+          {claudeMap[termName]?.running && <span title={t('session.runningClaude')} style={{ color: '#58a6ff' }}>✳</span>}
+          {codexMap[termName]?.running && <span title={t('session.runningCodex')} style={{ color: '#10a37f' }}>✸</span>}
+          {termName}
+          <a onClick={(e) => { e.stopPropagation(); closeTerm(termName) }} style={{ color: 'var(--text-dim)' }}>×</a>
+        </span>
+      ))}
+    </div>
+  )
+  const sessionToolbar = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)', flexWrap: 'wrap' }}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-dim)', fontSize: 12 }}>
+        <i style={{ width: 8, height: 8, borderRadius: '50%', background: dot }} />
+        {activeNeedsInput ? t('session.waiting') : st === 'connected' ? t('terminal.status.connected') : st === 'connecting' ? t('terminal.status.connecting') : t('terminal.status.disconnected')}
+      </span>
+      {active && claudeMap[active]?.running && (
+        <Tooltip title={t('chat.switchToClaude')}>
+          <Button size="small" type={claudeView[active] ? 'primary' : 'default'}
+            onClick={() => setClaudeView((v) => ({ ...v, [active!]: !v[active!] }))}>✳ Claude</Button>
+        </Tooltip>
+      )}
+      {active && codexMap[active]?.running && (
+        <Tooltip title={t('chat.switchToCodex')}>
+          <Button size="small" type={codexView[active] ? 'primary' : 'default'}
+            style={codexView[active] ? { background: '#10a37f', borderColor: '#10a37f' } : {}}
+            onClick={() => setCodexView((v) => ({ ...v, [active!]: !v[active!] }))}>✸ Codex</Button>
+        </Tooltip>
+      )}
+      <Dropdown trigger={['click']} menu={{ items: tmuxMenu(t) as any, onClick: ({ key }) => sendKey(key) }} placement="bottomLeft">
+        <Button size="small" type="primary" ghost>tmux ▾</Button>
+      </Dropdown>
+      {active && (
+        <Tooltip title={t('terminal.openInNewTabTitle')}>
+          <Button size="small" onClick={() => window.open(`/#/term/${encodeURIComponent(active)}`, '_blank')}>↗ {t('terminal.newTab')}</Button>
+        </Tooltip>
+      )}
+      {active && <Button size="small" onClick={() => setRenameSession(active)}>{t('session.rename')}</Button>}
+      <Tooltip title={promptOff ? t('prompt.popupOff') : t('prompt.popupOn')}>
+        <Button size="small" type={promptOff ? 'default' : 'primary'} ghost={!promptOff} onClick={togglePromptOff}>{promptOff ? '🔕' : '🔔'} {t('prompt.popup')}</Button>
+      </Tooltip>
+      <Tooltip title={t('terminal.fileBrowserTitle')}>
+        <Button size="small" type={showFiles ? 'primary' : 'default'} onClick={toggleFiles}>📁 {t('chat.files')}</Button>
+      </Tooltip>
+      <Tooltip title={t('terminal.gitPanelTitle')}>
+        <Button size="small" type={showGit ? 'primary' : 'default'} onClick={toggleGit}
+          icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: '-2px' }}><circle cx="6" cy="6" r="2.3" /><circle cx="6" cy="18" r="2.3" /><circle cx="18" cy="8" r="2.3" /><path d="M6 8.3v7.4" /><path d="M18 10.3a6 6 0 0 1-6 6H8.3" /></svg>}>
+          {t('git.title')}
+        </Button>
+      </Tooltip>
+      <Tooltip title={showVoice ? t('voice.hideButton') : t('voice.showButton')}>
+        <Button size="small" type={showVoice ? 'primary' : 'default'} onClick={() => setShowVoice((v) => !v)}>🎤</Button>
+      </Tooltip>
+      <span style={{ flex: 1 }} />
+      <Tooltip title={t('terminal.scrollHistory')}><Button size="small" onClick={() => active && termRefs.current[active]?.scroll(-12)}>▲</Button></Tooltip>
+      <Tooltip title={t('terminal.toBottom')}><Button size="small" onClick={() => active && termRefs.current[active]?.toBottom()}>{t('terminal.bottomShort')}</Button></Tooltip>
+      <Tooltip title={t('terminal.decreaseFont')}><Button size="small" onClick={() => setFontSize(Math.max(10, fontSize - 1))}>A-</Button></Tooltip>
+      <Tooltip title={t('terminal.increaseFont')}><Button size="small" onClick={() => setFontSize(Math.min(22, fontSize + 1))}>A+</Button></Tooltip>
+      <Tooltip title={t('terminal.reconnect')}><Button size="small" onClick={() => active && termRefs.current[active]?.reconnect()}>{t('terminal.reconnectShort')}</Button></Tooltip>
+    </div>
+  )
+  const terminalArea = (
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', position: 'relative' }}
+      onDragOver={(e) => { if (isPathDrag(e)) { e.stopPropagation(); allowPathDrop(e); setDragOver(true) } }}
+      onDragLeave={(e) => { if (e.currentTarget === e.target) setDragOver(false) }}
+      onDrop={onTermDrop}>
+      {dragOver && (
+        <div style={{
+          position: 'absolute', inset: 0, zIndex: 5, pointerEvents: 'none',
+          border: '2px dashed #58a6ff', borderRadius: 8, background: 'rgba(88,166,255,.08)',
+          display: 'grid', placeItems: 'center', color: '#58a6ff', fontSize: 14, fontWeight: 600,
+        }}>{t('terminal.dropToMention')}</div>
+      )}
+      <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+        {terms.map((termName) => (
+          <div key={termName} style={{ position: 'absolute', inset: 0, display: termName === active ? 'block' : 'none', padding: 6 }}>
+            <Term ref={(h) => { termRefs.current[termName] = h }} name={termName} fontSize={fontSize} active={termName === active} onStatus={(s) => setStatus(termName, s)}
+              onContextMenu={({ x, y, selection }) => { setActive(termName); setCtx({ x, y, session: termName, selection }) }}
+              onSelectionMenu={({ selection }) => { setActive(termName); setCtx(null); if (selection.trim()) { copyText(selection); message.success(t('common.copied')) } }}
+              onPaste={() => { setActive(termName); pasteClipboard(termName) }}
+              onImagePaste={(files) => { setActive(termName); pasteImage(termName, files) }} />
+            {claudeView[termName] && claudeMap[termName]?.running && (
+              <div style={{ position: 'absolute', inset: 0 }}>
+                <ClaudeChat name={termName} file={claudeMap[termName].file} dir={claudeMap[termName].dir} onBack={() => setClaudeView((v) => ({ ...v, [termName]: false }))} />
+              </div>
+            )}
+            {codexView[termName] && codexMap[termName]?.running && (
+              <div style={{ position: 'absolute', inset: 0 }}>
+                <CodexChat name={termName} file={codexMap[termName].file} dir={codexMap[termName].dir} onBack={() => setCodexView((v) => ({ ...v, [termName]: false }))} />
+              </div>
+            )}
+            {showVoice && !claudeView[termName] && !codexView[termName] && (
+              <VoiceInput accent="#58a6ff" onResult={(text) => { api('POST', `/sessions/${encodeURIComponent(termName)}/type`, { text }).catch((e: any) => message.error(e.message)) }} />
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+  const sessionBottom = (
+    <>
+      {isTouch && !inChat && (
+        <div style={{ display: 'flex', gap: 6, padding: '8px 8px 0' }} onDragOver={allowPathDrop} onDrop={onInputDrop}>
+          <Input ref={mobileInputRef} value={line} onFocus={exitCopyMode} onChange={(e) => setLine(e.target.value)}
+            onPressEnter={(e) => { if ((e.nativeEvent as any).isComposing) return; submitLine() }}
+            placeholder={t('terminal.mobileInputPlaceholder')} allowClear autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} />
+          <Button type="primary" onMouseDown={noBlur} onClick={submitLine}>{t('common.send')}</Button>
+        </div>
+      )}
+      {!inChat && (
+        <div style={{ display: 'flex', gap: 6, padding: 8, borderTop: '1px solid var(--border)', overflowX: 'auto' }}>
+          <Button type="primary" onMouseDown={noBlur} onClick={() => (isTouch ? submitLine() : sendKey('\r'))}>Enter</Button>
+          {(prefsData.quickCommands || []).map((cmd) => (
+            <Button key={cmd} onMouseDown={noBlur} onClick={() => { if (isTouch) { setLine(cmd); requestAnimationFrame(() => mobileInputRef.current?.focus()) } else { sendRaw(cmd) } }} style={{ flex: '0 0 auto' }}>{cmd}</Button>
+          ))}
+          {KEYS.map(([label, seq]) => (
+            <Button key={label} onMouseDown={noBlur} onClick={() => tapKey(seq)} style={{ flex: '0 0 auto' }}>{label}</Button>
+          ))}
+          <Button onMouseDown={noBlur} style={{ flex: '0 0 auto', borderStyle: 'dashed' }} onClick={() => {
+            let val = ''
+            modal.confirm({
+              title: t('settings.quickCommands'),
+              content: <Input placeholder={t('settings.quickCommandPlaceholder')} onChange={(e) => (val = e.target.value)} autoFocus />,
+              okText: t('quickCmd.addOk'),
+              onOk: () => {
+                const v = val.trim()
+                if (!v) return
+                if ((prefsData.quickCommands || []).includes(v)) return
+                savePreferences({ quickCommands: [...(prefsData.quickCommands || []), v] })
+              },
+            })
+          }}>{t('quickCmd.add')}</Button>
+        </div>
+      )}
+    </>
+  )
+
   return (
     // paddingBottom=env(keyboard-inset-height)：软键盘悬浮覆盖时(见 main.tsx/index.html)，
     // 把整块内容抬到键盘之上，让底部输入条/快捷键栏不被遮住。桌面无虚拟键盘 → 0，无影响。
@@ -853,172 +1051,41 @@ function TerminalPane(props: {
       >
         <span style={{ position: 'fixed', left: ctx?.x ?? -1000, top: ctx?.y ?? -1000, width: 1, height: 1, pointerEvents: 'none' }} />
       </Dropdown>
-      {/* 标签栏 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 8px', borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
-        {onCollapse && <Button size="small" type="text" style={{ color: 'var(--text-dim)' }} onClick={onCollapse}>✕ {t('common.collapse')}</Button>}
-        {terms.map((termName) => (
-          <span key={termName} onClick={() => setActive(termName)}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap',
-              background: termName === active ? '#1f6feb33' : 'transparent', border: termName === active ? '1px solid #1f6feb' : '1px solid var(--border)', color: 'var(--text-bright)',
-            }}>
-            <i style={{ width: 7, height: 7, borderRadius: '50%', background: termNeedsInput[termName] ? '#d29922' : (statusMap[termName] === 'connected' ? '#3fb950' : statusMap[termName] === 'connecting' ? '#d29922' : '#f85149') }} />
-            {termNeedsInput[termName] && <span title={t('prompt.confirmRequired')} style={{ color: '#d29922', fontSize: 12, fontWeight: 600 }}>{t('session.waiting')}</span>}
-            {claudeMap[termName]?.running && <span title={t('session.runningClaude')} style={{ color: '#58a6ff' }}>✳</span>}
-            {codexMap[termName]?.running && <span title={t('session.runningCodex')} style={{ color: '#10a37f' }}>✸</span>}
-            {termName}
-            <a onClick={(e) => { e.stopPropagation(); closeTerm(termName) }} style={{ color: 'var(--text-dim)' }}>×</a>
-          </span>
-        ))}
-      </div>
-
-      {/* 工具栏 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)', flexWrap: 'wrap' }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-dim)', fontSize: 12 }}>
-          <i style={{ width: 8, height: 8, borderRadius: '50%', background: dot }} />
-          {activeNeedsInput ? t('session.waiting') : st === 'connected' ? t('terminal.status.connected') : st === 'connecting' ? t('terminal.status.connecting') : t('terminal.status.disconnected')}
-        </span>
-        {active && claudeMap[active]?.running && (
-          <Tooltip title={t('chat.switchToClaude')}>
-            <Button size="small" type={claudeView[active] ? 'primary' : 'default'}
-              onClick={() => setClaudeView((v) => ({ ...v, [active!]: !v[active!] }))}>✳ Claude</Button>
-          </Tooltip>
-        )}
-        {active && codexMap[active]?.running && (
-          <Tooltip title={t('chat.switchToCodex')}>
-            <Button size="small" type={codexView[active] ? 'primary' : 'default'}
-              style={codexView[active] ? { background: '#10a37f', borderColor: '#10a37f' } : {}}
-              onClick={() => setCodexView((v) => ({ ...v, [active!]: !v[active!] }))}>✸ Codex</Button>
-          </Tooltip>
-        )}
-        <Dropdown
-          trigger={['click']}
-          menu={{ items: tmuxMenu(t) as any, onClick: ({ key }) => sendKey(key) }}
-          placement="bottomLeft"
-        >
-          <Button size="small" type="primary" ghost>tmux ▾</Button>
-        </Dropdown>
-        {active && (
-          <Tooltip title={t('terminal.openInNewTabTitle')}>
-            <Button size="small" onClick={() => window.open(`/#/term/${encodeURIComponent(active)}`, '_blank')}>↗ {t('terminal.newTab')}</Button>
-          </Tooltip>
-        )}
-        {active && (
-          <Button size="small" onClick={() => setRenameSession(active)}>{t('session.rename')}</Button>
-        )}
-        <Tooltip title={promptOff ? t('prompt.popupOff') : t('prompt.popupOn')}>
-          <Button size="small" type={promptOff ? 'default' : 'primary'} ghost={!promptOff}
-            onClick={togglePromptOff}>{promptOff ? '🔕' : '🔔'} {t('prompt.popup')}</Button>
-        </Tooltip>
-        <Tooltip title={t('terminal.fileBrowserTitle')}>
-          <Button size="small" type={showFiles ? 'primary' : 'default'} onClick={toggleFiles}>📁 {t('chat.files')}</Button>
-        </Tooltip>
-        <Tooltip title={t('terminal.gitPanelTitle')}>
-          <Button size="small" type={showGit ? 'primary' : 'default'} onClick={toggleGit}
-            icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: '-2px' }}><circle cx="6" cy="6" r="2.3" /><circle cx="6" cy="18" r="2.3" /><circle cx="18" cy="8" r="2.3" /><path d="M6 8.3v7.4" /><path d="M18 10.3a6 6 0 0 1-6 6H8.3" /></svg>}>
-            {t('git.title')}
-          </Button>
-        </Tooltip>
-        <Tooltip title={showVoice ? t('voice.hideButton') : t('voice.showButton')}>
-          <Button size="small" type={showVoice ? 'primary' : 'default'} onClick={() => setShowVoice((v) => !v)}>🎤</Button>
-        </Tooltip>
-        <span style={{ flex: 1 }} />
-        <Tooltip title={t('terminal.scrollHistory')}><Button size="small" onClick={() => active && termRefs.current[active]?.scroll(-12)}>▲</Button></Tooltip>
-        <Tooltip title={t('terminal.toBottom')}><Button size="small" onClick={() => active && termRefs.current[active]?.toBottom()}>{t('terminal.bottomShort')}</Button></Tooltip>
-        <Tooltip title={t('terminal.decreaseFont')}><Button size="small" onClick={() => setFontSize(Math.max(10, fontSize - 1))}>A-</Button></Tooltip>
-        <Tooltip title={t('terminal.increaseFont')}><Button size="small" onClick={() => setFontSize(Math.min(22, fontSize + 1))}>A+</Button></Tooltip>
-        <Tooltip title={t('terminal.reconnect')}><Button size="small" onClick={() => active && termRefs.current[active]?.reconnect()}>{t('terminal.reconnectShort')}</Button></Tooltip>
-      </div>
-
-      {/* 终端区（所有标签常驻，仅激活可见，保留滚动历史）。
-          支持从文件/Git 面板把文件拖进来 → 以 @相对路径 注入当前会话。 */}
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', position: 'relative' }}
-        onDragOver={(e) => { if (isPathDrag(e)) { allowPathDrop(e); setDragOver(true) } }}
-        onDragLeave={(e) => { if (e.currentTarget === e.target) setDragOver(false) }}
-        onDrop={onTermDrop}>
-        {dragOver && (
-          <div style={{
-            position: 'absolute', inset: 0, zIndex: 5, pointerEvents: 'none',
-            border: '2px dashed #58a6ff', borderRadius: 8, background: 'rgba(88,166,255,.08)',
-            display: 'grid', placeItems: 'center', color: '#58a6ff', fontSize: 14, fontWeight: 600,
-          }}>{t('terminal.dropToMention')}</div>
-        )}
-        <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
-          {terms.map((termName) => (
-            <div key={termName} style={{ position: 'absolute', inset: 0, display: termName === active ? 'block' : 'none', padding: 6 }}>
-              <Term ref={(h) => { termRefs.current[termName] = h }} name={termName} fontSize={fontSize} active={termName === active} onStatus={(s) => setStatus(termName, s)}
-                onContextMenu={({ x, y, selection }) => { setActive(termName); setCtx({ x, y, session: termName, selection }) }}
-                onSelectionMenu={({ selection }) => { setActive(termName); setCtx(null); if (selection.trim()) { copyText(selection); message.success(t('common.copied')) } }}
-                onPaste={() => { setActive(termName); pasteClipboard(termName) }}
-                onImagePaste={(files) => { setActive(termName); pasteImage(termName, files) }} />
-              {claudeView[termName] && claudeMap[termName]?.running && (
-                <div style={{ position: 'absolute', inset: 0 }}>
-                  <ClaudeChat name={termName} file={claudeMap[termName].file} dir={claudeMap[termName].dir} onBack={() => setClaudeView((v) => ({ ...v, [termName]: false }))} />
-                </div>
-              )}
-              {codexView[termName] && codexMap[termName]?.running && (
-                <div style={{ position: 'absolute', inset: 0 }}>
-                  <CodexChat name={termName} file={codexMap[termName].file} dir={codexMap[termName].dir} onBack={() => setCodexView((v) => ({ ...v, [termName]: false }))} />
-                </div>
-              )}
-              {/* 终端页右下角悬浮语音按钮：识别后字面量打进 pane，用户复查后自行回车（对话视图打开时由其自带按钮接管） */}
-              {showVoice && !claudeView[termName] && !codexView[termName] && (
-                <VoiceInput accent="#58a6ff" onResult={(text) => { api('POST', `/sessions/${encodeURIComponent(termName)}/type`, { text }).catch((e: any) => message.error(e.message)) }} />
-              )}
-            </div>
-          ))}
+      {/* 独立全屏页（左侧文件停靠）：顶部细标题栏显示会话名，横跨左右；下面才是「左文件 / 右会话」 */}
+      {fileDock === 'left' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px', borderBottom: '1px solid var(--border)', minHeight: 32 }}>
+          <span style={{ color: 'var(--text-bright)', fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{active || ''}</span>
+          <span style={{ flex: 1 }} />
+          <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.5, background: 'var(--brand-grad)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Roam</span>
         </div>
-      </div>
-      <FloatingFileDrawer open={showFiles}>
-        <FileBrowser dir={cwd} accent="#58a6ff" onClose={() => setShowFiles(false)} />
-      </FloatingFileDrawer>
+      )}
+      {/* 内容主体：左侧走 <FileWorkspace>（文件树 + 编辑器多 tab）；右侧抽屉走原地布局。
+          会话（终端）各部件用上面抽出的 sessionTab/sessionToolbar/terminalArea/sessionBottom 复用。 */}
+      {fileDock === 'left' ? (
+        <FileWorkspace
+          dir={cwd} accent="#58a6ff"
+          explorerOpen={showFiles} onExplorerClose={() => setShowFiles(false)}
+          leadingTitle={active || ''} leadingTab={sessionTab}
+          leadingContent={terminalArea} chrome={sessionToolbar} footer={sessionBottom}
+        />
+      ) : (
+        <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+          <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+            {tabStrip}
+            {sessionToolbar}
+            {terminalArea}
+            {sessionBottom}
+          </div>
+        </div>
+      )}
+      {fileDock === 'right' && (
+        <FloatingFileDrawer open={showFiles}>
+          <FileBrowser dir={cwd} accent="#58a6ff" onClose={() => setShowFiles(false)} />
+        </FloatingFileDrawer>
+      )}
       <FloatingFileDrawer open={showGit}>
         <GitPanel dir={cwd} accent="#58a6ff" onClose={() => setShowGit(false)} />
       </FloatingFileDrawer>
-
-      {/* 移动端文字输入框：软键盘/输入法在 xterm 里会丢字，这里整行可靠发送到 PTY。
-          对话视图(Claude/Codex)有自己的输入框，这里隐藏避免双输入框。 */}
-      {isTouch && !inChat && (
-        <div style={{ display: 'flex', gap: 6, padding: '8px 8px 0' }} onDragOver={allowPathDrop} onDrop={onInputDrop}>
-          <Input
-            value={line}
-            onFocus={exitCopyMode}
-            onChange={(e) => setLine(e.target.value)}
-            onPressEnter={(e) => { if ((e.nativeEvent as any).isComposing) return; submitLine() }}
-            placeholder={t('terminal.mobileInputPlaceholder')}
-            allowClear
-            autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
-          />
-          <Button type="primary" onMouseDown={noBlur} onClick={submitLine}>{t('common.send')}</Button>
-        </div>
-      )}
-
-      {/* 快捷键栏：对话视图下隐藏（聊天 UI 不需要终端控制键，且避免与其输入区挤占） */}
-      {!inChat && (
-        <div style={{ display: 'flex', gap: 6, padding: 8, borderTop: '1px solid var(--border)', overflowX: 'auto' }}>
-          <Button type="primary" onMouseDown={noBlur} onClick={() => (isTouch ? submitLine() : sendKey('\r'))}>Enter</Button>
-          {(prefsData.quickCommands || []).map((cmd) => (
-            <Button key={cmd} onMouseDown={noBlur} onClick={() => isTouch ? setLine(cmd) : sendRaw(cmd)} style={{ flex: '0 0 auto' }}>{cmd}</Button>
-          ))}
-          {KEYS.map(([label, seq]) => (
-            <Button key={label} onMouseDown={noBlur} onClick={() => tapKey(seq)} style={{ flex: '0 0 auto' }}>{label}</Button>
-          ))}
-          <Button onMouseDown={noBlur} style={{ flex: '0 0 auto', borderStyle: 'dashed' }} onClick={() => {
-            let val = ''
-            modal.confirm({
-              title: t('settings.quickCommands'),
-              content: <Input placeholder={t('settings.quickCommandPlaceholder')} onChange={(e) => (val = e.target.value)} autoFocus />,
-              okText: t('quickCmd.addOk'),
-              onOk: () => {
-                const v = val.trim()
-                if (!v) return
-                if ((prefsData.quickCommands || []).includes(v)) return
-                savePreferences({ quickCommands: [...(prefsData.quickCommands || []), v] })
-              },
-            })
-          }}>{t('quickCmd.add')}</Button>
-        </div>
-      )}
     </div>
   )
 }
@@ -1189,7 +1256,7 @@ function Overview({ go, openTerm }: { go: (k: string) => void; openTerm: (n: str
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minWidth: 0 }}>
                     <div style={{ minWidth: 0, flex: 1 }}>
                       <div style={{ color: 'var(--text-bright)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.name}>{s.name}</div>
-                      <div style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap' }}>{t('session.windows', { count: s.windows })} · {s.attached == 1 ? t('terminal.status.connected') : t('terminal.status.idle')}</div>
+                      <div style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap' }} title={`${t('session.createdAt')} ${absTime(s.created)} · ${t('session.lastActivity')} ${absTime(s.last_activity)}`}>{t('session.windows', { count: s.windows })} · {s.attached == 1 ? t('terminal.status.connected') : t('terminal.status.idle')} · {t('session.lastActivity')} {relTime(s.last_activity, t)}</div>
                     </div>
                     <a onClick={() => openTerm(s.name)} style={{ flex: '0 0 auto', whiteSpace: 'nowrap' }}>{t('common.terminal')}</a>
                   </div>
@@ -1497,15 +1564,39 @@ function Sessions({ openTerm, closeTerm }: { openTerm: (n: string) => void; clos
   const filtered = list.filter((s: any) => (!ql || s.name.toLowerCase().includes(ql)) && match(s, filter))
   const cnt = (f: typeof filter) => list.filter((s: any) => match(s, f)).length
 
+  // ── 排序：名称 / 创建时间 / 最后响应时间，可切升降序 ──
+  const [sortBy, setSortBy] = useState<'name' | 'created' | 'activity'>('activity')
+  const [sortAsc, setSortAsc] = useState(false)
+  const num = (v: any) => parseInt(v, 10) || 0
+  const sorted = [...filtered].sort((a: any, b: any) => {
+    const d = sortBy === 'name'
+      ? a.name.localeCompare(b.name)
+      : num(a[sortBy === 'created' ? 'created' : 'last_activity']) - num(b[sortBy === 'created' ? 'created' : 'last_activity'])
+    return sortAsc ? d : -d
+  })
+
   return (
     <Card
       title={<Space size={8}>{t('nav.sessions')}<Tag style={{ margin: 0 }}>{cnt('all')}</Tag></Space>}
       extra={<Button type="primary" onClick={() => setNewOpen(true)}>+ {t('session.new')}</Button>}
     >
-      {/* 工具条：搜索 + 类型筛选（两行） */}
+      {/* 工具条：搜索 + 排序同一行，类型筛选另起一行 */}
       <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <Input allowClear value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('session.searchPlaceholder')}
-          prefix={svg(<><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></>)} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Input allowClear value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('session.searchPlaceholder')}
+            style={{ flex: 1, minWidth: 0 }}
+            prefix={svg(<><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></>)} />
+          <Select value={sortBy} onChange={(v) => setSortBy(v)} title={t('session.sortBy')}
+            style={{ width: 120, flex: '0 0 auto' }} options={[
+              { label: t('session.sortActivity'), value: 'activity' },
+              { label: t('session.sortCreated'), value: 'created' },
+              { label: t('session.sortName'), value: 'name' },
+            ]} />
+          <Button onClick={() => setSortAsc((v) => !v)} style={{ flex: '0 0 auto' }}
+            title={sortAsc ? t('session.sortAsc') : t('session.sortDesc')}>
+            {sortAsc ? '↑' : '↓'}
+          </Button>
+        </div>
         <div style={{ overflowX: 'auto' }}>
           <Segmented block value={filter} onChange={(v) => setFilter(v as any)} size="small" options={[
             { label: `${t('common.all')} ${cnt('all')}`, value: 'all' },
@@ -1521,7 +1612,7 @@ function Sessions({ openTerm, closeTerm }: { openTerm: (n: string) => void; clos
       {list.length === 0 ? <Empty description={t('session.noActive')} />
         : filtered.length === 0 ? <Empty description={t('session.noMatches')} />
           : (
-            <List dataSource={filtered} renderItem={(s: any) => {
+            <List dataSource={sorted} renderItem={(s: any) => {
               const sw = swarmMap[s.name]
               const connected = s.attached == 1
               const agent = cc[s.name] ? 'claude' : cx[s.name] ? 'codex' : null
@@ -1530,15 +1621,24 @@ function Sessions({ openTerm, closeTerm }: { openTerm: (n: string) => void; clos
                 // 整行点击直接进入终端；右侧操作区 stopPropagation 不触发进入
                 <List.Item style={{ padding: '10px 8px', cursor: 'pointer' }} onClick={() => openTerm(s.name)}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
                       <i title={waiting ? t('prompt.confirmRequired') : connected ? t('terminal.status.connected') : t('terminal.status.idle')} style={{ width: 8, height: 8, borderRadius: '50%', flex: '0 0 8px', background: waiting ? '#d29922' : connected ? '#3fb950' : 'var(--text-dimmer)' }} />
-                      <span style={{ fontWeight: 600, color: 'var(--text-bright)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.name}>{s.name}</span>
-                      {sw && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>{t('nav.swarm')}:{sw.swarm}{sw.role === 'leader' ? `·${t('swarm.master')}` : ''}</Tag>}
-                      {waiting && <Tag color="warning" style={{ margin: 0, flex: '0 0 auto' }}>{t('session.waiting')}</Tag>}
-                      {cc[s.name] && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>✳ Claude</Tag>}
-                      {cx[s.name] && <Tag color="green" style={{ margin: 0, flex: '0 0 auto' }}>✸ Codex</Tag>}
-                      {!sw && !agent && <Tag style={{ margin: 0, flex: '0 0 auto' }}>{connected ? t('terminal.status.connected') : t('terminal.status.idle')}</Tag>}
-                      <span style={{ color: 'var(--text-dim)', fontSize: 12, flex: '0 0 auto', whiteSpace: 'nowrap' }}>{t('session.windows', { count: s.windows })}</span>
+                      <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' }}>
+                          <span style={{ fontWeight: 600, color: 'var(--text-bright)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.name}>{s.name}</span>
+                          {sw && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>{t('nav.swarm')}:{sw.swarm}{sw.role === 'leader' ? `·${t('swarm.master')}` : ''}</Tag>}
+                          {waiting && <Tag color="warning" style={{ margin: 0, flex: '0 0 auto' }}>{t('session.waiting')}</Tag>}
+                          {cc[s.name] && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>✳ Claude</Tag>}
+                          {cx[s.name] && <Tag color="green" style={{ margin: 0, flex: '0 0 auto' }}>✸ Codex</Tag>}
+                          {!sw && !agent && <Tag style={{ margin: 0, flex: '0 0 auto' }}>{connected ? t('terminal.status.connected') : t('terminal.status.idle')}</Tag>}
+                          <span style={{ color: 'var(--text-dim)', fontSize: 12, flex: '0 0 auto', whiteSpace: 'nowrap' }}>{t('session.windows', { count: s.windows })}</span>
+                        </div>
+                        <div style={{ color: 'var(--text-dimmer)', fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          <span title={absTime(s.created)}>{t('session.createdAt')} {relTime(s.created, t)}</span>
+                          <span style={{ margin: '0 6px' }}>·</span>
+                          <span title={absTime(s.last_activity)}>{t('session.lastActivity')} {relTime(s.last_activity, t)}</span>
+                        </div>
+                      </div>
                     </div>
                     <div onClick={(e) => e.stopPropagation()} style={{ marginLeft: 'auto', display: 'flex', gap: 14, alignItems: 'center', flex: '0 0 auto', whiteSpace: 'nowrap' }}>
                       {sw && <a onClick={() => goSwarm(sw.swarm)}>{t('session.swarmPage')}</a>}
@@ -1704,6 +1804,179 @@ function CertDownloadButton() {
 }
 
 // ── Env / Settings ──
+// 手机/Android 后端配置：本地 redroid / 远程 redroid / 真机 三选一 + adb 地址。
+type PhoneCfg = { active: '' | 'android' | 'ios'; android: { mode: string; address: string; resolution: string }; ios: { mode: string; address: string } }
+const PHONE_DEFAULT: PhoneCfg = { active: 'android', android: { mode: 'local', address: 'localhost:5555', resolution: '' }, ios: { mode: 'simulator', address: '' } }
+
+function PhoneSettingsCard() {
+  // 两张卡片：Android / iOS，各自配置(互不覆盖)；active 决定哪个驱动镜像。
+  const { t } = useI18n()
+  const { message } = AntApp.useApp()
+  const [cfg, setCfg] = useState<PhoneCfg>(PHONE_DEFAULT)
+  const cfgRef = useRef(cfg)
+  const [status, setStatus] = useState<any>({})
+  const [devs, setDevs] = useState<{ android: any[]; ios: any[] }>({ android: [], ios: [] })
+  const [plat, setPlat] = useState<{ android: { installed: boolean }; ios: { installed: boolean; supported: boolean } }>({ android: { installed: false }, ios: { installed: false, supported: false } })
+  const [installing, setInstalling] = useState<'android' | 'ios' | null>(null)
+  const [busy, setBusy] = useState('')
+  const [log, setLog] = useState('')
+  useEffect(() => { cfgRef.current = cfg }, [cfg])
+
+  const loadStatus = () => api('GET', '/phone/status').then((r) => { if (r?.data) setStatus(r.data) }).catch(() => {})
+  const loadDevices = (p: 'android' | 'ios') => api('GET', `/phone/devices?platform=${p}`).then((r) => { if (r?.data) setDevs((s) => ({ ...s, [p]: r.data })) }).catch(() => {})
+  const loadPlatforms = () => api('GET', '/phone/platforms').then((r) => { if (r?.data) setPlat({ android: { installed: !!r.data.android?.installed }, ios: { installed: !!r.data.ios?.installed, supported: !!r.data.ios?.supported } }) }).catch(() => {})
+  useEffect(() => {
+    api('GET', '/phone/config').then((r) => { if (r?.data) setCfg({ ...PHONE_DEFAULT, ...r.data, android: { ...PHONE_DEFAULT.android, ...r.data.android }, ios: { ...PHONE_DEFAULT.ios, ...r.data.ios } }) }).catch(() => {})
+    loadPlatforms(); loadStatus(); loadDevices('android'); loadDevices('ios')
+    const iv = setInterval(loadStatus, 3000) // 状态灯后台自动刷新
+    return () => clearInterval(iv)
+  }, [])
+
+  const persist = (next: PhoneCfg) => { setCfg(next); cfgRef.current = next; return api('PUT', '/phone/config', next).then(loadStatus).catch((e: any) => message.error(e.message)) }
+  const patch = (p: 'android' | 'ios', d: any) => persist({ ...cfgRef.current, [p]: { ...cfgRef.current[p], ...d } })
+  const editAddr = (p: 'android' | 'ios', a: string) => setCfg((c) => { const n = { ...c, [p]: { ...c[p], address: a } }; cfgRef.current = n; return n })
+  const blurPersist = () => api('PUT', '/phone/config', cfgRef.current).then(loadStatus).catch(() => {})
+
+  // 开关：开=激活(互斥+未装先装)；关=未启用。
+  const toggle = async (p: 'android' | 'ios', on: boolean) => {
+    if (busy || installing) return
+    if (!on) { if (cfg.active === p) persist({ ...cfgRef.current, active: '' }); return }
+    if (!plat[p].installed) {
+      setInstalling(p); setLog('')
+      try {
+        const r = await api('POST', '/phone/install', { platform: p })
+        setLog(r?.data?.log || r?.error || '')
+        if (!r?.data?.installed) { message.error(t('phone.installFailed')); setInstalling(null); return }
+        setPlat((s) => ({ ...s, [p]: { ...s[p], installed: true } }))
+      } catch (e: any) { message.error(e.message); setInstalling(null); return }
+      setInstalling(null)
+    }
+    persist({ ...cfgRef.current, active: p }); loadDevices(p)
+  }
+  const act = async (name: string, endpoint: string) => {
+    setBusy(name); setLog('')
+    try {
+      const r = await api('POST', endpoint, {})
+      if (r?.error) { message.error(r.error); setLog(r.error) }
+      if (r?.data?.log) setLog(r.data.log)
+      const h = r?.data?.health || r?.data
+      if (h?.error) message.warning(h.error)
+    } catch (e: any) { message.error(e.message) } finally { setBusy(''); loadStatus() }
+  }
+  const dim = { color: 'var(--text-dim)', fontSize: 12 }
+  const st = status || {}
+
+  const renderCard = (p: 'android' | 'ios') => {
+    const c = cfg[p] as any
+    const active = cfg.active === p
+    const inst = plat[p].installed
+    const sup = p === 'ios' ? plat.ios.supported : true
+    const isA = p === 'android'
+    const needAddr = isA ? c.mode !== 'local' : true
+    const isNet = isA && (c.address || '').includes(':')
+    const canSS = (isA && c.mode === 'local') || (!isA && c.mode === 'simulator')
+    const sources = isA
+      ? [{ label: t('phone.mode.local'), value: 'local' }, { label: t('phone.mode.remote'), value: 'remote' }, { label: t('phone.mode.device'), value: 'device' }]
+      : [{ label: t('phone.ios.simulator'), value: 'simulator' }, { label: t('phone.ios.device'), value: 'device' }]
+    const opts = (devs[p] || []).map((d: any) => ({ value: d.id, label: `${d.name} (${d.id})${d.kind && d.kind !== 'android' ? ' · ' + d.kind : ''}` }))
+    const changeSrc = (m: string) => patch(p, isA && m === 'local' ? { mode: m, address: 'localhost:5555' } : { mode: m })
+    return (
+      <Card size="small" title={
+        <Space align="center">
+          <Switch checked={active} loading={installing === p} onChange={(on) => toggle(p, on)} />
+          <b>{t('phone.platform.' + p)}</b>
+          <Tag color={inst ? 'green' : 'default'}>{inst ? t('phone.installedTag') : t('phone.notInstalled')}</Tag>
+          {p === 'ios' && !sup && <span style={dim}>{t('phone.iosMacOnly')}</span>}
+        </Space>
+      }>
+        <Space direction="vertical" size={10} style={{ width: '100%' }}>
+          <Space direction="vertical" size={4} style={{ width: '100%' }}>
+            <span style={dim}>{t('phone.source')}</span>
+            <Segmented value={c.mode} onChange={(v) => changeSrc(v as string)} options={sources} />
+          </Space>
+          {needAddr && (
+            <Space direction="vertical" size={4} style={{ width: '100%' }}>
+              <Space.Compact style={{ width: '100%', maxWidth: 380 }}>
+                <AutoComplete value={c.address} onChange={(a) => editAddr(p, a)} onBlur={blurPersist} options={opts} style={{ width: '100%' }}
+                  placeholder={isA ? t('phone.addrPlaceholder') : t('phone.addrPlaceholderIOS')}
+                  filterOption={(i, o) => String(o?.value || '').toLowerCase().includes(i.toLowerCase())} />
+                <Button onClick={() => loadDevices(p)}>{t('phone.refreshDevices')}</Button>
+              </Space.Compact>
+              <span style={dim}>{isA ? (c.mode === 'remote' ? t('phone.addrHelpRemote') : t('phone.addrHelpDevice')) : t('phone.addrHelpIOS')}</span>
+            </Space>
+          )}
+          {isA && (
+            <Space direction="vertical" size={4} style={{ width: '100%' }}>
+              <span style={dim}>{t('phone.resolution')}</span>
+              <Segmented value={c.resolution || 'phone'} onChange={(v) => patch(p, { resolution: (v as string) === 'phone' ? '' : v })}
+                options={[{ label: t('phone.res.phone'), value: 'phone' }, { label: t('phone.res.tablet'), value: 'tablet' },
+                  { label: t('phone.res.tabletLand'), value: 'tablet-land' }, { label: t('phone.res.tabletLarge'), value: 'tablet-large' }]} />
+            </Space>
+          )}
+          {/* 动作条 + 状态：仅激活卡片（动作作用于当前激活平台） */}
+          {active ? (
+            <>
+              <Space wrap>
+                <Button type="primary" loading={busy === 'auto'} onClick={() => act('auto', '/phone/auto')}>{t('phone.auto')}</Button>
+                {canSS && <Button loading={busy === 'start'} disabled={st.running === true} onClick={() => act('start', '/phone/start')}>{t('phone.redroidStart')}</Button>}
+                {canSS && <Button loading={busy === 'stop'} disabled={st.running === false} onClick={() => act('stop', '/phone/stop')}>{t('phone.redroidStop')}</Button>}
+                {isNet && <Button loading={busy === 'connect'} onClick={() => act('connect', '/phone/connect')}>{t('phone.connect')}</Button>}
+                {isNet && <Button loading={busy === 'disconnect'} onClick={() => act('disconnect', '/phone/disconnect')}>{t('phone.disconnect2')}</Button>}
+                <Button loading={busy === 'test'} onClick={() => act('test', '/phone/test')}>{t('phone.test')}</Button>
+              </Space>
+              <Space wrap size={8}>
+                <Tag color={st.connected ? 'green' : (st.error ? 'red' : 'default')}>
+                  {st.connected ? '● ' + (st.device || t('phone.connected')) : (st.error || t('phone.disconnected'))}
+                </Tag>
+                {canSS && st.running != null && <Tag color={st.running ? 'blue' : 'default'}>{st.running ? t('phone.redroidRunning') : t('phone.redroidStopped')}</Tag>}
+              </Space>
+            </>
+          ) : <span style={dim}>{t('phone.enableHint')}</span>}
+        </Space>
+      </Card>
+    )
+  }
+
+  return (
+    <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+      {renderCard('android')}
+      {renderCard('ios')}
+      {log && <pre style={{ maxHeight: 160, overflow: 'auto', margin: 0, padding: 8, fontSize: 11, lineHeight: 1.5, background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 6, whiteSpace: 'pre-wrap' }}>{log}</pre>}
+    </Space>
+  )
+}
+
+// 关于页：Logo / 版本号 / GitHub 仓库链接（版本取自 /api/info 的 ttmux CLI 版本）
+function AboutPage() {
+  const { t } = useI18n()
+  const [version, setVersion] = useState('')
+  useEffect(() => { api('GET', '/info').then((d: any) => setVersion(d?.version || '')).catch(() => {}) }, [])
+  return (
+    <Card style={{ maxWidth: 520, margin: '0 auto' }}>
+      <Space direction="vertical" size={18} align="center" style={{ width: '100%', padding: '28px 0' }}>
+        <img src="/logo-mark.svg" width={72} height={72} alt="Roam"
+          style={{ borderRadius: 16, boxShadow: '0 2px 8px rgba(0,0,0,.5)' }} />
+        <div style={{
+          fontWeight: 800, fontSize: 28, letterSpacing: 0.5,
+          background: 'var(--brand-grad)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent',
+        }}>Roam</div>
+        <p style={{ color: 'var(--text-dim)', fontSize: 13, lineHeight: 1.7, margin: 0, textAlign: 'left', maxWidth: 420 }}>
+          {t('about.intro')}
+        </p>
+        {version && (
+          <div style={{ color: 'var(--text-dim)', fontSize: 13 }}>
+            {t('settings.version')} <code>{version}</code>
+          </div>
+        )}
+        <a href="https://github.com/ybz21/roam" target="_blank" rel="noreferrer"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--text-bright)', fontSize: 14 }}>
+          {ICONS.github}<span>github.com/ybz21/roam</span>
+        </a>
+      </Space>
+    </Card>
+  )
+}
+
 function EnvPage() {
   const [list, setList] = useState<any[]>([])
   const { message, modal } = AntApp.useApp()
@@ -1775,6 +2048,7 @@ function EnvPage() {
         </Space>
       )},
       { key: 'browser', label: t('settings.browser'), children: <BrowserCard /> },
+      { key: 'phone', label: t('settings.phone'), children: <PhoneSettingsCard /> },
       { key: 'speech', label: t('settings.tabSpeech'), children: <SpeechCard /> },
       { key: 'preferences', label: t('settings.tabPreferences'), children: <PreferencesOverview /> },
       { key: 'env', label: t('settings.tabEnv'), children: (
@@ -1798,7 +2072,7 @@ function EnvPage() {
 // ── 语音输入(ASR)配置：选服务商并填密钥，持久化到后端 speech-config.json ──
 const SPEECH_DEFAULTS = {
   openai: { baseURL: 'https://api.openai.com/v1', model: 'whisper-1' },
-  volcano: { resourceId: 'volc.bigasr.auc_turbo', endpoint: 'https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash' },
+  volcano: { resourceId: 'volc.bigasr.auc', endpoint: 'https://openspeech.bytedance.com/api/v3/auc/bigmodel/submit' },
 }
 function normalizeSpeech(d: any) {
   const c = d || {}

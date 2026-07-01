@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// 开发期把 /api（含 WebSocket）代理到后端 Gin（:8080）
+// 开发期把 /api（含 WebSocket）代理到后端 Gin（:13579）
 export default defineConfig({
   plugins: [react()],
   build: {
@@ -17,6 +17,8 @@ export default defineConfig({
           if (!id.includes('node_modules')) return
           // Office 预览（docx/xlsx/pptx）很重，仅看 Office 文件时才用 → 独立块（配合 FileBrowser 懒加载按需取）
           if (/docx-preview|xlsx|pptx|jvmr/.test(id)) return 'office'
+          // Monaco 编辑器（VSCode 内核）很重，仅编辑/查看文本文件才用 → 独立块（配合 CodeEditor 懒加载按需取，不进首屏）
+          if (/monaco-editor/.test(id)) return 'monaco'
           // 注：markdown 渲染链（react-markdown + 庞大的 unified/micromark/hast 生态）不单独拆块——
           // 它与其它库共享 unist/hast 等工具，强行拆会造成 markdown↔vendor 循环依赖，故整体并入 vendor。
           if (id.includes('@xterm')) return 'xterm'
@@ -31,7 +33,7 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': { target: 'http://127.0.0.1:8080', changeOrigin: true, ws: true },
+      '/api': { target: 'http://127.0.0.1:13579', changeOrigin: true, ws: true },
     },
   },
 })

@@ -160,7 +160,7 @@ export function VoiceInput({ accent, onResult }: { accent: string; onResult: (te
         onPointerUp={(e) => { e.preventDefault(); end() }}
         onPointerCancel={() => { cancelRef.current = true; end() }}
         style={{
-          position: 'absolute', right: 18, bottom: 78, zIndex: 25,
+          position: 'absolute', right: 18, bottom: 54, zIndex: 25,
           width: 54, height: 54, borderRadius: '50%', cursor: 'pointer',
           border: 'none', touchAction: 'none', userSelect: 'none',
           display: 'flex', alignItems: 'center', justifyContent: 'center',

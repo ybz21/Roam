@@ -1,4 +1,4 @@
-# scripts/preflight.sh — 系统检查/前置：打印平台横幅、装好 tmux、建目录。
+# scripts/install/preflight.sh — 系统检查/前置：打印平台横幅、装好 tmux、建目录。
 # 依赖 lib/common.sh + lib/platform.sh（已 source）。
 # shellcheck shell=bash
 

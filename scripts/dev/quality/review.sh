@@ -3,7 +3,7 @@
 # risks without requiring external services.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 BASE_REF="${1:-${GITHUB_BASE_REF:-main}}"
 OUT="${2:-}"
 

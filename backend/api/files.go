@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -93,8 +94,120 @@ func (a *API) File(c *gin.Context) {
 		content = string(data)
 	}
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{
-		"path": p, "size": info.Size(), "truncated": truncated, "binary": binary, "content": content,
+		"path": p, "size": info.Size(), "mtime": info.ModTime().Unix(), "truncated": truncated, "binary": binary, "content": content,
 	}})
+}
+
+// FileSave POST /file/save —— 覆盖写入已存在的普通文件内容（编辑器保存用）。
+// 只允许覆盖既有普通文件（新建走 upload/mkdir），并保留原文件权限位。
+func (a *API) FileSave(c *gin.Context) {
+	var req struct {
+		Path    string `json:"path"`
+		Content string `json:"content"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_FORM", "message": err.Error()}})
+		return
+	}
+	p := filepath.Clean(req.Path)
+	if p == "" || !filepath.IsAbs(p) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_PATH"}})
+		return
+	}
+	info, err := os.Stat(p)
+	if err != nil || info.IsDir() {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "NOT_FILE"}})
+		return
+	}
+	if err := os.WriteFile(p, []byte(req.Content), info.Mode().Perm()); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "WRITE_ERROR", "message": err.Error()}})
+		return
+	}
+	var size, mtime int64
+	if ni, err := os.Stat(p); err == nil {
+		size = ni.Size()
+		mtime = ni.ModTime().Unix()
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"path": p, "size": size, "mtime": mtime}})
+}
+
+// FileSearch GET /file/search?dir=<dir>&q=<query> —— 从 dir 递归按文件名模糊(子串,忽略大小写)搜文件。
+// 有界：跳过 .git/node_modules，限制访问条目与返回条数，避免大目录卡死。
+func (a *API) FileSearch(c *gin.Context) {
+	dir := filepath.Clean(c.Query("dir"))
+	q := strings.TrimSpace(c.Query("q"))
+	if dir == "" || !filepath.IsAbs(dir) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_PATH"}})
+		return
+	}
+	type hit struct {
+		Path string `json:"path"`
+		Name string `json:"name"`
+		Rel  string `json:"rel"`
+	}
+	results := []hit{}
+	if q == "" {
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"results": results, "truncated": false}})
+		return
+	}
+	// 匹配器：优先当正则(忽略大小写、不锚定)；正则非法(如 *.py 以 * 开头)则按 glob 再试；
+	// 都不行退化为子串包含。这样纯文字=子串，a*.py / *.py 等通配也能用。
+	ql := strings.ToLower(q)
+	re, err := regexp.Compile("(?i)" + q)
+	if err != nil {
+		re, err = regexp.Compile("(?i)^" + globToRegex(q) + "$")
+		if err != nil {
+			re = nil
+		}
+	}
+	match := func(name string) bool {
+		if re != nil {
+			return re.MatchString(name)
+		}
+		return strings.Contains(strings.ToLower(name), ql)
+	}
+	const maxResults, maxVisited = 200, 50000
+	visited := 0
+	truncated := false
+	skipDir := map[string]bool{".git": true, "node_modules": true}
+	_ = filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil // 跳过不可读条目
+		}
+		if len(results) >= maxResults || visited >= maxVisited {
+			truncated = true
+			return filepath.SkipAll
+		}
+		if d.IsDir() {
+			if p != dir && skipDir[d.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		visited++
+		if match(d.Name()) {
+			rel, _ := filepath.Rel(dir, p)
+			results = append(results, hit{Path: p, Name: d.Name(), Rel: rel})
+		}
+		return nil
+	})
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"results": results, "truncated": truncated}})
+}
+
+// globToRegex 把 shell 通配(*,?)转成正则片段，其余字符原样转义。用于 *.py 这类 glob 搜索。
+func globToRegex(g string) string {
+	var b strings.Builder
+	for _, r := range g {
+		switch r {
+		case '*':
+			b.WriteString(".*")
+		case '?':
+			b.WriteString(".")
+		default:
+			b.WriteString(regexp.QuoteMeta(string(r)))
+		}
+	}
+	return b.String()
 }
 
 // FileRaw GET /file/raw?path=<file> —— 原样返回文件字节（图片等内联预览用，Content-Type 按扩展名嗅探）。
@@ -241,7 +354,7 @@ func (a *API) FileStat(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "FS_ERROR", "message": err.Error()}})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": gin.H{"path": p, "dir": info.IsDir(), "size": info.Size()}})
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"path": p, "dir": info.IsDir(), "size": info.Size(), "mtime": info.ModTime().Unix()}})
 }
 
 // FileDelete DELETE /file?path=<file-or-empty-dir> —— 删除文件或空目录。

@@ -1,11 +1,15 @@
 // 文件侧栏 —— 在 Claude / Codex 对话页右侧浏览工作目录、查看文件内容（类似 codex 右侧边栏）。
 // 单层可导航列表：目录在前可进入、↑ 回上级、点文件在弹层里查看正文。
-import { type MouseEvent, type ReactNode, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { type MouseEvent, type ReactNode, Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { AutoComplete, Button, Dropdown, Input, Modal, Space, Spin, App as AntApp, Tooltip } from 'antd'
 import { api, upload } from './api'
 import Markdown from './Markdown'
 import { useI18n } from './i18n'
 import { recentDirs } from './App'
+import { useThemeMode } from './theme'
+
+// Monaco 代码编辑器很重，只有真正编辑/查看文本文件才需要 → 懒加载，不进首屏包。
+const CodeEditor = lazy(() => import('./CodeEditor'))
 
 // Office 预览（docx-preview / xlsx / pptx）依赖很重，只有真正打开 Office 文件才需要：
 // 懒加载使其不进入首屏包，按需异步取。
@@ -107,6 +111,21 @@ function codeLangOf(path: string): string {
   return CODE_LANG[extOf(path)] || ''
 }
 
+// Monaco 语言 id（与 highlight.js 的略有出入：bash→shell、tsx→typescript、toml→ini…）
+const MONACO_LANG: Record<string, string> = {
+  py: 'python', pyw: 'python', ipynb: 'json', sh: 'shell', bash: 'shell', zsh: 'shell', fish: 'shell', ps1: 'powershell',
+  js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript', ts: 'typescript', tsx: 'typescript',
+  go: 'go', rs: 'rust', java: 'java', kt: 'kotlin', c: 'c', h: 'c', cpp: 'cpp', hpp: 'cpp', cs: 'csharp',
+  php: 'php', rb: 'ruby', swift: 'swift', html: 'html', htm: 'html', vue: 'html', css: 'css', scss: 'scss', sass: 'scss',
+  less: 'less', sql: 'sql', json: 'json', jsonl: 'json', ndjson: 'json', yaml: 'yaml', yml: 'yaml',
+  toml: 'ini', ini: 'ini', env: 'ini', conf: 'ini', lock: 'ini', xml: 'xml', md: 'markdown', markdown: 'markdown', mdx: 'markdown',
+}
+function monacoLangOf(path: string): string {
+  const name = path.split('/').pop() || ''
+  if (name === 'Dockerfile' || name.endsWith('.Dockerfile')) return 'dockerfile'
+  return MONACO_LANG[extOf(path)] || 'plaintext'
+}
+
 function parseDelimited(text: string, sep: ',' | '\t'): string[][] {
   const rows: string[][] = []
   let row: string[] = [], cell = '', quote = false
@@ -181,7 +200,7 @@ regIcon(['mp3', 'wav', 'flac', 'ogg', 'aac', 'aiff', 'm4a', 'mid'], <AudioIcon /
 regIcon(['mp4', 'mov', 'mkv', 'avi', 'webm', 'wmv', 'flv', 'm4v'], <VideoIcon />, 'hsl(340,65%,52%)')
 regIcon(['zip', 'tar', 'gz', 'rar', '7z', 'bz2', 'xz', 'tgz', 'dmg', 'iso', 'pkg'], <ArchiveIcon />, 'hsl(30,50%,48%)')
 regIcon(['ttf', 'otf', 'woff', 'woff2'], <FileIcon />, 'var(--text-dim)')
-const FileTypeIcon = ({ name }: { name: string }) => {
+export const FileTypeIcon = ({ name }: { name: string }) => {
   const entry = EXT_ICON[extOf(name)] || { icon: <FileIcon />, color: 'var(--text-dimmer)' }
   return (
     <span style={{
@@ -233,6 +252,28 @@ const EyeOffIcon = () => (
 )
 const SortIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h7" /><path d="M3 12h10" /><path d="M3 18h14" /><path d="M18 6v12" /><path d="m15 15 3 3 3-3" /></svg>
+)
+// 树形视图开关：平铺列表 <-> 可展开目录树
+const TreeIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="6" height="6" rx="1" /><rect x="15" y="15" width="6" height="6" rx="1" /><path d="M9 6h6a2 2 0 0 1 2 2v7" /></svg>
+)
+const ListIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 6h13" /><path d="M8 12h13" /><path d="M8 18h13" /><path d="M3 6h.01" /><path d="M3 12h.01" /><path d="M3 18h.01" /></svg>
+)
+const SearchIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
+)
+// markdown 预览（VSCode 式）：切换预览 / 侧栏打开预览
+const PreviewIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M7 9h10" /><path d="M7 13h10" /><path d="M7 17h6" /></svg>
+)
+const PreviewSideIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M13 4v16" /><path d="M16 10h3" /><path d="M16 14h3" /></svg>
+)
+// 目录展开箭头：展开时旋转 90°
+const Chevron = ({ open }: { open: boolean }) => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
+    style={{ transition: 'transform .12s', transform: open ? 'rotate(90deg)' : 'none' }}><path d="m9 18 6-6-6-6" /></svg>
 )
 const IconButton = ({ title, children, danger, onClick, disabled, width = 24 }: { title: string; children: React.ReactNode; danger?: boolean; onClick?: (e: React.MouseEvent) => void; disabled?: boolean; width?: number | string }) => (
   <Tooltip title={title}>
@@ -300,20 +341,36 @@ function OfficePreview({ name, previewUrl, rawUrl, downloadUrl, downloadName, he
   return <iframe title={name} src={url} style={{ width: '100%', height, border: 0, background: '#fff' }} />
 }
 
-function Viewer({
+export function Viewer({
   path,
   accent,
   inline,
+  active = true,
+  tabbed,
+  forcePreview,
   onClose,
   onOpenPath,
   onOpenAgent,
+  onDirtyChange,
+  onPreviewToSide,
 }: {
   path: string
   accent: string
   inline?: boolean
+  // 多 tab 常驻挂载时，只有激活的才渲染重型 Monaco 编辑器/预览，避免多实例吃爆内存(OOM)。
+  // 组件仍挂载 → draft/dirty 等 state 保留，切回来编辑内容不丢。
+  active?: boolean
+  // 编辑器 tab 上下文：外层 tab 已显示文件名+关闭，这里就不再重复顶部「▸ 文件名」标题行。
+  tabbed?: boolean
+  // 专用预览 tab（VSCode「侧栏预览」）：始终渲染 markdown，不显示编辑器/切换钮。
+  forcePreview?: boolean
   onClose: () => void
   onOpenPath: (p: string) => void
   onOpenAgent?: (kind: 'claude' | 'codex', path: string) => void
+  // 编辑器脏状态上报（供外层 tab 显示未保存圆点）
+  onDirtyChange?: (path: string, dirty: boolean) => void
+  // 在侧栏打开渲染预览（外层 FileWorkspace 处理，开另一栏）
+  onPreviewToSide?: (path: string) => void
 }) {
   const ext = extOf(path)
   const isImg = IMG_EXT.includes(ext)
@@ -334,14 +391,65 @@ function Viewer({
   const [err, setErr] = useState('')
   const [source, setSource] = useState(false) // markdown：源码/渲染切换
   const [agentPick, setAgentPick] = useState(false)
+  const [draft, setDraft] = useState('') // 编辑器当前文本
+  const [saving, setSaving] = useState(false)
+  const [stale, setStale] = useState(false) // 磁盘上文件已被外部(cc/codex)改动，但本地有未保存改动没自动覆盖
   const { message } = AntApp.useApp()
   const { t } = useI18n()
+  const { mode } = useThemeMode()
+
+  // 可编辑：文本/代码/JSON/Markdown（源码）；二进制、被截断的大文件、表格/图片/PDF/Office 不可编辑。
+  const editable = !!data && !data.binary && !data.truncated && !isSheetText && !isImg && !isPdf && !isOffice
+  const dirty = editable && data ? draft !== data.content : false
+  useEffect(() => { onDirtyChange?.(path, dirty); return () => onDirtyChange?.(path, false) }, [dirty, path])
+
+  const save = async () => {
+    if (!editable || saving || !dirty) return
+    setSaving(true)
+    try {
+      const res = await api('POST', '/file/save', { path, content: draft })
+      setData((d: any) => ({ ...d, content: draft, mtime: res.data?.mtime ?? d?.mtime })) // 基线更新 → dirty 归零；mtime 同步避免自触发重载
+      setStale(false)
+      message.success(t('file.saved'))
+    } catch (e: any) {
+      message.error(t('file.saveFailed', { message: e.message }))
+    } finally {
+      setSaving(false)
+    }
+  }
+  // Monaco 的 Ctrl+S 命令在挂载时捕获闭包，用 ref 始终指向最新 save，避免存到旧文本。
+  const saveRef = useRef(save)
+  saveRef.current = save
 
   useEffect(() => {
     if (isImg || isPdf || isOffice) return // 图片/PDF/Office 直接走 raw 或专用面板
-    setData(null); setErr(''); setSource(false)
-    api('GET', `/file?path=${encodeURIComponent(path)}`).then((r) => setData(r.data)).catch((e) => setErr(e.message))
+    // tab 语境的 markdown 默认进编辑器（源码），点眼睛才切预览；非 tab（有头部）默认渲染。
+    setData(null); setErr(''); setStale(false); setSource(!!tabbed && MD_EXT.includes(extOf(path))); setDraft('')
+    api('GET', `/file?path=${encodeURIComponent(path)}`).then((r) => { setData(r.data); setDraft(r.data?.content || '') }).catch((e) => setErr(e.message))
   }, [path, isImg, isPdf, isOffice])
+
+  // 从磁盘重载（放弃本地未保存改动）
+  const reloadFromDisk = () => {
+    api('GET', `/file?path=${encodeURIComponent(path)}`).then((r) => { setData(r.data); setDraft(r.data?.content || ''); setStale(false) }).catch(() => {})
+  }
+  // 外部(cc/codex 等)改动已打开的文件 → 轮询 mtime：无本地改动自动重载渲染；有未保存改动只提示不覆盖。
+  useEffect(() => {
+    if (!active || !data || err || isImg || isPdf || isOffice) return
+    let stop = false
+    const h = setInterval(async () => {
+      try {
+        const r = await api('GET', `/file/stat?path=${encodeURIComponent(path)}`)
+        if (stop || !r.data?.mtime || r.data.mtime === data.mtime) return
+        if (dirty) { setStale(true); return } // 有未保存改动 → 不覆盖，仅提示
+        const fr = await api('GET', `/file?path=${encodeURIComponent(path)}`)
+        if (!stop) { setData(fr.data); setDraft(fr.data?.content || '') }
+      } catch {}
+    }, 2000)
+    return () => { stop = true; clearInterval(h) }
+  }, [active, data?.mtime, dirty, path, isImg, isPdf, isOffice, err])
+
+  // 非激活 tab：只占位、不挂载重型 Monaco/预览（state 已在上面 hook 里保留，切回来不丢编辑）。
+  if (!active) return <div style={{ height: '100%' }} />
 
   const name = fileNameOf(path)
   const copyPath = async () => {
@@ -393,10 +501,16 @@ function Viewer({
 
   const titleNode = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingRight: inline ? 0 : 28, minWidth: 0 }}>
-      <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        <span style={{ color: accent }}>▸</span> {name}
-      </span>
+      {!tabbed && (
+        <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span style={{ color: accent }}>▸</span> {name}
+        </span>
+      )}
+      {dirty && <span title={t('file.unsaved')} style={{ width: 8, height: 8, borderRadius: '50%', background: '#d29922', flex: '0 0 auto' }} />}
       <span style={{ flex: 1, minWidth: 8 }} />
+      {editable && (
+        <Button size="small" type="primary" ghost={!dirty} disabled={!dirty || saving} loading={saving} onClick={save}>{t('file.save')}</Button>
+      )}
       {isMd && data && !data.binary && (
         <Button size="small" onClick={() => setSource((s) => !s)}>{source ? t('file.rendered') : t('file.source')}</Button>
       )}
@@ -406,7 +520,7 @@ function Viewer({
       <Button size="small" onClick={copyPath}>{t('file.copyPath')}</Button>
       <Button size="small" href={downloadUrl} download={downloadName}>{t('file.download')}</Button>
       <a href={rawUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('file.raw')}</a>
-      {inline && <IconButton title={t('file.closePreview')} onClick={onClose}><CloseIcon /></IconButton>}
+      {inline && !tabbed && <IconButton title={t('file.closePreview')} onClick={onClose}><CloseIcon /></IconButton>}
     </div>
   )
   const bodyNode = (
@@ -447,13 +561,17 @@ function Viewer({
             <>
               {isSheetText
                 ? csvTable(data.content, ext === 'tsv' ? '\t' : ',')
-                : isMd && !source
-                  ? <div style={{ height: previewHeight, overflow: 'auto' }}><Markdown accent={accent} resolveHref={resolvePreviewHref} onLinkClick={openPreviewLink}>{data.content}</Markdown></div>
-                  : ext === 'json'
-                    ? previewShell(t('file.jsonPreview'), <div style={{ height: previewHeight, boxSizing: 'border-box', overflow: 'auto', padding: 12 }}><Markdown accent={accent} fill>{fence('json', formatJSON(data.content))}</Markdown></div>)
-                    : codeLang
-                      ? previewShell(t('file.codePreview', { lang: codeLang.toUpperCase() }), <div style={{ height: previewHeight, boxSizing: 'border-box', overflow: 'auto', padding: 12 }}><Markdown accent={accent} fill>{fence(codeLang, data.content)}</Markdown></div>)
-                      : codePre(data.content)}
+                : isMd && (!source || forcePreview)
+                  ? <div style={{ height: previewHeight, overflow: 'auto', padding: forcePreview ? '0 8px' : undefined }}><Markdown accent={accent} resolveHref={resolvePreviewHref} onLinkClick={openPreviewLink}>{data.content}</Markdown></div>
+                  : (
+                    // 文本/代码/JSON/Markdown(源码) → Monaco 编辑器（行号、语法高亮、可编辑；截断的大文件只读）。
+                    // tab 语境下全屏无边框，背景由 CodeEditor 统一成应用底色。
+                    <div style={{ height: previewHeight, border: tabbed ? 'none' : '1px solid var(--border-subtle)', borderRadius: tabbed ? 0 : 8, overflow: 'hidden' }}>
+                      <Suspense fallback={<div style={{ height: '100%', display: 'grid', placeItems: 'center' }}><Spin /></div>}>
+                        <CodeEditor value={draft} language={monacoLangOf(path)} dark={mode === 'dark'} readOnly={!editable} onChange={setDraft} onSave={() => saveRef.current()} />
+                      </Suspense>
+                    </div>
+                  )}
               {data.truncated && <div style={{ color: '#d29922', fontSize: 12, marginTop: 6 }}>⚠ {t('file.truncatedLong')}</div>}
             </>
           )}
@@ -476,8 +594,31 @@ function Viewer({
   if (inline) {
     return (
       <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg-base)' }}>
-        <div style={{ padding: '9px 12px', borderBottom: '1px solid var(--border-subtle)' }}>{titleNode}</div>
-        <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', padding: 12 }}>{bodyNode}</div>
+        {/* 编辑器 tab 语境(tabbed)：文件名/操作已由外层 tab 承担 → 去掉整条标题栏，编辑器全屏。保存用 Ctrl/Cmd+S。 */}
+        {!tabbed && <div style={{ padding: '9px 12px', borderBottom: '1px solid var(--border-subtle)' }}>{titleNode}</div>}
+        <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', padding: tabbed ? 0 : 12, position: 'relative' }}>
+          {bodyNode}
+          {/* tab 语境无头部：markdown 右上角 VSCode 式预览按钮（切换预览 / 侧栏打开预览） */}
+          {tabbed && isMd && !forcePreview && data && !data.binary && (
+            <div style={{ position: 'absolute', top: 6, right: 8, zIndex: 10, display: 'inline-flex', gap: 2, background: 'color-mix(in srgb, var(--bg-base) 82%, transparent)', borderRadius: 8, padding: 2 }}>
+              <Tooltip title={source ? t('file.preview') : t('file.source')} placement="bottom">
+                <Button type="text" size="small" onClick={() => setSource((s) => !s)} style={{ color: !source ? accent : 'var(--text-dim)', width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><PreviewIcon /></Button>
+              </Tooltip>
+              {onPreviewToSide && (
+                <Tooltip title={t('file.previewToSide')} placement="bottom">
+                  <Button type="text" size="small" onClick={() => onPreviewToSide(path)} style={{ color: 'var(--text-dim)', width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><PreviewSideIcon /></Button>
+                </Tooltip>
+              )}
+            </div>
+          )}
+          {/* 文件被外部(cc/codex)改动、但本地有未保存改动 → 提示条 */}
+          {stale && dirty && (
+            <div style={{ position: 'absolute', top: 6, left: '50%', transform: 'translateX(-50%)', zIndex: 11, display: 'inline-flex', alignItems: 'center', gap: 8, padding: '4px 10px', borderRadius: 8, fontSize: 12, background: 'var(--bg-container)', border: '1px solid #d29922', color: 'var(--text-bright)', boxShadow: 'var(--elevated-shadow)' }}>
+              <span>⚠ {t('file.changedOnDisk')}</span>
+              <Button size="small" danger onClick={reloadFromDisk}>{t('file.reloadFromDisk')}</Button>
+            </div>
+          )}
+        </div>
       </div>
     )
   }
@@ -505,6 +646,121 @@ function fence(lang: string, content: string): string {
   return '```' + lang + '\n' + content + '\n```'
 }
 
+// 统一：把文件绝对路径写进拖拽载荷（对话框识别 application/x-ttmux-path，其余认 text/plain）。
+function startPathDrag(ev: React.DragEvent, full: string) {
+  ev.dataTransfer.setData('application/x-ttmux-path', full)
+  ev.dataTransfer.setData('text/plain', full)
+  ev.dataTransfer.effectAllowed = 'copy'
+}
+
+// 统一：一行文件/目录的图标 + 名称 + 大小 + @插入 + 下载。平铺列表与树共用（外层容器各自处理缩进/展开）。
+function FileRowBody({ full, name, isDir, size, accent, onInsertPath }: {
+  full: string; name: string; isDir: boolean; size: number; accent: string; onInsertPath?: (p: string) => void
+}) {
+  const { t } = useI18n()
+  return (
+    <>
+      <span style={{ color: isDir ? accent : 'var(--text-dimmer)', flex: '0 0 auto', display: 'inline-flex', width: 22, justifyContent: 'center' }}>{isDir ? <FolderIcon /> : <FileTypeIcon name={name} />}</span>
+      <span style={{ color: 'var(--text-bright)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+      {!isDir && <span style={{ color: 'var(--text-dimmer)', fontSize: 11, flex: '0 0 auto' }}>{fmtSize(size)}</span>}
+      {onInsertPath && (
+        <span data-file-action>
+          <IconButton title={t('file.insertPath')} onClick={() => onInsertPath(full)}>@</IconButton>
+        </span>
+      )}
+      {!isDir && (
+        <span data-file-action>
+          <Tooltip title={t('file.download')}>
+            <Button type="text" size="small" href={`/api/file/raw?path=${encodeURIComponent(full)}&dl=1`} download={name}
+              style={{ width: 24, height: 24, minWidth: 24, padding: 0, color: 'var(--text-dim)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><DownloadIcon /></Button>
+          </Tooltip>
+        </span>
+      )}
+    </>
+  )
+}
+
+// VSCode 风格可展开目录树：以 root 为根，子目录首次展开时懒加载（复用 GET /files?path=）。
+// 排序/隐藏文件过滤、点文件预览、拖入终端 @mention、右键删除都与平铺行一致。
+function FileTree({
+  root, rootEntries, accent, showHidden, sortKey, tick, selected,
+  onOpenFile, onDeleteEntry, onInsertPath,
+}: {
+  root: string
+  rootEntries: Entry[]
+  accent: string
+  showHidden: boolean
+  sortKey: SortKey
+  tick: number
+  selected: string | null
+  onOpenFile: (full: string) => void
+  onDeleteEntry: (full: string, isDir: boolean) => void
+  onInsertPath?: (full: string) => void
+}) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [childMap, setChildMap] = useState<Record<string, Entry[]>>({})
+  const [loading, setLoading] = useState<Record<string, boolean>>({})
+  const { t } = useI18n()
+
+  // 换根目录或刷新（tick）→ 清空展开态与缓存，避免展示上一目录的子树
+  useEffect(() => { setExpanded(new Set()); setChildMap({}); setLoading({}) }, [root, tick])
+
+  const loadDir = (dirPath: string) => {
+    setLoading((m) => ({ ...m, [dirPath]: true }))
+    api('GET', `/files?path=${encodeURIComponent(dirPath)}`)
+      .then((r) => setChildMap((m) => ({ ...m, [dirPath]: r.data?.entries || [] })))
+      .catch(() => setChildMap((m) => ({ ...m, [dirPath]: [] })))
+      .finally(() => setLoading((m) => ({ ...m, [dirPath]: false })))
+  }
+  const toggleDir = (dirPath: string) => {
+    setExpanded((s) => {
+      const n = new Set(s)
+      if (n.has(dirPath)) n.delete(dirPath)
+      else { n.add(dirPath); if (!(dirPath in childMap)) loadDir(dirPath) }
+      return n
+    })
+  }
+  const visible = (entries: Entry[]) => sortEntries((entries || []).filter((e) => showHidden || !e.name.startsWith('.')), sortKey)
+
+  const renderLevel = (dirPath: string, entries: Entry[], depth: number): ReactNode =>
+    visible(entries).map((e) => {
+      const full = joinPath(dirPath, e.name)
+      const isOpen = e.dir && expanded.has(full)
+      return (
+        <Fragment key={full}>
+          <div className="cc-filerow"
+            draggable
+            onDragStart={(ev) => startPathDrag(ev, full)}
+            onClick={(ev) => {
+              if ((ev.target as HTMLElement).closest('[data-file-action]')) return
+              e.dir ? toggleDir(full) : onOpenFile(full)
+            }}
+            onContextMenu={(ev) => { ev.preventDefault(); ev.stopPropagation(); onDeleteEntry(full, e.dir) }}
+            style={{ ...rowStyle(), gap: 0, padding: 0, alignItems: 'stretch', minHeight: 26, background: full === selected ? '#1f6feb22' : undefined }}>
+            {/* VSCode 式层级缩进导引线：每深一层一条竖线，逐行拼成连续的层级线 */}
+            <span style={{ flex: '0 0 auto', width: 8 }} />
+            {Array.from({ length: depth }).map((_, i) => (
+              <span key={i} aria-hidden style={{ flex: '0 0 auto', width: 14, boxSizing: 'border-box', borderLeft: '1px solid var(--border-subtle)' }} />
+            ))}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0, padding: '4px 8px 4px 2px' }}>
+              <span style={{ flex: '0 0 auto', width: 14, display: 'inline-flex', justifyContent: 'center', color: 'var(--text-dim)' }}>
+                {e.dir ? <Chevron open={!!isOpen} /> : null}
+              </span>
+              <FileRowBody full={full} name={e.name} isDir={e.dir} size={e.size} accent={accent} onInsertPath={onInsertPath} />
+            </div>
+          </div>
+          {isOpen && (
+            loading[full]
+              ? <div style={{ padding: '4px 0 4px', paddingLeft: 8 + (depth + 1) * 14 }}><Spin size="small" /></div>
+              : renderLevel(full, childMap[full] || [], depth + 1)
+          )}
+        </Fragment>
+      )
+    })
+
+  return <>{renderLevel(root, rootEntries, 0)}</>
+}
+
 export default function FileBrowser({
   dir,
   accent = '#58a6ff',
@@ -512,13 +768,19 @@ export default function FileBrowser({
   onClose,
   onInsertPath,
   onOpenAgent,
+  onOpenFile,
+  selectedPath,
 }: {
   dir?: string
   accent?: string
-  layout?: 'sidebar' | 'split'
+  layout?: 'sidebar' | 'split' | 'dock'
   onClose?: () => void
   onInsertPath?: (p: string) => void
   onOpenAgent?: (kind: 'claude' | 'codex', path: string) => void
+  // dock 布局下由外层（编辑器 tab 区）接管文件打开：点文件不再弹内置预览，而是回调让外层开 tab。
+  onOpenFile?: (path: string) => void
+  // 外层当前激活的文件 tab，用于在浏览器里高亮选中项（覆盖内部 view）。
+  selectedPath?: string | null
 }) {
   const [path, setPath] = useState(dir || '')
   const [data, setData] = useState<Dir | null>(null)
@@ -535,6 +797,23 @@ export default function FileBrowser({
   const [mkdirBusy, setMkdirBusy] = useState(false)
   const [showHidden, setShowHidden] = useState(false) // 隐藏文件（点号开头）默认不显示，眼睛开关切换
   const [sortKey, setSortKey] = useState<SortKey>('name')
+  // 递归按文件名搜索（当前目录向下），放大镜开关切换；有查询词时列表区改显搜索结果。
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<{ path: string; name: string; rel: string }[] | null>(null)
+  const [searching, setSearching] = useState(false)
+  const [searchTrunc, setSearchTrunc] = useState(false)
+  // 平铺列表 / VSCode 树 两种展示，所有文件面板都可切；localStorage 记住选择。
+  // dock（新标签左侧）与 split（独立 Files 页）默认树模式，会话右侧抽屉(sidebar)默认平铺。
+  const canToggleView = true
+  const [browseMode, setBrowseMode] = useState<'flat' | 'tree'>(() => {
+    const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('ttmux.fileBrowseMode') : null
+    if (saved === 'tree' || saved === 'flat') return saved
+    return layout === 'sidebar' ? 'flat' : 'tree'
+  })
+  useEffect(() => {
+    if (canToggleView && typeof localStorage !== 'undefined') localStorage.setItem('ttmux.fileBrowseMode', browseMode)
+  }, [browseMode, canToggleView])
   const fileRef = useRef<HTMLInputElement>(null)
   const { message, modal } = AntApp.useApp()
   const { t } = useI18n()
@@ -590,6 +869,21 @@ export default function FileBrowser({
     setPathDraft(displayPath(cur))
   }, [cur])
 
+  // 递归文件名搜索：防抖 250ms，作用域为当前目录 cur。
+  const searchQ = query.trim()
+  useEffect(() => {
+    if (!searchOpen || !searchQ || !cur) { setResults(null); setSearching(false); return }
+    setSearching(true)
+    let stop = false
+    const h = setTimeout(() => {
+      api('GET', `/file/search?dir=${encodeURIComponent(cur)}&q=${encodeURIComponent(searchQ)}`)
+        .then((r) => { if (!stop) { setResults(r.data?.results || []); setSearchTrunc(!!r.data?.truncated) } })
+        .catch(() => { if (!stop) { setResults([]); setSearchTrunc(false) } })
+        .finally(() => { if (!stop) setSearching(false) })
+    }, 250)
+    return () => { stop = true; clearTimeout(h) }
+  }, [searchQ, searchOpen, cur, tick])
+
   const doUpload = async (files: FileList | File[]) => {
     if (!files || !files.length || !cur || uploading) return
     setUploading(true)
@@ -637,13 +931,18 @@ export default function FileBrowser({
   // 根目录之上不再回退（防止越过工作目录乱逛；dir 为空时允许一直向上）
   const canUp = !!data && data.parent !== data.path && (!dir || cur !== dir)
 
+  // 打开一个文件：dock 布局把打开交给外层（开编辑器 tab），否则用内置预览。
+  const openFile = (target: string) => { if (onOpenFile) onOpenFile(target); else setView(target) }
+  // 浏览器里高亮的选中项：外层受控（selectedPath）优先，否则用内部 view。
+  const sel = selectedPath !== undefined ? selectedPath : view
+
   const openPath = async (target: string) => {
     try {
       const res = await api('GET', `/file/stat?path=${encodeURIComponent(target)}`)
       if (res.data?.dir) {
         navigate(target)
       } else {
-        setView(target)
+        openFile(target)
       }
     } catch (e: any) {
       message.error(t('file.openReferenceFailed', { message: e.message }))
@@ -690,7 +989,7 @@ export default function FileBrowser({
           <span style={{ flex: 1 }} />
           {onClose && <ClosePanelButton title={t('file.closePanel')} onClick={onClose} />}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'nowrap', overflowX: 'auto' }}>
           <input ref={fileRef} type="file" multiple style={{ display: 'none' }}
             onChange={(e) => { if (e.target.files?.length) doUpload(e.target.files); e.target.value = '' }} />
           <IconButton title={t('file.back')} disabled={!canBack} onClick={goBack}><BackIcon /></IconButton>
@@ -698,6 +997,10 @@ export default function FileBrowser({
           <IconButton title={t('file.up')} disabled={!canUp} onClick={goUp}><FolderUpIcon /></IconButton>
           <IconButton title={t('file.refreshDir')} onClick={refresh}><RefreshIcon /></IconButton>
           <IconButton title={showHidden ? t('file.hideHidden') : t('file.showHidden')} onClick={() => setShowHidden((s) => !s)}>{showHidden ? <EyeIcon /> : <EyeOffIcon />}</IconButton>
+          {canToggleView && (
+            <IconButton title={browseMode === 'tree' ? t('file.flatView') : t('file.treeView')} onClick={() => setBrowseMode((m) => (m === 'tree' ? 'flat' : 'tree'))}>{browseMode === 'tree' ? <ListIcon /> : <TreeIcon />}</IconButton>
+          )}
+          <IconButton title={t('file.searchFiles')} onClick={() => { setSearchOpen((s) => { if (s) setQuery(''); return !s }) }}><SearchIcon /></IconButton>
           <Dropdown menu={{ items: ([['name', 'file.sort.name'], ['kind', 'file.sort.kind'], ['mtime', 'file.sort.mtime'], ['ctime', 'file.sort.ctime'], ['size', 'file.sort.size']] as const).map(([k, label]) => ({ key: k, label: t(label), style: k === sortKey ? { color: accent, fontWeight: 600 } : undefined, onClick: () => setSortKey(k) })) }} trigger={['click']}>
             <Tooltip title={t('file.sort')}>
               <Button type="text" size="small" style={{ width: 24, height: 24, minWidth: 24, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><SortIcon /></Button>
@@ -707,6 +1010,21 @@ export default function FileBrowser({
           <IconButton title={t('file.uploadHere')} disabled={uploading || !cur} onClick={() => fileRef.current?.click()}>{uploading ? '…' : <UploadIcon />}</IconButton>
         </div>
       </div>
+      {searchOpen && (
+        <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)' }}>
+          <Input
+            size="small"
+            autoFocus
+            allowClear
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            prefix={<span style={{ color: 'var(--text-dimmer)', display: 'inline-flex' }}><SearchIcon /></span>}
+            suffix={searching ? <Spin size="small" /> : null}
+            placeholder={t('file.searchPlaceholder')}
+            style={{ fontSize: 12 }}
+          />
+        </div>
+      )}
       <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)' }}>
         {(() => {
           const chips: { label: string; path: string }[] = []
@@ -747,11 +1065,32 @@ export default function FileBrowser({
             style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12 }}
           />
         </AutoComplete>
-        <div style={{ marginTop: 4, color: 'var(--text-dimmer)', fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {t('file.pathHint')}
-        </div>
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 0' }}>
+        {searchOpen && searchQ ? (
+          searching && !results ? (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: 16 }}><Spin size="small" /></div>
+          ) : results && results.length === 0 ? (
+            <div style={{ color: 'var(--text-dimmer)', fontSize: 12, padding: '6px 10px' }}>{t('file.noMatches')}</div>
+          ) : (
+            <>
+              {searchTrunc && <div style={{ color: '#d29922', fontSize: 11, padding: '4px 10px' }}>{t('file.searchTruncated')}</div>}
+              {(results || []).map((r) => (
+                <div key={r.path} className="cc-filerow" draggable title={r.rel}
+                  onDragStart={(ev) => startPathDrag(ev, r.path)}
+                  onClick={() => openFile(r.path)}
+                  style={{ ...rowStyle(), background: r.path === sel ? '#1f6feb22' : undefined }}>
+                  <span style={{ color: 'var(--text-dimmer)', flex: '0 0 auto', display: 'inline-flex', width: 25, justifyContent: 'center' }}><FileTypeIcon name={r.name} /></span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ color: 'var(--text-bright)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
+                    <span style={{ color: 'var(--text-dimmer)', fontSize: 11, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.rel}</span>
+                  </span>
+                </div>
+              ))}
+            </>
+          )
+        ) : (
+        <>
         {loading && <div style={{ display: 'flex', justifyContent: 'center', padding: 16 }}><Spin size="small" /></div>}
         {err && <div style={{ color: '#f85149', fontSize: 12, padding: '6px 10px' }}>{err}</div>}
         {canUp && (
@@ -759,48 +1098,29 @@ export default function FileBrowser({
             <span style={{ color: 'var(--text-dim)' }}>↑</span><span style={{ color: 'var(--text-dim)' }}>{t('file.parentDir')}</span>
           </div>
         )}
-        {visibleEntries.map((e) => (
-          <div key={e.name} className="cc-filerow"
-            draggable
-            onDragStart={(ev) => {
-              const full = joinPath(cur, e.name)
-              ev.dataTransfer.setData('application/x-ttmux-path', full) // 给对话框识别用
-              ev.dataTransfer.setData('text/plain', full)
-              ev.dataTransfer.effectAllowed = 'copy'
-            }}
-            onClick={(ev) => {
-              if ((ev.target as HTMLElement).closest('[data-file-action]')) return
-              e.dir ? navigate(joinPath(cur, e.name)) : setView(joinPath(cur, e.name))
-            }}
-            onContextMenu={(ev) => {
-              ev.preventDefault()
-              ev.stopPropagation()
-              confirmDelete(joinPath(cur, e.name), e.dir)
-            }}
-            style={rowStyle()}>
-            <span style={{ color: e.dir ? accent : 'var(--text-dimmer)', flex: '0 0 auto', display: 'inline-flex', width: 25, justifyContent: 'center' }}>{e.dir ? <FolderIcon /> : <FileTypeIcon name={e.name} />}</span>
-            <span style={{ color: e.dir ? 'var(--text-bright)' : 'var(--text-bright)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name}</span>
-            {!e.dir && <span style={{ color: 'var(--text-dimmer)', fontSize: 11, flex: '0 0 auto' }}>{fmtSize(e.size)}</span>}
-            {onInsertPath && (
-              <span data-file-action>
-                <IconButton title={t('file.insertPath')} onClick={() => onInsertPath(joinPath(cur, e.name))}>@</IconButton>
-              </span>
-            )}
-            {!e.dir && (
-              <>
-                <span data-file-action>
-                  <Tooltip title={t('file.download')}>
-                    <Button type="text" size="small" href={`/api/file/raw?path=${encodeURIComponent(joinPath(cur, e.name))}&dl=1`} download={e.name}
-                      style={{ width: 24, height: 24, minWidth: 24, padding: 0, color: 'var(--text-dim)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><DownloadIcon /></Button>
-                  </Tooltip>
-                </span>
-              </>
-            )}
-          </div>
-        ))}
+        {browseMode === 'tree' ? (
+          <FileTree root={cur} rootEntries={data?.entries || []} accent={accent} showHidden={showHidden} sortKey={sortKey} tick={tick} selected={sel} onOpenFile={openFile} onDeleteEntry={confirmDelete} onInsertPath={onInsertPath} />
+        ) : visibleEntries.map((e) => {
+          const full = joinPath(cur, e.name)
+          return (
+            <div key={e.name} className="cc-filerow"
+              draggable
+              onDragStart={(ev) => startPathDrag(ev, full)}
+              onClick={(ev) => {
+                if ((ev.target as HTMLElement).closest('[data-file-action]')) return
+                e.dir ? navigate(full) : openFile(full)
+              }}
+              onContextMenu={(ev) => { ev.preventDefault(); ev.stopPropagation(); confirmDelete(full, e.dir) }}
+              style={{ ...rowStyle(), background: !e.dir && full === sel ? '#1f6feb22' : undefined }}>
+              <FileRowBody full={full} name={e.name} isDir={e.dir} size={e.size} accent={accent} onInsertPath={onInsertPath} />
+            </div>
+          )
+        })}
         {data && data.entries.length === 0 && <div style={{ color: 'var(--text-dimmer)', fontSize: 12, padding: '6px 10px' }}>{t('file.emptyDirectory')}</div>}
-        {data && data.entries.length > 0 && visibleEntries.length === 0 && (
+        {browseMode !== 'tree' && data && data.entries.length > 0 && visibleEntries.length === 0 && (
           <div style={{ color: 'var(--text-dimmer)', fontSize: 12, padding: '6px 10px' }}>{t('file.allHidden', { count: hiddenCount })}</div>
+        )}
+        </>
         )}
       </div>
       <Modal
@@ -836,6 +1156,18 @@ export default function FileBrowser({
           )}
         </div>
       </div>
+    )
+  }
+
+  // 停靠布局（新标签左侧栏）：只有文件面板本身，预览以 Modal 弹出（右边是终端，不占版面）。
+  if (layout === 'dock') {
+    return (
+      <>
+        {browserPane}
+        {view && (
+          <Viewer path={view} accent={accent} onClose={() => setView(null)} onOpenPath={openPath} onOpenAgent={onOpenAgent} />
+        )}
+      </>
     )
   }
 

@@ -18,7 +18,7 @@ DEST="${1:-${HOME}/.claude/skills}"
 TARGETS=("$DEST")
 [[ -d "${HOME}/.codex" ]] && TARGETS+=("${HOME}/.codex/skills")
 
-# 子文档拼接顺序；与 scripts/install-ttmux.sh 的 GitHub 下载分支保持一致。
+# 子文档拼接顺序；与 scripts/install/install-ttmux.sh 的 GitHub 下载分支保持一致。
 CC_SWARM_DOCS="intake decompose spawn patrol approve test-push review concurrency integrate memory"
 DEV_ROLES_DOCS="plaza board chrome pm architect frontend backend fullstack qa designer reviewer devops docs"
 
@@ -56,6 +56,13 @@ for d in "${TARGETS[@]}"; do
         mkdir -p "${d}/dev-roles"
         cp "$tmp_dr" "${d}/dev-roles/SKILL.md"
     fi
-    echo "✔ skills 已同步到 ${d} (ttmux/SKILL.md, cc-swarm/SKILL.md, dev-roles/SKILL.md)"
+    # babysit-pr skill：SKILL.md + 同目录脚本 wait-codex-review.sh 一并拷贝
+    if [[ -f "${SRC}/babysit-pr/SKILL.md" ]]; then
+        mkdir -p "${d}/babysit-pr"
+        cp "${SRC}/babysit-pr/SKILL.md" "${d}/babysit-pr/SKILL.md"
+        cp "${SRC}/babysit-pr/wait-codex-review.sh" "${d}/babysit-pr/wait-codex-review.sh"
+        chmod +x "${d}/babysit-pr/wait-codex-review.sh"
+    fi
+    echo "✔ skills 已同步到 ${d} (ttmux, cc-swarm, dev-roles, babysit-pr)"
 done
 rm -f "$tmp_cc" "$tmp_dr"

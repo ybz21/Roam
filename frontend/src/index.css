@@ -62,12 +62,14 @@ body {
   width: 100%;
   min-width: 0;
 }
-.tt-page-files {
+.tt-page-files,
+.tt-page-phone {
   height: 100%;
   min-height: 0;
   overflow: hidden;
 }
-.tt-page-files > * {
+.tt-page-files > *,
+.tt-page-phone > * {
   height: 100%;
   min-height: 0;
 }
@@ -161,6 +163,17 @@ body {
 .cc-dl:hover { background: rgba(255, 255, 255, .08); color: var(--text-bright) !important; }
 .cc-filerow .ant-btn { color: var(--text-dim); }
 .cc-filerow .ant-btn:hover { color: var(--text-bright) !important; background: rgba(255, 255, 255, .06) !important; }
+
+/* 编辑器文件 tab 的关闭键：干净常显 ×；脏文件平时显橙点、hover tab 时变 × 可关（VSCode 行为）。会话 tab 无此键 → 不可关。 */
+.cc-tabx { margin-left: 2px; padding: 0 3px; line-height: 1; border-radius: 4px; display: inline-flex; align-items: center; }
+.cc-tabx .dot { display: none; color: #d29922; font-size: 14px; }
+.cc-tabx .x { display: inline; color: var(--text-dim); font-size: 14px; }
+.cc-filetab:hover .cc-tabx .x { color: var(--text-bright); }
+.cc-tabx:hover { background: rgba(255, 255, 255, .1); }
+.cc-filetab.dirty .cc-tabx .dot { display: inline; }
+.cc-filetab.dirty .cc-tabx .x { display: none; }
+.cc-filetab.dirty:hover .cc-tabx .dot { display: none; }
+.cc-filetab.dirty:hover .cc-tabx .x { display: inline; }
 
 .tt-file-detail {
   transform: translateZ(0);

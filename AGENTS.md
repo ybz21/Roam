@@ -15,7 +15,17 @@ Allowed exceptions are listed in the i18n standard. If a change intentionally le
 
 ## Quality Gate
 
-- Run `scripts/quality/check.sh quick` before committing local changes.
-- Run `scripts/quality/check.sh full` before opening or updating a PR with runtime behavior changes.
-- Install the tracked Git hook with `bash scripts/install-git-hooks.sh`; it sets `core.hooksPath=.githooks`.
+- Run `scripts/dev/quality/check.sh quick` before committing local changes.
+- Run `scripts/dev/quality/check.sh full` before opening or updating a PR with runtime behavior changes.
+- Install the tracked Git hooks with `bash scripts/dev/install-git-hooks.sh`; it sets `core.hooksPath=.githooks` and `commit.template=.gitmessage`.
 - Do not commit `.env`, generated dependency folders, coverage output, or hard-coded secrets.
+
+## Commit Convention
+
+- Commit messages follow [Conventional Commits](docs/development/commit-convention.md): `<type>(<scope>): <描述>`.
+- The `commit-msg` hook enforces the format locally; PR titles must follow it too (squash merges turn the title into the final commit).
+
+## Code Review
+
+- PRs are reviewed by the **Codex GitHub App** (`chatgpt-codex-connector` bot). See [docs/development/codex-review.md](docs/development/codex-review.md) for how it is enabled and how to respond.
+- The `babysit-pr` skill (`skills/babysit-pr/`) automates polling, deciding fix-vs-skip, replying, and resolving Codex review threads.
