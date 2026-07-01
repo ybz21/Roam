@@ -208,6 +208,7 @@ const enUS = {
   'file.officePreview': 'Office to PDF preview',
   'file.officePreviewHelp': 'Preview depends on local LibreOffice/soffice conversion.',
   'file.binaryCannotPreview': 'Binary file cannot be previewed ({size}). ',
+  'file.dirAccessTimeout': 'Directory read timed out (likely macOS privacy permission not granted). Please grant Full Disk Access to ttmux-web in System Settings → Privacy & Security. Path: {path}',
   'file.downloadOrOpenRaw': 'Download/open raw file',
   'file.jsonPreview': 'JSON structure preview',
   'file.codePreview': '{lang} code preview',

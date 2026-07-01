@@ -18,8 +18,11 @@ export async function api(method: string, path: string, body?: any): Promise<any
   const ct = r.headers.get('content-type') || ''
   const data = ct.includes('json') ? await r.json() : await r.text()
   if (!r.ok) {
-    const msg = data?.error?.message || data?.error?.code || 'HTTP ' + r.status
-    throw new Error(msg)
+    const errObj = data?.error || {}
+    const msg = errObj.message || errObj.code || 'HTTP ' + r.status
+    const err = new Error(msg) as Error & { apiError?: Record<string, any> }
+    err.apiError = errObj
+    throw err
   }
   return data
 }

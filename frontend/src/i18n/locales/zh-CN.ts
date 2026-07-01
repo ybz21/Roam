@@ -208,6 +208,7 @@ const zhCN = {
   'file.officePreview': 'Office 转 PDF 预览',
   'file.officePreviewHelp': '预览依赖本机 LibreOffice/soffice 转换。',
   'file.binaryCannotPreview': '二进制文件，无法预览（{size}）。',
+  'file.dirAccessTimeout': '读取目录超时（可能是 macOS 隐私权限未授权）。请在「系统设置 → 隐私与安全性 → 完全磁盘访问权限」中授权 ttmux-web。路径: {path}',
   'file.downloadOrOpenRaw': '下载/打开原始文件',
   'file.jsonPreview': 'JSON 结构预览',
   'file.codePreview': '{lang} 代码预览',

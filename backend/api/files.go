@@ -30,6 +30,7 @@ type fileEntry struct {
 }
 
 // Files GET /files?path=<dir> —— 列出目录内容（目录在前，按名排序）。
+// macOS TCC 保护目录（~/Downloads 等）在无权限时 ReadDir 会无限阻塞，因此加超时兜底。
 func (a *API) Files(c *gin.Context) {
 	p := c.Query("path")
 	if p == "" {
@@ -37,28 +38,45 @@ func (a *API) Files(c *gin.Context) {
 		p = home
 	}
 	p = filepath.Clean(p)
-	entries, err := os.ReadDir(p)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "FS_ERROR", "message": err.Error()}})
-		return
+
+	type readResult struct {
+		entries []os.DirEntry
+		err     error
 	}
-	list := []fileEntry{}
-	for _, e := range entries {
-		var size, mtime, ctime int64
-		if info, err := e.Info(); err == nil {
-			size = info.Size()
-			mtime = info.ModTime().Unix()
-			ctime = fileCtime(info)
+	ch := make(chan readResult, 1)
+	go func() {
+		entries, err := os.ReadDir(p)
+		ch <- readResult{entries, err}
+	}()
+	select {
+	case res := <-ch:
+		if res.err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "FS_ERROR", "message": res.err.Error()}})
+			return
 		}
-		list = append(list, fileEntry{Name: e.Name(), Dir: e.IsDir(), Size: size, Mtime: mtime, Ctime: ctime})
+		list := []fileEntry{}
+		for _, e := range res.entries {
+			var size, mtime, ctime int64
+			if info, err := e.Info(); err == nil {
+				size = info.Size()
+				mtime = info.ModTime().Unix()
+				ctime = fileCtime(info)
+			}
+			list = append(list, fileEntry{Name: e.Name(), Dir: e.IsDir(), Size: size, Mtime: mtime, Ctime: ctime})
+		}
+		sort.Slice(list, func(i, j int) bool {
+			if list[i].Dir != list[j].Dir {
+				return list[i].Dir
+			}
+			return list[i].Name < list[j].Name
+		})
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"path": p, "parent": filepath.Dir(p), "entries": list}})
+	case <-time.After(3 * time.Second):
+		c.JSON(http.StatusGatewayTimeout, gin.H{"error": gin.H{
+			"code": "DIR_ACCESS_TIMEOUT",
+			"path": p,
+		}})
 	}
-	sort.Slice(list, func(i, j int) bool {
-		if list[i].Dir != list[j].Dir {
-			return list[i].Dir // 目录排前
-		}
-		return list[i].Name < list[j].Name
-	})
-	c.JSON(http.StatusOK, gin.H{"data": gin.H{"path": p, "parent": filepath.Dir(p), "entries": list}})
 }
 
 const fileReadCap = 512 * 1024 // 单文件正文上限，超出截断

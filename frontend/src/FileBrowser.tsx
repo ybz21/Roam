@@ -853,7 +853,7 @@ export default function FileBrowser({
     const q = path ? `?path=${encodeURIComponent(path)}` : ''
     api('GET', `/files${q}`)
       .then((r) => { if (!stop) setData(r.data) })
-      .catch((e) => { if (!stop) setErr(e.message) })
+      .catch((e: any) => { if (!stop) setErr(e.apiError?.code === 'DIR_ACCESS_TIMEOUT' ? t('file.dirAccessTimeout', { path: e.apiError.path || path }) : e.message) })
       .finally(() => { if (!stop) setLoading(false) })
     return () => { stop = true }
   }, [path, tick])
