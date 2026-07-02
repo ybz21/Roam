@@ -14,11 +14,28 @@ OS="$(uname -s 2>/dev/null || echo unknown)"
 say()  { echo "$*"; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# brew_install <cask|formula...>：跑 brew install 并透传真实退出码/输出。
+# 撞下载锁（上次安装的孤儿进程残留）时，清掉陈旧的 .incomplete 半成品后重试一次，
+# 避免反复报“已被另一个 brew install 进程锁定”而永远装不上。
+brew_install() {
+    local out rc
+    out="$(brew install "$@" 2>&1)"; rc=$?
+    echo "$out"
+    if [ $rc -ne 0 ] && echo "$out" | grep -q "has already locked"; then
+        say "↳ 撞到陈旧下载锁，清理半成品后重试…"
+        find "$(brew --cache 2>/dev/null || echo "$HOME/Library/Caches/Homebrew")/downloads" \
+            -name '*.incomplete' -mmin +1 -delete 2>/dev/null || true
+        out="$(brew install "$@" 2>&1)"; rc=$?
+        echo "$out"
+    fi
+    return $rc
+}
+
 install_adb() {
     have adb && { say "✔ adb 已就绪（$(adb version 2>/dev/null | head -1)）"; return 0; }
     case "$OS" in
         Darwin)
-            if have brew; then say "brew install android-platform-tools…"; brew install android-platform-tools 2>&1 || true
+            if have brew; then say "brew install android-platform-tools…"; brew_install android-platform-tools || true
             else say "需先装 Homebrew(https://brew.sh)再 brew install android-platform-tools"; fi ;;
         Linux)
             if have apt-get; then say "apt 安装 adb…"; sudo -n apt-get install -y adb 2>&1 || say "↳ 需 sudo:sudo apt-get install -y adb"
@@ -34,7 +51,7 @@ install_idb() {
     [ "$OS" = Darwin ] || { say "✘ idb 仅 macOS(iOS 模拟器);当前 $OS"; return 1; }
     have xcrun || say "⚠ 需 Xcode 命令行工具:xcode-select --install"
     have idb && { say "✔ idb 已就绪"; return 0; }
-    if have brew; then say "brew install idb-companion…"; brew install idb-companion 2>&1 || true
+    if have brew; then say "brew install idb-companion…"; brew_install idb-companion || true
     else say "需先装 Homebrew(https://brew.sh)"; fi
     if have pip3; then say "pip3 install fb-idb…"; pip3 install --user fb-idb 2>&1 || true
     else say "需 pip3 再 pip3 install fb-idb"; fi

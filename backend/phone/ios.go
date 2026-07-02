@@ -20,6 +20,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -38,8 +39,12 @@ func (d *iosDevice) target() string {
 func haveIDB() bool { _, err := exec.LookPath("idb"); return err == nil }
 
 // runCmd 跑任意命令并带超时，返回 stdout（出错带 stderr 摘要）。
+// 用独立进程组启动：超时时 kill 整个进程组，连带杀掉命令 spawn 的子进程
+// （如 bash→brew→curl）。否则只杀父进程会留下孤儿——brew 下载孤儿仍持有下载锁，
+// 导致下次安装撞锁失败（“已被另一个 brew install 进程锁定”）。
 func runCmd(timeout time.Duration, name string, args ...string) ([]byte, error) {
 	cmd := exec.Command(name, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true} // 自成进程组，pgid = pid
 	var out, errb bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errb
@@ -59,6 +64,10 @@ func runCmd(timeout time.Duration, name string, args ...string) ([]byte, error) 
 		}
 		return out.Bytes(), nil
 	case <-time.After(timeout):
+		// 负 pid = 向整个进程组发信号；先 TERM 给子进程善后机会，再兜底 KILL。
+		pgid := cmd.Process.Pid
+		_ = syscall.Kill(-pgid, syscall.SIGTERM)
+		go func() { time.Sleep(2 * time.Second); _ = syscall.Kill(-pgid, syscall.SIGKILL) }()
 		_ = cmd.Process.Kill()
 		return nil, fmt.Errorf("%s 超时", name)
 	}
