@@ -97,6 +97,9 @@ func New(cfg Config) *gin.Engine {
 		g.GET("/file/raw", h.FileRaw)         // 文件侧栏：原始字节（图片预览 / ?dl=1 下载）
 		g.GET("/file/preview", h.FilePreview) // 文件侧栏：Office 转 PDF 预览
 		g.GET("/file/stat", h.FileStat)
+		g.GET("/file/download", h.FileDownload)
+		g.POST("/file/rename", h.FileRename)
+		g.POST("/file/copy", h.FileCopy)
 		g.DELETE("/file", h.FileDelete)
 		g.POST("/file/mkdir", h.FileMkdir) // 文件侧栏：在当前目录新建子目录
 		g.POST("/upload", h.Upload)        // 上传文件到指定目录（拖拽到对话框 / 文件侧栏）

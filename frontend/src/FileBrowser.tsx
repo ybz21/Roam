@@ -1,7 +1,7 @@
 // 文件侧栏 —— 在 Claude / Codex 对话页右侧浏览工作目录、查看文件内容（类似 codex 右侧边栏）。
 // 单层可导航列表：目录在前可进入、↑ 回上级、点文件在弹层里查看正文。
 import { type MouseEvent, type ReactNode, Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
-import { AutoComplete, Button, Dropdown, Input, Modal, Space, Spin, App as AntApp, Tooltip } from 'antd'
+import { AutoComplete, Button, Dropdown, Input, Modal, Space, Spin, App as AntApp, Tooltip, type MenuProps } from 'antd'
 import { api, upload } from './api'
 import Markdown from './Markdown'
 import { useI18n } from './i18n'
@@ -39,6 +39,17 @@ function fileNameOf(path: string): string {
 
 interface Entry { name: string; dir: boolean; size: number; mtime: number; ctime: number }
 interface Dir { path: string; parent: string; entries: Entry[] }
+interface FileTarget extends Entry { path: string }
+interface FileStat {
+  path: string
+  name: string
+  dir: boolean
+  size: number
+  mtime: number
+  ctime: number
+  mode: string
+  entryCount?: number
+}
 
 type SortKey = 'name' | 'kind' | 'mtime' | 'ctime' | 'size'
 
@@ -653,6 +664,48 @@ function startPathDrag(ev: React.DragEvent, full: string) {
   ev.dataTransfer.effectAllowed = 'copy'
 }
 
+function FileContextMenu({ target, children, onOpen, onRename, onCopyTo, onUploadHere, onDownload, onProperties, onDelete, onInsertPath }: {
+  target: FileTarget
+  children: ReactNode
+  onOpen: (target: FileTarget) => void
+  onRename: (target: FileTarget) => void
+  onCopyTo: (target: FileTarget) => void
+  onUploadHere: (target: FileTarget) => void
+  onDownload: (target: FileTarget) => void
+  onProperties: (target: FileTarget) => void
+  onDelete: (target: FileTarget) => void
+  onInsertPath?: (path: string) => void
+}) {
+  const { t } = useI18n()
+  const items: MenuProps['items'] = [
+    { key: 'open', label: target.dir ? t('file.openFolder') : t('file.open') },
+    { key: 'rename', label: t('file.rename') },
+    { key: 'copyTo', label: t('file.copyTo') },
+    ...(target.dir ? [{ key: 'uploadHere', label: t('file.uploadHere') }] : []),
+    { key: 'download', label: target.dir ? t('file.downloadZip') : t('file.download') },
+    ...(onInsertPath ? [{ key: 'insertPath', label: t('file.insertPath') }] : []),
+    { key: 'properties', label: t('file.properties') },
+    { type: 'divider' as const },
+    { key: 'delete', label: t('file.delete'), danger: true },
+  ]
+  const onClick: MenuProps['onClick'] = ({ key, domEvent }) => {
+    domEvent.stopPropagation()
+    if (key === 'open') onOpen(target)
+    else if (key === 'rename') onRename(target)
+    else if (key === 'copyTo') onCopyTo(target)
+    else if (key === 'uploadHere') onUploadHere(target)
+    else if (key === 'download') onDownload(target)
+    else if (key === 'insertPath') onInsertPath?.(target.path)
+    else if (key === 'properties') onProperties(target)
+    else if (key === 'delete') onDelete(target)
+  }
+  return (
+    <Dropdown trigger={['contextMenu']} menu={{ items, onClick }}>
+      <div onContextMenu={(ev) => ev.stopPropagation()}>{children}</div>
+    </Dropdown>
+  )
+}
+
 // 统一：一行文件/目录的图标 + 名称 + 大小 + @插入 + 下载。平铺列表与树共用（外层容器各自处理缩进/展开）。
 function FileRowBody({ full, name, isDir, size, accent, onInsertPath }: {
   full: string; name: string; isDir: boolean; size: number; accent: string; onInsertPath?: (p: string) => void
@@ -684,7 +737,7 @@ function FileRowBody({ full, name, isDir, size, accent, onInsertPath }: {
 // 排序/隐藏文件过滤、点文件预览、拖入终端 @mention、右键删除都与平铺行一致。
 function FileTree({
   root, rootEntries, accent, showHidden, sortKey, tick, selected,
-  onOpenFile, onDeleteEntry, onInsertPath,
+  onOpenFile, onOpenEntry, onRenameEntry, onCopyEntry, onUploadEntry, onDownloadEntry, onPropertiesEntry, onDeleteEntry, onInsertPath,
 }: {
   root: string
   rootEntries: Entry[]
@@ -694,7 +747,13 @@ function FileTree({
   tick: number
   selected: string | null
   onOpenFile: (full: string) => void
-  onDeleteEntry: (full: string, isDir: boolean) => void
+  onOpenEntry: (target: FileTarget) => void
+  onRenameEntry: (target: FileTarget) => void
+  onCopyEntry: (target: FileTarget) => void
+  onUploadEntry: (target: FileTarget) => void
+  onDownloadEntry: (target: FileTarget) => void
+  onPropertiesEntry: (target: FileTarget) => void
+  onDeleteEntry: (target: FileTarget) => void
   onInsertPath?: (full: string) => void
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -725,30 +784,32 @@ function FileTree({
   const renderLevel = (dirPath: string, entries: Entry[], depth: number): ReactNode =>
     visible(entries).map((e) => {
       const full = joinPath(dirPath, e.name)
+      const target: FileTarget = { ...e, path: full }
       const isOpen = e.dir && expanded.has(full)
       return (
         <Fragment key={full}>
-          <div className="cc-filerow"
-            draggable
-            onDragStart={(ev) => startPathDrag(ev, full)}
-            onClick={(ev) => {
-              if ((ev.target as HTMLElement).closest('[data-file-action]')) return
-              e.dir ? toggleDir(full) : onOpenFile(full)
-            }}
-            onContextMenu={(ev) => { ev.preventDefault(); ev.stopPropagation(); onDeleteEntry(full, e.dir) }}
-            style={{ ...rowStyle(), gap: 0, padding: 0, alignItems: 'stretch', minHeight: 26, background: full === selected ? '#1f6feb22' : undefined }}>
-            {/* VSCode 式层级缩进导引线：每深一层一条竖线，逐行拼成连续的层级线 */}
-            <span style={{ flex: '0 0 auto', width: 8 }} />
-            {Array.from({ length: depth }).map((_, i) => (
-              <span key={i} aria-hidden style={{ flex: '0 0 auto', width: 14, boxSizing: 'border-box', borderLeft: '1px solid var(--border-subtle)' }} />
-            ))}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0, padding: '4px 8px 4px 2px' }}>
-              <span style={{ flex: '0 0 auto', width: 14, display: 'inline-flex', justifyContent: 'center', color: 'var(--text-dim)' }}>
-                {e.dir ? <Chevron open={!!isOpen} /> : null}
-              </span>
-              <FileRowBody full={full} name={e.name} isDir={e.dir} size={e.size} accent={accent} onInsertPath={onInsertPath} />
+          <FileContextMenu target={target} onOpen={onOpenEntry} onRename={onRenameEntry} onCopyTo={onCopyEntry} onUploadHere={onUploadEntry} onDownload={onDownloadEntry} onProperties={onPropertiesEntry} onDelete={onDeleteEntry} onInsertPath={onInsertPath}>
+            <div className="cc-filerow"
+              draggable
+              onDragStart={(ev) => startPathDrag(ev, full)}
+              onClick={(ev) => {
+                if ((ev.target as HTMLElement).closest('[data-file-action]')) return
+                e.dir ? toggleDir(full) : onOpenFile(full)
+              }}
+              style={{ ...rowStyle(), gap: 0, padding: 0, alignItems: 'stretch', minHeight: 26, background: full === selected ? '#1f6feb22' : undefined }}>
+              {/* VSCode 式层级缩进导引线：每深一层一条竖线，逐行拼成连续的层级线 */}
+              <span style={{ flex: '0 0 auto', width: 8 }} />
+              {Array.from({ length: depth }).map((_, i) => (
+                <span key={i} aria-hidden style={{ flex: '0 0 auto', width: 14, boxSizing: 'border-box', borderLeft: '1px solid var(--border-subtle)' }} />
+              ))}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0, padding: '4px 8px 4px 2px' }}>
+                <span style={{ flex: '0 0 auto', width: 14, display: 'inline-flex', justifyContent: 'center', color: 'var(--text-dim)' }}>
+                  {e.dir ? <Chevron open={!!isOpen} /> : null}
+                </span>
+                <FileRowBody full={full} name={e.name} isDir={e.dir} size={e.size} accent={accent} onInsertPath={onInsertPath} />
+              </div>
             </div>
-          </div>
+          </FileContextMenu>
           {isOpen && (
             loading[full]
               ? <div style={{ padding: '4px 0 4px', paddingLeft: 8 + (depth + 1) * 14 }}><Spin size="small" /></div>
@@ -795,6 +856,15 @@ export default function FileBrowser({
   const [mkdirOpen, setMkdirOpen] = useState(false)
   const [mkdirName, setMkdirName] = useState('')
   const [mkdirBusy, setMkdirBusy] = useState(false)
+  const [renameTarget, setRenameTarget] = useState<FileTarget | null>(null)
+  const [renameName, setRenameName] = useState('')
+  const [renameBusy, setRenameBusy] = useState(false)
+  const [copyTarget, setCopyTarget] = useState<FileTarget | null>(null)
+  const [copyDest, setCopyDest] = useState('')
+  const [copyBusy, setCopyBusy] = useState(false)
+  const [propertiesTarget, setPropertiesTarget] = useState<FileTarget | null>(null)
+  const [properties, setProperties] = useState<FileStat | null>(null)
+  const [propertiesLoading, setPropertiesLoading] = useState(false)
   const [showHidden, setShowHidden] = useState(false) // 隐藏文件（点号开头）默认不显示，眼睛开关切换
   const [sortKey, setSortKey] = useState<SortKey>('name')
   // 递归按文件名搜索（当前目录向下），放大镜开关切换；有查询词时列表区改显搜索结果。
@@ -815,8 +885,9 @@ export default function FileBrowser({
     if (canToggleView && typeof localStorage !== 'undefined') localStorage.setItem('ttmux.fileBrowseMode', browseMode)
   }, [browseMode, canToggleView])
   const fileRef = useRef<HTMLInputElement>(null)
+  const uploadTargetRef = useRef<string | null>(null)
   const { message, modal } = AntApp.useApp()
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
 
   // 会话切换（dir 变化）→ 回到工作目录根，并重置历史
   useEffect(() => {
@@ -884,11 +955,11 @@ export default function FileBrowser({
     return () => { stop = true; clearTimeout(h) }
   }, [searchQ, searchOpen, cur, tick])
 
-  const doUpload = async (files: FileList | File[]) => {
-    if (!files || !files.length || !cur || uploading) return
+  const doUpload = async (files: FileList | File[], targetDir = cur) => {
+    if (!files || !files.length || !targetDir || uploading) return
     setUploading(true)
     try {
-      const res = await upload(cur, files)
+      const res = await upload(targetDir, files)
       message.success(t('file.uploadedCount', { count: res.saved.length }))
       refresh()
     } catch (e: any) { message.error(t('chat.uploadFailed', { message: e.message })) }
@@ -927,6 +998,70 @@ export default function FileBrowser({
       okButtonProps: { danger: true },
       onOk: () => deletePath(target),
     })
+  }
+  const confirmDeleteTarget = (target: FileTarget) => confirmDelete(target.path, target.dir)
+  const openEntry = (target: FileTarget) => { target.dir ? navigate(target.path) : openFile(target.path) }
+  const startRename = (target: FileTarget) => {
+    setRenameTarget(target)
+    setRenameName(target.name)
+  }
+  const doRename = async () => {
+    const name = renameName.trim()
+    if (!renameTarget || !name || renameBusy) return
+    setRenameBusy(true)
+    try {
+      const res = await api('POST', '/file/rename', { path: renameTarget.path, name })
+      message.success(t('file.renamed'))
+      if (view === renameTarget.path) setView(res.data?.path || null)
+      setRenameTarget(null)
+      refresh()
+    } catch (e: any) { message.error(t('file.renameFailed', { message: e.message })) }
+    finally { setRenameBusy(false) }
+  }
+  const startCopy = (target: FileTarget) => {
+    setCopyTarget(target)
+    setCopyDest(joinPath(dirname(target.path), target.name))
+  }
+  const doCopy = async () => {
+    const target = copyDest.trim()
+    if (!copyTarget || !target || copyBusy) return
+    setCopyBusy(true)
+    try {
+      await api('POST', '/file/copy', { path: copyTarget.path, target: resolveTypedPath(target) })
+      message.success(t('file.copiedToPath'))
+      setCopyTarget(null)
+      refresh()
+    } catch (e: any) { message.error(t('file.copyToFailed', { message: e.message })) }
+    finally { setCopyBusy(false) }
+  }
+  const uploadInto = (target: FileTarget) => {
+    uploadTargetRef.current = target.dir ? target.path : dirname(target.path)
+    fileRef.current?.click()
+  }
+  const downloadEntry = (target: FileTarget) => {
+    const a = document.createElement('a')
+    a.href = `/api/file/download?path=${encodeURIComponent(target.path)}`
+    a.download = target.dir ? `${target.name}.zip` : target.name
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  }
+  const showProperties = async (target: FileTarget) => {
+    setPropertiesTarget(target)
+    setProperties(null)
+    setPropertiesLoading(true)
+    try {
+      const res = await api('GET', `/file/stat?path=${encodeURIComponent(target.path)}`)
+      setProperties(res.data)
+    } catch (e: any) {
+      message.error(t('file.propertiesFailed', { message: e.message }))
+    } finally {
+      setPropertiesLoading(false)
+    }
+  }
+  const fmtTime = (ts?: number) => {
+    if (!ts) return t('file.unknown')
+    return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'medium' }).format(new Date(ts * 1000))
   }
   // 根目录之上不再回退（防止越过工作目录乱逛；dir 为空时允许一直向上）
   const canUp = !!data && data.parent !== data.path && (!dir || cur !== dir)
@@ -991,7 +1126,11 @@ export default function FileBrowser({
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'nowrap', overflowX: 'auto' }}>
           <input ref={fileRef} type="file" multiple style={{ display: 'none' }}
-            onChange={(e) => { if (e.target.files?.length) doUpload(e.target.files); e.target.value = '' }} />
+            onChange={(e) => {
+              if (e.target.files?.length) doUpload(e.target.files, uploadTargetRef.current || cur)
+              uploadTargetRef.current = null
+              e.target.value = ''
+            }} />
           <IconButton title={t('file.back')} disabled={!canBack} onClick={goBack}><BackIcon /></IconButton>
           <IconButton title={t('file.forward')} disabled={!canForward} onClick={goForward}><ForwardIcon /></IconButton>
           <IconButton title={t('file.up')} disabled={!canUp} onClick={goUp}><FolderUpIcon /></IconButton>
@@ -1007,7 +1146,7 @@ export default function FileBrowser({
             </Tooltip>
           </Dropdown>
           <IconButton title={t('file.newFolder')} disabled={!cur} onClick={() => { setMkdirName(''); setMkdirOpen(true) }}><NewFolderIcon /></IconButton>
-          <IconButton title={t('file.uploadHere')} disabled={uploading || !cur} onClick={() => fileRef.current?.click()}>{uploading ? '…' : <UploadIcon />}</IconButton>
+          <IconButton title={t('file.uploadHere')} disabled={uploading || !cur} onClick={() => { uploadTargetRef.current = cur; fileRef.current?.click() }}>{uploading ? '…' : <UploadIcon />}</IconButton>
         </div>
       </div>
       {searchOpen && (
@@ -1099,21 +1238,23 @@ export default function FileBrowser({
           </div>
         )}
         {browseMode === 'tree' ? (
-          <FileTree root={cur} rootEntries={data?.entries || []} accent={accent} showHidden={showHidden} sortKey={sortKey} tick={tick} selected={sel} onOpenFile={openFile} onDeleteEntry={confirmDelete} onInsertPath={onInsertPath} />
+          <FileTree root={cur} rootEntries={data?.entries || []} accent={accent} showHidden={showHidden} sortKey={sortKey} tick={tick} selected={sel} onOpenFile={openFile} onOpenEntry={openEntry} onRenameEntry={startRename} onCopyEntry={startCopy} onUploadEntry={uploadInto} onDownloadEntry={downloadEntry} onPropertiesEntry={showProperties} onDeleteEntry={confirmDeleteTarget} onInsertPath={onInsertPath} />
         ) : visibleEntries.map((e) => {
           const full = joinPath(cur, e.name)
+          const target: FileTarget = { ...e, path: full }
           return (
-            <div key={e.name} className="cc-filerow"
-              draggable
-              onDragStart={(ev) => startPathDrag(ev, full)}
-              onClick={(ev) => {
-                if ((ev.target as HTMLElement).closest('[data-file-action]')) return
-                e.dir ? navigate(full) : openFile(full)
-              }}
-              onContextMenu={(ev) => { ev.preventDefault(); ev.stopPropagation(); confirmDelete(full, e.dir) }}
-              style={{ ...rowStyle(), background: !e.dir && full === sel ? '#1f6feb22' : undefined }}>
-              <FileRowBody full={full} name={e.name} isDir={e.dir} size={e.size} accent={accent} onInsertPath={onInsertPath} />
-            </div>
+            <FileContextMenu key={e.name} target={target} onOpen={openEntry} onRename={startRename} onCopyTo={startCopy} onUploadHere={uploadInto} onDownload={downloadEntry} onProperties={showProperties} onDelete={confirmDeleteTarget} onInsertPath={onInsertPath}>
+              <div className="cc-filerow"
+                draggable
+                onDragStart={(ev) => startPathDrag(ev, full)}
+                onClick={(ev) => {
+                  if ((ev.target as HTMLElement).closest('[data-file-action]')) return
+                  e.dir ? navigate(full) : openFile(full)
+                }}
+                style={{ ...rowStyle(), background: !e.dir && full === sel ? '#1f6feb22' : undefined }}>
+                <FileRowBody full={full} name={e.name} isDir={e.dir} size={e.size} accent={accent} onInsertPath={onInsertPath} />
+              </div>
+            </FileContextMenu>
           )
         })}
         {data && data.entries.length === 0 && <div style={{ color: 'var(--text-dimmer)', fontSize: 12, padding: '6px 10px' }}>{t('file.emptyDirectory')}</div>}
@@ -1136,6 +1277,61 @@ export default function FileBrowser({
         <div style={{ marginTop: 8, color: 'var(--text-dimmer)', fontSize: 12, wordBreak: 'break-all' }}>
           {t('file.createUnder', { path: displayPath(cur) })}
         </div>
+      </Modal>
+      <Modal
+        open={!!renameTarget}
+        title={t('file.rename')}
+        okText={t('file.rename')}
+        cancelText={t('common.cancel')}
+        confirmLoading={renameBusy}
+        onOk={doRename}
+        onCancel={() => { setRenameTarget(null); setRenameName('') }}
+      >
+        <Input autoFocus value={renameName} onChange={(e) => setRenameName(e.target.value)} onPressEnter={doRename} placeholder={t('file.namePlaceholder')} />
+        <div style={{ marginTop: 8, color: 'var(--text-dimmer)', fontSize: 12, wordBreak: 'break-all' }}>
+          {renameTarget ? t('file.renamePathHint', { path: renameTarget.path }) : null}
+        </div>
+      </Modal>
+      <Modal
+        open={!!copyTarget}
+        title={t('file.copyTo')}
+        okText={t('common.copy')}
+        cancelText={t('common.cancel')}
+        confirmLoading={copyBusy}
+        onOk={doCopy}
+        onCancel={() => { setCopyTarget(null); setCopyDest('') }}
+      >
+        <Input autoFocus value={copyDest} onChange={(e) => setCopyDest(e.target.value)} onPressEnter={doCopy} placeholder={t('file.copyTargetPlaceholder')} />
+        <div style={{ marginTop: 8, color: 'var(--text-dimmer)', fontSize: 12, wordBreak: 'break-all' }}>
+          {copyTarget ? t('file.copySourceHint', { path: copyTarget.path }) : null}
+        </div>
+      </Modal>
+      <Modal
+        open={!!propertiesTarget}
+        title={t('file.properties')}
+        footer={<Button onClick={() => setPropertiesTarget(null)}>{t('common.close')}</Button>}
+        onCancel={() => setPropertiesTarget(null)}
+      >
+        {propertiesLoading ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 20 }}><Spin /></div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'max-content minmax(0,1fr)', gap: '8px 12px', fontSize: 13 }}>
+            <span style={{ color: 'var(--text-dim)' }}>{t('file.property.name')}</span>
+            <span style={{ color: 'var(--text-bright)', wordBreak: 'break-all' }}>{properties?.name || propertiesTarget?.name}</span>
+            <span style={{ color: 'var(--text-dim)' }}>{t('file.property.type')}</span>
+            <span>{properties?.dir ?? propertiesTarget?.dir ? t('file.directory') : t('common.file')}</span>
+            <span style={{ color: 'var(--text-dim)' }}>{t('file.property.path')}</span>
+            <span style={{ wordBreak: 'break-all' }}>{properties?.path || propertiesTarget?.path}</span>
+            <span style={{ color: 'var(--text-dim)' }}>{t('file.property.size')}</span>
+            <span>{properties?.dir ? t('file.property.folderEntries', { count: properties.entryCount ?? 0 }) : fmtSize(properties?.size ?? propertiesTarget?.size ?? 0)}</span>
+            <span style={{ color: 'var(--text-dim)' }}>{t('file.property.modified')}</span>
+            <span>{fmtTime(properties?.mtime || propertiesTarget?.mtime)}</span>
+            <span style={{ color: 'var(--text-dim)' }}>{t('file.property.created')}</span>
+            <span>{fmtTime(properties?.ctime || propertiesTarget?.ctime)}</span>
+            <span style={{ color: 'var(--text-dim)' }}>{t('file.property.mode')}</span>
+            <span style={{ fontFamily: 'ui-monospace, monospace' }}>{properties?.mode || t('file.unknown')}</span>
+          </div>
+        )}
       </Modal>
     </div>
   )

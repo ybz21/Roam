@@ -3,6 +3,7 @@
 package api
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"fmt"
@@ -27,6 +28,17 @@ type fileEntry struct {
 	Size  int64  `json:"size"`
 	Mtime int64  `json:"mtime"`
 	Ctime int64  `json:"ctime"`
+}
+
+type fileStatData struct {
+	Path       string `json:"path"`
+	Name       string `json:"name"`
+	Dir        bool   `json:"dir"`
+	Size       int64  `json:"size"`
+	Mtime      int64  `json:"mtime"`
+	Ctime      int64  `json:"ctime"`
+	Mode       string `json:"mode"`
+	EntryCount int    `json:"entryCount,omitempty"`
 }
 
 // Files GET /files?path=<dir> —— 列出目录内容（目录在前，按名排序）。
@@ -356,7 +368,7 @@ func asciiFilename(s string) string {
 	return out
 }
 
-// FileStat GET /file/stat?path=<file-or-dir> —— 判断路径是否存在以及是否目录。
+// FileStat GET /file/stat?path=<file-or-dir> —— 判断路径是否存在以及返回基础元数据。
 func (a *API) FileStat(c *gin.Context) {
 	p := filepath.Clean(c.Query("path"))
 	if p == "" || !filepath.IsAbs(p) {
@@ -372,7 +384,167 @@ func (a *API) FileStat(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "FS_ERROR", "message": err.Error()}})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": gin.H{"path": p, "dir": info.IsDir(), "size": info.Size(), "mtime": info.ModTime().Unix()}})
+	stat := fileStatData{
+		Path: p, Name: filepath.Base(p), Dir: info.IsDir(), Size: info.Size(),
+		Mtime: info.ModTime().Unix(), Ctime: fileCtime(info), Mode: info.Mode().String(),
+	}
+	if info.IsDir() {
+		if entries, err := os.ReadDir(p); err == nil {
+			stat.EntryCount = len(entries)
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"data": stat})
+}
+
+// FileRename POST /file/rename —— 在同一父目录内重命名文件或目录。
+func (a *API) FileRename(c *gin.Context) {
+	var req struct {
+		Path string `json:"path"`
+		Name string `json:"name"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_FORM", "message": err.Error()}})
+		return
+	}
+	src := filepath.Clean(req.Path)
+	if src == "" || !filepath.IsAbs(src) || src == string(filepath.Separator) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_PATH"}})
+		return
+	}
+	if _, err := os.Lstat(src); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "FS_ERROR", "message": err.Error()}})
+		return
+	}
+	name := cleanEntryName(req.Name)
+	if name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_NAME"}})
+		return
+	}
+	dest := filepath.Join(filepath.Dir(src), name)
+	if dest == src {
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"path": dest}})
+		return
+	}
+	if _, err := os.Lstat(dest); err == nil {
+		c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "EXISTS"}})
+		return
+	}
+	if err := os.Rename(src, dest); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "RENAME_ERROR", "message": err.Error()}})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"path": dest}})
+}
+
+// FileCopy POST /file/copy —— 复制文件或目录到指定绝对路径。target 已存在且是目录时复制到目录内。
+func (a *API) FileCopy(c *gin.Context) {
+	var req struct {
+		Path   string `json:"path"`
+		Target string `json:"target"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_FORM", "message": err.Error()}})
+		return
+	}
+	src := filepath.Clean(req.Path)
+	target := filepath.Clean(req.Target)
+	if src == "" || target == "" || !filepath.IsAbs(src) || !filepath.IsAbs(target) || src == string(filepath.Separator) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_PATH"}})
+		return
+	}
+	info, err := os.Lstat(src)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "FS_ERROR", "message": err.Error()}})
+		return
+	}
+	dest := target
+	if ti, err := os.Stat(target); err == nil && ti.IsDir() {
+		dest = filepath.Join(target, filepath.Base(src))
+	}
+	if dest == src {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "SAME_PATH"}})
+		return
+	}
+	if info.IsDir() {
+		if rel, err := filepath.Rel(src, dest); err == nil && (rel == "." || (!strings.HasPrefix(rel, "..") && rel != "")) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "COPY_INTO_SELF"}})
+			return
+		}
+	}
+	if _, err := os.Lstat(dest); err == nil {
+		c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "EXISTS"}})
+		return
+	}
+	if err := copyPath(src, dest); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "COPY_ERROR", "message": err.Error()}})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"path": dest, "dir": info.IsDir()}})
+}
+
+// FileDownload GET /file/download?path=<file-or-dir> —— 下载文件；目录会流式打包为 Zip。
+func (a *API) FileDownload(c *gin.Context) {
+	p := filepath.Clean(c.Query("path"))
+	if p == "" || !filepath.IsAbs(p) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_PATH"}})
+		return
+	}
+	info, err := os.Stat(p)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "FS_ERROR", "message": err.Error()}})
+		return
+	}
+	if !info.IsDir() {
+		serveAttachment(c, p, filepath.Base(p))
+		return
+	}
+	filename := filepath.Base(p)
+	if filename == "." || filename == string(filepath.Separator) || filename == "" {
+		filename = "download"
+	}
+	c.Header("Content-Disposition", contentDisposition("attachment", filename+".zip"))
+	c.Header("Content-Type", "application/zip")
+	zw := zip.NewWriter(c.Writer)
+	defer zw.Close()
+	base := filepath.Dir(p)
+	_ = filepath.WalkDir(p, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if path == p {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return nil
+		}
+		rel, err := filepath.Rel(base, path)
+		if err != nil {
+			return nil
+		}
+		rel = filepath.ToSlash(rel)
+		if d.IsDir() {
+			_, _ = zw.Create(rel + "/")
+			return nil
+		}
+		h, err := zip.FileInfoHeader(info)
+		if err != nil {
+			return nil
+		}
+		h.Name = rel
+		h.Method = zip.Deflate
+		w, err := zw.CreateHeader(h)
+		if err != nil {
+			return nil
+		}
+		f, err := os.Open(path)
+		if err != nil {
+			return nil
+		}
+		_, _ = io.Copy(w, f)
+		_ = f.Close()
+		return nil
+	})
 }
 
 // FileDelete DELETE /file?path=<file-or-empty-dir> —— 删除文件或空目录。
@@ -443,6 +615,61 @@ func (a *API) FileMkdir(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"path": dest}})
+}
+
+func cleanEntryName(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" || strings.ContainsAny(name, `/\`) {
+		return ""
+	}
+	base := filepath.Base(name)
+	if base == "." || base == ".." || base != name {
+		return ""
+	}
+	return base
+}
+
+func copyPath(src, dest string) error {
+	info, err := os.Lstat(src)
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		target, err := os.Readlink(src)
+		if err != nil {
+			return err
+		}
+		return os.Symlink(target, dest)
+	}
+	if info.IsDir() {
+		if err := os.Mkdir(dest, info.Mode().Perm()); err != nil {
+			return err
+		}
+		entries, err := os.ReadDir(src)
+		if err != nil {
+			return err
+		}
+		for _, e := range entries {
+			if err := copyPath(filepath.Join(src, e.Name()), filepath.Join(dest, e.Name())); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_EXCL, info.Mode().Perm())
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close()
+		return err
+	}
+	return out.Close()
 }
 
 // uniquePath 目标已存在时在扩展名前加 (1)/(2)… 避免覆盖。
