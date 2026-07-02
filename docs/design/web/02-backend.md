@@ -25,16 +25,18 @@ ttmux/
 
 **关键依赖**：`gin-gonic/gin`（路由）、`creack/pty`（PTY）、`gorilla/websocket`（WS）。
 
-**配置**（环境变量 / 仓库根 `.env`）：
+**配置**（仓库根 `config.yaml`，由 `config` 包读写；优先级 flag > 环境变量 > 文件 > 默认）：
+```yaml
+web:
+  bind: 0.0.0.0:13579   # 监听地址（-addr / TTMUX_WEB_BIND 可覆盖）
+  password: ...         # 登录口令（缺省首启随机生成回写）
+  lock_after: 10        # 连续失败 N 次锁定
+  lock_secs: 30         # 锁定秒数
+# bin: .../ttmux        # ttmux 可执行文件（TTMUX_BIN 覆盖）
 ```
-TTMUX_WEB_BIND=0.0.0.0:8080        # 监听地址（-addr 可覆盖）
-TTMUX_WEB_PASSWORD=...             # 登录口令（默认值见 .env）
-TTMUX_WEB_FRONTEND=.../frontend/dist  # 前端产物目录（-web 可覆盖；缺省自动探测）
-TTMUX_BIN=.../ttmux                # ttmux 可执行文件
-TTMUX_WEB_LOCK_AFTER=10            # 连续失败 N 次锁定
-TTMUX_WEB_LOCK_SECS=30             # 锁定秒数
-```
-> 口令当前为明文比较（来自 `.env`）；argon2 哈希 + `web.toml` 持久化为后续增强（M4，见 [03](./03-auth-security.md)）。
+> 配置解析集中在 `config` 包（`cmd/main.go` 组装 `server.Config`）；`ttmux-web config show|ensure`
+> 供 `start.sh` 读取解析值。旧 `.env` 首启自动导入，`TTMUX_WEB_*` 环境变量仍可覆盖。
+> 口令当前为明文比较；argon2 哈希持久化为后续增强（M4，见 [03](./03-auth-security.md)）。
 
 ## 2. CLI 封装层（关键）
 

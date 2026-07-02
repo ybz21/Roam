@@ -11,11 +11,14 @@ ttmux 的 Web 控制台后端，是 ttmux CLI 的薄封装：读 = 调 `ttmux <c
 ./start.sh --dev
 ```
 
-配置走仓库根目录的 **`.env`**（见 `.env.example`），真实环境变量优先于 `.env`：
+配置走仓库根目录的 **`config.yaml`**（见 `config.example.yaml`）。优先级：命令行 flag > 环境变量 > `config.yaml` > 默认值：
+```yaml
+web:
+  password: ""            # 登录口令；留空则首次启动随机生成并写回 config.yaml
+  bind: 0.0.0.0:13579     # 监听地址（默认监听所有网卡，手机同 WiFi 可访问）
 ```
-TTMUX_WEB_PASSWORD=                 # 登录口令；留空则 start.sh 首次启动随机生成并写回 .env
-TTMUX_WEB_BIND=0.0.0.0:8080        # 监听地址（默认监听所有网卡，手机同 WiFi 可访问）
-```
+> 配置解析只有后端一处实现：`start.sh` 通过 `ttmux-web config show|ensure` 读取解析后的值。
+> 旧的 `.env` 仍会在首次启动时自动导入生成 `config.yaml`（之后可删除 `.env`）。相应环境变量（`TTMUX_WEB_*`）仍可临时覆盖。
 > ⚠ 默认监听 `0.0.0.0`，局域网内任何设备可访问——请使用强口令；外网访问走 Tailscale / Cloudflare Tunnel，不要直开公网端口。
 
 手动运行（flag 覆盖 env）：

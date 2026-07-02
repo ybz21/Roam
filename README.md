@@ -111,7 +111,7 @@ GitHub on demand; inside a clone, it sources the local modules directly.
 Then start the Web console from the repository:
 
 ```bash
-cp .env.example .env
+cp config.example.yaml config.yaml   # optional; start.sh auto-generates one if missing
 ./start.sh             # start built artifacts directly, without recompiling
 # ./start.sh --dev     # development mode: rebuild frontend + backend each run
 ```
@@ -119,8 +119,10 @@ cp .env.example .env
 `start.sh` also supports `stop` / `status` / `logs` / `fg`.
 
 By default, the Web console listens on `0.0.0.0:13579`, so devices on the same
-LAN can reach it. Before real use, change the access password in `.env`; for
-remote access, prefer Tailscale, Cloudflare Tunnel, SSH forwarding, or frp.
+LAN can reach it. Before real use, change the access password in `config.yaml`
+(`web.password`); for remote access, prefer Tailscale, Cloudflare Tunnel, SSH
+forwarding, or frp. (A leftover `.env` is auto-imported into `config.yaml` on
+first run; `TTMUX_WEB_*` env vars still override.)
 
 Exposing Roam through **frp with HTTPS** so mobile voice input and clipboard
 continue to work through the tunnel is covered in

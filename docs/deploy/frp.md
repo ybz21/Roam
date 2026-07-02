@@ -31,16 +31,19 @@ Relevant settings (env vars, also accepted as flags):
 - The self-signed cert is written to `<data>/tls/{cert,key}.pem`
   (`<data>` = `$TTMUX_DATA` or `~/.local/share/ttmux`). Delete it to regenerate.
 - Its SAN auto-includes `localhost`, `127.0.0.1`, `::1`, and every non-loopback
-  local IP. **Add the public IP / domain you reach it by via `TTMUX_WEB_TLS_SAN`**,
+  local IP. **Add the public IP / domain you reach it by via `web.tls_san`**,
   otherwise the browser shows an extra "name mismatch" warning.
-- `start.sh` reads these from `.env` and turns TLS on by default.
+- These are read from `config.yaml`; TLS is on by default.
 
-`.env` example:
+`config.yaml` example:
 
-```dotenv
-TTMUX_WEB_BIND=0.0.0.0:13579
-TTMUX_WEB_TLS=1
-TTMUX_WEB_TLS_SAN=47.94.183.77,roam.example.com
+```yaml
+web:
+  bind: 0.0.0.0:13579
+  tls: true
+  tls_san:
+    - 47.94.183.77
+    - roam.example.com
 ```
 
 ---
@@ -176,15 +179,18 @@ Roam 后端可自带 HTTPS，证书缺失时自动生成自签证书。相关配
 - 自签证书写到 `<data>/tls/{cert,key}.pem`（`<data>` = `$TTMUX_DATA` 或
   `~/.local/share/ttmux`）。删掉即可重新生成。
 - SAN 自动包含 `localhost`、`127.0.0.1`、`::1` 与本机所有非回环 IP。**务必把你实际访问
-  用的公网 IP / 域名加进 `TTMUX_WEB_TLS_SAN`**，否则浏览器会多报一条「域名不匹配」。
-- `start.sh`从 `.env` 读取这些，并默认开启 TLS。
+  用的公网 IP / 域名加进 `web.tls_san`**，否则浏览器会多报一条「域名不匹配」。
+- 这些从 `config.yaml` 读取，并默认开启 TLS。
 
-`.env` 示例：
+`config.yaml` 示例：
 
-```dotenv
-TTMUX_WEB_BIND=0.0.0.0:13579
-TTMUX_WEB_TLS=1
-TTMUX_WEB_TLS_SAN=47.94.183.77,roam.example.com
+```yaml
+web:
+  bind: 0.0.0.0:13579
+  tls: true
+  tls_san:
+    - 47.94.183.77
+    - roam.example.com
 ```
 
 ---

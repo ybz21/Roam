@@ -1,0 +1,32 @@
+# 复制为 config.yaml 并按需修改（后端 ttmux-web 读写；start.sh 通过 `ttmux-web config` 读取）。
+# 优先级：命令行 flag > 环境变量(TTMUX_WEB_* 等) > 本文件 > 默认值。改完重启生效。
+#
+# 迁移提示：若仓库里还留着旧的 .env，首次启动会自动把其中的值导入生成 config.yaml，
+# 之后即可删除 .env。
+web:
+  # 登录口令：留空则首次启动随机生成并写回 config.yaml；填了就用你填的值。
+  password: ""
+  bind: 0.0.0.0:13579
+
+  # ── 自签 HTTPS：手机/公网用麦克风·剪贴板需安全上下文（详见 docs/deploy/frp.md）──
+  # 默认开启；设 false 退回 http（也可用 TTMUX_WEB_TLS=0 临时覆盖）。
+  tls: true
+  # 额外证书 SAN（公网 IP 或域名），经 frp/反代访问时填，否则浏览器报「域名不匹配」。
+  tls_san: []
+  #   - 47.94.183.77
+  #   - example.com
+
+  # ── 两步验证 (TOTP / Authenticator)，默认关闭 ──
+  # 留空 = 关闭，只用口令登录。在控制台「系统配置」里生成密钥、扫码开启即可，
+  # 状态以 <data>/totp.json 为准；下面这行只是初始种子。
+  totp_secret: ""
+  # 临时关闭但保留种子：设为 off（优先级高于 totp_secret）。
+  two_fa: ""
+
+  # 登录失败锁定：连续失败 lock_after 次后锁 lock_secs 秒。
+  lock_after: 10
+  lock_secs: 30
+
+# 可选：覆盖 ttmux CLI 路径与数据目录（一般不用改）。
+# bin: ttmux
+# data_dir: ~/.local/share/ttmux

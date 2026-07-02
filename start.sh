@@ -23,17 +23,14 @@ for a in "$@"; do
 done
 if [ ${#ARGS[@]} -gt 0 ]; then set -- "${ARGS[@]}"; else set --; fi
 
-# ── 配置：加载 .env（已存在的环境变量优先）──────────────────────
-if [ -f .env ]; then
-  while IFS= read -r line || [ -n "$line" ]; do
-    case "$line" in ''|\#*) continue ;; esac
-    [ "${line#*=}" = "$line" ] && continue
-    key="${line%%=*}"; key="$(echo "$key" | tr -d '[:space:]')"
-    [ -z "$(eval "echo \${$key:-}")" ] && export "$key=${line#*=}"
-  done < .env
+# ── 配置：由后端 ttmux-web 解析 config.yaml（优先级 flag > 环境变量 > 文件 > 默认）─────
+# start.sh 不再自己解析配置：调用 `ttmux-web config show` 拿解析后的值，保证「配置解析」只有一处实现。
+# 二进制尚未构建时（dev 首次），回退到环境变量/默认，够 stop/status 用；启动前会再 `config ensure` 一次。
+BIN=backend/ttmux-web
+if [ -x "$BIN" ]; then
+  eval "$("$BIN" config show 2>/dev/null || true)"
 fi
-
-BIND="${TTMUX_WEB_BIND:-0.0.0.0:13579}"
+BIND="${TTMUX_CFG_BIND:-${TTMUX_WEB_BIND:-0.0.0.0:13579}}"
 PORT="${BIND##*:}"
 export TTMUX_BIN="${TTMUX_BIN:-ttmux}"   # 系统级 ttmux（install.sh 装到 ~/.local/bin，已在 PATH）
 # 若 TTMUX_BIN 指向具体路径却不存在（如继承了已删除的仓库根 ./ttmux），回退到 PATH 上的 ttmux，
@@ -64,14 +61,18 @@ if ! command -v "$TTMUX_BIN" &>/dev/null && [[ "$TTMUX_BIN" != */* || ! -x "$TTM
     exit 1
   fi
 fi
-# 登录口令在子命令(stop/status/logs)处理之后再解析，避免这些操作也触发生成/写 .env。
+# 登录口令在子命令(stop/status/logs)处理之后、后端构建之后再 `config ensure` 解析，
+# 避免这些操作也触发生成/写口令。
 # 自签 HTTPS：默认开启。手机经局域网用麦克风(语音)/剪贴板(一键粘贴)需「安全上下文」，
-# 纯 http 会被浏览器禁用这些能力。设 TTMUX_WEB_TLS=0 可退回 http。证书由后端就地生成。
-export TTMUX_WEB_TLS="${TTMUX_WEB_TLS:-1}"
-case "$(echo "${TTMUX_WEB_TLS}" | tr 'A-Z' 'a-z')" in
-  0|off|false|no) export TTMUX_WEB_TLS=0; SCHEME=http ;;
-  *)              export TTMUX_WEB_TLS=1; SCHEME=https ;;
-esac
+# 纯 http 会被浏览器禁用这些能力。设 config.yaml 的 web.tls=false（或 TTMUX_WEB_TLS=0）退回 http。
+if [ -n "${TTMUX_CFG_SCHEME:-}" ]; then
+  SCHEME="$TTMUX_CFG_SCHEME"
+else
+  case "$(echo "${TTMUX_WEB_TLS:-1}" | tr 'A-Z' 'a-z')" in
+    0|off|false|no) SCHEME=http ;;
+    *)              SCHEME=https ;;
+  esac
+fi
 OS="$(uname -s 2>/dev/null || echo unknown)"
 
 lan_ip() {
@@ -126,28 +127,8 @@ case "${1:-}" in
     exec tail -n 100 -f "$LOG" ;;
 esac
 
-# ── 登录口令：用户可通过环境变量或 .env 自定义；未配置时首次启动随机生成并写回 .env ──
-# 改密码：编辑 .env 里的 TTMUX_WEB_PASSWORD（或导出同名环境变量）后重启即可。
+# 登录口令的解析/生成挪到后端构建之后（见下方 `config ensure`），因为要用到 ttmux-web 二进制。
 PW_GENERATED=0
-if [ -z "${TTMUX_WEB_PASSWORD:-}" ]; then
-  if command -v openssl >/dev/null 2>&1; then
-    TTMUX_WEB_PASSWORD="ttmux-$(openssl rand -hex 4)"
-  else
-    TTMUX_WEB_PASSWORD="ttmux-$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)"
-  fi
-  # 持久化到 .env（gitignored），让用户能查看/修改：已有键则替换其值，否则追加。
-  touch .env
-  if grep -qE '^[[:space:]]*TTMUX_WEB_PASSWORD=' .env; then
-    tmp="$(mktemp)"
-    sed -E "s|^[[:space:]]*TTMUX_WEB_PASSWORD=.*|TTMUX_WEB_PASSWORD=${TTMUX_WEB_PASSWORD}|" .env > "$tmp" && mv "$tmp" .env
-  else
-    printf '\n# 自动生成的登录口令（可在本文件修改后重启生效）\nTTMUX_WEB_PASSWORD=%s\n' "$TTMUX_WEB_PASSWORD" >> .env
-  fi
-  PW_GENERATED=1
-fi
-export TTMUX_WEB_PASSWORD
-
-BIN=backend/ttmux-web
 
 # ── dev：刷新 CLI/chrome/skills（跳过后端，交给本脚本增量编译）──────
 if [ "$DEV" = 1 ] && [ -f install.sh ]; then
@@ -212,14 +193,22 @@ elif [ ! -x "$BIN" ]; then
   echo "✘ 未找到 $BIN —— 先构建：bash install.sh   或   bash start.sh --dev"; exit 1
 fi
 
+# ── 配置最终解析：后端已就位，用 `config ensure` 拿口令（为空则生成并写回 config.yaml）+ 各解析值 ──
+eval "$("$BIN" config ensure)"
+BIND="${TTMUX_CFG_BIND:-$BIND}"
+PORT="${BIND##*:}"
+SCHEME="${TTMUX_CFG_SCHEME:-$SCHEME}"
+TTMUX_WEB_PASSWORD="${TTMUX_CFG_PASSWORD:-}"
+PW_GENERATED="${TTMUX_CFG_PW_GENERATED:-0}"
+
 # ── 启动 ─────────────────────────────────────────────────────────
 echo "==> 启动 ttmux-web  $SCHEME://$BIND  （口令: ${TTMUX_WEB_PASSWORD}）"
 if [ "$PW_GENERATED" = 1 ]; then
-  echo "    ★ 已为你随机生成登录口令并写入 .env：${TTMUX_WEB_PASSWORD}"
-  echo "      改密码：编辑 .env 的 TTMUX_WEB_PASSWORD（或设同名环境变量）后重启。"
+  echo "    ★ 已为你随机生成登录口令并写入 ${TTMUX_CFG_PATH:-config.yaml}：${TTMUX_WEB_PASSWORD}"
+  echo "      改密码：编辑 ${TTMUX_CFG_PATH:-config.yaml} 的 web.password（或设 TTMUX_WEB_PASSWORD 环境变量）后重启。"
 fi
 [ -n "$LAN" ] && echo "==> 手机/平板（同 WiFi）: $SCHEME://$LAN:$PORT"
-[ "$SCHEME" = https ] && echo "    （自签证书：手机首次访问点「高级 → 继续前往」即可，之后语音/剪贴板可用；如需 http 设 TTMUX_WEB_TLS=0）"
+[ "$SCHEME" = https ] && echo "    （自签证书：手机首次访问点「高级 → 继续前往」即可，之后语音/剪贴板可用；如需 http 设 web.tls=false）"
 
 # fg：前台运行（调试，Ctrl-C 即停）
 if [ "${1:-}" = "fg" ]; then

@@ -24,7 +24,7 @@ import (
 //
 // 为什么分两张：浏览器(Chrome)不接受把一张 CA:TRUE 证书直接当服务器叶子证书；必须「装 CA → 信任其签发的叶子」。
 // 返回是否新生成。
-func ensureSelfSignedCert(certPath, keyPath string) (bool, error) {
+func ensureSelfSignedCert(certPath, keyPath string, extraSAN []string) (bool, error) {
 	if fileExists(certPath) && fileExists(keyPath) {
 		return false, nil
 	}
@@ -74,9 +74,9 @@ func ensureSelfSignedCert(certPath, keyPath string) (bool, error) {
 	}
 	dns := []string{"localhost"}
 	ips := append([]net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback}, localIPs()...)
-	// 额外 SAN：TTMUX_WEB_TLS_SAN（逗号分隔）。经 frp/反代从公网 IP 或域名访问时填上，
-	// 否则浏览器会因「证书域名不匹配」报错。是 IP 走 IPAddresses，否则当域名。
-	for _, s := range strings.Split(os.Getenv("TTMUX_WEB_TLS_SAN"), ",") {
+	// 额外 SAN：来自配置 web.tls_san（或 TTMUX_WEB_TLS_SAN 覆盖）。经 frp/反代从公网 IP 或域名
+	// 访问时填上，否则浏览器会因「证书域名不匹配」报错。是 IP 走 IPAddresses，否则当域名。
+	for _, s := range extraSAN {
 		if s = strings.TrimSpace(s); s == "" {
 			continue
 		}

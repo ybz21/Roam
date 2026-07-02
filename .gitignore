@@ -1,4 +1,5 @@
 .env
+/config.yaml
 /ScreenShot_*.png
 /tmp/
 /cli/ttmux-cli-go/ttmux-cli-go

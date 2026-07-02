@@ -85,15 +85,17 @@ clone 里则直接 source 本地模块。`TTMUX_SKIP_BACKEND=1` 只装 CLI/chrom
 然后在仓库目录里启动 Web 控制台：
 
 ```bash
-cp .env.example .env
+cp config.example.yaml config.yaml   # 可选；缺省时 start.sh 会自动生成一份
 ./start.sh             # 直接启动已构建产物（不重新编译）
 # ./start.sh --dev     # 开发模式：每次重新编译前端+后端
 ```
 
 `start.sh` 还支持 `stop` / `status` / `logs` / `fg`。
 
-默认监听 `0.0.0.0:13579`，局域网设备可以直接访问。正式使用前请修改 `.env` 里的
-访问口令；远程访问建议走 Tailscale、Cloudflare Tunnel、SSH forwarding 或 frp。
+默认监听 `0.0.0.0:13579`，局域网设备可以直接访问。正式使用前请修改 `config.yaml`
+里的访问口令（`web.password`）；远程访问建议走 Tailscale、Cloudflare Tunnel、SSH
+forwarding 或 frp。（仓库里若还留着旧 `.env`，首次启动会自动导入到 `config.yaml`；
+`TTMUX_WEB_*` 环境变量仍可临时覆盖。）
 
 通过 **frp 暴露并保持 HTTPS**（让手机语音输入、剪贴板经隧道仍可用）的配置见
 **[docs/deploy/frp.md](docs/deploy/frp.md)**（中英双语）。
