@@ -385,7 +385,7 @@ export default function App() {
   const pages: any = {
     overview: <Overview go={go} openTerm={openTerm} />,
     swarm: <Swarm openTerm={openTerm} initialSwarm={swarmSub || undefined} onNav={(n) => { location.hash = n ? '#/swarm/' + encodeURIComponent(n) : '#/swarm' }} />,
-    sessions: <Sessions openTerm={openTerm} closeTerm={closeTerm} />,
+    sessions: <Sessions openTerm={openTerm} closeTerm={closeTerm} activeTerm={active} />,
     files: <FilesPage openTerm={openTerm} />,
     settings: <EnvPage />,
     browser: <BrowserView />,
@@ -1477,7 +1477,7 @@ function RenameSessionModal({ session, onClose, onDone }: { session: string | nu
 }
 
 // ── 会话（可新建/指定目录 / 进终端 / 关闭） ──
-function Sessions({ openTerm, closeTerm }: { openTerm: (n: string) => void; closeTerm: (n: string) => void }) {
+function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) => void; closeTerm: (n: string) => void; activeTerm: string | null }) {
   const [list, setList] = useState<any[]>([])
   const [cc, setCc] = useState<Record<string, boolean>>({})
   const [cx, setCx] = useState<Record<string, boolean>>({})
@@ -1619,9 +1619,15 @@ function Sessions({ openTerm, closeTerm }: { openTerm: (n: string) => void; clos
               const connected = s.attached == 1
               const agent = cc[s.name] ? 'claude' : cx[s.name] ? 'codex' : null
               const waiting = !!needsInput[s.name]
+              const activeRow = activeTerm === s.name
               return (
                 // 整行点击直接进入终端；右侧操作区 stopPropagation 不触发进入
-                <List.Item style={{ padding: '10px 8px', cursor: 'pointer' }} onClick={() => openTerm(s.name)}>
+                <List.Item style={{
+                  padding: '10px 8px', cursor: 'pointer', borderRadius: 8,
+                  background: activeRow ? '#1f6feb22' : undefined,
+                  border: activeRow ? '1px solid #1f6feb88' : '1px solid transparent',
+                  boxShadow: activeRow ? 'inset 3px 0 0 #58a6ff' : undefined,
+                }} onClick={() => openTerm(s.name)}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
                       <i title={waiting ? t('prompt.confirmRequired') : connected ? t('terminal.status.connected') : t('terminal.status.idle')} style={{ width: 8, height: 8, borderRadius: '50%', flex: '0 0 8px', background: waiting ? '#d29922' : connected ? '#3fb950' : 'var(--text-dimmer)' }} />
