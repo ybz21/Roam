@@ -30,7 +30,8 @@ type infoJSON struct {
 
 func ListJSON(rt runtime.Runtime, exclude map[string]bool, w io.Writer) error {
 	out, err := rt.TmuxOutput("list-sessions", "-F", "#{session_name}\t#{session_windows}\t#{session_created}\t#{session_attached}\t#{session_activity}")
-	if err != nil && strings.TrimSpace(out) == "" {
+	if err != nil {
+		// tmux server 未启动时输出的是 stderr 错误文本（out 非空），只看 err
 		_, _ = io.WriteString(w, "[]\n")
 		return nil
 	}

@@ -31,10 +31,12 @@ mkdir -p "$TTMUX_DATA" "$TTMUX_HOME" "$HOME"
 export NO_COLOR=1
 unset TMUX_BIN TTMUX_AGENT TTMUX_QUIET 2>/dev/null || true
 
-# tmux wrapper bound to the private socket
+# tmux wrapper bound to the private socket（在改 PATH 前解析真实 tmux，
+# 避免硬编码 /usr/bin/tmux 在 macOS/Homebrew 环境下找不到）
+REAL_TMUX="$(command -v tmux)"
 cat > "$WBIN/tmux" <<EOF
 #!/usr/bin/env bash
-exec /usr/bin/tmux -L $SOCKET "\$@"
+exec "$REAL_TMUX" -L $SOCKET "\$@"
 EOF
 # fake claude/codex: stay alive so a resident "agent" session persists
 for stub in claude codex; do
@@ -77,6 +79,8 @@ sec "basics: version / help / info"
 eq "version" "ttmux v0.4.1-go" "$($GO -v)"
 has "help renders" "$($GO help)" "AI-native tmux wrapper"
 has "info --json sessions field" "$($GO info --json | jget 'list(d.keys())')" "sessions"
+eq "info --json sessions=0 (no server)" "0" "$($GO info --json | jget 'd["sessions"]')"
+eq "ls --json empty (no server)" "0" "$($GO ls --json | jget 'len(d)')"
 
 # ════════════════════════════════════════════
 sec "tasks: spawn / status / collect / group"

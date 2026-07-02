@@ -16,7 +16,11 @@ import (
 // List renders the human-readable session table (mirrors _pretty_sessions),
 // hiding swarm-owned sessions via exclude.
 func List(rt runtime.Runtime, exclude map[string]bool, w io.Writer) error {
-	out, _ := rt.TmuxOutput("list-sessions", "-F", "#{session_name}\t#{session_windows}\t#{session_created}\t#{session_attached}")
+	out, err := rt.TmuxOutput("list-sessions", "-F", "#{session_name}\t#{session_windows}\t#{session_created}\t#{session_attached}")
+	if err != nil {
+		// tmux server 未启动时输出的是 stderr 错误文本，不能当会话数据解析
+		out = ""
+	}
 	p := ui.P()
 	fmt.Fprintln(w)
 	count := 0
