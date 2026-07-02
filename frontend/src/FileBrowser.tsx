@@ -664,9 +664,11 @@ function startPathDrag(ev: React.DragEvent, full: string) {
   ev.dataTransfer.effectAllowed = 'copy'
 }
 
-function FileContextMenu({ target, children, onOpen, onRename, onCopyTo, onUploadHere, onDownload, onProperties, onDelete, onInsertPath }: {
+function FileContextMenu({ target, children, onContextFocus, onContextBlur, onOpen, onRename, onCopyTo, onUploadHere, onDownload, onProperties, onDelete, onInsertPath }: {
   target: FileTarget
   children: ReactNode
+  onContextFocus: (target: FileTarget) => void
+  onContextBlur: (target: FileTarget) => void
   onOpen: (target: FileTarget) => void
   onRename: (target: FileTarget) => void
   onCopyTo: (target: FileTarget) => void
@@ -700,8 +702,8 @@ function FileContextMenu({ target, children, onOpen, onRename, onCopyTo, onUploa
     else if (key === 'delete') onDelete(target)
   }
   return (
-    <Dropdown trigger={['contextMenu']} menu={{ items, onClick }}>
-      <div onContextMenu={(ev) => ev.stopPropagation()}>{children}</div>
+    <Dropdown trigger={['contextMenu']} menu={{ items, onClick }} onOpenChange={(open) => { open ? onContextFocus(target) : onContextBlur(target) }}>
+      <div onContextMenu={(ev) => { ev.stopPropagation(); onContextFocus(target) }}>{children}</div>
     </Dropdown>
   )
 }
@@ -737,7 +739,7 @@ function FileRowBody({ full, name, isDir, size, accent, onInsertPath }: {
 // 排序/隐藏文件过滤、点文件预览、拖入终端 @mention、右键删除都与平铺行一致。
 function FileTree({
   root, rootEntries, accent, showHidden, sortKey, tick, selected,
-  onOpenFile, onOpenEntry, onRenameEntry, onCopyEntry, onUploadEntry, onDownloadEntry, onPropertiesEntry, onDeleteEntry, onInsertPath,
+  onContextFocus, onContextBlur, onOpenFile, onOpenEntry, onRenameEntry, onCopyEntry, onUploadEntry, onDownloadEntry, onPropertiesEntry, onDeleteEntry, onInsertPath,
 }: {
   root: string
   rootEntries: Entry[]
@@ -746,6 +748,8 @@ function FileTree({
   sortKey: SortKey
   tick: number
   selected: string | null
+  onContextFocus: (target: FileTarget) => void
+  onContextBlur: (target: FileTarget) => void
   onOpenFile: (full: string) => void
   onOpenEntry: (target: FileTarget) => void
   onRenameEntry: (target: FileTarget) => void
@@ -788,7 +792,7 @@ function FileTree({
       const isOpen = e.dir && expanded.has(full)
       return (
         <Fragment key={full}>
-          <FileContextMenu target={target} onOpen={onOpenEntry} onRename={onRenameEntry} onCopyTo={onCopyEntry} onUploadHere={onUploadEntry} onDownload={onDownloadEntry} onProperties={onPropertiesEntry} onDelete={onDeleteEntry} onInsertPath={onInsertPath}>
+          <FileContextMenu target={target} onContextFocus={onContextFocus} onContextBlur={onContextBlur} onOpen={onOpenEntry} onRename={onRenameEntry} onCopyTo={onCopyEntry} onUploadHere={onUploadEntry} onDownload={onDownloadEntry} onProperties={onPropertiesEntry} onDelete={onDeleteEntry} onInsertPath={onInsertPath}>
             <div className="cc-filerow"
               draggable
               onDragStart={(ev) => startPathDrag(ev, full)}
@@ -865,6 +869,7 @@ export default function FileBrowser({
   const [propertiesTarget, setPropertiesTarget] = useState<FileTarget | null>(null)
   const [properties, setProperties] = useState<FileStat | null>(null)
   const [propertiesLoading, setPropertiesLoading] = useState(false)
+  const [contextPath, setContextPath] = useState<string | null>(null)
   const [showHidden, setShowHidden] = useState(false) // 隐藏文件（点号开头）默认不显示，眼睛开关切换
   const [sortKey, setSortKey] = useState<SortKey>('name')
   // 递归按文件名搜索（当前目录向下），放大镜开关切换；有查询词时列表区改显搜索结果。
@@ -1000,6 +1005,8 @@ export default function FileBrowser({
     })
   }
   const confirmDeleteTarget = (target: FileTarget) => confirmDelete(target.path, target.dir)
+  const markContextTarget = (target: FileTarget) => setContextPath(target.path)
+  const clearContextTarget = (target: FileTarget) => setContextPath((path) => (path === target.path ? null : path))
   const openEntry = (target: FileTarget) => { target.dir ? navigate(target.path) : openFile(target.path) }
   const startRename = (target: FileTarget) => {
     setRenameTarget(target)
@@ -1069,7 +1076,7 @@ export default function FileBrowser({
   // 打开一个文件：dock 布局把打开交给外层（开编辑器 tab），否则用内置预览。
   const openFile = (target: string) => { if (onOpenFile) onOpenFile(target); else setView(target) }
   // 浏览器里高亮的选中项：外层受控（selectedPath）优先，否则用内部 view。
-  const sel = selectedPath !== undefined ? selectedPath : view
+  const sel = contextPath || (selectedPath !== undefined ? selectedPath : view)
 
   const openPath = async (target: string) => {
     try {
@@ -1238,12 +1245,12 @@ export default function FileBrowser({
           </div>
         )}
         {browseMode === 'tree' ? (
-          <FileTree root={cur} rootEntries={data?.entries || []} accent={accent} showHidden={showHidden} sortKey={sortKey} tick={tick} selected={sel} onOpenFile={openFile} onOpenEntry={openEntry} onRenameEntry={startRename} onCopyEntry={startCopy} onUploadEntry={uploadInto} onDownloadEntry={downloadEntry} onPropertiesEntry={showProperties} onDeleteEntry={confirmDeleteTarget} onInsertPath={onInsertPath} />
+          <FileTree root={cur} rootEntries={data?.entries || []} accent={accent} showHidden={showHidden} sortKey={sortKey} tick={tick} selected={sel} onContextFocus={markContextTarget} onContextBlur={clearContextTarget} onOpenFile={openFile} onOpenEntry={openEntry} onRenameEntry={startRename} onCopyEntry={startCopy} onUploadEntry={uploadInto} onDownloadEntry={downloadEntry} onPropertiesEntry={showProperties} onDeleteEntry={confirmDeleteTarget} onInsertPath={onInsertPath} />
         ) : visibleEntries.map((e) => {
           const full = joinPath(cur, e.name)
           const target: FileTarget = { ...e, path: full }
           return (
-            <FileContextMenu key={e.name} target={target} onOpen={openEntry} onRename={startRename} onCopyTo={startCopy} onUploadHere={uploadInto} onDownload={downloadEntry} onProperties={showProperties} onDelete={confirmDeleteTarget} onInsertPath={onInsertPath}>
+            <FileContextMenu key={e.name} target={target} onContextFocus={markContextTarget} onContextBlur={clearContextTarget} onOpen={openEntry} onRename={startRename} onCopyTo={startCopy} onUploadHere={uploadInto} onDownload={downloadEntry} onProperties={showProperties} onDelete={confirmDeleteTarget} onInsertPath={onInsertPath}>
               <div className="cc-filerow"
                 draggable
                 onDragStart={(ev) => startPathDrag(ev, full)}
@@ -1251,7 +1258,7 @@ export default function FileBrowser({
                   if ((ev.target as HTMLElement).closest('[data-file-action]')) return
                   e.dir ? navigate(full) : openFile(full)
                 }}
-                style={{ ...rowStyle(), background: !e.dir && full === sel ? '#1f6feb22' : undefined }}>
+                style={{ ...rowStyle(), background: full === sel ? '#1f6feb22' : undefined }}>
                 <FileRowBody full={full} name={e.name} isDir={e.dir} size={e.size} accent={accent} onInsertPath={onInsertPath} />
               </div>
             </FileContextMenu>
