@@ -134,6 +134,8 @@ const enUS = {
   'session.agentClaude': 'Launch Claude Code',
   'session.agentCodex': 'Launch Codex',
   'session.dirPlaceholder': 'Working directory (optional, defaults to home; focus to see recent)',
+  'session.worktreeMode': 'Git Worktree mode',
+  'session.worktreeCreating': 'Creating worktree…',
   'session.searchPlaceholder': 'Search sessions…',
   'session.closed': 'Closed',
   'session.swarmPage': 'Swarm page',

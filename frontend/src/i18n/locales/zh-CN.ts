@@ -134,6 +134,8 @@ const zhCN = {
   'session.agentClaude': '启动 Claude Code',
   'session.agentCodex': '启动 Codex',
   'session.dirPlaceholder': '工作目录（可空，默认家目录；聚焦看最近）',
+  'session.worktreeMode': 'Git Worktree 模式',
+  'session.worktreeCreating': '正在创建 worktree…',
   'session.searchPlaceholder': '搜索会话名…',
   'session.closed': '已关闭',
   'session.swarmPage': '蜂群页',

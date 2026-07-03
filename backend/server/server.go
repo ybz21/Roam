@@ -108,13 +108,16 @@ func New(cfg Config) *gin.Engine {
 		g.POST("/file/mkdir", h.FileMkdir) // 文件侧栏：在当前目录新建子目录
 		g.POST("/upload", h.Upload)        // 上传文件到指定目录（拖拽到对话框 / 文件侧栏）
 
-		g.GET("/git/status", h.GitStatus)    // Git 面板：当前工作目录所属仓库状态
-		g.GET("/git/diff", h.GitDiff)        // Git 面板：单文件差异
-		g.POST("/git/stage", h.GitStage)     // 暂存
-		g.POST("/git/unstage", h.GitUnstage) // 取消暂存
-		g.POST("/git/discard", h.GitDiscard) // 放弃改动
-		g.POST("/git/commit", h.GitCommit)   // 提交（可选 push）
-		g.POST("/git/op", h.GitOp)           // push / pull / fetch / sync
+		g.GET("/git/status", h.GitStatus)                   // Git 面板：当前工作目录所属仓库状态
+		g.GET("/git/diff", h.GitDiff)                       // Git 面板：单文件差异
+		g.POST("/git/stage", h.GitStage)                    // 暂存
+		g.POST("/git/unstage", h.GitUnstage)                // 取消暂存
+		g.POST("/git/discard", h.GitDiscard)                // 放弃改动
+		g.POST("/git/commit", h.GitCommit)                  // 提交（可选 push）
+		g.POST("/git/op", h.GitOp)                          // push / pull / fetch / sync
+		g.POST("/git/worktree", h.GitWorktreeAdd)           // 新建 worktree
+		g.POST("/git/worktree/remove", h.GitWorktreeRemove) // 移除 worktree
+		g.GET("/git/is-repo", h.GitIsRepo)                  // 检查是否 git 仓库
 
 		g.GET("/sessions", h.Sessions)
 		g.POST("/sessions", h.NewSession)
