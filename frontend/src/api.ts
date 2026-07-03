@@ -10,6 +10,9 @@ export async function api(method: string, path: string, body?: any): Promise<any
     method,
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
+    // 移动端(Safari/WebView)会对无 Cache-Control 的 GET 做启发式缓存，导致文件实时重载
+    // 轮询的 /file/stat 一直拿到旧 mtime → 不刷新。强制不走缓存，每次真打网络。
+    cache: 'no-store',
   })
   if (r.status === 401) {
     onUnauth()
