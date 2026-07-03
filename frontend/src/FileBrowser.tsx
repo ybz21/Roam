@@ -765,9 +765,6 @@ function FileTree({
   const [loading, setLoading] = useState<Record<string, boolean>>({})
   const { t } = useI18n()
 
-  // 换根目录或刷新（tick）→ 清空展开态与缓存，避免展示上一目录的子树
-  useEffect(() => { setExpanded(new Set()); setChildMap({}); setLoading({}) }, [root, tick])
-
   const loadDir = (dirPath: string) => {
     setLoading((m) => ({ ...m, [dirPath]: true }))
     api('GET', `/files?path=${encodeURIComponent(dirPath)}`)
@@ -775,6 +772,26 @@ function FileTree({
       .catch(() => setChildMap((m) => ({ ...m, [dirPath]: [] })))
       .finally(() => setLoading((m) => ({ ...m, [dirPath]: false })))
   }
+  // 静默重拉子项：不置 loading（保留旧子项直到新数据到），刷新时展开的目录不闪 spinner
+  const reloadDir = (dirPath: string) => {
+    api('GET', `/files?path=${encodeURIComponent(dirPath)}`)
+      .then((r) => setChildMap((m) => ({ ...m, [dirPath]: r.data?.entries || [] })))
+      .catch(() => {})
+  }
+
+  const prevRoot = useRef(root)
+  // 换根目录 → 清空展开态与缓存（旧展开对新目录无意义）。
+  // 刷新(tick 变、root 不变) → 保留展开层级，静默重拉各已展开目录的子项，
+  // 让新增/删除的文件显示出来而不折叠（顶层 rootEntries 由父组件随 tick 重拉）。
+  useEffect(() => {
+    if (prevRoot.current !== root) {
+      prevRoot.current = root
+      setExpanded(new Set()); setChildMap({}); setLoading({})
+      return
+    }
+    expanded.forEach((dirPath) => reloadDir(dirPath))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [root, tick])
   const toggleDir = (dirPath: string) => {
     setExpanded((s) => {
       const n = new Set(s)
