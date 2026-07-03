@@ -85,6 +85,10 @@ func New(cfg Config) *gin.Engine {
 
 	// 受保护端点
 	g := r.Group("/api", a.Middleware())
+	// API 返回的都是动态数据（会话状态、文件内容/元信息…）。移动端(Safari/WebView)与反代会对
+	// 无 Cache-Control 的 GET 做启发式缓存，导致文件实时重载轮询的 /file/stat 一直拿到旧 mtime
+	// → 不刷新。统一禁缓存，兜底前端的 cache:no-store。
+	g.Use(func(c *gin.Context) { c.Header("Cache-Control", "no-store") })
 	{
 		g.GET("/me", h.Me)
 		g.GET("/info", h.Info)
