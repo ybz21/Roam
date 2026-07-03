@@ -1400,14 +1400,34 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
   const [dir, setDir] = useState('')
   const [pick, setPick] = useState(false)
   const [agent, setAgent] = useState<'none' | 'claude' | 'codex'>('none')
+  const [worktree, setWorktree] = useState(false)
+  const [isGitRepo, setIsGitRepo] = useState(false)
+  const [creating, setCreating] = useState(false)
   const { message } = AntApp.useApp()
   const { t } = useI18n()
   const [prefs] = usePreferences()
-  useEffect(() => { if (open) { setName(''); setDir(''); setAgent('none') } }, [open])
+  useEffect(() => { if (open) { setName(''); setDir(''); setAgent('none'); setWorktree(false); setIsGitRepo(false) } }, [open])
+  useEffect(() => {
+    const d = dir.trim()
+    if (!d) { setIsGitRepo(false); return }
+    let cancelled = false
+    api('GET', `/git/is-repo?path=${encodeURIComponent(d)}`).then((r) => {
+      if (!cancelled) setIsGitRepo(!!r?.data?.repo)
+    }).catch(() => { if (!cancelled) setIsGitRepo(false) })
+    return () => { cancelled = true }
+  }, [dir])
   const ok = async () => {
     if (!name.trim()) return message.error(t('session.nameRequired'))
+    let worktreePath = ''
     try {
-      const res = await api('POST', '/sessions', { name: name.trim(), dir: dir.trim() })
+      setCreating(true)
+      let sessionDir = dir.trim()
+      if (worktree && isGitRepo && sessionDir) {
+        const wt = await api('POST', '/git/worktree', { dir: sessionDir })
+        worktreePath = wt?.data?.path || ''
+        if (worktreePath) sessionDir = worktreePath
+      }
+      const res = await api('POST', '/sessions', { name: name.trim(), dir: sessionDir })
       const actual = res.name || name.trim()
       if (agent !== 'none') {
         const cmd = agent === 'claude' ? (prefs.claudeCommand || 'claude') : (prefs.codexCommand || 'codex')
@@ -1415,11 +1435,18 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
       }
       pushRecentDir(dir); message.success(t('session.created')); onClose(); onDone(actual)
     }
-    catch (e: any) { message.error(e.message) }
+    catch (e: any) {
+      if (worktreePath) {
+        api('POST', '/git/worktree/remove', { path: worktreePath }).catch(() => {})
+      }
+      message.error(e.message)
+    }
+    finally { setCreating(false) }
   }
   return (
     <>
-      <Modal open={open} onCancel={onClose} onOk={ok} okText={t('file.create')} title={t('session.new')} destroyOnClose>
+      <Modal open={open} onCancel={onClose} onOk={ok} okText={t('file.create')} title={t('session.new')} destroyOnClose
+        confirmLoading={creating}>
         <Space direction="vertical" style={{ width: '100%' }}>
           <Input placeholder={t('session.namePlaceholder')} value={name} onChange={(e) => setName(e.target.value)} autoFocus />
           <Space.Compact style={{ width: '100%' }}>
@@ -1439,6 +1466,12 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
                   </Tag>
                 </Tooltip>
               ))}
+            </div>
+          )}
+          {isGitRepo && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Switch size="small" checked={worktree} onChange={setWorktree} />
+              <span style={{ fontSize: 13 }}>{t('session.worktreeMode')}</span>
             </div>
           )}
           <Radio.Group value={agent} onChange={(e) => setAgent(e.target.value)} optionType="button" buttonStyle="solid"

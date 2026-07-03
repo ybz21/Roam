@@ -4,6 +4,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
@@ -313,6 +314,89 @@ func (a *API) GitCommit(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"ok": true, "output": strings.TrimSpace(result)}})
+}
+
+// GitWorktreeAdd POST /git/worktree {dir} —— 在 dir/.worktrees/ 下新建 git worktree，返回路径。
+func (a *API) GitWorktreeAdd(c *gin.Context) {
+	var req struct {
+		Dir string `json:"dir"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.Dir == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
+		return
+	}
+	dir := filepath.Clean(req.Dir)
+	if !filepath.IsAbs(dir) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_PATH"}})
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	defer cancel()
+
+	root, err := runGit(ctx, dir, "rev-parse", "--show-toplevel")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "NOT_GIT_REPO", "message": "not a git repository"}})
+		return
+	}
+	root = strings.TrimSpace(root)
+
+	if _, err := runGit(ctx, root, "rev-parse", "--verify", "HEAD"); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "EMPTY_REPO", "message": "repository has no commits yet"}})
+		return
+	}
+
+	now := time.Now()
+	name := "_" + now.Format("20060102150405") + fmt.Sprintf("%03d", now.Nanosecond()/1e6)
+	wtDir := filepath.Join(root, ".worktrees", name)
+
+	if err := os.MkdirAll(filepath.Dir(wtDir), 0o755); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "MKDIR_FAILED", "message": err.Error()}})
+		return
+	}
+
+	out, err := runGit(ctx, root, "worktree", "add", wtDir)
+	if err != nil {
+		gitFail(c, "GIT_WORKTREE_FAILED", out, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"path": wtDir}})
+}
+
+// GitWorktreeRemove POST /git/worktree/remove {path} —— 移除指定 worktree（用于创建会话失败时清理）。
+func (a *API) GitWorktreeRemove(c *gin.Context) {
+	var req struct {
+		Path string `json:"path"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.Path == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
+		return
+	}
+	p := filepath.Clean(req.Path)
+	if !filepath.IsAbs(p) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_PATH"}})
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	defer cancel()
+	out, err := runGit(ctx, filepath.Dir(p), "worktree", "remove", "--force", p)
+	if err != nil {
+		gitFail(c, "GIT_WORKTREE_REMOVE_FAILED", out, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"ok": true}})
+}
+
+// GitIsRepo GET /git/is-repo?path=<dir> —— 检查目录是否为 git 仓库。
+func (a *API) GitIsRepo(c *gin.Context) {
+	dir := filepath.Clean(c.Query("path"))
+	if dir == "" || !filepath.IsAbs(dir) {
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"repo": false}})
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+	_, err := runGit(ctx, dir, "rev-parse", "--git-dir")
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"repo": err == nil}})
 }
 
 // GitOp POST /git/op {root, op} —— 远端操作：push / pull / fetch / sync(pull+push)。
