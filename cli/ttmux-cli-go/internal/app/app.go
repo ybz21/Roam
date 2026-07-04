@@ -10,6 +10,7 @@ import (
 	"ttmux-cli-go/internal/command/group"
 	"ttmux-cli-go/internal/command/help"
 	"ttmux-cli-go/internal/command/interactive"
+	plugincmd "ttmux-cli-go/internal/command/plugin"
 	"ttmux-cli-go/internal/command/session"
 	"ttmux-cli-go/internal/command/spawn"
 	swarmcommand "ttmux-cli-go/internal/command/swarm"
@@ -43,6 +44,8 @@ func (a App) Run(args []string) error {
 			spawn.RunAutoconfirm(a.rt, rest[0])
 		}
 		return nil
+	case "_plugin-host": // 插件子进程入口(stdio JSON-RPC,勿直接调用)
+		return plugincmd.HostMain(rest)
 
 	case "-h", "--help", "help":
 		help.Show(version, out)
@@ -126,6 +129,10 @@ func (a App) Run(args []string) error {
 	// ── swarm (status native, rest delegated) ──
 	case "swarm":
 		return swarmcommand.Run(a.rt, rest, out)
+
+	// ── plugins(default 分支透传 tmux,必须显式注册)──
+	case "plugin":
+		return plugincmd.Run(a.rt, rest, out)
 
 	default:
 		return a.rt.Tmux(append([]string{cmd}, rest...)...)
