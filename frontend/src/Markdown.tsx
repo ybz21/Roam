@@ -4,7 +4,12 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import type { CSSProperties, MouseEvent } from 'react'
+import { lazy, Suspense } from 'react'
 import { CodeBox } from './chat/blocks'
+import { useI18n } from './i18n'
+
+// Mermaid 组件连同其重依赖(mermaid/d3/cytoscape…)整体懒加载，只有真渲染 ```mermaid 才拉取，不进首屏。
+const Mermaid = lazy(() => import('./Mermaid'))
 
 const mono = 'ui-monospace, SFMono-Regular, Menlo, monospace'
 
@@ -33,6 +38,7 @@ export default function Markdown({
   onLinkClick?: (href: string, event: MouseEvent<HTMLAnchorElement>) => void
   fill?: boolean // 整块代码/JSON 预览：让唯一的代码块撑满父容器高度
 }) {
+  const { t } = useI18n()
   return (
     <div style={{ fontSize: 13.5, lineHeight: 1.55, wordBreak: 'break-word', height: fill ? '100%' : undefined }}>
       <ReactMarkdown
@@ -62,6 +68,8 @@ export default function Markdown({
             // 块级代码复用对话里的 CodeBox（hover 复制 + 主题色 + 语法高亮）
             if (block) {
               const raw = (node ? nodeText(node) : String(children)).replace(/\n$/, '')
+              // ```mermaid → 渲染成可视化图（懒加载 mermaid），渲染失败回退源码
+              if (/language-mermaid/.test(cls)) return <Suspense fallback={<div style={{ padding: 12, color: 'var(--text-dim)', fontSize: 12 }}>{t('mermaid.loading')}</div>}><Mermaid code={raw} /></Suspense>
               return <CodeBox text={raw} max={420} fill={fill} className={`hljs ${cls}`}>{children}</CodeBox>
             }
             return <code style={inlineCode}>{children}</code>

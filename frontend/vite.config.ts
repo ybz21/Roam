@@ -19,6 +19,9 @@ export default defineConfig({
           if (/docx-preview|xlsx|pptx|jvmr/.test(id)) return 'office'
           // Monaco 编辑器（VSCode 内核）很重，仅编辑/查看文本文件才用 → 独立块（配合 CodeEditor 懒加载按需取，不进首屏）
           if (/monaco-editor/.test(id)) return 'monaco'
+          // Mermaid 图渲染（含 d3 / cytoscape / katex 等专属重依赖）很重，仅渲染含 ```mermaid 的 Markdown 才用
+          // → 独立块（Mermaid 组件动态 import 按需取，不进首屏）。共享依赖(dayjs/stylis 等)仍留 vendor。
+          if (/[\\/]node_modules[\\/](mermaid|@mermaid-js|cytoscape[^\\/]*|d3[^\\/]*|dagre-d3-es|katex|khroma|roughjs|@braintree[\\/]sanitize-url|@upsetjs[^\\/]*|internmap|delaunator|robust-predicates|layout-base|cose-base|@iconify[\\/]utils)[\\/]/.test(id)) return 'mermaid'
           // 注：markdown 渲染链（react-markdown + 庞大的 unified/micromark/hast 生态）不单独拆块——
           // 它与其它库共享 unist/hast 等工具，强行拆会造成 markdown↔vendor 循环依赖，故整体并入 vendor。
           if (id.includes('@xterm')) return 'xterm'
