@@ -704,11 +704,17 @@ function TerminalPane(props: {
     e.preventDefault()
     e.dataTransfer.dropEffect = 'copy'
   }
+  // 落点是否在终端区右半 → 让给 FileWorkspace 做分栏（VSCode 式：右半区拆栏，左/中区注入@）。
+  const inTermSplitZone = (e: React.DragEvent) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    return e.clientX > r.left + r.width / 2
+  }
   // 拖到终端区：直接把 @路径 送进当前会话（claude/codex TUI 或 shell 提示符的光标处）。
   const onTermDrop = (e: React.DragEvent) => {
     if (!isPathDrag(e)) return
+    if (inTermSplitZone(e)) { setDragOver(false); return } // 右半区：不拦截，冒泡给 FileWorkspace 分栏
     e.preventDefault()
-    e.stopPropagation() // 别再冒泡到 FileWorkspace 的分栏 drop：拖到终端=注入@，不触发分栏
+    e.stopPropagation() // 左/中区：拖到终端=注入@，不冒泡到分栏
     setDragOver(false)
     const mention = toMention(readDropPath(e))
     if (!mention || !active) return
@@ -946,7 +952,11 @@ function TerminalPane(props: {
   )
   const terminalArea = (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', position: 'relative' }}
-      onDragOver={(e) => { if (isPathDrag(e)) { e.stopPropagation(); allowPathDrop(e); setDragOver(true) } }}
+      onDragOver={(e) => {
+        if (!isPathDrag(e)) return
+        if (inTermSplitZone(e)) { setDragOver(false); return } // 右半区：让事件冒泡给 FileWorkspace 显示分栏提示
+        e.stopPropagation(); allowPathDrop(e); setDragOver(true)
+      }}
       onDragLeave={(e) => { if (e.currentTarget === e.target) setDragOver(false) }}
       onDrop={onTermDrop}>
       {dragOver && (

@@ -54,6 +54,10 @@ export default function CodeEditor({
       options={{
         readOnly,
         fontSize: 13,
+        // Monaco 默认会拦截拖到编辑器上的 drop（dropIntoEditor：插入文件/文本）并阻止其冒泡，
+        // 导致把文件 tab 拖到编辑器区想「分栏」时，drop 被 Monaco 吃掉、外层 FileWorkspace 收不到。
+        // 关掉它，让 drop 冒泡到外层做分栏。（编辑器内选中文本拖动 dragAndDrop 保留不动。）
+        dropIntoEditor: { enabled: false },
         minimap: { enabled: true }, // 右侧代码缩略图：显示整段代码长度与当前所在位置（VSCode 同款）
         lineNumbers: 'on',
         // 行号装订线：关掉字形边距/折叠栏（那才是之前的大缝隙），保留 VSCode 同款行号↔代码间距

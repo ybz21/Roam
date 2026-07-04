@@ -229,7 +229,11 @@ export default function FileWorkspace({
           onDrop={(e) => {
             if (!dragHasPayload(e)) return
             e.preventDefault()
-            const target: Group = (!split && primary && dropHint === 'split') ? 'B' : g
+            // 分栏判断直接用落点位置，不依赖 React 状态 dropHint：快速拖放时最后一帧 dragover
+            // 与 drop 之间来不及 re-render 提交 dropHint，读状态会失效（还会被全局 drop 清理干扰）。
+            const r = e.currentTarget.getBoundingClientRect()
+            const inRightHalf = e.clientX > r.left + r.width / 2
+            const target: Group = (!split && primary && inRightHalf) ? 'B' : g
             setDropHint(null); applyDrop(e, target)
           }}>
           {primary && leadingContent}
