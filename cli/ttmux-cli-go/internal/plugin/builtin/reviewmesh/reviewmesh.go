@@ -47,6 +47,9 @@ func watch(ctx *sdk.Ctx, args map[string]string) (any, error) {
 	}
 	ctx.Logf("watch: monitoring %s (workdir %s)", dev, workdir)
 	fmt.Fprintf(os.Stderr, "== review-mesh 监控 %s ==\n对话空闲 30s 即互审;意见自动回灌;同一 diff 只审一次,最多 %d 轮\n", dev, maxAutoRounds)
+	// 新一次陪跑 = 新一轮周期:清掉同名会话遗留的轮次/哈希,否则会话名
+	// 复用时自动互审会被旧状态静默跳过
+	_ = ctx.StorageSet("auto:"+dev, "")
 
 	lastPane, stableSince := "", time.Time{}
 	for {
@@ -118,12 +121,19 @@ func autoReviewOnce(ctx *sdk.Ctx, dev, workdir string, wait bool) (bool, error) 
 		return true, nil
 	}
 
+	rollback := func() { // 收尾失败时撤销哈希登记,下次空闲可重试这份 diff
+		st.LastDiff = ""
+		raw, _ := json.Marshal(st)
+		_ = ctx.StorageSet(stateKey, string(raw))
+	}
 	done, err := ctx.SessionWait(res.Session, 1800)
 	if err != nil || !done {
+		rollback()
 		return true, fmt.Errorf("reviewer %s 未在时限内完成", res.Session)
 	}
 	fin, err := finalize(ctx, res.Job, res.Session)
 	if err != nil {
+		rollback()
 		return true, err
 	}
 	fmt.Fprintf(os.Stderr, "[%s] 第 %d 轮完成:%d 个 finding(blocking %d)\n",
