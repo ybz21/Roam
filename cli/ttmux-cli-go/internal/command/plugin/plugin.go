@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/user"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -29,6 +30,10 @@ func Run(rt runtime.Runtime, args []string, out io.Writer) error {
 	switch sub {
 	case "ls", "list":
 		return list(env, args, out)
+	case "install":
+		return install(env, args, out)
+	case "uninstall":
+		return uninstall(env, args, out)
 	case "info":
 		return info(env, args, out)
 	case "enable", "disable":
@@ -329,6 +334,105 @@ func status(env plugin.Env, args []string, out io.Writer) error {
 	return nil
 }
 
+// install 安装外部插件:目录或 .tgz/.tar.gz 包(node/exec 运行时)。
+// 文件落 $TTMUX_HOME/plugins/installed/<id>/<version>/,安装后默认不启用。
+func install(env plugin.Env, args []string, out io.Writer) error {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: ttmux plugin install <目录|插件包.tgz>")
+	}
+	src, err := filepath.Abs(args[0])
+	if err != nil {
+		return err
+	}
+	root := src
+	st, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	if !st.IsDir() {
+		if !strings.HasSuffix(src, ".tgz") && !strings.HasSuffix(src, ".tar.gz") {
+			return fmt.Errorf("install source must be a directory or .tgz/.tar.gz, got %s", src)
+		}
+		tmp, err := os.MkdirTemp("", "roam-plugin-install-")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(tmp)
+		if err := plugin.ExtractTgz(src, tmp); err != nil {
+			return err
+		}
+		root = tmp
+		// 包顶层是单个目录(常见打包形态)时下钻一层找 manifest
+		if _, err := os.Stat(filepath.Join(root, "roam-plugin.json")); err != nil {
+			entries, _ := os.ReadDir(root)
+			if len(entries) == 1 && entries[0].IsDir() {
+				root = filepath.Join(root, entries[0].Name())
+			}
+		}
+	}
+	m, err := plugin.ParseManifestFile(root)
+	if err != nil {
+		return err
+	}
+	if m.Runtime.Kind == "builtin" {
+		return fmt.Errorf("runtime.kind builtin is reserved for built-in plugins")
+	}
+	store, err := openStore(env)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+	if existing, err := store.Get(m.ID); err == nil && existing.Manifest.Runtime.Kind == "builtin" {
+		return fmt.Errorf("plugin id %s conflicts with a built-in plugin", m.ID)
+	}
+	dest := filepath.Join(env.InstalledRoot(), m.ID, m.Version)
+	if err := os.RemoveAll(dest); err != nil {
+		return err
+	}
+	if err := plugin.CopyDir(root, dest); err != nil {
+		return err
+	}
+	if err := store.InstallExternal(m, dest); err != nil {
+		return err
+	}
+	env.Audit(plugin.AuditEntry{Plugin: m.ID, Version: m.Version, Actor: actor(), Action: "plugin.install", Target: src, Decision: "allowed"})
+	ui.Ok(out, "已安装 %s v%s(%s 运行时,默认未启用)", ui.Bold(m.ID), m.Version, m.Runtime.Kind)
+	if b, err := json.MarshalIndent(m.Permissions, "", "  "); err == nil {
+		fmt.Fprintf(out, "权限声明(启用即授予,见安全设计):\n%s\n", string(b))
+	}
+	ui.Info(out, "启用: ttmux plugin enable %s", m.Name)
+	return nil
+}
+
+// uninstall 移除外部插件(注册行 + 安装文件;storage/config 保留以便重装)。
+func uninstall(env plugin.Env, args []string, out io.Writer) error {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: ttmux plugin uninstall <id>")
+	}
+	store, err := openStore(env)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+	p, err := store.Get(args[0])
+	if err != nil {
+		return err
+	}
+	if p.Manifest.Runtime.Kind == "builtin" {
+		return fmt.Errorf("built-in plugin %s cannot be uninstalled (disable with: ttmux plugin disable %s)", p.Manifest.ID, p.Manifest.Name)
+	}
+	if err := store.Remove(p.Manifest.ID); err != nil {
+		return err
+	}
+	// 只清理受管安装目录内的文件,别的路径一律不动
+	if p.InstallPath != "" && strings.HasPrefix(p.InstallPath, env.InstalledRoot()+string(os.PathSeparator)) {
+		_ = os.RemoveAll(filepath.Dir(p.InstallPath)) // <id>/ 整目录(含各版本)
+	}
+	env.Audit(plugin.AuditEntry{Plugin: p.Manifest.ID, Version: p.Manifest.Version, Actor: actor(), Action: "plugin.uninstall", Decision: "allowed"})
+	ui.Ok(out, "已卸载 %s(配置与数据保留在 storage,可重装复用)", ui.Bold(p.Manifest.ID))
+	return nil
+}
+
 // track 把一个已存在的会话登记给插件跟踪:plugind 在其退出时向该插件派发
 // session:agent.exited 事件(如「结束后自动互审」给会话打 review:auto 标签)。
 func track(env plugin.Env, args []string, out io.Writer) error {
@@ -387,6 +491,8 @@ func help(out io.Writer) {
 	fmt.Fprint(out, `用法: ttmux plugin <子命令>
 
   ls [--json]                         列出插件与其命令
+  install <目录|包.tgz>                安装外部插件(node/exec 运行时,默认未启用)
+  uninstall <id>                      卸载外部插件(builtin 不可卸载)
   info <id> [--json]                  插件详情(manifest、权限、状态)
   enable|disable <id>                 启用 / 禁用插件
   run <插件>.<命令> [--key value ...]  调用插件命令(如 review-mesh.review)

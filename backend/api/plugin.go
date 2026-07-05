@@ -5,6 +5,7 @@ package api
 
 import (
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -19,6 +20,46 @@ func (a *API) PluginStatus(c *gin.Context) { a.json(c, "plugin", "status", "--js
 // POST /api/plugin/daemon/start —— 拉起 plugind(等价终端执行 ttmux plugin daemon,
 // 幂等:已运行则直接返回)
 func (a *API) PluginDaemonStart(c *gin.Context) { a.text(c, "plugin", "daemon") }
+
+// POST /api/plugin/install —— 安装插件:multipart 上传 .tgz 包,或 JSON {path}
+// 安装本机目录。落到 CLI `ttmux plugin install <src>`,安装后默认未启用。
+func (a *API) PluginInstall(c *gin.Context) {
+	if strings.HasPrefix(c.GetHeader("Content-Type"), "multipart/") {
+		fh, err := c.FormFile("file")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
+			return
+		}
+		if !strings.HasSuffix(fh.Filename, ".tgz") && !strings.HasSuffix(fh.Filename, ".tar.gz") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_PACKAGE", "message": "need .tgz / .tar.gz"}})
+			return
+		}
+		tmp, err := os.CreateTemp("", "roam-plugin-upload-*.tgz")
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "TMP_FAILED"}})
+			return
+		}
+		tmp.Close()
+		defer os.Remove(tmp.Name())
+		if err := c.SaveUploadedFile(fh, tmp.Name()); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "SAVE_FAILED", "message": err.Error()}})
+			return
+		}
+		a.text(c, "plugin", "install", tmp.Name())
+		return
+	}
+	var b struct {
+		Path string `json:"path"`
+	}
+	if err := c.ShouldBindJSON(&b); err != nil || strings.TrimSpace(b.Path) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
+		return
+	}
+	a.text(c, "plugin", "install", b.Path)
+}
+
+// DELETE /api/plugins/:id —— 卸载外部插件(builtin 由 CLI 拒绝)
+func (a *API) PluginUninstall(c *gin.Context) { a.text(c, "plugin", "uninstall", c.Param("id")) }
 
 // POST /api/plugin/track —— 把会话登记给插件跟踪(如新建会话勾选「结束后自动互审」:
 // labels 带 review:auto=true 与 workdir,plugind 在会话退出时通知插件)

@@ -768,6 +768,20 @@ const enUS = {
   'session.worktreeTip': 'Work in an isolated git worktree without touching the main checkout',
   'session.worktreeNeedsRepo': 'Pick a git repository directory above first',
   'session.autoReviewNeedsAgent': 'Pick Claude or Codex above first',
+
+  'plugins.install': 'Install',
+  'plugins.installTitle': 'Install plugin',
+  'plugins.market': 'Marketplace',
+  'plugins.marketSoon': 'Marketplace is on the roadmap (design doc v2)',
+  'plugins.uploadHint': 'Drag or click to upload a plugin package (.tgz / .tar.gz)',
+  'plugins.uploadSub': 'The package must contain roam-plugin.json with node or exec runtime',
+  'plugins.orLocalPath': 'Or install a directory on this machine',
+  'plugins.pathPlaceholder': '/absolute/path/to/plugin',
+  'plugins.installFromPath': 'Install',
+  'plugins.installedOk': 'Installed (disabled by default; enable it in the list)',
+  'plugins.uninstall': 'Uninstall',
+  'plugins.uninstallConfirm': 'Uninstall this plugin? Files are removed; config and data are kept',
+  'plugins.uninstalled': 'Plugin uninstalled',
 }
 
 export default enUS

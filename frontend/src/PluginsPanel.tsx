@@ -3,8 +3,8 @@
 // 数据全部走 backend 薄封装 REST(exec ttmux plugin ... --json),前端不感知 plugind。
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  Alert, Button, Card, Descriptions, Empty, Form, Input, List, Select, Space, Spin, Switch,
-  Table, Tabs, Tag, Typography, message,
+  Alert, Button, Card, Descriptions, Divider, Empty, Form, Input, List, Modal, Popconfirm, Select,
+  Space, Spin, Switch, Table, Tabs, Tag, Tooltip, Typography, Upload, message,
 } from 'antd'
 import { api } from './api'
 import { useI18n } from './i18n'
@@ -54,6 +54,7 @@ export default function PluginsPanel() {
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState('')
   const [startingDaemon, setStartingDaemon] = useState(false)
+  const [installOpen, setInstallOpen] = useState(false)
 
   const reload = useCallback(async () => {
     try {
@@ -99,7 +100,13 @@ export default function PluginsPanel() {
 
   return (
     <div style={{ display: 'flex', gap: 16, height: '100%', minHeight: 0 }}>
-      <Card size="small" style={{ width: 300, flex: '0 0 300px', overflow: 'auto' }} title={t('plugins.title')}>
+      <Card size="small" style={{ width: 300, flex: '0 0 300px', overflow: 'auto' }} title={t('plugins.title')}
+        extra={<Space size={4}>
+          <Button size="small" type="primary" onClick={() => setInstallOpen(true)}>{t('plugins.install')}</Button>
+          <Tooltip title={t('plugins.marketSoon')}>
+            <Button size="small" disabled>{t('plugins.market')}</Button>
+          </Tooltip>
+        </Space>}>
         {daemon
           ? <Alert type="success" showIcon style={{ marginBottom: 8 }} message={t('plugins.daemonRunning')} />
           : <Alert type="warning" showIcon style={{ marginBottom: 8 }} message={t('plugins.daemonStopped')}
@@ -129,25 +136,105 @@ export default function PluginsPanel() {
       </Card>
       <div style={{ flex: 1, minWidth: 0, overflow: 'auto' }}>
         {current
-          ? <PluginDetail key={current.manifest.id} plugin={current} locale={locale} t={t} />
+          ? <PluginDetail key={current.manifest.id} plugin={current} locale={locale} t={t}
+              onChanged={() => { setSelected(''); reload() }} />
           : <Empty style={{ marginTop: 64 }} />}
       </div>
+      <InstallModal open={installOpen} t={t} onClose={() => setInstallOpen(false)}
+        onDone={() => { setInstallOpen(false); reload() }} />
     </div>
   )
 }
 
-function PluginDetail({ plugin, locale, t }: {
-  plugin: RegisteredPlugin; locale: string
+// ── 安装入口:上传 .tgz 插件包,或安装开发机上的本地目录 ──
+function InstallModal({ open, onClose, onDone, t }: {
+  open: boolean; onClose: () => void; onDone: () => void
+  t: (k: string, vars?: Record<string, string | number>) => string
+}) {
+  const [path, setPath] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const finish = (data: any) => {
+    message.success(t('plugins.installedOk'))
+    const text = typeof data?.data === 'string' ? data.data : ''
+    if (text) Modal.info({ title: t('plugins.installTitle'), width: 560, content: <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{text}</pre> })
+    setPath('')
+    onDone()
+  }
+
+  const uploadPkg = async (file: File) => {
+    setBusy(true)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const r = await fetch('/api/plugin/install', { method: 'POST', body: form })
+      const data = await r.json().catch(() => null)
+      if (!r.ok) throw new Error(data?.error?.message || data?.error?.code || 'HTTP ' + r.status)
+      finish(data)
+    } catch (e: any) {
+      message.error(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const installPath = async () => {
+    if (!path.trim()) return
+    setBusy(true)
+    try {
+      finish(await api('POST', '/plugin/install', { path: path.trim() }))
+    } catch (e: any) {
+      message.error(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal open={open} onCancel={onClose} footer={null} title={t('plugins.installTitle')} destroyOnClose>
+      <Spin spinning={busy}>
+        <Upload.Dragger accept=".tgz,.tar.gz" showUploadList={false} disabled={busy}
+          beforeUpload={(f) => { uploadPkg(f as unknown as File); return false }}>
+          <p style={{ margin: '12px 0 4px' }}>{t('plugins.uploadHint')}</p>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('plugins.uploadSub')}</Typography.Text>
+        </Upload.Dragger>
+        <Divider plain style={{ fontSize: 12 }}>{t('plugins.orLocalPath')}</Divider>
+        <Space.Compact style={{ width: '100%' }}>
+          <Input placeholder={t('plugins.pathPlaceholder')} value={path}
+            onChange={(e) => setPath(e.target.value)} onPressEnter={installPath} />
+          <Button type="primary" disabled={!path.trim()} onClick={installPath}>{t('plugins.installFromPath')}</Button>
+        </Space.Compact>
+      </Spin>
+    </Modal>
+  )
+}
+
+function PluginDetail({ plugin, locale, t, onChanged }: {
+  plugin: RegisteredPlugin; locale: string; onChanged: () => void
   t: (k: string, vars?: Record<string, string | number>) => string
 }) {
   const m = plugin.manifest
   const fields = m.contributes?.configFields || []
   const commands = m.contributes?.commands || []
+  const uninstall = async () => {
+    try {
+      await api('DELETE', `/plugins/${encodeURIComponent(m.id)}`)
+      message.success(t('plugins.uninstalled'))
+      onChanged()
+    } catch (e: any) {
+      message.error(e.message)
+    }
+  }
   return (
     <Card size="small"
       title={<Space>{lt(m.displayName, locale) || m.name}
         <Tag color={plugin.enabled ? 'green' : undefined}>{t(plugin.enabled ? 'plugins.stateEnabled' : 'plugins.stateDisabled')}</Tag>
         <Tag>{m.runtime?.kind || 'builtin'}</Tag></Space>}
+      extra={m.runtime?.kind !== 'builtin' && (
+        <Popconfirm title={t('plugins.uninstallConfirm')} onConfirm={uninstall}>
+          <Button size="small" danger>{t('plugins.uninstall')}</Button>
+        </Popconfirm>
+      )}
     >
       <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
         {lt(m.description, locale)}

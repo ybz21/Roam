@@ -30,18 +30,40 @@ type Hosted struct {
 }
 
 // StartPlugin launches the plugin subprocess and completes the initialize
-// handshake. v0 仅支持 builtin(以自身二进制的隐藏子命令 _plugin-host 拉起,
-// 见 04-architecture "插件用什么语言写");node/exec 为后续增量。
+// handshake. 三种运行时形态在宿主眼里协议一致(04-architecture 第 3 节):
+// builtin 以自身二进制的隐藏子命令 _plugin-host 拉起;node 用 node 解释
+// main;exec 直接执行 main(需可执行位)。
 // depth 是通知级联深度:sink 插件以 depth=1 托管,其自身 publish 不再分发。
 func StartPlugin(env Env, store *Store, p RegisteredPlugin, actor, workdir string, depth int) (*Hosted, error) {
-	if p.Manifest.Runtime.Kind != "builtin" {
-		return nil, fmt.Errorf("runtime.kind %q not supported yet (v0 hosts builtin plugins only)", p.Manifest.Runtime.Kind)
+	var cmd *exec.Cmd
+	switch p.Manifest.Runtime.Kind {
+	case "builtin":
+		self, err := os.Executable()
+		if err != nil {
+			return nil, err
+		}
+		cmd = exec.Command(self, "_plugin-host", p.Manifest.ID)
+	case "node", "exec":
+		if p.InstallPath == "" {
+			return nil, fmt.Errorf("plugin %s has no install path (reinstall with: ttmux plugin install <dir|tgz>)", p.Manifest.ID)
+		}
+		mainPath := filepath.Join(p.InstallPath, filepath.Clean("/"+p.Manifest.Main)) // 防越出安装目录
+		if _, err := os.Stat(mainPath); err != nil {
+			return nil, fmt.Errorf("plugin %s main not found: %s", p.Manifest.ID, mainPath)
+		}
+		if p.Manifest.Runtime.Kind == "node" {
+			nodeBin, err := exec.LookPath("node")
+			if err != nil {
+				return nil, fmt.Errorf("plugin %s needs Node.js but node is not in PATH", p.Manifest.ID)
+			}
+			cmd = exec.Command(nodeBin, mainPath)
+		} else {
+			cmd = exec.Command(mainPath)
+		}
+		cmd.Dir = p.InstallPath
+	default:
+		return nil, fmt.Errorf("unsupported runtime.kind %q for plugin %s", p.Manifest.Runtime.Kind, p.Manifest.ID)
 	}
-	self, err := os.Executable()
-	if err != nil {
-		return nil, err
-	}
-	cmd := exec.Command(self, "_plugin-host", p.Manifest.ID)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, err
