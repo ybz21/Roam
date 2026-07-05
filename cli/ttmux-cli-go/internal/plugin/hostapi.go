@@ -36,6 +36,8 @@ func (h *HostAPI) Handle(method string, params json.RawMessage) (any, error) {
 		return h.agentProviders()
 	case "roam/agent.spawn":
 		return h.agentSpawn(params)
+	case "roam/agent.run":
+		return h.agentRun(params)
 	case "roam/session.wait":
 		return h.sessionWait(params)
 	case "roam/session.capture":
@@ -199,6 +201,57 @@ func (h *HostAPI) agentSpawn(params json.RawMessage) (any, error) {
 	_ = h.Store.AddSession(SessionRow{Session: req.SessionName, Plugin: h.Plugin.Manifest.ID, Job: req.Job, Labels: req.Labels})
 	h.audit("agent.spawn", req.SessionName, "allowed", "provider="+ac.Kind)
 	return map[string]string{"session": req.SessionName, "provider": ac.Kind}, nil
+}
+
+// agentRun executes a one-shot agent (claude -p / codex exec) as a blocking
+// host subprocess and returns its output. 与 agent.spawn 的区别:不占会话名
+// 额度、不进会话列表——适合"审查"这类短时机器工作;输出即证据,全程审计。
+func (h *HostAPI) agentRun(params json.RawMessage) (any, error) {
+	var req struct {
+		Provider   string `json:"provider"`
+		Prompt     string `json:"prompt"`
+		Workdir    string `json:"workdir"`
+		TimeoutSec int    `json:"timeoutSec"`
+	}
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, err
+	}
+	if err := h.requirePerm("agents:spawn", "agent.run", req.Provider); err != nil {
+		return nil, err
+	}
+	if req.Prompt == "" {
+		return nil, fmt.Errorf("agent.run: prompt is required")
+	}
+	workdir := orDefault(req.Workdir, h.Workdir)
+	ac := spawn.DefaultAgentConfig(workdir)
+	if req.Provider != "" {
+		ac.Kind = req.Provider
+	}
+	timeout := req.TimeoutSec
+	if timeout <= 0 || timeout > 3600 {
+		timeout = 1800
+	}
+	cmd := exec.Command("sh", "-c", ac.Command(req.Prompt))
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	err := runWithTimeout(cmd, time.Duration(timeout)*time.Second)
+	exit := 0
+	if err != nil {
+		if ee, ok := err.(*exec.ExitError); ok {
+			exit = ee.ExitCode()
+		} else {
+			h.audit("agent.run", ac.Kind, "allowed", "error: "+err.Error())
+			return nil, err
+		}
+	}
+	const capBytes = 512 * 1024
+	output := out.String()
+	if len(output) > capBytes {
+		output = output[len(output)-capBytes:]
+	}
+	h.audit("agent.run", ac.Kind, "allowed", fmt.Sprintf("exit=%d %d bytes", exit, len(output)))
+	return map[string]any{"exit": exit, "output": output, "provider": ac.Kind}, nil
 }
 
 // ── session ──

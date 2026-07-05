@@ -92,6 +92,26 @@ func (c *Ctx) AgentSpawn(req SpawnReq) (session string, err error) {
 	return out.Session, err
 }
 
+// AgentRunResult mirrors roam/agent.run.
+type AgentRunResult struct {
+	Exit     int    `json:"exit"`
+	Output   string `json:"output"`
+	Provider string `json:"provider"`
+}
+
+// AgentRun executes a one-shot agent as a blocking host subprocess(不占
+// 会话名、不进会话列表;适合审查类短时机器工作)。
+func (c *Ctx) AgentRun(provider, prompt, workdir string, timeoutSec int) (AgentRunResult, error) {
+	var out AgentRunResult
+	if timeoutSec <= 0 {
+		timeoutSec = 1800
+	}
+	err := c.call("roam/agent.run", map[string]any{
+		"provider": provider, "prompt": prompt, "workdir": workdir, "timeoutSec": timeoutSec,
+	}, &out, time.Duration(timeoutSec+60)*time.Second)
+	return out, err
+}
+
 // SessionWait blocks until the session exits (host-side long call).
 func (c *Ctx) SessionWait(name string, timeoutSec int) (bool, error) {
 	var out struct {
