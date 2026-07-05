@@ -20,6 +20,31 @@ func (a *API) PluginStatus(c *gin.Context) { a.json(c, "plugin", "status", "--js
 // 幂等:已运行则直接返回)
 func (a *API) PluginDaemonStart(c *gin.Context) { a.text(c, "plugin", "daemon") }
 
+// POST /api/plugin/track —— 把会话登记给插件跟踪(如新建会话勾选「结束后自动互审」:
+// labels 带 review:auto=true 与 workdir,plugind 在会话退出时通知插件)
+func (a *API) PluginTrack(c *gin.Context) {
+	var b struct {
+		Session string            `json:"session"`
+		Plugin  string            `json:"plugin"`
+		Labels  map[string]string `json:"labels"`
+	}
+	if err := c.ShouldBindJSON(&b); err != nil || strings.TrimSpace(b.Session) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
+		return
+	}
+	args := []string{"plugin", "track", b.Session}
+	if strings.TrimSpace(b.Plugin) != "" {
+		args = append(args, "--plugin", b.Plugin)
+	}
+	for k, v := range b.Labels {
+		if strings.TrimSpace(k) == "" || strings.Contains(k, "=") {
+			continue
+		}
+		args = append(args, "--label", k+"="+v)
+	}
+	a.text(c, args...)
+}
+
 // GET /api/plugin/findings —— 互审 finding 列表
 func (a *API) PluginFindings(c *gin.Context) { a.json(c, "plugin", "findings", "--json") }
 

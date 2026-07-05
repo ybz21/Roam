@@ -1415,12 +1415,13 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
   const [pick, setPick] = useState(false)
   const [agent, setAgent] = useState<'none' | 'claude' | 'codex'>('none')
   const [worktree, setWorktree] = useState(false)
+  const [autoReview, setAutoReview] = useState(false)
   const [isGitRepo, setIsGitRepo] = useState(false)
   const [creating, setCreating] = useState(false)
   const { message } = AntApp.useApp()
   const { t } = useI18n()
   const [prefs] = usePreferences()
-  useEffect(() => { if (open) { setName(''); setDir(''); setAgent('none'); setWorktree(false); setIsGitRepo(false) } }, [open])
+  useEffect(() => { if (open) { setName(''); setDir(''); setAgent('none'); setWorktree(false); setAutoReview(false); setIsGitRepo(false) } }, [open])
   useEffect(() => {
     const d = dir.trim()
     if (!d) { setIsGitRepo(false); return }
@@ -1444,8 +1445,19 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
       const res = await api('POST', '/sessions', { name: name.trim(), dir: sessionDir })
       const actual = res.name || name.trim()
       if (agent !== 'none') {
-        const cmd = agent === 'claude' ? (prefs.claudeCommand || 'claude') : (prefs.codexCommand || 'codex')
+        let cmd = agent === 'claude' ? (prefs.claudeCommand || 'claude') : (prefs.codexCommand || 'codex')
+        const doAutoReview = autoReview && !!sessionDir
+        // 自动互审依赖「会话结束」信号:Agent 退出后顺手退出 shell,会话消亡即触发
+        if (doAutoReview) cmd = cmd + '; exit'
         await api('POST', '/tasks/_/send', { sess: actual, msg: cmd })
+        if (autoReview && !sessionDir) {
+          message.warning(t('session.autoReviewNeedsDir'))
+        } else if (doAutoReview) {
+          await api('POST', '/plugin/track', {
+            session: actual,
+            labels: { 'review:auto': 'true', role: 'author', workdir: sessionDir },
+          }).catch((e: any) => message.warning(t('session.autoReviewTrackFailed') + ': ' + e.message))
+        }
       }
       pushRecentDir(dir); message.success(t('session.created')); onClose(); onDone(actual)
     }
@@ -1494,6 +1506,14 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
             <Radio.Button value="claude">{t('session.agentClaude')}</Radio.Button>
             <Radio.Button value="codex">{t('session.agentCodex')}</Radio.Button>
           </Radio.Group>
+          {agent !== 'none' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Switch size="small" checked={autoReview} onChange={setAutoReview} />
+              <Tooltip title={t('session.autoReviewTip')}>
+                <span style={{ fontSize: 13 }}>{t('session.autoReview')}</span>
+              </Tooltip>
+            </div>
+          )}
         </Space>
       </Modal>
       <DirPicker open={pick} start={dir || undefined} onPick={(p) => { setDir(p); setPick(false) }} onClose={() => setPick(false)} />

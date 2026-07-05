@@ -42,15 +42,32 @@ func onAgentExited(ctx *sdk.Ctx, payload json.RawMessage) error {
 	if err := json.Unmarshal(payload, &ev); err != nil {
 		return err
 	}
-	if ev.Labels["role"] != "reviewer" {
-		return nil // 不是本插件的 reviewer 会话,忽略
+	switch {
+	case ev.Labels["role"] == "reviewer":
+		// 自己 spawn 的 reviewer 完成 → 收尾(解析 findings、落库、发通知)
+		res, err := finalize(ctx, ev.Job, ev.Session)
+		if err != nil {
+			return err
+		}
+		ctx.Logf("job %s finalized asynchronously: %d findings (%d blocking)", ev.Job, len(res.Findings), res.Blocking)
+		return nil
+	case ev.Labels["review:auto"] == "true":
+		// 被跟踪的开发会话结束(建会话时勾了「结束后自动互审」)→ 对其工作区发起互审。
+		// reviewer 会话本身也被登记,退出后走上面的 reviewer 分支闭环,全程异步。
+		workdir := ev.Labels["workdir"]
+		if workdir == "" {
+			ctx.Logf("auto-review skipped for %s: no workdir label", ev.Session)
+			return nil
+		}
+		res, err := launchReview(ctx, workdir, "")
+		if err != nil {
+			ctx.Logf("auto-review for %s (%s) not started: %v", ev.Session, workdir, err)
+			return nil // 无 diff 等情况不算错误,不重试
+		}
+		ctx.Logf("auto-review started for %s: job %s session %s", ev.Session, res.Job, res.Session)
+		return nil
 	}
-	res, err := finalize(ctx, ev.Job, ev.Session)
-	if err != nil {
-		return err
-	}
-	ctx.Logf("job %s finalized asynchronously: %d findings (%d blocking)", ev.Job, len(res.Findings), res.Blocking)
-	return nil
+	return nil // 与本插件无关的会话,忽略
 }
 
 type reviewResult struct {
@@ -64,15 +81,41 @@ type reviewResult struct {
 }
 
 func review(ctx *sdk.Ctx, args map[string]string) (any, error) {
-	diff, err := ctx.WorkspaceDiff()
+	res, err := launchReview(ctx, args["workdir"], args["provider"])
+	if err != nil {
+		return nil, err
+	}
+	if args["wait"] == "false" {
+		// 不等待:留给 plugind watcher 在 agent.exited 时收尾(daemon 模式)。
+		return res, nil
+	}
+
+	done, err := ctx.SessionWait(res.Session, 1800)
+	if err != nil {
+		return nil, err
+	}
+	if !done {
+		return nil, fmt.Errorf("reviewer session %s did not finish in time (attach with: ttmux a %s)", res.Session, res.Session)
+	}
+	fin, err := finalize(ctx, res.Job, res.Session)
+	if err != nil {
+		return nil, err
+	}
+	fin.Provider = res.Provider
+	fin.Waited = true
+	return fin, nil
+}
+
+// launchReview takes the workspace diff (workdir 为空时用宿主注入的工作区)
+// and spawns a reviewer agent session. 命令(--wait)与自动互审共用。
+func launchReview(ctx *sdk.Ctx, workdir, provider string) (*reviewResult, error) {
+	diff, err := ctx.WorkspaceDiff(workdir)
 	if err != nil {
 		return nil, err
 	}
 	if strings.TrimSpace(diff.Diff) == "" {
 		return nil, fmt.Errorf("workspace has no reviewable diff")
 	}
-
-	provider := args["provider"]
 	if provider == "" {
 		provider = ctx.Config["provider"] // 设置页配置的默认 reviewer
 	}
@@ -86,6 +129,7 @@ func review(ctx *sdk.Ctx, args map[string]string) (any, error) {
 		Provider:    provider,
 		Prompt:      reviewerPrompt(diff),
 		SessionName: session,
+		Workdir:     workdir,
 		Job:         jobID,
 		Labels:      map[string]string{"job": jobID, "role": "reviewer"},
 	})
@@ -93,27 +137,7 @@ func review(ctx *sdk.Ctx, args map[string]string) (any, error) {
 		return nil, err
 	}
 	ctx.Logf("job %s: reviewer %s spawned in session %s", jobID, provider, sess)
-
-	res := reviewResult{Job: jobID, Session: sess, Provider: provider}
-	if args["wait"] == "false" {
-		// 不等待:留给 plugind watcher 在 agent.exited 时收尾(daemon 模式)。
-		return res, nil
-	}
-
-	done, err := ctx.SessionWait(sess, 1800)
-	if err != nil {
-		return nil, err
-	}
-	if !done {
-		return nil, fmt.Errorf("reviewer session %s did not finish in time (attach with: ttmux a %s)", sess, sess)
-	}
-	fin, err := finalize(ctx, jobID, sess)
-	if err != nil {
-		return nil, err
-	}
-	fin.Provider = provider
-	fin.Waited = true
-	return fin, nil
+	return &reviewResult{Job: jobID, Session: sess, Provider: provider}, nil
 }
 
 // finalize parses the reviewer session output, persists findings and

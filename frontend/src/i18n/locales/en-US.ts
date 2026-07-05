@@ -759,6 +759,11 @@ const enUS = {
   'plugins.auditTarget': 'Target',
   'plugins.auditDecision': 'Decision',
   'plugins.auditResult': 'Result',
+
+  'session.autoReview': 'Auto peer-review on finish',
+  'session.autoReviewTip': 'When the agent exits, review-mesh reviews this working directory; results go to findings and notifications (requires a working directory)',
+  'session.autoReviewNeedsDir': 'Auto review needs a working directory; skipped this time',
+  'session.autoReviewTrackFailed': 'Failed to register auto review',
 }
 
 export default enUS
