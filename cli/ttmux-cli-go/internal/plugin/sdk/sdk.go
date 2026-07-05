@@ -102,6 +102,41 @@ func (c *Ctx) SessionWait(name string, timeoutSec int) (bool, error) {
 	return out.Done, err
 }
 
+// SessionAlive reports whether the tmux session still exists(经 session.wait
+// 的零超时查询代价大,这里用 capture 探测:失败即视为不存在)。
+func (c *Ctx) SessionAlive(name string) bool {
+	_, err := c.SessionCapture(name, 1)
+	return err == nil
+}
+
+// SessionCapture returns the last tailLines of the session pane.
+func (c *Ctx) SessionCapture(name string, tailLines int) (string, error) {
+	var out struct {
+		Output string `json:"output"`
+	}
+	err := c.call("roam/session.capture", map[string]any{"name": name, "tailLines": tailLines}, &out, 30*time.Second)
+	return out.Output, err
+}
+
+// SessionSend types text + Enter into a session(需 sessions:write)。
+func (c *Ctx) SessionSend(name, text string) error {
+	return c.call("roam/session.send", map[string]string{"name": name, "text": text}, nil, 30*time.Second)
+}
+
+// StorageGet reads the plugin's private KV(缺省为空串)。
+func (c *Ctx) StorageGet(key string) (string, error) {
+	var out struct {
+		Value string `json:"value"`
+	}
+	err := c.call("roam/storage.get", map[string]string{"key": key}, &out, 15*time.Second)
+	return out.Value, err
+}
+
+// StorageSet writes the plugin's private KV(空值即删除)。
+func (c *Ctx) StorageSet(key, value string) error {
+	return c.call("roam/storage.set", map[string]string{"key": key, "value": value}, nil, 15*time.Second)
+}
+
 func (c *Ctx) SessionLog(name string) (string, error) {
 	var out struct {
 		Log string `json:"log"`

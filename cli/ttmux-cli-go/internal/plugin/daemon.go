@@ -88,6 +88,8 @@ func acceptLoop(ln net.Listener, env Env, store *Store) {
 
 // watchOnce marks exited plugin sessions and dispatches session:agent.exited
 // to the owner plugin(事件合成:tmux 会话列表 diff,见 04-architecture 6.1)。
+// "对话空闲即互审"不在这里做——那由 review-mesh 的监控会话陪跑实现,
+// 可见可 attach(review-mesh.watch)。
 func watchOnce(env Env, store *Store) {
 	rows, err := store.Sessions("", "running")
 	if err != nil {
@@ -98,21 +100,26 @@ func watchOnce(env Env, store *Store) {
 			continue
 		}
 		_ = store.UpdateSessionStatus(r.Session, "exited")
-		owner, err := store.Get(r.Plugin)
-		if err != nil || !owner.Enabled {
-			continue
-		}
 		fmt.Printf("[plugind] session %s exited; notifying %s\n", r.Session, r.Plugin)
-		h, err := StartPlugin(env, store, owner, "watcher:plugind", ".", 0)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "[plugind] activate %s failed: %v\n", r.Plugin, err)
-			continue
-		}
-		if err := h.SendEvent("session:agent.exited", r, 120*time.Second); err != nil {
-			fmt.Fprintf(os.Stderr, "[plugind] event delivery to %s failed: %v\n", r.Plugin, err)
-		}
-		h.Close()
+		dispatch(env, store, r, "session:agent.exited")
 		_ = store.UpdateSessionStatus(r.Session, "handled")
+	}
+}
+
+// dispatch activates the owner plugin and delivers one event.
+func dispatch(env Env, store *Store, r SessionRow, eventType string) {
+	owner, err := store.Get(r.Plugin)
+	if err != nil || !owner.Enabled {
+		return
+	}
+	h, err := StartPlugin(env, store, owner, "watcher:plugind", ".", 0)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[plugind] activate %s failed: %v\n", r.Plugin, err)
+		return
+	}
+	defer h.Close()
+	if err := h.SendEvent(eventType, r, 120*time.Second); err != nil {
+		fmt.Fprintf(os.Stderr, "[plugind] %s delivery to %s failed: %v\n", eventType, r.Plugin, err)
 	}
 }
 

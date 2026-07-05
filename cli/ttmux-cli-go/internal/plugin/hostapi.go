@@ -44,6 +44,12 @@ func (h *HostAPI) Handle(method string, params json.RawMessage) (any, error) {
 		return h.sessionLog(params)
 	case "roam/session.list":
 		return h.sessionList(params)
+	case "roam/session.send":
+		return h.sessionSend(params)
+	case "roam/storage.get":
+		return h.storageGet(params)
+	case "roam/storage.set":
+		return h.storageSet(params)
 	case "roam/command.exec":
 		return h.commandExec(params)
 	case "roam/finding.create":
@@ -286,6 +292,79 @@ func (h *HostAPI) sessionList(params json.RawMessage) (any, error) {
 		out = append(out, r)
 	}
 	return out, nil
+}
+
+// sessionSend types text + Enter into a session(高危:sessions:write;
+// 互审意见回灌原会话让 Agent 修改就走这里)。
+func (h *HostAPI) sessionSend(params json.RawMessage) (any, error) {
+	var req struct {
+		Name string `json:"name"`
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, err
+	}
+	if err := h.requirePerm("sessions:write", "session.send", req.Name); err != nil {
+		return nil, err
+	}
+	if !h.Env.RT.HasSession(req.Name) {
+		return nil, fmt.Errorf("session not found: %s", req.Name)
+	}
+	// 单行化:交互 TUI 中换行即提交,多行文本会被拆成多次输入
+	text := strings.ReplaceAll(strings.ReplaceAll(req.Text, "\r", " "), "\n", " ")
+	if err := h.Env.RT.Tmux("send-keys", "-t", req.Name, "-l", text); err != nil {
+		return nil, err
+	}
+	if err := h.Env.RT.Tmux("send-keys", "-t", req.Name, "C-m"); err != nil {
+		return nil, err
+	}
+	h.audit("session.send", req.Name, "allowed", fmt.Sprintf("%d chars", len(text)))
+	return map[string]bool{"sent": true}, nil
+}
+
+// ── storage(插件私有 KV,落 storage/<id>/kv.json)──
+
+func (h *HostAPI) storagePath() string {
+	return filepath.Join(h.Env.StorageDir(h.Plugin.Manifest.ID), "kv.json")
+}
+
+func (h *HostAPI) loadKV() map[string]string {
+	kv := map[string]string{}
+	if b, err := os.ReadFile(h.storagePath()); err == nil {
+		_ = json.Unmarshal(b, &kv)
+	}
+	return kv
+}
+
+func (h *HostAPI) storageGet(params json.RawMessage) (any, error) {
+	var req struct {
+		Key string `json:"key"`
+	}
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, err
+	}
+	return map[string]string{"value": h.loadKV()[req.Key]}, nil
+}
+
+func (h *HostAPI) storageSet(params json.RawMessage) (any, error) {
+	var req struct {
+		Key   string `json:"key"`
+		Value string `json:"value"`
+	}
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, err
+	}
+	kv := h.loadKV()
+	if req.Value == "" {
+		delete(kv, req.Key)
+	} else {
+		kv[req.Key] = req.Value
+	}
+	if err := os.MkdirAll(filepath.Dir(h.storagePath()), 0o755); err != nil {
+		return nil, err
+	}
+	b, _ := json.MarshalIndent(kv, "", " ")
+	return map[string]bool{"ok": true}, os.WriteFile(h.storagePath(), b, 0o600)
 }
 
 // ── command.exec (白名单是 v1 唯一真正可强制的命令权限,见 06-platform-api) ──

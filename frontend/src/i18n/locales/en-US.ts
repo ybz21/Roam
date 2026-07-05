@@ -760,8 +760,8 @@ const enUS = {
   'plugins.auditDecision': 'Decision',
   'plugins.auditResult': 'Result',
 
-  'session.autoReview': 'Auto peer-review on finish',
-  'session.autoReviewTip': 'When the agent exits, review-mesh reviews this working directory; results go to findings and notifications (requires a working directory)',
+  'session.autoReview': 'Auto peer-review on idle',
+  'session.autoReviewTip': 'A watcher session tags along: after each round goes idle, review-mesh reviews the working directory and feeds findings back for the agent to fix, up to 3 rounds (requires a working directory)',
   'session.autoReviewNeedsDir': 'Auto review needs a working directory; skipped this time',
   'session.autoReviewTrackFailed': 'Failed to register auto review',
 

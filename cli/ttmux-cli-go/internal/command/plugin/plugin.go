@@ -177,7 +177,7 @@ func runCommand(env plugin.Env, args []string, out io.Writer) error {
 		return err
 	}
 	defer hosted.Close()
-	result, err := hosted.Invoke(handler, flags, time.Hour)
+	result, err := hosted.Invoke(handler, flags, 24*time.Hour) // watch 等陪跑型命令可长驻
 	if err != nil {
 		return err
 	}
@@ -484,7 +484,30 @@ func track(env plugin.Env, args []string, out io.Writer) error {
 		ui.Warn(out, "plugind 未能启动(%v)——会话退出事件不会被侦测,可稍后手动: ttmux plugin daemon", err)
 	}
 	ui.Ok(out, "会话 %s 已登记给 %s 跟踪", ui.Bold(session), p.Manifest.ID)
+
+	// 自动互审:再拉一个可见的监控会话陪跑(空闲即互审、意见回灌;
+	// 会话结束或监控命令返回后该会话自行消亡)
+	if labels["review:auto"] == "true" && p.Manifest.Name == "review-mesh" && labels["workdir"] != "" {
+		self, err := os.Executable()
+		if err != nil {
+			return err
+		}
+		watchSess := "rvw-" + session
+		if !env.RT.HasSession(watchSess) {
+			cmd := fmt.Sprintf("%s plugin run review-mesh.watch --session %s --workdir %s",
+				shellQuote(self), shellQuote(session), shellQuote(labels["workdir"]))
+			if err := env.RT.Tmux("new-session", "-d", "-s", watchSess, cmd); err != nil {
+				ui.Warn(out, "监控会话拉起失败: %v", err)
+			} else {
+				ui.Ok(out, "监控会话 %s 已陪跑(围观: ttmux a %s)", ui.Bold(watchSess), watchSess)
+			}
+		}
+	}
 	return nil
+}
+
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 func help(out io.Writer) {

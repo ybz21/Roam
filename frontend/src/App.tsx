@@ -1445,14 +1445,12 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
       const res = await api('POST', '/sessions', { name: name.trim(), dir: sessionDir })
       const actual = res.name || name.trim()
       if (agent !== 'none') {
-        let cmd = agent === 'claude' ? (prefs.claudeCommand || 'claude') : (prefs.codexCommand || 'codex')
-        const doAutoReview = autoReview && !!sessionDir
-        // 自动互审依赖「会话结束」信号:Agent 退出后顺手退出 shell,会话消亡即触发
-        if (doAutoReview) cmd = cmd + '; exit'
+        const cmd = agent === 'claude' ? (prefs.claudeCommand || 'claude') : (prefs.codexCommand || 'codex')
         await api('POST', '/tasks/_/send', { sess: actual, msg: cmd })
         if (autoReview && !sessionDir) {
           message.warning(t('session.autoReviewNeedsDir'))
-        } else if (doAutoReview) {
+        } else if (autoReview && sessionDir) {
+          // track 会登记跟踪并拉起 rvw-<会话> 监控会话:对话空闲即互审,意见回灌
           await api('POST', '/plugin/track', {
             session: actual,
             labels: { 'review:auto': 'true', role: 'author', workdir: sessionDir },
