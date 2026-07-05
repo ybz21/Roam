@@ -4,6 +4,7 @@ import { type MouseEvent, type ReactNode, Fragment, lazy, Suspense, useEffect, u
 import { AutoComplete, Button, Dropdown, Input, Modal, Space, Spin, App as AntApp, Tooltip, type MenuProps } from 'antd'
 import { api, upload } from './api'
 import Markdown from './Markdown'
+import ErrorBoundary from './ErrorBoundary'
 import { useI18n } from './i18n'
 import { recentDirs } from './App'
 import { useThemeMode } from './theme'
@@ -608,7 +609,7 @@ export function Viewer({
         {/* 编辑器 tab 语境(tabbed)：文件名/操作已由外层 tab 承担 → 去掉整条标题栏，编辑器全屏。保存用 Ctrl/Cmd+S。 */}
         {!tabbed && <div style={{ padding: '9px 12px', borderBottom: '1px solid var(--border-subtle)' }}>{titleNode}</div>}
         <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', padding: tabbed ? 0 : 12, position: 'relative' }}>
-          {bodyNode}
+          <ErrorBoundary>{bodyNode}</ErrorBoundary>
           {/* tab 语境无头部：markdown 右上角 VSCode 式预览按钮（切换预览 / 侧栏打开预览） */}
           {tabbed && isMd && !forcePreview && data && !data.binary && (
             <div style={{ position: 'absolute', top: 6, right: 8, zIndex: 10, display: 'inline-flex', gap: 2, background: 'color-mix(in srgb, var(--bg-base) 82%, transparent)', borderRadius: 8, padding: 2 }}>
@@ -636,7 +637,7 @@ export function Viewer({
 
   return (
     <Modal open onCancel={onClose} footer={null} width="min(900px,94vw)" title={titleNode}>
-      {bodyNode}
+      <ErrorBoundary>{bodyNode}</ErrorBoundary>
     </Modal>
   )
 }
