@@ -16,6 +16,10 @@ func (a *API) Plugins(c *gin.Context) { a.json(c, "plugin", "ls", "--json") }
 // GET /api/plugin/status —— plugind 守护进程与插件会话状态
 func (a *API) PluginStatus(c *gin.Context) { a.json(c, "plugin", "status", "--json") }
 
+// POST /api/plugin/daemon/start —— 拉起 plugind(等价终端执行 ttmux plugin daemon,
+// 幂等:已运行则直接返回)
+func (a *API) PluginDaemonStart(c *gin.Context) { a.text(c, "plugin", "daemon") }
+
 // GET /api/plugin/findings —— 互审 finding 列表
 func (a *API) PluginFindings(c *gin.Context) { a.json(c, "plugin", "findings", "--json") }
 
