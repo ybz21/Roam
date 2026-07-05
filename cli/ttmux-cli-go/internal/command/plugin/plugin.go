@@ -492,7 +492,7 @@ func track(env plugin.Env, args []string, out io.Writer) error {
 		if err != nil {
 			return err
 		}
-		watchSess := "rvw-" + session
+		watchSess := "review-" + session
 		if !env.RT.HasSession(watchSess) {
 			cmd := fmt.Sprintf("%s plugin run review-mesh.watch --session %s --workdir %s",
 				shellQuote(self), shellQuote(session), shellQuote(labels["workdir"]))

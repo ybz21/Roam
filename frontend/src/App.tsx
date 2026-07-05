@@ -1450,7 +1450,7 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
         if (autoReview && !sessionDir) {
           message.warning(t('session.autoReviewNeedsDir'))
         } else if (autoReview && sessionDir) {
-          // track 会登记跟踪并拉起 rvw-<会话> 监控会话:对话空闲即互审,意见回灌
+          // track 会登记跟踪并拉起 review-<会话> 监控会话:对话空闲即互审,意见回灌
           await api('POST', '/plugin/track', {
             session: actual,
             labels: { 'review:auto': 'true', role: 'author', workdir: sessionDir },
