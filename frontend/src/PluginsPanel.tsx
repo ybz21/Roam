@@ -53,6 +53,7 @@ export default function PluginsPanel() {
   const [daemon, setDaemon] = useState<Record<string, any> | null>(null)
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState('')
+  const [startingDaemon, setStartingDaemon] = useState(false)
 
   const reload = useCallback(async () => {
     try {
@@ -70,6 +71,19 @@ export default function PluginsPanel() {
   useEffect(() => { reload() }, [reload])
 
   const current = useMemo(() => plugins.find((p) => p.manifest.id === selected), [plugins, selected])
+
+  const startDaemon = async () => {
+    setStartingDaemon(true)
+    try {
+      await api('POST', '/plugin/daemon/start')
+      message.success(t('plugins.daemonStarted'))
+      await reload()
+    } catch (e: any) {
+      message.error(e.message)
+    } finally {
+      setStartingDaemon(false)
+    }
+  }
 
   const toggle = async (p: RegisteredPlugin, enabled: boolean) => {
     try {
@@ -89,7 +103,8 @@ export default function PluginsPanel() {
         {daemon
           ? <Alert type="success" showIcon style={{ marginBottom: 8 }} message={t('plugins.daemonRunning')} />
           : <Alert type="warning" showIcon style={{ marginBottom: 8 }} message={t('plugins.daemonStopped')}
-              description={<Typography.Text code copyable>ttmux plugin daemon</Typography.Text>} />}
+              action={<Button size="small" type="primary" loading={startingDaemon} onClick={startDaemon}>
+                {t('plugins.daemonStart')}</Button>} />}
         <List
           dataSource={plugins}
           renderItem={(p) => (

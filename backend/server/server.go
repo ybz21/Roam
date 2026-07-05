@@ -159,6 +159,7 @@ func New(cfg Config) *gin.Engine {
 		// 插件:统一管理/配置(VS Code 式设置页;backend 只做 CLI 薄封装)
 		g.GET("/plugins", h.Plugins)
 		g.GET("/plugin/status", h.PluginStatus)
+		g.POST("/plugin/daemon/start", h.PluginDaemonStart)
 		g.GET("/plugin/findings", h.PluginFindings)
 		g.GET("/plugin/notifications", h.PluginNotifications)
 		g.POST("/plugins/:id/enable", h.PluginSetEnabled(true))
