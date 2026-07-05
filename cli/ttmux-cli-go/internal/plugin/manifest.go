@@ -84,6 +84,18 @@ type NetworkPerms struct {
 type Contribs struct {
 	Commands          []CommandContrib `json:"commands,omitempty"`
 	NotificationSinks []SinkContrib    `json:"notificationSinks,omitempty"`
+	ConfigFields      []ConfigField    `json:"configFields,omitempty"`
+}
+
+// ConfigField declares one settings entry; 宿主(CLI/Web 设置页)据此渲染
+// 配置表单,插件零前端(完整 JSON Schema 校验为后续增量)。
+type ConfigField struct {
+	Key         string     `json:"key"`
+	Title       LocaleText `json:"title,omitempty"`
+	Description LocaleText `json:"description,omitempty"`
+	Secret      bool       `json:"secret,omitempty"`  // 展示打码,输入用密码框
+	Options     []string   `json:"options,omitempty"` // 非空则渲染为下拉选择
+	Placeholder string     `json:"placeholder,omitempty"`
 }
 
 // CommandContrib declares a human-facing command (CLI / Web).

@@ -74,6 +74,9 @@ func review(ctx *sdk.Ctx, args map[string]string) (any, error) {
 
 	provider := args["provider"]
 	if provider == "" {
+		provider = ctx.Config["provider"] // 设置页配置的默认 reviewer
+	}
+	if provider == "" {
 		provider = pickProvider(ctx)
 	}
 	jobID := fmt.Sprintf("j%d", time.Now().Unix()%1000000)

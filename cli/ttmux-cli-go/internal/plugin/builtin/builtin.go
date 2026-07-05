@@ -69,6 +69,12 @@ func reviewMeshManifest() plugin.Manifest {
 				{ID: "review-mesh.review", Title: plugin.LocaleText{"zh-CN": "互审当前变更", "en-US": "Review current changes"}},
 				{ID: "review-mesh.status", Title: plugin.LocaleText{"zh-CN": "互审状态", "en-US": "Review status"}},
 			},
+			ConfigFields: []plugin.ConfigField{
+				{Key: "provider",
+					Title:       plugin.LocaleText{"zh-CN": "默认评审 Agent", "en-US": "Default reviewer agent"},
+					Description: plugin.LocaleText{"zh-CN": "留空则自动选择(codex 优先)", "en-US": "Empty = auto (prefer codex)"},
+					Options:     []string{"", "codex", "claude"}},
+			},
 		},
 	}
 }
@@ -101,6 +107,15 @@ func feishuManifest() plugin.Manifest {
 			},
 			NotificationSinks: []plugin.SinkContrib{
 				{ID: "feishu.send", Events: []string{"finding.blocking", "review.completed", "monitor.alert", "*"}},
+			},
+			ConfigFields: []plugin.ConfigField{
+				{Key: "webhook", Secret: true,
+					Title:       plugin.LocaleText{"zh-CN": "群机器人 Webhook", "en-US": "Group bot webhook"},
+					Description: plugin.LocaleText{"zh-CN": "飞书群 → 设置 → 群机器人 → 自定义机器人的 Webhook 地址", "en-US": "Feishu group → Settings → Bots → Custom bot webhook URL"},
+					Placeholder: "https://open.feishu.cn/open-apis/bot/v2/hook/..."},
+				{Key: "secret", Secret: true,
+					Title:       plugin.LocaleText{"zh-CN": "加签密钥", "en-US": "Signing secret"},
+					Description: plugin.LocaleText{"zh-CN": "机器人开启「加签」时填写,否则留空", "en-US": "Only when the bot enables signature verification"}},
 			},
 		},
 	}
