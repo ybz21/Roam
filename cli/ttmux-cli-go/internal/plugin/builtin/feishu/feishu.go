@@ -52,6 +52,12 @@ func test(ctx *sdk.Ctx, args map[string]string) (any, error) {
 }
 
 func onNotification(ctx *sdk.Ctx, payload json.RawMessage) error {
+	if ctx.Config["webhook"] == "" {
+		// 未配置即静默跳过:sink 不该因为没接飞书就给每条通知刷错误日志
+		// (feishu-bridge.test 仍显式报错,引导配置)
+		ctx.Logf("webhook not configured; notification skipped")
+		return nil
+	}
 	var n struct {
 		Type     string `json:"type"`
 		Severity string `json:"severity"`
