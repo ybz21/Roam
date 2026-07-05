@@ -54,20 +54,23 @@ func reviewMeshManifest() plugin.Manifest {
 		},
 		Runtime: plugin.Runtime{Kind: "builtin"},
 		Permissions: plugin.Perms{
-			Workspace:     []string{"read"},
-			Agents:        []string{"spawn"},
-			Sessions:      []string{"read"},
+			Workspace: []string{"read"},
+			Agents:    []string{"spawn"},
+			// write:互审意见回灌开发会话(session.send),高危已声明
+			Sessions:      []string{"read", "write"},
 			Findings:      []string{"read", "write"},
 			Notifications: []string{"publish"},
 		},
 		ActivationEvents: []string{
 			"onCommand:review-mesh.review",
 			"onCommand:review-mesh.status",
+			"onCommand:review-mesh.watch",
 		},
 		Contributes: plugin.Contribs{
 			Commands: []plugin.CommandContrib{
 				{ID: "review-mesh.review", Title: plugin.LocaleText{"zh-CN": "互审当前变更", "en-US": "Review current changes"}},
 				{ID: "review-mesh.status", Title: plugin.LocaleText{"zh-CN": "互审状态", "en-US": "Review status"}},
+				{ID: "review-mesh.watch", Title: plugin.LocaleText{"zh-CN": "陪跑监控会话(空闲即互审)", "en-US": "Watch a session (review on idle)"}},
 			},
 			ConfigFields: []plugin.ConfigField{
 				{Key: "provider",

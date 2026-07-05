@@ -760,8 +760,8 @@ const zhCN = {
   'plugins.auditDecision': '决策',
   'plugins.auditResult': '结果',
 
-  'session.autoReview': '结束后自动互审',
-  'session.autoReviewTip': 'Agent 退出后自动用 review-mesh 审查该工作目录的变更,结果进 finding 与通知(需要工作目录)',
+  'session.autoReview': '空闲自动互审',
+  'session.autoReviewTip': '一个监控会话陪跑:每轮对话空闲后自动互审该工作目录的变更,review 意见回灌会话让 Agent 修复,最多 3 轮(需要工作目录)',
   'session.autoReviewNeedsDir': '自动互审需要指定工作目录,本次已跳过',
   'session.autoReviewTrackFailed': '自动互审登记失败',
 
