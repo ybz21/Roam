@@ -238,10 +238,18 @@ func (a App) runGroup(args []string) error {
 	}
 }
 
-// swarmSessions returns the set of tmux sessions that belong to swarms so the
-// native session listings hide them, matching the shell CLI's _is_swarm_session.
+// swarmSessions returns the set of tmux sessions hidden from native session
+// listings: swarm members (matching the shell CLI's _is_swarm_session) plus
+// `_` 前缀的基础设施会话(如插件守护进程 _ttmux-plugind)——从列表和
+// killall 中隐藏防止被顺手关掉;显式指名 attach/kill 不受影响。
 func (a App) swarmSessions() map[string]bool {
-	return swarmcore.SessionNames(a.swarmOptions())
+	set := swarmcore.SessionNames(a.swarmOptions())
+	for _, s := range a.rt.Sessions() {
+		if strings.HasPrefix(s, "_") {
+			set[s] = true
+		}
+	}
+	return set
 }
 
 // swarmNames returns the set of swarm names so the group listing hides them.
