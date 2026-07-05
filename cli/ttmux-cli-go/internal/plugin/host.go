@@ -34,7 +34,9 @@ type Hosted struct {
 // builtin 以自身二进制的隐藏子命令 _plugin-host 拉起;node 用 node 解释
 // main;exec 直接执行 main(需可执行位)。
 // depth 是通知级联深度:sink 插件以 depth=1 托管,其自身 publish 不再分发。
-func StartPlugin(env Env, store *Store, p RegisteredPlugin, actor, workdir string, depth int) (*Hosted, error) {
+// termStderr 时插件 stderr 直通调用方终端(plugin run 的"面板即界面",
+// 如 watch 陪跑会话的进度日志);否则收集到 plugins/logs/<id>.log。
+func StartPlugin(env Env, store *Store, p RegisteredPlugin, actor, workdir string, depth int, termStderr bool) (*Hosted, error) {
 	var cmd *exec.Cmd
 	switch p.Manifest.Runtime.Kind {
 	case "builtin":
@@ -72,10 +74,16 @@ func StartPlugin(env Env, store *Store, p RegisteredPlugin, actor, workdir strin
 	if err != nil {
 		return nil, err
 	}
-	logPath := filepath.Join(env.LogsDir(), p.Manifest.ID+".log")
-	logF, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
-	if err == nil {
-		cmd.Stderr = logF // 插件日志走 stderr,宿主收集(stdout 只走 RPC)
+	var logF *os.File
+	if termStderr {
+		cmd.Stderr = os.Stderr // 面板即界面:进度直接可见
+	} else {
+		logPath := filepath.Join(env.LogsDir(), p.Manifest.ID+".log")
+		f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+		if err == nil {
+			logF = f
+			cmd.Stderr = logF // 插件日志走 stderr,宿主收集(stdout 只走 RPC)
+		}
 	}
 	if err := cmd.Start(); err != nil {
 		if logF != nil {
@@ -152,7 +160,7 @@ func DispatchToSinks(env Env, store *Store, n Notification, depth int) int {
 			continue
 		}
 		actor := "plugin:" + n.Source
-		h, err := StartPlugin(env, store, p, actor, ".", depth)
+		h, err := StartPlugin(env, store, p, actor, ".", depth, false)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "[plugin] sink %s activation failed: %v\n", p.Manifest.ID, err)
 			continue
