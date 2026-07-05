@@ -1494,26 +1494,27 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
               ))}
             </div>
           )}
-          {isGitRepo && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Switch size="small" checked={worktree} onChange={setWorktree} />
-              <span style={{ fontSize: 13 }}>{t('session.worktreeMode')}</span>
-            </div>
-          )}
           <Radio.Group value={agent} onChange={(e) => setAgent(e.target.value)} optionType="button" buttonStyle="solid"
             style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
             <Radio.Button value="none">{t('session.agentNone')}</Radio.Button>
             <Radio.Button value="claude">{t('session.agentClaude')}</Radio.Button>
             <Radio.Button value="codex">{t('session.agentCodex')}</Radio.Button>
           </Radio.Group>
-          {agent !== 'none' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Switch size="small" checked={autoReview} onChange={setAutoReview} />
-              <Tooltip title={t('session.autoReviewTip')}>
-                <span style={{ fontSize: 13 }}>{t('session.autoReview')}</span>
-              </Tooltip>
-            </div>
-          )}
+          {/* 选项开关行:常驻并列展示,不适用时置灰(tooltip 说明条件) */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, rowGap: 8 }}>
+            <Tooltip title={isGitRepo ? t('session.worktreeTip') : t('session.worktreeNeedsRepo')}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                <Switch size="small" checked={worktree && isGitRepo} disabled={!isGitRepo} onChange={setWorktree} />
+                <span style={{ fontSize: 13, opacity: isGitRepo ? 1 : 0.45 }}>{t('session.worktreeMode')}</span>
+              </span>
+            </Tooltip>
+            <Tooltip title={agent !== 'none' ? t('session.autoReviewTip') : t('session.autoReviewNeedsAgent')}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                <Switch size="small" checked={autoReview && agent !== 'none'} disabled={agent === 'none'} onChange={setAutoReview} />
+                <span style={{ fontSize: 13, opacity: agent !== 'none' ? 1 : 0.45 }}>{t('session.autoReview')}</span>
+              </span>
+            </Tooltip>
+          </div>
         </Space>
       </Modal>
       <DirPicker open={pick} start={dir || undefined} onPick={(p) => { setDir(p); setPick(false) }} onClose={() => setPick(false)} />

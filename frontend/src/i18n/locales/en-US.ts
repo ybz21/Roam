@@ -764,6 +764,10 @@ const enUS = {
   'session.autoReviewTip': 'When the agent exits, review-mesh reviews this working directory; results go to findings and notifications (requires a working directory)',
   'session.autoReviewNeedsDir': 'Auto review needs a working directory; skipped this time',
   'session.autoReviewTrackFailed': 'Failed to register auto review',
+
+  'session.worktreeTip': 'Work in an isolated git worktree without touching the main checkout',
+  'session.worktreeNeedsRepo': 'Pick a git repository directory above first',
+  'session.autoReviewNeedsAgent': 'Pick Claude or Codex above first',
 }
 
 export default enUS
