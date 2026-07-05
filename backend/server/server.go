@@ -161,6 +161,8 @@ func New(cfg Config) *gin.Engine {
 		g.GET("/plugin/status", h.PluginStatus)
 		g.POST("/plugin/daemon/start", h.PluginDaemonStart)
 		g.POST("/plugin/track", h.PluginTrack)
+		g.POST("/plugin/install", h.PluginInstall)
+		g.DELETE("/plugins/:id", h.PluginUninstall)
 		g.GET("/plugin/findings", h.PluginFindings)
 		g.GET("/plugin/notifications", h.PluginNotifications)
 		g.POST("/plugins/:id/enable", h.PluginSetEnabled(true))

@@ -768,6 +768,20 @@ const zhCN = {
   'session.worktreeTip': '在独立 git worktree 中工作,不影响主工作区',
   'session.worktreeNeedsRepo': '先在上方选择一个 git 仓库目录',
   'session.autoReviewNeedsAgent': '先在上方选择 Claude 或 Codex',
+
+  'plugins.install': '安装插件',
+  'plugins.installTitle': '安装插件',
+  'plugins.market': '插件市场',
+  'plugins.marketSoon': '插件市场规划中(设计文档路线图 v2)',
+  'plugins.uploadHint': '拖拽或点击上传插件包(.tgz / .tar.gz)',
+  'plugins.uploadSub': '包内需含 roam-plugin.json,运行时为 node 或 exec',
+  'plugins.orLocalPath': '或安装开发机上的目录',
+  'plugins.pathPlaceholder': '/绝对路径/插件目录',
+  'plugins.installFromPath': '安装',
+  'plugins.installedOk': '安装成功(默认未启用,请在列表中启用)',
+  'plugins.uninstall': '卸载',
+  'plugins.uninstallConfirm': '卸载该插件?文件将删除,配置与数据保留',
+  'plugins.uninstalled': '插件已卸载',
 }
 
 export default zhCN

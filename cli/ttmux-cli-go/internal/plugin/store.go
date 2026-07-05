@@ -87,6 +87,8 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	// 增量列:外部插件安装路径(旧库已有该列时 ALTER 报错,忽略)
+	_, _ = s.db.Exec(`ALTER TABLE plugins ADD COLUMN install_path TEXT`)
 	return nil
 }
 
@@ -96,9 +98,10 @@ func (s *Store) now() string { return s.env.RT.Now().Format(time.RFC3339) }
 
 // RegisteredPlugin is a registry row joined with its parsed manifest.
 type RegisteredPlugin struct {
-	Manifest  Manifest `json:"manifest"`
-	Enabled   bool     `json:"enabled"`
-	Installed string   `json:"installed"`
+	Manifest    Manifest `json:"manifest"`
+	Enabled     bool     `json:"enabled"`
+	Installed   string   `json:"installed"`
+	InstallPath string   `json:"installPath,omitempty"` // 外部插件的文件位置(builtin 为空)
 }
 
 // SyncBuiltin upserts a builtin manifest into the registry. Builtin 官方插件
@@ -120,25 +123,50 @@ func (s *Store) SyncBuiltin(m Manifest) error {
 	return err
 }
 
+// InstallExternal registers an external (node/exec) plugin whose files live
+// at installPath. 安装后默认不启用(02-product 用户旅程:授权发生在启用时)。
+func (s *Store) InstallExternal(m Manifest, installPath string) error {
+	raw, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	res, err := s.db.Exec(`UPDATE plugins SET version=?, kind=?, manifest=?, install_path=? WHERE id=?`,
+		m.Version, m.Runtime.Kind, string(raw), installPath, m.ID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		_, err = s.db.Exec(`INSERT INTO plugins (id, version, kind, enabled, manifest, installed, install_path) VALUES (?,?,?,0,?,?,?)`,
+			m.ID, m.Version, m.Runtime.Kind, string(raw), s.now(), installPath)
+	}
+	return err
+}
+
+// Remove deletes a plugin's registry row (files handled by the caller).
+func (s *Store) Remove(id string) error {
+	_, err := s.db.Exec(`DELETE FROM plugins WHERE id=?`, id)
+	return err
+}
+
 // List returns all registered plugins.
 func (s *Store) List() ([]RegisteredPlugin, error) {
-	rows, err := s.db.Query(`SELECT manifest, enabled, IFNULL(installed,'') FROM plugins ORDER BY id`)
+	rows, err := s.db.Query(`SELECT manifest, enabled, IFNULL(installed,''), IFNULL(install_path,'') FROM plugins ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	var out []RegisteredPlugin
 	for rows.Next() {
-		var raw, installed string
+		var raw, installed, installPath string
 		var enabled int
-		if err := rows.Scan(&raw, &enabled, &installed); err != nil {
+		if err := rows.Scan(&raw, &enabled, &installed, &installPath); err != nil {
 			return nil, err
 		}
 		var m Manifest
 		if err := json.Unmarshal([]byte(raw), &m); err != nil {
 			continue // 损坏行不阻断列表
 		}
-		out = append(out, RegisteredPlugin{Manifest: m, Enabled: enabled == 1, Installed: installed})
+		out = append(out, RegisteredPlugin{Manifest: m, Enabled: enabled == 1, Installed: installed, InstallPath: installPath})
 	}
 	return out, rows.Err()
 }
