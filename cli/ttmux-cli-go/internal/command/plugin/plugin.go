@@ -172,7 +172,7 @@ func runCommand(env plugin.Env, args []string, out io.Writer) error {
 		return err
 	}
 	wd, _ := os.Getwd()
-	hosted, err := plugin.StartPlugin(env, store, p, actor(), wd, 0)
+	hosted, err := plugin.StartPlugin(env, store, p, actor(), wd, 0, true)
 	if err != nil {
 		return err
 	}

@@ -112,7 +112,7 @@ func dispatch(env Env, store *Store, r SessionRow, eventType string) {
 	if err != nil || !owner.Enabled {
 		return
 	}
-	h, err := StartPlugin(env, store, owner, "watcher:plugind", ".", 0)
+	h, err := StartPlugin(env, store, owner, "watcher:plugind", ".", 0, false)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[plugind] activate %s failed: %v\n", r.Plugin, err)
 		return
