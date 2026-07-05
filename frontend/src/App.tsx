@@ -1500,19 +1500,19 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
             <Radio.Button value="claude">{t('session.agentClaude')}</Radio.Button>
             <Radio.Button value="codex">{t('session.agentCodex')}</Radio.Button>
           </Radio.Group>
-          {/* 选项开关行:常驻并列展示,不适用时置灰(tooltip 说明条件) */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, rowGap: 8 }}>
-            <Tooltip title={isGitRepo ? t('session.worktreeTip') : t('session.worktreeNeedsRepo')}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                <Switch size="small" checked={worktree && isGitRepo} disabled={!isGitRepo} onChange={setWorktree} />
-                <span style={{ fontSize: 13, opacity: isGitRepo ? 1 : 0.45 }}>{t('session.worktreeMode')}</span>
-              </span>
+          {/* 会话选项:勾选项竖排,不适用时置灰(tooltip 说明启用条件) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <Tooltip placement="right" title={isGitRepo ? t('session.worktreeTip') : t('session.worktreeNeedsRepo')}>
+              <Checkbox checked={worktree && isGitRepo} disabled={!isGitRepo}
+                onChange={(e) => setWorktree(e.target.checked)} style={{ width: 'fit-content' }}>
+                <span style={{ fontSize: 13 }}>{t('session.worktreeMode')}</span>
+              </Checkbox>
             </Tooltip>
-            <Tooltip title={agent !== 'none' ? t('session.autoReviewTip') : t('session.autoReviewNeedsAgent')}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                <Switch size="small" checked={autoReview && agent !== 'none'} disabled={agent === 'none'} onChange={setAutoReview} />
-                <span style={{ fontSize: 13, opacity: agent !== 'none' ? 1 : 0.45 }}>{t('session.autoReview')}</span>
-              </span>
+            <Tooltip placement="right" title={agent !== 'none' ? t('session.autoReviewTip') : t('session.autoReviewNeedsAgent')}>
+              <Checkbox checked={autoReview && agent !== 'none'} disabled={agent === 'none'}
+                onChange={(e) => setAutoReview(e.target.checked)} style={{ width: 'fit-content' }}>
+                <span style={{ fontSize: 13 }}>{t('session.autoReview')}</span>
+              </Checkbox>
             </Tooltip>
           </div>
         </Space>
