@@ -759,6 +759,11 @@ const zhCN = {
   'plugins.auditTarget': '目标',
   'plugins.auditDecision': '决策',
   'plugins.auditResult': '结果',
+
+  'session.autoReview': '结束后自动互审',
+  'session.autoReviewTip': 'Agent 退出后自动用 review-mesh 审查该工作目录的变更,结果进 finding 与通知(需要工作目录)',
+  'session.autoReviewNeedsDir': '自动互审需要指定工作目录,本次已跳过',
+  'session.autoReviewTrackFailed': '自动互审登记失败',
 }
 
 export default zhCN

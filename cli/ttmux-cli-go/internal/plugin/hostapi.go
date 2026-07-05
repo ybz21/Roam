@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -91,27 +92,38 @@ func (h *HostAPI) workspaceDiff(params json.RawMessage) (any, error) {
 	}
 	var req struct {
 		Base string `json:"base"`
+		Dir  string `json:"dir"` // 可选:显式工作区(watcher 触发的自动互审带 workdir 标签)
 	}
 	_ = json.Unmarshal(params, &req)
+	dir := h.Workdir
+	if strings.TrimSpace(req.Dir) != "" {
+		if !filepath.IsAbs(req.Dir) {
+			return nil, fmt.Errorf("workspace.diff: dir must be absolute, got %q", req.Dir)
+		}
+		if st, err := os.Stat(req.Dir); err != nil || !st.IsDir() {
+			return nil, fmt.Errorf("workspace.diff: dir not found: %s", req.Dir)
+		}
+		dir = req.Dir
+	}
 	base := orDefault(req.Base, "HEAD")
-	branch := h.git("rev-parse", "--abbrev-ref", "HEAD")
-	stat := h.git("diff", "--stat", base)
-	diff := h.git("diff", base)
+	branch := h.git(dir, "rev-parse", "--abbrev-ref", "HEAD")
+	stat := h.git(dir, "diff", "--stat", base)
+	diff := h.git(dir, "diff", base)
 	if strings.TrimSpace(diff) == "" {
 		// 无未提交变更时退回最近一次提交的 diff,便于"刚提交完求 review"的场景
-		diff = h.git("show", "--format=commit %h %s", base)
-		stat = h.git("show", "--stat", "--format=", base)
+		diff = h.git(dir, "show", "--format=commit %h %s", base)
+		stat = h.git(dir, "show", "--stat", "--format=", base)
 	}
 	const capBytes = 120 * 1024
 	if len(diff) > capBytes {
 		diff = diff[:capBytes] + "\n...[diff truncated by roam host]"
 	}
-	h.audit("workspace.diff", h.Workdir, "allowed", fmt.Sprintf("%d bytes", len(diff)))
+	h.audit("workspace.diff", dir, "allowed", fmt.Sprintf("%d bytes", len(diff)))
 	return diffResult{Branch: strings.TrimSpace(branch), Stat: stat, Diff: diff}, nil
 }
 
-func (h *HostAPI) git(args ...string) string {
-	cmd := exec.Command("git", append([]string{"-C", h.Workdir}, args...)...)
+func (h *HostAPI) git(dir string, args ...string) string {
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &out

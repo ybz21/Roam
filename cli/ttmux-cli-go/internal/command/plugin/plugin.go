@@ -45,6 +45,8 @@ func Run(rt runtime.Runtime, args []string, out io.Writer) error {
 		return audit(env, args, out)
 	case "status":
 		return status(env, args, out)
+	case "track":
+		return track(env, args, out)
 	case "daemon":
 		if hasFlag(args, "--foreground") {
 			return plugin.RunDaemonForeground(env)
@@ -327,6 +329,60 @@ func status(env plugin.Env, args []string, out io.Writer) error {
 	return nil
 }
 
+// track 把一个已存在的会话登记给插件跟踪:plugind 在其退出时向该插件派发
+// session:agent.exited 事件(如「结束后自动互审」给会话打 review:auto 标签)。
+func track(env plugin.Env, args []string, out io.Writer) error {
+	if len(args) < 1 || strings.HasPrefix(args[0], "--") {
+		return fmt.Errorf("usage: ttmux plugin track <session> [--plugin <id>] [--job <id>] [--label k=v ...]")
+	}
+	session := args[0]
+	pluginName := "review-mesh"
+	job := ""
+	labels := map[string]string{}
+	for i := 1; i < len(args); i++ {
+		switch args[i] {
+		case "--plugin":
+			if i+1 < len(args) {
+				pluginName = args[i+1]
+				i++
+			}
+		case "--job":
+			if i+1 < len(args) {
+				job = args[i+1]
+				i++
+			}
+		case "--label":
+			if i+1 < len(args) {
+				if k, v, ok := strings.Cut(args[i+1], "="); ok {
+					labels[k] = v
+				}
+				i++
+			}
+		}
+	}
+	store, err := openStore(env)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+	p, err := store.Get(pluginName)
+	if err != nil {
+		return err
+	}
+	if !p.Enabled {
+		return fmt.Errorf("plugin %s is disabled", p.Manifest.ID)
+	}
+	if err := store.AddSession(plugin.SessionRow{Session: session, Plugin: p.Manifest.ID, Job: job, Labels: labels}); err != nil {
+		return err
+	}
+	// 事件驱动依赖 plugind;顺手确保它在跑(失败不阻断登记,提示即可)
+	if err := plugin.EnsureDaemon(env); err != nil {
+		ui.Warn(out, "plugind 未能启动(%v)——会话退出事件不会被侦测,可稍后手动: ttmux plugin daemon", err)
+	}
+	ui.Ok(out, "会话 %s 已登记给 %s 跟踪", ui.Bold(session), p.Manifest.ID)
+	return nil
+}
+
 func help(out io.Writer) {
 	fmt.Fprint(out, `用法: ttmux plugin <子命令>
 
@@ -339,6 +395,7 @@ func help(out io.Writer) {
   notifications [--json]              查看通知流
   audit [<id>] [--json]               查看审计日志
   status                              守护进程与会话状态
+  track <会话> [--label k=v ...]       登记会话给插件跟踪(退出时派发事件)
   daemon [--foreground]               启动 plugind(异步事件收尾需要)
 
 示例:

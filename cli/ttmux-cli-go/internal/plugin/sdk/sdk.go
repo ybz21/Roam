@@ -61,9 +61,10 @@ type DiffResult struct {
 	Diff   string `json:"diff"`
 }
 
-func (c *Ctx) WorkspaceDiff() (DiffResult, error) {
+// WorkspaceDiff returns the reviewable diff; dir 为空时用宿主注入的工作区。
+func (c *Ctx) WorkspaceDiff(dir string) (DiffResult, error) {
 	var out DiffResult
-	err := c.call("roam/workspace.diff", map[string]string{}, &out, 60*time.Second)
+	err := c.call("roam/workspace.diff", map[string]string{"dir": dir}, &out, 60*time.Second)
 	return out, err
 }
 
