@@ -764,6 +764,10 @@ const zhCN = {
   'session.autoReviewTip': 'Agent 退出后自动用 review-mesh 审查该工作目录的变更,结果进 finding 与通知(需要工作目录)',
   'session.autoReviewNeedsDir': '自动互审需要指定工作目录,本次已跳过',
   'session.autoReviewTrackFailed': '自动互审登记失败',
+
+  'session.worktreeTip': '在独立 git worktree 中工作,不影响主工作区',
+  'session.worktreeNeedsRepo': '先在上方选择一个 git 仓库目录',
+  'session.autoReviewNeedsAgent': '先在上方选择 Claude 或 Codex',
 }
 
 export default zhCN
