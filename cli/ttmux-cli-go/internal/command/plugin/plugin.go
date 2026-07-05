@@ -44,7 +44,7 @@ func Run(rt runtime.Runtime, args []string, out io.Writer) error {
 	case "audit":
 		return audit(env, args, out)
 	case "status":
-		return status(env, out)
+		return status(env, args, out)
 	case "daemon":
 		if hasFlag(args, "--foreground") {
 			return plugin.RunDaemonForeground(env)
@@ -304,20 +304,23 @@ func audit(env plugin.Env, args []string, out io.Writer) error {
 	return nil
 }
 
-func status(env plugin.Env, out io.Writer) error {
+func status(env plugin.Env, args []string, out io.Writer) error {
 	st := plugin.DaemonStatus(env)
-	if st == nil {
-		fmt.Fprintf(out, "plugind: %s(启动: ttmux plugin daemon)\n", ui.Dim("not running"))
-	} else {
-		fmt.Fprintf(out, "plugind: running pid=%.0f enabled=%.0f/%.0f watching=%.0f sessions\n",
-			asF(st["pid"]), asF(st["enabled"]), asF(st["plugins"]), asF(st["watchedSessions"]))
-	}
 	store, err := openStore(env)
 	if err != nil {
 		return err
 	}
 	defer store.Close()
 	running, _ := store.Sessions("", "running")
+	if hasFlag(args, "--json") {
+		return printJSON(out, map[string]any{"daemon": st, "sessions": running})
+	}
+	if st == nil {
+		fmt.Fprintf(out, "plugind: %s(启动: ttmux plugin daemon)\n", ui.Dim("not running"))
+	} else {
+		fmt.Fprintf(out, "plugind: running pid=%.0f enabled=%.0f/%.0f watching=%.0f sessions\n",
+			asF(st["pid"]), asF(st["enabled"]), asF(st["plugins"]), asF(st["watchedSessions"]))
+	}
 	for _, r := range running {
 		fmt.Fprintf(out, "  · %s %s job=%s\n", r.Session, ui.Dim(r.Plugin), r.Job)
 	}

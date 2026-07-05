@@ -96,9 +96,9 @@ func (s *Store) now() string { return s.env.RT.Now().Format(time.RFC3339) }
 
 // RegisteredPlugin is a registry row joined with its parsed manifest.
 type RegisteredPlugin struct {
-	Manifest  Manifest
-	Enabled   bool
-	Installed string
+	Manifest  Manifest `json:"manifest"`
+	Enabled   bool     `json:"enabled"`
+	Installed string   `json:"installed"`
 }
 
 // SyncBuiltin upserts a builtin manifest into the registry. Builtin 官方插件
