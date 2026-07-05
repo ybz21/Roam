@@ -107,7 +107,7 @@ func autoReviewOnce(ctx *sdk.Ctx, dev, workdir string, wait bool) (bool, error) 
 	}
 
 	fmt.Fprintf(os.Stderr, "[%s] 第 %d 轮互审开始…\n", time.Now().Format("15:04:05"), st.Rounds+1)
-	res, err := launchReview(ctx, workdir, "")
+	res, err := launchReviewManaged(ctx, workdir, "", wait)
 	if err != nil {
 		return false, err
 	}
@@ -175,6 +175,9 @@ func onAgentExited(ctx *sdk.Ctx, payload json.RawMessage) error {
 	}
 	switch {
 	case ev.Labels["role"] == "reviewer":
+		if ev.Labels["managed"] == "watch" {
+			return nil // watch 陪跑在同步收尾,这里不重复 finalize(防双份 finding/通知)
+		}
 		// 自己 spawn 的 reviewer 完成 → 收尾(解析 findings、落库、发通知)
 		res, err := finalize(ctx, ev.Job, ev.Session)
 		if err != nil {
@@ -242,6 +245,12 @@ func review(ctx *sdk.Ctx, args map[string]string) (any, error) {
 // launchReview takes the workspace diff (workdir 为空时用宿主注入的工作区)
 // and spawns a reviewer agent session. 命令(--wait)与自动互审共用。
 func launchReview(ctx *sdk.Ctx, workdir, provider string) (*reviewResult, error) {
+	return launchReviewManaged(ctx, workdir, provider, false)
+}
+
+// launchReviewManaged 额外标记 reviewer 是否由 watch 同步收尾(managed=watch):
+// plugind 的 reviewer 退出事件看到该标记会跳过 finalize,避免双份收尾。
+func launchReviewManaged(ctx *sdk.Ctx, workdir, provider string, managedByWatch bool) (*reviewResult, error) {
 	diff, err := ctx.WorkspaceDiff(workdir)
 	if err != nil {
 		return nil, err
@@ -258,13 +267,17 @@ func launchReview(ctx *sdk.Ctx, workdir, provider string) (*reviewResult, error)
 	jobID := fmt.Sprintf("j%d", time.Now().Unix()%1000000)
 	session := fmt.Sprintf("review-mesh-%s-rv1", jobID)
 
+	labels := map[string]string{"job": jobID, "role": "reviewer"}
+	if managedByWatch {
+		labels["managed"] = "watch"
+	}
 	sess, err := ctx.AgentSpawn(sdk.SpawnReq{
 		Provider:    provider,
 		Prompt:      reviewerPrompt(diff),
 		SessionName: session,
 		Workdir:     workdir,
 		Job:         jobID,
-		Labels:      map[string]string{"job": jobID, "role": "reviewer"},
+		Labels:      labels,
 	})
 	if err != nil {
 		return nil, err
