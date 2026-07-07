@@ -179,4 +179,4 @@ Roam 能控制你的开发机终端、文件、浏览器和 Agent，安全级别
 
 ## License
 
-MIT
+GNU Affero 通用公共许可证 v3.0（AGPL-3.0）。详见 [LICENSE](LICENSE)。
