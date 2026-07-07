@@ -54,6 +54,33 @@ func (c AgentConfig) CommandFromPromptFile(path string) string {
 	return c.claudeOneShotPrefix() + " < " + shellQuote(path)
 }
 
+// InteractiveFromPromptFile builds the interactive-TUI launch command with the
+// initial prompt read from a file("$(cat …)" 注入,同 swarm members 的手法:
+// 多行 prompt 内联会被 send-keys 的换行当回车拆碎)。
+func (c AgentConfig) InteractiveFromPromptFile(path string) string {
+	bin := orDefault(c.ClaudeBin, "claude")
+	var b strings.Builder
+	if c.Kind == "codex" {
+		bin = orDefault(c.CodexBin, "codex")
+		b.WriteString("cd '" + c.Workdir + "' && " + bin)
+		if c.Model != "" {
+			b.WriteString(" -m " + c.Model)
+		}
+	} else {
+		b.WriteString("cd '" + c.Workdir + "' && " + bin)
+		if c.Model != "" {
+			b.WriteString(" --model " + c.Model)
+		}
+		if c.Permission == "dangerously-skip-permissions" {
+			b.WriteString(" --dangerously-skip-permissions")
+		} else {
+			b.WriteString(" --permission-mode " + c.Permission)
+		}
+	}
+	b.WriteString(` "$(cat ` + shellQuote(path) + `)"`)
+	return b.String()
+}
+
 func (c AgentConfig) claudeCommand(task string) string {
 	if c.Interactive {
 		bin := orDefault(c.ClaudeBin, "claude")

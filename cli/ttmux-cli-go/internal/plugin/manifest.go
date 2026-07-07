@@ -84,13 +84,23 @@ type NetworkPerms struct {
 type Contribs struct {
 	Commands          []CommandContrib `json:"commands,omitempty"`
 	NotificationSinks []SinkContrib    `json:"notificationSinks,omitempty"`
+	ConfigGroups      []ConfigGroup    `json:"configGroups,omitempty"`
 	ConfigFields      []ConfigField    `json:"configFields,omitempty"`
+}
+
+// ConfigGroup 把配置字段分节展示(如飞书桥的「出站通知」与「入站派活」是
+// 两条独立通道);设置页按声明顺序渲染分组标题与引导说明。
+type ConfigGroup struct {
+	Key         string     `json:"key"`
+	Title       LocaleText `json:"title,omitempty"`
+	Description LocaleText `json:"description,omitempty"` // 支持多行(\n 即换行),写配置步骤
 }
 
 // ConfigField declares one settings entry; 宿主(CLI/Web 设置页)据此渲染
 // 配置表单,插件零前端(完整 JSON Schema 校验为后续增量)。
 type ConfigField struct {
 	Key         string     `json:"key"`
+	Group       string     `json:"group,omitempty"` // 所属 ConfigGroup.Key;空=默认组
 	Title       LocaleText `json:"title,omitempty"`
 	Description LocaleText `json:"description,omitempty"`
 	Secret      bool       `json:"secret,omitempty"`  // 展示打码,输入用密码框
