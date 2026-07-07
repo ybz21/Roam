@@ -67,7 +67,9 @@ func (r Runtime) TmuxOutput(args ...string) (string, error) {
 }
 
 func (r Runtime) HasSession(name string) bool {
-	cmd := exec.Command(r.TmuxBin, "has-session", "-t", name)
+	// "=" 强制精确匹配:tmux -t 默认按前缀匹配,dev 会话死后 has-session
+	// 会命中它的陪跑会话 <dev>-review,导致存活误判、退出事件永不触发
+	cmd := exec.Command(r.TmuxBin, "has-session", "-t", "="+name)
 	return cmd.Run() == nil
 }
 
@@ -240,7 +242,7 @@ func (r Runtime) WaitSession(sess string, timeout int) bool {
 		if !r.HasSession(sess) {
 			return true
 		}
-		dead, _ := r.TmuxOutput("display-message", "-t", sess, "-p", "#{pane_dead}")
+		dead, _ := r.TmuxOutput("display-message", "-t", "="+sess+":", "-p", "#{pane_dead}")
 		if strings.TrimSpace(dead) == "1" {
 			return true
 		}
@@ -251,7 +253,8 @@ func (r Runtime) WaitSession(sess string, timeout int) bool {
 
 func (r Runtime) ReadCapture(name string, lines string) (string, error) {
 	if r.HasSession(name) {
-		return r.TmuxOutput("capture-pane", "-t", name, "-p", "-S", "-"+lines)
+		// pane 目标的精确匹配要写成 "=名:"(tmux 3.4 对裸 "=名" 报 can't find pane)
+		return r.TmuxOutput("capture-pane", "-t", "="+name+":", "-p", "-S", "-"+lines)
 	}
 	log := filepath.Join(r.LogsDir, name+".log")
 	lineCount := 200

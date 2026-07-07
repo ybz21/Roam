@@ -15,6 +15,8 @@
 - [蜂群 Web 接入设计](./design/蜂群%20Web%20接入设计.md) — 蜂群在 Web 端的映射
 - [蜂群成员启动与提示词模板设计](./design/蜂群成员启动与提示词模板设计.md) — claude/codex 引擎 · master/worker 角色 · 提示词模板（Go text/template）
 - [蜂群成员角色模型设计](./design/蜂群成员角色模型设计.md) — 细分角色(产品/工程/测试…) + 职责 · 底层/界面/prompt/leader 全链路
+- [插件机制设计](./design/plugin/README.md) — 插件机制:调研 / 产品 / 架构(plugind) / manifest / 平台 API / 安全 / 路线图 / 开发指南
+- [智能评审插件设计](./design/智能评审插件设计.md) — Codex + Claude 互审、finding、裁决与 swarm 质量闭环
 - [web/](./design/web/) — Web 控制台完整设计（总览 / 后端 / 认证 / 前端 / 逐页面 / 路线图）
 - [mockups/](./design/mockups/) — 静态原型
 
