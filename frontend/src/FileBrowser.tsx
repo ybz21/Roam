@@ -1,7 +1,7 @@
 // 文件侧栏 —— 在 Claude / Codex 对话页右侧浏览工作目录、查看文件内容（类似 codex 右侧边栏）。
 // 单层可导航列表：目录在前可进入、↑ 回上级、点文件在弹层里查看正文。
 import { type MouseEvent, type ReactNode, Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
-import { AutoComplete, Button, Dropdown, Input, Modal, Space, Spin, App as AntApp, Tooltip, type MenuProps } from 'antd'
+import { AutoComplete, Button, ConfigProvider, Dropdown, Input, Modal, Space, Spin, App as AntApp, Tooltip, type MenuProps } from 'antd'
 import { api, upload } from './api'
 import Markdown from './Markdown'
 import ErrorBoundary from './ErrorBoundary'
@@ -1361,6 +1361,7 @@ export default function FileBrowser({
     </div>
   )
 
+  const content = (() => {
   if (layout === 'split') {
     return (
       <div style={{ height: '100%', minHeight: 0, display: 'flex', background: 'var(--bg-base)' }}>
@@ -1419,6 +1420,12 @@ export default function FileBrowser({
   }
 
   return browserPane
+  })()
+
+  // 文件浏览器可能挂在高 z-index 的悬浮抽屉(FloatingFileDrawer, z=1200)里，而 antd 弹层
+  // (右键菜单/下拉/Modal)默认基线低于抽屉 → 弹层被抽屉盖住，表现为「右键没反应」。
+  // 统一抬高弹层基线，保证无论挂在抽屉、停靠栏还是独立文件页，行为都一致。
+  return <ConfigProvider theme={{ token: { zIndexPopupBase: 1300 } }}>{content}</ConfigProvider>
 }
 
 function rowStyle(): React.CSSProperties {

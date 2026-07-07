@@ -1246,8 +1246,25 @@ function Overview({ go, openTerm }: { go: (k: string) => void; openTerm: (n: str
         ].map((p, i) => <div key={i} style={{ flex: '1 1 140px', minWidth: 140 }}><StatTile {...p} /></div>)}
       </div>
 
-      {/* 蜂群 + 会话 双栏 */}
+      {/* 会话 + 蜂群 双栏（会话在前，蜂群在后） */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
+        <div style={{ flex: '1 1 360px', minWidth: 280 }}>
+          <Card title={t('nav.sessions')} extra={<a onClick={() => go('sessions')}>{t('common.all')} →</a>}>
+            {sessions.length === 0 ? <Empty description={t('session.noActive')} /> : (
+              <List size="small" dataSource={sessions.slice(0, 6)} renderItem={(s: any) => (
+                <List.Item style={{ padding: '8px 0' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minWidth: 0 }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ color: 'var(--text-bright)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.name}>{s.name}</div>
+                      <div style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap' }} title={`${t('session.createdAt')} ${absTime(s.created)} · ${t('session.lastActivity')} ${absTime(s.last_activity)}`}>{t('session.windows', { count: s.windows })} · {s.attached == 1 ? t('terminal.status.connected') : t('terminal.status.idle')} · {t('session.lastActivity')} {relTime(s.last_activity, t)}</div>
+                    </div>
+                    <a onClick={() => openTerm(s.name)} style={{ flex: '0 0 auto', whiteSpace: 'nowrap' }}>{t('common.terminal')}</a>
+                  </div>
+                </List.Item>
+              )} />
+            )}
+          </Card>
+        </div>
         <div style={{ flex: '1 1 360px', minWidth: 280 }}>
           <Card title={<Space><span style={{ color: '#58a6ff' }}>◆</span>{t('nav.swarm')}</Space>} extra={<a onClick={() => go('swarm')}>{t('common.all')} →</a>}>
             {swarms.length === 0 ? <Empty description={t('overview.noSwarms')} /> : (
@@ -1267,23 +1284,6 @@ function Overview({ go, openTerm }: { go: (k: string) => void; openTerm: (n: str
                   </div>
                 ))}
               </Space>
-            )}
-          </Card>
-        </div>
-        <div style={{ flex: '1 1 360px', minWidth: 280 }}>
-          <Card title={t('nav.sessions')} extra={<a onClick={() => go('sessions')}>{t('common.all')} →</a>}>
-            {sessions.length === 0 ? <Empty description={t('session.noActive')} /> : (
-              <List size="small" dataSource={sessions.slice(0, 6)} renderItem={(s: any) => (
-                <List.Item style={{ padding: '8px 0' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minWidth: 0 }}>
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ color: 'var(--text-bright)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.name}>{s.name}</div>
-                      <div style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap' }} title={`${t('session.createdAt')} ${absTime(s.created)} · ${t('session.lastActivity')} ${absTime(s.last_activity)}`}>{t('session.windows', { count: s.windows })} · {s.attached == 1 ? t('terminal.status.connected') : t('terminal.status.idle')} · {t('session.lastActivity')} {relTime(s.last_activity, t)}</div>
-                    </div>
-                    <a onClick={() => openTerm(s.name)} style={{ flex: '0 0 auto', whiteSpace: 'nowrap' }}>{t('common.terminal')}</a>
-                  </div>
-                </List.Item>
-              )} />
             )}
           </Card>
         </div>
