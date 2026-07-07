@@ -1,0 +1,397 @@
+package plugin
+
+import (
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"time"
+
+	"ttmux-cli-go/internal/runtime"
+
+	_ "modernc.org/sqlite"
+)
+
+// Env bundles the paths and runtime the plugin foundation needs. 配置与安装态
+// 进 $TTMUX_HOME,运行态进 $TTMUX_DATA(见 docs/design/plugin/04 第 10 节)。
+type Env struct {
+	RT runtime.Runtime
+}
+
+func NewEnv(rt runtime.Runtime) Env { return Env{RT: rt} }
+
+func (e Env) metaDBPath() string          { return filepath.Join(e.RT.HomeDir, "meta.db") }
+func (e Env) DataDir() string             { return filepath.Join(e.RT.DataDir, "plugins") }
+func (e Env) AuditDir() string            { return filepath.Join(e.DataDir(), "audit") }
+func (e Env) LogsDir() string             { return filepath.Join(e.DataDir(), "logs") }
+func (e Env) StorageDir(id string) string { return filepath.Join(e.DataDir(), "storage", id) }
+
+// SockPath prefers $XDG_RUNTIME_DIR, falling back to $TTMUX_DATA/plugins/run.
+func (e Env) SockPath() string {
+	if dir := os.Getenv("XDG_RUNTIME_DIR"); dir != "" {
+		return filepath.Join(dir, "ttmux", "plugin.sock")
+	}
+	return filepath.Join(e.DataDir(), "run", "plugin.sock")
+}
+
+// Store wraps the plugin tables in meta.db.
+type Store struct {
+	db  *sql.DB
+	env Env
+}
+
+// Open opens meta.db and ensures plugin tables + builtin registry rows exist.
+func Open(env Env) (*Store, error) {
+	for _, dir := range []string{env.RT.HomeDir, env.DataDir(), env.AuditDir(), env.LogsDir(), filepath.Dir(env.SockPath())} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, err
+		}
+	}
+	db, err := sql.Open("sqlite", "file:"+env.metaDBPath()+"?_pragma=busy_timeout(5000)")
+	if err != nil {
+		return nil, err
+	}
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return nil, err
+	}
+	s := &Store{db: db, env: env}
+	if err := s.migrate(); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return s, nil
+}
+
+func (s *Store) Close() { s.db.Close() }
+
+func (s *Store) migrate() error {
+	stmts := []string{
+		`CREATE TABLE IF NOT EXISTS plugins (
+			id TEXT PRIMARY KEY, version TEXT, kind TEXT,
+			enabled INTEGER DEFAULT 0, manifest TEXT, installed TEXT)`,
+		`CREATE TABLE IF NOT EXISTS plugin_sessions (
+			session TEXT PRIMARY KEY, plugin TEXT, job TEXT, labels TEXT,
+			status TEXT DEFAULT 'running', created TEXT, updated TEXT)`,
+		`CREATE TABLE IF NOT EXISTS plugin_findings (
+			id INTEGER PRIMARY KEY AUTOINCREMENT, plugin TEXT, job TEXT,
+			severity TEXT, title TEXT, file TEXT, line INTEGER,
+			detail TEXT, status TEXT DEFAULT 'open', created TEXT, updated TEXT)`,
+		`CREATE TABLE IF NOT EXISTS plugin_notifications (
+			id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT, severity TEXT,
+			title TEXT, body TEXT, source TEXT, dedupe TEXT, created TEXT)`,
+	}
+	for _, q := range stmts {
+		if _, err := s.db.Exec(q); err != nil {
+			return err
+		}
+	}
+	// 增量列:外部插件安装路径(旧库已有该列时 ALTER 报错,忽略)
+	_, _ = s.db.Exec(`ALTER TABLE plugins ADD COLUMN install_path TEXT`)
+	return nil
+}
+
+func (s *Store) now() string { return s.env.RT.Now().Format(time.RFC3339) }
+
+// ── registry ──
+
+// RegisteredPlugin is a registry row joined with its parsed manifest.
+type RegisteredPlugin struct {
+	Manifest    Manifest `json:"manifest"`
+	Enabled     bool     `json:"enabled"`
+	Installed   string   `json:"installed"`
+	InstallPath string   `json:"installPath,omitempty"` // 外部插件的文件位置(builtin 为空)
+}
+
+// SyncBuiltin upserts a builtin manifest into the registry. Builtin 官方插件
+// 默认启用(信任层级 Built-in,见 02-product 治理分层)。
+func (s *Store) SyncBuiltin(m Manifest) error {
+	raw, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	res, err := s.db.Exec(`UPDATE plugins SET version=?, kind=?, manifest=? WHERE id=?`,
+		m.Version, m.Runtime.Kind, string(raw), m.ID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		_, err = s.db.Exec(`INSERT INTO plugins (id, version, kind, enabled, manifest, installed) VALUES (?,?,?,1,?,?)`,
+			m.ID, m.Version, m.Runtime.Kind, string(raw), s.now())
+	}
+	return err
+}
+
+// InstallExternal registers an external (node/exec) plugin whose files live
+// at installPath. 安装后默认不启用(02-product 用户旅程:授权发生在启用时)。
+func (s *Store) InstallExternal(m Manifest, installPath string) error {
+	raw, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	res, err := s.db.Exec(`UPDATE plugins SET version=?, kind=?, manifest=?, install_path=? WHERE id=?`,
+		m.Version, m.Runtime.Kind, string(raw), installPath, m.ID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		_, err = s.db.Exec(`INSERT INTO plugins (id, version, kind, enabled, manifest, installed, install_path) VALUES (?,?,?,0,?,?,?)`,
+			m.ID, m.Version, m.Runtime.Kind, string(raw), s.now(), installPath)
+	}
+	return err
+}
+
+// Remove deletes a plugin's registry row (files handled by the caller).
+func (s *Store) Remove(id string) error {
+	_, err := s.db.Exec(`DELETE FROM plugins WHERE id=?`, id)
+	return err
+}
+
+// List returns all registered plugins.
+func (s *Store) List() ([]RegisteredPlugin, error) {
+	rows, err := s.db.Query(`SELECT manifest, enabled, IFNULL(installed,''), IFNULL(install_path,'') FROM plugins ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []RegisteredPlugin
+	for rows.Next() {
+		var raw, installed, installPath string
+		var enabled int
+		if err := rows.Scan(&raw, &enabled, &installed, &installPath); err != nil {
+			return nil, err
+		}
+		var m Manifest
+		if err := json.Unmarshal([]byte(raw), &m); err != nil {
+			continue // 损坏行不阻断列表
+		}
+		out = append(out, RegisteredPlugin{Manifest: m, Enabled: enabled == 1, Installed: installed, InstallPath: installPath})
+	}
+	return out, rows.Err()
+}
+
+// Get returns one plugin by id (or by short name).
+func (s *Store) Get(id string) (RegisteredPlugin, error) {
+	all, err := s.List()
+	if err != nil {
+		return RegisteredPlugin{}, err
+	}
+	for _, p := range all {
+		if p.Manifest.ID == id || p.Manifest.Name == id {
+			return p, nil
+		}
+	}
+	return RegisteredPlugin{}, fmt.Errorf("plugin not found: %s", id)
+}
+
+// SetEnabled toggles a plugin.
+func (s *Store) SetEnabled(id string, enabled bool) error {
+	p, err := s.Get(id)
+	if err != nil {
+		return err
+	}
+	v := 0
+	if enabled {
+		v = 1
+	}
+	_, err = s.db.Exec(`UPDATE plugins SET enabled=? WHERE id=?`, v, p.Manifest.ID)
+	return err
+}
+
+// FindCommand resolves "<name>.<cmd>" to its enabled owner plugin.
+func (s *Store) FindCommand(commandID string) (RegisteredPlugin, string, error) {
+	all, err := s.List()
+	if err != nil {
+		return RegisteredPlugin{}, "", err
+	}
+	for _, p := range all {
+		if handler, ok := p.Manifest.CommandOwner(commandID); ok {
+			if !p.Enabled {
+				return RegisteredPlugin{}, "", fmt.Errorf("plugin %s is disabled (enable with: ttmux plugin enable %s)", p.Manifest.ID, p.Manifest.Name)
+			}
+			return p, handler, nil
+		}
+	}
+	return RegisteredPlugin{}, "", fmt.Errorf("unknown plugin command: %s", commandID)
+}
+
+// ── sessions (owner/labels 会话组句柄,见 04-architecture 2.5) ──
+
+// SessionRow tracks a plugin-owned tmux session.
+type SessionRow struct {
+	Session string            `json:"session"`
+	Plugin  string            `json:"plugin"`
+	Job     string            `json:"job"`
+	Labels  map[string]string `json:"labels"`
+	Status  string            `json:"status"`
+	Created string            `json:"created"`
+}
+
+func (s *Store) AddSession(row SessionRow) error {
+	labels, _ := json.Marshal(row.Labels)
+	_, err := s.db.Exec(`INSERT OR REPLACE INTO plugin_sessions (session, plugin, job, labels, status, created, updated)
+		VALUES (?,?,?,?,?,?,?)`, row.Session, row.Plugin, row.Job, string(labels), "running", s.now(), s.now())
+	return err
+}
+
+func (s *Store) UpdateSessionStatus(session, status string) error {
+	_, err := s.db.Exec(`UPDATE plugin_sessions SET status=?, updated=? WHERE session=?`, status, s.now(), session)
+	return err
+}
+
+// Sessions lists rows filtered by owner plugin (""=all) and/or status (""=all).
+func (s *Store) Sessions(plugin, status string) ([]SessionRow, error) {
+	rows, err := s.db.Query(`SELECT session, plugin, IFNULL(job,''), IFNULL(labels,'{}'), IFNULL(status,''), IFNULL(created,'')
+		FROM plugin_sessions WHERE (?='' OR plugin=?) AND (?='' OR status=?) ORDER BY created`, plugin, plugin, status, status)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []SessionRow
+	for rows.Next() {
+		var r SessionRow
+		var labels string
+		if err := rows.Scan(&r.Session, &r.Plugin, &r.Job, &labels, &r.Status, &r.Created); err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal([]byte(labels), &r.Labels)
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// ── findings ──
+
+// Finding is a structured review result (智能评审插件设计 §5 的最小子集).
+type Finding struct {
+	ID       int64  `json:"id"`
+	Plugin   string `json:"plugin"`
+	Job      string `json:"job"`
+	Severity string `json:"severity"`
+	Title    string `json:"title"`
+	File     string `json:"file"`
+	Line     int    `json:"line"`
+	Detail   string `json:"detail"`
+	Status   string `json:"status"`
+	Created  string `json:"created"`
+}
+
+func (s *Store) CreateFinding(f Finding) (int64, error) {
+	res, err := s.db.Exec(`INSERT INTO plugin_findings (plugin, job, severity, title, file, line, detail, status, created, updated)
+		VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		f.Plugin, f.Job, f.Severity, f.Title, f.File, f.Line, f.Detail, orDefault(f.Status, "open"), s.now(), s.now())
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+// Findings lists findings filtered by plugin/job/status (""=all).
+func (s *Store) Findings(plugin, job, status string) ([]Finding, error) {
+	rows, err := s.db.Query(`SELECT id, plugin, IFNULL(job,''), severity, title, IFNULL(file,''), IFNULL(line,0), IFNULL(detail,''), status, IFNULL(created,'')
+		FROM plugin_findings WHERE (?='' OR plugin=?) AND (?='' OR job=?) AND (?='' OR status=?) ORDER BY id`,
+		plugin, plugin, job, job, status, status)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Finding
+	for rows.Next() {
+		var f Finding
+		if err := rows.Scan(&f.ID, &f.Plugin, &f.Job, &f.Severity, &f.Title, &f.File, &f.Line, &f.Detail, &f.Status, &f.Created); err != nil {
+			return nil, err
+		}
+		out = append(out, f)
+	}
+	return out, rows.Err()
+}
+
+// ── notifications ──
+
+// Notification is the standard cross-plugin notification record.
+type Notification struct {
+	ID       int64  `json:"id"`
+	Type     string `json:"type"`
+	Severity string `json:"severity"`
+	Title    string `json:"title"`
+	Body     string `json:"body"`
+	Source   string `json:"source"`
+	Dedupe   string `json:"dedupeKey,omitempty"`
+	Created  string `json:"created"`
+}
+
+// AddNotification stores a notification; duplicate dedupe keys within 5
+// minutes are dropped (returns id 0).
+func (s *Store) AddNotification(n Notification) (int64, error) {
+	if n.Dedupe != "" {
+		cutoff := s.env.RT.Now().Add(-5 * time.Minute).Format(time.RFC3339)
+		var count int
+		_ = s.db.QueryRow(`SELECT COUNT(*) FROM plugin_notifications WHERE dedupe=? AND created>?`, n.Dedupe, cutoff).Scan(&count)
+		if count > 0 {
+			return 0, nil
+		}
+	}
+	res, err := s.db.Exec(`INSERT INTO plugin_notifications (type, severity, title, body, source, dedupe, created)
+		VALUES (?,?,?,?,?,?,?)`, n.Type, n.Severity, n.Title, n.Body, n.Source, n.Dedupe, s.now())
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+// Notifications returns the most recent limit rows.
+func (s *Store) Notifications(limit int) ([]Notification, error) {
+	rows, err := s.db.Query(`SELECT id, type, IFNULL(severity,''), title, IFNULL(body,''), IFNULL(source,''), IFNULL(dedupe,''), IFNULL(created,'')
+		FROM plugin_notifications ORDER BY id DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Notification
+	for rows.Next() {
+		var n Notification
+		if err := rows.Scan(&n.ID, &n.Type, &n.Severity, &n.Title, &n.Body, &n.Source, &n.Dedupe, &n.Created); err != nil {
+			return nil, err
+		}
+		out = append(out, n)
+	}
+	return out, rows.Err()
+}
+
+// ── plugin config (schema 默认 < 全局配置;工作区覆盖为后续增量) ──
+
+// ConfigPath is the per-plugin JSON config under the storage dir.
+func (e Env) ConfigPath(id string) string { return filepath.Join(e.StorageDir(id), "config.json") }
+
+// LoadConfig reads the plugin's config map (missing file = empty map).
+func (e Env) LoadConfig(id string) (map[string]string, error) {
+	cfg := map[string]string{}
+	b, err := os.ReadFile(e.ConfigPath(id))
+	if os.IsNotExist(err) {
+		return cfg, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return cfg, json.Unmarshal(b, &cfg)
+}
+
+// SaveConfig persists the plugin's config map.
+func (e Env) SaveConfig(id string, cfg map[string]string) error {
+	if err := os.MkdirAll(e.StorageDir(id), 0o755); err != nil {
+		return err
+	}
+	b, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(e.ConfigPath(id), b, 0o600)
+}
+
+func orDefault(v, def string) string {
+	if v == "" {
+		return def
+	}
+	return v
+}

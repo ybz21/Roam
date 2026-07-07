@@ -8,3 +8,7 @@
 # never committed.
 /ttmux
 /chrome
+
+# 本机运行态,含登录口令等敏感信息,不入库
+/config.yaml
+/.worktrees/

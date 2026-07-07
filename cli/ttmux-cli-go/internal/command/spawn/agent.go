@@ -44,9 +44,19 @@ func (c AgentConfig) Command(task string) string {
 	return c.claudeCommand(task)
 }
 
+// CommandFromPromptFile builds the one-shot launch command with the task fed
+// from a file on stdin. tmux send-keys 有命令长度上限(整段 diff 内联会报
+// "command too long"),经会话拉起 Agent 的调用方必须用这个短命令形态。
+func (c AgentConfig) CommandFromPromptFile(path string) string {
+	if c.Kind == "codex" {
+		return c.codexOneShotPrefix() + " < " + shellQuote(path)
+	}
+	return c.claudeOneShotPrefix() + " < " + shellQuote(path)
+}
+
 func (c AgentConfig) claudeCommand(task string) string {
-	bin := orDefault(c.ClaudeBin, "claude")
 	if c.Interactive {
+		bin := orDefault(c.ClaudeBin, "claude")
 		var b strings.Builder
 		b.WriteString("cd '" + c.Workdir + "' && " + bin)
 		if c.Model != "" {
@@ -60,6 +70,11 @@ func (c AgentConfig) claudeCommand(task string) string {
 		b.WriteString(" " + shellQuote(task))
 		return b.String()
 	}
+	return c.claudeOneShotPrefix() + heredoc(task)
+}
+
+func (c AgentConfig) claudeOneShotPrefix() string {
+	bin := orDefault(c.ClaudeBin, "claude")
 	var b strings.Builder
 	b.WriteString("cd '" + c.Workdir + "' && " + bin + " -p")
 	if c.Model != "" {
@@ -74,13 +89,12 @@ func (c AgentConfig) claudeCommand(task string) string {
 		b.WriteString(" --max-turns " + c.MaxTurns)
 	}
 	b.WriteString(" --output-format text")
-	b.WriteString(heredoc(task))
 	return b.String()
 }
 
 func (c AgentConfig) codexCommand(task string) string {
-	bin := orDefault(c.CodexBin, "codex")
 	if c.Interactive {
+		bin := orDefault(c.CodexBin, "codex")
 		var b strings.Builder
 		b.WriteString("cd '" + c.Workdir + "' && " + bin)
 		if c.Model != "" {
@@ -89,6 +103,11 @@ func (c AgentConfig) codexCommand(task string) string {
 		b.WriteString(" " + shellQuote(task))
 		return b.String()
 	}
+	return c.codexOneShotPrefix() + heredoc(task)
+}
+
+func (c AgentConfig) codexOneShotPrefix() string {
+	bin := orDefault(c.CodexBin, "codex")
 	var b strings.Builder
 	b.WriteString("cd '" + c.Workdir + "' && " + bin + " exec --skip-git-repo-check")
 	if c.Model != "" {
@@ -98,7 +117,6 @@ func (c AgentConfig) codexCommand(task string) string {
 		b.WriteString(" --dangerously-bypass-approvals-and-sandbox")
 	}
 	b.WriteString(" -")
-	b.WriteString(heredoc(task))
 	return b.String()
 }
 
