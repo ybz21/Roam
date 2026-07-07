@@ -160,6 +160,7 @@ type spawnReq struct {
 	Workdir     string            `json:"workdir"`
 	Job         string            `json:"job"`
 	Labels      map[string]string `json:"labels"`
+	Interactive bool              `json:"interactive"` // 交互 TUI 会话(可持续对话),非一次性
 }
 
 func (h *HostAPI) agentSpawn(params json.RawMessage) (any, error) {
@@ -198,10 +199,16 @@ func (h *HostAPI) agentSpawn(params json.RawMessage) (any, error) {
 	_ = os.WriteFile(rt.LogFile(req.SessionName), nil, 0o644)
 	_ = rt.Tmux("pipe-pane", "-t", req.SessionName, "-o", "cat >> '"+rt.LogFile(req.SessionName)+"'")
 	_ = rt.WriteTaskMeta(req.SessionName, "agent", "plugin:"+h.Plugin.Manifest.ID, workdir)
-	// 一次性 Agent 会话:`; exit` 与命令同行提交,跑完 shell 立即退出,会话
-	// 消亡就是完成信号(WaitSession 与 plugind watcher 都以此判定;单独排队
-	// 一个 exit 按键会被置 raw 模式的程序冲掉,不可靠)。
-	if err := rt.Tmux("send-keys", "-t", req.SessionName, ac.CommandFromPromptFile(promptFile)+"; exit", "C-m"); err != nil {
+	// `; exit` 与命令同行提交:Agent 进程退出(一次性跑完 / 交互 TUI 被 /exit)
+	// 后 shell 立即退出,会话消亡就是完成信号(WaitSession 与 plugind watcher
+	// 都以此判定;单独排队一个 exit 按键会被置 raw 模式的程序冲掉,不可靠)。
+	launch := ac.CommandFromPromptFile(promptFile)
+	if req.Interactive {
+		launch = ac.InteractiveFromPromptFile(promptFile)
+		// 交互 TUI 首启会卡 trust-folder / bypass 确认,后台点掉
+		spawn.LaunchAutoconfirm(rt, req.SessionName)
+	}
+	if err := rt.Tmux("send-keys", "-t", req.SessionName, launch+"; exit", "C-m"); err != nil {
 		// 半成品会话必须就地回收,否则留下一个永不退出的空 shell 会话
 		_ = rt.Tmux("kill-session", "-t", req.SessionName)
 		rt.CleanTaskMeta(req.SessionName)

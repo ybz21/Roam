@@ -13,11 +13,18 @@ type LocaleText = Record<string, string> | undefined
 
 type ConfigField = {
   key: string
+  group?: string
   title?: LocaleText
   description?: LocaleText
   secret?: boolean
   options?: string[]
   placeholder?: string
+}
+
+type ConfigGroup = {
+  key: string
+  title?: LocaleText
+  description?: LocaleText
 }
 
 type Manifest = {
@@ -31,6 +38,7 @@ type Manifest = {
   contributes?: {
     commands?: { id: string; title?: LocaleText }[]
     notificationSinks?: { id: string; events?: string[] }[]
+    configGroups?: ConfigGroup[]
     configFields?: ConfigField[]
   }
 }
@@ -244,7 +252,7 @@ function PluginDetail({ plugin, locale, t, onChanged }: {
           {
             key: 'config', label: t('plugins.tabConfig'),
             children: fields.length
-              ? <ConfigForm pluginId={m.id} fields={fields} locale={locale} t={t} />
+              ? <ConfigForm pluginId={m.id} fields={fields} groups={m.contributes?.configGroups || []} locale={locale} t={t} />
               : <Empty description={t('plugins.noConfig')} image={Empty.PRESENTED_IMAGE_SIMPLE} />,
           },
           {
@@ -265,8 +273,8 @@ function PluginDetail({ plugin, locale, t, onChanged }: {
   )
 }
 
-function ConfigForm({ pluginId, fields, locale, t }: {
-  pluginId: string; fields: ConfigField[]; locale: string
+function ConfigForm({ pluginId, fields, groups, locale, t }: {
+  pluginId: string; fields: ConfigField[]; groups: ConfigGroup[]; locale: string
   t: (k: string, vars?: Record<string, string | number>) => string
 }) {
   const [form] = Form.useForm()
@@ -302,18 +310,37 @@ function ConfigForm({ pluginId, fields, locale, t }: {
     }
   }
 
+  const renderField = (f: ConfigField) => (
+    <Form.Item key={f.key} name={f.key}
+      label={lt(f.title, locale) || f.key}
+      extra={lt(f.description, locale) || undefined}>
+      {f.options?.length
+        ? <Select options={f.options.map((o) => ({ value: o, label: o === '' ? t('plugins.optionAuto') : o }))} />
+        : f.secret
+          ? <Input.Password placeholder={f.placeholder} autoComplete="new-password" />
+          : <Input placeholder={f.placeholder} />}
+    </Form.Item>
+  )
+
+  // 按 manifest 的 configGroups 分节:组标题 + 多行引导说明 + 该组字段;
+  // 未归组的字段渲染在最前(与旧 manifest 兼容)。
+  const grouped = groups.filter((g) => fields.some((f) => f.group === g.key))
+  const ungrouped = fields.filter((f) => !f.group || !grouped.some((g) => g.key === f.group))
   return (
     <Form form={form} layout="vertical" style={{ maxWidth: 560 }}>
-      {fields.map((f) => (
-        <Form.Item key={f.key} name={f.key}
-          label={lt(f.title, locale) || f.key}
-          extra={lt(f.description, locale) || undefined}>
-          {f.options?.length
-            ? <Select options={f.options.map((o) => ({ value: o, label: o === '' ? t('plugins.optionAuto') : o }))} />
-            : f.secret
-              ? <Input.Password placeholder={f.placeholder} autoComplete="new-password" />
-              : <Input placeholder={f.placeholder} />}
-        </Form.Item>
+      {ungrouped.map(renderField)}
+      {grouped.map((g, i) => (
+        <div key={g.key}>
+          <Divider orientation="left" orientationMargin={0} style={{ marginTop: i === 0 && !ungrouped.length ? 0 : 8 }}>
+            <Typography.Text strong>{lt(g.title, locale) || g.key}</Typography.Text>
+          </Divider>
+          {lt(g.description, locale) && (
+            <Typography.Paragraph type="secondary" style={{ whiteSpace: 'pre-line', fontSize: 13, marginBottom: 16 }}>
+              {lt(g.description, locale)}
+            </Typography.Paragraph>
+          )}
+          {fields.filter((f) => f.group === g.key).map(renderField)}
+        </div>
       ))}
       <Button type="primary" loading={saving} onClick={save}>{t('plugins.save')}</Button>
     </Form>

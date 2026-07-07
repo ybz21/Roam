@@ -15,6 +15,10 @@ import (
 // tmux,可 attach 看日志;见 04-architecture 4.2)。
 const DaemonSession = "_ttmux-plugind"
 
+// FeishuListenerSession hosts the feishu-bridge long-connection listener
+// (入站 @机器人 派活;由 plugind 托管:配置齐且插件启用时自动拉起,掉了重拉)。
+const FeishuListenerSession = "_ttmux-feishu"
+
 // RunDaemonForeground runs plugind: a unix-socket control API plus the
 // session watcher that synthesizes agent.exited events for plugin-owned
 // sessions (spawn 时 wait=false 的异步收尾路径)。
@@ -50,8 +54,43 @@ func RunDaemonForeground(env Env) error {
 	defer ticker.Stop()
 	for range ticker.C {
 		watchOnce(env, store)
+		ensureFeishuListener(env, store)
 	}
 	return nil
+}
+
+// lastFeishuStart throttles listener restarts(凭据错误时 ws 秒退,不能 3s
+// 一循环地锤飞书鉴权接口;冷却 60s,配置修好后最多一分钟内自愈)。
+var lastFeishuStart time.Time
+
+// ensureFeishuListener keeps the feishu inbound listener session alive when
+// the plugin is enabled and app credentials are configured. `plugin run` 的
+// invoke 上限 24h,监听会话日级回收后由这里重拉,天然自愈。
+func ensureFeishuListener(env Env, store *Store) {
+	if env.RT.HasSession(FeishuListenerSession) {
+		return
+	}
+	if time.Since(lastFeishuStart) < time.Minute {
+		return
+	}
+	p, err := store.Get("roam.feishu-bridge")
+	if err != nil || !p.Enabled {
+		return
+	}
+	cfg, err := env.LoadConfig(p.Manifest.ID)
+	if err != nil || cfg["app_id"] == "" || cfg["app_secret"] == "" {
+		return
+	}
+	self, err := os.Executable()
+	if err != nil {
+		return
+	}
+	lastFeishuStart = time.Now()
+	if err := env.RT.Tmux("new-session", "-d", "-s", FeishuListenerSession, self+" plugin run feishu-bridge.listen"); err != nil {
+		fmt.Fprintf(os.Stderr, "[plugind] feishu listener start failed: %v\n", err)
+		return
+	}
+	fmt.Printf("[plugind] feishu listener started in session %s\n", FeishuListenerSession)
 }
 
 // reconcileStale settles sessions that died while plugind was down. reviewer

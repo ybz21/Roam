@@ -82,6 +82,7 @@ type SpawnReq struct {
 	Workdir     string            `json:"workdir,omitempty"`
 	Job         string            `json:"job,omitempty"`
 	Labels      map[string]string `json:"labels,omitempty"`
+	Interactive bool              `json:"interactive,omitempty"` // 交互 TUI(可持续对话)
 }
 
 func (c *Ctx) AgentSpawn(req SpawnReq) (session string, err error) {
@@ -161,6 +162,22 @@ func (c *Ctx) StorageGet(key string) (string, error) {
 // StorageSet writes the plugin's private KV(空值即删除)。
 func (c *Ctx) StorageSet(key, value string) error {
 	return c.call("roam/storage.set", map[string]string{"key": key, "value": value}, nil, 15*time.Second)
+}
+
+// SessionInfo mirrors the host's plugin session row (roam/session.list)。
+type SessionInfo struct {
+	Session string            `json:"session"`
+	Job     string            `json:"job"`
+	Labels  map[string]string `json:"labels"`
+	Status  string            `json:"status"`
+	Created string            `json:"created"`
+}
+
+// SessionList returns this plugin's owned sessions (spawn/track 登记的)。
+func (c *Ctx) SessionList() ([]SessionInfo, error) {
+	var out []SessionInfo
+	err := c.call("roam/session.list", map[string]string{}, &out, 30*time.Second)
+	return out, err
 }
 
 func (c *Ctx) SessionLog(name string) (string, error) {

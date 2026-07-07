@@ -10,12 +10,13 @@ import (
 	"ttmux-cli-go/internal/runtime"
 )
 
-// launchAutoconfirm detaches a background poller that clicks through claude's
+// LaunchAutoconfirm detaches a background poller that clicks through claude's
 // first-run dialogs (trust folder / bypass permissions), mirroring the
 // `setsid bash -c _spawn_autoconfirm` trick in lib/spawn.sh. It re-execs this
 // binary's hidden `__autoconfirm` subcommand in a new session so it survives
-// the parent command returning.
-func launchAutoconfirm(rt runtime.Runtime, sess string) {
+// the parent command returning.(插件 agent.spawn 的交互会话也用它,否则
+// 首次打开的目录会卡在 trust 确认上)
+func LaunchAutoconfirm(rt runtime.Runtime, sess string) {
 	self, err := os.Executable()
 	if err != nil {
 		return
