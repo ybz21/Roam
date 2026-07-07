@@ -23,6 +23,7 @@
 | [07-security.md](07-security.md) | 信任模型、权限、威胁模型、审计 |
 | [08-roadmap.md](08-roadmap.md) | 分阶段落地计划与 MVP |
 | [09-plugin-development.md](09-plugin-development.md) | 插件开发指南:从 hello 到发布 |
+| [10-feishu-concierge.md](10-feishu-concierge.md) | 飞书常驻管家 Agent(concierge):消息进大脑,复杂活开 worker |
 
 相关文档:
 

@@ -36,13 +36,22 @@ func listen(ctx *sdk.Ctx, args map[string]string) (any, error) {
 	if appID == "" || appSecret == "" {
 		return nil, fmt.Errorf("app_id/app_secret 未配置(飞书开放平台建自建应用后: ttmux plugin config feishu-bridge set app_id <cli_xxx> && set app_secret <secret>)")
 	}
-	fmt.Fprintf(os.Stderr, "== feishu-bridge 长连接监听 ==\n@应用机器人 说「帮助」看用法;其余文本将派给 Agent 干活\n")
+	fmt.Fprintf(os.Stderr, "== feishu-bridge 长连接监听 ==\n@应用机器人 说「帮助」看用法;消息将进常驻管家(concierge)处理\n")
+
+	st := &conciergeState{}
+	if conciergeMode(ctx) {
+		if err := ensureWorkspace(ctx); err != nil {
+			return nil, fmt.Errorf("workspace init failed: %w", err)
+		}
+		runConciergeLoops(ctx, st)
+		fmt.Fprintf(os.Stderr, "管家工作目录: %s(AGENT.md 可自定义)\n", workspaceDir(ctx))
+	}
 
 	seen := &seenSet{ids: map[string]struct{}{}}
 	handler := dispatcher.NewEventDispatcher("", "").
 		OnP2MessageReceiveV1(func(_ context.Context, ev *larkim.P2MessageReceiveV1) error {
 			// RPC 连接支持并发调用;回调里不做重活,避免阻塞 ws 心跳
-			go handleMessage(ctx, seen, ev)
+			go handleMessage(ctx, st, seen, ev)
 			return nil
 		})
 	cli := larkws.NewClient(appID, appSecret,
@@ -90,7 +99,13 @@ func (s *seenSet) firstTime(id string) bool {
 
 var mentionKeyRe = regexp.MustCompile(`@_user_\d+`)
 
-func handleMessage(ctx *sdk.Ctx, seen *seenSet, ev *larkim.P2MessageReceiveV1) {
+// conciergeMode reports whether task_mode selects the resident concierge(默认)。
+func conciergeMode(ctx *sdk.Ctx) bool {
+	m := strings.TrimSpace(ctx.Config["task_mode"])
+	return m == "" || m == "concierge"
+}
+
+func handleMessage(ctx *sdk.Ctx, st *conciergeState, seen *seenSet, ev *larkim.P2MessageReceiveV1) {
 	msg := ev.Event.Message
 	if msg == nil || msg.ChatId == nil {
 		return
@@ -99,9 +114,13 @@ func handleMessage(ctx *sdk.Ctx, seen *seenSet, ev *larkim.P2MessageReceiveV1) {
 	if msg.MessageId != nil && !seen.firstTime(*msg.MessageId) {
 		return
 	}
+	sender := ""
+	if ev.Event.Sender != nil && ev.Event.Sender.SenderId != nil {
+		sender = strVal(ev.Event.Sender.SenderId.OpenId)
+	}
 	// 先记日志再过滤:排障时能看到"收到了但被谁拦下"
-	ctx.Logf("feishu inbound: chat=%s type=%s msgType=%s mentions=%d",
-		chatID, strVal(msg.ChatType), strVal(msg.MessageType), len(msg.Mentions))
+	ctx.Logf("feishu inbound: chat=%s sender=%s type=%s msgType=%s mentions=%d",
+		chatID, sender, strVal(msg.ChatType), strVal(msg.MessageType), len(msg.Mentions))
 	// 群聊只响应 @机器人(订阅范围建议也只勾「群聊中@机器人的消息」);单聊全收
 	if strVal(msg.ChatType) != "p2p" && len(msg.Mentions) == 0 {
 		return
@@ -116,6 +135,11 @@ func handleMessage(ctx *sdk.Ctx, seen *seenSet, ev *larkim.P2MessageReceiveV1) {
 	_ = json.Unmarshal([]byte(strVal(msg.Content)), &content)
 	text := strings.TrimSpace(mentionKeyRe.ReplaceAllString(content.Text, ""))
 	ctx.Logf("feishu inbound text (%s): %s", chatID, text)
+
+	if conciergeMode(ctx) {
+		handleConciergeMessage(ctx, st, chatID, sender, text)
+		return
+	}
 
 	switch strings.ToLower(text) {
 	case "", "hi", "hello", "你好", "help", "帮助", "?", "？":

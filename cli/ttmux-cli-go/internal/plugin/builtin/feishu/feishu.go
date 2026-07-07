@@ -11,6 +11,7 @@ package feishu
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -22,9 +23,11 @@ import (
 func Activate(ctx *sdk.Ctx) sdk.Plugin {
 	return sdk.Plugin{
 		Commands: map[string]sdk.CommandHandler{
-			"test":   test,
-			"listen": listen,
-			"send":   send,
+			"test":       test,
+			"listen":     listen,
+			"send":       send,
+			"bind-token": bindToken,
+			"delegate":   delegate,
 		},
 		Events: map[string]sdk.EventHandler{
 			"notification": onNotification,
@@ -42,6 +45,21 @@ func onAgentExited(ctx *sdk.Ctx, payload json.RawMessage) error {
 	}
 	if err := json.Unmarshal(payload, &ev); err != nil {
 		return err
+	}
+	if ev.Labels["role"] == "concierge" {
+		// 管家消亡:listener 的投递环节会按需重建,这里无事可做
+		ctx.Logf("concierge session %s exited; listener will respawn on demand", ev.Session)
+		return nil
+	}
+	if ev.Labels["feishu:worker"] == "1" {
+		// delegate 出去的 worker 结束:只写 inbox(单一投递者原则,
+		// 由 listener 的 delivery loop 投给管家),绝不直接回用户
+		msg := fmt.Sprintf("worker %s 已结束。验收:读 %s 与 `ttmux capture %s`,通过后向用户汇报,不通过带原因重派",
+			ev.Session, filepath.Join(ev.Labels["feishu:task_dir"], "RESULT.md"), ev.Session)
+		if _, err := appendInbox(ctx, inboxItem{Type: "system", Chat: ev.Labels["feishu:chat"], Text: msg}); err != nil {
+			ctx.Logf("worker-exit inbox append failed: %v", err)
+		}
+		return nil
 	}
 	chatID := ev.Labels["feishu:chat"]
 	if chatID == "" {
