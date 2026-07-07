@@ -221,4 +221,4 @@ agents. Treat it as close to SSH access. For real deployments:
 
 ## License
 
-MIT
+GNU Affero General Public License v3.0 (AGPL-3.0). See [LICENSE](LICENSE).
