@@ -1,4 +1,4 @@
-package feishu
+package im
 
 import (
 	"os"
@@ -80,14 +80,14 @@ func TestSenderAllowed(t *testing.T) {
 }
 
 func TestWorkerContract(t *testing.T) {
-	c := workerContract("oc_1", "feishu-w-x", "/w/tasks/w-x/RESULT.md", true)
-	for _, want := range []string{"RESULT.md", "feishu-bridge.send --chat oc_1", "tmux kill-session -t feishu-w-x"} {
+	c := workerContract("oc_1", "im-w-x", "/w/tasks/w-x/RESULT.md", true)
+	for _, want := range []string{"RESULT.md", "im-bridge.send --chat oc_1", "tmux kill-session -t im-w-x"} {
 		if !strings.Contains(c, want) {
 			t.Fatalf("contract missing %q:\n%s", want, c)
 		}
 	}
-	c2 := workerContract("", "feishu-w-y", "/r.md", false)
-	if strings.Contains(c2, "feishu-bridge.send") || strings.Contains(c2, "kill-session") {
+	c2 := workerContract("", "im-w-y", "/r.md", false)
+	if strings.Contains(c2, "im-bridge.send") || strings.Contains(c2, "kill-session") {
 		t.Fatalf("one-shot contract without chat should not offer send/kill:\n%s", c2)
 	}
 }
@@ -99,7 +99,7 @@ func TestWorkspaceTildeExpansion(t *testing.T) {
 		t.Fatalf("tilde not expanded: %s", got)
 	}
 	ctx2 := &sdk.Ctx{Config: map[string]string{}}
-	if got := workspaceDir(ctx2); !strings.HasSuffix(got, filepath.Join(".ttmux", "plugins", "feishu", "workspace")) {
+	if got := workspaceDir(ctx2); !strings.HasSuffix(got, filepath.Join(".ttmux", "plugins", "im", "workspace")) {
 		t.Fatalf("default workspace wrong: %s", got)
 	}
 }

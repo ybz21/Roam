@@ -15,9 +15,9 @@ import (
 // tmux,可 attach 看日志;见 04-architecture 4.2)。
 const DaemonSession = "_ttmux-plugind"
 
-// FeishuListenerSession hosts the feishu-bridge long-connection listener
+// IMListenerSession hosts the im-bridge long-connection listener
 // (入站 @机器人 派活;由 plugind 托管:配置齐且插件启用时自动拉起,掉了重拉)。
-const FeishuListenerSession = "_ttmux-feishu"
+const IMListenerSession = "_ttmux-im"
 
 // RunDaemonForeground runs plugind: a unix-socket control API plus the
 // session watcher that synthesizes agent.exited events for plugin-owned
@@ -54,43 +54,52 @@ func RunDaemonForeground(env Env) error {
 	defer ticker.Stop()
 	for range ticker.C {
 		watchOnce(env, store)
-		ensureFeishuListener(env, store)
+		ensureIMListener(env, store)
 	}
 	return nil
 }
 
-// lastFeishuStart throttles listener restarts(凭据错误时 ws 秒退,不能 3s
-// 一循环地锤飞书鉴权接口;冷却 60s,配置修好后最多一分钟内自愈)。
-var lastFeishuStart time.Time
+// lastIMStart throttles listener restarts(凭据错误时长连接秒退,不能 3s
+// 一循环地锤 IM 鉴权接口;冷却 60s,配置修好后最多一分钟内自愈)。
+var lastIMStart time.Time
 
-// ensureFeishuListener keeps the feishu inbound listener session alive when
-// the plugin is enabled and app credentials are configured. `plugin run` 的
-// invoke 上限 24h,监听会话日级回收后由这里重拉,天然自愈。
-func ensureFeishuListener(env Env, store *Store) {
-	if env.RT.HasSession(FeishuListenerSession) {
+// ensureIMListener keeps the im-bridge inbound listener session alive when
+// the plugin is enabled and provider credentials are configured. `plugin run`
+// 的 invoke 上限 24h,监听会话日级回收后由这里重拉,天然自愈。
+func ensureIMListener(env Env, store *Store) {
+	if env.RT.HasSession(IMListenerSession) {
 		return
 	}
-	if time.Since(lastFeishuStart) < time.Minute {
+	if time.Since(lastIMStart) < time.Minute {
 		return
 	}
-	p, err := store.Get("roam.feishu-bridge")
+	p, err := store.Get("roam.im-bridge")
 	if err != nil || !p.Enabled {
 		return
 	}
 	cfg, err := env.LoadConfig(p.Manifest.ID)
-	if err != nil || cfg["app_id"] == "" || cfg["app_secret"] == "" {
+	if err != nil {
+		return
+	}
+	// provider 凭据齐了才拉(目前:feishu 需 app_id/app_secret;其余 provider
+	// 尚未实现,不自动拉起)
+	prov := cfg["im_provider"]
+	if prov != "" && prov != "feishu" {
+		return
+	}
+	if cfg["app_id"] == "" || cfg["app_secret"] == "" {
 		return
 	}
 	self, err := os.Executable()
 	if err != nil {
 		return
 	}
-	lastFeishuStart = time.Now()
-	if err := env.RT.Tmux("new-session", "-d", "-s", FeishuListenerSession, self+" plugin run feishu-bridge.listen"); err != nil {
-		fmt.Fprintf(os.Stderr, "[plugind] feishu listener start failed: %v\n", err)
+	lastIMStart = time.Now()
+	if err := env.RT.Tmux("new-session", "-d", "-s", IMListenerSession, self+" plugin run im-bridge.listen"); err != nil {
+		fmt.Fprintf(os.Stderr, "[plugind] im listener start failed: %v\n", err)
 		return
 	}
-	fmt.Printf("[plugind] feishu listener started in session %s\n", FeishuListenerSession)
+	fmt.Printf("[plugind] im listener started in session %s\n", IMListenerSession)
 }
 
 // reconcileStale settles sessions that died while plugind was down. reviewer

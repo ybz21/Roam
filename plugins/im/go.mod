@@ -1,6 +1,6 @@
-// 飞书管家插件——独立 Go 模块,经 replace 编译进 ttmux 二进制(builtin)。
+// IM 桥插件(飞书/钉钉…提供方适配)——独立 Go 模块,经 replace 编译进 ttmux 二进制(builtin)。
 // 只依赖公开 SDK ttmux-cli-go/pkg/plugin/sdk,不触碰宿主 internal。
-module roam-plugins/feishu
+module roam-plugins/im
 
 go 1.22
 

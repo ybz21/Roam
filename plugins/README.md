@@ -4,8 +4,8 @@
 
 ```
 plugins/
-  feishu/            # 飞书管家(常驻 concierge:@机器人 进大脑,复杂活委派 worker)
-    go.mod           #   独立模块 roam-plugins/feishu
+  im/                # IM 机器人(飞书已支持,钉钉等可扩展;常驻 concierge 管家)
+    go.mod           #   独立模块 roam-plugins/im(provider 适配见 im/provider.go)
   reviewmesh/        # 智能互审(空闲自动互审、意见回灌)
     go.mod           #   独立模块 roam-plugins/reviewmesh
   examples/
@@ -16,7 +16,7 @@ plugins/
 
 ## 两种形态
 
-**builtin Go 插件(feishu、reviewmesh)**:每个插件是独立 Go 模块,经 cli 模块的
+**builtin Go 插件(im、reviewmesh)**:每个插件是独立 Go 模块,经 cli 模块的
 `replace` 编译进 ttmux 二进制——开箱即用、默认启用,不走安装流程。约定:
 
 - 只依赖公开 SDK `ttmux-cli-go/pkg/plugin/sdk`,不触碰宿主 internal;
