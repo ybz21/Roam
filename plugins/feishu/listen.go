@@ -25,7 +25,7 @@ import (
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 	larkws "github.com/larksuite/oapi-sdk-go/v3/ws"
 
-	"ttmux-cli-go/internal/plugin/sdk"
+	"ttmux-cli-go/pkg/plugin/sdk"
 )
 
 // listen 命令:前台长连接监听(plugind 会把它托管在 _ttmux-feishu 会话里,

@@ -21,7 +21,7 @@ import (
 	"strings"
 	"time"
 
-	"ttmux-cli-go/internal/plugin/sdk"
+	"ttmux-cli-go/pkg/plugin/sdk"
 )
 
 // ConciergeSession is the resident agent session name(无 _ 前缀:它是用户

@@ -4,10 +4,10 @@
 package builtin
 
 import (
+	"roam-plugins/feishu"
+	"roam-plugins/reviewmesh"
 	"ttmux-cli-go/internal/plugin"
-	"ttmux-cli-go/internal/plugin/builtin/feishu"
-	"ttmux-cli-go/internal/plugin/builtin/reviewmesh"
-	"ttmux-cli-go/internal/plugin/sdk"
+	"ttmux-cli-go/pkg/plugin/sdk"
 )
 
 // Builtin pairs a manifest with its activation entry.
