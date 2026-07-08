@@ -282,6 +282,9 @@ const PreviewIcon = () => (
 const PreviewSideIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M13 4v16" /><path d="M16 10h3" /><path d="M16 14h3" /></svg>
 )
+const ExternalLinkIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6" /><path d="M10 14 21 3" /><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /></svg>
+)
 // 目录展开箭头：展开时旋转 90°
 const Chevron = ({ open }: { open: boolean }) => (
   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
@@ -437,9 +440,9 @@ export function Viewer({
   useEffect(() => {
     if (isImg || isPdf || isOffice) return // 图片/PDF/Office 直接走 raw 或专用面板
     // tab 语境的 markdown 默认进编辑器（源码），点眼睛才切预览；非 tab（有头部）默认渲染。
-    const e = extOf(path)
-    const hasPreview = MD_EXT.includes(e) || e === 'html' || e === 'htm'
-    setData(null); setErr(''); setStale(false); setSource(!!tabbed && hasPreview); setDraft('')
+    // tab 语境的 markdown 默认进编辑器(源码)、点预览才渲染;HTML 则默认直接渲染
+    // (打开网页多是想看效果,不是编辑),两者都可用「源码/渲染」钮切换。
+    setData(null); setErr(''); setStale(false); setSource(!!tabbed && MD_EXT.includes(extOf(path))); setDraft('')
     api('GET', `/file?path=${encodeURIComponent(path)}`).then((r) => { setData(r.data); setDraft(r.data?.content || '') }).catch((e) => setErr(e.message))
   }, [path, isImg, isPdf, isOffice])
 
@@ -528,6 +531,9 @@ export function Viewer({
       )}
       {(isMd || isHtml) && data && !data.binary && (
         <Button size="small" onClick={() => setSource((s) => !s)}>{source ? t('file.rendered') : t('file.source')}</Button>
+      )}
+      {isHtml && (
+        <Button size="small" href={rawUrl} target="_blank" rel="noreferrer">{t('file.openInNewTab')}</Button>
       )}
       {onOpenAgent && (
         <Button size="small" onClick={() => setAgentPick(true)}>{t('file.openInAgent')}</Button>
@@ -626,6 +632,11 @@ export function Viewer({
               {onPreviewToSide && (
                 <Tooltip title={t('file.previewToSide')} placement="bottom">
                   <Button type="text" size="small" onClick={() => onPreviewToSide(path)} style={{ color: 'var(--text-dim)', width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><PreviewSideIcon /></Button>
+                </Tooltip>
+              )}
+              {isHtml && (
+                <Tooltip title={t('file.openInNewTab')} placement="bottom">
+                  <Button type="text" size="small" href={rawUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--text-dim)', width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><ExternalLinkIcon /></Button>
                 </Tooltip>
               )}
             </div>
