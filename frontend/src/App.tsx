@@ -3,7 +3,7 @@
 //   电脑 ≥1200 → 三栏：导航 Sider | 列表(页面) | 终端面板(常驻, 多标签)
 //   平板/手机   → 终端为全屏覆盖层；手机底部 Tab 导航
 // 终端：多标签 / 字号调节 / 复制 / 更多快捷键 / 断线自动重连。
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import {
   Layout, Menu, Button, Card, List, Tag, Form, Input, Select, Segmented, Tabs, Descriptions,
   Statistic, Row, Col, Space, Popconfirm, Empty, Modal, Grid, App as AntApp, Typography, Spin, Tooltip, Dropdown, Checkbox, Progress, AutoComplete, Radio, Switch,
@@ -16,11 +16,13 @@ import CodexChat from './CodexChat'
 import FileBrowser from './FileBrowser'
 import FileWorkspace from './FileWorkspace'
 import FloatingFileDrawer from './FloatingFileDrawer'
-import GitPanel from './GitPanel'
-import PluginsPanel from './PluginsPanel'
-import BrowserView from './BrowserView'
-import PhoneView from './PhoneView'
-import Swarm from './Swarm'
+// 非首屏的重页面（蜂群/Git 面板/浏览器/手机镜像/插件）按路由懒加载：切到对应 tab 才拉 chunk，
+// 缩小首屏 index 块。都渲染在同一个 Suspense 边界内（见 lazyFallback，App 内 page）。
+const GitPanel = lazy(() => import('./GitPanel'))
+const PluginsPanel = lazy(() => import('./PluginsPanel'))
+const BrowserView = lazy(() => import('./BrowserView'))
+const PhoneView = lazy(() => import('./PhoneView'))
+const Swarm = lazy(() => import('./Swarm'))
 import UpdateBanner from './UpdateBanner'
 import { useThemeMode } from './theme'
 import { useI18n } from './i18n'
@@ -399,7 +401,9 @@ export default function App() {
     phone: <PhoneView />,
     about: <AboutPage />,
   }
-  const page = pages[tab] || pages.sessions
+  // 懒加载页面 chunk 拉取期间的兜底：居中转圈（体量小，通常一闪而过）
+  const lazyFallback = <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}><Spin /></div>
+  const page = <Suspense fallback={lazyFallback}>{pages[tab] || pages.sessions}</Suspense>
   // browser 全幅(自带工具栏铺满)；phone 与概览/会话一致走 tt-page（同 16px 留白 + 满高，见 tt-page-phone）。
   const pageNode = tab === 'browser'
     ? page
@@ -1111,7 +1115,9 @@ function TerminalPane(props: {
         </FloatingFileDrawer>
       )}
       <FloatingFileDrawer open={showGit}>
-        <GitPanel dir={cwd} accent="#58a6ff" onClose={() => setShowGit(false)} />
+        <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}><Spin /></div>}>
+          <GitPanel dir={cwd} accent="#58a6ff" onClose={() => setShowGit(false)} />
+        </Suspense>
       </FloatingFileDrawer>
     </div>
   )

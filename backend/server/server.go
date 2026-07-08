@@ -272,16 +272,21 @@ func mountWeb(r *gin.Engine, frontendDir string) {
 			// 否则每次打开页面都对全部 JS/CSS 发条件请求甚至重新下载，首屏明显变慢。
 			c.Header("Cache-Control", "public, max-age=31536000, immutable")
 			c.Header("Vary", "Accept-Encoding")
-			// 构建期预压缩的 .gz 旁路文件（见 frontend/scripts/compress-dist.mjs）：
-			// 客户端支持 gzip 就直接下发，几 MB 的 JS 传输量降到约 1/3。
-			if gz := fp + ".gz"; strings.Contains(c.GetHeader("Accept-Encoding"), "gzip") && fileExists(gz) {
+			// 构建期预压缩的 .br/.gz 旁路文件（见 frontend/scripts/compress-dist.mjs）：
+			// 按 Accept-Encoding 择优直接下发（br 比 gzip 再小 15~20%，浏览器仅 HTTPS 下声明支持），
+			// 几 MB 的 JS 传输量降到约 1/4~1/3。
+			ae := c.GetHeader("Accept-Encoding")
+			for _, enc := range [...]struct{ name, ext string }{{"br", ".br"}, {"gzip", ".gz"}} {
+				if !strings.Contains(ae, enc.name) || !fileExists(fp+enc.ext) {
+					continue
+				}
 				ct := mime.TypeByExtension(filepath.Ext(fp))
 				if ct == "" {
 					ct = "application/octet-stream"
 				}
 				c.Header("Content-Type", ct)
-				c.Header("Content-Encoding", "gzip")
-				c.File(gz)
+				c.Header("Content-Encoding", enc.name)
+				c.File(fp + enc.ext)
 				return
 			}
 			c.File(fp)

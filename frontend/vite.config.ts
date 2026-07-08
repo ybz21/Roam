@@ -20,16 +20,22 @@ export default defineConfig({
           if (id.includes('vite/preload-helper')) return 'vendor'
           if (!id.includes('node_modules')) return
           // Office 预览（docx/xlsx/pptx）很重，仅看 Office 文件时才用 → 独立块（配合 FileBrowser 懒加载按需取）
-          if (/docx-preview|xlsx|pptx|jvmr/.test(id)) return 'office'
+          // jszip 是 docx-preview / pptx-to-html 的专属依赖，一并归入，别落进首屏 vendor。
+          if (/docx-preview|xlsx|pptx|jvmr|jszip/.test(id)) return 'office'
           // Monaco 编辑器（VSCode 内核）很重，仅编辑/查看文本文件才用 → 独立块（配合 CodeEditor 懒加载按需取，不进首屏）
-          if (/monaco-editor/.test(id)) return 'monaco'
+          // state-local 是 @monaco-editor/loader 的专属依赖。
+          if (/monaco-editor|state-local/.test(id)) return 'monaco'
           // Mermaid 图渲染（含 d3 / cytoscape / katex 等专属重依赖）很重，仅渲染含 ```mermaid 的 Markdown 才用
           // → 独立块（Mermaid 组件动态 import 按需取，不进首屏）。共享依赖(dayjs/stylis 等)仍留 vendor。
-          if (/[\\/]node_modules[\\/](mermaid|@mermaid-js|cytoscape[^\\/]*|d3[^\\/]*|dagre-d3-es|katex|khroma|roughjs|@braintree[\\/]sanitize-url|@upsetjs[^\\/]*|internmap|delaunator|robust-predicates|layout-base|cose-base|@iconify[\\/]utils)[\\/]/.test(id)) return 'mermaid'
-          // 注：markdown 渲染链（react-markdown + 庞大的 unified/micromark/hast 生态）不单独拆块——
-          // 它与其它库共享 unist/hast 等工具，强行拆会造成 markdown↔vendor 循环依赖，故整体并入 vendor。
+          // lodash-es / es-toolkit 此仓库里只有 mermaid（经 dagre-d3-es）在用，一并归入。
+          if (/[\\/]node_modules[\\/](mermaid|@mermaid-js|cytoscape[^\\/]*|d3[^\\/]*|dagre-d3-es|katex|khroma|roughjs|@braintree[\\/]sanitize-url|@upsetjs[^\\/]*|internmap|delaunator|robust-predicates|layout-base|cose-base|@iconify[\\/]utils|lodash-es|es-toolkit)[\\/]/.test(id)) return 'mermaid'
+          // Markdown 渲染链（react-markdown + unified/micromark/hast 生态 + highlight.js 语法高亮）
+          // 只有渲染对话文本 / .md 预览才用 → 独立块，配合 Markdown 组件懒加载不进首屏。
+          // （此前并入 vendor 是因 Markdown 组件被静态引用，拆块会与 vendor 互相循环；现已懒加载，依赖树独立。）
+          if (/[\\/]node_modules[\\/](react-markdown|remark-[^\\/]+|rehype-[^\\/]+|micromark[^\\/]*|mdast-[^\\/]+|hast-[^\\/]+|unist-[^\\/]+|unified|vfile[^\\/]*|lowlight|highlight\.js|property-information|space-separated-tokens|comma-separated-tokens|character-entities[^\\/]*|decode-named-character-reference|html-url-attributes|trim-lines|bail|trough|zwitch|longest-streak|markdown-table|ccount|devlop|is-plain-obj|escape-string-regexp|style-to-js|style-to-object|inline-style-parser|estree-util-is-identifier-name|@ungap[\\/]structured-clone)[\\/]/.test(id)) return 'markdown'
           if (id.includes('@xterm')) return 'xterm'
-          if (/hello-pangea/.test(id)) return 'dnd'
+          // react-redux/redux 等是 @hello-pangea/dnd 的专属依赖，跟着 dnd 走。
+          if (/hello-pangea|react-redux|hoist-non-react-statics|[\\/]redux[\\/]|css-box-model|raf-schd|use-memo-one|memoize-one/.test(id)) return 'dnd'
           if (/antd|@ant-design|rc-/.test(id)) return 'antd'
           if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'react'
           return 'vendor'
