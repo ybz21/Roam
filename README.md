@@ -36,14 +36,9 @@ puts terminals, browser, files, tasks, and AI agents into a remotely controllabl
 workspace. What you see is a console; behind it is still the development
 environment and toolchain you already use.
 
-<table>
-  <tr>
-    <td width="70%"><img src="docs/screenshots/overview.en.png" alt="Roam Web console — desktop overview"></td>
-    <td width="30%"><img src="docs/screenshots/mobile-overview.en.png" alt="Roam Web console — mobile overview"></td>
-  </tr>
-</table>
+![Roam — the same development machine, from a laptop and from a phone](docs/screenshots/hero.en.png)
 
-<sub>The same development machine, seen from a laptop and from a phone — sessions, swarms, and live agent state stay in one place.</sub>
+<sub>Remote access to one development machine: the desktop console and the phone show the same sessions, swarms, and live agent state.</sub>
 
 ## Core Capabilities
 
@@ -108,20 +103,11 @@ Check progress on the train, nudge an agent from the couch, take over from a caf
 
 ![Roam on a phone: overview and swarm dashboard](docs/screenshots/mobile-office.en.png)
 
-The overview and the swarm dashboard reflow to a phone (real device screenshots):
-
-<table>
-  <tr>
-    <td width="50%"><img src="docs/screenshots/mobile-overview.en.png" alt="Mobile overview"></td>
-    <td width="50%"><img src="docs/screenshots/mobile-swarm.en.png" alt="Mobile swarm dashboard"></td>
-  </tr>
-</table>
-
 **Talk to an agent from your phone.** Open a session and chat with Claude Code or
 Codex right in the terminal — the mobile key bar and send button let you type
 follow-ups, review the reply, and keep the task moving without a laptop.
 
-<img src="docs/screenshots/mobile-chat.en.png" alt="Chatting with Claude Code on a phone" width="300">
+![Chatting with Claude Code on a phone](docs/screenshots/mobile-chat.en.png)
 
 ## Why It Exists
 
