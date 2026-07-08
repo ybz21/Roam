@@ -53,8 +53,8 @@ bash install.sh
 
 ## 蜂群 swarm 命令参考（实现规格）
 
-> 设计与理由见 [`docs/design/蜂群编排设计.md`](../../docs/design/蜂群编排设计.md) 与
-> [`docs/design/蜂群广场与看板设计.md`](../../docs/design/蜂群广场与看板设计.md)。本节是**落地到 CLI 的命令清单**，
+> 设计与理由见 [`docs/design/swarm/蜂群编排设计.md`](../../docs/design/swarm/蜂群编排设计.md) 与
+> [`docs/design/swarm/蜂群广场与看板设计.md`](../../docs/design/swarm/蜂群广场与看板设计.md)。本节是**落地到 CLI 的命令清单**，
 > 即 `lib/swarm.sh` 要实现的全部子命令；实现后同步 `lib/help.sh` 与 `lib/completion.sh`。
 >
 > 一句话模型：**多个智能体(成员)通过「广场+看板」协作；有且只有一个「主控 master」负责拆任务、派活。**
