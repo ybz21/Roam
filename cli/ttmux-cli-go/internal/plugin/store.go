@@ -157,10 +157,26 @@ func (s *Store) migrateRenamedBuiltins() {
 	_, _ = s.db.Exec(`UPDATE plugin_sessions SET plugin=? WHERE plugin=?`, newID, oldID)
 }
 
-// Remove deletes a plugin's registry row (files handled by the caller).
+// Remove deletes a plugin's registry row plus its owned rows in the session/
+// finding/notification tables —— 卸载后不留孤儿数据(会话表按 plugin、通知表
+// 按 source 归属)。安装文件与 storage 目录由调用方处理(见 uninstall)。
 func (s *Store) Remove(id string) error {
-	_, err := s.db.Exec(`DELETE FROM plugins WHERE id=?`, id)
-	return err
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	for _, q := range []string{
+		`DELETE FROM plugins WHERE id=?`,
+		`DELETE FROM plugin_sessions WHERE plugin=?`,
+		`DELETE FROM plugin_findings WHERE plugin=?`,
+		`DELETE FROM plugin_notifications WHERE source=?`,
+	} {
+		if _, err := tx.Exec(q, id); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // List returns all registered plugins.

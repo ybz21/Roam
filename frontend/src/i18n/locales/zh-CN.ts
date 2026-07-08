@@ -780,7 +780,8 @@ const zhCN = {
   'plugins.installFromPath': '安装',
   'plugins.installedOk': '安装成功(默认未启用,请在列表中启用)',
   'plugins.uninstall': '卸载',
-  'plugins.uninstallConfirm': '卸载该插件?文件将删除,配置与数据保留',
+  'plugins.uninstallConfirm': '卸载该插件?将停掉其会话并删除安装文件',
+  'plugins.uninstallPurge': '同时删除配置与数据(不保留,无法重装复用)',
   'plugins.uninstalled': '插件已卸载',
 }
 

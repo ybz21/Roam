@@ -145,14 +145,24 @@ func setEnabled(env plugin.Env, enabled bool, args []string, out io.Writer) erro
 		return err
 	}
 	defer store.Close()
-	if err := store.SetEnabled(args[0], enabled); err != nil {
+	p, err := store.Get(args[0])
+	if err != nil {
+		return err
+	}
+	if err := store.SetEnabled(p.Manifest.ID, enabled); err != nil {
 		return err
 	}
 	verb := "已禁用"
 	if enabled {
 		verb = "已启用"
+	} else {
+		// 禁用即停掉该插件的常驻监听会话:ensureIMListener 只在启用时拉起,
+		// 不停的话现存监听会一直挂到 24h invoke 上限才退。
+		if p.Manifest.ID == "roam.im-bridge" && env.RT.HasSession(plugin.IMListenerSession) {
+			_ = env.RT.Tmux("kill-session", "-t", "="+plugin.IMListenerSession)
+		}
 	}
-	ui.Ok(out, "插件 %s %s", ui.Bold(args[0]), verb)
+	ui.Ok(out, "插件 %s %s", ui.Bold(p.Manifest.ID), verb)
 	return nil
 }
 
@@ -404,23 +414,29 @@ func install(env plugin.Env, args []string, out io.Writer) error {
 	return nil
 }
 
-// uninstall 移除外部插件(注册行 + 安装文件;storage/config 保留以便重装)。
+// uninstall 移除外部插件:先停掉插件还在跑的会话,再删注册行/孤儿数据行/
+// 安装文件。默认保留 storage/config 以便重装复用;加 --purge 则连同清除。
 func uninstall(env plugin.Env, args []string, out io.Writer) error {
-	if len(args) < 1 {
-		return fmt.Errorf("usage: ttmux plugin uninstall <id>")
+	purge := hasFlag(args, "--purge")
+	id := firstNonFlag(args)
+	if id == "" {
+		return fmt.Errorf("usage: ttmux plugin uninstall <id> [--purge]")
 	}
 	store, err := openStore(env)
 	if err != nil {
 		return err
 	}
 	defer store.Close()
-	p, err := store.Get(args[0])
+	p, err := store.Get(id)
 	if err != nil {
 		return err
 	}
 	if p.Manifest.Runtime.Kind == "builtin" {
 		return fmt.Errorf("built-in plugin %s cannot be uninstalled (disable with: ttmux plugin disable %s)", p.Manifest.ID, p.Manifest.Name)
 	}
+	// 先停掉插件还活着的会话(spawn 的评审会话 + im-bridge 常驻监听会话),
+	// 免得进程继续引用即将被删的插件文件。
+	stopPluginSessions(env, store, p.Manifest.ID)
 	if err := store.Remove(p.Manifest.ID); err != nil {
 		return err
 	}
@@ -429,8 +445,38 @@ func uninstall(env plugin.Env, args []string, out io.Writer) error {
 		_ = os.RemoveAll(filepath.Dir(p.InstallPath)) // <id>/ 整目录(含各版本)
 	}
 	env.Audit(plugin.AuditEntry{Plugin: p.Manifest.ID, Version: p.Manifest.Version, Actor: actor(), Action: "plugin.uninstall", Decision: "allowed"})
-	ui.Ok(out, "已卸载 %s(配置与数据保留在 storage,可重装复用)", ui.Bold(p.Manifest.ID))
+	if purge {
+		_ = os.RemoveAll(env.StorageDir(p.Manifest.ID))
+		ui.Ok(out, "已卸载 %s(含配置与数据,--purge)", ui.Bold(p.Manifest.ID))
+		return nil
+	}
+	ui.Ok(out, "已卸载 %s(配置与数据保留在 storage,可重装复用;彻底清除加 --purge)", ui.Bold(p.Manifest.ID))
 	return nil
+}
+
+// stopPluginSessions kills any live tmux sessions the plugin owns. 用 =name
+// 精确匹配,避免前缀误伤(见 tmux -t 前缀匹配坑)。
+func stopPluginSessions(env plugin.Env, store *plugin.Store, id string) {
+	rows, _ := store.Sessions(id, "")
+	for _, r := range rows {
+		if env.RT.HasSession(r.Session) {
+			_ = env.RT.Tmux("kill-session", "-t", "="+r.Session)
+		}
+	}
+	// im-bridge 的入站监听会话由 plugind 直接拉起,不登记在 plugin_sessions,单独收
+	if id == "roam.im-bridge" && env.RT.HasSession(plugin.IMListenerSession) {
+		_ = env.RT.Tmux("kill-session", "-t", "="+plugin.IMListenerSession)
+	}
+}
+
+// firstNonFlag returns the first positional (non---flag) arg, or "".
+func firstNonFlag(args []string) string {
+	for _, a := range args {
+		if !strings.HasPrefix(a, "--") {
+			return a
+		}
+	}
+	return ""
 }
 
 // track 把一个已存在的会话登记给插件跟踪:plugind 在其退出时向该插件派发
@@ -515,7 +561,7 @@ func help(out io.Writer) {
 
   ls [--json]                         列出插件与其命令
   install <目录|包.tgz>                安装外部插件(node/exec 运行时,默认未启用)
-  uninstall <id>                      卸载外部插件(builtin 不可卸载)
+  uninstall <id> [--purge]            卸载外部插件(builtin 不可卸载;--purge 连配置数据一并清除)
   info <id> [--json]                  插件详情(manifest、权限、状态)
   enable|disable <id>                 启用 / 禁用插件
   run <插件>.<命令> [--key value ...]  调用插件命令(如 review-mesh.review)
