@@ -36,26 +36,86 @@ puts terminals, browser, files, tasks, and AI agents into a remotely controllabl
 workspace. What you see is a console; behind it is still the development
 environment and toolchain you already use.
 
-![Roam Web console](docs/roam-web-console.png)
+<table>
+  <tr>
+    <td width="70%"><img src="docs/screenshots/overview.en.png" alt="Roam Web console — desktop overview"></td>
+    <td width="30%"><img src="docs/screenshots/mobile-overview.en.png" alt="Roam Web console — mobile overview"></td>
+  </tr>
+</table>
+
+<sub>The same development machine, seen from a laptop and from a phone — sessions, swarms, and live agent state stay in one place.</sub>
 
 ## Core Capabilities
 
-- **Development from any device**: phones, tablets, and laptops can all connect
-  to the same development machine to inspect terminals, logs, tasks, and agent
-  progress.
-- **Context stays intact**: sessions run on the development machine, so you can
-  reconnect to the original working scene after network drops, browser closes,
-  or device changes.
-- **Long tasks continue**: builds, tests, migrations, debugging, log watching,
-  and agent execution can keep running in the background.
-- **Agents are easier to operate**: Claude Code, Codex, and similar tools can be
-  named, grouped, tracked, collected, and given follow-up instructions.
-- **Swarm connects complex tasks**: split one large goal across members, set
-  dependencies, and drive collaboration through a shared board and message feed.
-- **The browser also lives on the development machine**: remote UI debugging,
-  login state, screenshots, and reproduction flows stay in the same workspace.
-- **Built for people and agents together**: humans can take over from the Web
-  console; agents can read state, collect output, and keep pushing work forward.
+- **Close the lid, the work keeps running**: terminals, dev servers, tests, and
+  agent conversations live on the development machine — a dropped network or a
+  shut laptop never kills the scene.
+- **Any device is the same desk**: open the Web console from a phone, tablet, or
+  laptop and land back in the exact terminal you left — zero install, no native
+  app to update.
+- **Long tasks don't need you watching**: builds, migrations, log tailing, and
+  agent runs keep going in the background; check back from anywhere to see where
+  they got to.
+- **Agents you can actually manage**: name, group, and track Claude Code, Codex,
+  and others, collect their output, and drop in follow-up instructions without
+  losing context.
+- **Swarm splits one goal across many hands**: hand the API to one member, the
+  frontend to another, tests to a third — a shared board and message feed keep
+  them in sync, and dependencies unlock the next step automatically.
+- **The debugging browser lives on the dev machine too**: login state,
+  screenshots, and repro flows stay put, so remote UI debugging picks up right
+  where it was.
+- **Built for humans and agents to share one workspace**: take over from the Web
+  console by hand, or let agents read state, collect output, and keep pushing.
+
+## Screenshots
+
+**Every session and agent in one list.** Filter by Claude / Codex / swarm or by
+state (waiting, idle), see which agents need attention, and jump into any of them
+as a terminal.
+
+![Sessions list with agent tags and filters](docs/screenshots/sessions.en.png)
+
+**One view for the agent, its terminal, and the file tree.** Watch Claude Code or
+Codex work, browse and open files beside it, and type on the mobile key bar when
+you're on a phone.
+
+![Terminal with a running agent and the file tree](docs/screenshots/terminal.en.png)
+
+**Swarm, at a glance.** A live dependency topology of every member, a shared
+collaboration wall (plaza), and a drag-to-flow board — so a complex goal split
+across agents stays legible.
+
+![Swarm dashboard: topology, plaza, and board](docs/screenshots/swarm.en.png)
+
+**Drive a real browser from the console.** The dev machine's Chrome is mirrored
+into the console — open tabs, navigate, click, and type. Debug a web app, keep a
+login session, or let an agent reproduce a flow, all on the development machine.
+
+![Browser mirror: a live Chrome tab driven from the console](docs/screenshots/browser.en.png)
+
+**Control a real phone from the console.** Mirror an Android device over adb — the
+live screen, streaming stats, and remote nav bar — to reproduce mobile flows or
+check an app right next to your terminals.
+
+![Phone mirror: a live Android device inside the console](docs/screenshots/phone.en.png)
+
+## Mobile: work from anywhere
+
+**Your whole workspace fits in a phone.** Open the console in any mobile browser —
+no app to install — and land back in the same sessions, swarms, and agents.
+Check progress on the train, nudge an agent from the couch, take over from a café.
+
+![Roam on a phone: overview and swarm dashboard](docs/screenshots/mobile-office.en.png)
+
+The overview and the swarm dashboard reflow to a phone (real device screenshots):
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/mobile-overview.en.png" alt="Mobile overview"></td>
+    <td width="50%"><img src="docs/screenshots/mobile-swarm.en.png" alt="Mobile swarm dashboard"></td>
+  </tr>
+</table>
 
 ## Why It Exists
 
