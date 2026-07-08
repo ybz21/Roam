@@ -282,6 +282,9 @@ const PreviewIcon = () => (
 const PreviewSideIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M13 4v16" /><path d="M16 10h3" /><path d="M16 14h3" /></svg>
 )
+const ExternalLinkIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6" /><path d="M10 14 21 3" /><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /></svg>
+)
 // 目录展开箭头：展开时旋转 90°
 const Chevron = ({ open }: { open: boolean }) => (
   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
@@ -387,6 +390,7 @@ export function Viewer({
   const ext = extOf(path)
   const isImg = IMG_EXT.includes(ext)
   const isMd = MD_EXT.includes(ext)
+  const isHtml = ext === 'html' || ext === 'htm'
   const isPdf = ext === 'pdf'
   const isOffice = ['doc', 'docx', 'odt', 'rtf', 'xls', 'xlsx', 'xlsm', 'ods', 'ppt', 'pptx', 'odp'].includes(ext)
   const isDocxPreview = ext === 'docx'
@@ -436,6 +440,8 @@ export function Viewer({
   useEffect(() => {
     if (isImg || isPdf || isOffice) return // 图片/PDF/Office 直接走 raw 或专用面板
     // tab 语境的 markdown 默认进编辑器（源码），点眼睛才切预览；非 tab（有头部）默认渲染。
+    // tab 语境的 markdown 默认进编辑器(源码)、点预览才渲染;HTML 则默认直接渲染
+    // (打开网页多是想看效果,不是编辑),两者都可用「源码/渲染」钮切换。
     setData(null); setErr(''); setStale(false); setSource(!!tabbed && MD_EXT.includes(extOf(path))); setDraft('')
     api('GET', `/file?path=${encodeURIComponent(path)}`).then((r) => { setData(r.data); setDraft(r.data?.content || '') }).catch((e) => setErr(e.message))
   }, [path, isImg, isPdf, isOffice])
@@ -523,8 +529,11 @@ export function Viewer({
       {editable && (
         <Button size="small" type="primary" ghost={!dirty} disabled={!dirty || saving} loading={saving} onClick={save}>{t('file.save')}</Button>
       )}
-      {isMd && data && !data.binary && (
+      {(isMd || isHtml) && data && !data.binary && (
         <Button size="small" onClick={() => setSource((s) => !s)}>{source ? t('file.rendered') : t('file.source')}</Button>
+      )}
+      {isHtml && (
+        <Button size="small" href={rawUrl} target="_blank" rel="noreferrer">{t('file.openInNewTab')}</Button>
       )}
       {onOpenAgent && (
         <Button size="small" onClick={() => setAgentPick(true)}>{t('file.openInAgent')}</Button>
@@ -575,6 +584,10 @@ export function Viewer({
                 ? csvTable(data.content, ext === 'tsv' ? '\t' : ',')
                 : isMd && (!source || forcePreview)
                   ? <div style={{ height: previewHeight, overflow: 'auto', padding: forcePreview ? '0 8px' : undefined }}><Markdown accent={accent} resolveHref={resolvePreviewHref} onLinkClick={openPreviewLink}>{data.content}</Markdown></div>
+                  : isHtml && (!source || forcePreview)
+                    // HTML 预览：不在前端拼 DOM，直接 iframe 后端服务代理(/api/file/raw 以 text/html 直出)，
+                    // 脚本/样式按原样运行。key 绑 mtime → 文件被外部(cc/codex)改动时 iframe 自动重载。
+                    ? <iframe key={data.mtime} title={name} src={rawUrl} style={{ display: 'block', width: '100%', height: previewHeight, border: 0, background: '#fff' }} />
                   : (
                     // 文本/代码/JSON/Markdown(源码) → Monaco 编辑器（行号、语法高亮、可编辑；截断的大文件只读）。
                     // tab 语境下全屏无边框，背景由 CodeEditor 统一成应用底色。
@@ -611,7 +624,7 @@ export function Viewer({
         <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', padding: tabbed ? 0 : 12, position: 'relative' }}>
           <ErrorBoundary>{bodyNode}</ErrorBoundary>
           {/* tab 语境无头部：markdown 右上角 VSCode 式预览按钮（切换预览 / 侧栏打开预览） */}
-          {tabbed && isMd && !forcePreview && data && !data.binary && (
+          {tabbed && (isMd || isHtml) && !forcePreview && data && !data.binary && (
             <div style={{ position: 'absolute', top: 6, right: 8, zIndex: 10, display: 'inline-flex', gap: 2, background: 'color-mix(in srgb, var(--bg-base) 82%, transparent)', borderRadius: 8, padding: 2 }}>
               <Tooltip title={source ? t('file.preview') : t('file.source')} placement="bottom">
                 <Button type="text" size="small" onClick={() => setSource((s) => !s)} style={{ color: !source ? accent : 'var(--text-dim)', width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><PreviewIcon /></Button>
@@ -619,6 +632,11 @@ export function Viewer({
               {onPreviewToSide && (
                 <Tooltip title={t('file.previewToSide')} placement="bottom">
                   <Button type="text" size="small" onClick={() => onPreviewToSide(path)} style={{ color: 'var(--text-dim)', width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><PreviewSideIcon /></Button>
+                </Tooltip>
+              )}
+              {isHtml && (
+                <Tooltip title={t('file.openInNewTab')} placement="bottom">
+                  <Button type="text" size="small" href={rawUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--text-dim)', width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><ExternalLinkIcon /></Button>
                 </Tooltip>
               )}
             </div>

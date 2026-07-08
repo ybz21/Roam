@@ -201,6 +201,7 @@ const zhCN = {
   'file.copyPath': '复制路径',
   'file.download': '下载',
   'file.raw': '原始',
+  'file.openInNewTab': '新标签打开',
   'file.closePreview': '关闭预览',
   'file.pdfPreview': 'PDF 内嵌预览',
   'file.wordPreview': 'Word 预览',

@@ -201,6 +201,7 @@ const enUS = {
   'file.copyPath': 'Copy path',
   'file.download': 'Download',
   'file.raw': 'Raw',
+  'file.openInNewTab': 'Open in new tab',
   'file.closePreview': 'Close preview',
   'file.pdfPreview': 'Embedded PDF preview',
   'file.wordPreview': 'Word preview',
