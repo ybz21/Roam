@@ -139,7 +139,7 @@ activate(ctx => {
 | MCP 桥 | reviewer agent 调 `createFinding` 写结构化结果,不靠解析聊天文本 |
 | 审计 | 谁发起 review、跑了哪些命令、哪些 finding 阻塞,全程可查 |
 
-> 本故事的完整产品与算法设计见 [../智能评审插件设计.md](../智能评审插件设计.md);该文档中的 manifest 与存储设计需按本目录规范对齐(finding 走平台 Finding API,而非插件私有表)。
+> 本故事的完整产品与算法设计见 [智能评审插件设计.md](智能评审插件设计.md);该文档中的 manifest 与存储设计需按本目录规范对齐(finding 走平台 Finding API,而非插件私有表)。
 
 ---
 

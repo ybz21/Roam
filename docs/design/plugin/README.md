@@ -27,7 +27,7 @@
 
 相关文档:
 
-- [../智能评审插件设计.md](../智能评审插件设计.md) — 插件机制的第一个消费者;其 manifest 与 finding 模型以本目录 [05-manifest.md](05-manifest.md) / [06-platform-api.md](06-platform-api.md) 为准对齐。
+- [智能评审插件设计.md](智能评审插件设计.md) — 插件机制的第一个消费者;其 manifest 与 finding 模型以本目录 [05-manifest.md](05-manifest.md) / [06-platform-api.md](06-platform-api.md) 为准对齐。
 
 ## 一页纸架构
 
