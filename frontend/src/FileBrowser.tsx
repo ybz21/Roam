@@ -387,6 +387,7 @@ export function Viewer({
   const ext = extOf(path)
   const isImg = IMG_EXT.includes(ext)
   const isMd = MD_EXT.includes(ext)
+  const isHtml = ext === 'html' || ext === 'htm'
   const isPdf = ext === 'pdf'
   const isOffice = ['doc', 'docx', 'odt', 'rtf', 'xls', 'xlsx', 'xlsm', 'ods', 'ppt', 'pptx', 'odp'].includes(ext)
   const isDocxPreview = ext === 'docx'
@@ -436,7 +437,9 @@ export function Viewer({
   useEffect(() => {
     if (isImg || isPdf || isOffice) return // 图片/PDF/Office 直接走 raw 或专用面板
     // tab 语境的 markdown 默认进编辑器（源码），点眼睛才切预览；非 tab（有头部）默认渲染。
-    setData(null); setErr(''); setStale(false); setSource(!!tabbed && MD_EXT.includes(extOf(path))); setDraft('')
+    const e = extOf(path)
+    const hasPreview = MD_EXT.includes(e) || e === 'html' || e === 'htm'
+    setData(null); setErr(''); setStale(false); setSource(!!tabbed && hasPreview); setDraft('')
     api('GET', `/file?path=${encodeURIComponent(path)}`).then((r) => { setData(r.data); setDraft(r.data?.content || '') }).catch((e) => setErr(e.message))
   }, [path, isImg, isPdf, isOffice])
 
@@ -523,7 +526,7 @@ export function Viewer({
       {editable && (
         <Button size="small" type="primary" ghost={!dirty} disabled={!dirty || saving} loading={saving} onClick={save}>{t('file.save')}</Button>
       )}
-      {isMd && data && !data.binary && (
+      {(isMd || isHtml) && data && !data.binary && (
         <Button size="small" onClick={() => setSource((s) => !s)}>{source ? t('file.rendered') : t('file.source')}</Button>
       )}
       {onOpenAgent && (
@@ -575,6 +578,10 @@ export function Viewer({
                 ? csvTable(data.content, ext === 'tsv' ? '\t' : ',')
                 : isMd && (!source || forcePreview)
                   ? <div style={{ height: previewHeight, overflow: 'auto', padding: forcePreview ? '0 8px' : undefined }}><Markdown accent={accent} resolveHref={resolvePreviewHref} onLinkClick={openPreviewLink}>{data.content}</Markdown></div>
+                  : isHtml && (!source || forcePreview)
+                    // HTML 预览：不在前端拼 DOM，直接 iframe 后端服务代理(/api/file/raw 以 text/html 直出)，
+                    // 脚本/样式按原样运行。key 绑 mtime → 文件被外部(cc/codex)改动时 iframe 自动重载。
+                    ? <iframe key={data.mtime} title={name} src={rawUrl} style={{ display: 'block', width: '100%', height: previewHeight, border: 0, background: '#fff' }} />
                   : (
                     // 文本/代码/JSON/Markdown(源码) → Monaco 编辑器（行号、语法高亮、可编辑；截断的大文件只读）。
                     // tab 语境下全屏无边框，背景由 CodeEditor 统一成应用底色。
@@ -611,7 +618,7 @@ export function Viewer({
         <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', padding: tabbed ? 0 : 12, position: 'relative' }}>
           <ErrorBoundary>{bodyNode}</ErrorBoundary>
           {/* tab 语境无头部：markdown 右上角 VSCode 式预览按钮（切换预览 / 侧栏打开预览） */}
-          {tabbed && isMd && !forcePreview && data && !data.binary && (
+          {tabbed && (isMd || isHtml) && !forcePreview && data && !data.binary && (
             <div style={{ position: 'absolute', top: 6, right: 8, zIndex: 10, display: 'inline-flex', gap: 2, background: 'color-mix(in srgb, var(--bg-base) 82%, transparent)', borderRadius: 8, padding: 2 }}>
               <Tooltip title={source ? t('file.preview') : t('file.source')} placement="bottom">
                 <Button type="text" size="small" onClick={() => setSource((s) => !s)} style={{ color: !source ? accent : 'var(--text-dim)', width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><PreviewIcon /></Button>
