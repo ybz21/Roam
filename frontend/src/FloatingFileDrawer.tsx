@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-export default function FloatingFileDrawer({ open, children }: { open: boolean; children: ReactNode }) {
+export default function FloatingFileDrawer({ open, children, right = 0 }: { open: boolean; children: ReactNode; right?: number | string }) {
   if (!open) return null
   return (
     <div
@@ -8,7 +8,7 @@ export default function FloatingFileDrawer({ open, children }: { open: boolean; 
       style={{
         position: 'fixed',
         top: 0,
-        right: 0,
+        right,
         bottom: 0,
         height: '100dvh',
         zIndex: 1200,

@@ -702,9 +702,10 @@ function TerminalPane(props: {
   const [showFiles, setShowFiles] = useState(fileDock === 'left')
   const [showGit, setShowGit] = useState(false)
   const [cwd, setCwd] = useState('')
-  // 文件栏与 Git 面板共用右侧抽屉位，互斥显示。
-  const toggleFiles = () => setShowFiles((s) => { if (!s) setShowGit(false); return !s })
-  const toggleGit = () => setShowGit((s) => { if (!s) setShowFiles(false); return !s })
+  // 文件栏与 Git 面板可并存：左侧停靠时文件走左栏、Git 走右抽屉，天然并列；
+  // 右侧停靠时两者都是右抽屉，Git 抽屉在文件也开着时向左让位（见下方 right 偏移），并排显示而非互相覆盖。
+  const toggleFiles = () => setShowFiles((s) => !s)
+  const toggleGit = () => setShowGit((s) => !s)
 
   // 从文件/Git 面板把文件拖到终端 → 插入为 @绝对路径。
   const [dragOver, setDragOver] = useState(false)
@@ -1124,7 +1125,7 @@ function TerminalPane(props: {
           <FileBrowser dir={cwd} accent="#58a6ff" onClose={() => setShowFiles(false)} />
         </FloatingFileDrawer>
       )}
-      <FloatingFileDrawer open={showGit}>
+      <FloatingFileDrawer open={showGit} right={fileDock === 'right' && showFiles ? 'min(420px, 92vw)' : 0}>
         <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}><Spin /></div>}>
           <GitPanel dir={cwd} accent="#58a6ff" onClose={() => setShowGit(false)} />
         </Suspense>
