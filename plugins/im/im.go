@@ -1,30 +1,34 @@
-// Package feishu is the builtin 双向飞书桥(设计见 docs/design/plugin/
-// 03-stories.md 故事三与 08-roadmap 阶段 3):基于飞书自建应用——
+// Package im is the builtin 双向 IM 桥(设计见 docs/design/plugin/
+// 10-feishu-concierge.md;08-roadmap 阶段 3):
 //
-//   - 入站:长连接订阅 @机器人 消息,把任务派给交互式 Agent 会话,由 Agent
-//     经 feishu-bridge.send 主导对话(汇报/提问/总结),用户回复自动转回会话
-//     (见 listen.go);
+//   - 入站:provider(飞书/钉钉…,见 provider.go)长连接收 @机器人 消息,
+//     进常驻管家会话(concierge.go),由它自答或委派 worker(delegate.go);
 //   - 出站:作为 notification sink 把 Roam 通知(互审结果、告警)渲染成卡片
 //     发到「绑定通知」记下的会话。
-package feishu
+//
+// 本文件是提供方无关的插件骨架:Activate 注册、事件收尾、通知 sink。
+package im
 
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
 
-	"ttmux-cli-go/internal/plugin/sdk"
+	"ttmux-cli-go/pkg/plugin/sdk"
 )
 
 // Activate registers commands + the notification sink handler.
 func Activate(ctx *sdk.Ctx) sdk.Plugin {
 	return sdk.Plugin{
 		Commands: map[string]sdk.CommandHandler{
-			"test":   test,
-			"listen": listen,
-			"send":   send,
+			"test":       test,
+			"listen":     listen,
+			"send":       send,
+			"bind-token": bindToken,
+			"delegate":   delegate,
 		},
 		Events: map[string]sdk.EventHandler{
 			"notification": onNotification,
@@ -43,12 +47,27 @@ func onAgentExited(ctx *sdk.Ctx, payload json.RawMessage) error {
 	if err := json.Unmarshal(payload, &ev); err != nil {
 		return err
 	}
-	chatID := ev.Labels["feishu:chat"]
+	if ev.Labels["role"] == "concierge" {
+		// 管家消亡:listener 的投递环节会按需重建,这里无事可做
+		ctx.Logf("concierge session %s exited; listener will respawn on demand", ev.Session)
+		return nil
+	}
+	if ev.Labels["im:worker"] == "1" {
+		// delegate 出去的 worker 结束:只写 inbox(单一投递者原则,
+		// 由 listener 的 delivery loop 投给管家),绝不直接回用户
+		msg := fmt.Sprintf("worker %s 已结束。验收:读 %s 与 `ttmux capture %s`,通过后向用户汇报,不通过带原因重派",
+			ev.Session, filepath.Join(ev.Labels["im:task_dir"], "RESULT.md"), ev.Session)
+		if _, err := appendInbox(ctx, inboxItem{Type: "system", Chat: ev.Labels["im:chat"], Text: msg}); err != nil {
+			ctx.Logf("worker-exit inbox append failed: %v", err)
+		}
+		return nil
+	}
+	chatID := ev.Labels["im:chat"]
 	if chatID == "" {
 		return nil // 不是 feishu 派的活
 	}
-	if ev.Labels["feishu:mode"] == "interactive" {
-		// 交互模式:总结由 Agent 自己经 feishu-bridge.send 发,这里只补一条
+	if ev.Labels["im:mode"] == "interactive" {
+		// 交互模式:总结由 Agent 自己经 im-bridge.send 发,这里只补一条
 		// 会话关闭的确认(TUI 画面日志不适合直接进卡片)
 		replyText(ctx, chatID, "✅ 任务会话 "+ev.Session+" 已结束。")
 		return nil
@@ -62,7 +81,7 @@ func onAgentExited(ctx *sdk.Ctx, payload json.RawMessage) error {
 		Title:    "任务完成: " + ev.Session,
 		Severity: "info",
 		Body:     tailForCard(logText, 1200),
-		Source:   "feishu-bridge.task",
+		Source:   "im-bridge.task",
 	})
 	return nil
 }
@@ -107,21 +126,21 @@ func test(ctx *sdk.Ctx, args map[string]string) (any, error) {
 	c := card{
 		Title:    title,
 		Severity: "info",
-		Body:     "这是一条来自 roam.feishu-bridge 插件的测试卡片。\n发送时间: " + time.Now().Format("2006-01-02 15:04:05"),
-		Source:   "feishu-bridge.test",
+		Body:     "这是一条来自 roam.im-bridge 插件的测试卡片。\n发送时间: " + time.Now().Format("2006-01-02 15:04:05"),
+		Source:   "im-bridge.test",
 	}
 	chat := notifyChat(ctx)
 	if chat == "" {
 		return nil, fmt.Errorf("未绑定通知会话:群里 @机器人 说「绑定通知」,或配置 notify_chat")
 	}
-	content, err := json.Marshal(cardContent(c))
+	prov, err := activeProvider(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if err := sendAppMessage(ctx, chat, "interactive", string(content)); err != nil {
+	if err := prov.SendCard(ctx, chat, c); err != nil {
 		return nil, err
 	}
-	return map[string]string{"sent": "ok", "chat": chat}, nil
+	return map[string]string{"sent": "ok", "chat": chat, "provider": prov.Name()}, nil
 }
 
 func onNotification(ctx *sdk.Ctx, payload json.RawMessage) error {
@@ -159,36 +178,4 @@ func notifyChat(ctx *sdk.Ctx) string {
 	}
 	v, _ := ctx.StorageGet("notify_chat")
 	return v
-}
-
-type card struct {
-	Title    string
-	Severity string
-	Body     string
-	Source   string
-}
-
-// cardContent renders the shared interactive-card JSON(webhook 出站与应用
-// 机器人回复共用一套排版)。
-func cardContent(c card) map[string]any {
-	template := map[string]string{"high": "red", "warning": "orange", "info": "blue"}[c.Severity]
-	if template == "" {
-		template = "blue"
-	}
-	body := c.Body
-	if body == "" {
-		body = "(无正文)"
-	}
-	return map[string]any{
-		"header": map[string]any{
-			"title":    map[string]any{"tag": "plain_text", "content": c.Title},
-			"template": template,
-		},
-		"elements": []any{
-			map[string]any{"tag": "markdown", "content": body},
-			map[string]any{"tag": "note", "elements": []any{
-				map[string]any{"tag": "plain_text", "content": "Roam · " + c.Source},
-			}},
-		},
-	}
 }

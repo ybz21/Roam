@@ -142,6 +142,21 @@ func (s *Store) InstallExternal(m Manifest, installPath string) error {
 	return err
 }
 
+// migrateRenamedBuiltins settles builtin plugin renames(0.4.0 起
+// roam.feishu-bridge 通用化为 roam.im-bridge):存储目录整体搬迁(config/
+// kv 原样保留),注册行与会话归属改名,旧 id 不再残留。幂等,可反复调用。
+func (s *Store) migrateRenamedBuiltins() {
+	const oldID, newID = "roam.feishu-bridge", "roam.im-bridge"
+	oldDir, newDir := s.env.StorageDir(oldID), s.env.StorageDir(newID)
+	if _, err := os.Stat(oldDir); err == nil {
+		if _, err := os.Stat(newDir); os.IsNotExist(err) {
+			_ = os.Rename(oldDir, newDir)
+		}
+	}
+	_, _ = s.db.Exec(`DELETE FROM plugins WHERE id=?`, oldID)
+	_, _ = s.db.Exec(`UPDATE plugin_sessions SET plugin=? WHERE plugin=?`, newID, oldID)
+}
+
 // Remove deletes a plugin's registry row (files handled by the caller).
 func (s *Store) Remove(id string) error {
 	_, err := s.db.Exec(`DELETE FROM plugins WHERE id=?`, id)

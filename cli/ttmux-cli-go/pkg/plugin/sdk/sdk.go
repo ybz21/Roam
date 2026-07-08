@@ -42,6 +42,9 @@ func (c *Ctx) Logf(format string, args ...any) {
 }
 
 func (c *Ctx) call(method string, params any, out any, timeout time.Duration) error {
+	if c.conn == nil {
+		return fmt.Errorf("sdk: no host connection (offline ctx)")
+	}
 	raw, err := c.conn.Call(method, params, timeout)
 	if err != nil {
 		return err
@@ -134,6 +137,12 @@ func (c *Ctx) SessionAlive(name string) bool {
 		return false
 	}
 	return out.Alive
+}
+
+// SessionKill terminates a session owned by this plugin(spawn/track 登记过
+// 的才允许;管家 graceful recycle 的兜底手段)。
+func (c *Ctx) SessionKill(name string) error {
+	return c.call("roam/session.kill", map[string]string{"name": name}, nil, 15*time.Second)
 }
 
 // SessionCapture returns the last tailLines of the session pane.

@@ -14,9 +14,9 @@ import (
 
 	"ttmux-cli-go/internal/plugin"
 	"ttmux-cli-go/internal/plugin/builtin"
-	"ttmux-cli-go/internal/plugin/sdk"
 	"ttmux-cli-go/internal/runtime"
 	"ttmux-cli-go/internal/ui"
+	"ttmux-cli-go/pkg/plugin/sdk"
 )
 
 // Run dispatches `ttmux plugin <subcommand>`.
@@ -529,8 +529,8 @@ func help(out io.Writer) {
 
 示例:
   ttmux plugin run review-mesh.review              # 互审当前工作区变更
-  ttmux plugin config feishu-bridge set webhook <url>
-  ttmux plugin run feishu-bridge.test              # 发送飞书测试卡片
+  ttmux plugin config im-bridge set app_id <cli_xxx>
+  ttmux plugin run im-bridge.test                  # 发送 IM 测试卡片
 `)
 }
 
