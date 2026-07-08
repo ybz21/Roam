@@ -3,7 +3,7 @@
 // 数据全部走 backend 薄封装 REST(exec ttmux plugin ... --json),前端不感知 plugind。
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  Alert, Button, Card, Descriptions, Divider, Empty, Form, Input, List, Modal, Popconfirm, Select,
+  Alert, Button, Card, Checkbox, Descriptions, Divider, Empty, Form, Input, List, Modal, Popconfirm, Select,
   Space, Spin, Switch, Table, Tabs, Tag, Tooltip, Typography, Upload, message,
 } from 'antd'
 import { api } from './api'
@@ -224,9 +224,10 @@ function PluginDetail({ plugin, locale, t, onChanged }: {
   const m = plugin.manifest
   const fields = m.contributes?.configFields || []
   const commands = m.contributes?.commands || []
+  const [purge, setPurge] = useState(false)
   const uninstall = async () => {
     try {
-      await api('DELETE', `/plugins/${encodeURIComponent(m.id)}`)
+      await api('DELETE', `/plugins/${encodeURIComponent(m.id)}${purge ? '?purge=1' : ''}`)
       message.success(t('plugins.uninstalled'))
       onChanged()
     } catch (e: any) {
@@ -239,7 +240,16 @@ function PluginDetail({ plugin, locale, t, onChanged }: {
         <Tag color={plugin.enabled ? 'green' : undefined}>{t(plugin.enabled ? 'plugins.stateEnabled' : 'plugins.stateDisabled')}</Tag>
         <Tag>{m.runtime?.kind || 'builtin'}</Tag></Space>}
       extra={m.runtime?.kind !== 'builtin' && (
-        <Popconfirm title={t('plugins.uninstallConfirm')} onConfirm={uninstall}>
+        <Popconfirm
+          title={t('plugins.uninstallConfirm')}
+          description={
+            <Checkbox checked={purge} onChange={(e) => setPurge(e.target.checked)}>
+              {t('plugins.uninstallPurge')}
+            </Checkbox>
+          }
+          onConfirm={uninstall}
+          onOpenChange={(open) => { if (!open) setPurge(false) }}
+        >
           <Button size="small" danger>{t('plugins.uninstall')}</Button>
         </Popconfirm>
       )}
