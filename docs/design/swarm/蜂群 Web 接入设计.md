@@ -23,7 +23,7 @@
 
 > **一个蜂群 = 一个 master cc 带着一群 member cc 干活。每个 cc 都是一个 tmux 会话。**
 
-- **master**：会话名 `cc-<群>`，加载了 [cc-swarm skill](../skills/cc-swarm/SKILL.md) 的 Claude Code，负责拆活/派活/巡检/验收。
+- **master**：会话名 `cc-<群>`，加载了 [cc-swarm skill](../../../skills/cc-swarm/SKILL.md) 的 Claude Code，负责拆活/派活/巡检/验收。
 - **member**：会话名 `<群>-<成员>`，各自一个 Claude Code（`agent` 类型），干自己名下的活，经广场/看板协作。
 - **每个节点都能「一键进入」**：web 上点任一节点 → 把该 cc 会话挂进右侧终端栏（`openTerm`），直接看/操作它的终端。
 - **「任务」概念被「蜂群」取代**：底层任务组(`group`/`spawn`)仍是蜂群成员的运行机制，但 web 顶层不再暴露「任务」入口——
@@ -120,7 +120,7 @@ swarm task rm     <群> <卡id>
 
 **`ttmux swarm new <群>` 创建时自动拉起一个 master cc 会话**（不再要求事后 `swarm adopt`）：
 - 复用既有 `_swarm_adopt`（`swarm.sh`）逻辑：建会话 `cc-<群>` → 注入环境 → `claude '/cc-swarm --swarm <群>'`。
-  `/cc-swarm --swarm` 即加载 [cc-swarm SKILL.md](../skills/cc-swarm/SKILL.md)，进入「蜂群作用域监护」。
+  `/cc-swarm --swarm` 即加载 [cc-swarm SKILL.md](../../../skills/cc-swarm/SKILL.md)，进入「蜂群作用域监护」。
 - **master 已被告知如何操作 CLI**：SKILL.md 的「广场 + 看板」一节（L84–108）已写明
   `swarm task add/assign/move/done`、`swarm say/feed/board`、`swarm done/activate` 等命令与协作纪律——
   建群即把这套操作手册随 skill 一起加载给 master。
