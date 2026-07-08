@@ -26,11 +26,11 @@ require (
 )
 
 require (
-	roam-plugins/feishu v0.0.0
+	roam-plugins/im v0.0.0
 	roam-plugins/reviewmesh v0.0.0
 )
 
 replace (
-	roam-plugins/feishu => ../../plugins/feishu
+	roam-plugins/im => ../../plugins/im
 	roam-plugins/reviewmesh => ../../plugins/reviewmesh
 )

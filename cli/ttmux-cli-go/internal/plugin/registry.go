@@ -11,6 +11,7 @@ func RegisterBuiltinManifest(m Manifest) {
 
 // SyncBuiltins upserts all registered builtin manifests into the registry.
 func SyncBuiltins(s *Store) error {
+	s.migrateRenamedBuiltins()
 	for _, m := range builtinManifests {
 		if err := m.Validate(); err != nil {
 			return err
