@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"ttmux-cli-go/internal/plugin/sdk"
+	"ttmux-cli-go/pkg/plugin/sdk"
 )
 
 func testCtx(t *testing.T) *sdk.Ctx {

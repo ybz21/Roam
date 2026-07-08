@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"ttmux-cli-go/internal/plugin/sdk"
+	"ttmux-cli-go/pkg/plugin/sdk"
 )
 
 // Activate registers commands + the notification sink handler.

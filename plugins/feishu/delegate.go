@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"ttmux-cli-go/internal/plugin/sdk"
+	"ttmux-cli-go/pkg/plugin/sdk"
 )
 
 func delegate(ctx *sdk.Ctx, args map[string]string) (any, error) {

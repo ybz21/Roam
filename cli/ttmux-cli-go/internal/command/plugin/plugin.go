@@ -14,9 +14,9 @@ import (
 
 	"ttmux-cli-go/internal/plugin"
 	"ttmux-cli-go/internal/plugin/builtin"
-	"ttmux-cli-go/internal/plugin/sdk"
 	"ttmux-cli-go/internal/runtime"
 	"ttmux-cli-go/internal/ui"
+	"ttmux-cli-go/pkg/plugin/sdk"
 )
 
 // Run dispatches `ttmux plugin <subcommand>`.
