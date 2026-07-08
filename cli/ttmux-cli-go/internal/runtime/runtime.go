@@ -136,6 +136,32 @@ func (r Runtime) InjectEnv(sess string) {
 	_ = r.Tmux("send-keys", "-t", sess, "clear", "C-m")
 }
 
+// SendPromptSubmit pastes a (possibly multi-line) prompt into a session and
+// submits it. TUI agents (Claude/Codex) treat a trailing C-m inside send-keys
+// as an input newline rather than a submit, so a naive `send-keys text C-m`
+// only types the text without sending it. Instead we drop the text via a paste
+// buffer (no embedded submit) then press Enter separately; a second Enter after
+// a short delay reliably fires the submit even when the TUI is still ingesting
+// the paste. Mirrors the swarm sendPromptSubmit / _tmux_send_prompt_submit.
+// Set TTMUX_FORCE_PROMPT_SUBMIT=0 to skip the second Enter (e.g. plain shells).
+func (r Runtime) SendPromptSubmit(target, message string) {
+	// -p 让 paste-buffer 在目标应用开了 bracketed paste 模式(Claude/Codex 等
+	// TUI 都开)时用 ESC[200~..ESC[201~ 包裹，整段多行 prompt 作为「一次粘贴」
+	// 送入、内嵌换行保留为输入换行而非提交；不带 -p 时 tmux 把换行当裸 CR 逐个
+	// 下发，多行 prompt 会在每个换行处被提前提交、拆成多条。对普通 shell(未开
+	// bracketed paste)-p 无副作用，退化为普通粘贴。
+	if r.Tmux("set-buffer", "-b", "ttmux-prompt", message) != nil ||
+		r.Tmux("paste-buffer", "-p", "-d", "-b", "ttmux-prompt", "-t", target) != nil {
+		// Fallback: paste buffer unavailable, send literally.
+		_ = r.Tmux("send-keys", "-t", target, "-l", message)
+	}
+	_ = r.Tmux("send-keys", "-t", target, "Enter")
+	if os.Getenv("TTMUX_FORCE_PROMPT_SUBMIT") != "0" {
+		time.Sleep(50 * time.Millisecond)
+		_ = r.Tmux("send-keys", "-t", target, "Enter")
+	}
+}
+
 func (r Runtime) GroupFile(name string) string {
 	return filepath.Join(r.GroupsDir, name+".group")
 }

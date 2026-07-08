@@ -234,9 +234,10 @@ func Send(rt runtime.Runtime, exclude map[string]bool, args []string, w io.Write
 		ui.Err(w, "会话 %s 不存在", ui.Bold(target))
 		return fmt.Errorf("session not found: %s", target)
 	}
-	if err := rt.Tmux("send-keys", "-t", target, cmdStr, "C-m"); err != nil {
-		return err
-	}
+	// 用粘贴缓冲 + 独立回车提交：TUI Agent(Claude/Codex)会把 send-keys 里
+	// 尾随的 C-m 当成输入换行而非提交，导致「只打字不发送」。SendPromptSubmit
+	// 走 paste-buffer 落文本再单独按回车，对多行 prompt 和 TUI 都可靠。
+	rt.SendPromptSubmit(target, cmdStr)
 	ui.Ok(w, "已发送到 %s: %s", ui.Bold(target), ui.Dim(cmdStr))
 	return nil
 }

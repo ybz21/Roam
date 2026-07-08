@@ -153,19 +153,10 @@ func masterSession(rt runtime.Runtime, st *swarmcore.Store, swarm string) string
 }
 
 // sendPromptSubmit pastes a multi-line prompt into a TUI and submits it
-// (mirrors _tmux_send_prompt_submit).
+// (mirrors _tmux_send_prompt_submit). Delegates to the shared runtime helper
+// so `ttmux send`、广场通知、hostapi 走同一条提交路径。
 func sendPromptSubmit(rt runtime.Runtime, target, message string) {
-	if rt.Tmux("set-buffer", "-b", "ttmux-prompt", message) == nil &&
-		rt.Tmux("paste-buffer", "-d", "-b", "ttmux-prompt", "-t", target) == nil {
-		// pasted
-	} else {
-		_ = rt.Tmux("send-keys", "-t", target, message)
-	}
-	_ = rt.Tmux("send-keys", "-t", target, "Enter")
-	if os.Getenv("TTMUX_FORCE_PROMPT_SUBMIT") != "0" {
-		time.Sleep(50 * time.Millisecond)
-		_ = rt.Tmux("send-keys", "-t", target, "Enter")
-	}
+	rt.SendPromptSubmit(target, message)
 }
 
 func cmdFeed(rt runtime.Runtime, st *swarmcore.Store, args []string, w io.Writer) error {
