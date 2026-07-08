@@ -117,6 +117,12 @@ The overview and the swarm dashboard reflow to a phone (real device screenshots)
   </tr>
 </table>
 
+**Talk to an agent from your phone.** Open a session and chat with Claude Code or
+Codex right in the terminal — the mobile key bar and send button let you type
+follow-ups, review the reply, and keep the task moving without a laptop.
+
+<img src="docs/screenshots/mobile-chat.en.png" alt="Chatting with Claude Code on a phone" width="300">
+
 ## Why It Exists
 
 Remote development is easy for small tasks. Once the work becomes complex, it
