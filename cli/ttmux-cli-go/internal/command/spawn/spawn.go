@@ -44,7 +44,7 @@ func spawnOne(rt runtime.Runtime, group, name, taskType, payload string, ac Agen
 		return false, err
 	}
 	if taskType == "agent" && ac.Interactive {
-		launchAutoconfirm(rt, sess)
+		LaunchAutoconfirm(rt, sess)
 	}
 	if err := rt.GroupAddSession(group, sess); err != nil {
 		return false, err

@@ -1,0 +1,21 @@
+{
+  "manifestVersion": 1,
+  "id": "acme.hello-py",
+  "publisher": "acme",
+  "name": "hello-py",
+  "displayName": { "zh-CN": "示例插件(Python)", "en-US": "Hello Plugin (Python)" },
+  "version": "0.1.0",
+  "description": {
+    "zh-CN": "exec 运行时示例:任意语言实现 stdio JSON-RPC 即可接入,本例用 Python",
+    "en-US": "Exec-runtime sample: any language speaking stdio JSON-RPC can plug in; this one is Python"
+  },
+  "main": "main.py",
+  "runtime": { "kind": "exec" },
+  "permissions": {},
+  "activationEvents": ["onCommand:hello-py.greet"],
+  "contributes": {
+    "commands": [
+      { "id": "hello-py.greet", "title": { "zh-CN": "打招呼", "en-US": "Greet" } }
+    ]
+  }
+}

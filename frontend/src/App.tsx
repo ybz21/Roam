@@ -16,9 +16,10 @@ import CodexChat from './CodexChat'
 import FileBrowser from './FileBrowser'
 import FileWorkspace from './FileWorkspace'
 import FloatingFileDrawer from './FloatingFileDrawer'
-// 非首屏的重页面（蜂群/Git 面板/浏览器/手机镜像）按路由懒加载：切到对应 tab 才拉 chunk，
-// 缩小首屏 index 块。Suspense 兜底转圈（见 lazyFallback）。
+// 非首屏的重页面（蜂群/Git 面板/浏览器/手机镜像/插件）按路由懒加载：切到对应 tab 才拉 chunk，
+// 缩小首屏 index 块。都渲染在同一个 Suspense 边界内（见 lazyFallback，App 内 page）。
 const GitPanel = lazy(() => import('./GitPanel'))
+const PluginsPanel = lazy(() => import('./PluginsPanel'))
 const BrowserView = lazy(() => import('./BrowserView'))
 const PhoneView = lazy(() => import('./PhoneView'))
 const Swarm = lazy(() => import('./Swarm'))
@@ -44,8 +45,12 @@ const NAV = [
   { key: 'files', labelKey: 'nav.files' },
   { key: 'browser', labelKey: 'nav.browser' },
   { key: 'phone', labelKey: 'nav.phone' },
+  { key: 'plugins', labelKey: 'nav.plugins' },
   { key: 'settings', labelKey: 'nav.env' },
 ]
+
+// 手机底栏只放高频页，plugins/settings 折进「更多」，避免底栏拥挤（桌面侧栏仍展示全部）
+const MOBILE_MORE_KEYS = ['plugins', 'settings']
 
 // 旧链接兼容：/#/env 重定向到 /#/settings
 function normalizeRoute(raw: string): string {
@@ -83,6 +88,7 @@ const ICONS: Record<string, any> = {
   settings: svg(<><line x1="4" y1="7" x2="20" y2="7" /><circle cx="9" cy="7" r="2.3" /><line x1="4" y1="17" x2="20" y2="17" /><circle cx="15" cy="17" r="2.3" /></>),
   browser: svg(<><rect x="3" y="4" width="18" height="16" rx="2" /><line x1="3" y1="9" x2="21" y2="9" /><circle cx="6" cy="6.5" r="0.6" /><circle cx="8.4" cy="6.5" r="0.6" /></>),
   phone: svg(<><rect x="6" y="2" width="12" height="20" rx="2.5" /><line x1="10" y1="18.5" x2="14" y2="18.5" /></>),
+  plugins: svg(<path d="M10 3.5a1.8 1.8 0 0 1 3.6 0V5H17a2 2 0 0 1 2 2v3.4h1.5a1.8 1.8 0 0 1 0 3.6H19V17a2 2 0 0 1-2 2h-3.4v1.5a1.8 1.8 0 0 1-3.6 0V19H7a2 2 0 0 1-2-2v-3.4H3.5a1.8 1.8 0 0 1 0-3.6H5V7a2 2 0 0 1 2-2h3z" />),
   github: (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
       <path d="M12 2C6.48 2 2 6.58 2 12.26c0 4.5 2.87 8.32 6.84 9.67.5.1.68-.22.68-.49 0-.24-.01-.87-.01-1.71-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.49-1.11-1.49-.91-.64.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.36-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.27 2.75 1.05a9.36 9.36 0 0 1 2.5-.34c.85 0 1.71.12 2.5.34 1.91-1.32 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.81-4.57 5.06.36.32.68.94.68 1.9 0 1.37-.01 2.48-.01 2.82 0 .27.18.6.69.49A10.02 10.02 0 0 0 22 12.26C22 6.58 17.52 2 12 2z" />
@@ -390,6 +396,7 @@ export default function App() {
     sessions: <Sessions openTerm={openTerm} closeTerm={closeTerm} activeTerm={active} />,
     files: <FilesPage openTerm={openTerm} />,
     settings: <EnvPage />,
+    plugins: <PluginsPanel />,
     browser: <BrowserView />,
     phone: <PhoneView />,
     about: <AboutPage />,
@@ -555,14 +562,16 @@ export default function App() {
 
       {isMobile && (
         <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, display: 'flex', background: 'var(--bg-container)', borderTop: '1px solid var(--border)', zIndex: 50, paddingBottom: 'env(safe-area-inset-bottom)' }}>
-          {NAV.map((n) => (
+          {NAV.filter((n) => !MOBILE_MORE_KEYS.includes(n.key)).map((n) => (
             <button key={n.key} onClick={() => go(n.key)}
               style={{ flex: 1, border: 0, background: 'none', color: tab === n.key ? '#58a6ff' : 'var(--text-dim)', padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11 }}>
               {ICONS[n.key]}{t(n.labelKey)}
             </button>
           ))}
-          {/* 主题/全屏/退出折叠进「更多」，省出底栏空间 */}
+          {/* plugins/settings + 主题/全屏/退出折叠进「更多」，省出底栏空间 */}
           <Dropdown placement="top" trigger={['click']} menu={{ items: [
+            ...NAV.filter((n) => MOBILE_MORE_KEYS.includes(n.key)).map((n) => ({ key: n.key, icon: ICONS[n.key], label: t(n.labelKey), onClick: () => go(n.key) })),
+            { type: 'divider' as const },
             { key: 'theme', icon: themeIcon, label: mode === 'dark' ? t('common.lightTheme') : t('common.darkTheme'), onClick: toggleTheme },
             ...(fsSupported ? [{ key: 'fs', icon: fsIcon, label: isFs ? t('common.exitFullscreen') : t('common.fullscreen'), onClick: toggleFs }] : []),
             { key: 'about', icon: ICONS.github, label: t('nav.about'), onClick: () => go('about') },
@@ -570,7 +579,7 @@ export default function App() {
             { key: 'logout', danger: true, label: t('common.logout'), onClick: () => Modal.confirm({ title: t('common.logoutConfirm'), okText: t('common.logout'), cancelText: t('common.cancel'), okButtonProps: { danger: true }, onOk: logout }) },
           ] }}>
             <button
-              style={{ flex: 1, border: 0, background: 'none', color: 'var(--text-dim)', padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11 }}>
+              style={{ flex: 1, border: 0, background: 'none', color: MOBILE_MORE_KEYS.includes(tab) ? '#58a6ff' : 'var(--text-dim)', padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11 }}>
               {svg(<><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></>)}{t('common.more')}
             </button>
           </Dropdown>
@@ -1248,8 +1257,25 @@ function Overview({ go, openTerm }: { go: (k: string) => void; openTerm: (n: str
         ].map((p, i) => <div key={i} style={{ flex: '1 1 140px', minWidth: 140 }}><StatTile {...p} /></div>)}
       </div>
 
-      {/* 蜂群 + 会话 双栏 */}
+      {/* 会话 + 蜂群 双栏（会话在前，蜂群在后） */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
+        <div style={{ flex: '1 1 360px', minWidth: 280 }}>
+          <Card title={t('nav.sessions')} extra={<a onClick={() => go('sessions')}>{t('common.all')} →</a>}>
+            {sessions.length === 0 ? <Empty description={t('session.noActive')} /> : (
+              <List size="small" dataSource={sessions.slice(0, 6)} renderItem={(s: any) => (
+                <List.Item style={{ padding: '8px 0' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minWidth: 0 }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ color: 'var(--text-bright)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.name}>{s.name}</div>
+                      <div style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap' }} title={`${t('session.createdAt')} ${absTime(s.created)} · ${t('session.lastActivity')} ${absTime(s.last_activity)}`}>{t('session.windows', { count: s.windows })} · {s.attached == 1 ? t('terminal.status.connected') : t('terminal.status.idle')} · {t('session.lastActivity')} {relTime(s.last_activity, t)}</div>
+                    </div>
+                    <a onClick={() => openTerm(s.name)} style={{ flex: '0 0 auto', whiteSpace: 'nowrap' }}>{t('common.terminal')}</a>
+                  </div>
+                </List.Item>
+              )} />
+            )}
+          </Card>
+        </div>
         <div style={{ flex: '1 1 360px', minWidth: 280 }}>
           <Card title={<Space><span style={{ color: '#58a6ff' }}>◆</span>{t('nav.swarm')}</Space>} extra={<a onClick={() => go('swarm')}>{t('common.all')} →</a>}>
             {swarms.length === 0 ? <Empty description={t('overview.noSwarms')} /> : (
@@ -1269,23 +1295,6 @@ function Overview({ go, openTerm }: { go: (k: string) => void; openTerm: (n: str
                   </div>
                 ))}
               </Space>
-            )}
-          </Card>
-        </div>
-        <div style={{ flex: '1 1 360px', minWidth: 280 }}>
-          <Card title={t('nav.sessions')} extra={<a onClick={() => go('sessions')}>{t('common.all')} →</a>}>
-            {sessions.length === 0 ? <Empty description={t('session.noActive')} /> : (
-              <List size="small" dataSource={sessions.slice(0, 6)} renderItem={(s: any) => (
-                <List.Item style={{ padding: '8px 0' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minWidth: 0 }}>
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ color: 'var(--text-bright)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.name}>{s.name}</div>
-                      <div style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap' }} title={`${t('session.createdAt')} ${absTime(s.created)} · ${t('session.lastActivity')} ${absTime(s.last_activity)}`}>{t('session.windows', { count: s.windows })} · {s.attached == 1 ? t('terminal.status.connected') : t('terminal.status.idle')} · {t('session.lastActivity')} {relTime(s.last_activity, t)}</div>
-                    </div>
-                    <a onClick={() => openTerm(s.name)} style={{ flex: '0 0 auto', whiteSpace: 'nowrap' }}>{t('common.terminal')}</a>
-                  </div>
-                </List.Item>
-              )} />
             )}
           </Card>
         </div>
@@ -1417,12 +1426,13 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
   const [pick, setPick] = useState(false)
   const [agent, setAgent] = useState<'none' | 'claude' | 'codex'>('none')
   const [worktree, setWorktree] = useState(false)
+  const [autoReview, setAutoReview] = useState(false)
   const [isGitRepo, setIsGitRepo] = useState(false)
   const [creating, setCreating] = useState(false)
   const { message } = AntApp.useApp()
   const { t } = useI18n()
   const [prefs] = usePreferences()
-  useEffect(() => { if (open) { setName(''); setDir(''); setAgent('none'); setWorktree(false); setIsGitRepo(false) } }, [open])
+  useEffect(() => { if (open) { setName(''); setDir(''); setAgent('none'); setWorktree(false); setAutoReview(false); setIsGitRepo(false) } }, [open])
   useEffect(() => {
     const d = dir.trim()
     if (!d) { setIsGitRepo(false); return }
@@ -1448,6 +1458,15 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
       if (agent !== 'none') {
         const cmd = agent === 'claude' ? (prefs.claudeCommand || 'claude') : (prefs.codexCommand || 'codex')
         await api('POST', '/tasks/_/send', { sess: actual, msg: cmd })
+        if (autoReview && !sessionDir) {
+          message.warning(t('session.autoReviewNeedsDir'))
+        } else if (autoReview && sessionDir) {
+          // track 会登记跟踪并拉起 review-<会话> 监控会话:对话空闲即互审,意见回灌
+          await api('POST', '/plugin/track', {
+            session: actual,
+            labels: { 'review:auto': 'true', role: 'author', workdir: sessionDir },
+          }).catch((e: any) => message.warning(t('session.autoReviewTrackFailed') + ': ' + e.message))
+        }
       }
       pushRecentDir(dir); message.success(t('session.created')); onClose(); onDone(actual)
     }
@@ -1484,18 +1503,27 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
               ))}
             </div>
           )}
-          {isGitRepo && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Switch size="small" checked={worktree} onChange={setWorktree} />
-              <span style={{ fontSize: 13 }}>{t('session.worktreeMode')}</span>
-            </div>
-          )}
           <Radio.Group value={agent} onChange={(e) => setAgent(e.target.value)} optionType="button" buttonStyle="solid"
             style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
             <Radio.Button value="none">{t('session.agentNone')}</Radio.Button>
             <Radio.Button value="claude">{t('session.agentClaude')}</Radio.Button>
             <Radio.Button value="codex">{t('session.agentCodex')}</Radio.Button>
           </Radio.Group>
+          {/* 会话选项:勾选项竖排,不适用时置灰(tooltip 说明启用条件) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <Tooltip placement="right" title={isGitRepo ? t('session.worktreeTip') : t('session.worktreeNeedsRepo')}>
+              <Checkbox checked={worktree && isGitRepo} disabled={!isGitRepo}
+                onChange={(e) => setWorktree(e.target.checked)} style={{ width: 'fit-content' }}>
+                <span style={{ fontSize: 13 }}>{t('session.worktreeMode')}</span>
+              </Checkbox>
+            </Tooltip>
+            <Tooltip placement="right" title={agent !== 'none' ? t('session.autoReviewTip') : t('session.autoReviewNeedsAgent')}>
+              <Checkbox checked={autoReview && agent !== 'none'} disabled={agent === 'none'}
+                onChange={(e) => setAutoReview(e.target.checked)} style={{ width: 'fit-content' }}>
+                <span style={{ fontSize: 13 }}>{t('session.autoReview')}</span>
+              </Checkbox>
+            </Tooltip>
+          </div>
         </Space>
       </Modal>
       <DirPicker open={pick} start={dir || undefined} onPick={(p) => { setDir(p); setPick(false) }} onClose={() => setPick(false)} />

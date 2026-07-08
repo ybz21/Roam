@@ -10,6 +10,7 @@ import (
 	"ttmux-cli-go/internal/command/group"
 	"ttmux-cli-go/internal/command/help"
 	"ttmux-cli-go/internal/command/interactive"
+	plugincmd "ttmux-cli-go/internal/command/plugin"
 	"ttmux-cli-go/internal/command/session"
 	"ttmux-cli-go/internal/command/spawn"
 	swarmcommand "ttmux-cli-go/internal/command/swarm"
@@ -43,6 +44,8 @@ func (a App) Run(args []string) error {
 			spawn.RunAutoconfirm(a.rt, rest[0])
 		}
 		return nil
+	case "_plugin-host": // 插件子进程入口(stdio JSON-RPC,勿直接调用)
+		return plugincmd.HostMain(rest)
 
 	case "-h", "--help", "help":
 		help.Show(version, out)
@@ -126,6 +129,10 @@ func (a App) Run(args []string) error {
 	// ── swarm (status native, rest delegated) ──
 	case "swarm":
 		return swarmcommand.Run(a.rt, rest, out)
+
+	// ── plugins(default 分支透传 tmux,必须显式注册)──
+	case "plugin":
+		return plugincmd.Run(a.rt, rest, out)
 
 	default:
 		return a.rt.Tmux(append([]string{cmd}, rest...)...)
@@ -231,10 +238,19 @@ func (a App) runGroup(args []string) error {
 	}
 }
 
-// swarmSessions returns the set of tmux sessions that belong to swarms so the
-// native session listings hide them, matching the shell CLI's _is_swarm_session.
+// swarmSessions returns the set of tmux sessions hidden from native session
+// listings: swarm members (matching the shell CLI's _is_swarm_session) plus
+// `_ttmux-` 命名空间的基础设施会话(如插件守护进程 _ttmux-plugind)——
+// 从列表和 killall 中隐藏防止被顺手关掉;显式指名 attach/kill 不受影响。
+// 只收窄到自家前缀:用户自己起的 _xxx 会话不受影响,照常显示。
 func (a App) swarmSessions() map[string]bool {
-	return swarmcore.SessionNames(a.swarmOptions())
+	set := swarmcore.SessionNames(a.swarmOptions())
+	for _, s := range a.rt.Sessions() {
+		if strings.HasPrefix(s, "_ttmux-") {
+			set[s] = true
+		}
+	}
+	return set
 }
 
 // swarmNames returns the set of swarm names so the group listing hides them.
