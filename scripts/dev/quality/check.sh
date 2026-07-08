@@ -51,6 +51,9 @@ fi
 section "Go tests"
 (cd backend && go test ./...)
 (cd cli/ttmux-cli-go && go test ./...)
+for mod in plugins/*/go.mod; do
+  (cd "$(dirname "$mod")" && go test ./...)
+done
 
 section "Frontend checks"
 if [ ! -d frontend/node_modules ]; then

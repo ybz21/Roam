@@ -43,6 +43,8 @@ func (h *HostAPI) Handle(method string, params json.RawMessage) (any, error) {
 		return h.sessionWait(params)
 	case "roam/session.alive":
 		return h.sessionAlive(params)
+	case "roam/session.kill":
+		return h.sessionKill(params)
 	case "roam/session.capture":
 		return h.sessionCapture(params)
 	case "roam/session.log":
@@ -314,6 +316,38 @@ func (h *HostAPI) sessionAlive(params json.RawMessage) (any, error) {
 		return nil, err
 	}
 	return map[string]bool{"alive": h.Env.RT.HasSession(req.Name)}, nil
+}
+
+// sessionKill 终止一个会话。只允许杀本插件登记过的会话(spawn/track 的产物)
+// ——sessions:write 给的是"对话"能力,不该顺带成为任意会话的处决权。
+func (h *HostAPI) sessionKill(params json.RawMessage) (any, error) {
+	var req sessionNameReq
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, err
+	}
+	if err := h.requirePerm("sessions:write", "session.kill", req.Name); err != nil {
+		return nil, err
+	}
+	rows, err := h.Store.Sessions(h.Plugin.Manifest.ID, "")
+	if err != nil {
+		return nil, err
+	}
+	owned := false
+	for _, r := range rows {
+		if r.Session == req.Name {
+			owned = true
+			break
+		}
+	}
+	if !owned {
+		h.audit("session.kill", req.Name, "denied", "not owned by plugin")
+		return nil, fmt.Errorf("session.kill: %s is not owned by plugin %s", req.Name, h.Plugin.Manifest.ID)
+	}
+	if err := h.Env.RT.Tmux("kill-session", "-t", "="+req.Name); err != nil {
+		return nil, err
+	}
+	h.audit("session.kill", req.Name, "allowed", "")
+	return map[string]bool{"killed": true}, nil
 }
 
 func (h *HostAPI) sessionCapture(params json.RawMessage) (any, error) {

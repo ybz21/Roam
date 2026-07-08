@@ -3,7 +3,7 @@ module ttmux-cli-go
 go 1.22
 
 require (
-	github.com/larksuite/oapi-sdk-go/v3 v3.9.8
+	github.com/larksuite/oapi-sdk-go/v3 v3.9.8 // indirect
 	modernc.org/sqlite v1.30.2
 )
 
@@ -23,4 +23,14 @@ require (
 	modernc.org/memory v1.8.0 // indirect
 	modernc.org/strutil v1.2.0 // indirect
 	modernc.org/token v1.1.0 // indirect
+)
+
+require (
+	roam-plugins/im v0.0.0
+	roam-plugins/reviewmesh v0.0.0
+)
+
+replace (
+	roam-plugins/im => ../../plugins/im
+	roam-plugins/reviewmesh => ../../plugins/reviewmesh
 )
