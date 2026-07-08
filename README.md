@@ -4,8 +4,8 @@
 
 > **Turn your development machine into an always-on AI coding workstation.**
 
-**Roam** lets you connect back to your own development machine from anywhere,
-at any time, using a phone, tablet, or laptop. You can keep coding, run tests,
+**Roam** lets you **connect back to your own development machine from anywhere,
+at any time, using a phone, tablet, or laptop.** You can keep coding, run tests,
 watch logs, debug in a browser, and supervise Claude Code, Codex, or other AI
 coding agents while the real work continues on the development machine.
 
@@ -36,7 +36,7 @@ puts terminals, browser, files, tasks, and AI agents into a remotely controllabl
 workspace. What you see is a console; behind it is still the development
 environment and toolchain you already use.
 
-![Roam — the same development machine, from a laptop and from a phone](docs/screenshots/hero.en.png)
+![Roam — the same development machine, from a laptop and from a phone](https://cdn.jsdelivr.net/gh/ybz21/Roam@main/docs/screenshots/hero.en.png)
 
 <sub>Remote access to one development machine: the desktop console and the phone show the same sessions, swarms, and live agent state.</sub>
 
@@ -69,31 +69,31 @@ environment and toolchain you already use.
 state (waiting, idle), see which agents need attention, and jump into any of them
 as a terminal.
 
-![Sessions list with agent tags and filters](docs/screenshots/sessions.en.png)
+![Sessions list with agent tags and filters](https://cdn.jsdelivr.net/gh/ybz21/Roam@main/docs/screenshots/sessions.en.png)
 
 **One view for the agent, its terminal, and the file tree.** Watch Claude Code or
 Codex work, browse and open files beside it, and type on the mobile key bar when
 you're on a phone.
 
-![Terminal with a running agent and the file tree](docs/screenshots/terminal.en.png)
+![Terminal with a running agent and the file tree](https://cdn.jsdelivr.net/gh/ybz21/Roam@main/docs/screenshots/terminal.en.png)
 
 **Swarm, at a glance.** A live dependency topology of every member, a shared
 collaboration wall (plaza), and a drag-to-flow board — so a complex goal split
 across agents stays legible.
 
-![Swarm dashboard: topology, plaza, and board](docs/screenshots/swarm.en.png)
+![Swarm dashboard: topology, plaza, and board](https://cdn.jsdelivr.net/gh/ybz21/Roam@main/docs/screenshots/swarm.en.png)
 
 **Drive a real browser from the console.** The dev machine's Chrome is mirrored
 into the console — open tabs, navigate, click, and type. Debug a web app, keep a
 login session, or let an agent reproduce a flow, all on the development machine.
 
-![Browser mirror: a live Chrome tab driven from the console](docs/screenshots/browser.en.png)
+![Browser mirror: a live Chrome tab driven from the console](https://cdn.jsdelivr.net/gh/ybz21/Roam@main/docs/screenshots/browser.en.png)
 
 **Control a real phone from the console.** Mirror an Android device over adb — the
 live screen, streaming stats, and remote nav bar — to reproduce mobile flows or
 check an app right next to your terminals.
 
-![Phone mirror: a live Android device inside the console](docs/screenshots/phone.en.png)
+![Phone mirror: a live Android device inside the console](https://cdn.jsdelivr.net/gh/ybz21/Roam@main/docs/screenshots/phone.en.png)
 
 ## Mobile: work from anywhere
 
@@ -101,13 +101,13 @@ check an app right next to your terminals.
 no app to install — and land back in the same sessions, swarms, and agents.
 Check progress on the train, nudge an agent from the couch, take over from a café.
 
-![Roam on a phone: overview and swarm dashboard](docs/screenshots/mobile-office.en.png)
+![Roam on a phone: overview and swarm dashboard](https://cdn.jsdelivr.net/gh/ybz21/Roam@main/docs/screenshots/mobile-office.en.png)
 
 **Talk to an agent from your phone.** Open a session and chat with Claude Code or
 Codex right in the terminal — the mobile key bar and send button let you type
 follow-ups, review the reply, and keep the task moving without a laptop.
 
-![Chatting with Claude Code on a phone](docs/screenshots/mobile-chat.en.png)
+![Chatting with Claude Code on a phone](https://cdn.jsdelivr.net/gh/ybz21/Roam@main/docs/screenshots/mobile-chat.en.png)
 
 ## Why It Exists
 
@@ -266,6 +266,7 @@ agents. Treat it as close to SSH access. For real deployments:
 
 ## Docs
 
+- [docs/features.md](docs/features.md) - full feature list
 - [docs/install/](docs/install/) - installation and deployment
 - [docs/design/](docs/design/) - design docs for swarm orchestration, plaza
   boards, and Web integration
