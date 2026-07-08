@@ -3,7 +3,9 @@
 // 两处复用：独立 Files 页（纯文件）与新标签 SoloTerminal（会话经 leading* 槽传入）。
 import { type ReactNode, Fragment, useEffect, useRef, useState } from 'react'
 import { App as AntApp } from 'antd'
-import FileBrowser, { Viewer, FileTypeIcon } from './FileBrowser'
+import FileBrowser from './FileBrowser'
+import { FileView } from './fileview'
+import { FileTypeIcon } from './file-icons'
 import { useI18n } from './i18n'
 
 type Group = 'A' | 'B'
@@ -241,7 +243,7 @@ export default function FileWorkspace({
             const prev = isPreview(f)
             return (
               <div key={f} style={{ position: 'absolute', inset: 0, zIndex: 6, background: 'var(--bg-base)', display: active === f ? 'block' : 'none' }}>
-                <Viewer path={realPath(f)} accent={accent} inline tabbed forcePreview={prev} active={active === f}
+                <FileView path={realPath(f)} accent={accent} inline tabbed forcePreview={prev} active={active === f}
                   onClose={() => closeFileTab(f, g)} onOpenPath={(p) => openInGroup(p, g)}
                   onDirtyChange={prev ? undefined : setFileDirty} onOpenAgent={onOpenAgent}
                   onPreviewToSide={prev ? undefined : (p) => openPreviewToSide(g, p)} />
