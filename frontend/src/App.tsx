@@ -1122,7 +1122,7 @@ function TerminalPane(props: {
       )}
       {fileDock === 'right' && (
         <FloatingFileDrawer open={showFiles}>
-          <FileBrowser dir={cwd} accent="#58a6ff" onClose={() => setShowFiles(false)} />
+          <FileBrowser dir={cwd} accent="#58a6ff" layout="dock" onClose={() => setShowFiles(false)} />
         </FloatingFileDrawer>
       )}
       <FloatingFileDrawer open={showGit} right={fileDock === 'right' && showFiles ? 'min(420px, 92vw)' : 0}>
