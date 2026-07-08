@@ -58,8 +58,15 @@ func (a *API) PluginInstall(c *gin.Context) {
 	a.text(c, "plugin", "install", b.Path)
 }
 
-// DELETE /api/plugins/:id —— 卸载外部插件(builtin 由 CLI 拒绝)
-func (a *API) PluginUninstall(c *gin.Context) { a.text(c, "plugin", "uninstall", c.Param("id")) }
+// DELETE /api/plugins/:id —— 卸载外部插件(builtin 由 CLI 拒绝)。
+// ?purge=1 连同清除该插件的 storage/config(默认保留以便重装复用)。
+func (a *API) PluginUninstall(c *gin.Context) {
+	args := []string{"plugin", "uninstall", c.Param("id")}
+	if p := c.Query("purge"); p == "1" || p == "true" {
+		args = append(args, "--purge")
+	}
+	a.text(c, args...)
+}
 
 // POST /api/plugin/track —— 把会话登记给插件跟踪(如新建会话勾选「结束后自动互审」:
 // labels 带 review:auto=true 与 workdir,plugind 在会话退出时通知插件)

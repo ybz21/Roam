@@ -780,7 +780,8 @@ const enUS = {
   'plugins.installFromPath': 'Install',
   'plugins.installedOk': 'Installed (disabled by default; enable it in the list)',
   'plugins.uninstall': 'Uninstall',
-  'plugins.uninstallConfirm': 'Uninstall this plugin? Files are removed; config and data are kept',
+  'plugins.uninstallConfirm': 'Uninstall this plugin? Its sessions are stopped and installed files removed',
+  'plugins.uninstallPurge': 'Also delete config and data (not kept; no reuse on reinstall)',
   'plugins.uninstalled': 'Plugin uninstalled',
 }
 
