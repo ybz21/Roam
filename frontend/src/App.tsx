@@ -3,7 +3,7 @@
 //   电脑 ≥1200 → 三栏：导航 Sider | 列表(页面) | 终端面板(常驻, 多标签)
 //   平板/手机   → 终端为全屏覆盖层；手机底部 Tab 导航
 // 终端：多标签 / 字号调节 / 复制 / 更多快捷键 / 断线自动重连。
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from 'react'
 import {
   Layout, Menu, Button, Card, List, Tag, Form, Input, Select, Segmented, Tabs, Descriptions,
   Statistic, Row, Col, Space, Popconfirm, Empty, Modal, Grid, App as AntApp, Typography, Spin, Tooltip, Dropdown, Checkbox, Progress, AutoComplete, Radio, Switch,
@@ -417,6 +417,16 @@ export default function App() {
     />
   )
 
+  // 底部按钮：antd v5 Button 是 flex+居中，textAlign 无效，须用 justifyContent。
+  // 展开时左对齐并让图标与上方 inline Menu 项的图标严格对齐：二者左边缘都在 8px
+  // (菜单项 margin / 底部容器 padding 各 8)，菜单项 paddingLeft=24px 使图标落在 32px，
+  // 故底部按钮同样取 paddingLeft 24px。折叠时居中只显图标。
+  const bottomBtnStyle: CSSProperties = {
+    color: 'var(--text-dim)',
+    justifyContent: collapsed ? 'center' : 'flex-start',
+    paddingInline: collapsed ? undefined : '24px 15px',
+  }
+
   return (
     <Layout style={{ height: '100dvh', overflow: 'hidden', background: 'var(--bg-base)' }}>
       <UpdateBanner />
@@ -443,22 +453,22 @@ export default function App() {
             {/* 底部：收起 在上，其次 全屏，最后 退出，始终竖向堆叠（展开带文字，折叠仅图标居中）。*/}
             <div style={{ borderTop: '1px solid var(--border-subtle)', padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
               <Button type="text" block onClick={() => go('about')} title={t('nav.about')}
-                style={{ color: tab === 'about' ? '#58a6ff' : 'var(--text-dim)', textAlign: collapsed ? 'center' : 'left' }}>
+                style={{ ...bottomBtnStyle, color: tab === 'about' ? '#58a6ff' : 'var(--text-dim)' }}>
                 {collapsed ? ICONS.github : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{ICONS.github}{t('nav.about')}</span>}
               </Button>
-              <Button type="text" block onClick={() => setCollapsed((c) => !c)} style={{ color: 'var(--text-dim)', textAlign: collapsed ? 'center' : 'left' }}
+              <Button type="text" block onClick={() => setCollapsed((c) => !c)} style={bottomBtnStyle}
                 title={collapsed ? t('common.expand') : t('common.collapse')}>
                 {(() => { const icon = svg(collapsed ? <><polyline points="9 6 15 12 9 18" /></> : <><polyline points="15 6 9 12 15 18" /></>)
                   return collapsed ? icon : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{icon}{t('common.collapse')}</span> })()}
               </Button>
               {fsSupported && (
-                <Button type="text" block onClick={toggleFs} style={{ color: 'var(--text-dim)', textAlign: collapsed ? 'center' : 'left' }}
+                <Button type="text" block onClick={toggleFs} style={bottomBtnStyle}
                   title={isFs ? t('common.exitFullscreen') : t('common.fullscreen')}>
                   {collapsed ? fsIcon : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{fsIcon}{isFs ? t('common.exitFullscreen') : t('common.fullscreen')}</span>}
                 </Button>
               )}
               <Popconfirm title={t('common.logoutConfirm')} okText={t('common.logout')} cancelText={t('common.cancel')} onConfirm={logout} placement="topRight">
-                <Button type="text" block style={{ color: 'var(--text-dim)', textAlign: collapsed ? 'center' : 'left' }} title={t('common.exit')}>
+                <Button type="text" block style={bottomBtnStyle} title={t('common.exit')}>
                   {(() => { const icon = svg(<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></>)
                     return collapsed ? icon : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{icon}{t('common.exit')}</span> })()}
                 </Button>
