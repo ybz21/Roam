@@ -25,6 +25,12 @@ require (
 	modernc.org/token v1.1.0 // indirect
 )
 
-require roam-plugins v0.0.0
+require (
+	roam-plugins/feishu v0.0.0
+	roam-plugins/reviewmesh v0.0.0
+)
 
-replace roam-plugins => ../../plugins
+replace (
+	roam-plugins/feishu => ../../plugins/feishu
+	roam-plugins/reviewmesh => ../../plugins/reviewmesh
+)
