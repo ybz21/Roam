@@ -47,6 +47,9 @@ const NAV = [
   { key: 'settings', labelKey: 'nav.env' },
 ]
 
+// 手机底栏只放高频页，plugins/settings 折进「更多」，避免底栏拥挤（桌面侧栏仍展示全部）
+const MOBILE_MORE_KEYS = ['plugins', 'settings']
+
 // 旧链接兼容：/#/env 重定向到 /#/settings
 function normalizeRoute(raw: string): string {
   const route = raw.split('?')[0]
@@ -555,14 +558,16 @@ export default function App() {
 
       {isMobile && (
         <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, display: 'flex', background: 'var(--bg-container)', borderTop: '1px solid var(--border)', zIndex: 50, paddingBottom: 'env(safe-area-inset-bottom)' }}>
-          {NAV.map((n) => (
+          {NAV.filter((n) => !MOBILE_MORE_KEYS.includes(n.key)).map((n) => (
             <button key={n.key} onClick={() => go(n.key)}
               style={{ flex: 1, border: 0, background: 'none', color: tab === n.key ? '#58a6ff' : 'var(--text-dim)', padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11 }}>
               {ICONS[n.key]}{t(n.labelKey)}
             </button>
           ))}
-          {/* 主题/全屏/退出折叠进「更多」，省出底栏空间 */}
+          {/* plugins/settings + 主题/全屏/退出折叠进「更多」，省出底栏空间 */}
           <Dropdown placement="top" trigger={['click']} menu={{ items: [
+            ...NAV.filter((n) => MOBILE_MORE_KEYS.includes(n.key)).map((n) => ({ key: n.key, icon: ICONS[n.key], label: t(n.labelKey), onClick: () => go(n.key) })),
+            { type: 'divider' as const },
             { key: 'theme', icon: themeIcon, label: mode === 'dark' ? t('common.lightTheme') : t('common.darkTheme'), onClick: toggleTheme },
             ...(fsSupported ? [{ key: 'fs', icon: fsIcon, label: isFs ? t('common.exitFullscreen') : t('common.fullscreen'), onClick: toggleFs }] : []),
             { key: 'about', icon: ICONS.github, label: t('nav.about'), onClick: () => go('about') },
@@ -570,7 +575,7 @@ export default function App() {
             { key: 'logout', danger: true, label: t('common.logout'), onClick: () => Modal.confirm({ title: t('common.logoutConfirm'), okText: t('common.logout'), cancelText: t('common.cancel'), okButtonProps: { danger: true }, onOk: logout }) },
           ] }}>
             <button
-              style={{ flex: 1, border: 0, background: 'none', color: 'var(--text-dim)', padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11 }}>
+              style={{ flex: 1, border: 0, background: 'none', color: MOBILE_MORE_KEYS.includes(tab) ? '#58a6ff' : 'var(--text-dim)', padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11 }}>
               {svg(<><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></>)}{t('common.more')}
             </button>
           </Dropdown>
