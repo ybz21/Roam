@@ -42,18 +42,36 @@ export function ChatShell({ name, dir, accent, title, placeholder, onBack, onRef
   // 把路径插进输入框（文件侧栏「@」按钮 / 拖拽 / 上传后共用）
   const insertPath = (p: string) => setInput((v) => (v ? v.replace(/\s*$/, ' ') : '') + p + ' ')
 
-  // 上传文件到会话工作目录，并把文件名插进输入框，方便直接让模型处理
+  // 图片上传到 /tmp 并把完整路径插进输入框（等同桌面 Ctrl+V：不污染工作目录，模型按绝对路径读取）
+  const uploadImagesToTmp = async (images: File[]) => {
+    if (!images.length) return
+    const res = await upload('/tmp', images)
+    setInput((v) => (v ? v.replace(/\s*$/, ' ') : '') + res.saved.join(' ') + ' ')
+    message.success(t('chat.uploadedFiles', { count: images.length, dir: '/tmp' }))
+  }
+
+  // 普通文件上传到会话工作目录并插入文件名，方便直接让模型处理
+  const uploadFilesToCwd = async (files: File[]) => {
+    if (!files.length) return
+    const cwd = await api('GET', `/sessions/${encodeURIComponent(name)}/cwd`)
+    const dir = cwd?.data?.dir
+    if (!dir) { message.error(t('chat.cwdMissing')); return }
+    const res = await upload(dir, files)
+    const names = res.saved.map((p) => p.split('/').pop() || p)
+    setInput((v) => (v ? v.replace(/\s*$/, ' ') : '') + names.join(' ') + ' ')
+    message.success(t('chat.uploadedFiles', { count: names.length, dir }))
+  }
+
+  // 拖拽/📎 选择：图片走 /tmp+绝对路径（同 Ctrl+V），其余文件走工作目录+文件名。
+  // 注意入参可能是 <input> 的 FileList——调用方须在本函数返回前(await 前)就取好，
+  // 因为重置 input.value 会清空该 FileList（手机端上传图片报 NO_FILE 的根因）。
   const doUpload = async (files: FileList | File[]) => {
-    if (!files || !files.length || uploading) return
+    const all = Array.from(files)
+    if (!all.length || uploading) return
     setUploading(true)
     try {
-      const cwd = await api('GET', `/sessions/${encodeURIComponent(name)}/cwd`)
-      const dir = cwd?.data?.dir
-      if (!dir) { message.error(t('chat.cwdMissing')); return }
-      const res = await upload(dir, files)
-      const names = res.saved.map((p) => p.split('/').pop() || p)
-      setInput((v) => (v ? v.replace(/\s*$/, ' ') : '') + names.join(' ') + ' ')
-      message.success(t('chat.uploadedFiles', { count: names.length, dir }))
+      await uploadImagesToTmp(all.filter((f) => f.type.startsWith('image/')))
+      await uploadFilesToCwd(all.filter((f) => !f.type.startsWith('image/')))
     } catch (e: any) { message.error(t('chat.uploadFailed', { message: e.message })) }
     finally { setUploading(false) }
   }
@@ -72,15 +90,9 @@ export function ChatShell({ name, dir, accent, title, placeholder, onBack, onRef
       e.preventDefault()
       if (uploading) return
       setUploading(true)
-      try {
-        const res = await upload('/tmp', imageFiles)
-        setInput((v) => (v ? v.replace(/\s*$/, ' ') : '') + res.saved.join(' ') + ' ')
-        message.success(t('chat.uploadedFiles', { count: imageFiles.length, dir: '/tmp' }))
-      } catch (err: any) {
-        message.error(t('chat.uploadFailed', { message: err.message }))
-      } finally {
-        setUploading(false)
-      }
+      try { await uploadImagesToTmp(imageFiles) }
+      catch (err: any) { message.error(t('chat.uploadFailed', { message: err.message })) }
+      finally { setUploading(false) }
     }
   }
 
@@ -173,7 +185,7 @@ export function ChatShell({ name, dir, accent, title, placeholder, onBack, onRef
         {errMsg && <div style={{ color: '#f85149', fontSize: 12, padding: '2px 12px' }}>{errMsg}</div>}
         <div style={{ display: 'flex', gap: 8, padding: 10, borderTop: '1px solid var(--border)', alignItems: 'flex-end' }}>
           <input ref={fileRef} type="file" multiple style={{ display: 'none' }}
-            onChange={(e) => { if (e.target.files?.length) doUpload(e.target.files); e.target.value = '' }} />
+            onChange={(e) => { const fs = e.target.files ? Array.from(e.target.files) : []; e.target.value = ''; if (fs.length) doUpload(fs) }} />
           <Button title={t('chat.uploadToCwd')} loading={uploading} onClick={() => fileRef.current?.click()}>📎</Button>
           <Input.TextArea
             value={input} onChange={(e) => setInput(e.target.value)}
