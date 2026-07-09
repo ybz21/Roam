@@ -416,7 +416,7 @@ const enUS = {
   'phone.test': 'Test connection',
   'phone.saved': 'Saved',
   'overview.welcome': 'Welcome back 👋',
-  'overview.subtitle': 'Control your machine and get work done — anywhere, anytime',
+  'overview.subtitle': 'Drive your machine and its AI agents — anywhere, anytime',
   'overview.enterSessions': 'Open sessions',
   'overview.viewSwarm': 'View swarm',
   'overview.activeMembers': 'Active members',

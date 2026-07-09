@@ -146,6 +146,25 @@ ensure_chrome() {
   fi
 }
 
+# ── adb（「手机」镜像页需要 adb 才能连 Android 设备）─────────────────
+# ROAM_NO_ADB=1 可跳过（则手机镜像页不可用）。
+ensure_adb() {
+  [ "${ROAM_NO_ADB:-0}" = 1 ] && { step "ROAM_NO_ADB=1：跳过 adb（手机镜像页将不可用）"; return 0; }
+  command -v adb >/dev/null && { info "adb 已就绪（手机镜像可用）"; return 0; }
+  local sudo=""; [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null && sudo=sudo
+  step "未检测到 adb，尝试安装（手机镜像页用）..."
+  if   command -v apt-get >/dev/null; then $sudo apt-get install -y -qq adb 2>/dev/null || $sudo apt-get install -y -qq android-tools-adb 2>/dev/null
+  elif command -v dnf     >/dev/null; then $sudo dnf install -y android-tools
+  elif command -v yum     >/dev/null; then $sudo yum install -y android-tools
+  elif command -v pacman  >/dev/null; then $sudo pacman -Sy --noconfirm android-tools
+  elif command -v zypper  >/dev/null; then $sudo zypper -n install android-tools
+  elif command -v apk     >/dev/null; then $sudo apk add android-tools
+  elif command -v brew    >/dev/null; then brew install --cask android-platform-tools 2>/dev/null || brew install android-platform-tools
+  fi
+  command -v adb >/dev/null && info "adb 已安装（手机镜像可用）" \
+    || warn "未能自动安装 adb：手机镜像页不可用，装好后重启：systemctl --user restart roam"
+}
+
 # ── systemd 常驻服务 ─────────────────────────────────────────────
 install_service_user() {
   command -v systemctl >/dev/null || { warn "无 systemd，跳过服务注册；手动运行：${BIN_DIR}/roam"; return 0; }
@@ -209,6 +228,7 @@ detect_asset
 install_binary
 ensure_tmux
 ensure_chrome
+ensure_adb
 
 if [ "${ROAM_NO_SERVICE:-0}" = 1 ]; then
   step "ROAM_NO_SERVICE=1：跳过服务注册"

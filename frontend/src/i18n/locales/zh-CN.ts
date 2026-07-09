@@ -416,7 +416,7 @@ const zhCN = {
   'phone.test': '测试连接',
   'phone.saved': '已保存',
   'overview.welcome': '欢迎回来 👋',
-  'overview.subtitle': '随时随地，控制你的电脑干活',
+  'overview.subtitle': '随时随地，遥控你的电脑和 AI 干活',
   'overview.enterSessions': '进入会话',
   'overview.viewSwarm': '查看蜂群',
   'overview.activeMembers': '活跃成员',
