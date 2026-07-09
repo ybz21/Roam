@@ -250,7 +250,7 @@ web:
 
 ```toml
 bindPort = 7000
-auth.token = "换成一串强随机密钥"     # frps/frpc 必须一致
+auth.token = "<TOKEN>"     # 换成强随机串，frps/frpc 必须一致
 ```
 
 ```bash
@@ -265,7 +265,7 @@ auth.token = "换成一串强随机密钥"     # frps/frpc 必须一致
 ```toml
 serverAddr = "公网服务器IP"
 serverPort = 7000
-auth.token = "同 frps 的 token"
+auth.token = "<TOKEN>"   # 与 frps 相同
 
 [[proxies]]
 name = "ttmux-web"
@@ -291,7 +291,7 @@ remotePort = 13579       # 公网服务器对外端口
 ```toml
 serverAddr = "公网服务器IP"
 serverPort = 7000
-auth.token = "同 frps 的 token"
+auth.token = "<TOKEN>"   # 与 frps 相同
 
 [[proxies]]
 name = "ttmux-web"
@@ -306,7 +306,7 @@ localPort = 13579
 ```toml
 serverAddr = "公网服务器IP"
 serverPort = 7000
-auth.token = "同 frps 的 token"
+auth.token = "<TOKEN>"   # 与 frps 相同
 
 [[visitors]]
 name = "ttmux-web-visitor"

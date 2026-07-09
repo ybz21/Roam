@@ -67,9 +67,12 @@ else
     fi
   fi
 
+  # 只扫「新增行」(以 + 开头，排除 +++ 文件头)：策略是「不要新增密钥」。
+  # 扫上下文/删除行/@@ 段头会对文档里的示例占位（如 frp 的 auth.token）误报。
   if git diff "$BASE"...HEAD -- . ':!frontend/package-lock.json' ':!backend/go.sum' ':!cli/ttmux-cli-go/go.sum' \
+    | grep -E '^\+' | grep -vE '^\+\+\+' \
     | grep -nEI '(api[_-]?key|secret|token|password|passwd|private[_-]?key)[[:space:]]*[:=][[:space:]]*["'\''][^"'\'']{12,}' >/tmp/ttmux-review-secrets.txt; then
-    block "Potential hard-coded secret-like value found in the diff. Review and remove secrets before merge."
+    block "Potential hard-coded secret-like value found in newly added lines. Review and remove secrets before merge."
     sed 's/^/  - /' /tmp/ttmux-review-secrets.txt >> "$tmp"
   fi
 fi
