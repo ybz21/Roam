@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Roam 服务器安装器 —— 下载单一自包含二进制并注册为常驻服务（systemd）。
+# Roam 常驻安装器 —— 下载单一自包含二进制并注册为常驻服务（systemd）。适合 24 小时运行的机器。
 #
 # 一行安装（推荐）：
 #   curl -fsSL https://raw.githubusercontent.com/ybz21/Roam/main/install.sh | bash
@@ -174,7 +174,7 @@ EOF
 
 # ── 主流程 ───────────────────────────────────────────────────────
 echo ""
-echo -e "  ${bold}Roam${reset} ${dim}— 服务器安装（下载二进制 + systemd 常驻）${reset}"
+echo -e "  ${bold}Roam${reset} ${dim}— 常驻安装（下载二进制 + systemd 常驻）${reset}"
 echo ""
 
 detect_asset

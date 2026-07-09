@@ -150,7 +150,7 @@ closed.
 embedded, so the target machine needs no go/node/npm. Config and data live in
 `~/.roam/` (`config.yaml` is generated on first run).
 
-### Option A — install as a service (recommended for servers)
+### Option A — install as a service (recommended for always-on / 24×7 machines)
 
 One line downloads the binary and registers it as a persistent **systemd**
 service (survives reboots and logout):

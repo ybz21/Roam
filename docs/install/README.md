@@ -7,7 +7,7 @@ ttmux 有 **两种使用模式**，按需取用，也可叠加：
 | **① 本地 CLI** | 在终端 / 服务器上直接编排并行任务、Agent、蜂群 | `ttmux` 单文件二进制 | `tmux`（Claude Code 按需） |
 | **② 远程控制台** | **远程办公**：手机 / 平板 / 笔记本随地查看·操控（实时终端 + 浏览器镜像） | `roam` 预构建单文件二进制（内嵌前端 + ttmux CLI）+ frp 内网穿透 | 目标机零依赖（`go`、`node`+`npm` 仅从源码构建时才需要；远程暴露用 frp） |
 
-> 模式 ② 跑在你的开发机 / 服务器上，模式 ① 是它的底座——**远程控制台本质是 CLI 的网页封装**，
+> 模式 ② 跑在你的开发机 / 长期常驻的机器上，模式 ① 是它的底座——**远程控制台本质是 CLI 的网页封装**，
 > 读 = 代理 `ttmux <cmd> --json`，写 = 调对应子命令，行为与 CLI 永远一致。`roam` 二进制已把
 > 前端和 `ttmux` CLI 一并内嵌，目标机无需 go/node/npm（仅从源码构建时才需要）。
 >
@@ -98,7 +98,7 @@ ttmux status build
 
 ## 二、远程控制台
 
-远程控制台是 `roam` —— 一个**内嵌前端 + `ttmux` CLI 的自包含二进制**，发布为 `roam-<os>-<arch>`（linux/darwin，amd64/arm64）。配置与数据都在 `~/.roam/`（`config.yaml` 首次运行自动生成）。装在你的开发机 / 服务器上，本节先让它在本机 / 局域网跑起来；要从外网随地访问，见 [四、远程办公](#四远程办公--frp-内网穿透)。
+远程控制台是 `roam` —— 一个**内嵌前端 + `ttmux` CLI 的自包含二进制**，发布为 `roam-<os>-<arch>`（linux/darwin，amd64/arm64）。配置与数据都在 `~/.roam/`（`config.yaml` 首次运行自动生成）。装在你的开发机 / 长期常驻的机器上，本节先让它在本机 / 局域网跑起来；要从外网随地访问，见 [四、远程办公](#四远程办公--frp-内网穿透)。
 
 三种装法，任选其一：
 
@@ -108,7 +108,7 @@ ttmux status build
 curl -fsSL https://raw.githubusercontent.com/ybz21/Roam/main/install.sh | bash
 ```
 
-`install.sh` 是**服务器安装器**：检测 OS/架构 → 下载 `roam-<os>-<arch>` 到 `~/.local/bin/roam` → 注册 **systemd** 服务并启动。环境开关：
+`install.sh` 是**常驻安装器**（适合 24 小时运行的机器）：检测 OS/架构 → 下载 `roam-<os>-<arch>` 到 `~/.local/bin/roam` → 注册 **systemd** 服务并启动。环境开关：
 
 - `ROAM_VERSION=vX.Y.Z` —— 指定版本（默认 latest）。
 - `ROAM_BIN_DIR=DIR` —— 安装目录（默认 `~/.local/bin`）。
