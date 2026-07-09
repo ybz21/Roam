@@ -2099,25 +2099,25 @@ function AboutPage() {
   const { message } = AntApp.useApp()
   const [info, setInfo] = useState<{ version?: string; repo?: string }>({})
   const [checking, setChecking] = useState(false)
-  const [latest, setLatest] = useState<{ tag: string; url: string; newer: boolean } | null>(null)
+  const [latest, setLatest] = useState<{ tag: string; url: string; newer: boolean; failed?: boolean } | null>(null)
   useEffect(() => { api('GET', '/version').then((d: any) => setInfo(d?.data || {})).catch(() => {}) }, [])
   const repo = info.repo || 'ybz21/Roam'
   const releasesUrl = `https://github.com/${repo}/releases`
-  const norm = (v: string) => (v || '').trim().replace(/^v/i, '')
+  // 走后端 /update-check（带缓存+优雅降级），避免浏览器直连 GitHub API 的限流/跨域/被墙问题
   const checkUpdate = async () => {
     setChecking(true); setLatest(null)
     try {
-      const r = await fetch(`https://api.github.com/repos/${repo}/releases?per_page=1`)
-      if (!r.ok) throw new Error(String(r.status))
-      const arr = await r.json()
-      const rel = Array.isArray(arr) ? arr[0] : null
-      if (!rel) { message.info(t('about.noRelease')); return }
-      const tag = rel.tag_name as string
-      const cur = norm(info.version || '')
-      const newer = !cur || cur === 'dev' || norm(tag) !== cur
-      setLatest({ tag, url: rel.html_url || releasesUrl, newer })
-    } catch { message.error(t('about.checkFailed')) }
-    finally { setChecking(false) }
+      const d = (await api('GET', '/update-check'))?.data || {}
+      if (d.error || !d.latest) {
+        setLatest({ tag: '', url: d.releases || releasesUrl, newer: false, failed: true })
+        message.warning(t('about.checkFailed'))
+      } else {
+        setLatest({ tag: d.latest, url: d.url || d.releases || releasesUrl, newer: !!d.newer, failed: false })
+      }
+    } catch {
+      setLatest({ tag: '', url: releasesUrl, newer: false, failed: true })
+      message.error(t('about.checkFailed'))
+    } finally { setChecking(false) }
   }
   return (
     <Card style={{ maxWidth: 520, margin: '0 auto' }}>
@@ -2136,7 +2136,12 @@ function AboutPage() {
         </div>
         <Space wrap style={{ justifyContent: 'center' }}>
           <Button loading={checking} onClick={checkUpdate}>{t('about.checkUpdate')}</Button>
-          {latest && (latest.newer
+          {latest?.failed && (
+            <a href={latest.url} target="_blank" rel="noreferrer">
+              <Button>{t('about.goReleases')}</Button>
+            </a>
+          )}
+          {latest && !latest.failed && (latest.newer
             ? <a href={latest.url} target="_blank" rel="noreferrer">
                 <Button type="primary">{t('about.newVersion', { tag: latest.tag })}</Button>
               </a>

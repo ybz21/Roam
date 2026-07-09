@@ -621,6 +621,7 @@ const enUS = {
   'about.upToDate': "You're on the latest version",
   'about.checkFailed': 'Update check failed, try again later',
   'about.noRelease': 'No releases yet',
+  'about.goReleases': 'Open releases page',
   'env.addVariable': 'Add environment variable',
   'env.set': 'Set',
   'env.keyRequired': 'KEY is required',

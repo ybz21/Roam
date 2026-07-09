@@ -621,6 +621,7 @@ const zhCN = {
   'about.upToDate': '已是最新版本',
   'about.checkFailed': '检查更新失败，请稍后再试',
   'about.noRelease': '暂无发布版本',
+  'about.goReleases': '前往发布页手动查看',
   'env.addVariable': '添加环境变量',
   'env.set': '设置',
   'env.keyRequired': '需要 KEY',

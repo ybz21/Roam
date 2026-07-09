@@ -205,7 +205,8 @@ if [ "$DEV" = 1 ]; then
   # 检测 .go 与 go:embed 的资源(*.tmpl/*.html)变更，避免改模板却跳过编译
   if [ ! -f "$BIN" ] || [ "$(find backend \( -name '*.go' -o -name '*.tmpl' -o -name '*.html' \) -newer "$BIN" 2>/dev/null | head -1)" ]; then
     echo "==> 编译后端..."
-    (cd backend && go build -o ttmux-web ./cmd)
+    ROAM_VER="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
+    (cd backend && go build -ldflags "-X main.version=${ROAM_VER}" -o ttmux-web ./cmd)
   else
     echo "==> 后端无变更，跳过编译"
   fi

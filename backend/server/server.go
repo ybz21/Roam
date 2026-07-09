@@ -7,12 +7,16 @@ package server
 
 import (
 	_ "embed"
+	"encoding/json"
 	"log"
 	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"ttmux-web/api"
@@ -63,7 +67,12 @@ func New(cfg Config) *gin.Engine {
 	r.POST("/api/setup", a.Setup)                // 首次设置口令（仅当尚未设置口令时可用），成功即发会话
 	r.GET("/api/pubconfig", a.PubConfig)         // 登录页据此决定是否要动态码 / 是否需首次设置
 	r.GET("/api/version", func(c *gin.Context) { // roam 版本 + 仓库（关于页/检测更新，免登录）
-		c.JSON(http.StatusOK, gin.H{"data": gin.H{"version": cfg.Version, "repo": "ybz21/Roam"}})
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"version": cfg.Version, "repo": roamRepo}})
+	})
+	// 检测更新：后端查 GitHub Releases（带缓存 + 优雅降级），避免浏览器直连 GitHub API
+	// 遇到的限流/跨域/网络不通问题。无论成功与否都返回 releases 页地址供手动前往。
+	r.GET("/api/update-check", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"data": checkUpdate(cfg.Version)})
 	})
 
 	// 下载自签证书（免登录）：手机装为受信任证书后即把本站当安全上下文，
@@ -262,6 +271,72 @@ func fileExists(p string) bool {
 	}
 	st, err := os.Stat(p)
 	return err == nil && !st.IsDir()
+}
+
+const roamRepo = "ybz21/Roam"
+
+var (
+	ucMu   sync.Mutex
+	ucAt   time.Time
+	ucData gin.H
+)
+
+// checkUpdate 查 GitHub 最新 release（含 prerelease），与当前版本比对。
+// 成功结果缓存 30 分钟；失败也返回 releases 页地址，前端据此优雅降级（仍可手动前往）。
+func checkUpdate(current string) gin.H {
+	releases := "https://github.com/" + roamRepo + "/releases"
+	ucMu.Lock()
+	defer ucMu.Unlock()
+	if ucData != nil && time.Since(ucAt) < 30*time.Minute {
+		return ucData
+	}
+	res := gin.H{"current": current, "repo": roamRepo, "releases": releases}
+	client := &http.Client{Timeout: 6 * time.Second}
+	req, _ := http.NewRequest("GET", "https://api.github.com/repos/"+roamRepo+"/releases?per_page=1", nil)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	resp, err := client.Do(req)
+	if err != nil {
+		res["error"] = "unreachable"                        // 网络不通/被墙/超时
+		ucData, ucAt = res, time.Now().Add(-25*time.Minute) // 只缓存 5 分钟，尽快重试
+		return res
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		res["error"] = "http_" + strconv.Itoa(resp.StatusCode) // 常见 403 限流
+		ucData, ucAt = res, time.Now().Add(-25*time.Minute)
+		return res
+	}
+	var arr []struct {
+		Tag  string `json:"tag_name"`
+		URL  string `json:"html_url"`
+		Pre  bool   `json:"prerelease"`
+		Name string `json:"name"`
+	}
+	if json.NewDecoder(resp.Body).Decode(&arr) == nil && len(arr) > 0 {
+		res["latest"] = arr[0].Tag
+		res["url"] = firstNonEmptyStr(arr[0].URL, releases)
+		res["prerelease"] = arr[0].Pre
+		res["newer"] = isNewer(arr[0].Tag, current)
+	}
+	ucData, ucAt = res, time.Now()
+	return res
+}
+
+// isNewer 判断 latest 是否比 current 新：current 为空/dev 一律视为可更新；
+// 否则按去掉前导 v 的字符串是否不同（保守：不同即提示，交由用户到 release 页确认）。
+func isNewer(latest, current string) bool {
+	c := strings.TrimPrefix(strings.TrimSpace(current), "v")
+	if c == "" || c == "dev" {
+		return true
+	}
+	return strings.TrimPrefix(strings.TrimSpace(latest), "v") != c
+}
+
+func firstNonEmptyStr(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }
 
 func mountWeb(r *gin.Engine, frontendDir string) {
