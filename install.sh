@@ -51,11 +51,23 @@ detect_asset() {
   OS="$os"; ASSET="roam-${os}-${arch}"
 }
 
-download_url() {
-  if [ "$VERSION" = latest ]; then
+# 解析生效的 release tag：显式 ROAM_VERSION 直接用；否则优先 stable「latest」，
+# 若仓库只有 prerelease（latest 会 404）则退回 GitHub API 取最新一个 release（含 prerelease）。
+resolve_tag() {
+  [ "$VERSION" != latest ] && { echo "$VERSION"; return; }
+  if curl -fsIL -o /dev/null "https://github.com/${REPO}/releases/latest/download/${ASSET}" 2>/dev/null; then
+    echo latest; return
+  fi
+  curl -fsSL "https://api.github.com/repos/${REPO}/releases?per_page=1" 2>/dev/null \
+    | grep -m1 '"tag_name"' | sed -E 's/.*"tag_name":[[:space:]]*"([^"]+)".*/\1/'
+}
+
+download_url() {  # <tag>
+  local tag="$1"
+  if [ -z "$tag" ] || [ "$tag" = latest ]; then
     echo "https://github.com/${REPO}/releases/latest/download/${ASSET}"
   else
-    echo "https://github.com/${REPO}/releases/download/${VERSION}/${ASSET}"
+    echo "https://github.com/${REPO}/releases/download/${tag}/${ASSET}"
   fi
 }
 
@@ -65,8 +77,8 @@ install_binary() {
   local dest="${BIN_DIR}/roam"
 
   if [ "${ROAM_FROM_SOURCE:-0}" != 1 ]; then
-    local url; url="$(download_url)"
-    step "下载 ${ASSET} ($VERSION)..."
+    local tag url; tag="$(resolve_tag)"; url="$(download_url "$tag")"
+    step "下载 ${ASSET} (${tag:-latest})..."
     if curl -fSL --progress-bar -o "${dest}.tmp" "$url"; then
       mv "${dest}.tmp" "$dest"; chmod +x "$dest"
       info "roam 已安装到 $dest"
@@ -88,6 +100,22 @@ install_binary() {
     return 0
   fi
   die "无法安装 roam：下载失败且非源码环境（需 clone 仓库 + go/npm，或先发布 release）"
+}
+
+# ── tmux（会话基座）：roam 内嵌 ttmux，但会话/蜂群仍需宿主机的 tmux ─────
+ensure_tmux() {
+  command -v tmux >/dev/null && { info "tmux 已就绪"; return 0; }
+  local sudo=""; [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null && sudo=sudo
+  step "未检测到 tmux，尝试自动安装（可能需要 sudo 口令）..."
+  if   command -v apt-get >/dev/null; then $sudo apt-get update -qq && $sudo apt-get install -y -qq tmux
+  elif command -v dnf     >/dev/null; then $sudo dnf install -y tmux
+  elif command -v yum     >/dev/null; then $sudo yum install -y tmux
+  elif command -v pacman  >/dev/null; then $sudo pacman -Sy --noconfirm tmux
+  elif command -v zypper  >/dev/null; then $sudo zypper -n install tmux
+  elif command -v apk     >/dev/null; then $sudo apk add tmux
+  elif command -v brew    >/dev/null; then brew install tmux
+  fi
+  command -v tmux >/dev/null && info "tmux 已安装" || warn "tmux 未安装：会话/蜂群功能需要它，请手动安装后重试"
 }
 
 # ── systemd 常驻服务 ─────────────────────────────────────────────
@@ -151,6 +179,7 @@ echo ""
 
 detect_asset
 install_binary
+ensure_tmux
 
 if [ "${ROAM_NO_SERVICE:-0}" = 1 ]; then
   step "ROAM_NO_SERVICE=1：跳过服务注册"
