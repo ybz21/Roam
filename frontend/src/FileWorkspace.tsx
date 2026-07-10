@@ -2,7 +2,7 @@
 // 支持左右双栏(编辑组 A/B)：拖 tab 到另一栏、或从文件树拖文件到某栏；会话(终端)作为固定首 tab 常驻 A 栏。
 // 两处复用：独立 Files 页（纯文件）与新标签 SoloTerminal（会话经 leading* 槽传入）。
 import { type ReactNode, Fragment, useEffect, useRef, useState } from 'react'
-import { App as AntApp } from 'antd'
+import { App as AntApp, Dropdown, type MenuProps } from 'antd'
 import FileBrowser from './FileBrowser'
 import { FileView } from './fileview'
 import { FileTypeIcon } from './file-icons'
@@ -57,11 +57,15 @@ export default function FileWorkspace({
   const [focus, setFocus] = useState<Group>('A')
   const [dirtyFiles, setDirtyFiles] = useState<Set<string>>(new Set())
   const [dropHint, setDropHint] = useState<Group | 'split' | null>(null) // 拖拽落点提示
+  const [dragging, setDragging] = useState(false) // 原生拖拽进行中 → 每栏内容盖一层透明接盘层，压过终端/Monaco
   useEffect(() => {
-    const clear = () => setDropHint(null)
-    document.addEventListener('dragend', clear)
-    document.addEventListener('drop', clear, true)
-    return () => { document.removeEventListener('dragend', clear); document.removeEventListener('drop', clear, true) }
+    // drop 用「冒泡阶段」清理：React 事件委托挂在 document 内层根节点，冒泡到 document 时
+    // onDrop 已派发完，此时卸接盘层安全。若用捕获阶段则会赶在 onDrop 前卸掉接盘层 →
+    // drop 落到已移除的元素 → onDrop 不触发 → tab 不动。dragend 兜底（拖到界外/取消）。
+    const end = () => { setDropHint(null); setDragging(false) }
+    document.addEventListener('dragend', end)
+    document.addEventListener('drop', end)
+    return () => { document.removeEventListener('dragend', end); document.removeEventListener('drop', end) }
   }, [])
   const split = filesB.length > 0
 
@@ -175,7 +179,99 @@ export default function FileWorkspace({
     if (p) openInGroup(p, to)
   }
 
-  const tabBase: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap', fontSize: 12, cursor: 'pointer', borderRight: '1px solid var(--border)' }
+  // ── 触屏拖拽 + 点按菜单兜底 ──
+  // HTML5 原生拖拽在触屏不触发；且拖到另一栏时，那栏的终端/Monaco 会吞掉 drag 事件，
+  // 导致「拖不进另一个分栏」。这里改用 PointerEvent + elementFromPoint 命中落点栏（爬到
+  // 带 data-drop-group 的祖先），绕开内层控件，落点栏一定能识别。
+  const coarse = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches
+  type Payload = { kind: 'tab'; path: string; from: Group } | { kind: 'lead' }
+  const [touchDrag, setTouchDrag] = useState<{ label: string; x: number; y: number } | null>(null)
+  const draggedRef = useRef(false)
+  const rightGroup: Group = leftGroup === 'A' ? 'B' : 'A'
+
+  const resolveDropAt = (x: number, y: number): { group: Group; hint: Group | 'split' } | null => {
+    const el = document.elementFromPoint(x, y) as HTMLElement | null
+    const zone = el?.closest('[data-drop-group]') as HTMLElement | null
+    if (!zone) return null
+    const g = zone.getAttribute('data-drop-group') as Group
+    if (zone.getAttribute('data-drop-content') === '1' && !split && g === 'A') {
+      const r = zone.getBoundingClientRect()
+      if (x > r.left + r.width / 2) return { group: 'B', hint: 'split' } // 单栏拖到右半 → 拆栏
+    }
+    return { group: g, hint: g }
+  }
+  const applyPayload = (p: Payload, to: Group) => {
+    if (p.kind === 'lead') { setSwapped(to !== leftGroup); return }
+    moveTab(p.path, p.from, to)
+  }
+  const startTouchDrag = (e: React.PointerEvent, p: Payload, label: string) => {
+    if (e.pointerType === 'mouse') return // 桌面走原生 HTML5 拖拽
+    const sx = e.clientX, sy = e.clientY
+    let started = false
+    const move = (ev: PointerEvent) => {
+      if (!started && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 8) return
+      started = true; draggedRef.current = true
+      ev.preventDefault()
+      const hit = resolveDropAt(ev.clientX, ev.clientY)
+      setDropHint(hit ? hit.hint : null)
+      setTouchDrag({ label, x: ev.clientX, y: ev.clientY })
+    }
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
+      setTouchDrag(null); setDropHint(null)
+      if (started) { const hit = resolveDropAt(ev.clientX, ev.clientY); if (hit) applyPayload(p, hit.group) }
+      setTimeout(() => { draggedRef.current = false }, 0) // 让紧随的 click 被忽略
+    }
+    window.addEventListener('pointermove', move, { passive: false })
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
+  }
+  // 触屏兜底：tab 上「⋯」菜单，不拖也能移到左右栏 / 分栏
+  const buildMenu = (p: Payload): NonNullable<MenuProps['items']> => {
+    if (p.kind === 'lead') {
+      if (!split) return []
+      return leftGroup === 'A'
+        ? [{ key: 'r', label: t('file.sessionRight'), onClick: () => setSwapped(true) }]
+        : [{ key: 'l', label: t('file.sessionLeft'), onClick: () => setSwapped(false) }]
+    }
+    if (!split) return [
+      { key: 'sr', label: t('file.splitRight'), onClick: () => { moveTab(p.path, p.from, 'B'); setSwapped(false) } },
+      { key: 'sl', label: t('file.splitLeft'), onClick: () => { moveTab(p.path, p.from, 'B'); setSwapped(true) } },
+    ]
+    return p.from === leftGroup
+      ? [{ key: 'mr', label: t('file.moveRight'), onClick: () => moveTab(p.path, p.from, rightGroup) }]
+      : [{ key: 'ml', label: t('file.moveLeft'), onClick: () => moveTab(p.path, p.from, leftGroup) }]
+  }
+  const tabMenuBtn = (p: Payload) => {
+    if (!coarse) return null
+    const items = buildMenu(p)
+    if (items.length === 0) return null
+    return (
+      <Dropdown trigger={['click']} placement="bottomRight" menu={{ items }}>
+        <span className="cc-tabmenu" title={t('file.tabActions')} onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}
+          style={{ padding: '0 4px', color: 'var(--text-dim)', fontSize: 15, lineHeight: 1 }}>⋯</span>
+      </Dropdown>
+    )
+  }
+
+  // 内容区(终端/编辑器)拖放：单栏 primary 落右半 → 拆栏，否则落本栏。content div 与拖拽期覆盖层共用。
+  const onContentDragOver = (e: React.DragEvent, g: Group, primary: boolean) => {
+    if (!dragHasPayload(e)) return
+    e.preventDefault()
+    if (!split && primary) setDropHint('split'); else setDropHint(g)
+  }
+  const onContentDrop = (e: React.DragEvent, g: Group, primary: boolean) => {
+    if (!dragHasPayload(e)) return
+    e.preventDefault()
+    const r = e.currentTarget.getBoundingClientRect()
+    const inRightHalf = e.clientX > r.left + r.width / 2
+    const target: Group = (!split && primary && inRightHalf) ? 'B' : g
+    setDropHint(null); applyDrop(e, target)
+  }
+
+  const tabBase: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap', fontSize: 12, cursor: 'pointer', borderRight: '1px solid var(--border)', touchAction: 'none' }
 
   const fileTab = (f: string, g: Group) => {
     const prev = isPreview(f)
@@ -184,13 +280,15 @@ export default function FileWorkspace({
     const act = activeOf(g) === f
     return (
       <div key={g + f} title={prev ? `${t('file.preview')} · ${rp}` : f} draggable
-        onDragStart={(e) => { e.dataTransfer.setData(TAB_MIME, JSON.stringify({ path: f, from: g })); e.dataTransfer.effectAllowed = 'move' }}
-        onClick={() => { setActiveOf(g, f); setFocus(g) }}
+        onDragStart={(e) => { e.dataTransfer.setData(TAB_MIME, JSON.stringify({ path: f, from: g })); e.dataTransfer.effectAllowed = 'move'; setDragging(true) }}
+        onPointerDown={(e) => startTouchDrag(e, { kind: 'tab', path: f, from: g }, baseName(f))}
+        onClick={() => { if (draggedRef.current) return; setActiveOf(g, f); setFocus(g) }}
         className={`cc-filetab${isDirty ? ' dirty' : ''}`}
         style={{ ...tabBase, gap: 3, padding: '5px 8px 5px 10px', color: act ? 'var(--text-bright)' : 'var(--text-dim)', background: act ? 'var(--bg-base)' : 'transparent', borderTop: `2px solid ${act ? '#58a6ff' : 'transparent'}` }}>
         <span style={{ display: 'inline-flex', transform: 'scale(0.72)' }}><FileTypeIcon name={rp} /></span>
         <span style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', fontStyle: prev ? 'italic' : undefined }}>{prev ? `${t('file.preview')}: ${baseName(rp)}` : baseName(f)}</span>
-        <a className="cc-tabx" onClick={(e) => { e.stopPropagation(); closeFileTab(f, g) }} title={isDirty ? t('file.unsaved') : t('file.closeTab')}>
+        {tabMenuBtn({ kind: 'tab', path: f, from: g })}
+        <a className="cc-tabx" onClick={(e) => { e.stopPropagation(); closeFileTab(f, g) }} onPointerDown={(e) => e.stopPropagation()} title={isDirty ? t('file.unsaved') : t('file.closeTab')}>
           <span className="dot">●</span><span className="x">×</span>
         </a>
       </div>
@@ -207,16 +305,18 @@ export default function FileWorkspace({
       <div style={{ flex: `${grow} 1 0`, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}
         onClick={() => setFocus(g)}>
         <div style={{ display: 'flex', alignItems: 'stretch', borderBottom: '1px solid var(--border)', background: 'var(--bg-container)' }}>
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'stretch', overflowX: 'auto' }}
+          <div data-drop-group={g} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'stretch', overflowX: 'auto' }}
             onDragOver={(e) => { if (dragHasPayload(e)) { e.preventDefault(); setDropHint(g) } }}
             onDragLeave={() => setDropHint((h) => (h === g ? null : h))}
             onDrop={(e) => { if (dragHasPayload(e)) { e.preventDefault(); setDropHint(null); applyDrop(e, g) } }}>
             {primary && hasLeading && (
-              <div onClick={() => setActiveOf('A', null)} title={leadingTitle}
+              <div onClick={() => { if (draggedRef.current) return; setActiveOf('A', null) }} title={leadingTitle}
                 draggable={split}
-                onDragStart={(e) => { e.dataTransfer.setData(LEAD_MIME, '1'); e.dataTransfer.effectAllowed = 'move' }}
+                onDragStart={(e) => { e.dataTransfer.setData(LEAD_MIME, '1'); e.dataTransfer.effectAllowed = 'move'; setDragging(true) }}
+                onPointerDown={(e) => { if (split) startTouchDrag(e, { kind: 'lead' }, leadingTitle || '') }}
                 style={{ ...tabBase, gap: 6, padding: '5px 12px', color: leadingActive ? 'var(--text-bright)' : 'var(--text-dim)', background: leadingActive ? 'var(--bg-base)' : 'transparent', borderTop: `2px solid ${leadingActive ? '#58a6ff' : 'transparent'}` }}>
                 {leadingTab}
+                {tabMenuBtn({ kind: 'lead' })}
               </div>
             )}
             {files.map((f) => fileTab(f, g))}
@@ -225,19 +325,10 @@ export default function FileWorkspace({
         </div>
         {/* 会话工具栏：只属会话，放在会话首 tab 的正下方、终端之上（跟着会话那栏走） */}
         {primary && leadingActive && chrome}
-        <div style={{ flex: 1, minWidth: 0, minHeight: 0, position: 'relative', display: 'flex' }}
-          onDragOver={(e) => { if (dragHasPayload(e)) { e.preventDefault(); if (!split && primary) setDropHint('split'); else setDropHint(g) } }}
+        <div data-drop-group={g} data-drop-content="1" style={{ flex: 1, minWidth: 0, minHeight: 0, position: 'relative', display: 'flex' }}
+          onDragOver={(e) => onContentDragOver(e, g, primary)}
           onDragLeave={(e) => { if (e.currentTarget === e.target) setDropHint(null) }}
-          onDrop={(e) => {
-            if (!dragHasPayload(e)) return
-            e.preventDefault()
-            // 分栏判断直接用落点位置，不依赖 React 状态 dropHint：快速拖放时最后一帧 dragover
-            // 与 drop 之间来不及 re-render 提交 dropHint，读状态会失效（还会被全局 drop 清理干扰）。
-            const r = e.currentTarget.getBoundingClientRect()
-            const inRightHalf = e.clientX > r.left + r.width / 2
-            const target: Group = (!split && primary && inRightHalf) ? 'B' : g
-            setDropHint(null); applyDrop(e, target)
-          }}>
+          onDrop={(e) => onContentDrop(e, g, primary)}>
           {primary && leadingContent}
           {files.map((f) => {
             const prev = isPreview(f)
@@ -253,6 +344,14 @@ export default function FileWorkspace({
           {(!primary || !hasLeading) && active === null && files.length === 0 && (
             <div style={{ flex: 1, display: 'grid', placeItems: 'center', color: 'var(--text-dimmer)', fontSize: 13 }}>{emptyText || t('file.selectPreview')}</div>
           )}
+          {/* 拖拽期透明接盘层：盖在终端/Monaco 之上，抢在它们之前接住 dragover/drop，
+              否则拖 tab 到有终端/编辑器的那一栏时事件被内层吞掉 → 拖不进去 */}
+          {dragging && (
+            <div data-drop-group={g} data-drop-content="1" style={{ position: 'absolute', inset: 0, zIndex: 15 }}
+              onDragOver={(e) => onContentDragOver(e, g, primary)}
+              onDragLeave={(e) => { if (e.currentTarget === e.target) setDropHint(null) }}
+              onDrop={(e) => onContentDrop(e, g, primary)} />
+          )}
           {/* 单栏时拖到右半区 → 拆出第二栏 */}
           {!split && primary && dropHint === 'split' && (
             <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: '50%', zIndex: 20, pointerEvents: 'none', background: 'rgba(88,166,255,.12)', borderLeft: '2px dashed #58a6ff', display: 'grid', placeItems: 'center', color: '#58a6ff', fontSize: 13, fontWeight: 600 }}>{t('file.splitHere')}</div>
@@ -265,7 +364,8 @@ export default function FileWorkspace({
   }
 
   return (
-    <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+    <div style={{ flex: 1, minHeight: 0, display: 'flex' }}
+      onDragEnter={(e) => { if (!dragging && dragHasPayload(e)) setDragging(true) }}>
       {explorerOpen && (
         <>
           <div style={{ flex: `0 0 ${dockW}px`, minWidth: 0, minHeight: 0, display: 'flex' }}>
@@ -285,6 +385,9 @@ export default function FileWorkspace({
           ))}
         </div>
       </div>
+      {touchDrag && (
+        <div style={{ position: 'fixed', left: touchDrag.x + 12, top: touchDrag.y + 12, zIndex: 9999, pointerEvents: 'none', padding: '4px 10px', fontSize: 12, borderRadius: 6, background: 'var(--bg-container)', border: '1px solid #58a6ff', color: 'var(--text-bright)', boxShadow: '0 4px 16px rgba(0,0,0,.4)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{touchDrag.label}</div>
+      )}
     </div>
   )
 }
