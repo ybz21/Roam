@@ -58,8 +58,8 @@ func (a *API) PluginInstall(c *gin.Context) {
 	a.text(c, "plugin", "install", b.Path)
 }
 
-// DELETE /api/plugins/:id —— 卸载外部插件(builtin 由 CLI 拒绝)。
-// ?purge=1 连同清除该插件的 storage/config(默认保留以便重装复用)。
+// DELETE /api/plugins/:id —— 卸载插件。外部插件删文件;内置插件由 CLI 软删
+// (tombstone,从列表隐藏、可经恢复入口找回)。?purge=1 连同清除 storage/config。
 func (a *API) PluginUninstall(c *gin.Context) {
 	args := []string{"plugin", "uninstall", c.Param("id")}
 	if p := c.Query("purge"); p == "1" || p == "true" {
@@ -67,6 +67,12 @@ func (a *API) PluginUninstall(c *gin.Context) {
 	}
 	a.text(c, args...)
 }
+
+// GET /api/plugin/removed —— 已卸载待恢复的内置插件(恢复入口列表)
+func (a *API) PluginsRemoved(c *gin.Context) { a.json(c, "plugin", "ls", "--removed", "--json") }
+
+// POST /api/plugins/:id/restore —— 恢复被卸载的内置插件
+func (a *API) PluginRestore(c *gin.Context) { a.text(c, "plugin", "restore", c.Param("id")) }
 
 // POST /api/plugin/track —— 把会话登记给插件跟踪(如新建会话勾选「结束后自动互审」:
 // labels 带 review:auto=true 与 workdir,plugind 在会话退出时通知插件)

@@ -89,6 +89,9 @@ func (s *Store) migrate() error {
 	}
 	// 增量列:外部插件安装路径(旧库已有该列时 ALTER 报错,忽略)
 	_, _ = s.db.Exec(`ALTER TABLE plugins ADD COLUMN install_path TEXT`)
+	// 增量列:内置插件软删标记(编译在二进制里删不掉文件,卸载=打 tombstone,
+	// 从列表隐藏且不被 SyncBuiltins 复活;可经「安装」入口恢复)。
+	_, _ = s.db.Exec(`ALTER TABLE plugins ADD COLUMN removed INTEGER DEFAULT 0`)
 	return nil
 }
 
@@ -160,6 +163,7 @@ func (s *Store) migrateRenamedBuiltins() {
 // Remove deletes a plugin's registry row plus its owned rows in the session/
 // finding/notification tables —— 卸载后不留孤儿数据(会话表按 plugin、通知表
 // 按 source 归属)。安装文件与 storage 目录由调用方处理(见 uninstall)。
+// 仅用于外部插件;内置插件走 SoftRemove(见其注释)。
 func (s *Store) Remove(id string) error {
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -179,9 +183,47 @@ func (s *Store) Remove(id string) error {
 	return tx.Commit()
 }
 
-// List returns all registered plugins.
+// SoftRemove tombstones a built-in plugin: 保留注册行(否则每次命令的
+// SyncBuiltins 会把它 upsert 回来并重新启用),置 removed=1 + 禁用,并清掉
+// 其名下的会话/finding/通知孤儿行。恢复见 Restore。
+func (s *Store) SoftRemove(id string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	for _, q := range []string{
+		`UPDATE plugins SET removed=1, enabled=0 WHERE id=?`,
+		`DELETE FROM plugin_sessions WHERE plugin=?`,
+		`DELETE FROM plugin_findings WHERE plugin=?`,
+		`DELETE FROM plugin_notifications WHERE source=?`,
+	} {
+		if _, err := tx.Exec(q, id); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// Restore clears a built-in tombstone(removed=0)并重新启用。manifest 已由
+// 调用前的 SyncBuiltins 刷新,这里只翻状态。
+func (s *Store) Restore(id string) error {
+	_, err := s.db.Exec(`UPDATE plugins SET removed=0, enabled=1 WHERE id=?`, id)
+	return err
+}
+
+// List returns registered plugins that are not soft-removed(正常展示用)。
 func (s *Store) List() ([]RegisteredPlugin, error) {
-	rows, err := s.db.Query(`SELECT manifest, enabled, IFNULL(installed,''), IFNULL(install_path,'') FROM plugins ORDER BY id`)
+	return s.query(`WHERE IFNULL(removed,0)=0`)
+}
+
+// Removed returns soft-removed built-in plugins awaiting restore(恢复入口用)。
+func (s *Store) Removed() ([]RegisteredPlugin, error) {
+	return s.query(`WHERE IFNULL(removed,0)=1`)
+}
+
+func (s *Store) query(where string) ([]RegisteredPlugin, error) {
+	rows, err := s.db.Query(`SELECT manifest, enabled, IFNULL(installed,''), IFNULL(install_path,'') FROM plugins ` + where + ` ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -202,9 +244,9 @@ func (s *Store) List() ([]RegisteredPlugin, error) {
 	return out, rows.Err()
 }
 
-// Get returns one plugin by id (or by short name).
+// Get returns one plugin by id (or by short name), 含已软删的(恢复/卸载需要能定位)。
 func (s *Store) Get(id string) (RegisteredPlugin, error) {
-	all, err := s.List()
+	all, err := s.query("")
 	if err != nil {
 		return RegisteredPlugin{}, err
 	}

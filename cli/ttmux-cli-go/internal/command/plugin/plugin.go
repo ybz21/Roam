@@ -34,6 +34,8 @@ func Run(rt runtime.Runtime, args []string, out io.Writer) error {
 		return install(env, args, out)
 	case "uninstall":
 		return uninstall(env, args, out)
+	case "restore":
+		return restore(env, args, out)
 	case "info":
 		return info(env, args, out)
 	case "enable", "disable":
@@ -99,7 +101,12 @@ func list(env plugin.Env, args []string, out io.Writer) error {
 		return err
 	}
 	defer store.Close()
-	plugins, err := store.List()
+	var plugins []plugin.RegisteredPlugin
+	if hasFlag(args, "--removed") {
+		plugins, err = store.Removed() // 已卸载的内置插件(恢复入口)
+	} else {
+		plugins, err = store.List()
+	}
 	if err != nil {
 		return err
 	}
@@ -432,7 +439,20 @@ func uninstall(env plugin.Env, args []string, out io.Writer) error {
 		return err
 	}
 	if p.Manifest.Runtime.Kind == "builtin" {
-		return fmt.Errorf("built-in plugin %s cannot be uninstalled (disable with: ttmux plugin disable %s)", p.Manifest.ID, p.Manifest.Name)
+		// 内置插件编译在二进制里,删不掉文件:改为软删(tombstone)——从列表隐藏、
+		// SyncBuiltins 不会复活,可经「安装」入口(ttmux plugin restore)恢复。
+		stopPluginSessions(env, store, p.Manifest.ID)
+		if err := store.SoftRemove(p.Manifest.ID); err != nil {
+			return err
+		}
+		env.Audit(plugin.AuditEntry{Plugin: p.Manifest.ID, Version: p.Manifest.Version, Actor: actor(), Action: "plugin.uninstall", Decision: "allowed"})
+		if purge {
+			_ = os.RemoveAll(env.StorageDir(p.Manifest.ID))
+			ui.Ok(out, "已卸载内置插件 %s(含配置与数据,--purge;可在「安装」入口恢复)", ui.Bold(p.Manifest.ID))
+			return nil
+		}
+		ui.Ok(out, "已卸载内置插件 %s(配置保留;可在「安装」入口恢复)", ui.Bold(p.Manifest.ID))
+		return nil
 	}
 	// 先停掉插件还活着的会话(spawn 的评审会话 + im-bridge 常驻监听会话),
 	// 免得进程继续引用即将被删的插件文件。
@@ -451,6 +471,33 @@ func uninstall(env plugin.Env, args []string, out io.Writer) error {
 		return nil
 	}
 	ui.Ok(out, "已卸载 %s(配置与数据保留在 storage,可重装复用;彻底清除加 --purge)", ui.Bold(p.Manifest.ID))
+	return nil
+}
+
+// restore 恢复被卸载的内置插件:清掉软删标记并重新启用。manifest 已由 openStore
+// 的 SyncBuiltins 刷新。外部插件不适用(请重新安装插件包)。
+func restore(env plugin.Env, args []string, out io.Writer) error {
+	id := firstNonFlag(args)
+	if id == "" {
+		return fmt.Errorf("usage: ttmux plugin restore <id>")
+	}
+	store, err := openStore(env)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+	p, err := store.Get(id)
+	if err != nil {
+		return err
+	}
+	if p.Manifest.Runtime.Kind != "builtin" {
+		return fmt.Errorf("只有内置插件支持恢复;外部插件请重新安装插件包")
+	}
+	if err := store.Restore(p.Manifest.ID); err != nil {
+		return err
+	}
+	env.Audit(plugin.AuditEntry{Plugin: p.Manifest.ID, Version: p.Manifest.Version, Actor: actor(), Action: "plugin.restore", Decision: "allowed"})
+	ui.Ok(out, "已恢复内置插件 %s", ui.Bold(p.Manifest.ID))
 	return nil
 }
 
@@ -559,9 +606,10 @@ func shellQuote(s string) string {
 func help(out io.Writer) {
 	fmt.Fprint(out, `用法: ttmux plugin <子命令>
 
-  ls [--json]                         列出插件与其命令
+  ls [--json] [--removed]             列出插件与其命令(--removed 列出已卸载待恢复的内置插件)
   install <目录|包.tgz>                安装外部插件(node/exec 运行时,默认未启用)
-  uninstall <id> [--purge]            卸载外部插件(builtin 不可卸载;--purge 连配置数据一并清除)
+  uninstall <id> [--purge]            卸载插件(内置=软删可恢复;--purge 连配置数据一并清除)
+  restore <id>                        恢复被卸载的内置插件
   info <id> [--json]                  插件详情(manifest、权限、状态)
   enable|disable <id>                 启用 / 禁用插件
   run <插件>.<命令> [--key value ...]  调用插件命令(如 review-mesh.review)

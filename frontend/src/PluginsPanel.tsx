@@ -148,19 +148,39 @@ export default function PluginsPanel() {
               onChanged={() => { setSelected(''); reload() }} />
           : <Empty style={{ marginTop: 64 }} />}
       </div>
-      <InstallModal open={installOpen} t={t} onClose={() => setInstallOpen(false)}
+      <InstallModal open={installOpen} locale={locale} t={t} onClose={() => setInstallOpen(false)}
         onDone={() => { setInstallOpen(false); reload() }} />
     </div>
   )
 }
 
 // ── 安装入口:上传 .tgz 插件包,或安装开发机上的本地目录 ──
-function InstallModal({ open, onClose, onDone, t }: {
-  open: boolean; onClose: () => void; onDone: () => void
+function InstallModal({ open, onClose, onDone, locale, t }: {
+  open: boolean; onClose: () => void; onDone: () => void; locale: string
   t: (k: string, vars?: Record<string, string | number>) => string
 }) {
   const [path, setPath] = useState('')
   const [busy, setBusy] = useState(false)
+  const [removed, setRemoved] = useState<RegisteredPlugin[]>([])
+
+  // 打开弹窗时拉取「已卸载的内置插件」,供一键恢复(内置编译在二进制里,不能重传包)
+  useEffect(() => {
+    if (!open) return
+    api('GET', '/plugin/removed').then((r) => setRemoved(r || [])).catch(() => setRemoved([]))
+  }, [open])
+
+  const restore = async (id: string) => {
+    setBusy(true)
+    try {
+      await api('POST', `/plugins/${encodeURIComponent(id)}/restore`)
+      message.success(t('plugins.restored'))
+      onDone()
+    } catch (e: any) {
+      message.error(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const finish = (data: any) => {
     message.success(t('plugins.installedOk'))
@@ -212,6 +232,23 @@ function InstallModal({ open, onClose, onDone, t }: {
             onChange={(e) => setPath(e.target.value)} onPressEnter={installPath} />
           <Button type="primary" disabled={!path.trim()} onClick={installPath}>{t('plugins.installFromPath')}</Button>
         </Space.Compact>
+        {removed.length > 0 && (
+          <>
+            <Divider plain style={{ fontSize: 12 }}>{t('plugins.restoreBuiltin')}</Divider>
+            <List size="small" dataSource={removed}
+              renderItem={(p) => (
+                <List.Item actions={[
+                  <Button key="r" size="small" onClick={() => restore(p.manifest.id)}>{t('plugins.restore')}</Button>,
+                ]}>
+                  <List.Item.Meta
+                    title={lt(p.manifest.displayName, locale) || p.manifest.name}
+                    description={<Typography.Text type="secondary" ellipsis={{ tooltip: true }} style={{ fontSize: 12 }}>
+                      {lt(p.manifest.description, locale)}</Typography.Text>}
+                  />
+                </List.Item>
+              )} />
+          </>
+        )}
       </Spin>
     </Modal>
   )
@@ -239,9 +276,9 @@ function PluginDetail({ plugin, locale, t, onChanged }: {
       title={<Space>{lt(m.displayName, locale) || m.name}
         <Tag color={plugin.enabled ? 'green' : undefined}>{t(plugin.enabled ? 'plugins.stateEnabled' : 'plugins.stateDisabled')}</Tag>
         <Tag>{m.runtime?.kind || 'builtin'}</Tag></Space>}
-      extra={m.runtime?.kind !== 'builtin' && (
+      extra={(
         <Popconfirm
-          title={t('plugins.uninstallConfirm')}
+          title={m.runtime?.kind === 'builtin' ? t('plugins.uninstallConfirmBuiltin') : t('plugins.uninstallConfirm')}
           description={
             <Checkbox checked={purge} onChange={(e) => setPurge(e.target.checked)}>
               {t('plugins.uninstallPurge')}

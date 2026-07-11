@@ -815,8 +815,12 @@ const zhCN = {
   'plugins.installedOk': '安装成功(默认未启用,请在列表中启用)',
   'plugins.uninstall': '卸载',
   'plugins.uninstallConfirm': '卸载该插件?将停掉其会话并删除安装文件',
-  'plugins.uninstallPurge': '同时删除配置与数据(不保留,无法重装复用)',
+  'plugins.uninstallConfirmBuiltin': '卸载该内置插件?将停掉其会话并从列表移除,可在「安装」入口恢复',
+  'plugins.uninstallPurge': '同时删除配置与数据(不保留,恢复后需重新配置)',
   'plugins.uninstalled': '插件已卸载',
+  'plugins.restoreBuiltin': '恢复已卸载的内置插件',
+  'plugins.restore': '恢复',
+  'plugins.restored': '插件已恢复',
 }
 
 export default zhCN

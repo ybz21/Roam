@@ -815,8 +815,12 @@ const enUS = {
   'plugins.installedOk': 'Installed (disabled by default; enable it in the list)',
   'plugins.uninstall': 'Uninstall',
   'plugins.uninstallConfirm': 'Uninstall this plugin? Its sessions are stopped and installed files removed',
-  'plugins.uninstallPurge': 'Also delete config and data (not kept; no reuse on reinstall)',
+  'plugins.uninstallConfirmBuiltin': 'Uninstall this built-in plugin? Its sessions are stopped and it is removed from the list; you can restore it from the Install entry',
+  'plugins.uninstallPurge': 'Also delete config and data (not kept; reconfigure after restore)',
   'plugins.uninstalled': 'Plugin uninstalled',
+  'plugins.restoreBuiltin': 'Restore uninstalled built-in plugins',
+  'plugins.restore': 'Restore',
+  'plugins.restored': 'Plugin restored',
 }
 
 export default enUS
