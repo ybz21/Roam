@@ -161,6 +161,7 @@ export default function BrowserView() {
   // 画面旋转：0/90/180/270，持久化。手机竖屏看横屏浏览器时转 90°
   const [rotation, setRotation] = useState<number>(() => Number(prefs.browserRotate || localStorage.getItem(RKEY)) || 0)
   const [stage, setStage] = useState({ w: 0, h: 0 }) // 舞台尺寸，旋转时需据此对调 <img> 盒子宽高
+  const [vp, setVp] = useState({ w: 1280, h: 800 })  // 当前生效的渲染视口(mw×mh)：显示盒的高按它的比×舞台宽算出，与舞台高解耦
   // 实时指标
   const [latency, setLatency] = useState<number | null>(null)
   const [bw, setBw] = useState(0)   // 字节/秒
@@ -174,6 +175,8 @@ export default function BrowserView() {
   const dragRef = useRef({ x: 0, y: 0, active: false, moved: false }) // 拖动框选：起点(页面坐标)+是否真的移动过
   const wheelRef = useRef({ x: 0, y: 0, dx: 0, dy: 0, m: 0, timer: 0 as any })
   const touchRef = useRef({ x: 0, y: 0, t: 0, moved: false })
+  const lastEmuRef = useRef('')       // 上次已发的 emulate 载荷（去重：载荷没变绝不重发 → 不重设视口 → 不跳）
+  const emuTimerRef = useRef(0 as any) // emulate 防抖计时器
 
   // control 开关用 ref 同步，供事件回调读取最新值
   useEffect(() => { controlRef.current = control }, [control])
@@ -280,18 +283,34 @@ export default function BrowserView() {
     catch (e: any) { message.error(e.message) }
   }
 
-  // 当前设备 → emulate 消息载荷。桌面用观看区(stage)的原生 CSS 尺寸 + 真实 DPR，
-  // 镜像里的桌面布局就与你屏幕一致、随窗口自适应，不被 Chrome 启动窗口尺寸(1280×800)限死。
+  // 当前设备 → emulate 消息载荷。桌面把远端渲染成「和观看区同比、但宽≥1280 的桌面视口」，整帧
+  // 铺满组件。视口只在观看区【宽】变化时重算(见 emulate effect)；高度抖动(移动端工具栏/滚动)不重算，
+  // 显示盒的高也只按【宽】算(见 <img>) → 铺满且高度抖动时内容缩放比恒定、不忽大忽小。
   const emulatePayload = () => {
     const dev = DEVICES.find((d) => d.key === deviceRef.current)
     if (dev) return { type: 'emulate', mobile: true, mw: dev.w, mh: dev.h, dpr: dev.dpr, ua: dev.ua }
     const el = stageRef.current
-    return {
-      type: 'emulate', mobile: false,
-      mw: el ? Math.round(el.clientWidth) : 0,
-      mh: el ? Math.round(el.clientHeight) : 0,
-      dpr: window.devicePixelRatio || 1,
-    }
+    const pw = el ? el.clientWidth : 0
+    const ph = el ? el.clientHeight : 0
+    if (pw <= 0 || ph <= 0) return { type: 'emulate', mobile: false, mw: 0, mh: 0, dpr: window.devicePixelRatio || 1 }
+    // 宽 = max(观看区宽, 桌面下限 1280)：窄窗格(iPad 分屏/手机)也按桌面宽出图、不掉手机版；宽屏用原生宽。
+    // 高 = 宽 × 观看区当前宽高比 → 视口与观看区同比、铺满不留白。
+    const mw = Math.max(Math.round(pw), 1280)
+    const mh = Math.max(1, Math.round((mw * ph) / pw))
+    return { type: 'emulate', mobile: false, mw, mh, dpr: window.devicePixelRatio || 1 }
+  }
+
+  // 发 emulate 但【去重】：载荷和上次一样就不发。重设 device metrics 会让后端产一个「视口尚未稳」
+  // 的畸形首帧(object-fit letterbox 后就是画面一跳)，所以观看区尺寸抖来抖去、只要 settle 回同一个
+  // 值，就不该重设视口。移动端工具栏随滚动显隐、窄屏顶栏换行会让 stage 尺寸每秒抖动 → 不去重就连
+  // 标清都持续跳。newSession=true 时强制发一次（新连接的后端会话还没视口覆盖）。
+  const sendEmulate = (newSession = false) => {
+    const p = emulatePayload()
+    const key = JSON.stringify(p)
+    if (!newSession && key === lastEmuRef.current) return
+    lastEmuRef.current = key
+    if (p.mw && p.mh) setVp({ w: p.mw, h: p.mh }) // 记生效视口 → 显示盒高按它算，与舞台高解耦
+    send(p)
   }
 
   // control / target 变化才重连；画质切换【不重连】(连上后发 quality 消息，见下面 changeQuality)，
@@ -306,8 +325,9 @@ export default function BrowserView() {
     const ws = new WebSocket(`${proto}://${location.host}/api/browser/stream?${params}`)
     ws.binaryType = 'arraybuffer'
     wsRef.current = ws
+    lastEmuRef.current = '' // 新连接：后端会话尚无视口覆盖，onopen 必须强制发一次 emulate
     let objURL: string | null = null
-    ws.onopen = () => { setConnected(true); setHealthMsg(''); ws.send(JSON.stringify(emulatePayload())) } // 连上即同步当前设备/尺寸
+    ws.onopen = () => { setConnected(true); setHealthMsg(''); sendEmulate(true) } // 连上即同步当前设备/尺寸
     ws.onclose = () => {
       setConnected(false)
       // 连不上时问后端为什么（Chrome 启动失败原因），显示给用户而非干瞪黑屏
@@ -360,11 +380,14 @@ export default function BrowserView() {
     }
   }, [control, target]) // 画质/device 切换都不重连，靠 quality / emulate 消息现场切换
 
-  // 设备切换 / 观看区尺寸变化：在现有连接上发 emulate（同一 CDP 会话 set/clear），不重连
-  // → 无闪烁/无竞态，来回切也稳。桌面随窗口大小自适应（stage 变化即重发原生尺寸）。
+  // 设备切换 / 观看区尺寸变化：在现有连接上发 emulate（同一 CDP 会话 set/clear），不重连。
+  // 防抖 300ms 合并连续抖动（移动端工具栏显隐/顶栏换行会让 stage 尺寸高频抖动），settle 后经
+  // sendEmulate 去重：净值没变就完全不发 → 不重设视口 → 不跳。桌面仍随窗口大小自适应。
   useEffect(() => {
-    send(emulatePayload())
-  }, [device, stage.w, stage.h])
+    clearTimeout(emuTimerRef.current)
+    emuTimerRef.current = setTimeout(() => sendEmulate(), 300)
+    return () => clearTimeout(emuTimerRef.current)
+  }, [device, stage.w]) // 只在观看区【宽】变时重设视口；高度抖动(移动端工具栏显隐)不重设 → 不跳
 
   const navigate = () => {
     if (!url) return
@@ -668,10 +691,12 @@ export default function BrowserView() {
           onMouseUp={onMouse('up')}
           onMouseMove={onMove}
           style={{
-            // 绝对居中 + 旋转；旋转 90/270 时盒子宽高对调以铺满舞台
+            // 绝对居中 + 旋转。关键：显示盒的【高】= 舞台宽 × 视口比(vp.h/vp.w)，只跟舞台【宽】走、
+            // 与舞台【高】无关 → 移动端工具栏显隐令观看区高度抖动时，画面缩放比恒定、不忽大忽小；
+            // 高度富余则上下留边、不足则被 overflow:hidden 裁切，都不缩放。旋转(90/270)维持原逻辑。
             position: 'absolute', left: '50%', top: '50%',
             width: rotated ? stage.h : stage.w,
-            height: rotated ? stage.w : stage.h,
+            height: rotated ? stage.w : Math.round((stage.w * vp.h) / vp.w),
             objectFit: 'contain',
             transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
           }}

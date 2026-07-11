@@ -158,6 +158,13 @@ func buildFrame(jpeg []byte, w, h int, seq uint16) []byte {
 
 func nowMs() int64 { return time.Now().UnixMilli() }
 
+func absInt(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
+}
+
 // Handler 处理 /api/browser/stream 的 WebSocket 升级与 CDP 桥接。
 func Handler(c *gin.Context) {
 	front, err := upgrader.Upgrade(c.Writer, c.Request, nil)
@@ -208,19 +215,22 @@ func Handler(c *gin.Context) {
 		w, h int
 	}
 	var (
-		pending      *pend                // 最新一帧（未发出的），新帧覆盖旧帧 = latest-only 丢帧
-		credits      = window             // 可发帧的信用，发一帧 -1，收到 ack +1
-		seq          uint16               // 帧序号（与 ack 对应）
-		sentAt       = map[uint16]int64{} // seq → 发出时刻，用于算 deliveryMs
-		ewma         float64              // deliveryMs 的指数滑动平均（自适应控制信号）
-		level        = autoStart          // 当前档位（仅 auto 模式移动）
-		closed       bool
-		frameW       = 1280 // 最近一帧/视口 CSS 宽高；强制截图回包没有 metadata，用它补帧头。
-		frameH       = 800
-		frameDPR     = 1.0            // 当前视口 deviceScaleFactor；强制截图按它对齐 startScreencast 的像素分辨率
-		copyReqID    int              // 复制选区的 Runtime.evaluate 请求 id；读取循环据此匹配回包(0=无在途)
-		forcedReqIDs = map[int]bool{} // Page.captureScreenshot 请求 id；macOS 全屏 Space 下补偿停产帧
-		lastStreamMs int64            // 最近一帧 startScreencast 推流帧到达时刻(ms)；流帧还活跃时丢弃强制帧
+		pending   *pend                // 最新一帧（未发出的），新帧覆盖旧帧 = latest-only 丢帧
+		credits   = window             // 可发帧的信用，发一帧 -1，收到 ack +1
+		seq       uint16               // 帧序号（与 ack 对应）
+		sentAt    = map[uint16]int64{} // seq → 发出时刻，用于算 deliveryMs
+		ewma      float64              // deliveryMs 的指数滑动平均（自适应控制信号）
+		level     = autoStart          // 当前档位（仅 auto 模式移动）
+		closed    bool
+		frameW    = 1280 // 最近一帧/视口 CSS 宽高（流帧 metadata 缺失时补帧头用）
+		frameH    = 800
+		copyReqID int // 复制选区的 Runtime.evaluate 请求 id；读取循环据此匹配回包(0=无在途)
+		// 视口自愈：CDP device metrics 覆盖是「最后写入者赢」，chrome-cli 截图等外部会话会把本会话
+		// 的覆盖踩掉且退出后仍卡在渲染器上 → 布局重排、用户看到内容突然变大/变小。流帧 metadata
+		// 偏离期望视口时防抖重设抢回。详见 docs/development/browser-mirror.md。
+		expW, expH   int    // 本会话期望的视口 CSS 宽高（0 = 无覆盖，不自愈）
+		reassert     func() // 重发本会话 device metrics 覆盖
+		lastReassert int64  // 上次自愈时刻(ms)；600ms 防抖，避免与另一活跃会话打乒乓
 	)
 
 	// 初始档：auto 用阶梯，手动用前端给的 q（分辨率给足，质量听用户）
@@ -248,14 +258,11 @@ func Handler(c *gin.Context) {
 		frameW, frameH = w, h
 		mu.Unlock()
 	}
-	setFrameDPR := func(dpr float64) {
-		if dpr <= 0 {
-			return
-		}
-		mu.Lock()
-		frameDPR = dpr
-		mu.Unlock()
-	}
+	// 强制补帧 = 重发 Page.startScreencast（无需 stop）。Chrome 收到后立即吐一帧当前画面，
+	// 走与流帧完全相同的管线（同 metadata/同降采样）→ 天然像素级一致。
+	// 绝不能用 Page.captureScreenshot：它 fromSurface 出图，模拟视口高于 Chrome 窗口时
+	// （手机竖屏 vp 2226 > 窗口 800）会临时改表面尺寸 → 真实视口被扰动（实测 metadata 跳到
+	// 1380×2400、蹦出 2760×4800 巨帧）→ 页面重排、画面缩成一块乱跳。见 docs/development/browser-mirror.md。
 	forceFrame := func() {
 		mu.Lock()
 		if closed {
@@ -263,42 +270,12 @@ func Handler(c *gin.Context) {
 			return
 		}
 		// cur / auto 会被前端「切画质」消息在运行中改写，故一律在锁内读，避免与切换竞态。
-		q := cur.q
-		maxW, maxH := cur.w, cur.h
+		l := cur
 		if auto && level >= 0 && level < len(ladder) {
-			q = ladder[level].q
-			maxW, maxH = ladder[level].w, ladder[level].h
+			l = ladder[level]
 		}
-		vw, vh, dpr := frameW, frameH, frameDPR
 		mu.Unlock()
-		params := map[string]any{
-			"format":      "jpeg",
-			"quality":     q,
-			"fromSurface": true,
-		}
-		// 关键：把强制截图裁到「当前模拟视口(CSS 宽高)」并按 startScreencast 相同的缩放系数出图，
-		// 使强制帧与流帧的像素分辨率/裁剪范围完全一致。否则打字时(每个可打印字符都补一发强制帧)
-		// 强制帧走整表面全分辨率、流帧走 maxWidth/Height 降采样，两者高频交替 → 画面忽清忽糊/尺寸
-		// 微跳，主观即「打字时画面抖动」。scale = min(dpr, maxW/vw, maxH/vh) 正是 startScreencast
-		// 把 视口×dpr 塞进 maxWidth×maxHeight 的缩放比。
-		if vw > 0 && vh > 0 && dpr > 0 {
-			s := dpr
-			if maxW > 0 {
-				if r := float64(maxW) / float64(vw); r < s {
-					s = r
-				}
-			}
-			if maxH > 0 {
-				if r := float64(maxH) / float64(vh); r < s {
-					s = r
-				}
-			}
-			params["clip"] = map[string]any{"x": 0, "y": 0, "width": vw, "height": vh, "scale": s}
-		}
-		id := conn.sendID("Page.captureScreenshot", params)
-		mu.Lock()
-		forcedReqIDs[id] = true
-		mu.Unlock()
+		applyLevel(l)
 	}
 	var refreshMu sync.Mutex
 	refreshVersion := 0
@@ -355,11 +332,15 @@ func Handler(c *gin.Context) {
 	// 抢跑（来回切尤其容易卡住）。改成同一会话 set/clear，既不泄漏也无竞态。
 	applyMobile := func(mw, mh int, dpr float64, ua string) {
 		setFrameSize(mw, mh)
-		setFrameDPR(dpr)
-		conn.send("Emulation.setDeviceMetricsOverride", map[string]any{
+		metrics := map[string]any{
 			"width": mw, "height": mh, "deviceScaleFactor": dpr, "mobile": true,
 			"screenWidth": mw, "screenHeight": mh,
-		})
+		}
+		mu.Lock()
+		expW, expH = mw, mh
+		reassert = func() { conn.send("Emulation.setDeviceMetricsOverride", metrics) }
+		mu.Unlock()
+		conn.send("Emulation.setDeviceMetricsOverride", metrics)
 		conn.send("Emulation.setTouchEmulationEnabled", map[string]any{"enabled": true, "maxTouchPoints": 5})
 		conn.send("Emulation.setEmitTouchEventsForMouse", map[string]any{"enabled": true, "configuration": "mobile"})
 		if ua != "" { // 设备 UA 由前端按机型下发，后端只透传
@@ -371,14 +352,21 @@ func Handler(c *gin.Context) {
 	// w<=0 时退化为 clearMobile（彻底不覆盖，用 Chrome 原生窗口尺寸）。
 	applyDesktop := func(w, h int, dpr float64) {
 		if w <= 0 || h <= 0 {
+			mu.Lock()
+			expW, expH, reassert = 0, 0, nil // 无覆盖 → 不自愈
+			mu.Unlock()
 			conn.send("Emulation.clearDeviceMetricsOverride", nil)
 		} else {
 			setFrameSize(w, h)
-			setFrameDPR(dpr)
-			conn.send("Emulation.setDeviceMetricsOverride", map[string]any{
+			metrics := map[string]any{
 				"width": w, "height": h, "deviceScaleFactor": dpr, "mobile": false,
 				"screenWidth": w, "screenHeight": h,
-			})
+			}
+			mu.Lock()
+			expW, expH = w, h
+			reassert = func() { conn.send("Emulation.setDeviceMetricsOverride", metrics) }
+			mu.Unlock()
+			conn.send("Emulation.setDeviceMetricsOverride", metrics)
 		}
 		conn.send("Emulation.setTouchEmulationEnabled", map[string]any{"enabled": false})
 		conn.send("Emulation.setEmitTouchEventsForMouse", map[string]any{"enabled": false})
@@ -387,6 +375,9 @@ func Handler(c *gin.Context) {
 		}
 	}
 	clearAll := func() {
+		mu.Lock()
+		expW, expH, reassert = 0, 0, nil
+		mu.Unlock()
 		conn.send("Emulation.clearDeviceMetricsOverride", nil)
 		conn.send("Emulation.setTouchEmulationEnabled", map[string]any{"enabled": false})
 		conn.send("Emulation.setEmitTouchEventsForMouse", map[string]any{"enabled": false})
@@ -438,7 +429,6 @@ func Handler(c *gin.Context) {
 					} `json:"metadata"`
 				} `json:"params"`
 				Result struct {
-					Data   string `json:"data"`
 					Result struct {
 						Value string `json:"value"`
 					} `json:"result"`
@@ -460,11 +450,6 @@ func Handler(c *gin.Context) {
 					if hit {
 						copyReqID = 0
 					}
-					forced := forcedReqIDs[msg.ID]
-					if forced {
-						delete(forcedReqIDs, msg.ID)
-					}
-					w, h := frameW, frameH
 					mu.Unlock()
 					if hit {
 						txt := msg.Result.Result.Value
@@ -473,22 +458,11 @@ func Handler(c *gin.Context) {
 						browserClip.mu.Unlock()
 						_ = writeJSON(map[string]any{"type": "copied", "text": txt})
 					}
-					if forced && msg.Result.Data != "" {
-						mu.Lock()
-						// 流帧还在活跃推送（如页面加载中，startScreencast 每帧都在更新）→ 丢弃这发强制帧。
-						// captureScreenshot 延迟高于推流，加载期它常带着较旧内容、晚于更新的流帧才到，
-						// 盖掉新帧就会让画面在新旧快照间来回跳（「加载那一两秒抖动」的根因）。
-						// 强制帧只在流帧真停产(>250ms 没来，如 macOS 全屏 Space)时兜底。
-						if !closed && nowMs()-lastStreamMs >= 250 {
-							pending = &pend{b64: msg.Result.Data, w: w, h: h}
-							cond.Signal()
-						}
-						mu.Unlock()
-					}
 				}
 				continue
 			}
 			conn.send("Page.screencastFrameAck", map[string]any{"sessionId": msg.Params.SessionID})
+			var heal func()
 			mu.Lock()
 			w, h := int(msg.Params.Metadata.DeviceWidth), int(msg.Params.Metadata.DeviceHeight)
 			if w > 0 && h > 0 {
@@ -496,10 +470,18 @@ func Handler(c *gin.Context) {
 			} else {
 				w, h = frameW, frameH
 			}
+			// 视口自愈：帧的真实视口偏离本会话期望（容差 ±2px）→ 有外部会话踩了覆盖，防抖重设抢回
+			if expW > 0 && w > 0 && (absInt(w-expW) > 2 || absInt(h-expH) > 2) &&
+				nowMs()-lastReassert > 600 && reassert != nil {
+				lastReassert = nowMs()
+				heal = reassert
+			}
 			pending = &pend{b64: msg.Params.Data, w: w, h: h}
-			lastStreamMs = nowMs() // 记推流帧到达时刻：流帧活跃时强制帧让位（见上方 forced 分支）
 			cond.Signal()
 			mu.Unlock()
+			if heal != nil {
+				heal() // 锁外发 CDP（conn 自带写锁），避免网络 IO 占着状态锁
+			}
 		}
 	}()
 
