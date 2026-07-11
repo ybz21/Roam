@@ -43,8 +43,8 @@ export function ChatShell({ name, dir, accent, title, placeholder, onBack, onRef
 
   // 把文本追加进输入框末尾（语音识别结果 / 路径插入共用）
   const appendText = (s: string) => setInput((v) => (v ? v.replace(/\s*$/, ' ') : '') + s + ' ')
-  // 把路径插进输入框（文件侧栏「@」按钮 / 拖拽 / 上传后共用）
-  const insertPath = (p: string) => appendText(p)
+  // 把路径以 @引用 插进输入框（文件侧栏「@」按钮 / 拖拽共用），与终端 toMention 一致
+  const insertPath = (p: string) => appendText('@' + p)
 
   // 图片上传到 /tmp 并把完整路径插进输入框（等同桌面 Ctrl+V：不污染工作目录，模型按绝对路径读取）
   const uploadImagesToTmp = async (images: File[]) => {
@@ -141,6 +141,7 @@ export function ChatShell({ name, dir, accent, title, placeholder, onBack, onRef
         onDragEnter={(e) => { e.preventDefault() }}
         onDragOver={(e) => {
           e.preventDefault()
+          e.stopPropagation() // 对话区自己接住,别冒泡到 FileWorkspace 分栏层(否则会显示「分栏」提示并抢走 drop)
           const isPath = Array.from(e.dataTransfer.types || []).includes('application/x-ttmux-path')
           e.dataTransfer.dropEffect = 'copy'
           setDropMode(isPath ? 'path' : 'upload')
@@ -148,9 +149,9 @@ export function ChatShell({ name, dir, accent, title, placeholder, onBack, onRef
         }}
         onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false) }}
         onDrop={(e) => {
-          e.preventDefault(); setDragOver(false)
+          e.preventDefault(); e.stopPropagation(); setDragOver(false) // 阻断冒泡:否则分栏层还会再把文件当「开文件」打开一次
           const p = e.dataTransfer.getData('application/x-ttmux-path') || e.dataTransfer.getData('text/plain')
-          if (p && !e.dataTransfer.files?.length) { insertPath(p); return } // 从文件侧栏拖来的：插入路径
+          if (p && !e.dataTransfer.files?.length) { insertPath(p); return } // 从文件侧栏拖来的：插入 @路径
           if (e.dataTransfer?.files?.length) doUpload(e.dataTransfer.files) // 从系统拖来的：上传
         }}>
         {dragOver && (

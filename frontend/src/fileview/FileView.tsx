@@ -51,6 +51,8 @@ export function FileView({
   const kind = fileKind(path)
   const { isImg, isMd, isHtml, isPdf, isOffice, isSheet } = kind
   const rawUrl = `/api/file/raw?path=${encodeURIComponent(path)}`
+  // HTML 预览专用：绝对路径编进 URL 路径（逐段转义、保留斜杠），让 iframe 里同目录相对引用能解析
+  const serveUrl = `/api/file/serve${path.split('/').map(encodeURIComponent).join('/')}`
   const previewUrl = `/api/file/preview?path=${encodeURIComponent(path)}`
   const downloadUrl = `${rawUrl}&dl=1`
   const downloadName = fileNameOf(path)
@@ -191,7 +193,7 @@ export function FileView({
                 : isMd && (!source || forcePreview)
                   ? <MarkdownView content={data.content} accent={accent} height={previewHeight} pad={forcePreview ? '0 8px' : undefined} resolveHref={resolvePreviewHref} onLinkClick={openPreviewLink} />
                   : isHtml && (!source || forcePreview)
-                    ? <HtmlView rawUrl={rawUrl} name={name} mtime={data.mtime} height={previewHeight} />
+                    ? <HtmlView rawUrl={serveUrl} name={name} mtime={data.mtime} height={previewHeight} />
                     : <CodeView value={draft} language={monacoLangOf(path)} dark={mode === 'dark'} readOnly={!editable} tabbed={tabbed} height={previewHeight} onChange={setDraft} onSave={() => saveRef.current()} />}
               {data.truncated && <div style={{ color: '#d29922', fontSize: 12, marginTop: 6 }}>⚠ {t('file.truncatedLong')}</div>}
             </>

@@ -259,6 +259,25 @@ func (a *API) FileRaw(c *gin.Context) {
 	c.File(p)
 }
 
+// FileServe GET /file/serve/*path —— 把文件绝对路径直接编进 URL 路径来提供文件
+// （区别于 /file/raw 的 ?path= 查询参数）。这样 HTML 内的同目录相对引用（style.css、
+// ./app.js、../img/x.png）会被浏览器按 URL 相对规则解析到同目录资源，再命中本路由取到
+// 文件，相当于一个以文件系统为根的静态文件服务。暴露面与 /file/raw 一致（都能读任意
+// 可访问的绝对路径文件，已在鉴权后）。仅供 HTML 预览 iframe 使用。
+func (a *API) FileServe(c *gin.Context) {
+	p := filepath.Clean(c.Param("path")) // *path 含前导斜杠 → 即绝对路径；Clean 顺带归一化 .. 段
+	if p == "" || p == "/" || !filepath.IsAbs(p) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_PATH"}})
+		return
+	}
+	info, err := os.Stat(p)
+	if err != nil || info.IsDir() {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "NOT_FILE"}})
+		return
+	}
+	c.File(p) // Content-Type 按扩展名嗅探：.css→text/css .js→text/javascript .html→text/html
+}
+
 var officePreviewExt = map[string]bool{
 	".doc": true, ".docx": true, ".odt": true, ".rtf": true,
 	".xls": true, ".xlsx": true, ".xlsm": true, ".ods": true,

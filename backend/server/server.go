@@ -110,12 +110,13 @@ func New(cfg Config) *gin.Engine {
 		g.GET("/info", h.Info)
 
 		g.GET("/fs", h.FS)
-		g.GET("/files", h.Files)              // 文件侧栏：列目录
-		g.GET("/file", h.File)                // 文件侧栏：读文件
-		g.POST("/file/save", h.FileSave)      // 文件侧栏：编辑器保存（覆盖写入既有文件）
-		g.GET("/file/search", h.FileSearch)   // 文件侧栏：从当前目录递归按文件名搜索
-		g.GET("/file/raw", h.FileRaw)         // 文件侧栏：原始字节（图片预览 / ?dl=1 下载）
-		g.GET("/file/preview", h.FilePreview) // 文件侧栏：Office 转 PDF 预览
+		g.GET("/files", h.Files)                // 文件侧栏：列目录
+		g.GET("/file", h.File)                  // 文件侧栏：读文件
+		g.POST("/file/save", h.FileSave)        // 文件侧栏：编辑器保存（覆盖写入既有文件）
+		g.GET("/file/search", h.FileSearch)     // 文件侧栏：从当前目录递归按文件名搜索
+		g.GET("/file/raw", h.FileRaw)           // 文件侧栏：原始字节（图片预览 / ?dl=1 下载）
+		g.GET("/file/serve/*path", h.FileServe) // 文件侧栏：HTML 预览（绝对路径进 URL，令同目录相对引用可解析）
+		g.GET("/file/preview", h.FilePreview)   // 文件侧栏：Office 转 PDF 预览
 		g.GET("/file/stat", h.FileStat)
 		g.GET("/file/download", h.FileDownload)
 		g.POST("/file/rename", h.FileRename)

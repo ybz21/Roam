@@ -58,11 +58,13 @@ export default function FileWorkspace({
   const [dirtyFiles, setDirtyFiles] = useState<Set<string>>(new Set())
   const [dropHint, setDropHint] = useState<Group | 'split' | null>(null) // 拖拽落点提示
   const [dragging, setDragging] = useState(false) // 原生拖拽进行中 → 每栏内容盖一层透明接盘层，压过终端/Monaco
+  // 拖的是 tab/会话(需接盘层压过终端才能移栏) 还是文件路径(要落回终端/对话做 @引用注入,不能被接盘层截走)
+  const [dragKind, setDragKind] = useState<'tab' | 'lead' | 'path' | null>(null)
   useEffect(() => {
     // drop 用「冒泡阶段」清理：React 事件委托挂在 document 内层根节点，冒泡到 document 时
     // onDrop 已派发完，此时卸接盘层安全。若用捕获阶段则会赶在 onDrop 前卸掉接盘层 →
     // drop 落到已移除的元素 → onDrop 不触发 → tab 不动。dragend 兜底（拖到界外/取消）。
-    const end = () => { setDropHint(null); setDragging(false) }
+    const end = () => { setDropHint(null); setDragging(false); setDragKind(null) }
     document.addEventListener('dragend', end)
     document.addEventListener('drop', end)
     return () => { document.removeEventListener('dragend', end); document.removeEventListener('drop', end) }
@@ -280,7 +282,7 @@ export default function FileWorkspace({
     const act = activeOf(g) === f
     return (
       <div key={g + f} title={prev ? `${t('file.preview')} · ${rp}` : f} draggable
-        onDragStart={(e) => { e.dataTransfer.setData(TAB_MIME, JSON.stringify({ path: f, from: g })); e.dataTransfer.effectAllowed = 'move'; setDragging(true) }}
+        onDragStart={(e) => { e.dataTransfer.setData(TAB_MIME, JSON.stringify({ path: f, from: g })); e.dataTransfer.effectAllowed = 'move'; setDragging(true); setDragKind('tab') }}
         onPointerDown={(e) => startTouchDrag(e, { kind: 'tab', path: f, from: g }, baseName(f))}
         onClick={() => { if (draggedRef.current) return; setActiveOf(g, f); setFocus(g) }}
         className={`cc-filetab${isDirty ? ' dirty' : ''}`}
@@ -312,7 +314,7 @@ export default function FileWorkspace({
             {primary && hasLeading && (
               <div onClick={() => { if (draggedRef.current) return; setActiveOf('A', null) }} title={leadingTitle}
                 draggable={split}
-                onDragStart={(e) => { e.dataTransfer.setData(LEAD_MIME, '1'); e.dataTransfer.effectAllowed = 'move'; setDragging(true) }}
+                onDragStart={(e) => { e.dataTransfer.setData(LEAD_MIME, '1'); e.dataTransfer.effectAllowed = 'move'; setDragging(true); setDragKind('lead') }}
                 onPointerDown={(e) => { if (split) startTouchDrag(e, { kind: 'lead' }, leadingTitle || '') }}
                 style={{ ...tabBase, gap: 6, padding: '5px 12px', color: leadingActive ? 'var(--text-bright)' : 'var(--text-dim)', background: leadingActive ? 'var(--bg-base)' : 'transparent', borderTop: `2px solid ${leadingActive ? '#58a6ff' : 'transparent'}` }}>
                 {leadingTab}
@@ -345,8 +347,10 @@ export default function FileWorkspace({
             <div style={{ flex: 1, display: 'grid', placeItems: 'center', color: 'var(--text-dimmer)', fontSize: 13 }}>{emptyText || t('file.selectPreview')}</div>
           )}
           {/* 拖拽期透明接盘层：盖在终端/Monaco 之上，抢在它们之前接住 dragover/drop，
-              否则拖 tab 到有终端/编辑器的那一栏时事件被内层吞掉 → 拖不进去 */}
-          {dragging && (
+              否则拖 tab 到有终端/编辑器的那一栏时事件被内层吞掉 → 拖不进去。
+              但拖「文件路径」到正显示会话(终端/对话)的首栏时不盖 → 让终端/ChatShell 自己接住做 @引用注入,
+              否则文件会被当成「开文件/分栏」而进不了对话。tab/lead 拖拽照旧盖(移栏必须压过终端)。 */}
+          {dragging && !(primary && leadingActive && dragKind === 'path') && (
             <div data-drop-group={g} data-drop-content="1" style={{ position: 'absolute', inset: 0, zIndex: 15 }}
               onDragOver={(e) => onContentDragOver(e, g, primary)}
               onDragLeave={(e) => { if (e.currentTarget === e.target) setDropHint(null) }}
@@ -365,7 +369,12 @@ export default function FileWorkspace({
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex' }}
-      onDragEnter={(e) => { if (!dragging && dragHasPayload(e)) setDragging(true) }}>
+      onDragEnter={(e) => {
+        if (dragging || !dragHasPayload(e)) return
+        setDragging(true)
+        // 文件树拖出的路径:onDragStart 在 FileBrowser 里不置 kind,这里补判(唯一非 tab/lead 的来源)
+        setDragKind(e.dataTransfer.types.includes(PATH_MIME) ? 'path' : e.dataTransfer.types.includes(LEAD_MIME) ? 'lead' : 'tab')
+      }}>
       {explorerOpen && (
         <>
           <div style={{ flex: `0 0 ${dockW}px`, minWidth: 0, minHeight: 0, display: 'flex' }}>
