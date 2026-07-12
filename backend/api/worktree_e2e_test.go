@@ -69,6 +69,8 @@ func e2eSetup(t *testing.T) (*gin.Engine, string, func(...string) string) {
 	h := New(ttmux.New(bin), "", tmp)
 	r := gin.New()
 	r.POST("/worktree-sessions", h.WorktreeSessionCreate)
+	r.GET("/sessions", h.Sessions)
+	r.POST("/sessions/:name/fork", h.SessionFork)
 	r.POST("/sessions/:name/fork-worktree", h.SessionForkWorktree)
 	r.POST("/sessions/:name/close-with-worktree", h.SessionCloseWithWorktree)
 	r.GET("/sessions/:name/worktree-status", h.SessionWorktreeStatus)
@@ -166,6 +168,46 @@ func TestWorktreeSessionLifecycle(t *testing.T) {
 		t.Fatalf("bad fork data: %v", kid)
 	}
 	waitCwd("e2e-kid", kidPath)
+
+	// ②b 纯 fork（无 worktree）：显式 dir，parent 记入 meta，tree=1 投影可见
+	code, resp = post(t, r, "/sessions/e2e-main/fork", map[string]any{"child": "e2e-flat", "dir": repo})
+	if code != 200 {
+		t.Fatalf("fork: %d %v", code, resp)
+	}
+	waitCwd("e2e-flat", repo)
+	{
+		req := httptest.NewRequest(http.MethodGet, "/sessions?tree=1", nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		var roots []map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &roots); err != nil {
+			t.Fatalf("tree json: %v (%s)", err, w.Body.String())
+		}
+		found := false
+		var walk func(nodes []map[string]any)
+		walk = func(nodes []map[string]any) {
+			for _, n := range nodes {
+				if n["name"] == "e2e-flat" && n["parent"] == "e2e-main" {
+					found = true
+				}
+				if kids, ok := n["children"].([]any); ok {
+					sub := make([]map[string]any, 0, len(kids))
+					for _, k := range kids {
+						if m, ok := k.(map[string]any); ok {
+							sub = append(sub, m)
+						}
+					}
+					walk(sub)
+				}
+			}
+		}
+		walk(roots)
+		if !found {
+			t.Fatalf("e2e-flat not under e2e-main in tree: %s", w.Body.String())
+		}
+	}
+	// 收尾：清掉 flat 子会话，别影响后面 merge close 的占用语义
+	tmuxOut("kill-session", "-t", "=e2e-flat")
 
 	// ③ discard 关闭子会话：会话/worktree/分支全清
 	code, resp = post(t, r, "/sessions/e2e-kid/close-with-worktree", map[string]any{

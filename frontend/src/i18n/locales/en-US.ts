@@ -885,6 +885,15 @@ const enUS = {
   'worktree.close.failedAtStage': '{msg} (stage: {stage})',
 
   // W5/W6 race
+  'session.fork.entry': 'Fork',
+  'session.fork.title': 'Fork a child session from {parent}',
+  'session.fork.namePlaceholder': 'Child session name (short; empty = auto-named from the task)',
+  'session.fork.parentDir': "Parent's directory",
+  'session.fork.hintParent': "Work in the parent's directory (small changes, shared context); parent link is recorded, children detach when the parent closes",
+  'session.fork.childOf': 'Forked from {parent}',
+  'session.fork.created': 'Child session forked',
+  'session.fork.ok': 'Fork',
+
   'race.new': 'New race…',
   'race.title': 'New race',
   'race.start': 'Start',

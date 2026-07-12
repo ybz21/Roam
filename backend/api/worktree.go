@@ -266,6 +266,31 @@ func (a *API) WorktreeSessionCreate(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"session": b.Name, "path": wt.Path, "branch": wt.Branch, "base": wt.Base}, "name": b.Name})
 }
 
+// SessionFork POST /sessions/:name/fork {child, dir?}
+// 纯 subSession 派生（无 worktree）：ttmux fork（meta 记 parent，缺省继承父 cwd）。
+func (a *API) SessionFork(c *gin.Context) {
+	parent := sessionParam(c)
+	var b struct {
+		Child string `json:"child"`
+		Dir   string `json:"dir"`
+	}
+	if err := c.ShouldBindJSON(&b); err != nil || b.Child == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
+		return
+	}
+	b.Child = SanitizeSessionName(b.Child)
+	args := []string{"fork", parent, b.Child, "--detach", "--json"}
+	if d := strings.TrimSpace(b.Dir); d != "" {
+		args = append(args, "--dir", d)
+	}
+	out, err := a.TT.Run(args...)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "FORK_FAILED", "message": ttmux.StripANSI(out)}})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"session": b.Child, "parent": parent}, "name": b.Child})
+}
+
 // SessionForkWorktree POST /sessions/:name/fork-worktree {child, branch?, base?, dir?}
 // 编排（先 subSession 后 worktree）：ttmux fork（cwd=父仓库目录，meta 记 parent）→
 // 建 worktree（分支缺省自动占位）→ 子会话内注入 cd；失败反向补偿 kill 子会话。

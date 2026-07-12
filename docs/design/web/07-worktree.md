@@ -208,6 +208,12 @@ ttmux 的能力止步于「平坦 tmux session + parent 关系」，**不理解 
 
 同仓库 ≥2 个 worktree 会话聚组；分组优先按 parent 树（fork 关系），无 parent 的按 cwd join 兜底。行尾 `⎇ 分支` Tag；session 多 pane 命中多个 worktree 时显示 primary 并加歧义标记（hover 列全部 matches）。其余同前（分组头 [管理] 入口、竞赛组头 [对比台]、手机端只显图标、折叠记 localStorage）。
 
+> 实现补充（F 期收尾）：数据源改 `GET /sessions?tree=1`（parent 投影树拍平）；分组优先级
+> **竞赛 > 父子树 > 仓库**——有活父/子的会话按 parent 树渲染（子行 ⑂ 紫色导线、按深度缩进），
+> 不再落入仓库分组。会话行新增「派生」入口 → ForkSessionModal：子会话名（可留空派生）+
+> 在哪干活二选一（新建 worktree〔父目录是仓库时默认〕/ 父目录）+ Agent + 需求；
+> 提交走 `POST /sessions/:parent/fork-worktree` 或（父目录档）`POST /sessions/:parent/fork`。
+
 ### W3. Git 面板：worktree 态 + 「对比 base」
 
 - 头部加 `worktree` 徽标与「基于 <roam.baseRef> · 主仓库 <路径>」；**base=unknown（外部 worktree）显示 `base ?`，隐藏合并按钮**。

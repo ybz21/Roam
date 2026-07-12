@@ -146,6 +146,7 @@ func New(cfg Config) *gin.Engine {
 		g.GET("/sessions/:name/worktree-status", h.SessionWorktreeStatus) // W7 关闭前预检
 		// ── 组合 WorktreeSession API（事务编排）──
 		g.POST("/worktree-sessions", h.WorktreeSessionCreate)                     // 建 worktree + 会话
+		g.POST("/sessions/:name/fork", h.SessionFork)                             // 派生子会话（继承父 cwd）
 		g.POST("/sessions/:name/fork-worktree", h.SessionForkWorktree)            // 派生子会话进新 worktree
 		g.POST("/sessions/:name/close-with-worktree", h.SessionCloseWithWorktree) // W7 三选一
 		// ── Race Service（W5/W6：一题多解竞赛，设计 07 §3）──
