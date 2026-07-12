@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"ttmux-web/ttmux"
@@ -72,6 +73,9 @@ func e2eSetup(t *testing.T) (*gin.Engine, string, func(...string) string) {
 	r.POST("/sessions/:name/close-with-worktree", h.SessionCloseWithWorktree)
 	r.GET("/sessions/:name/worktree-status", h.SessionWorktreeStatus)
 	r.GET("/git/worktrees", h.WorktreeList)
+	r.POST("/races", h.RaceCreate)
+	r.POST("/races/:id/crown", h.RaceCrown)
+	r.POST("/races/:id/cleanup", h.RaceCleanup)
 
 	tmuxOut := func(args ...string) string {
 		out, _ := exec.Command("tmux", append([]string{"-L", sock}, args...)...).CombinedOutput()
@@ -120,24 +124,34 @@ func TestWorktreeSessionLifecycle(t *testing.T) {
 	r, tmp, tmuxOut := e2eSetup(t)
 	repo := e2eRepo(t, tmp)
 
-	// ① 组合创建：worktree + 会话一次到位
+	// ① 组合创建（先会话后 worktree）：不传分支 → 自动占位 roam/<会话名>，会话被 cd 进 worktree
 	code, resp := post(t, r, "/worktree-sessions", map[string]any{
-		"name": "e2e-main", "dir": repo, "branch": "roam/e2e", "base": "main",
+		"name": "e2e-main", "dir": repo, "base": "main",
 	})
 	if code != 200 {
 		t.Fatalf("worktree-sessions: %d %v", code, resp)
 	}
 	data := resp["data"].(map[string]any)
 	wtPath := data["path"].(string)
-	if data["branch"] != "roam/e2e" || !strings.Contains(wtPath, ".worktrees") {
+	if data["branch"] != "e2e-main" || !strings.Contains(wtPath, ".worktrees") {
 		t.Fatalf("bad data: %v", data)
 	}
 	if !strings.Contains(tmuxOut("list-sessions", "-F", "#{session_name}"), "e2e-main") {
 		t.Fatal("session not created")
 	}
-	if cwd := tmuxOut("list-panes", "-t", "=e2e-main", "-F", "#{pane_current_path}"); cwd != wtPath {
-		t.Fatalf("session cwd %q != worktree %q", cwd, wtPath)
+	// cd 是注入 shell 的异步键入，轮询等 pane cwd 落进 worktree
+	waitCwd := func(sess, want string) {
+		t.Helper()
+		for i := 0; i < 50; i++ {
+			if tmuxOut("list-panes", "-t", "="+sess, "-F", "#{pane_current_path}") == want {
+				return
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		t.Fatalf("session %s cwd never reached %q (now %q)", sess, want,
+			tmuxOut("list-panes", "-t", "="+sess, "-F", "#{pane_current_path}"))
 	}
+	waitCwd("e2e-main", wtPath)
 
 	// ② fork 子会话进新 worktree（仓库自动取父 cwd）
 	code, resp = post(t, r, "/sessions/e2e-main/fork-worktree", map[string]any{
@@ -151,6 +165,7 @@ func TestWorktreeSessionLifecycle(t *testing.T) {
 	if kid["parent"] != "e2e-main" {
 		t.Fatalf("bad fork data: %v", kid)
 	}
+	waitCwd("e2e-kid", kidPath)
 
 	// ③ discard 关闭子会话：会话/worktree/分支全清
 	code, resp = post(t, r, "/sessions/e2e-kid/close-with-worktree", map[string]any{
@@ -189,5 +204,74 @@ func TestWorktreeSessionLifecycle(t *testing.T) {
 	}
 	if strings.Contains(tmuxOut("list-sessions", "-F", "#{session_name}"), "e2e-main") {
 		t.Fatal("session survived merge close")
+	}
+}
+
+// Race Service：开赛（先会话后 worktree × N）→ 赢家做出改动 → crown（wip→squash→清理输家）。
+func TestRaceLifecycle(t *testing.T) {
+	r, tmp, tmuxOut := e2eSetup(t)
+	repo := e2eRepo(t, tmp)
+
+	// ① 开赛：2 选手（cmd 留空 = 纯 shell 会话，不真起 agent）
+	code, resp := post(t, r, "/races", map[string]any{
+		"name": "race-x", "dir": repo, "base": "main", "prompt": "fix it",
+		"contestants": []map[string]any{{"agent": "claude"}, {"agent": "codex"}},
+	})
+	if code != 200 {
+		t.Fatalf("races: %d %v", code, resp)
+	}
+	race := resp["data"].(map[string]any)
+	raceID := race["id"].(string)
+	cts := race["contestants"].([]any)
+	if len(cts) != 2 {
+		t.Fatalf("want 2 contestants: %v", cts)
+	}
+	a := cts[0].(map[string]any)
+	loser := cts[1].(map[string]any)
+	if a["branch"] != "race-x-a" || loser["branch"] != "race-x-b" {
+		t.Fatalf("bad lane branches: %v / %v", a["branch"], loser["branch"])
+	}
+	sessions := tmuxOut("list-sessions", "-F", "#{session_name}")
+	if !strings.Contains(sessions, "race-x-a") || !strings.Contains(sessions, "race-x-b") {
+		t.Fatalf("contestant sessions missing: %s", sessions)
+	}
+
+	// ② 赢家 worktree 里留未提交改动（crown 应先 wip-commit 再合并）
+	winPath := a["path"].(string)
+	if err := os.WriteFile(filepath.Join(winPath, "win.txt"), []byte("winner\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// ③ crown：squash 合回 main + 清理输家
+	code, resp = post(t, r, "/races/"+raceID+"/crown", map[string]any{
+		"winner": a["session"], "strategy": "squash", "cleanup": true,
+	})
+	if code != 200 {
+		t.Fatalf("crown: %d %v", code, resp)
+	}
+	if st := resp["data"].(map[string]any)["status"]; st != "crowned" {
+		t.Fatalf("race status %v", st)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "win.txt")); err != nil {
+		t.Fatal("winner change not merged into main")
+	}
+	if _, err := os.Stat(loser["path"].(string)); err == nil {
+		t.Fatal("loser worktree survived cleanup")
+	}
+	if strings.Contains(tmuxOut("list-sessions", "-F", "#{session_name}"), "race-x-b") {
+		t.Fatal("loser session survived cleanup")
+	}
+	// 赢家会话/worktree 保留（收尾走 W7/W4）
+	if !strings.Contains(tmuxOut("list-sessions", "-F", "#{session_name}"), "race-x-a") {
+		t.Fatal("winner session should survive crown")
+	}
+
+	// ④ 全部清理：赢家也收掉
+	code, resp = post(t, r, "/races/"+raceID+"/cleanup", nil)
+	if code != 200 {
+		t.Fatalf("cleanup: %d %v", code, resp)
+	}
+	if _, err := os.Stat(winPath); err == nil {
+		t.Fatal("winner worktree survived full cleanup")
 	}
 }

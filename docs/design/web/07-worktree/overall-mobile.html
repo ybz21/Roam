@@ -92,36 +92,37 @@
       <div class="m-title">会话</div>
       <div style="flex:1;position:relative;overflow:hidden">
         <div class="sheet-dim"></div>
-        <div class="sheet" style="top:16px">
+        <div class="sheet" style="top:12px">
           <div style="padding:14px 16px 0;font-weight:700;font-size:15px">新建会话</div>
           <div style="padding:12px 16px;display:flex;flex-direction:column;gap:10px">
-            <input class="input" value="fix-login" style="border-color:var(--blue)">
+            <input class="input" placeholder="会话名(短,留空自动起名)">
+            <textarea class="input" rows="3" style="border-color:var(--blue)">修复登录页在 Safari 下的 UA 判断…</textarea>
             <div style="display:flex"><input class="input" value="~/codes/app" style="border-radius:7px 0 0 7px"><span class="btn" style="height:34px;border-radius:0 7px 7px 0;border-left:0">浏览</span></div>
-            <div class="segmented" style="width:100%"><button style="flex:1">无</button><button class="on" style="flex:1">Claude</button><button style="flex:1">Codex</button></div>
-            <label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" checked style="accent-color:var(--blue-deep)"> worktree 模式</label>
-            <div style="background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:10px;padding:11px 12px;display:flex;flex-direction:column;gap:9px">
-              <div><span class="field-label"><span style="color:var(--cyan)">⎇</span> 分支</span><input class="input mono" value="roam/fix-login" style="font-size:12.5px"></div>
-              <div class="hint warn">已存在，将使用 roam/fix-login-2</div>
-              <div><span class="field-label">基于</span><div class="select"><span class="mono">main <span class="hint">(默认)</span></span><span class="caret">▾</span></div></div>
-              <div class="hint" style="font-size:11px">.worktrees/roam-fix-login-2</div>
+            <div class="segmented" style="width:100%"><button style="flex:1">不启动</button><button class="on" style="flex:1">Claude</button><button style="flex:1">Codex</button></div>
+            <div style="display:flex;align-items:center;gap:8px"><span class="hint" style="flex:0 0 auto">在哪干活</span>
+              <div class="segmented" style="flex:1"><button style="flex:1">主仓库</button><button class="on" style="flex:1">新建</button><button style="flex:1">已有(1)</button></div>
             </div>
-            <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-dim)"><input type="checkbox" style="accent-color:var(--blue-deep)"> 自动互审</label>
+            <div style="background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px">
+              <div><span class="field-label">基于</span><div class="select"><span class="mono">main <span class="hint">(默认)</span></span><span class="caret">▾</span></div></div>
+              <div class="hint" style="font-size:11px"><span class="mono" style="color:var(--cyan)">⎇ safari-ua</span> · 语义名由 Agent 开工后改</div>
+            </div>
+            <div class="hint">▸ 高级(分支名)</div>
           </div>
           <div style="padding:4px 16px 14px;display:flex;gap:10px"><span class="btn" style="flex:1;justify-content:center">取消</span><span class="btn primary" style="flex:1;justify-content:center">创建</span></div>
         </div>
       </div>
       <div class="tabbar"><span>◎</span><span>≡</span><span class="on">▸</span><span>⋯</span></div>
     </div>
-    <div class="ph-cap"><b><span class="no">3</span>新建会话（= W1 手机态）</b>Modal 全宽；分支卡同构；按钮全宽对半</div>
+    <div class="ph-cap"><b><span class="no">3</span>新建会话（= W1 手机态）</b>名称+需求+三选一同桌面；按钮全宽对半</div>
   </div>
 
   <!-- ④ 终端会话页 -->
   <div class="ph-cell">
     <div class="phone-frame">
       <div class="notch"><i></i></div>
-      <div class="m-title"><span class="back">←</span> fix-login <span class="tag cyan" style="font-size:10.5px;height:17px">⎇ roam/fix-login</span><span style="flex:1"></span><span style="color:var(--text-dimmer);font-weight:400">⋮</span></div>
+      <div class="m-title"><span class="back">←</span> fix-login <span class="tag cyan" style="font-size:10.5px;height:17px">⎇ fix-login</span><span style="flex:1"></span><span style="color:var(--text-dimmer);font-weight:400">⋮</span></div>
       <div class="term-bg" style="flex:1;font-size:11.5px">
-        <div><span class="p">➜</span> <span class="c">roam-fix-login</span> <span class="t">git:(</span><span class="p">roam/fix-login</span><span class="t">)</span> claude</div>
+        <div><span class="p">➜</span> <span class="c">roam-fix-login</span> <span class="t">git:(</span><span class="p">fix-login</span><span class="t">)</span> claude</div>
         <div class="t">CL Welcome to Claude Code!</div>
         <div class="d">──────────────────────────</div>
         <div class="t">&gt; 修复登录页在 Safari 下的 UA 判断…</div>
@@ -144,7 +145,7 @@
   <div class="ph-cell">
     <div class="phone-frame">
       <div class="notch"><i></i></div>
-      <div class="m-title"><span class="back">←</span> <span class="mono" style="font-size:13px">⎇ roam/fix-login</span> <span class="mono" style="font-size:11px;color:var(--text-dim)">↑3↓0</span><span class="tag cyan" style="font-size:10.5px;height:17px">worktree</span><span style="flex:1"></span><span style="color:var(--text-dimmer);font-weight:400">⟳</span></div>
+      <div class="m-title"><span class="back">←</span> <span class="mono" style="font-size:13px">⎇ fix-login</span> <span class="mono" style="font-size:11px;color:var(--text-dim)">↑3↓0</span><span class="tag cyan" style="font-size:10.5px;height:17px">worktree</span><span style="flex:1"></span><span style="color:var(--text-dimmer);font-weight:400">⟳</span></div>
       <div style="padding:8px 12px 0;font-size:11.5px;color:var(--text-dimmer)">基于 <span class="mono">main</span> · 主仓库 ~/codes/app</div>
       <div style="padding:9px 12px"><div class="segmented" style="width:100%"><button style="flex:1">改动</button><button class="on" style="flex:1">对比 main <span class="badge-n">3</span></button></div></div>
       <div style="flex:1;overflow:hidden">
@@ -180,12 +181,12 @@
       </div>
       <div style="flex:1;overflow:hidden">
         <div class="wt-row" style="padding:11px 13px">
-          <div class="r1"><span class="branch" style="font-size:12.5px">roam/fix-login</span><span style="margin-left:auto" class="tag green" style="font-size:10.5px">fix-login ●</span></div>
+          <div class="r1"><span class="branch" style="font-size:12.5px">fix-login</span><span style="margin-left:auto" class="tag green" style="font-size:10.5px">fix-login ●</span></div>
           <div class="r2" style="font-size:11.5px">基于 main · <b class="hot-b">↑3</b>↓0 · <b class="hot-y">改动2</b> · 2小时前</div>
           <div class="r3"><span class="btn sm">进入会话</span><span class="btn sm">⋯ 更多</span></div>
         </div>
         <div class="wt-row" style="padding:11px 13px;background:rgba(210,153,34,.03)">
-          <div class="r1"><span class="branch" style="font-size:12.5px">roam/try-idea</span><span style="margin-left:auto" class="tag yellow" style="font-size:10.5px">孤儿</span></div>
+          <div class="r1"><span class="branch" style="font-size:12.5px">try-idea</span><span style="margin-left:auto" class="tag yellow" style="font-size:10.5px">孤儿</span></div>
           <div class="r2" style="font-size:11.5px">基于 main · ↑0<b>↓5</b> · 无改动 · 6天前</div>
           <div class="r3"><span class="btn sm">新建进入</span><span class="btn sm">⋯ 更多</span></div>
         </div>
@@ -201,7 +202,7 @@
         </div>
         <!-- ⋯ 更多 ActionSheet -->
         <div style="margin:12px 10px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:14px;overflow:hidden">
-          <div style="padding:8px 14px;font-size:11px;color:var(--text-dimmer);border-bottom:1px solid var(--border-subtle)">roam/fix-login 的更多操作 ↓（ActionSheet）</div>
+          <div style="padding:8px 14px;font-size:11px;color:var(--text-dimmer);border-bottom:1px solid var(--border-subtle)">fix-login 的更多操作 ↓（ActionSheet）</div>
           <div style="padding:11px 14px;border-bottom:1px solid var(--border-subtle);font-size:13px">对比 base</div>
           <div style="padding:11px 14px;border-bottom:1px solid var(--border-subtle);font-size:13px">合并回 main（merge / squash / rebase）</div>
           <div style="padding:11px 14px;font-size:13px;color:var(--red)">删除 worktree…</div>
@@ -220,19 +221,19 @@
       <div style="flex:1;overflow:hidden;padding:10px 12px;display:flex;flex-direction:column;gap:9px">
         <div style="border:1px solid var(--blue);border-radius:12px;background:var(--bg-container);padding:11px 12px;box-shadow:0 0 0 1px rgba(88,166,255,.2)">
           <div style="display:flex;gap:8px;font-weight:700;font-size:13px"><span style="color:var(--blue)">Claude -a</span><span style="margin-left:auto" class="tag green">● 完成</span></div>
-          <div class="mono" style="font-size:11px;color:var(--cyan);margin:5px 0">⎇ roam/dark-mode-a</div>
+          <div class="mono" style="font-size:11px;color:var(--cyan);margin:5px 0">⎇ dark-mode-a</div>
           <div style="display:flex;gap:12px;font-size:11.5px;color:var(--text-dim)"><span><b style="color:var(--text-bright)">4</b> 文件</span><span class="mono"><span style="color:var(--green)">+210</span><span style="color:var(--red)">−12</span></span><span><b style="color:var(--text-bright)">2</b> 提交</span><span style="color:var(--green)">✓ 测试</span></div>
           <div style="display:flex;gap:7px;margin-top:8px"><span class="btn sm">看 diff</span><span class="btn sm">进会话</span></div>
         </div>
         <div style="border:1px solid var(--border);border-radius:12px;background:var(--bg-container);padding:11px 12px">
           <div style="display:flex;gap:8px;font-weight:700;font-size:13px"><span style="color:var(--blue)">Claude -b</span><span style="margin-left:auto" class="tag green">● 完成</span></div>
-          <div class="mono" style="font-size:11px;color:var(--cyan);margin:5px 0">⎇ roam/dark-mode-b</div>
+          <div class="mono" style="font-size:11px;color:var(--cyan);margin:5px 0">⎇ dark-mode-b</div>
           <div style="display:flex;gap:12px;font-size:11.5px;color:var(--text-dim)"><span><b style="color:var(--text-bright)">2</b> 文件</span><span class="mono"><span style="color:var(--green)">+95</span><span style="color:var(--red)">−8</span></span><span><b style="color:var(--text-bright)">1</b> 提交</span></div>
           <div style="display:flex;gap:7px;margin-top:8px"><span class="btn sm">看 diff</span><span class="btn sm">进会话</span></div>
         </div>
         <div style="border:1px solid var(--border);border-radius:12px;background:var(--bg-container);padding:11px 12px">
           <div style="display:flex;gap:8px;font-weight:700;font-size:13px"><span style="color:var(--green)">Codex -c</span><span style="margin-left:auto" class="tag blue">进行中</span></div>
-          <div class="mono" style="font-size:11px;color:var(--cyan);margin:5px 0">⎇ roam/dark-mode-c</div>
+          <div class="mono" style="font-size:11px;color:var(--cyan);margin:5px 0">⎇ dark-mode-c</div>
           <div style="display:flex;gap:12px;font-size:11.5px;color:var(--text-dim)"><span><b style="color:var(--text-bright)">3</b> 文件</span><span class="mono"><span style="color:var(--green)">+150</span><span style="color:var(--red)">−40</span></span><span><b style="color:var(--text-bright)">0</b> 提交</span></div>
           <div style="display:flex;gap:7px;margin-top:8px"><span class="btn sm">看 diff</span><span class="btn sm">进会话</span></div>
         </div>
@@ -259,7 +260,7 @@
           <div style="padding:14px 16px 0;font-weight:700;font-size:15px">关闭会话 fix-login？</div>
           <div style="padding:12px 16px;display:flex;flex-direction:column;gap:9px">
             <div style="font-size:12.5px;color:var(--text-dim);line-height:1.7;background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:9px;padding:9px 11px">
-              worktree <span class="mono" style="color:var(--cyan)">⎇ roam/fix-login</span> 还有 <b style="color:var(--yellow)">2 个未提交改动</b>、<b style="color:var(--blue)">3 个未合并提交</b>
+              worktree <span class="mono" style="color:var(--cyan)">⎇ fix-login</span> 还有 <b style="color:var(--yellow)">2 个未提交改动</b>、<b style="color:var(--blue)">3 个未合并提交</b>
             </div>
             <div class="radio on"><span class="r"></span><span class="rt"><b>保留 worktree</b><span>稍后可在管理页处理</span></span></div>
             <div class="radio"><span class="r"></span><span class="rt"><b>合并回 main 并删除</b><span>未提交改动先自动提交为 wip</span></span></div>

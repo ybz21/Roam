@@ -2,7 +2,9 @@
 
 ← 返回 [README](./README.md) ｜ 页面惯例见 [05-pages](./05-pages.md)
 
-> 状态：设计 v0.5 — 机制边界修订稿，未实现。
+> 状态：设计 v0.6 — 已实现（§7 A–G 全部落地）。
+> v0.5 → v0.6：**创建流程反转**——组合 API 从「先建 worktree 再建会话」改为「先建 (sub)session（cwd=仓库）→ 建 worktree（占位分支）→ 会话内 cd 进去」；分支名不再提前指定，由 agent 开工后按任务 `git branch -m` 动态命名（W1 交互修订 4）。Race Service（W5/W6）落地：crown 状态机阶段持久化可续跑，expectedHead 在冻结时校验（wip-commit 会合法挪 HEAD，不传给 Merge）。
+> v0.6 增补（交互修订 5）：W1 字段顺序重排（名字→目录→在哪干活→Agent→需求）；base 缺省始终本地主干（origin/HEAD → main → master，绝不默认当前检出分支）；占位分支去 roam/ 前缀（纯会话名 slug，前缀由 agent/用户自定）。
 > v0.4 → v0.5：架构边界重定——**ttmux CLI 专注 Session/subSession，Worktree 完全由上层（backend）Worktree Service 管理**。撤销 v0.4「CLI 是 worktree 唯一写入口」的结论：ttmux 不新增 `wt` 命令族、不实现 `cli/internal/worktree`、不执行任何 git 操作；v0.4 吸收的 Git 底层安全规则全部保留，归属改为 Worktree Service（§2.3）。
 > 目标：把 git worktree 从「建会话时的一个复选框」升级为**有名字、看得见、有生命周期、能收尾、能并行竞赛**的一等能力。
 > 参照：[Orca](https://github.com/stablyai/orca) 的 worktree-native 模型。
@@ -96,10 +98,12 @@ ttmux 的能力止步于「平坦 tmux session + parent 关系」，**不理解 
 3. **锁内分配最终 branch/path**（冲突后缀在锁内定，前端提示只是预览；路径 slug 与 branch slug 分开处理）→ `git worktree add` → 写 roam.* worktree config（首次顺带在 common git dir 启用 `extensions.worktreeConfig`）→ **调 ttmux 建会话** → 任一步失败按反向顺序补偿（含删除刚建的 worktree/branch）。
 4. `info/exclude`：经 common-dir 定位，带锁幂等追加 `/.worktrees/`。
 
-**组合编排（service 调 ttmux，前端不再两段式）**：
-- 顶层 worktree 会话 = service 建 worktree → `ttmux new <名> --dir <path> --json`。
-- 派生编码会话 = service 建 worktree → `ttmux fork <父> <子> --dir <path> --json`。
-- session 创建失败 → service 反向补偿删除刚创建的 worktree/branch。
+**组合编排（service 调 ttmux，前端不再两段式；v0.6 顺序反转为先会话后 worktree）**：
+- 顶层 worktree 会话 = `ttmux new <名> --dir <仓库目录>` → service 建 worktree（分支缺省自动占位 `<会话名 slug>`——纯 slug 无强制前缀，roam 身份在 roam.* config 不靠分支名）→ 会话内注入 `cd <worktree>`（send-keys 排队，先于前端随后发送的 agent 启动指令）。
+- 派生编码会话 = `ttmux fork <父> <子> --dir <仓库目录>` → 同上建 worktree + cd。
+- worktree 创建失败 → 反向补偿 `ttmux kill` 刚建的会话。
+- 为什么反转：分支名不该在创建时定死——占位分支只是技术需要，agent 读完任务后 `git branch -m` 起语义名（分支名与 roam.baseRef 解耦，rename 安全）；会话先活起来也让创建零等待、cd 过程在回滚里可见。
+- tmux 3.4 坑：send-keys 的 pane 目标必须写 `=name:`（精确会话+缺省窗口），裸 `=name` 报 can't find pane。
 
 **合并**（同锁 + 检查无进行中 sequencer/merge/rebase）：
 - **执行位**：在 `worktree list` 里找 checkout 了 base 的 worktree（主工作区不一定是 base）；找不到 → 默认建临时 integration worktree 执行、完毕即删（可配置改报 `BASE_WORKTREE_NOT_FOUND`）。执行位 dirty → 结构化报错，不自动 stash。
@@ -134,7 +138,6 @@ ttmux 的能力止步于「平坦 tmux session + parent 关系」，**不理解 
 
 > **高保真 HTML mockup：[07-worktree/index.html](./07-worktree/)**（W3/W6/W7 带轻交互）。
 > 成套总览：[overall-desktop.html](./07-worktree/overall-desktop.html)｜[overall-mobile.html](./07-worktree/overall-mobile.html)。
-> **v2 视觉升级版：[07-worktree/v2/](./07-worktree/v2/index.html)**——「VSCode 式纯黑」设计语言，v1 定交互规格、v2 定视觉方向，实现时合流。
 > 现有布局基线：电脑 = 导航 `Sider` | 页面 | 右侧停靠终端三栏；手机 = 底部 Tab + 全屏页；Git 面板是终端视图里的浮动抽屉。
 
 七个界面与入口关系：
@@ -146,7 +149,22 @@ ttmux 的能力止步于「平坦 tmux session + parent 关系」，**不理解 
    └─关闭 worktree 会话──→ 收尾三选一(W7)
 ```
 
-### W1. 新建会话弹窗（prompt-first 派活 + 工作区三选一）
+### W1. 新建会话弹窗（名称 + 需求 + 工作区三选一）
+
+> 交互修订 5（实现期）：**字段顺序重排 + base 缺省主干**——先定位置（名字 → 目录 →
+> 在哪干活），再定执行（Agent → 需求），需求不再插在名字与目录之间；「基于」缺省
+> 始终是本地主干（origin/HEAD 指向的本地分支 → main → master），绝不默认当前检出的
+> feature 分支。占位分支去掉 roam/ 前缀（纯会话名 slug）。
+
+> 交互修订 4（实现期）：**分支不再预指定**——去掉分支输入/派生预览/「高级」折叠，
+> 展开卡只剩「基于」。流程反转为先建 subsession 再建 worktree：占位分支按会话名
+> 派生（纯 slug，无强制前缀），prompt 前置命名约定让 agent 开工后 `git branch -m` 语义化
+> （前缀 feat/fix 等由 agent 自定）；想手动指定分支名走 W4 新建入口。
+> 无 agent 时提示可自行改名。
+
+> 交互修订 3（实现期）：需求派生的长句不适合当会话名——**名称回归一等短输入**（可留空，
+> 提交时从需求短派生 ≤16 字，再兜底 task-<时间>），需求 textarea 其次（发 Agent 第一条
+> 指令，不再实时回填名称）。
 
 > 交互修订 2（实现期）：**主输入是自然语言任务**，不是名字/分支。对照 Orca：它是任务名
 > 优先（留空则随机海洋生物名，分支从名字派生，显式分支藏 Advanced）、prompt 要用户建完
@@ -164,27 +182,27 @@ ttmux 的能力止步于「平坦 tmux session + parent 关系」，**不理解 
 ┌─ 新建会话 ──────────────────────────────┐
 │ 名称  [ fix-login                  ]    │
 │ 目录  [ ~/codes/app         ][浏览]     │
-│ ( 无 )( ●Claude )( Codex )              │
-│ 在哪干活  (主仓库)(●新建 worktree)(已有(2))│ ← Segmented，仅 git 仓库时出现
+│ 在哪干活  (主仓库)(●新建 worktree)(已有(2))│ ← Segmented，非 git 目录置灰
 │ 「为这个任务开一个隔离工作区…」          │ ← 各态一句白话说明
 │ ┌─────────────────────────────────────┐ │
-│ │ ⎇ 分支 [ roam/fix-login         ]   │ │ ← 默认 roam/<会话名 slug>
-│ │ 基于   [ main (默认)          ▾ ]   │ │ ← start-from 选择器
-│ │ 将创建 .worktrees/roam-fix-login     │ │ ← 路径预览，灰字
+│ │ 基于   [ main (默认)          ▾ ]   │ │ ← start-from 选择器（展开卡仅此一项）
+│ │ 分支与目录自动创建;Agent 开工后会    │ │ ← 灰字说明，无分支输入（交互修订 4）
+│ │ 按任务给分支起语义化名字             │ │
 │ └─────────────────────────────────────┘ │
+│ ( 无 )( ●Claude )( Codex )              │ ← Agent 在位置确定后选
+│ 「需求 / 任务(自然语言)…」textarea       │ ← 最后写要干什么
 │ ☐ 自动互审                              │
 │                    [取消]  [创建]        │
 └──────────────────────────────────────────┘
 ```
 
 - **主仓库**（默认）：行为与普通建会话完全一致，零打扰。
-- **新建 worktree**：展开分支卡（同上）；提交 = 一次 `POST /worktree-sessions`。
+- **新建 worktree**：展开「基于」卡（同上）；提交 = 一次 `POST /worktree-sessions`。
 - **已有 (N)**：下拉列出仓库现有 worktree（`⎇ 分支` + 孤儿/外部/占用会话徽章 + 改动数），
   选中即把会话 cwd 指进去——孤儿由此复活；无可选项时该档置灰。
 
-- **提交 = 一次 `POST /worktree-sessions`**（组合 API，§4）：Worktree Service 建 worktree → 调 `ttmux new --dir` → 一次返回 `{session, worktree, branch, base}`；最终分支名/路径由 service 在锁内分配，前端查重提示只是预览。
+- **提交 = 一次 `POST /worktree-sessions`**（组合 API，§4，v0.6 先会话后 worktree）：`ttmux new --dir <仓库>` → Worktree Service 建 worktree（占位分支 `<会话名 slug>`，锁内分配后缀）→ 会话内 cd；一次返回 `{session, path, branch, base}`。
 - start-from 选远端时 UI 明确拆 `remote` + `ref` 两个值；fetch 中可取消。
-- 分支输入跟随「名称」自动填 `roam/<slug>`，手改后停止联动。
 
 ### W2. 会话列表：仓库 → worktree 分组
 
@@ -210,13 +228,13 @@ ttmux 的能力止步于「平坦 tmux session + parent 关系」，**不理解 
 
 ### W5. 竞赛创建弹窗
 
-布局同前（选手卡、上限 5、资源预估）。提交 = **一次调上层 Race Service**：service 逐选手「建 worktree → `ttmux fork <leader> <选手> --dir`（或 swarm add 传 `--dir`）→ 发同题」；`race_id/repo/base/branch/worktree` 落 **Race Service 数据模型**（不进 SessionMeta、不进 swarm.db 的 Git 字段——swarm 只管 session 编排，成员的通用 `dir` 字段照旧可用）。失败选手由 service 单独重试。
+布局同前（选手卡、上限 5、资源预估）。入口 = W2「＋ 新建」下拉「新建竞赛…」。提交 = **一次调 `POST /races`**：service 逐选手「建会话（`<竞赛名>-<a/b/c>`，cwd=仓库）→ 建 worktree（分支 `<竞赛名>-<字母>`，即赛道身份，**不随 agent 改名**）→ cd → 发同题」；`race_id/repo/base/branch/worktree/winner/crown 阶段` 落 **Race Service 数据模型**（`<dataDir>/races.json`，不进 SessionMeta、不进 swarm.db）。单个选手失败只标记该选手（`status=failed` + error），不拖累其他人。
 
 ### W6. 竞赛对比台
 
-- 数据源 = Race Service（谁参赛、base/branch/winner）+ Worktree Service list/diff（各自改了什么）。
-- **[选为赢家] = 调 Race Service 的 crown 状态机**（不是 ttmux 命令）：冻结选手 → 校验赢家 expected-head → 调 Worktree Service merge → 验证 → 可选清理（调 Worktree Service remove + ttmux kill）；每步持久化阶段，中途失败可续跑；前端只展示阶段进度与重试按钮。
-- 未完成选手不给赢家按钮；[全部清理] 逐个走 W4 删除确认（占用检查生效）。
+- 数据源 = Race Service（谁参赛、base/branch/winner）+ Worktree Service list/diff（各自改了什么），5s 轮询；lane 状态复用 agent 进程探测（claude/codex running）。
+- **[选为赢家] = 调 crown 状态机**（`POST /races/:id/crown`）：冻结（**expectedHead 在此校验**——后续 wip-commit 会合法挪 HEAD，不能把 expectedHead 传给 Merge）→ wip-commit → merge（策略可选，默认 squash）→ 可选清理输家（remove + ttmux kill）；每步完成即持久化 `crownDone`，中途失败返回 `{stage, done}`，同 winner 重试跳过已完成阶段续跑。
+- 赢家的会话/worktree 保留（收尾走 W7/W4 占用语义）；[全部清理] 二次确认后杀全部选手会话 + 强删 worktree/分支，随后删竞赛记录。
 
 ### W7. 会话关闭钩子：收尾三选一
 
@@ -224,7 +242,7 @@ ttmux 的能力止步于「平坦 tmux session + parent 关系」，**不理解 
 
 ```
 ┌─ 关闭会话 fix-login？ ──────────────────┐
-│ 该会话的 worktree roam/fix-login 还有   │
+│ 该会话的 worktree fix-login 还有   │
 │ 2 个未提交改动、3 个未合并到 main 的提交 │
 │ (●) 保留 worktree（稍后在管理页处理）    │
 │ ( ) 合并回 main 并删除    [squash ▾]    │
@@ -270,10 +288,12 @@ ttmux 的能力止步于「平坦 tmux session + parent 关系」，**不理解 
 
 | 接口 | 编排 |
 |---|---|
-| `POST /worktree-sessions` | Worktree Service create → `ttmux new --dir`；失败反向补偿删 worktree/branch；返回 `{session, worktree, branch, base}` |
-| `POST /sessions/:parent/fork-worktree` | Worktree Service create → `ttmux fork --dir`；同上补偿 |
+| `POST /worktree-sessions` | `ttmux new --dir <仓库>` → Worktree Service create（分支缺省占位）→ 会话内 cd；worktree 失败反向补偿 kill 会话；返回 `{session, path, branch, base}` |
+| `POST /sessions/:parent/fork-worktree` | `ttmux fork --dir <仓库>` → create → cd；同上补偿 |
 | `POST /sessions/:name/close-with-worktree` | W7 三选一（keep / merge-then-remove / discard-remove）的状态机入口 |
-| Race：`POST /races`、`POST /races/:id/crown` | Race Service 状态机（§3 W5/W6） |
+| `POST /races` / `GET /races` | 开赛（逐选手 会话→worktree→发题）/ 竞赛列表 |
+| `POST /races/:id/crown` | crown 状态机（冻结校验 expectedHead → wip → merge → 可选清理），阶段可续跑 |
+| `POST /races/:id/cleanup` / `DELETE /races/:id` | 全部清理（会话+worktree+分支）/ 删除竞赛记录 |
 
 ## 5. 与裸 git 互操作
 
@@ -302,6 +322,8 @@ ttmux 的能力止步于「平坦 tmux session + parent 关系」，**不理解 
 | B | backend Worktree Service + Git 集成测试（普通仓 / linked worktree / dirty / 分支被占 / 冲突 / 外部 worktree） | M1 |
 | C | session↔worktree cwd join 读模型（annotations） | M1 |
 | D | 事务式组合 API（/worktree-sessions、fork-worktree、close-with-worktree） | M1 |
-| E | W1 / W4 / W7 | M1~M2 |
-| F | W2 / W3（对比 base） | M2 |
-| G | Race Service（race/crown 状态机）+ W5 / W6 | M3 |
+| E | W1 / W4 / W7 | M1~M2 ✅ |
+| F | W2 / W3（对比 base） | M2 ✅ |
+| G | Race Service（race/crown 状态机）+ W5 / W6 | M3 ✅ |
+
+A–D 亦已全部落地（M1）。

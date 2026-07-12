@@ -51,6 +51,27 @@ func commitFile(t *testing.T, dir, name, content, msg string) {
 	}
 }
 
+// base 缺省应始终回到本地主干（main/master），不能是当前检出的 feature 分支
+// （很多仓库没设 origin/HEAD，旧逻辑会兜底到 HEAD 分支）。
+func TestDefaultBasePrefersMain(t *testing.T) {
+	ctx := context.Background()
+	s := New()
+	repo := mkRepo(t)
+	// 检出到 feature 分支再建 worktree（不传 base）
+	cmd := exec.Command("git", "-C", repo, "checkout", "-q", "-b", "feat/wip")
+	cmd.Env = scrubGitEnv()
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("checkout: %v %s", err, out)
+	}
+	resp, err := s.Create(ctx, CreateReq{Dir: repo, Branch: "probe-base"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Base != "main" {
+		t.Fatalf("default base = %q, want main", resp.Base)
+	}
+}
+
 func TestCreateListRemove(t *testing.T) {
 	ctx := context.Background()
 	s := New()

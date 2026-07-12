@@ -20,6 +20,8 @@ import FloatingFileDrawer from './FloatingFileDrawer'
 // 缩小首屏 index 块。都渲染在同一个 Suspense 边界内（见 lazyFallback，App 内 page）。
 const GitPanel = lazy(() => import('./GitPanel'))
 const WorktreePanel = lazy(() => import('./WorktreePanel'))
+const RaceCreateModal = lazy(() => import('./Race').then((m) => ({ default: m.RaceCreateModal })))
+const RaceComparePanel = lazy(() => import('./Race').then((m) => ({ default: m.RaceComparePanel })))
 const PluginsPanel = lazy(() => import('./PluginsPanel'))
 const BrowserView = lazy(() => import('./BrowserView'))
 const PhoneView = lazy(() => import('./PhoneView'))
@@ -1502,14 +1504,6 @@ export function DirPicker({ open, start, onPick, onClose }: { open: boolean; sta
 }
 
 // worktree 分支默认名：会话名 slug（小写、非字母数字转 -）
-function worktreeNameSlug(s: string): string {
-  return s.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
-}
-// worktree 目录名 slug：/ 转 -，非 [a-zA-Z0-9._-] 转 -（与后端路径规则一致，仅预览用）
-function worktreeBranchSlug(b: string): string {
-  return b.replace(/\//g, '-').replace(/[^a-zA-Z0-9._-]+/g, '-')
-}
-
 // prompt 派生任务名：取首行、去引号标点、截 24 字、空白转 -；中文原样保留（tmux 会话名支持中文）。
 function taskNameFromPrompt(p: string): string {
   const first = (p.trim().split(/\n/)[0] || '').replace(/["'`«»""'']/g, '').trim()
@@ -1538,9 +1532,8 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
   const [autoReview, setAutoReview] = useState(false)
   const [isGitRepo, setIsGitRepo] = useState(false)
   const [creating, setCreating] = useState(false)
-  // worktree 展开态（W1）：分支名随会话名联动，手改后停止；基于分支从后端拉本地分支
-  const [branch, setBranch] = useState('')
-  const [branchTouched, setBranchTouched] = useState(false)
+  // worktree 展开态（W1）：只选「基于」。分支不提前指定——后端按会话名占位，
+  // Agent 开工后按任务 git branch -m 语义化（交互修订 4：先建会话再建 worktree）。
   const [base, setBase] = useState('')
   const [branches, setBranches] = useState<string[]>([])
   const [defBranch, setDefBranch] = useState('')
@@ -1550,7 +1543,7 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
   useEffect(() => {
     if (open) {
       setPrompt(''); setName(''); setNameTouched(false); setDir(''); setAgent('claude'); setWtMode('repo'); setAutoReview(false); setIsGitRepo(false)
-      setBranch(''); setBranchTouched(false); setBase(''); setBranches([]); setDefBranch(''); setExistingWts([]); setWtPath('')
+      setBase(''); setBranches([]); setDefBranch(''); setExistingWts([]); setWtPath('')
     }
   }, [open])
   useEffect(() => {
@@ -1562,16 +1555,6 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
     }).catch(() => { if (!cancelled) setIsGitRepo(false) })
     return () => { cancelled = true }
   }, [dir])
-  // prompt → 会话名派生（手改后停跟）；slug 为空(纯中文等)时兜底 task-<HHMM>
-  useEffect(() => {
-    if (!nameTouched) setName(taskNameFromPrompt(prompt))
-  }, [prompt, nameTouched])
-  // 分支名跟随会话名自动填 roam/<slug>，用户手改后停止联动
-  useEffect(() => {
-    if (branchTouched) return
-    const slug = worktreeNameSlug(name)
-    setBranch(name.trim() ? 'roam/' + (slug || 'task') : '')
-  }, [name, branchTouched])
   // 目录是 git 仓库时拉已有 worktree（三选一的「已有」选项 + 计数）
   useEffect(() => {
     if (!isGitRepo || !dir.trim()) { setExistingWts([]); setWtPath(''); setWtMode('repo'); return }
@@ -1602,6 +1585,9 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
     let finalName = name.trim()
     if (!finalName) {
       if (!prompt.trim()) return message.error(t('session.promptOrNameRequired'))
+      finalName = taskNameFromPrompt(prompt).slice(0, 16).replace(/[-，。,.\s]+$/g, '')
+    }
+    if (!finalName) {
       const d = new Date()
       finalName = 'task-' + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0') + '-' + String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0')
     }
@@ -1610,10 +1596,9 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
       let sessionDir = dir.trim()
       let actual: string
       if (wtMode === 'new' && isGitRepo && sessionDir) {
-        // 组合 API 一次完成建 worktree + 会话；失败由后端反向补偿，前端不再两段式
+        // 组合 API（先会话后 worktree）：分支不传——后端按会话名占位，Agent 开工后语义化
         const res = await api('POST', '/worktree-sessions', {
           name: finalName, dir: sessionDir,
-          ...(branch.trim() ? { branch: branch.trim() } : {}),
           ...(base ? { base } : {}),
         })
         actual = res.name || res.data?.session || finalName
@@ -1628,9 +1613,9 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
         const cmd = agent === 'claude' ? (prefs.claudeCommand || 'claude') : (prefs.codexCommand || 'codex')
         let launch = cmd
         if (prompt.trim()) {
-          // prompt 作为 CLI 参数随启动一次带入；新建 worktree 且分支未手改时，
-          // 前置命名约定：让 cc 开工前 git branch -m 一个语义化分支名（W1 prompt-first）
-          const naming = wtMode === 'new' && !branchTouched ? t('session.wt.namingHint') + '\n\n' : ''
+          // prompt 作为 CLI 参数随启动一次带入；新建 worktree 时前置命名约定：
+          // 让 agent 开工前 git branch -m 一个语义化分支名（占位分支来自后端）
+          const naming = wtMode === 'new' ? t('session.wt.namingHint') + '\n\n' : ''
           launch = `${cmd} ${shq(naming + prompt.trim())}`
         }
         await api('POST', '/tasks/_/send', { sess: actual, msg: launch })
@@ -1654,10 +1639,10 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
       <Modal open={open} onCancel={onClose} onOk={ok} okText={t('file.create')} title={t('session.new')} destroyOnClose
         confirmLoading={creating}>
         <Space direction="vertical" style={{ width: '100%' }}>
-          {/* prompt-first：主输入是「要干什么」，名字/分支全部派生（高级里可改） */}
-          <Input.TextArea placeholder={t('session.promptPlaceholder')} value={prompt}
-            onChange={(e) => setPrompt(e.target.value)} autoFocus
-            autoSize={{ minRows: 3, maxRows: 8 }} />
+          {/* 名称是一等短输入(可留空自动命名)；需求是任务本体,发给 Agent/派生分支 */}
+          <Input placeholder={t('session.namePlaceholder2')} value={name} autoFocus
+            onChange={(e) => { setName(e.target.value); setNameTouched(true) }} />
+          {/* 顺序（交互修订 5）：先定位置——名字 → 目录 → 在哪干活；再定执行——Agent → 需求 */}
           <Space.Compact style={{ width: '100%' }}>
             <AutoComplete style={{ flex: 1 }} value={dir} onChange={setDir}
               options={recentDirs().map((d) => ({ value: d }))}
@@ -1677,53 +1662,45 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
               ))}
             </div>
           )}
-          <Radio.Group value={agent} onChange={(e) => setAgent(e.target.value)} optionType="button" buttonStyle="solid"
-            style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-            <Radio.Button value="none">{t('session.agentNone')}</Radio.Button>
-            <Radio.Button value="claude">{t('session.agentClaude')}</Radio.Button>
-            <Radio.Button value="codex">{t('session.agentCodex')}</Radio.Button>
-          </Radio.Group>
-          {/* 会话选项:勾选项竖排,不适用时置灰(tooltip 说明启用条件) */}
+          {/* 工作区三选一（W1 交互修订）：常驻不隐藏(cc96123 教训)——非 git 目录整组置灰+tooltip */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {/* 工作区三选一（W1 交互修订）：主仓库 / 新建 worktree / 已有 worktree */}
-            {isGitRepo && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <span style={{ color: 'var(--text-dim)', fontSize: 13, flex: '0 0 auto' }}>{t('session.wt.where')}</span>
-                  <Segmented size="small" value={wtMode} onChange={(v) => setWtMode(v as any)} options={[
-                    { label: t('session.wt.mainRepo'), value: 'repo' },
-                    { label: t('session.wt.newWt'), value: 'new' },
-                    { label: t('session.wt.existingWt', { count: existingWts.length }), value: 'existing', disabled: !existingWts.length },
-                  ]} />
-                </div>
-                <div style={{ color: 'var(--text-dimmer)', fontSize: 12 }}>
-                  {wtMode === 'repo' ? t('session.wt.hintRepo') : wtMode === 'new' ? t('session.wt.hintNew') : t('session.wt.hintExisting')}
-                </div>
-                {wtMode === 'existing' && (
-                  <Select value={wtPath || undefined} onChange={(v) => setWtPath(v)} placeholder={t('session.wt.pickExisting')}
-                    style={{ width: '100%' }} optionLabelProp="title"
-                    options={existingWts.map((w: any) => {
-                      const occupied = (w.sessions || []).length > 0
-                      return {
-                        value: w.path,
-                        title: `⎇ ${w.branch || w.path.split('/').pop()}`,
-                        label: (
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                            <span style={{ fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis' }}>⎇ {w.branch || '?'}</span>
-                            {occupied
-                              ? <Tag color="green" style={{ margin: 0, fontSize: 11, lineHeight: '16px' }}>{w.sessions[0].session}</Tag>
-                              : w.external
-                                ? <Tag style={{ margin: 0, fontSize: 11, lineHeight: '16px' }}>⧉ {t('worktree.external')}</Tag>
-                                : <Tag color="warning" style={{ margin: 0, fontSize: 11, lineHeight: '16px' }}>{t('worktree.orphan')}</Tag>}
-                            {(w.dirty > 0 || w.untracked > 0) && <span style={{ color: 'var(--text-dimmer)', fontSize: 11 }}>{t('session.wt.dirtyShort', { count: w.dirty + w.untracked })}</span>}
-                          </span>
-                        ),
-                      }
-                    })} />
-                )}
-              </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ color: 'var(--text-dim)', fontSize: 13, flex: '0 0 auto' }}>{t('session.wt.where')}</span>
+              <Tooltip title={isGitRepo ? '' : t('session.worktreeNeedsRepo')}>
+                <Segmented size="small" value={isGitRepo ? wtMode : 'repo'} onChange={(v) => setWtMode(v as any)} options={[
+                  { label: t('session.wt.mainRepo'), value: 'repo' },
+                  { label: t('session.wt.newWt'), value: 'new', disabled: !isGitRepo },
+                  { label: t('session.wt.existingWt', { count: existingWts.length }), value: 'existing', disabled: !isGitRepo || !existingWts.length },
+                ]} />
+              </Tooltip>
+            </div>
+            <div style={{ color: 'var(--text-dimmer)', fontSize: 12 }}>
+              {!isGitRepo ? t('session.worktreeNeedsRepo') : wtMode === 'repo' ? t('session.wt.hintRepo') : wtMode === 'new' ? t('session.wt.hintNew') : t('session.wt.hintExisting')}
+            </div>
+            {wtMode === 'existing' && (
+              <Select value={wtPath || undefined} onChange={(v) => setWtPath(v)} placeholder={t('session.wt.pickExisting')}
+                style={{ width: '100%' }} optionLabelProp="title"
+                options={existingWts.map((w: any) => {
+                  const occupied = (w.sessions || []).length > 0
+                  return {
+                    value: w.path,
+                    title: `⎇ ${w.branch || w.path.split('/').pop()}`,
+                    label: (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                        <span style={{ fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis' }}>⎇ {w.branch || '?'}</span>
+                        {occupied
+                          ? <Tag color="green" style={{ margin: 0, fontSize: 11, lineHeight: '16px' }}>{w.sessions[0].session}</Tag>
+                          : w.external
+                            ? <Tag style={{ margin: 0, fontSize: 11, lineHeight: '16px' }}>⧉ {t('worktree.external')}</Tag>
+                            : <Tag color="warning" style={{ margin: 0, fontSize: 11, lineHeight: '16px' }}>{t('worktree.orphan')}</Tag>}
+                        {(w.dirty > 0 || w.untracked > 0) && <span style={{ color: 'var(--text-dimmer)', fontSize: 11 }}>{t('session.wt.dirtyShort', { count: w.dirty + w.untracked })}</span>}
+                      </span>
+                    ),
+                  }
+                })} />
             )}
-            {/* 新建 worktree 展开态（W1 prompt-first）：只留「基于」，分支/路径自动派生，语义名交给 cc */}
+            {/* 新建 worktree 展开态（W1 交互修订 4）：只选「基于」（缺省本地主干）。
+                分支不提前指定——占位按会话名派生，Agent 开工后按任务命名 */}
             {wtMode === 'new' && isGitRepo && (
               <div style={{ background: 'var(--bg-elevated)', borderRadius: 8, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1736,41 +1713,27 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
                       ...branches.filter((b) => b !== defBranch).map((b) => ({ value: b, label: b })),
                     ]} />
                 </div>
-                <div style={{ color: 'var(--text-dimmer)', fontSize: 12, wordBreak: 'break-all' }}>
-                  <span style={{ fontFamily: 'monospace' }}>⎇ {branch || 'roam/…'}</span>
-                  {' · '}{t('session.wt.pathPreview', { path: `${dir.trim()}/.worktrees/${worktreeBranchSlug(branch)}` })}
-                  {!branchTouched && agent !== 'none' && <span>{' · '}{t('session.wt.autoBranchNote')}</span>}
+                <div style={{ color: 'var(--text-dimmer)', fontSize: 12 }}>
+                  {agent !== 'none' ? t('session.wt.autoNote') : t('session.wt.autoNoteNoAgent')}
                 </div>
               </div>
             )}
-            {/* 高级折叠：会话名 / 分支名（默认全派生，手改停跟） */}
-            <Collapse ghost size="small" items={[{
-              key: 'adv',
-              label: <span style={{ fontSize: 12.5, color: 'var(--text-dim)' }}>{t('session.advanced')}</span>,
-              children: (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ flex: '0 0 64px', color: 'var(--text-dim)', fontSize: 13 }}>{t('session.nameLabel')}</span>
-                    <Input size="small" value={name} placeholder={t('session.namePlaceholder')} style={{ flex: 1 }}
-                      onChange={(e) => { setName(e.target.value); setNameTouched(true) }} />
-                  </div>
-                  {wtMode === 'new' && isGitRepo && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ flex: '0 0 64px', color: 'var(--text-dim)', fontSize: 13 }}>⎇ {t('session.wt.branch')}</span>
-                      <Input size="small" value={branch} style={{ flex: 1, fontFamily: 'monospace' }}
-                        onChange={(e) => { setBranch(e.target.value); setBranchTouched(true) }} />
-                    </div>
-                  )}
-                </div>
-              ),
-            }]} />
-            <Tooltip placement="right" title={agent !== 'none' ? t('session.autoReviewTip') : t('session.autoReviewNeedsAgent')}>
-              <Checkbox checked={autoReview && agent !== 'none'} disabled={agent === 'none'}
-                onChange={(e) => setAutoReview(e.target.checked)} style={{ width: 'fit-content' }}>
-                <span style={{ fontSize: 13 }}>{t('session.autoReview')}</span>
-              </Checkbox>
-            </Tooltip>
           </div>
+          <Radio.Group value={agent} onChange={(e) => setAgent(e.target.value)} optionType="button" buttonStyle="solid"
+            style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            <Radio.Button value="none">{t('session.agentNone')}</Radio.Button>
+            <Radio.Button value="claude">{t('session.agentClaude')}</Radio.Button>
+            <Radio.Button value="codex">{t('session.agentCodex')}</Radio.Button>
+          </Radio.Group>
+          <Input.TextArea placeholder={t('session.promptPlaceholder')} value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            autoSize={{ minRows: 3, maxRows: 8 }} />
+          <Tooltip placement="right" title={agent !== 'none' ? t('session.autoReviewTip') : t('session.autoReviewNeedsAgent')}>
+            <Checkbox checked={autoReview && agent !== 'none'} disabled={agent === 'none'}
+              onChange={(e) => setAutoReview(e.target.checked)} style={{ width: 'fit-content' }}>
+              <span style={{ fontSize: 13 }}>{t('session.autoReview')}</span>
+            </Checkbox>
+          </Tooltip>
         </Space>
       </Modal>
       <DirPicker open={pick} start={dir || undefined} onPick={(p) => { setDir(p); setPick(false) }} onClose={() => setPick(false)} />
@@ -1876,6 +1839,10 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
   const [wtDir, setWtDir] = useState<string | undefined>(undefined)
   // session→worktree 归属注解（cwd 现算的弱关联）：会话行 ⎇ Tag 的数据源
   const [wtAnn, setWtAnn] = useState<Record<string, any>>({})
+  // 竞赛（W5/W6）：Race Service 业务数据，会话按竞赛聚组、组头进对比台
+  const [races, setRaces] = useState<any[]>([])
+  const [raceOpen, setRaceOpen] = useState(false)
+  const [compareId, setCompareId] = useState('')
   // W7 关闭流程：confirmKill = 普通 Popconfirm 受控打开；closing = worktree 收尾三选一弹窗
   const [confirmKill, setConfirmKill] = useState<string | null>(null)
   const [closing, setClosing] = useState<{ name: string; st: any } | null>(null)
@@ -1891,6 +1858,15 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
     const t = setInterval(loadAnn, 8000)
     return () => { stop = true; clearInterval(t) }
   }, [])
+  useEffect(() => {
+    let stop = false
+    const loadRaces = () => api('GET', '/races')
+      .then((r) => { if (!stop) setRaces(Array.isArray(r?.data) ? r.data : []) }).catch(() => {})
+    loadRaces()
+    const t = setInterval(loadRaces, 8000)
+    return () => { stop = true; clearInterval(t) }
+  }, [])
+  const reloadRaces = () => api('GET', '/races').then((r) => setRaces(Array.isArray(r?.data) ? r.data : [])).catch(() => {})
   // 拉取蜂群拓扑：哪些会话其实是蜂群的指挥/成员。会话页和蜂群页看到的是同一批 tmux 会话，
   // 这里据成员的真实 session 名(非前缀猜测)打标，并据此拦住「关闭」误把成员当完成解锁下游。
   useEffect(() => {
@@ -2042,16 +2018,32 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
     })).then((es) => { if (!stop) setRepoWt(Object.fromEntries(es)) })
     return () => { stop = true }
   }, [wtAnn])
+  // 竞赛成员映射：竞赛分组优先于仓库分组（同一批会话不重复聚组）
+  const raceOf: Record<string, any> = {}
+  for (const rc of races) {
+    if (rc.status === 'cleaned') continue
+    for (const ct of rc.contestants || []) raceOf[ct.session] = rc
+  }
   const groupCounts: Record<string, number> = {}
-  for (const s of sorted) { const r = repoOf(s.name); if (r) groupCounts[r] = (groupCounts[r] || 0) + 1 }
+  for (const s of sorted) { const r = repoOf(s.name); if (r && !raceOf[s.name]) groupCounts[r] = (groupCounts[r] || 0) + 1 }
   const entries: any[] = []
   {
     const consumed = new Set<string>()
     for (const s of sorted) {
       if (consumed.has(s.name)) continue
+      const rc = raceOf[s.name]
+      if (rc) {
+        // 竞赛组头(W2)：RACE <名> ×N + [对比台]
+        const members = sorted.filter((x: any) => raceOf[x.name]?.id === rc.id)
+        members.forEach((m: any) => consumed.add(m.name))
+        const key = 'race:' + rc.id
+        entries.push({ kind: 'race', race: rc, count: members.length, key })
+        if (!wtCollapsed[key]) members.forEach((m: any) => entries.push({ kind: 'sess', s: m, indent: true, race: true }))
+        continue
+      }
       const r = repoOf(s.name)
       if (r && groupCounts[r] >= 2) {
-        const members = sorted.filter((x: any) => repoOf(x.name) === r)
+        const members = sorted.filter((x: any) => repoOf(x.name) === r && !raceOf[x.name])
         members.forEach((m: any) => consumed.add(m.name))
         entries.push({ kind: 'group', repo: r, count: members.length })
         if (!wtCollapsed[r]) members.forEach((m: any) => entries.push({ kind: 'sess', s: m, indent: true }))
@@ -2060,13 +2052,18 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
       }
     }
   }
+  const compareRace = races.find((rc) => rc.id === compareId) || null
 
   return (
     <Card
       title={<Space size={8}>{t('nav.sessions')}<Tag style={{ margin: 0 }}>{cnt('all')}</Tag></Space>}
       extra={<Space size={8}>
         <Button onClick={() => { setWtDir(undefined); setWtOpen(true) }}>{t('worktree.entry')}</Button>
-        <Button type="primary" onClick={() => setNewOpen(true)}>+ {t('session.new')}</Button>
+        {/* 新建下拉(W5 入口)：主点 = 新建会话；菜单 = 新建竞赛 */}
+        <Dropdown.Button type="primary" onClick={() => setNewOpen(true)}
+          menu={{ items: [{ key: 'race', label: t('race.new') }], onClick: () => setRaceOpen(true) }}>
+          + {t('session.new')}
+        </Dropdown.Button>
       </Space>}
     >
       {/* 工具条：搜索 + 排序同一行，类型筛选另起一行 */}
@@ -2102,6 +2099,25 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
         : filtered.length === 0 ? <Empty description={t('session.noMatches')} />
           : (
             <List dataSource={entries} renderItem={(en: any) => {
+              if (en.kind === 'race') {
+                const rc = en.race
+                const collapsed = !!wtCollapsed[en.key]
+                return (
+                  // 竞赛组头(W6 入口)：RACE 徽标 + 名字 + 选手数 + 对比台
+                  <List.Item style={{ padding: '10px 8px 4px 6px', cursor: 'pointer', borderBlockEnd: 'none' }} onClick={() => toggleGroup(en.key)}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', minWidth: 0 }}>
+                      <span style={{ fontSize: 10, color: 'var(--text-dimmer)', flex: '0 0 auto' }}>{collapsed ? '▸' : '▾'}</span>
+                      <Tag color="gold" style={{ margin: 0, flex: '0 0 auto', fontSize: 11, lineHeight: '18px', height: 20 }}>RACE</Tag>
+                      <span style={{ fontWeight: 700, color: 'var(--text-bright)', fontSize: 13, flex: '0 0 auto' }}>{rc.name}</span>
+                      {rc.base && <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 11.5, color: 'var(--text-dimmer)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{t('race.groupBase', { base: rc.base })}</span>}
+                      <Tag style={{ margin: 0, flex: '0 0 auto', fontSize: 11, lineHeight: '18px', height: 20 }}>×{en.count}</Tag>
+                      {rc.status === 'crowned' && <Tag color="gold" style={{ margin: 0, flex: '0 0 auto', fontSize: 11, lineHeight: '18px', height: 20 }}>{t('race.status.crowned')}</Tag>}
+                      <span style={{ flex: 1 }} />
+                      <a style={{ fontSize: 12.5, flex: '0 0 auto' }} onClick={(e) => { e.stopPropagation(); setCompareId(rc.id) }}>{t('race.compare')}</a>
+                    </div>
+                  </List.Item>
+                )
+              }
               if (en.kind === 'group') {
                 const repo: string = en.repo
                 const base = repo.split('/').filter(Boolean).pop() || repo
@@ -2139,7 +2155,8 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
                 // 整行点击直接进入终端；右侧操作区 stopPropagation 不触发进入
                 <List.Item style={{
                   position: 'relative', overflow: 'hidden',
-                  marginLeft: indent ? 14 : 0, borderLeft: indent ? '2px solid rgba(57,197,207,.3)' : undefined,
+                  marginLeft: indent ? 14 : 0,
+                  borderLeft: indent ? (en.race ? '2px solid rgba(212,160,23,.35)' : '2px solid rgba(57,197,207,.3)') : undefined,
                   padding: '10px 8px 10px 12px', cursor: 'pointer', borderRadius: indent ? '0 8px 8px 0' : 8,
                   background: activeRow ? 'linear-gradient(90deg, rgba(31,111,235,.38), rgba(31,111,235,.16))' : undefined,
                   border: activeRow ? '1px solid #58a6ff' : '1px solid transparent',
@@ -2210,6 +2227,12 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
       <CloseWorktreeModal info={closing} onClose={() => setClosing(null)} onDone={(name) => { closeTerm(name); load() }} />
       <Suspense fallback={null}>
         <WorktreePanel open={wtOpen} onClose={() => { setWtOpen(false); setWtDir(undefined) }} openTerm={openTerm} initialDir={wtDir} />
+      </Suspense>
+      <Suspense fallback={null}>
+        {raceOpen && <RaceCreateModal open={raceOpen} onClose={() => setRaceOpen(false)}
+          onDone={() => { reloadRaces(); load() }} />}
+        {compareRace && <RaceComparePanel race={compareRace} onClose={() => setCompareId('')}
+          openTerm={openTerm} onChanged={() => { reloadRaces(); load() }} />}
       </Suspense>
     </Card>
   )

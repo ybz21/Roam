@@ -218,9 +218,19 @@ func pathSlug(branch string) string {
 	return s
 }
 
+// defaultBase 解析缺省 base：origin/HEAD 指向的本地分支 → 本地 main → master →
+// 当前 HEAD 分支兜底。很多仓库没设 origin/HEAD（clone 早/本地建库），不能让 base
+// 默认成当前检出的 feature 分支——base 应始终是本地主干。
 func (s *Service) defaultBase(ctx context.Context, repo Repo) string {
 	if out, err := git(ctx, repo.Root, "symbolic-ref", "--short", "refs/remotes/origin/HEAD"); err == nil {
-		return strings.TrimPrefix(strings.TrimSpace(out), "origin/")
+		if name := strings.TrimPrefix(strings.TrimSpace(out), "origin/"); branchExists(ctx, repo, name) {
+			return name
+		}
+	}
+	for _, name := range []string{"main", "master"} {
+		if branchExists(ctx, repo, name) {
+			return name
+		}
 	}
 	if out, err := git(ctx, repo.Root, "rev-parse", "--abbrev-ref", "HEAD"); err == nil && out != "HEAD" {
 		return strings.TrimSpace(out)
@@ -672,6 +682,24 @@ func (s *Service) DiffBase(ctx context.Context, path string) (DiffResp, error) {
 	return resp, nil
 }
 
+// DiffBaseFile 返回单文件相对 mergeBase 的统一 diff 文本（W3 对比视图点开文件用）。
+func (s *Service) DiffBaseFile(ctx context.Context, path, file string) (string, error) {
+	path = canonical(path)
+	base, e := git(ctx, path, "config", "--worktree", "--get", "roam.baseref")
+	if e != nil || strings.TrimSpace(base) == "" {
+		return "", errf("BASE_UNKNOWN", "worktree has no recorded base")
+	}
+	mb, e := git(ctx, path, "merge-base", strings.TrimSpace(base), "HEAD")
+	if e != nil {
+		return "", errf("GIT_ERROR", "merge-base: %s", mb)
+	}
+	out, e := git(ctx, path, "diff", strings.TrimSpace(mb), "HEAD", "--", file)
+	if e != nil {
+		return "", errf("GIT_ERROR", "%s", out)
+	}
+	return out, nil
+}
+
 // ── Merge ────────────────────────────────────────────────
 
 type MergeReq struct {
@@ -934,6 +962,15 @@ func (s *Service) CommitAll(ctx context.Context, path, msg string) error {
 		return errf("COMMIT_FAILED", "%s", out)
 	}
 	return nil
+}
+
+// Head 返回 worktree 当前 HEAD OID（编排层做确认后漂移校验用，如 crown 冻结）。
+func (s *Service) Head(ctx context.Context, path string) (string, error) {
+	out, e := git(ctx, canonical(path), "rev-parse", "--verify", "HEAD")
+	if e != nil {
+		return "", errf("GIT_ERROR", "rev-parse HEAD: %s", out)
+	}
+	return strings.TrimSpace(out), nil
 }
 
 // Branches 返回本地分支列表与默认 base（W1 start-from 选择器用）。

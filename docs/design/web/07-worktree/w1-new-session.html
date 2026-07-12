@@ -12,7 +12,7 @@
   <span class="spacer"></span>
   <a href="index.html">↑ 索引</a><a href="w2-session-list.html">W2 →</a>
 </div>
-<div class="spec-note">勾选「worktree 模式」后就地展开内嵌分支卡；分支名随会话名联动、冲突黄字提示不阻塞、路径预览说明磁盘将发生什么。<em>不勾选时与现状完全一致。</em></div>
+<div class="spec-note">名称一等短输入(可留空,提交时从需求短派生)；需求发给 Agent 并派生分支；「在哪干活」三选一常驻(非 git 目录置灰)；分支语义名由 Agent 开工后 <em>git branch -m</em>。</div>
 
 <div class="stage">
   <div class="app-frame">
@@ -37,41 +37,37 @@
     </div>
 
     <div class="dim"></div>
-    <div class="modal" style="top:44px">
+    <div class="modal" style="top:30px">
       <div class="m-head">新建会话<span class="x">✕</span></div>
       <div class="m-body">
-        <input class="input" value="fix-login" style="border-color:var(--blue)">
+        <!-- 顺序(交互修订 5):先定位置(名字→目录→在哪干活),再定执行(Agent→需求) -->
+        <input class="input" placeholder="会话名(短,留空则从需求自动起名)" style="color:var(--text-dimmer)">
         <div style="display:flex;gap:0">
           <input class="input" value="~/codes/app" style="border-radius:7px 0 0 7px">
           <span class="btn" style="height:34px;border-radius:0 7px 7px 0;border-left:0">浏览</span>
         </div>
-        <div style="display:flex;gap:5px">
-          <span class="tag blue">app</span><span class="tag ghost">roam</span><span class="tag ghost">blog</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="hint" style="flex:0 0 auto">在哪干活</span>
+          <div class="segmented">
+            <button>主仓库</button><button class="on">新建 worktree</button><button>已有 (2)</button>
+          </div>
         </div>
-        <div class="segmented">
-          <button>无</button><button class="on">Claude</button><button>Codex</button>
-        </div>
+        <div class="hint">为这个任务开一个隔离工作区:独立分支,和主仓库/其他任务互不干扰</div>
 
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
-          <input type="checkbox" checked style="accent-color:var(--blue-deep)"> worktree 模式
-          <span class="hint">在独立 git worktree 中工作，不影响主工作区</span>
-        </label>
-
-        <!-- 展开的分支卡 -->
+        <!-- 新建 worktree 卡(交互修订 4):只留「基于」(缺省本地主干)。分支不预指定——
+             先建会话再建 worktree,占位分支按会话名派生,Agent 开工后 git branch -m 语义化 -->
         <div style="background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:10px;padding:12px 13px;display:flex;flex-direction:column;gap:10px">
           <div>
-            <span class="field-label"><span class="mono" style="color:var(--cyan)">⎇</span> 分支</span>
-            <input class="input mono" value="roam/fix-login" style="font-size:13px">
-            <div class="hint warn" style="margin-top:5px">roam/fix-login 已存在，将使用 <span class="mono">roam/fix-login-2</span></div>
-          </div>
-          <div>
-            <span class="field-label">基于（start-from）</span>
+            <span class="field-label">基于(start-from)</span>
             <div class="select"><span><span class="mono">main</span> <span class="hint">(默认分支)</span></span><span class="caret">▾</span></div>
-            <div class="hint" style="margin-top:5px">可选本地分支 / 手输 <span class="mono">origin/xxx</span>（将 fetch）/ commit SHA</div>
           </div>
-          <div class="hint">将创建 <span class="mono">~/codes/app/.worktrees/roam-fix-login-2</span></div>
+          <div class="hint">分支与目录自动创建;Agent 开工后会按任务给分支起语义化名字</div>
         </div>
 
+        <div class="segmented">
+          <button>不启动</button><button class="on">启动 Claude Code</button><button>启动 Codex</button>
+        </div>
+        <textarea class="input" rows="3" style="border-color:var(--blue)">修复登录页在 Safari 下的 UA 判断，兼容 16 以下版本</textarea>
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-dim)">
           <input type="checkbox" style="accent-color:var(--blue-deep)"> 自动互审
         </label>
@@ -84,9 +80,9 @@
 </div>
 
 <div class="spec-note" style="border-top:1px solid var(--border-subtle)">
-  组件：Antd <span class="mono">Modal / Input / AutoComplete / Select(showSearch) / Checkbox / Segmented</span>。
-  交互：① 分支名跟随「名称」自动填 roam/&lt;slug&gt;，手改后停止联动；② 失焦查重（GET /git/worktrees），冲突提示但不阻塞；
-  ③ start-from 选远端 ref 时提交按钮变「拉取中…」可取消；④ 路径预览实时更新。
+  组件：Antd <span class="mono">Modal / Input / TextArea / Select / Segmented</span>。
+  提交：新建 worktree = 一次 POST /worktree-sessions——先建会话(cwd=仓库)再建 worktree(占位分支 roam/&lt;会话名&gt;,锁内分配)再会话内 cd,失败反向补偿 kill 会话；
+  已有 = 会话 cwd 指入所选 worktree；需求随 agent 启动作为 CLI 参数带入(单引号安全包裹),前置命名约定让 Agent 开工后 git branch -m 语义化。
 </div>
 </body>
 </html>

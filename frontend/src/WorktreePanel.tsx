@@ -2,7 +2,7 @@
 // 列出仓库全部 worktree（5s 轮询），支持合并回 base（squash/merge/rebase）、
 // 删除（脏保护/占用检查/分支未合并三种 409 交互）与显式清理残留。
 import { useCallback, useEffect, useState } from 'react'
-import { App as AntApp, AutoComplete, Button, Drawer, Dropdown, Empty, Grid, Skeleton, Tag } from 'antd'
+import { App as AntApp, AutoComplete, Button, Drawer, Dropdown, Empty, Grid, Input, Popover, Select, Skeleton, Tag } from 'antd'
 import { api } from './api'
 import { useI18n } from './i18n'
 import { recentDirs } from './App'
@@ -29,7 +29,7 @@ function relTime(sec: number | undefined, t: (k: string, v?: Record<string, stri
 export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
   open: boolean
   onClose: () => void
-  openTerm: (name: string) => void
+  openTerm?: (name: string) => void
   initialDir?: string
 }) {
   const { message, modal } = AntApp.useApp()
@@ -39,6 +39,12 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
   const [list, setList] = useState<Worktree[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState<Record<string, boolean>>({})
+  // + 新建 worktree（不带会话）：分支 + 基于
+  const [createOpen, setCreateOpen] = useState(false)
+  const [newBranch, setNewBranch] = useState('')
+  const [newBase, setNewBase] = useState('')
+  const [branches, setBranches] = useState<string[]>([])
+  const [creatingWt, setCreatingWt] = useState(false)
 
   // 打开时优先用调用方指定目录（会话 Tag 直达），否则默认最近用过的
   useEffect(() => {
@@ -136,6 +142,25 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
     }
   })
 
+  // 打开创建气泡时拉分支列表
+  useEffect(() => {
+    if (!createOpen || !dir.trim()) return
+    api('GET', `/git/branches?dir=${encodeURIComponent(dir.trim())}`).then((r) => {
+      setBranches(r?.data?.branches || [])
+      setNewBase((prev) => prev || r?.data?.default || '')
+    }).catch(() => {})
+  }, [createOpen, dir])
+
+  const doCreate = async () => {
+    setCreatingWt(true)
+    try {
+      const r = await api('POST', '/git/worktree', { dir: dir.trim(), branch: newBranch.trim(), base: newBase })
+      message.success(t('worktree.created', { branch: r?.data?.branch || newBranch }))
+      setCreateOpen(false); setNewBranch('')
+      load(dir, true)
+    } catch (e: any) { message.error(e.message) } finally { setCreatingWt(false) }
+  }
+
   const doPrune = async () => {
     try {
       await api('POST', '/git/worktree/prune', { dir: dir.trim() })
@@ -150,8 +175,8 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
     const out = [] as any[]
     if (wt.sessions?.length) {
       out.push(
-        <Tag key="s" color="green" style={{ margin: 0, cursor: 'pointer' }} title={wt.sessions.map((x) => x.session).join(', ')}
-          onClick={() => { openTerm(wt.sessions[0].session); onClose() }}>
+        <Tag key="s" color="green" style={{ margin: 0, cursor: openTerm ? 'pointer' : 'default' }} title={wt.sessions.map((x) => x.session).join(', ')}
+          onClick={openTerm ? () => { openTerm(wt.sessions[0].session); onClose() } : undefined}>
           {wt.sessions[0].session}{wt.sessions.length > 1 ? ` +${wt.sessions.length - 1}` : ''}
         </Tag>,
       )
@@ -170,6 +195,19 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
           options={recentDirs().map((d) => ({ value: d }))}
           filterOption={(input, opt) => String(opt?.value).toLowerCase().includes(input.toLowerCase())}
           placeholder={t('worktree.dirPlaceholder')} />
+        <Popover open={createOpen} onOpenChange={setCreateOpen} trigger="click" placement="bottomRight"
+          content={
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: 260 }}>
+              <Input size="small" placeholder={t('worktree.createBranchPlaceholder')} value={newBranch}
+                onChange={(e) => setNewBranch(e.target.value)} style={{ fontFamily: 'monospace' }} />
+              <Select size="small" showSearch value={newBase || undefined} onChange={(v) => setNewBase(v)}
+                placeholder={t('session.wt.basePlaceholder')}
+                options={branches.map((b) => ({ value: b, label: b }))} />
+              <Button size="small" type="primary" loading={creatingWt} disabled={!dir.trim()} onClick={doCreate}>{t('worktree.create')}</Button>
+            </div>
+          }>
+          <Button style={{ flex: '0 0 auto' }}>＋</Button>
+        </Popover>
         <Button onClick={() => load(dir)} loading={loading} style={{ flex: '0 0 auto' }}>{t('common.refresh')}</Button>
       </div>
       {/* 关系说明：session↔worktree 是按 cwd 现算的弱关联，讲清楚规则避免误解 */}

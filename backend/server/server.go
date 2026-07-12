@@ -148,6 +148,12 @@ func New(cfg Config) *gin.Engine {
 		g.POST("/worktree-sessions", h.WorktreeSessionCreate)                     // 建 worktree + 会话
 		g.POST("/sessions/:name/fork-worktree", h.SessionForkWorktree)            // 派生子会话进新 worktree
 		g.POST("/sessions/:name/close-with-worktree", h.SessionCloseWithWorktree) // W7 三选一
+		// ── Race Service（W5/W6：一题多解竞赛，设计 07 §3）──
+		g.POST("/races", h.RaceCreate)              // 开赛：逐选手 会话→worktree→发题
+		g.GET("/races", h.RaceList)                 // 竞赛列表（业务数据模型）
+		g.POST("/races/:id/crown", h.RaceCrown)     // 选为赢家：wip→merge→可选清理，阶段可续跑
+		g.POST("/races/:id/cleanup", h.RaceCleanup) // 全部清理（会话+worktree+分支）
+		g.DELETE("/races/:id", h.RaceDelete)        // 删除竞赛记录
 
 		g.GET("/sessions", h.Sessions)
 		g.POST("/sessions", h.NewSession)
