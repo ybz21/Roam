@@ -798,8 +798,6 @@ const enUS = {
   'session.autoReviewTip': 'A watcher session tags along: after each round goes idle, review-mesh reviews the working directory and feeds findings back for the agent to fix, up to 3 rounds (requires a working directory)',
   'session.autoReviewNeedsDir': 'Auto review needs a working directory; skipped this time',
   'session.autoReviewTrackFailed': 'Failed to register auto review',
-
-  'session.worktreeTip': 'Work in an isolated git worktree without touching the main checkout',
   'session.worktreeNeedsRepo': 'Pick a git repository directory above first',
   'session.autoReviewNeedsAgent': 'Pick Claude or Codex above first',
 
@@ -827,6 +825,19 @@ const enUS = {
 
   // W4 worktree management drawer
   'worktree.entry': 'Worktree',
+  'git.wt.badgeTip': 'This is a git worktree; click to manage',
+  'git.wt.baseLine': 'base {base} · main repo {repo}',
+  'git.wt.tabChanges': 'Changes',
+  'git.wt.tabBase': 'vs {base}',
+  'git.wt.summary': 'Committed diff vs base: {files} files +{adds} −{dels}',
+  'git.wt.workingNote': '{count} more uncommitted/untracked files — see Changes tab',
+  'git.wt.noDiff': 'no committed diff vs {base}',
+  'git.wt.merge': 'Merge into {base}',
+  'git.wt.mergeDone': 'Merged into {base}; worktree kept — delete it from the manager',
+  'git.wt.manage': 'Worktrees',
+  'worktree.create': 'Create worktree',
+  'worktree.createBranchPlaceholder': 'branch, e.g. roam/try-x',
+  'worktree.created': 'Created {branch}',
   'worktree.groupOrphans': '{count} orphaned',
   'worktree.groupOrphansTip': 'This repo has worktrees with no session; click to manage',
   'worktree.groupCount': '{count} worktrees',

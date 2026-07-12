@@ -1,14 +1,16 @@
 // Git 面板 —— 仿 VSCode「源代码管理」：提交框 + 暂存/取消暂存/放弃（按文件、按分组）+ Pull/Push/Fetch/Sync。
 // 数据全部来自会话工作目录所属仓库的本地 .git（经 git CLI 读写），跟随会话工作目录。
-import { useEffect, useMemo, useState } from 'react'
-import { Button, Dropdown, Input, Spin, Tooltip, App as AntApp } from 'antd'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import { Button, Dropdown, Input, Segmented, Spin, Tag, Tooltip, App as AntApp } from 'antd'
 import { api } from './api'
 import { useI18n } from './i18n'
+
+const WorktreePanel = lazy(() => import('./WorktreePanel'))
 
 interface GitFile { path: string; orig?: string; index: string; work: string; staged: boolean; untracked: boolean }
 interface GitCommit { hash: string; short: string; subject: string; author: string; when: string }
 interface GitStatus { repo: boolean; root?: string; branch?: string; ahead?: number; behind?: number; files?: GitFile[]; commits?: GitCommit[] }
-interface Pick { file: string; staged: boolean; untracked: boolean; label: string }
+interface Pick { file: string; staged: boolean; untracked: boolean; label: string; base?: boolean }
 
 const BranchIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="6" r="2.3" /><circle cx="6" cy="18" r="2.3" /><circle cx="18" cy="8" r="2.3" /><path d="M6 8.3v7.4" /><path d="M18 10.3a6 6 0 0 1-6 6H8.3" /></svg>
@@ -144,6 +146,13 @@ export default function GitPanel({ dir, accent = '#58a6ff', onClose }: { dir?: s
   const [diff, setDiff] = useState('')
   const [diffLoading, setDiffLoading] = useState(false)
   const [msg, setMsg] = useState('')
+  // W3 worktree 态：当前 dir 所在的 linked worktree（含 base 身份）+ 对比 base 数据
+  const [wt, setWt] = useState<any | null>(null)
+  const [repoRoot, setRepoRoot] = useState('')
+  const [tab, setTab] = useState<'changes' | 'base'>('changes')
+  const [cmp, setCmp] = useState<any | null>(null)
+  const [wtOpen, setWtOpen] = useState(false)
+  const [merging, setMerging] = useState(false)
 
   const root = status?.root
 
@@ -159,16 +168,47 @@ export default function GitPanel({ dir, accent = '#58a6ff', onClose }: { dir?: s
   }, [dir, tick])
 
   useEffect(() => {
-    if (!pick || !status?.files) return
+    if (!pick || pick.base || !status?.files) return
     if (!status.files.some((f) => f.path === pick.file)) { setPick(null); setDiff('') }
   }, [status])
+
+  // 探测当前 dir 是否落在某个 linked worktree（最长前缀），并记主仓库根
+  useEffect(() => {
+    if (!dir) { setWt(null); setRepoRoot(''); setTab('changes'); return }
+    let stop = false
+    api('GET', `/git/worktrees?dir=${encodeURIComponent(dir)}`).then((r) => {
+      if (stop) return
+      const list: any[] = Array.isArray(r?.data) ? r.data : []
+      setRepoRoot(list.find((w) => w.isMain)?.path || '')
+      let best: any = null
+      for (const w of list) {
+        if (w.isMain || w.prunable) continue
+        if ((dir === w.path || dir.startsWith(w.path + '/')) && (!best || w.path.length > best.path.length)) best = w
+      }
+      setWt(best)
+      if (!best || !best.base) setTab('changes')
+    }).catch(() => { if (!stop) { setWt(null); setRepoRoot('') } })
+    return () => { stop = true }
+  }, [dir, tick])
+
+  // 「对比 base」数据（进 tab 或刷新时拉）
+  useEffect(() => {
+    if (tab !== 'base' || !wt?.base) { setCmp(null); return }
+    let stop = false
+    api('GET', `/git/worktree/diff?path=${encodeURIComponent(wt.path)}`)
+      .then((r) => { if (!stop) setCmp(r?.data || null) })
+      .catch(() => { if (!stop) setCmp(null) })
+    return () => { stop = true }
+  }, [tab, wt, tick])
 
   useEffect(() => {
     if (!pick || !root) { setDiff(''); return }
     let stop = false
     setDiffLoading(true)
-    const q = `root=${encodeURIComponent(root)}&file=${encodeURIComponent(pick.file)}&staged=${pick.staged ? 1 : 0}&untracked=${pick.untracked ? 1 : 0}`
-    api('GET', `/git/diff?${q}`)
+    const req = pick.base && wt
+      ? api('GET', `/git/worktree/diff?path=${encodeURIComponent(wt.path)}&file=${encodeURIComponent(pick.file)}`)
+      : api('GET', `/git/diff?root=${encodeURIComponent(root)}&file=${encodeURIComponent(pick.file)}&staged=${pick.staged ? 1 : 0}&untracked=${pick.untracked ? 1 : 0}`)
+    req
       .then((r) => { if (!stop) setDiff(r.data?.diff || '') })
       .catch((e) => { if (!stop) setDiff(`# ${e.message}`) })
       .finally(() => { if (!stop) setDiffLoading(false) })
@@ -219,6 +259,32 @@ export default function GitPanel({ dir, accent = '#58a6ff', onClose }: { dir?: s
     }, t('git.committed'))
   }
 
+  // W3 合并回 base：squash 默认,expected-head 防漂移;冲突弹 {stage, conflictFiles}
+  const doWtMerge = async (strategy: 'merge' | 'squash' | 'rebase') => {
+    if (!wt) return
+    setMerging(true)
+    try {
+      await api('POST', '/git/worktree/merge', { path: wt.path, strategy, expectedHead: wt.head })
+      message.success(t('git.wt.mergeDone', { base: wt.base }))
+      setTick((v) => v + 1)
+    } catch (e: any) {
+      const ae = e.apiError
+      if (ae?.code === 'MERGE_CONFLICT') {
+        modal.error({
+          title: t('worktree.mergeConflictTitle'),
+          content: (
+            <div style={{ fontSize: 13 }}>
+              <div style={{ marginBottom: 6 }}>{t('worktree.mergeConflictDesc', { stage: ae.stage || '?' })}</div>
+              <ul style={{ paddingLeft: 18, margin: 0, fontFamily: 'ui-monospace, monospace', fontSize: 12 }}>
+                {(ae.conflictFiles || []).map((cf: string) => <li key={cf}>{cf}</li>)}
+              </ul>
+            </div>
+          ),
+        })
+      } else message.error(e.message)
+    } finally { setMerging(false) }
+  }
+
   const staged = useMemo(() => status?.files?.filter((f) => f.staged && !f.untracked) || [], [status])
   const changed = useMemo(() => status?.files?.filter((f) => !f.untracked && f.work !== ' ' && f.work !== '?') || [], [status])
   const untracked = useMemo(() => status?.files?.filter((f) => f.untracked) || [], [status])
@@ -263,6 +329,11 @@ export default function GitPanel({ dir, accent = '#58a6ff', onClose }: { dir?: s
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px', borderRadius: 6, background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', color: 'var(--text-bright)', fontSize: 12, fontFamily: 'ui-monospace, monospace' }}>
               <span style={{ color: accent, display: 'inline-flex' }}><BranchIcon /></span>{status.branch || 'HEAD'}
             </span>
+            {wt && (
+              <Tooltip title={t('git.wt.badgeTip')}>
+                <Tag color="cyan" style={{ margin: 0, cursor: 'pointer' }} onClick={() => setWtOpen(true)}>worktree{wt.external ? ' · ⧉' : ''}</Tag>
+              </Tooltip>
+            )}
             <Tooltip title={t('git.sync')}>
               <Button type="text" size="small" onClick={() => op('sync')} disabled={busy}
                 style={{ height: 22, padding: '0 6px', display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--text-dim)' }}>
@@ -273,10 +344,23 @@ export default function GitPanel({ dir, accent = '#58a6ff', onClose }: { dir?: s
             </Tooltip>
           </div>
         )}
+        {wt && (
+          <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--text-dimmer)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={repoRoot}>
+            {t('git.wt.baseLine', { base: wt.base || '?', repo: repoRoot })}
+          </div>
+        )}
+        {wt && !!wt.base && (
+          <div style={{ marginTop: 8 }}>
+            <Segmented size="small" block value={tab} onChange={(v) => setTab(v as any)} options={[
+              { label: t('git.wt.tabChanges'), value: 'changes' },
+              { label: t('git.wt.tabBase', { base: wt.base }) + (cmp ? ` (${cmp.committed?.files?.length ?? 0})` : ''), value: 'base' },
+            ]} />
+          </div>
+        )}
       </div>
 
       {/* 提交框（VSCode 风格）：暂存内容 + 信息 → 提交，可下拉提交并推送/同步 */}
-      {status?.repo && (
+      {status?.repo && tab === 'changes' && (
         <div style={{ padding: '8px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: 6 }}>
           <Input.TextArea
             value={msg}
@@ -297,6 +381,32 @@ export default function GitPanel({ dir, accent = '#58a6ff', onClose }: { dir?: s
         </div>
       )}
 
+      {tab === 'base' && wt ? (
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 0' }}>
+          {!cmp ? <div style={{ display: 'flex', justifyContent: 'center', padding: 12 }}><Spin size="small" /></div> : (
+            <>
+              <div style={{ padding: '6px 10px', fontSize: 12, color: 'var(--text-dim)' }}>
+                {t('git.wt.summary', { files: cmp.committed?.files?.length ?? 0, adds: cmp.committed?.adds ?? 0, dels: cmp.committed?.dels ?? 0 })}
+                {((cmp.workingTree?.files?.length ?? 0) + (cmp.untracked ?? 0)) > 0 && (
+                  <div style={{ color: 'var(--text-dimmer)', marginTop: 2 }}>{t('git.wt.workingNote', { count: (cmp.workingTree?.files?.length ?? 0) + (cmp.untracked ?? 0) })}</div>
+                )}
+              </div>
+              {!(cmp.committed?.files?.length) && <div style={{ color: 'var(--text-dimmer)', fontSize: 12, padding: '8px 10px' }}>✓ {t('git.wt.noDiff', { base: wt.base })}</div>}
+              {(cmp.committed?.files || []).map((fs: any) => (
+                <div key={fs.path} className="cc-filerow" onClick={() => setPick({ file: fs.path, staged: false, untracked: false, label: fs.path, base: true })}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 10px', cursor: 'pointer', fontSize: 13, background: pick?.file === fs.path && pick.base ? 'rgba(88,166,255,.12)' : undefined }}>
+                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-bright)' }} title={fs.path}>{fileNameOf(fs.path)}
+                    <span style={{ color: 'var(--text-dimmer)', fontSize: 11, marginLeft: 6 }}>{fs.path.includes('/') ? fs.path.slice(0, fs.path.lastIndexOf('/')) : ''}</span>
+                  </span>
+                  <span style={{ flex: '0 0 auto', fontFamily: 'ui-monospace, monospace', fontSize: 11.5 }}>
+                    {fs.binary ? <span style={{ color: 'var(--text-dimmer)' }}>bin</span> : <><span style={{ color: 'hsl(140,60%,55%)' }}>+{fs.adds}</span> <span style={{ color: 'hsl(0,72%,60%)' }}>−{fs.dels}</span></>}
+                  </span>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      ) : (
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 0' }}>
         {(loading || busy) && <div style={{ display: 'flex', justifyContent: 'center', padding: 10 }}><Spin size="small" /></div>}
         {err && <div style={{ color: '#f85149', fontSize: 12, padding: '6px 10px' }}>{t('git.loadFailed', { message: err })}</div>}
@@ -338,12 +448,30 @@ export default function GitPanel({ dir, accent = '#58a6ff', onClose }: { dir?: s
           </Section>
         )}
       </div>
+      )}
+
+      {/* W3 底部操作条：合并回 base + Worktree 管理（worktree 态才有） */}
+      {wt && (
+        <div style={{ borderTop: '1px solid var(--border-subtle)', padding: 8, display: 'flex', gap: 8 }}>
+          {!!wt.base && !wt.external && (
+            <Dropdown.Button size="small" type="primary" style={{ flex: 1 }} disabled={merging}
+              onClick={() => doWtMerge('squash')}
+              menu={{ items: [{ key: 'merge', label: 'merge' }, { key: 'rebase', label: 'rebase' }], onClick: ({ key }) => doWtMerge(key as any) }}>
+              {merging ? <Spin size="small" /> : t('git.wt.merge', { base: wt.base })}
+            </Dropdown.Button>
+          )}
+          <Button size="small" onClick={() => setWtOpen(true)}>{t('git.wt.manage')}</Button>
+        </div>
+      )}
     </div>
   )
 
   return (
     <>
       {panel}
+      <Suspense fallback={null}>
+        <WorktreePanel open={wtOpen} onClose={() => setWtOpen(false)} initialDir={repoRoot || dir} />
+      </Suspense>
       {pick && (
         <div className="tt-file-detail" style={{ position: 'fixed', top: 0, bottom: 0, height: '100dvh', right: 'min(420px, 92vw)', zIndex: 1199, background: 'var(--bg-base)', borderLeft: '1px solid var(--border)', boxShadow: 'var(--elevated-shadow)', display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderBottom: '1px solid var(--border-subtle)' }}>
@@ -351,7 +479,7 @@ export default function GitPanel({ dir, accent = '#58a6ff', onClose }: { dir?: s
               <span style={{ color: accent }}>▸</span> {pick.label}
             </span>
             <span style={{ flex: 1 }} />
-            {!pick.untracked && (
+            {!pick.untracked && !pick.base && (
               <Button size="small" type={pick.staged ? 'primary' : 'default'} onClick={() => setPick({ ...pick, staged: !pick.staged })}>
                 {pick.staged ? t('git.stagedDiff') : t('git.working')}
               </Button>

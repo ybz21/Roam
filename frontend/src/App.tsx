@@ -1685,19 +1685,21 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
           </Radio.Group>
           {/* 会话选项:勾选项竖排,不适用时置灰(tooltip 说明启用条件) */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {/* 工作区三选一（W1 交互修订）：主仓库 / 新建 worktree / 已有 worktree */}
-            {isGitRepo && (
+            {/* 工作区三选一（W1 交互修订）：常驻不隐藏(cc96123 教训)——非 git 目录整组置灰+tooltip */}
+            {(
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <span style={{ color: 'var(--text-dim)', fontSize: 13, flex: '0 0 auto' }}>{t('session.wt.where')}</span>
-                  <Segmented size="small" value={wtMode} onChange={(v) => setWtMode(v as any)} options={[
-                    { label: t('session.wt.mainRepo'), value: 'repo' },
-                    { label: t('session.wt.newWt'), value: 'new' },
-                    { label: t('session.wt.existingWt', { count: existingWts.length }), value: 'existing', disabled: !existingWts.length },
-                  ]} />
+                  <Tooltip title={isGitRepo ? '' : t('session.worktreeNeedsRepo')}>
+                    <Segmented size="small" value={isGitRepo ? wtMode : 'repo'} onChange={(v) => setWtMode(v as any)} options={[
+                      { label: t('session.wt.mainRepo'), value: 'repo' },
+                      { label: t('session.wt.newWt'), value: 'new', disabled: !isGitRepo },
+                      { label: t('session.wt.existingWt', { count: existingWts.length }), value: 'existing', disabled: !isGitRepo || !existingWts.length },
+                    ]} />
+                  </Tooltip>
                 </div>
                 <div style={{ color: 'var(--text-dimmer)', fontSize: 12 }}>
-                  {wtMode === 'repo' ? t('session.wt.hintRepo') : wtMode === 'new' ? t('session.wt.hintNew') : t('session.wt.hintExisting')}
+                  {!isGitRepo ? t('session.worktreeNeedsRepo') : wtMode === 'repo' ? t('session.wt.hintRepo') : wtMode === 'new' ? t('session.wt.hintNew') : t('session.wt.hintExisting')}
                 </div>
                 {wtMode === 'existing' && (
                   <Select value={wtPath || undefined} onChange={(v) => setWtPath(v)} placeholder={t('session.wt.pickExisting')}

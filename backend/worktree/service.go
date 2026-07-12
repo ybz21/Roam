@@ -672,6 +672,24 @@ func (s *Service) DiffBase(ctx context.Context, path string) (DiffResp, error) {
 	return resp, nil
 }
 
+// DiffBaseFile 返回单文件相对 mergeBase 的统一 diff 文本（W3 对比视图点开文件用）。
+func (s *Service) DiffBaseFile(ctx context.Context, path, file string) (string, error) {
+	path = canonical(path)
+	base, e := git(ctx, path, "config", "--worktree", "--get", "roam.baseref")
+	if e != nil || strings.TrimSpace(base) == "" {
+		return "", errf("BASE_UNKNOWN", "worktree has no recorded base")
+	}
+	mb, e := git(ctx, path, "merge-base", strings.TrimSpace(base), "HEAD")
+	if e != nil {
+		return "", errf("GIT_ERROR", "merge-base: %s", mb)
+	}
+	out, e := git(ctx, path, "diff", strings.TrimSpace(mb), "HEAD", "--", file)
+	if e != nil {
+		return "", errf("GIT_ERROR", "%s", out)
+	}
+	return out, nil
+}
+
 // ── Merge ────────────────────────────────────────────────
 
 type MergeReq struct {

@@ -71,11 +71,21 @@ func (a *API) WorktreeList(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": list})
 }
 
-// WorktreeDiff GET /git/worktree/diff?path=
+// WorktreeDiff GET /git/worktree/diff?path=[&file=] —— 无 file 返回统计，带 file 返回该文件 diff 文本。
 func (a *API) WorktreeDiff(c *gin.Context) {
 	ctx, cancel := wtCtx(c)
 	defer cancel()
-	resp, err := a.WT.DiffBase(ctx, filepath.Clean(c.Query("path")))
+	path := filepath.Clean(c.Query("path"))
+	if file := c.Query("file"); file != "" {
+		text, err := a.WT.DiffBaseFile(ctx, path, file)
+		if err != nil {
+			wtErr(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"diff": text}})
+		return
+	}
+	resp, err := a.WT.DiffBase(ctx, path)
 	if err != nil {
 		wtErr(c, err)
 		return

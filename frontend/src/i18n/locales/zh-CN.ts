@@ -798,8 +798,6 @@ const zhCN = {
   'session.autoReviewTip': '一个监控会话陪跑:每轮对话空闲后自动互审该工作目录的变更,review 意见回灌会话让 Agent 修复,最多 3 轮(需要工作目录)',
   'session.autoReviewNeedsDir': '自动互审需要指定工作目录,本次已跳过',
   'session.autoReviewTrackFailed': '自动互审登记失败',
-
-  'session.worktreeTip': '在独立 git worktree 中工作,不影响主工作区',
   'session.worktreeNeedsRepo': '先在上方选择一个 git 仓库目录',
   'session.autoReviewNeedsAgent': '先在上方选择 Claude 或 Codex',
 
@@ -827,6 +825,19 @@ const zhCN = {
 
   // W4 Worktree 管理抽屉
   'worktree.entry': 'Worktree',
+  'git.wt.badgeTip': '这是一个 git worktree,点击打开管理页',
+  'git.wt.baseLine': '基于 {base} · 主仓库 {repo}',
+  'git.wt.tabChanges': '改动',
+  'git.wt.tabBase': '对比 {base}',
+  'git.wt.summary': '与 base 的累计差异:{files} 文件 +{adds} −{dels}',
+  'git.wt.workingNote': '另有 {count} 个未提交/未跟踪文件,见「改动」标签',
+  'git.wt.noDiff': '与 {base} 无已提交差异',
+  'git.wt.merge': '合并回 {base}',
+  'git.wt.mergeDone': '已合并回 {base};worktree 保留,可在管理页删除',
+  'git.wt.manage': 'Worktree 管理',
+  'worktree.create': '新建 worktree',
+  'worktree.createBranchPlaceholder': '分支名,如 roam/try-x',
+  'worktree.created': '已创建 {branch}',
   'worktree.groupOrphans': '{count} 孤儿',
   'worktree.groupOrphansTip': '该仓库有未挂会话的 worktree,点击打开管理页清理',
   'worktree.groupCount': '{count} 个 worktree',
