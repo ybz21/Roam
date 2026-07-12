@@ -82,6 +82,22 @@ func git(ctx context.Context, dir string, args ...string) (string, error) {
 	return strings.TrimRight(string(out), "\n"), err
 }
 
+// gitID 同 git()，用于会产生提交的操作（merge/squash commit/rebase/wip commit）：
+// 仓库连全局都没配 user.name/email 时（CI、裸机），注入 roam 机器身份兜底——
+// 只在 `git var GIT_AUTHOR_IDENT` 解析失败时注入，绝不覆盖用户已配置的身份。
+func gitID(ctx context.Context, dir string, args ...string) (string, error) {
+	full := append([]string{"-C", dir, "-c", "core.quotepath=false"}, args...)
+	cmd := exec.CommandContext(ctx, "git", full...)
+	cmd.Env = append(scrubGitEnv(), "GIT_TERMINAL_PROMPT=0")
+	if _, err := git(ctx, dir, "var", "GIT_AUTHOR_IDENT"); err != nil {
+		cmd.Env = append(cmd.Env,
+			"GIT_AUTHOR_NAME=roam", "GIT_AUTHOR_EMAIL=roam@localhost",
+			"GIT_COMMITTER_NAME=roam", "GIT_COMMITTER_EMAIL=roam@localhost")
+	}
+	out, err := cmd.CombinedOutput()
+	return strings.TrimRight(string(out), "\n"), err
+}
+
 // Repo 是解析后的仓库身份。
 type Repo struct {
 	CommonDir string // canonical git-common-dir（仓库身份）
@@ -779,7 +795,7 @@ func (s *Service) Merge(ctx context.Context, req MergeReq) (MergeResp, error) {
 
 	switch req.Strategy {
 	case "merge":
-		if out, e := git(ctx, site, "merge", "--no-edit", "--", srcBranch); e != nil {
+		if out, e := gitID(ctx, site, "merge", "--no-edit", "--", srcBranch); e != nil {
 			err := conflictErr("merge", site, out)
 			_, _ = git(ctx, site, "merge", "--abort")
 			return MergeResp{}, err
@@ -792,13 +808,13 @@ func (s *Service) Merge(ctx context.Context, req MergeReq) (MergeResp, error) {
 			}
 			return MergeResp{}, err
 		}
-		if out, e := git(ctx, site, "commit", "--no-verify", "-m", fmt.Sprintf("squash: merge %s into %s (roam)", srcBranch, base)); e != nil {
+		if out, e := gitID(ctx, site, "commit", "--no-verify", "-m", fmt.Sprintf("squash: merge %s into %s (roam)", srcBranch, base)); e != nil {
 			_, _ = git(ctx, site, "reset", "--merge")
 			return MergeResp{}, errf("COMMIT_FAILED", "%s", out)
 		}
 	case "rebase":
 		// 第一步：在 source worktree 把 source rebase onto base
-		if out, e := git(ctx, path, "rebase", "--", base); e != nil {
+		if out, e := gitID(ctx, path, "rebase", "--", base); e != nil {
 			err := conflictErr("rebase", path, out)
 			_, _ = git(ctx, path, "rebase", "--abort")
 			return MergeResp{}, err
@@ -914,7 +930,7 @@ func (s *Service) CommitAll(ctx context.Context, path, msg string) error {
 	if out, e := git(ctx, path, "add", "-A"); e != nil {
 		return errf("GIT_ERROR", "add -A: %s", out)
 	}
-	if out, e := git(ctx, path, "commit", "--no-verify", "-m", msg); e != nil {
+	if out, e := gitID(ctx, path, "commit", "--no-verify", "-m", msg); e != nil {
 		return errf("COMMIT_FAILED", "%s", out)
 	}
 	return nil
