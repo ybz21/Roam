@@ -15,6 +15,7 @@ import (
 	"ttmux-cli-go/internal/command/spawn"
 	swarmcommand "ttmux-cli-go/internal/command/swarm"
 	"ttmux-cli-go/internal/runtime"
+	"ttmux-cli-go/internal/sessmeta"
 	swarmcore "ttmux-cli-go/internal/swarm"
 	"ttmux-cli-go/internal/ui"
 )
@@ -62,22 +63,41 @@ func (a App) Run(args []string) error {
 
 	// ── session management (native) ──
 	case "ls":
+		if has(rest, "--tree") {
+			if has(rest, "--json") {
+				return session.TreeJSON(a.rt, a.meta(), a.swarmSessions(), out)
+			}
+			return session.Tree(a.rt, a.meta(), a.swarmSessions(), out)
+		}
 		if has(rest, "--json") {
 			return session.ListJSON(a.rt, a.swarmSessions(), out)
 		}
 		return session.List(a.rt, a.swarmSessions(), out)
 	case "new":
 		return session.New(a.rt, rest, out)
+	// ── subSession（fork/树/parent，设计 07 §2.1）──
+	case "fork":
+		return session.Fork(a.rt, a.meta(), rest, out)
+	case "children":
+		return session.Children(a.rt, a.meta(), rest, out)
+	case "parent":
+		return session.ParentCmd(a.rt, a.meta(), rest, out)
 	case "a", "attach":
 		return session.Attach(a.rt, a.swarmSessions(), rest, out)
 	case "d", "detach":
 		return session.Detach(a.rt, rest, out)
 	case "kill":
-		return session.Kill(a.rt, a.swarmSessions(), rest, out)
+		return session.KillTree(a.rt, a.meta(), a.swarmSessions(), rest, out)
 	case "killall":
 		return session.KillAll(a.rt, a.swarmSessions(), out)
 	case "rename":
-		return session.Rename(a.rt, a.swarmSessions(), rest, out)
+		if err := session.Rename(a.rt, a.swarmSessions(), rest, out); err != nil {
+			return err
+		}
+		if len(rest) >= 2 { // 显式双参改名成功后同步 meta 外键
+			_ = a.meta().OnRename(rest[0], rest[1])
+		}
+		return nil
 	case "send":
 		return session.Send(a.rt, a.swarmSessions(), rest, out)
 	case "source":
@@ -154,6 +174,8 @@ func (a App) swarmSessions() map[string]bool {
 func (a App) swarmNames() map[string]bool {
 	return swarmcore.Names(a.swarmOptions())
 }
+
+func (a App) meta() *sessmeta.Store { return sessmeta.New(a.rt.HomeDir) }
 
 func (a App) swarmOptions() swarmcore.Options {
 	return swarmcore.Options{

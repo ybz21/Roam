@@ -16,7 +16,7 @@ const script = `_ttmux_completions() {
     local cur prev cmds
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    cmds="ls new a attach d detach kill killall rename nw lw kw sp split kp send info source help capture status completion swarm"
+    cmds="ls new fork children parent a attach d detach kill killall rename nw lw kw sp split kp send info source help capture status completion swarm"
 
     case "$prev" in
         ttmux)

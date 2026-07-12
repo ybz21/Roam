@@ -25,9 +25,15 @@ func Show(version string, w io.Writer) {
 	fmt.Fprintf(w, "    %s %s   新建会话\n", g("new"), d("[名称]"))
 	fmt.Fprintf(w, "    %s %s   附加会话 %s\n", g("a"), d("[名称]"), d("(无参数交互选择)"))
 	fmt.Fprintf(w, "    %s %s   分离会话\n", g("d"), d("[名称]"))
-	fmt.Fprintf(w, "    %s %s   关闭会话\n", g("kill"), d("[名称]"))
+	fmt.Fprintf(w, "    %s %s   关闭会话 %s\n", g("kill"), d("[名称] [--cascade]"), d("(默认孤儿收养子会话)"))
 	fmt.Fprintf(w, "    %s            关闭所有会话\n", g("killall"))
 	fmt.Fprintf(w, "    %s %s  重命名会话\n\n", g("rename"), d("<旧名> <新名>"))
+
+	fmt.Fprintf(w, "  %s %s\n", b("子会话"), m("(subSession — 平坦 tmux 会话 + parent 关系)"))
+	fmt.Fprintf(w, "    %s %s  从父会话派生子会话(继承 cwd/env)\n", g("fork"), d("[<父>] <子> [--dir <目录>] [--detach] [--json]"))
+	fmt.Fprintf(w, "    %s %s  会话树(parent 投影)\n", g("ls --tree"), d("[--json]"))
+	fmt.Fprintf(w, "    %s %s  列出直接子会话\n", g("children"), d("<会话> [--json]"))
+	fmt.Fprintf(w, "    %s %s  调整归属\n\n", g("parent"), d("set <子> <父> | clear <子> | get <子>"))
 
 	fmt.Fprintf(w, "  %s %s\n", b("蜂群编排"), m("(swarm — 有目标的任务组)"))
 	fmt.Fprintf(w, "    %s %s  新建蜂群\n", g("swarm new"), d("<名> [--goal \"...\"] [--no-master]"))
