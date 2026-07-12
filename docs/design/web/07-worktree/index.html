@@ -3,100 +3,176 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>07 · Worktree 管理 — 页面设计 mockup</title>
+<title>07 · Worktree 管理 — 设计图纸</title>
 <link rel="stylesheet" href="mock.css">
 <style>
-  .wrap { max-width: 980px; margin: 0 auto; padding: 40px 24px 80px; }
-  h1 { font-size: 26px; letter-spacing: .5px; margin-bottom: 6px; }
-  h1 .brand { background: var(--brand-grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
-  .sub { color: var(--text-dim); font-size: 14px; margin-bottom: 34px; line-height: 1.7; }
-  .sub a { color: var(--blue); }
-  .flow {
-    font-family: var(--mono); font-size: 12px; color: var(--text-dim);
-    background: var(--bg-container); border: 1px solid var(--border-subtle); border-radius: 12px;
-    padding: 16px 20px; margin-bottom: 34px; line-height: 2; white-space: pre; overflow-x: auto;
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 56px 28px 90px; }
+  .cover { margin-bottom: 44px; }
+  .cover .kicker {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .3em; color: var(--stage-faint);
+    margin-bottom: 14px;
   }
-  .flow b { color: var(--cyan); font-weight: 600; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 16px; }
-  .pcard {
-    display: block; background: var(--bg-container); border: 1px solid var(--border-subtle);
-    border-radius: 14px; padding: 18px; color: var(--text-bright);
-    transition: border-color .18s, transform .18s, box-shadow .18s; position: relative; overflow: hidden;
+  .cover h1 {
+    font-size: 34px; font-weight: 800; letter-spacing: .01em; line-height: 1.2;
+    color: var(--plate); margin-bottom: 14px;
   }
-  .pcard::before {
-    content: attr(data-n); position: absolute; right: -6px; top: -18px;
-    font-size: 74px; font-weight: 800; color: rgba(88,166,255,.06); font-family: var(--mono);
+  .cover h1 .brand {
+    background: var(--brand-grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
   }
-  .pcard:hover { border-color: var(--blue); transform: translateY(-2px); box-shadow: 0 10px 30px rgba(0,0,0,.4); }
-  .pcard .t { font-size: 15px; font-weight: 700; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
-  .pcard .d { font-size: 12.5px; color: var(--text-dim); line-height: 1.7; }
-  .pcard .m { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
-  .stagger { animation: rise .5s ease backwards; }
+  .cover .meta {
+    display: flex; gap: 22px; flex-wrap: wrap;
+    font-size: 12px; color: var(--stage-ink);
+  }
+  .cover .meta b { color: var(--plate); font-weight: 600; }
+  .cover .meta .k { font-family: var(--mono); font-size: 9.5px; letter-spacing: .18em; color: var(--stage-faint); display: block; margin-bottom: 3px; }
+
+  .flowmap {
+    margin: 34px 0 40px; padding: 20px 24px;
+    border: 1px solid var(--stage-line); border-radius: 14px;
+    background: rgba(148, 163, 184, .03);
+    font-family: var(--mono); font-size: 12px; line-height: 2.1; color: var(--stage-ink);
+    white-space: pre; overflow-x: auto;
+  }
+  .flowmap b { color: var(--cyan); font-weight: 600; }
+
+  .sec-h {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .26em; color: var(--stage-faint);
+    margin: 38px 0 16px; display: flex; align-items: center; gap: 14px;
+  }
+  .sec-h::after { content: ''; flex: 1; border-top: 1px dashed var(--stage-line); }
+
+  .plates { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+  .plate-card {
+    display: flex; gap: 14px; padding: 18px;
+    border: 1px solid var(--stage-line); border-radius: 14px;
+    background: linear-gradient(180deg, rgba(148, 163, 184, .05), rgba(148, 163, 184, .015));
+    color: var(--plate);
+    transition: border-color .18s, transform .18s, box-shadow .18s, background .18s;
+  }
+  .plate-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(88, 166, 255, .45); color: var(--plate);
+    box-shadow: 0 14px 40px -12px rgba(0, 0, 0, .6), 0 0 0 1px rgba(88, 166, 255, .12);
+    background: linear-gradient(180deg, rgba(148, 163, 184, .07), rgba(148, 163, 184, .02));
+  }
+  .plate-card .no {
+    flex: 0 0 44px; height: 44px; border-radius: 11px;
+    display: grid; place-items: center;
+    font-family: var(--mono); font-size: 13px; font-weight: 700; letter-spacing: .04em;
+    color: var(--cyan); background: rgba(57, 197, 207, .08);
+    border: 1px solid rgba(57, 197, 207, .28);
+  }
+  .plate-card.wide .no { color: #79b8ff; background: rgba(56, 139, 253, .09); border-color: rgba(56, 139, 253, .3); }
+  .plate-card .t { font-size: 14.5px; font-weight: 700; margin-bottom: 5px; letter-spacing: .01em; }
+  .plate-card .d { font-size: 12px; color: var(--stage-ink); line-height: 1.75; }
+  .plate-card .m { margin-top: 9px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .plate-card .m .tag { font-size: 10.5px; height: 18px; }
+  .plates.two { grid-template-columns: 1fr 1fr; }
+  @media (max-width: 720px) { .plates.two { grid-template-columns: 1fr; } }
+
+  .in { animation: rise .5s cubic-bezier(.2, .85, .3, 1) backwards; }
   @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
 </style>
 </head>
 <body>
+<div class="spec-bar">
+  <b>07 · Worktree 管理 — 设计图纸</b><span class="spec-tag">SPEC SUITE · 与实现同步</span>
+  <span class="spacer"></span>
+  <a href="../07-worktree.md">设计文档 v0.5</a>
+</div>
+
 <div class="wrap">
-  <h1><span class="brand">Roam</span> · Worktree 管理 — 页面设计</h1>
-  <div class="sub">
-    设计文档 <a href="../07-worktree.md">07-worktree.md</a> 的高保真 HTML mockup（随实现同步更新）。实现采用本套交互规格 + 应用现有主题。
-    样式取自前端真实设计 token（GitHub-dark palette · Antd 组件语言）。
-    页面间可用页头链接串行浏览；W3 / W6 / W7 带轻交互（切 tab、选选手、选单选项）。
+  <div class="cover in">
+    <div class="kicker">ROAM · DESIGN PLATES · 07-WORKTREE</div>
+    <h1><span class="brand">Roam</span> Worktree 管理 · 页面设计</h1>
+    <div class="meta">
+      <span><span class="k">体例</span><b>交互规格 + 产品真实 token</b>（GitHub-dark · Antd）</span>
+      <span><span class="k">状态</span><b>W1–W4 / W7 已实现</b>，图纸随实现同步</span>
+      <span><span class="k">规划</span><b>W5 / W6 竞赛</b>（M3）</span>
+      <span><span class="k">交互</span><b>W3 / W6 / W7</b> 页面内可点</span>
+    </div>
   </div>
 
-  <div class="flow">会话列表(<b>W2</b>) ──新建──→ 新建会话弹窗(<b>W1</b>)
-   │  └─仓库分组头[管理]──→ Worktree 管理抽屉(<b>W4</b>) ←──Git面板(<b>W3</b>)「···」/徽标
+  <div class="flowmap in" style="animation-delay:.06s">会话列表(<b>W2</b>) ──新建──→ 新建会话弹窗(<b>W1</b>)
+   │  └─仓库分组头[管理]──→ Worktree 管理抽屉(<b>W4</b>) ←──Git面板(<b>W3</b>)徽标/底部按钮
    │  └─竞赛组头[对比台]──→ 竞赛对比台(<b>W6</b>) ←──竞赛创建(<b>W5</b>)生成的组
    └─关闭 worktree 会话──→ 收尾三选一(<b>W7</b>)</div>
 
-  <div class="grid" style="margin-bottom:16px;grid-template-columns:1fr 1fr">
-    <a class="pcard stagger" data-n="全" href="overall-desktop.html" style="border-color:rgba(88,166,255,.35)">
-      <div class="t">整体 · 桌面</div>
-      <div class="d">worktree 融入现有布局的完整旅程（5 屏）：概览 → 会话页+停靠终端 → 终端+Git 面板 Review → 管理抽屉收尾 → 竞赛对比台收场。</div>
-      <div class="m"><span class="tag blue">用户旅程</span><span class="tag ghost">结合现有</span></div>
+  <div class="sec-h">OVERVIEW · 成套总览</div>
+  <div class="plates two">
+    <a class="plate-card wide in" style="animation-delay:.1s" href="overall-desktop.html">
+      <span class="no">全·桌</span>
+      <span style="min-width:0">
+        <span class="t" style="display:block">整体 · 桌面 — 5 屏用户旅程</span>
+        <span class="d" style="display:block">概览 → 会话页+停靠终端 → 终端+Git 面板 Review → 管理抽屉收尾 → 竞赛对比台。现有布局零改动，全部增量。</span>
+      </span>
     </a>
-    <a class="pcard stagger" data-n="全" href="overall-mobile.html" style="border-color:rgba(88,166,255,.35)">
-      <div class="t">整体 · 手机</div>
-      <div class="d">8 屏全套手机版：概览 / 会话列表 / 新建 / 终端页 / Git 面板 / 管理 / 对比台 / 关闭三选一。底部 Tab 结构不变。</div>
-      <div class="m"><span class="tag blue">全套</span><span class="tag ghost">Bottom Sheet / ActionSheet</span></div>
+    <a class="plate-card wide in" style="animation-delay:.14s" href="overall-mobile.html">
+      <span class="no">全·移</span>
+      <span style="min-width:0">
+        <span class="t" style="display:block">整体 · 手机 — 8 屏全套</span>
+        <span class="d" style="display:block">概览 / 列表 / 新建 / 终端 / Git 面板 / 管理 / 对比台 / 三选一。底部 Tab 结构不变，抽屉全屏化。</span>
+      </span>
     </a>
   </div>
 
-  <div class="grid">
-    <a class="pcard stagger" style="animation-delay:.02s" data-n="W1" href="w1-new-session.html">
-      <div class="t">W1 · 新建会话弹窗</div>
-      <div class="d">名称一等短输入(可留空自动起名) + 需求 textarea(发 Agent/派生分支) + 「在哪干活」三选一(主仓库/新建/已有) + 高级折叠分支名。</div>
-      <div class="m"><span class="tag ghost">Modal</span><span class="tag cyan">⎇ 分支卡</span><span class="tag ghost">M1</span></div>
+  <div class="sec-h">PLATES · 逐页图版</div>
+  <div class="plates">
+    <a class="plate-card in" style="animation-delay:.1s" href="w1-new-session.html">
+      <span class="no">W1</span>
+      <span style="min-width:0">
+        <span class="t" style="display:block">新建会话弹窗</span>
+        <span class="d" style="display:block">名称一等短输入（可留空自动起名）+ 需求 textarea（发 Agent / 派生分支）+「在哪干活」三选一 + 高级折叠。</span>
+        <span class="m"><span class="tag cyan">⎇ 派生链</span><span class="tag ghost">已实现</span></span>
+      </span>
     </a>
-    <a class="pcard stagger" style="animation-delay:.06s" data-n="W2" href="w2-session-list.html">
-      <div class="t">W2 · 会话列表分组</div>
-      <div class="d">仓库 → worktree 分组 + ⎇ Tag；竞赛组头 RACE；[管理] / [对比台] 入口。桌面 + 手机双端。</div>
-      <div class="m"><span class="tag ghost">List 分组</span><span class="tag ghost">双端</span><span class="tag ghost">M1</span></div>
+    <a class="plate-card in" style="animation-delay:.13s" href="w2-session-list.html">
+      <span class="no">W2</span>
+      <span style="min-width:0">
+        <span class="t" style="display:block">会话列表 · 仓库分组</span>
+        <span class="d" style="display:block">组头 = 仓库 + 全貌计数 + 孤儿提示 + 管理入口；worktree 会话缩进挂靠，⎇/⧉ 标识。桌面 + 手机。</span>
+        <span class="m"><span class="tag cyan">从属导线</span><span class="tag ghost">已实现</span></span>
+      </span>
     </a>
-    <a class="pcard stagger" style="animation-delay:.10s" data-n="W3" href="w3-git-panel.html">
-      <div class="t">W3 · Git 面板 worktree 态</div>
-      <div class="d">worktree 徽标 + Segmented「改动 / 对比 main」+ 底部「合并回 main ▾」操作条。可切 tab。</div>
-      <div class="m"><span class="tag ghost">Segmented</span><span class="tag ghost">DiffView</span><span class="tag ghost">M2</span></div>
+    <a class="plate-card in" style="animation-delay:.16s" href="w3-git-panel.html">
+      <span class="no">W3</span>
+      <span style="min-width:0">
+        <span class="t" style="display:block">Git 面板 · worktree 态</span>
+        <span class="d" style="display:block">worktree 徽标 + 基于行；「改动 / 对比 base」双 tab；底部合并操作条（squash 默认，合并后保留引导管理页）。</span>
+        <span class="m"><span class="tag blue">可切 tab</span><span class="tag ghost">已实现</span></span>
+      </span>
     </a>
-    <a class="pcard stagger" style="animation-delay:.14s" data-n="W4" href="w4-worktree-drawer.html">
-      <div class="t">W4 · Worktree 管理抽屉</div>
-      <div class="d">核心新页面：关联徽章四态、有货着色、合并/删除全流程、脏删除保护、＋新建 worktree、关系说明、空态。</div>
-      <div class="m"><span class="tag ghost">Drawer 480</span><span class="tag yellow">脏保护</span><span class="tag ghost">M1</span></div>
+    <a class="plate-card in" style="animation-delay:.19s" href="w4-worktree-drawer.html">
+      <span class="no">W4</span>
+      <span style="min-width:0">
+        <span class="t" style="display:block">Worktree 管理抽屉</span>
+        <span class="d" style="display:block">四态徽章（活会话/孤儿/外部/旧格式）、合并与脏保护删除全流程、＋新建、显式清理残留、关系说明。</span>
+        <span class="m"><span class="tag yellow">脏保护</span><span class="tag ghost">已实现</span></span>
+      </span>
     </a>
-    <a class="pcard stagger" style="animation-delay:.18s" data-n="W5" href="w5-race-create.html">
-      <div class="t">W5 · 竞赛创建</div>
-      <div class="d">一个 prompt × N 选手：选手卡（Claude/Codex 混编，上限 5）、资源预估、自动分支后缀。</div>
-      <div class="m"><span class="tag ghost">Modal</span><span class="tag yellow">Race</span><span class="tag ghost">M3</span></div>
+    <a class="plate-card in" style="animation-delay:.22s" href="w7-close-session.html">
+      <span class="no">W7</span>
+      <span style="min-width:0">
+        <span class="t" style="display:block">关闭会话 · 收尾三选一</span>
+        <span class="d" style="display:block">保留（默认）/ 合并回 base 并删 / 丢弃删除；干净且 base 已知才给显式勾选随会话删。可点选。</span>
+        <span class="m"><span class="tag red">防丢改动</span><span class="tag ghost">已实现</span></span>
+      </span>
     </a>
-    <a class="pcard stagger" style="animation-delay:.22s" data-n="W6" href="w6-race-compare.html">
-      <div class="t">W6 · 竞赛对比台</div>
-      <div class="d">全屏浮层：横排选手列（状态/±行数/测试）+ 下半屏 diff；选赢家 = crown 状态机收场（阶段可续跑）。</div>
-      <div class="m"><span class="tag ghost">全屏浮层</span><span class="tag yellow">赢家</span><span class="tag ghost">M3</span></div>
+    <a class="plate-card in" style="animation-delay:.25s" href="w5-race-create.html">
+      <span class="no">W5</span>
+      <span style="min-width:0">
+        <span class="t" style="display:block">竞赛创建</span>
+        <span class="d" style="display:block">一个 prompt × N 选手（Claude/Codex 混编，上限 5）；Race Service 落库标组，失败单独重试。</span>
+        <span class="m"><span class="tag yellow">RACE</span><span class="tag ghost">规划 M3</span></span>
+      </span>
     </a>
-    <a class="pcard stagger" style="animation-delay:.26s" data-n="W7" href="w7-close-session.html">
-      <div class="t">W7 · 收尾三选一</div>
-      <div class="d">关闭有货 worktree 会话时：保留 / 合并回 main 并删 / 丢弃删除。默认最安全项。</div>
-      <div class="m"><span class="tag ghost">Modal</span><span class="tag red">防丢改动</span><span class="tag ghost">M2</span></div>
+    <a class="plate-card in" style="animation-delay:.28s" href="w6-race-compare.html">
+      <span class="no">W6</span>
+      <span style="min-width:0">
+        <span class="t" style="display:block">竞赛对比台</span>
+        <span class="d" style="display:block">横排选手列 + 下半屏 diff 联动；选为赢家 = crown 状态机（校验 → 合并 → 清理，可续跑）。可点选手。</span>
+        <span class="m"><span class="tag yellow">crown</span><span class="tag ghost">规划 M3</span></span>
+      </span>
     </a>
   </div>
 </div>

@@ -92,27 +92,28 @@
       <div class="m-title">会话</div>
       <div style="flex:1;position:relative;overflow:hidden">
         <div class="sheet-dim"></div>
-        <div class="sheet" style="top:16px">
+        <div class="sheet" style="top:12px">
           <div style="padding:14px 16px 0;font-weight:700;font-size:15px">新建会话</div>
           <div style="padding:12px 16px;display:flex;flex-direction:column;gap:10px">
-            <input class="input" value="fix-login" style="border-color:var(--blue)">
+            <input class="input" placeholder="会话名(短,留空自动起名)">
+            <textarea class="input" rows="3" style="border-color:var(--blue)">修复登录页在 Safari 下的 UA 判断…</textarea>
             <div style="display:flex"><input class="input" value="~/codes/app" style="border-radius:7px 0 0 7px"><span class="btn" style="height:34px;border-radius:0 7px 7px 0;border-left:0">浏览</span></div>
-            <div class="segmented" style="width:100%"><button style="flex:1">无</button><button class="on" style="flex:1">Claude</button><button style="flex:1">Codex</button></div>
-            <label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" checked style="accent-color:var(--blue-deep)"> worktree 模式</label>
-            <div style="background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:10px;padding:11px 12px;display:flex;flex-direction:column;gap:9px">
-              <div><span class="field-label"><span style="color:var(--cyan)">⎇</span> 分支</span><input class="input mono" value="roam/fix-login" style="font-size:12.5px"></div>
-              <div class="hint warn">已存在，将使用 roam/fix-login-2</div>
-              <div><span class="field-label">基于</span><div class="select"><span class="mono">main <span class="hint">(默认)</span></span><span class="caret">▾</span></div></div>
-              <div class="hint" style="font-size:11px">.worktrees/roam-fix-login-2</div>
+            <div class="segmented" style="width:100%"><button style="flex:1">不启动</button><button class="on" style="flex:1">Claude</button><button style="flex:1">Codex</button></div>
+            <div style="display:flex;align-items:center;gap:8px"><span class="hint" style="flex:0 0 auto">在哪干活</span>
+              <div class="segmented" style="flex:1"><button style="flex:1">主仓库</button><button class="on" style="flex:1">新建</button><button style="flex:1">已有(1)</button></div>
             </div>
-            <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-dim)"><input type="checkbox" style="accent-color:var(--blue-deep)"> 自动互审</label>
+            <div style="background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px">
+              <div><span class="field-label">基于</span><div class="select"><span class="mono">main <span class="hint">(默认)</span></span><span class="caret">▾</span></div></div>
+              <div class="hint" style="font-size:11px"><span class="mono" style="color:var(--cyan)">⎇ roam/safari-ua</span> · 语义名由 Agent 开工后改</div>
+            </div>
+            <div class="hint">▸ 高级(分支名)</div>
           </div>
           <div style="padding:4px 16px 14px;display:flex;gap:10px"><span class="btn" style="flex:1;justify-content:center">取消</span><span class="btn primary" style="flex:1;justify-content:center">创建</span></div>
         </div>
       </div>
       <div class="tabbar"><span>◎</span><span>≡</span><span class="on">▸</span><span>⋯</span></div>
     </div>
-    <div class="ph-cap"><b><span class="no">3</span>新建会话（= W1 手机态）</b>Modal 全宽；分支卡同构；按钮全宽对半</div>
+    <div class="ph-cap"><b><span class="no">3</span>新建会话（= W1 手机态）</b>名称+需求+三选一同桌面；按钮全宽对半</div>
   </div>
 
   <!-- ④ 终端会话页 -->
