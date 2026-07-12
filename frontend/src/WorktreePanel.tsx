@@ -7,6 +7,12 @@ import { api } from './api'
 import { useI18n } from './i18n'
 import { recentDirs } from './App'
 
+// 会话视图的 Git 面板挂在 FloatingFileDrawer(z=1200)里，本抽屉从那里打开时必须压过它，
+// 否则整个抽屉被 Git 面板盖住（antd Drawer 默认 z=1000）。抽屉内嵌套弹层 antd 会自动抬升，
+// 但 modal.confirm 走 App 级 holder 不在抽屉上下文里，须显式再高一级。
+const DRAWER_Z = 1300
+const MODAL_Z = 1400
+
 type WtSession = { session: string; primary: boolean }
 type Worktree = {
   path: string; branch: string; head: string; isMain: boolean
@@ -87,6 +93,7 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
       const ae = e.apiError || {}
       if (ae.code === 'WORKTREE_DIRTY') {
         modal.confirm({
+          zIndex: MODAL_Z,
           title: t('worktree.dirtyDeleteTitle'),
           content: t('worktree.dirtyDeleteDesc', { dirty: ae.dirty ?? wt.dirty, untracked: ae.untracked ?? wt.untracked }),
           okText: t('worktree.delete'), okButtonProps: { danger: true },
@@ -94,12 +101,14 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
         })
       } else if (ae.code === 'SESSIONS_INSIDE') {
         modal.warning({
+          zIndex: MODAL_Z,
           title: t('worktree.sessionsInsideTitle'),
           content: t('worktree.sessionsInsideDesc', { sessions: (ae.sessions || []).join(', ') }),
         })
       } else if (ae.code === 'BRANCH_NOT_MERGED') {
         load(dir, true) // worktree 本体已删，先刷新
         modal.confirm({
+          zIndex: MODAL_Z,
           title: t('worktree.branchNotMergedTitle'),
           content: t('worktree.branchNotMergedDesc', { branch: ae.branch || wt.branch }),
           okText: t('worktree.forceDeleteBranch'), okButtonProps: { danger: true },
@@ -117,6 +126,7 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
       message.success(t('worktree.mergeSuccess', { base: r?.data?.base || wt.base }))
       load(dir, true)
       modal.confirm({
+        zIndex: MODAL_Z,
         title: t('worktree.deleteAfterMergeTitle', { branch: wt.branch }),
         content: t('worktree.deleteAfterMergeDesc'),
         okText: t('worktree.delete'),
@@ -126,6 +136,7 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
       const ae = e.apiError || {}
       if (ae.code === 'MERGE_CONFLICT') {
         modal.warning({
+          zIndex: MODAL_Z,
           title: t('worktree.mergeConflictTitle'),
           content: (
             <div>
@@ -189,7 +200,7 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
   }
 
   return (
-    <Drawer open={open} onClose={onClose} title={t('worktree.title')} width={screens.md ? 480 : '100%'}>
+    <Drawer open={open} onClose={onClose} title={t('worktree.title')} width={screens.md ? 480 : '100%'} zIndex={DRAWER_Z}>
       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
         <AutoComplete style={{ flex: 1, minWidth: 0 }} value={dir} onChange={setDir}
           options={recentDirs().map((d) => ({ value: d }))}
