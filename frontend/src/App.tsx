@@ -1910,6 +1910,35 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
     return sortAsc ? d : -d
   })
 
+  // ── W2 仓库分组：同仓库 ≥2 个 worktree 会话聚组，组头可折叠(记 localStorage) ──
+  const [wtCollapsed, setWtCollapsed] = useState<Record<string, boolean>>(() => {
+    try { return JSON.parse(localStorage.getItem('ttmux_wt_groups') || '{}') } catch { return {} }
+  })
+  const toggleGroup = (repo: string) => setWtCollapsed((m) => {
+    const next = { ...m, [repo]: !m[repo] }
+    try { localStorage.setItem('ttmux_wt_groups', JSON.stringify(next)) } catch { /* 忽略 */ }
+    return next
+  })
+  const repoOf = (name: string) => { const a = wtAnn[name]; return a?.primary?.linked ? a.primary.repo as string : '' }
+  const groupCounts: Record<string, number> = {}
+  for (const s of sorted) { const r = repoOf(s.name); if (r) groupCounts[r] = (groupCounts[r] || 0) + 1 }
+  const entries: any[] = []
+  {
+    const consumed = new Set<string>()
+    for (const s of sorted) {
+      if (consumed.has(s.name)) continue
+      const r = repoOf(s.name)
+      if (r && groupCounts[r] >= 2) {
+        const members = sorted.filter((x: any) => repoOf(x.name) === r)
+        members.forEach((m: any) => consumed.add(m.name))
+        entries.push({ kind: 'group', repo: r, count: members.length })
+        if (!wtCollapsed[r]) members.forEach((m: any) => entries.push({ kind: 'sess', s: m, indent: true }))
+      } else {
+        entries.push({ kind: 'sess', s, indent: false })
+      }
+    }
+  }
+
   return (
     <Card
       title={<Space size={8}>{t('nav.sessions')}<Tag style={{ margin: 0 }}>{cnt('all')}</Tag></Space>}
@@ -1950,7 +1979,27 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
       {list.length === 0 ? <Empty description={t('session.noActive')} />
         : filtered.length === 0 ? <Empty description={t('session.noMatches')} />
           : (
-            <List dataSource={sorted} renderItem={(s: any) => {
+            <List dataSource={entries} renderItem={(en: any) => {
+              if (en.kind === 'group') {
+                const repo: string = en.repo
+                const base = repo.split('/').filter(Boolean).pop() || repo
+                const collapsed = !!wtCollapsed[repo]
+                return (
+                  // 仓库分组头(W2)：折叠三角 + 仓库名 + 路径 + worktree 计数 + 管理入口
+                  <List.Item style={{ padding: '10px 8px 4px 6px', cursor: 'pointer', borderBlockEnd: 'none' }} onClick={() => toggleGroup(repo)}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', minWidth: 0 }}>
+                      <span style={{ fontSize: 10, color: 'var(--text-dimmer)', flex: '0 0 auto' }}>{collapsed ? '▸' : '▾'}</span>
+                      <span style={{ fontWeight: 700, color: 'var(--text-bright)', fontSize: 13, flex: '0 0 auto' }}>{base}</span>
+                      <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 11.5, color: 'var(--text-dimmer)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{repo}</span>
+                      <Tag color="cyan" style={{ margin: 0, flex: '0 0 auto', fontSize: 11, lineHeight: '18px', height: 20 }}>{t('worktree.groupCount', { count: en.count })}</Tag>
+                      <span style={{ flex: 1 }} />
+                      <a style={{ fontSize: 12.5, flex: '0 0 auto' }} onClick={(e) => { e.stopPropagation(); setWtDir(repo); setWtOpen(true) }}>{t('worktree.manage')}</a>
+                    </div>
+                  </List.Item>
+                )
+              }
+              const s = en.s
+              const indent = !!en.indent
               const sw = swarmMap[s.name]
               const connected = s.attached == 1
               const agent = cc[s.name] ? 'claude' : cx[s.name] ? 'codex' : null
@@ -1960,7 +2009,8 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
                 // 整行点击直接进入终端；右侧操作区 stopPropagation 不触发进入
                 <List.Item style={{
                   position: 'relative', overflow: 'hidden',
-                  padding: '10px 8px 10px 12px', cursor: 'pointer', borderRadius: 8,
+                  marginLeft: indent ? 14 : 0, borderLeft: indent ? '2px solid rgba(57,197,207,.3)' : undefined,
+                  padding: '10px 8px 10px 12px', cursor: 'pointer', borderRadius: indent ? '0 8px 8px 0' : 8,
                   background: activeRow ? 'linear-gradient(90deg, rgba(31,111,235,.38), rgba(31,111,235,.16))' : undefined,
                   border: activeRow ? '1px solid #58a6ff' : '1px solid transparent',
                   boxShadow: activeRow ? '0 0 0 1px rgba(88,166,255,.18), 0 0 18px rgba(31,111,235,.14)' : undefined,

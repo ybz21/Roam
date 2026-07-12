@@ -812,6 +812,8 @@ const zhCN = {
 
   // W4 Worktree 管理抽屉
   'worktree.entry': 'Worktree',
+  'worktree.groupCount': '{count} 个 worktree',
+  'worktree.manage': '管理',
   'worktree.sessionTagTip': '工作区 {path} · 点击打开 Worktree 管理',
   'worktree.sessionTagAmbiguous': '多个 pane 分布在 {count} 个 worktree',
   'worktree.relationHint': '会话按其工作目录(cwd)关联到 worktree,cd 离开即自动解除;一个 worktree 也可以没有会话(孤儿)或被多个会话共用',
