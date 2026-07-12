@@ -19,6 +19,7 @@ import FloatingFileDrawer from './FloatingFileDrawer'
 // 非首屏的重页面（蜂群/Git 面板/浏览器/手机镜像/插件）按路由懒加载：切到对应 tab 才拉 chunk，
 // 缩小首屏 index 块。都渲染在同一个 Suspense 边界内（见 lazyFallback，App 内 page）。
 const GitPanel = lazy(() => import('./GitPanel'))
+const WorktreePanel = lazy(() => import('./WorktreePanel'))
 const PluginsPanel = lazy(() => import('./PluginsPanel'))
 const BrowserView = lazy(() => import('./BrowserView'))
 const PhoneView = lazy(() => import('./PhoneView'))
@@ -1500,6 +1501,15 @@ export function DirPicker({ open, start, onPick, onClose }: { open: boolean; sta
   )
 }
 
+// worktree 分支默认名：会话名 slug（小写、非字母数字转 -）
+function worktreeNameSlug(s: string): string {
+  return s.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+}
+// worktree 目录名 slug：/ 转 -，非 [a-zA-Z0-9._-] 转 -（与后端路径规则一致，仅预览用）
+function worktreeBranchSlug(b: string): string {
+  return b.replace(/\//g, '-').replace(/[^a-zA-Z0-9._-]+/g, '-')
+}
+
 // ── 新建会话（可选工作目录） ──
 function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: (name: string) => void }) {
   const [name, setName] = useState('')
@@ -1510,10 +1520,21 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
   const [autoReview, setAutoReview] = useState(false)
   const [isGitRepo, setIsGitRepo] = useState(false)
   const [creating, setCreating] = useState(false)
+  // worktree 展开态（W1）：分支名随会话名联动，手改后停止；基于分支从后端拉本地分支
+  const [branch, setBranch] = useState('')
+  const [branchTouched, setBranchTouched] = useState(false)
+  const [base, setBase] = useState('')
+  const [branches, setBranches] = useState<string[]>([])
+  const [defBranch, setDefBranch] = useState('')
   const { message } = AntApp.useApp()
   const { t } = useI18n()
   const [prefs] = usePreferences()
-  useEffect(() => { if (open) { setName(''); setDir(''); setAgent('none'); setWorktree(false); setAutoReview(false); setIsGitRepo(false) } }, [open])
+  useEffect(() => {
+    if (open) {
+      setName(''); setDir(''); setAgent('none'); setWorktree(false); setAutoReview(false); setIsGitRepo(false)
+      setBranch(''); setBranchTouched(false); setBase(''); setBranches([]); setDefBranch('')
+    }
+  }, [open])
   useEffect(() => {
     const d = dir.trim()
     if (!d) { setIsGitRepo(false); return }
@@ -1523,19 +1544,42 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
     }).catch(() => { if (!cancelled) setIsGitRepo(false) })
     return () => { cancelled = true }
   }, [dir])
+  // 分支名跟随会话名自动填 roam/<slug>，用户手改后停止联动
+  useEffect(() => {
+    if (!branchTouched) setBranch(name.trim() ? 'roam/' + worktreeNameSlug(name) : '')
+  }, [name, branchTouched])
+  // 勾选 worktree 且目录是 git 仓库时拉本地分支做「基于」候选
+  useEffect(() => {
+    if (!worktree || !isGitRepo || !dir.trim()) return
+    let cancelled = false
+    api('GET', `/git/branches?dir=${encodeURIComponent(dir.trim())}`).then((r) => {
+      if (cancelled) return
+      const bs: string[] = r?.data?.branches || []
+      const def: string = r?.data?.default || ''
+      setBranches(bs); setDefBranch(def)
+      setBase((prev) => (prev && bs.includes(prev) ? prev : def))
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [worktree, isGitRepo, dir])
   const ok = async () => {
     if (!name.trim()) return message.error(t('session.nameRequired'))
-    let worktreePath = ''
     try {
       setCreating(true)
       let sessionDir = dir.trim()
+      let actual: string
       if (worktree && isGitRepo && sessionDir) {
-        const wt = await api('POST', '/git/worktree', { dir: sessionDir })
-        worktreePath = wt?.data?.path || ''
-        if (worktreePath) sessionDir = worktreePath
+        // 组合 API 一次完成建 worktree + 会话；失败由后端反向补偿，前端不再两段式
+        const res = await api('POST', '/worktree-sessions', {
+          name: name.trim(), dir: sessionDir,
+          ...(branch.trim() ? { branch: branch.trim() } : {}),
+          ...(base ? { base } : {}),
+        })
+        actual = res.name || res.data?.session || name.trim()
+        sessionDir = res.data?.path || sessionDir
+      } else {
+        const res = await api('POST', '/sessions', { name: name.trim(), dir: sessionDir })
+        actual = res.name || name.trim()
       }
-      const res = await api('POST', '/sessions', { name: name.trim(), dir: sessionDir })
-      const actual = res.name || name.trim()
       if (agent !== 'none') {
         const cmd = agent === 'claude' ? (prefs.claudeCommand || 'claude') : (prefs.codexCommand || 'codex')
         await api('POST', '/tasks/_/send', { sess: actual, msg: cmd })
@@ -1551,12 +1595,7 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
       }
       pushRecentDir(dir); message.success(t('session.created')); onClose(); onDone(actual)
     }
-    catch (e: any) {
-      if (worktreePath) {
-        api('POST', '/git/worktree/remove', { path: worktreePath }).catch(() => {})
-      }
-      message.error(e.message)
-    }
+    catch (e: any) { message.error(e.message) }
     finally { setCreating(false) }
   }
   return (
@@ -1598,6 +1637,29 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
                 <span style={{ fontSize: 13 }}>{t('session.worktreeMode')}</span>
               </Checkbox>
             </Tooltip>
+            {/* worktree 展开态（W1）：分支 / 基于 / 路径预览 */}
+            {worktree && isGitRepo && (
+              <div style={{ background: 'var(--bg-elevated)', borderRadius: 8, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ flex: '0 0 52px', color: 'var(--text-dim)', fontSize: 13 }}>⎇ {t('session.wt.branch')}</span>
+                  <Input size="small" value={branch} style={{ flex: 1, fontFamily: 'monospace' }}
+                    onChange={(e) => { setBranch(e.target.value); setBranchTouched(true) }} />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ flex: '0 0 52px', color: 'var(--text-dim)', fontSize: 13 }}>{t('session.wt.base')}</span>
+                  <Select size="small" showSearch optionFilterProp="label" style={{ flex: 1, minWidth: 0 }}
+                    value={base || undefined} onChange={(v) => setBase(v)}
+                    placeholder={t('session.wt.basePlaceholder')}
+                    options={[
+                      ...(defBranch ? [{ value: defBranch, label: t('session.wt.defaultBranch', { name: defBranch }) }] : []),
+                      ...branches.filter((b) => b !== defBranch).map((b) => ({ value: b, label: b })),
+                    ]} />
+                </div>
+                <div style={{ color: 'var(--text-dimmer)', fontSize: 12, fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                  {t('session.wt.pathPreview', { path: `${dir.trim()}/.worktrees/${worktreeBranchSlug(branch)}` })}
+                </div>
+              </div>
+            )}
             <Tooltip placement="right" title={agent !== 'none' ? t('session.autoReviewTip') : t('session.autoReviewNeedsAgent')}>
               <Checkbox checked={autoReview && agent !== 'none'} disabled={agent === 'none'}
                 onChange={(e) => setAutoReview(e.target.checked)} style={{ width: 'fit-content' }}>
@@ -1640,6 +1702,64 @@ function RenameSessionModal({ session, onClose, onDone }: { session: string | nu
   )
 }
 
+// ── 关闭 worktree 会话的收尾三选一（W7）：保留 / 合并回 base 并删除 / 丢弃并删除 ──
+function CloseWorktreeModal({ info, onClose, onDone }: {
+  info: { name: string; st: any } | null
+  onClose: () => void
+  onDone: (name: string) => void
+}) {
+  const [mode, setMode] = useState<'keep' | 'merge' | 'discard'>('keep')
+  const [strategy, setStrategy] = useState<'squash' | 'merge' | 'rebase'>('squash')
+  const [busy, setBusy] = useState(false)
+  const { message } = AntApp.useApp()
+  const { t } = useI18n()
+  useEffect(() => { if (info) { setMode('keep'); setStrategy('squash') } }, [info])
+  const st = info?.st || {}
+  const ok = async () => {
+    if (!info) return
+    setBusy(true)
+    try {
+      await api('POST', `/sessions/${encodeURIComponent(info.name)}/close-with-worktree`, {
+        mode, path: st.path, ...(mode === 'merge' ? { strategy } : {}),
+      })
+      message.success(t('session.closed'))
+      onClose(); onDone(info.name)
+    } catch (e: any) {
+      const ae = e.apiError || {}
+      message.error(ae.stage ? t('worktree.close.failedAtStage', { stage: ae.stage, msg: e.message }) : e.message)
+    } finally { setBusy(false) }
+  }
+  return (
+    <Modal open={!!info} onCancel={onClose} onOk={ok} confirmLoading={busy} destroyOnClose
+      title={t('worktree.close.title', { name: info?.name || '' })}
+      okText={t('session.close')} okButtonProps={{ danger: mode === 'discard' }}>
+      <div style={{ color: 'var(--text-dim)', marginBottom: 12 }}>
+        {t('worktree.close.summary', {
+          branch: st.branch || '?',
+          dirty: (st.dirty || 0) + (st.untracked || 0),
+          ahead: st.committedAhead || 0,
+          base: st.base || '?',
+        })}
+      </div>
+      <Radio.Group value={mode} onChange={(e) => setMode(e.target.value)}
+        style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <Radio value="keep">{t('worktree.close.keep')}</Radio>
+        <Radio value="merge" disabled={!st.base}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            {t('worktree.close.merge', { base: st.base || '?' })}
+            {mode === 'merge' && (
+              <Select size="small" value={strategy} onChange={(v) => setStrategy(v)} style={{ width: 100 }}
+                onClick={(e) => e.stopPropagation()}
+                options={[{ value: 'squash', label: 'squash' }, { value: 'merge', label: 'merge' }, { value: 'rebase', label: 'rebase' }]} />
+            )}
+          </span>
+        </Radio>
+        <Radio value="discard"><span style={{ color: '#f85149' }}>{t('worktree.close.discard')}</span></Radio>
+      </Radio.Group>
+    </Modal>
+  )
+}
+
 // ── 会话（可新建/指定目录 / 进终端 / 关闭） ──
 function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) => void; closeTerm: (n: string) => void; activeTerm: string | null }) {
   const [list, setList] = useState<any[]>([])
@@ -1648,7 +1768,11 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
   const [needsInput, setNeedsInput] = useState<Record<string, boolean>>({})
   const [swarmMap, setSwarmMap] = useState<Record<string, { swarm: string; role: string }>>({})
   const [newOpen, setNewOpen] = useState(false)
-  const { message } = AntApp.useApp()
+  const [wtOpen, setWtOpen] = useState(false)
+  // W7 关闭流程：confirmKill = 普通 Popconfirm 受控打开；closing = worktree 收尾三选一弹窗
+  const [confirmKill, setConfirmKill] = useState<string | null>(null)
+  const [closing, setClosing] = useState<{ name: string; st: any } | null>(null)
+  const { message, modal } = AntApp.useApp()
   const { t } = useI18n()
   const load = () => api('GET', '/sessions').then(setList).catch(() => {})
   useEffect(() => { load(); const t = setInterval(load, 3000); return () => clearInterval(t) }, [])
@@ -1709,6 +1833,40 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
   }, [list])
   const kill = async (n: string) => { try { await api('DELETE', '/sessions/' + encodeURIComponent(n)); message.success(t('session.closed')); closeTerm(n); load() } catch (e: any) { message.error(e.message) } }
   const goSwarm = (sw: string) => { location.hash = '#/swarm/' + encodeURIComponent(sw) }
+  // W7：点关闭先查会话是否在 worktree 内，据状态分流——
+  // 非 worktree/外部 → 原 Popconfirm；有未收尾内容 → 三选一；干净且 base 已知 → 确认框附「随会话删除」勾选
+  const closeWith = async (n: string, mode: 'keep' | 'merge' | 'discard', path?: string) => {
+    try {
+      await api('POST', `/sessions/${encodeURIComponent(n)}/close-with-worktree`, { mode, path })
+      message.success(t('session.closed')); closeTerm(n); load()
+    } catch (e: any) {
+      const ae = e.apiError || {}
+      message.error(ae.stage ? t('worktree.close.failedAtStage', { stage: ae.stage, msg: e.message }) : e.message)
+      throw e
+    }
+  }
+  const beginClose = async (n: string) => {
+    let st: any = null
+    try { st = (await api('GET', `/sessions/${encodeURIComponent(n)}/worktree-status`))?.data } catch {}
+    if (!st?.inWorktree || st.external) { setConfirmKill(n); return }
+    if ((st.dirty || 0) > 0 || (st.untracked || 0) > 0 || (st.committedAhead || 0) > 0) {
+      setClosing({ name: n, st })
+      return
+    }
+    if (!st.base) { setConfirmKill(n); return }
+    // 干净 worktree：默认勾选随会话删除（显式可见，不静默）
+    const removeToo = { current: true }
+    modal.confirm({
+      title: t('session.closeConfirm', { name: n }),
+      content: (
+        <Checkbox defaultChecked onChange={(e) => { removeToo.current = e.target.checked }}>
+          {t('worktree.close.removeWithSession')}
+        </Checkbox>
+      ),
+      okText: t('session.close'),
+      onOk: () => closeWith(n, removeToo.current ? 'discard' : 'keep', st.path),
+    })
+  }
 
   // ── 筛选 / 搜索 ──
   const [q, setQ] = useState('')
@@ -1744,7 +1902,10 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
   return (
     <Card
       title={<Space size={8}>{t('nav.sessions')}<Tag style={{ margin: 0 }}>{cnt('all')}</Tag></Space>}
-      extra={<Button type="primary" onClick={() => setNewOpen(true)}>+ {t('session.new')}</Button>}
+      extra={<Space size={8}>
+        <Button onClick={() => setWtOpen(true)}>{t('worktree.entry')}</Button>
+        <Button type="primary" onClick={() => setNewOpen(true)}>+ {t('session.new')}</Button>
+      </Space>}
     >
       {/* 工具条：搜索 + 排序同一行，类型筛选另起一行 */}
       <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1825,8 +1986,12 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
                           <a style={{ color: '#f85149' }}>{t('session.close')}</a>
                         </Popconfirm>
                       ) : (
-                        <Popconfirm title={t('session.closeConfirm', { name: s.name })} onConfirm={() => kill(s.name)}>
-                          <a style={{ color: '#f85149' }}>{t('session.close')}</a>
+                        // 受控 Popconfirm：点「关闭」先查 worktree 状态，非 worktree 会话才打开本确认
+                        <Popconfirm title={t('session.closeConfirm', { name: s.name })} open={confirmKill === s.name}
+                          onConfirm={() => { setConfirmKill(null); kill(s.name) }}
+                          onCancel={() => setConfirmKill(null)}
+                          onOpenChange={(o) => { if (!o && confirmKill === s.name) setConfirmKill(null) }}>
+                          <a style={{ color: '#f85149' }} onClick={() => { if (confirmKill !== s.name) beginClose(s.name) }}>{t('session.close')}</a>
                         </Popconfirm>
                       )}
                     </div>
@@ -1836,6 +2001,10 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
             }} />
           )}
       <NewSessionModal open={newOpen} onClose={() => setNewOpen(false)} onDone={(name) => { load(); openTerm(name) }} />
+      <CloseWorktreeModal info={closing} onClose={() => setClosing(null)} onDone={(name) => { closeTerm(name); load() }} />
+      <Suspense fallback={null}>
+        <WorktreePanel open={wtOpen} onClose={() => setWtOpen(false)} openTerm={openTerm} />
+      </Suspense>
     </Card>
   )
 }
