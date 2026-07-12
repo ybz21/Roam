@@ -58,16 +58,16 @@
         </div>
         <div class="hint">为这个任务开一个隔离工作区:独立分支,和主仓库/其他任务互不干扰</div>
 
-        <!-- 新建 worktree 卡:只留「基于」,分支/路径灰字派生,语义名交给 Agent -->
+        <!-- 新建 worktree 卡(交互修订 4):只留「基于」。分支不预指定——先建会话再建
+             worktree,占位分支按会话名派生,Agent 开工后 git branch -m 语义化 -->
         <div style="background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:10px;padding:12px 13px;display:flex;flex-direction:column;gap:10px">
           <div>
             <span class="field-label">基于(start-from)</span>
             <div class="select"><span><span class="mono">main</span> <span class="hint">(默认分支)</span></span><span class="caret">▾</span></div>
           </div>
-          <div class="hint"><span class="mono" style="color:var(--cyan)">⎇ roam/safari-ua</span> · 将创建 <span class="mono">.worktrees/roam-safari-ua</span> · 开工后由 Agent 改成语义化分支名</div>
+          <div class="hint">分支与目录自动创建;Agent 开工后会按任务给分支起语义化名字</div>
         </div>
 
-        <div class="hint" style="cursor:pointer">▸ 高级(分支名)</div>
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-dim)">
           <input type="checkbox" style="accent-color:var(--blue-deep)"> 自动互审
         </label>
@@ -80,9 +80,9 @@
 </div>
 
 <div class="spec-note" style="border-top:1px solid var(--border-subtle)">
-  组件：Antd <span class="mono">Modal / Input / TextArea / Select / Segmented / Collapse</span>。
-  提交：新建 worktree = 一次 POST /worktree-sessions(锁内命名,失败后端补偿)；已有 = 会话 cwd 指入所选 worktree；
-  需求随 agent 启动作为 CLI 参数带入(单引号安全包裹),分支未手改时前置命名约定。
+  组件：Antd <span class="mono">Modal / Input / TextArea / Select / Segmented</span>。
+  提交：新建 worktree = 一次 POST /worktree-sessions——先建会话(cwd=仓库)再建 worktree(占位分支 roam/&lt;会话名&gt;,锁内分配)再会话内 cd,失败反向补偿 kill 会话；
+  已有 = 会话 cwd 指入所选 worktree；需求随 agent 启动作为 CLI 参数带入(单引号安全包裹),前置命名约定让 Agent 开工后 git branch -m 语义化。
 </div>
 </body>
 </html>

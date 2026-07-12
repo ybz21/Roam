@@ -87,8 +87,8 @@
     <h1><span class="brand">Roam</span> Worktree 管理 · 页面设计</h1>
     <div class="meta">
       <span><span class="k">体例</span><b>交互规格 + 产品真实 token</b>（GitHub-dark · Antd）</span>
-      <span><span class="k">状态</span><b>W1–W4 / W7 已实现</b>，图纸随实现同步</span>
-      <span><span class="k">规划</span><b>W5 / W6 竞赛</b>（M3）</span>
+      <span><span class="k">状态</span><b>W1–W7 全部已实现</b>，图纸随实现同步</span>
+      <span><span class="k">流程</span><b>先建会话再建 worktree</b>，分支由 Agent 命名</span>
       <span><span class="k">交互</span><b>W3 / W6 / W7</b> 页面内可点</span>
     </div>
   </div>
@@ -122,7 +122,7 @@
       <span class="no">W1</span>
       <span style="min-width:0">
         <span class="t" style="display:block">新建会话弹窗</span>
-        <span class="d" style="display:block">名称一等短输入（可留空自动起名）+ 需求 textarea（发 Agent / 派生分支）+「在哪干活」三选一 + 高级折叠。</span>
+        <span class="d" style="display:block">名称一等短输入（可留空自动起名）+ 需求 textarea（发 Agent）+「在哪干活」三选一；分支不预指定，Agent 开工后命名。</span>
         <span class="m"><span class="tag cyan">⎇ 派生链</span><span class="tag ghost">已实现</span></span>
       </span>
     </a>
@@ -163,7 +163,7 @@
       <span style="min-width:0">
         <span class="t" style="display:block">竞赛创建</span>
         <span class="d" style="display:block">一个 prompt × N 选手（Claude/Codex 混编，上限 5）；Race Service 落库标组，失败单独重试。</span>
-        <span class="m"><span class="tag yellow">RACE</span><span class="tag ghost">规划 M3</span></span>
+        <span class="m"><span class="tag yellow">RACE</span><span class="tag ghost">已实现</span></span>
       </span>
     </a>
     <a class="plate-card in" style="animation-delay:.28s" href="w6-race-compare.html">
@@ -171,7 +171,7 @@
       <span style="min-width:0">
         <span class="t" style="display:block">竞赛对比台</span>
         <span class="d" style="display:block">横排选手列 + 下半屏 diff 联动；选为赢家 = crown 状态机（校验 → 合并 → 清理，可续跑）。可点选手。</span>
-        <span class="m"><span class="tag yellow">crown</span><span class="tag ghost">规划 M3</span></span>
+        <span class="m"><span class="tag yellow">crown</span><span class="tag ghost">已实现</span></span>
       </span>
     </a>
   </div>
