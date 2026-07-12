@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>W6 · 竞赛对比台</title>
+<link rel="stylesheet" href="mock.css">
+<style>
+  .lane {
+    flex: 1; min-width: 0; border: 1px solid var(--border); border-radius: 12px;
+    background: var(--bg-container); padding: 13px 14px; display: flex; flex-direction: column; gap: 9px;
+    cursor: pointer; transition: border-color .15s, box-shadow .15s;
+  }
+  .lane:hover { border-color: #3d444d; }
+  .lane.sel { border-color: var(--blue); box-shadow: 0 0 0 1px rgba(88,166,255,.25), 0 0 20px rgba(31,111,235,.12); }
+  .lane .l-head { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+  .lane .stats { display: flex; gap: 14px; font-size: 12px; color: var(--text-dim); }
+  .lane .stats b { color: var(--text-bright); font-size: 15px; display: block; font-family: var(--mono); }
+  .lane .l-acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+  .win { background: linear-gradient(135deg, #b8860b, #d4a017); border: 0; color: #fff; }
+  .win:hover { color: #fff; filter: brightness(1.1); }
+</style>
+</head>
+<body>
+<div class="spec-bar">
+  <b>W6 · 竞赛对比台</b><span class="spec-tag">全屏浮层 · 横排选手列 + 下半屏 diff</span>
+  <span class="spacer"></span>
+  <a href="w5-race-create.html">← W5</a><a href="index.html">↑ 索引</a><a href="w7-close-session.html">W7 →</a>
+</div>
+<div class="spec-note">入口：W2 竞赛组头 [对比台]。点选手卡切换下半屏 diff；<em>进行中的选手不给赢家按钮</em>防误触。「选为赢家」= 调 crown 状态机：校验 → 合并回 base → 清理输家，阶段持久化、失败可续跑。</div>
+
+<div class="stage">
+  <div class="app-frame" style="width:1240px;height:820px;flex-direction:column">
+    <!-- 浮层头 -->
+    <div style="display:flex;align-items:center;gap:12px;padding:13px 18px;border-bottom:1px solid var(--border-subtle);background:var(--bg-container)">
+      <b style="font-size:15px">RACE fix-login</b>
+      <span class="hint">基于 <span class="mono">main</span> · 3 选手 · 开赛 25 分钟</span>
+      <span class="hint" style="max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-left:1px solid var(--border);padding-left:12px">「修复登录页在 Safari 下 UA 判断失效的问题：Safari 16- 不支持…」</span>
+      <span style="flex:1"></span>
+      <span class="btn sm danger">全部清理</span>
+      <span style="color:var(--text-dimmer);margin-left:6px">✕</span>
+    </div>
+
+    <!-- 选手列 -->
+    <div style="display:flex;gap:14px;padding:16px 18px">
+      <div class="lane sel" onclick="pick(this,'a')">
+        <div class="l-head"><span style="color:var(--blue)">Claude</span><span class="mono" style="color:var(--text-dim);font-weight:400">-a</span>
+          <span style="margin-left:auto" class="tag green">● 完成</span></div>
+        <div class="mono" style="font-size:11.5px;color:var(--cyan)">⎇ roam/fix-login-a</div>
+        <div class="stats">
+          <span><b>3</b>文件</span>
+          <span><b><span style="color:var(--green)">+120</span> <span style="color:var(--red)">−45</span></b>行</span>
+          <span><b>2</b>提交</span>
+        </div>
+        <div class="hint">✓ 测试通过 · tests/login.spec.ts 3/3</div>
+        <div class="l-acts">
+          <span class="btn sm">看 diff</span><span class="btn sm">进会话</span>
+          <span class="btn sm win">选为赢家</span>
+        </div>
+      </div>
+
+      <div class="lane" onclick="pick(this,'b')">
+        <div class="l-head"><span style="color:var(--blue)">Claude</span><span class="mono" style="color:var(--text-dim);font-weight:400">-b</span>
+          <span style="margin-left:auto" class="tag blue">进行中</span></div>
+        <div class="mono" style="font-size:11.5px;color:var(--cyan)">⎇ roam/fix-login-b</div>
+        <div class="stats">
+          <span><b>1</b>文件</span>
+          <span><b><span style="color:var(--green)">+15</span> <span style="color:var(--red)">−2</span></b>行</span>
+          <span><b>0</b>提交</span>
+        </div>
+        <div class="hint">未提交 · agent 仍在工作</div>
+        <div class="l-acts">
+          <span class="btn sm">看 diff</span><span class="btn sm">进会话</span>
+        </div>
+      </div>
+
+      <div class="lane" onclick="pick(this,'c')">
+        <div class="l-head"><span style="color:var(--green)">Codex</span><span class="mono" style="color:var(--text-dim);font-weight:400">-c</span>
+          <span style="margin-left:auto" class="tag yellow">等待输入</span></div>
+        <div class="mono" style="font-size:11.5px;color:var(--cyan)">⎇ roam/fix-login-c</div>
+        <div class="stats">
+          <span><b>5</b>文件</span>
+          <span><b><span style="color:var(--green)">+300</span> <span style="color:var(--red)">−80</span></b>行</span>
+          <span><b>1</b>提交</span>
+        </div>
+        <div class="hint">✗ 测试未跑 · 改动面偏大</div>
+        <div class="l-acts">
+          <span class="btn sm">看 diff</span><span class="btn sm">进会话</span>
+          <span class="btn sm win">选为赢家</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 下半屏 diff -->
+    <div style="flex:1;min-height:0;margin:0 18px 18px;border:1px solid var(--border-subtle);border-radius:12px;overflow:hidden;display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 13px;background:var(--bg-container);border-bottom:1px solid var(--border-subtle);font-size:12.5px">
+        <span id="diff-who" class="mono" style="color:var(--blue)">Claude -a</span>
+        <span class="mono" style="color:var(--text-dim)">src/login.ts</span>
+        <span class="pm mono" style="font-size:11.5px"><span style="color:var(--green)">+80</span> <span style="color:var(--red);margin-left:5px">−20</span></span>
+        <span style="flex:1"></span>
+        <span class="fstat" style="padding:2px 8px"><span class="st M">M</span><span style="font-size:12px">login.ts</span></span>
+        <span class="fstat" style="padding:2px 8px;opacity:.6"><span class="st M">M</span><span style="font-size:12px">api.ts</span></span>
+        <span class="fstat" style="padding:2px 8px;opacity:.6"><span class="st A">A</span><span style="font-size:12px">retry.ts</span></span>
+      </div>
+      <div class="diff" style="flex:1;overflow:auto;padding:6px 0">
+        <div class="hunk">@@ -12,7 +12,9 @@ export function detectBrowser() {</div>
+        <div class="ctx">   const ua = navigator.userAgent</div>
+        <div class="del">-  if (safari) {</div>
+        <div class="del">-    legacyLogin()</div>
+        <div class="add">+  if (isSafari(ua)) {</div>
+        <div class="add">+    // Safari 16- 不支持 credential API，走回退</div>
+        <div class="add">+    legacyLogin({ retry: true })</div>
+        <div class="ctx">   }</div>
+        <div class="ctx">   return modernLogin()</div>
+        <div class="hunk">@@ -40,6 +42,8 @@ async function legacyLogin(opts) {</div>
+        <div class="add">+  const r = await withRetry(() => post('/login', opts))</div>
+        <div class="add">+  if (!r.ok) throw new LoginError(r)</div>
+        <div class="ctx">   return r</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 手机版 + 赢家确认 -->
+  <div style="display:flex;flex-direction:column;gap:28px">
+    <div class="phone-frame" style="height:560px">
+      <div class="notch"><i></i></div>
+      <div style="padding:8px 14px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border-subtle)">
+        <b>RACE fix-login</b><span class="hint">×3</span><span style="margin-left:auto;color:var(--text-dimmer)">✕</span>
+      </div>
+      <div style="flex:1;overflow:hidden;padding:12px;display:flex;flex-direction:column;gap:10px">
+        <div class="lane sel" style="padding:11px 12px">
+          <div class="l-head" style="font-size:13px"><span style="color:var(--blue)">Claude -a</span><span style="margin-left:auto" class="tag green">● 完成</span></div>
+          <div class="stats"><span><b>3</b>文件</span><span><b style="font-size:13px"><span style="color:var(--green)">+120</span><span style="color:var(--red)">−45</span></b>行</span><span><b>2</b>提交</span></div>
+          <div class="l-acts"><span class="btn sm">看 diff</span><span class="btn sm">进会话</span></div>
+        </div>
+        <div class="lane" style="padding:11px 12px">
+          <div class="l-head" style="font-size:13px"><span style="color:var(--blue)">Claude -b</span><span style="margin-left:auto" class="tag blue">进行中</span></div>
+          <div class="stats"><span><b>1</b>文件</span><span><b style="font-size:13px"><span style="color:var(--green)">+15</span><span style="color:var(--red)">−2</span></b>行</span></div>
+        </div>
+        <div class="lane" style="padding:11px 12px">
+          <div class="l-head" style="font-size:13px"><span style="color:var(--green)">Codex -c</span><span style="margin-left:auto" class="tag yellow"></span></div>
+          <div class="stats"><span><b>5</b>文件</span><span><b style="font-size:13px"><span style="color:var(--green)">+300</span><span style="color:var(--red)">−80</span></b>行</span><span><b>1</b>提交</span></div>
+        </div>
+      </div>
+      <div style="padding:10px 14px;border-top:1px solid var(--border-subtle)">
+        <span class="btn win" style="width:100%;justify-content:center">选 Claude -a 为赢家</span>
+      </div>
+    </div>
+
+    <div style="width:375px;background:var(--bg-container);border:1px solid var(--border);border-radius:12px;box-shadow:0 18px 50px rgba(0,0,0,.6)">
+      <div class="m-head" style="padding:15px 18px 0">选 Claude -a 为赢家？</div>
+      <div class="m-body" style="padding:14px 18px">
+        <div style="font-size:13px;color:var(--text-dim);line-height:1.8">
+          将把 <span class="mono" style="color:var(--cyan)">roam/fix-login-a</span> 合并回 <span class="mono">main</span>
+          <span class="btn sm" style="margin-left:4px">squash <span class="caret">▾</span></span>
+        </div>
+        <label style="display:flex;gap:8px;font-size:13px;align-items:center">
+          <input type="checkbox" checked style="accent-color:var(--blue-deep)">清理其余 2 个选手（worktree + 分支 + 会话）
+        </label>
+        <div class="hint warn">-b 仍在进行中，清理将中断其会话</div>
+      </div>
+      <div class="m-foot" style="padding:4px 18px 16px"><span class="btn">取消</span><span class="btn win">合并并收场</span></div>
+    </div>
+    <div class="stage-label" style="margin:0">↑ 赢家确认框（crown 状态机入口，可只合并不清理）</div>
+  </div>
+</div>
+
+<div class="spec-note" style="border-top:1px solid var(--border-subtle)">
+  数据 = <span class="mono">GET /git/worktrees</span> + <span class="mono">GET /git/diff-base</span> 组合，5s 轮询；状态复用会话列表的 Claude/Codex/待输入检测。
+  测试徽章：约定 prompt 要求 agent 跑测试，从 transcript 抓结果（尽力而为，抓不到不显示）。「全部清理」逐个走 W4 删除确认（有货的会拦）。
+</div>
+<script>
+function pick(el, who) {
+  document.querySelectorAll('.app-frame .lane').forEach(l => l.classList.remove('sel'));
+  el.classList.add('sel');
+  const names = { a: 'Claude -a', b: 'Claude -b', c: 'Codex -c' };
+  const d = document.getElementById('diff-who');
+  if (d) d.textContent = names[who];
+}
+</script>
+</body>
+</html>

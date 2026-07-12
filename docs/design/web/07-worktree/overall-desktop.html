@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>整体 · 桌面 — worktree 融入现有应用的完整页面流</title>
+<link rel="stylesheet" href="mock.css">
+<style>
+  .journey {
+    display: flex; align-items: center; gap: 12px; width: 100%; max-width: 1180px;
+    margin: 34px auto 6px; font-size: 13px; color: var(--text-dim);
+  }
+  .journey .no {
+    width: 26px; height: 26px; border-radius: 50%; background: var(--blue-deep); color: #fff;
+    display: grid; place-items: center; font-weight: 700; font-size: 13px; flex: 0 0 26px;
+  }
+  .journey b { color: var(--text-bright); font-size: 14.5px; }
+  .journey .ln { flex: 1; border-top: 1px dashed #3d444d; }
+  .stat-card {
+    flex: 1; background: var(--bg-elevated); border: 1px solid var(--border-subtle); border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .stat-card .k { font-size: 12px; color: var(--text-dim); margin-bottom: 4px; }
+  .stat-card .v { font-size: 22px; font-weight: 700; font-family: var(--mono); }
+  .dock {
+    width: 380px; flex: 0 0 380px; border-left: 1px solid var(--border); display: flex; flex-direction: column; background: var(--bg-base);
+  }
+</style>
+</head>
+<body>
+<div class="spec-bar">
+  <b>整体 · 桌面</b><span class="spec-tag">worktree 融入现有布局的完整旅程 · 5 屏</span>
+  <span class="spacer"></span>
+  <a href="index.html">↑ 索引</a><a href="overall-mobile.html">手机版 →</a>
+</div>
+<div class="spec-note">按用户旅程串联：<em>① 概览看全局 → ② 会话页分组管理 → ③ 终端里干活+Review → ④ 管理抽屉收尾 → ⑤ 竞赛对比台收场</em>。现有布局（Sider 三栏 / 停靠终端 / 浮动 Git 面板）一律不动，只做增量。</div>
+
+<!-- ═══════ ① 概览 ═══════ -->
+<div class="journey"><span class="no">1</span><b>概览</b>·统计卡加「worktree」、活动竞赛与孤儿提醒进「活动/告警」——全局第一眼就看到并行工作面<span class="ln"></span></div>
+<div class="stage" style="padding-top:14px">
+  <div class="app-frame" style="height:560px">
+    <div class="sider">
+      <div class="brand">Roam</div>
+      <div class="nav-item on">◎ 概览</div>
+      <div class="nav-item">≡ 任务</div>
+      <div class="nav-item">▸ 会话</div>
+      <div class="nav-item">⬡ 蜂群</div>
+      <div class="nav-item">⋯ 更多</div>
+    </div>
+    <div class="main-col">
+      <div class="page-pad">
+        <div style="display:flex;gap:12px;margin-bottom:14px">
+          <div class="stat-card"><div class="k">会话</div><div class="v">7</div></div>
+          <div class="stat-card"><div class="k">蜂群</div><div class="v">1</div></div>
+          <div class="stat-card"><div class="k">Agent</div><div class="v">5</div></div>
+          <div class="stat-card" style="border-color:rgba(57,197,207,.4)"><div class="k" style="color:var(--cyan)">⎇ worktree</div><div class="v" style="color:var(--cyan)">6</div></div>
+          <div class="stat-card" style="border-color:rgba(210,153,34,.35)"><div class="k" style="color:var(--yellow)">RACE 竞赛</div><div class="v" style="color:var(--yellow)">1</div></div>
+        </div>
+        <div style="display:flex;gap:14px">
+          <div class="card" style="flex:1.4">
+            <div class="c-head" style="font-size:13.5px">活动任务</div>
+            <div style="padding:6px 8px">
+              <div class="sess-row"><i class="dot g"></i><div class="col"><div class="line1"><span class="name">fix-login</span><span class="tag cyan">⎇ roam/fix-login</span><span class="tag blue">Claude</span></div><div class="meta">活动 1分钟前</div></div></div>
+              <div class="sess-row"><i class="dot g"></i><div class="col"><div class="line1"><span class="name">RACE dark-mode ×3</span><span class="tag yellow">竞赛 · 2 完成 1 进行</span></div><div class="meta">开赛 25 分钟 · <a>对比台 →</a></div></div></div>
+              <div class="sess-row"><i class="dot y"></i><div class="col"><div class="line1"><span class="name">try-idea</span><span class="tag cyan">⎇ roam/try-idea</span><span class="tag yellow">待输入</span></div><div class="meta">活动 3小时前</div></div></div>
+            </div>
+          </div>
+          <div class="card" style="flex:1">
+            <div class="c-head" style="font-size:13.5px">告警 / 待清理</div>
+            <div style="padding:10px 14px;display:flex;flex-direction:column;gap:10px;font-size:12.5px">
+              <div style="display:flex;gap:8px;align-items:center"><span class="tag yellow">!</span><span style="color:var(--text-dim)"><b style="color:var(--text-bright)">2 个孤儿 worktree</b>（app）超过 3 天未动 · <a>去清理</a></span></div>
+              <div style="display:flex;gap:8px;align-items:center"><span class="tag blue">↑</span><span style="color:var(--text-dim)"><span class="mono" style="color:var(--cyan)">roam/try-idea</span> 落后 main 5 个提交</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ ② 会话页 + 停靠终端 ═══════ -->
+<div class="journey"><span class="no">2</span><b>会话页（三栏态）</b>·中栏 = W2 分组列表；右侧停靠终端顶栏带 ⎇ 徽标，随时知道自己在哪个 worktree 里<span class="ln"></span></div>
+<div class="stage" style="padding-top:14px">
+  <div class="app-frame" style="height:680px">
+    <div class="sider" style="width:64px;flex-basis:64px;align-items:center;padding:14px 6px">
+      <div class="brand" style="font-size:13px;padding:2px 0 16px">Roam</div>
+      <div class="nav-item" style="padding:9px">◎</div>
+      <div class="nav-item" style="padding:9px">≡</div>
+      <div class="nav-item on" style="padding:9px">▸</div>
+      <div class="nav-item" style="padding:9px">⬡</div>
+      <div class="nav-item" style="padding:9px">⋯</div>
+    </div>
+    <div class="main-col" style="border-right:1px solid var(--border)">
+      <div class="page-pad" style="padding:12px">
+        <div class="card">
+          <div class="c-head" style="padding:11px 14px">会话<span style="flex:1"></span><span class="btn primary sm">＋ 新建 <span class="caret">▾</span></span></div>
+          <div style="padding:6px 8px 10px">
+            <div class="group-head"><span class="tri">▾</span><span class="repo">app</span><span class="tag cyan" style="height:18px;font-size:11px">3 worktree</span><a>管理</a></div>
+            <div class="group-body">
+              <div class="sess-row active" style="padding:8px 8px 8px 10px">
+                <i class="dot g"></i><div class="col"><div class="line1"><span class="name" style="color:#fff">fix-login</span><span class="tag cyan">⎇ roam/fix-login</span><span class="tag blue">CL</span></div><div class="meta">活动 1分钟前</div></div>
+              </div>
+              <div class="sess-row" style="padding:8px 8px 8px 10px">
+                <i class="dot y"></i><div class="col"><div class="line1"><span class="name">try-idea</span><span class="tag cyan">⎇ roam/try-idea</span><span class="tag yellow">待输入</span></div><div class="meta">活动 3小时前</div></div>
+              </div>
+              <div class="sess-row" style="padding:8px 8px 8px 10px">
+                <i class="dot idle"></i><div class="col"><div class="line1"><span class="name">hotfix</span><span class="tag cyan">⎇ hotfix-x</span><span class="tag ghost">⧉</span></div><div class="meta">活动 30分钟前</div></div>
+              </div>
+            </div>
+            <div class="group-head" style="margin-top:6px"><span class="tri">▸</span><span class="repo">blog</span><span class="tag yellow" style="height:18px;font-size:11px">RACE ×3</span><a>对比台</a></div>
+            <hr class="hr" style="margin:8px 4px">
+            <div class="sess-row" style="padding:8px 8px 8px 10px"><i class="dot g"></i><div class="col"><div class="line1"><span class="name">main-shell</span><span class="tag ghost">已连接</span></div><div class="meta">活动 5分钟前</div></div></div>
+            <div class="sess-row" style="padding:8px 8px 8px 10px"><i class="dot idle"></i><div class="col"><div class="line1"><span class="name">notes</span><span class="tag ghost">空闲</span></div><div class="meta">活动 2天前</div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="dock">
+      <div class="term-tabs"><span class="tt on">fix-login</span><span class="tt">＋</span></div>
+      <div class="term-toolbar" style="font-size:11.5px">⎇Git 浏览器 语音 <span class="tag cyan" style="margin-left:auto;height:17px;font-size:10.5px">⎇ roam/fix-login</span></div>
+      <div class="term-bg" style="font-size:11.5px">
+        <div><span class="p">➜</span> <span class="c">roam-fix-login</span> claude</div>
+        <div class="t">Claude Code</div>
+        <div class="t">&gt; 修复登录页 Safari UA…</div>
+        <div class="t">● 已修改 src/login.ts</div>
+        <div class="p">▌</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ ③ 终端全屏 + Git 面板（Review） ═══════ -->
+<div class="journey"><span class="no">3</span><b>终端页 + Git 面板</b>·干活与 Review 同屏：右侧 Git 面板切「对比 main」看累计差异，底部操作条直接合并（= W3）<span class="ln"></span></div>
+<div class="stage" style="padding-top:14px">
+  <div class="app-frame" style="height:640px">
+    <div class="main-col">
+      <div class="term-tabs"><span class="tt on">fix-login</span><span class="tt">main-shell</span><span class="tt">＋</span></div>
+      <div class="term-toolbar">文件 <span style="color:var(--blue)">⎇ Git</span> 浏览器 浏览器 语音 语音 <span style="margin-left:auto" class="mono">.worktrees/roam-fix-login</span></div>
+      <div class="term-bg">
+        <div><span class="p">➜</span> <span class="c">roam-fix-login</span> <span class="t">git:(</span><span class="p">roam/fix-login</span><span class="t">)</span> claude</div>
+        <div class="t">● 修复完成，tests/login.spec.ts 3/3 通过</div>
+        <div class="p">▌</div>
+      </div>
+    </div>
+    <div style="width:390px;flex:0 0 390px;background:var(--bg-container);border-left:1px solid var(--border);display:flex;flex-direction:column">
+      <div style="padding:11px 13px 9px;border-bottom:1px solid var(--border-subtle)">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="mono" style="font-weight:700;font-size:13.5px;color:var(--text-bright)">⎇ roam/fix-login</span>
+          <span class="mono" style="font-size:12px;color:var(--text-dim)">↑3 ↓0</span>
+          <span class="tag cyan" style="height:18px;font-size:11px">worktree</span>
+          <span style="margin-left:auto;color:var(--text-dimmer)">⟳ ⋯ ✕</span>
+        </div>
+        <div style="margin-top:5px;font-size:12px;color:var(--text-dimmer)">基于 <span class="mono">main</span> · 主仓库 <span class="mono">~/codes/app</span></div>
+        <div style="margin-top:9px" class="segmented">
+          <button>改动</button><button class="on">对比 main <span class="badge-n">3</span></button>
+        </div>
+      </div>
+      <div style="flex:1;overflow:hidden">
+        <div style="padding:10px 12px 4px;font-size:12.5px;color:var(--text-dim)">与 <span class="mono">main</span> 累计 · 3 文件 <span class="mono"><span style="color:var(--green)">+120</span> <span style="color:var(--red)">−45</span></span></div>
+        <div class="fstat" style="background:rgba(255,255,255,.04)"><span class="st M">M</span><span class="fp">src/login.ts</span><span class="pm"><span class="p">+80</span><span class="m">−20</span></span></div>
+        <div class="fstat"><span class="st M">M</span><span class="fp">src/api.ts</span><span class="pm"><span class="p">+30</span><span class="m">−25</span></span></div>
+        <div class="fstat"><span class="st A">A</span><span class="fp">src/util/retry.ts</span><span class="pm"><span class="p">+10</span></span></div>
+        <div class="diff" style="border-top:1px solid var(--border-subtle);margin-top:6px;padding-top:4px">
+          <div class="hunk">@@ -12,7 +12,9 @@</div>
+          <div class="del">-  if (safari) {</div>
+          <div class="add">+  if (isSafari(ua)) {</div>
+          <div class="add">+    legacyLogin({ retry: true })</div>
+          <div class="ctx">   }</div>
+        </div>
+      </div>
+      <div style="border-top:1px solid var(--border-subtle);padding:10px 12px;display:flex;gap:10px">
+        <span class="btn primary" style="flex:1;justify-content:center">合并回 main <span class="caret">▾</span></span>
+        <span class="btn">Worktree 管理</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ ④ 管理抽屉（收尾） ═══════ -->
+<div class="journey"><span class="no">4</span><b>Worktree 管理抽屉</b>·仓库维度盘点与收尾：活会话/孤儿/外部/旧格式四态，合并、删除、收编一站式（= W4）<span class="ln"></span></div>
+<div class="stage" style="padding-top:14px">
+  <div class="app-frame" style="height:600px">
+    <div class="main-col">
+      <div class="term-tabs"><span class="tt on">fix-login</span></div>
+      <div class="term-bg"><div><span class="p">➜</span> <span class="c">roam-fix-login</span></div></div>
+    </div>
+    <div class="dim"></div>
+    <div class="drawer">
+      <div class="d-head">Worktree · app <span class="hint mono" style="font-weight:400">~/codes/app</span><span class="x">✕</span></div>
+      <div style="padding:11px 16px;display:flex;gap:10px;border-bottom:1px solid var(--border-subtle)">
+        <span class="btn primary sm">＋ 新建 worktree <span class="caret">▾</span></span>
+        <input class="input" placeholder="筛选分支 / 会话…" style="height:26px;font-size:12px;flex:1">
+      </div>
+      <div style="flex:1;overflow:auto">
+        <div class="wt-row">
+          <div class="r1"><span class="branch">roam/fix-login</span><span style="margin-left:auto" class="tag green">fix-login ●</span></div>
+          <div class="r2">基于 <b class="mono">main</b> · <b class="hot-b">↑3</b> ↓0 · <b class="hot-y">改动 2</b> · 2小时前</div>
+          <div class="r3"><span class="btn sm">进入会话</span><span class="btn sm">对比</span><span class="btn sm primary">合并回 main <span class="caret">▾</span></span><span class="btn sm danger">删除</span></div>
+        </div>
+        <div class="wt-row" style="background:rgba(210,153,34,.03)">
+          <div class="r1"><span class="branch">roam/try-idea</span><span style="margin-left:auto" class="tag yellow">无关联会话</span></div>
+          <div class="r2">基于 <b class="mono">main</b> · ↑0 <b>↓5</b> · 无改动 · 6天前</div>
+          <div class="r3"><span class="btn sm">新建会话进入</span><span class="btn sm">对比</span><span class="btn sm">合并 <span class="caret">▾</span></span><span class="btn sm danger">删除</span></div>
+        </div>
+        <div class="wt-row">
+          <div class="r1"><span class="branch">hotfix-x</span><span style="margin-left:auto" class="tag ghost">⧉ 外部创建</span></div>
+          <div class="r2">基于 <b class="mono">main</b> · <b class="hot-b">↑1</b> ↓0 · <b class="hot-y">改动 1</b> · 30分钟前</div>
+          <div class="r3"><span class="btn sm">新建会话进入</span><span class="btn sm">对比</span><span class="btn sm">合并 <span class="caret">▾</span></span><span class="btn sm danger">删除</span></div>
+        </div>
+      </div>
+      <div style="padding:9px 16px;border-top:1px solid var(--border-subtle)" class="hint">3 个 worktree · 5s 自动刷新 · 外部 git 增删自动收敛</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ ⑤ 竞赛对比台 ═══════ -->
+<div class="journey"><span class="no">5</span><b>竞赛对比台</b>·并行的终点：并排比选手、看 diff、选赢家一键合并收场（= W6）<span class="ln"></span></div>
+<div class="stage" style="padding-top:14px;padding-bottom:60px">
+  <div class="app-frame" style="height:600px;flex-direction:column">
+    <div style="display:flex;align-items:center;gap:12px;padding:13px 18px;border-bottom:1px solid var(--border-subtle);background:var(--bg-container)">
+      <b style="font-size:15px">RACE dark-mode</b>
+      <span class="hint">基于 <span class="mono">main</span> · 3 选手 · 开赛 25 分钟</span>
+      <span style="flex:1"></span><span class="btn sm danger">全部清理</span><span style="color:var(--text-dimmer)">✕</span>
+    </div>
+    <div style="display:flex;gap:14px;padding:16px 18px">
+      <div style="flex:1;border:1px solid var(--blue);border-radius:12px;background:var(--bg-container);padding:13px 14px;box-shadow:0 0 0 1px rgba(88,166,255,.25)">
+        <div style="display:flex;gap:8px;font-weight:700"><span style="color:var(--blue)">Claude -a</span><span style="margin-left:auto" class="tag green">● 完成</span></div>
+        <div class="mono" style="font-size:11.5px;color:var(--cyan);margin:6px 0">⎇ roam/dark-mode-a</div>
+        <div style="display:flex;gap:14px;font-size:12px;color:var(--text-dim)"><span><b style="color:var(--text-bright);font-family:var(--mono)">4</b> 文件</span><span class="mono"><span style="color:var(--green)">+210</span> <span style="color:var(--red)">−12</span></span><span><b style="color:var(--text-bright)">2</b> 提交</span></div>
+        <div style="display:flex;gap:8px;margin-top:10px"><span class="btn sm">看 diff</span><span class="btn sm">进会话</span><span class="btn sm" style="background:linear-gradient(135deg,#b8860b,#d4a017);border:0;color:#fff">选为赢家</span></div>
+      </div>
+      <div style="flex:1;border:1px solid var(--border);border-radius:12px;background:var(--bg-container);padding:13px 14px">
+        <div style="display:flex;gap:8px;font-weight:700"><span style="color:var(--blue)">Claude -b</span><span style="margin-left:auto" class="tag green">● 完成</span></div>
+        <div class="mono" style="font-size:11.5px;color:var(--cyan);margin:6px 0">⎇ roam/dark-mode-b</div>
+        <div style="display:flex;gap:14px;font-size:12px;color:var(--text-dim)"><span><b style="color:var(--text-bright);font-family:var(--mono)">2</b> 文件</span><span class="mono"><span style="color:var(--green)">+95</span> <span style="color:var(--red)">−8</span></span><span><b style="color:var(--text-bright)">1</b> 提交</span></div>
+        <div style="display:flex;gap:8px;margin-top:10px"><span class="btn sm">看 diff</span><span class="btn sm">进会话</span><span class="btn sm" style="background:linear-gradient(135deg,#b8860b,#d4a017);border:0;color:#fff">选为赢家</span></div>
+      </div>
+      <div style="flex:1;border:1px solid var(--border);border-radius:12px;background:var(--bg-container);padding:13px 14px">
+        <div style="display:flex;gap:8px;font-weight:700"><span style="color:var(--green)">Codex -c</span><span style="margin-left:auto" class="tag blue">进行中</span></div>
+        <div class="mono" style="font-size:11.5px;color:var(--cyan);margin:6px 0">⎇ roam/dark-mode-c</div>
+        <div style="display:flex;gap:14px;font-size:12px;color:var(--text-dim)"><span><b style="color:var(--text-bright);font-family:var(--mono)">3</b> 文件</span><span class="mono"><span style="color:var(--green)">+150</span> <span style="color:var(--red)">−40</span></span><span><b style="color:var(--text-bright)">0</b> 提交</span></div>
+        <div style="display:flex;gap:8px;margin-top:10px"><span class="btn sm">看 diff</span><span class="btn sm">进会话</span></div>
+      </div>
+    </div>
+    <div style="flex:1;min-height:0;margin:0 18px 18px;border:1px solid var(--border-subtle);border-radius:12px;overflow:hidden;display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 13px;background:var(--bg-container);border-bottom:1px solid var(--border-subtle);font-size:12.5px">
+        <span class="mono" style="color:var(--blue)">Claude -a</span><span class="mono" style="color:var(--text-dim)">src/theme.ts</span>
+        <span class="mono" style="font-size:11.5px"><span style="color:var(--green)">+120</span> <span style="color:var(--red)">−6</span></span>
+      </div>
+      <div class="diff" style="flex:1;overflow:hidden;padding:6px 0">
+        <div class="hunk">@@ -8,6 +8,14 @@ export const theme = {</div>
+        <div class="add">+  dark: {</div>
+        <div class="add">+    bg: '#0d1117', text: '#e6edf3',</div>
+        <div class="add">+  },</div>
+        <div class="ctx">   light: { … }</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="spec-note" style="border-top:1px solid var(--border-subtle)">
+  结合现有的原则：① 不新增导航项——worktree 挂在「会话」与 Git 面板之下，概览只加统计卡与告警行；② 停靠终端/全屏终端顶栏都带 ⎇ 徽标，位置感常在；
+  ③ 所有浮层（抽屉/对比台）都盖在现有页面之上，关掉即回原地，无路由跳转成本。
+</div>
+</body>
+</html>

@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>整体 · 手机 — worktree 全套手机版页面</title>
+<link rel="stylesheet" href="mock.css">
+<style>
+  .ph-grid { display: flex; flex-wrap: wrap; gap: 34px 26px; justify-content: center; padding: 30px 24px 70px; }
+  .ph-cell { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+  .ph-cap { font-size: 12.5px; color: var(--text-dim); text-align: center; max-width: 340px; line-height: 1.6; }
+  .ph-cap b { color: var(--text-bright); display: block; font-size: 13.5px; margin-bottom: 2px; }
+  .ph-cap .no {
+    display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--blue-deep); color: #fff; font-size: 11px; font-weight: 700; margin-right: 5px; vertical-align: -3px;
+  }
+  .phone-frame { height: 660px; }
+  .m-title { padding: 9px 14px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--border-subtle); font-weight: 700; font-size: 14.5px; }
+  .m-title .back { color: var(--text-dim); font-weight: 400; }
+  .sheet-dim { position: absolute; inset: 0; background: rgba(1,4,9,.6); z-index: 5; }
+  .sheet {
+    position: absolute; left: 10px; right: 10px; z-index: 6; background: var(--bg-container);
+    border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 18px 50px rgba(0,0,0,.6);
+  }
+</style>
+</head>
+<body>
+<div class="spec-bar">
+  <b>整体 · 手机</b><span class="spec-tag">8 屏全套 · 底部 Tab 结构不变</span>
+  <span class="spacer"></span>
+  <a href="overall-desktop.html">← 桌面版</a><a href="index.html">↑ 索引</a>
+</div>
+<div class="spec-note">手机端原则：<em>不加新 Tab</em>——worktree 全部挂在「会话」Tab 与终端页工具栏之下；抽屉/对比台全屏化；操作行收进「⋯ 更多」；⎇ Tag 只显图标省宽度。</div>
+
+<div class="ph-grid">
+
+  <!-- ① 概览 -->
+  <div class="ph-cell">
+    <div class="phone-frame">
+      <div class="notch"><i></i></div>
+      <div class="m-title">概览</div>
+      <div style="flex:1;overflow:hidden;padding:12px">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
+          <div style="background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:10px;padding:10px"><div class="hint">会话</div><div class="mono" style="font-size:20px;font-weight:700">7</div></div>
+          <div style="background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:10px;padding:10px"><div class="hint">蜂群</div><div class="mono" style="font-size:20px;font-weight:700">1</div></div>
+          <div style="background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:10px;padding:10px"><div class="hint">Agent</div><div class="mono" style="font-size:20px;font-weight:700">5</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+          <div style="background:var(--bg-elevated);border:1px solid rgba(57,197,207,.4);border-radius:10px;padding:10px"><div class="hint" style="color:var(--cyan)">⎇ worktree</div><div class="mono" style="font-size:20px;font-weight:700;color:var(--cyan)">6</div></div>
+          <div style="background:var(--bg-elevated);border:1px solid rgba(210,153,34,.35);border-radius:10px;padding:10px"><div class="hint" style="color:var(--yellow)">RACE 竞赛</div><div class="mono" style="font-size:20px;font-weight:700;color:var(--yellow)">1</div></div>
+        </div>
+        <div class="hint" style="margin-bottom:6px;font-weight:700;letter-spacing:.3px">活动任务</div>
+        <div class="sess-row" style="padding:8px"><i class="dot g"></i><div class="col"><div class="line1"><span class="name" style="font-size:13px">fix-login</span><span class="tag cyan">⎇</span><span class="tag blue">CL</span></div><div class="meta">活动 1分钟前</div></div></div>
+        <div class="sess-row" style="padding:8px"><i class="dot g"></i><div class="col"><div class="line1"><span class="name" style="font-size:13px">RACE dark-mode ×3</span><span class="tag yellow">2完成</span></div><div class="meta"><a>对比台 →</a></div></div></div>
+        <div style="margin-top:10px;padding:9px 11px;background:rgba(210,153,34,.06);border:1px solid rgba(210,153,34,.25);border-radius:10px;font-size:12px;color:var(--text-dim)">2 个孤儿 worktree 超 3 天未动 · <a>去清理</a></div>
+      </div>
+      <div class="tabbar"><span class="on">◎</span><span>≡</span><span>▸</span><span>⋯</span></div>
+    </div>
+    <div class="ph-cap"><b><span class="no">1</span>概览</b>统计卡加 ⎇/RACE 两张；活动任务里竞赛聚合成一行；告警区提醒孤儿清理</div>
+  </div>
+
+  <!-- ② 会话列表 -->
+  <div class="ph-cell">
+    <div class="phone-frame">
+      <div class="notch"><i></i></div>
+      <div class="m-title">会话<span style="flex:1"></span><span class="btn primary sm">＋ 新建 ▾</span></div>
+      <div style="flex:1;overflow:hidden;padding:4px 8px">
+        <div class="group-head"><span class="tri">▾</span><span class="repo">app</span><span class="tag cyan" style="height:18px;font-size:11px">3</span><a>管理</a></div>
+        <div class="group-body">
+          <div class="sess-row active" style="padding:9px 8px"><i class="dot g"></i><div class="col"><div class="line1"><span class="name" style="color:#fff">fix-login</span><span class="tag cyan">⎇</span><span class="tag blue">CL</span></div><div class="meta">2小时前 · 1分钟前</div></div></div>
+          <div class="sess-row" style="padding:9px 8px"><i class="dot y"></i><div class="col"><div class="line1"><span class="name">try-idea</span><span class="tag cyan">⎇</span><span class="tag yellow">待输入</span></div><div class="meta">1天前 · 3小时前</div></div></div>
+          <div class="sess-row" style="padding:9px 8px"><i class="dot idle"></i><div class="col"><div class="line1"><span class="name">hotfix</span><span class="tag cyan">⎇</span><span class="tag ghost">⧉</span></div><div class="meta">30分钟前</div></div></div>
+        </div>
+        <div class="group-head" style="margin-top:6px"><span class="tri">▾</span><span class="repo">blog</span><span class="tag yellow" style="height:18px;font-size:11px">RACE ×3</span><a>对比台</a></div>
+        <div class="group-body">
+          <div class="sess-row" style="padding:9px 8px"><i class="dot g"></i><div class="col"><div class="line1"><span class="name">dark-mode-a</span><span class="tag cyan">⎇</span><span class="tag blue">CL</span></div><div class="meta">活动 刚刚</div></div></div>
+          <div class="sess-row" style="padding:9px 8px"><i class="dot g"></i><div class="col"><div class="line1"><span class="name">dark-mode-b</span><span class="tag cyan">⎇</span><span class="tag blue">CL</span></div><div class="meta">活动 2分钟前</div></div></div>
+          <div class="sess-row" style="padding:9px 8px"><i class="dot idle"></i><div class="col"><div class="line1"><span class="name">dark-mode-c</span><span class="tag cyan">⎇</span><span class="tag green">CX</span></div><div class="meta">活动 8分钟前</div></div></div>
+        </div>
+        <hr class="hr" style="margin:8px 4px">
+        <div class="sess-row" style="padding:9px 8px"><i class="dot g"></i><div class="col"><div class="line1"><span class="name">main-shell</span><span class="tag ghost">已连接</span></div><div class="meta">5分钟前</div></div></div>
+      </div>
+      <div class="tabbar"><span>◎</span><span>≡</span><span class="on">▸</span><span>⋯</span></div>
+    </div>
+    <div class="ph-cap"><b><span class="no">2</span>会话列表</b>分组 + ⎇ 图标 Tag；组头 [管理]→⑤、[对比台]→⑦；「＋ 新建 ▾」下拉含「新建竞赛」</div>
+  </div>
+
+  <!-- ③ 新建会话（worktree 展开） -->
+  <div class="ph-cell">
+    <div class="phone-frame">
+      <div class="notch"><i></i></div>
+      <div class="m-title">会话</div>
+      <div style="flex:1;position:relative;overflow:hidden">
+        <div class="sheet-dim"></div>
+        <div class="sheet" style="top:16px">
+          <div style="padding:14px 16px 0;font-weight:700;font-size:15px">新建会话</div>
+          <div style="padding:12px 16px;display:flex;flex-direction:column;gap:10px">
+            <input class="input" value="fix-login" style="border-color:var(--blue)">
+            <div style="display:flex"><input class="input" value="~/codes/app" style="border-radius:7px 0 0 7px"><span class="btn" style="height:34px;border-radius:0 7px 7px 0;border-left:0">浏览</span></div>
+            <div class="segmented" style="width:100%"><button style="flex:1">无</button><button class="on" style="flex:1">Claude</button><button style="flex:1">Codex</button></div>
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" checked style="accent-color:var(--blue-deep)"> worktree 模式</label>
+            <div style="background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:10px;padding:11px 12px;display:flex;flex-direction:column;gap:9px">
+              <div><span class="field-label"><span style="color:var(--cyan)">⎇</span> 分支</span><input class="input mono" value="roam/fix-login" style="font-size:12.5px"></div>
+              <div class="hint warn">已存在，将使用 roam/fix-login-2</div>
+              <div><span class="field-label">基于</span><div class="select"><span class="mono">main <span class="hint">(默认)</span></span><span class="caret">▾</span></div></div>
+              <div class="hint" style="font-size:11px">.worktrees/roam-fix-login-2</div>
+            </div>
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-dim)"><input type="checkbox" style="accent-color:var(--blue-deep)"> 自动互审</label>
+          </div>
+          <div style="padding:4px 16px 14px;display:flex;gap:10px"><span class="btn" style="flex:1;justify-content:center">取消</span><span class="btn primary" style="flex:1;justify-content:center">创建</span></div>
+        </div>
+      </div>
+      <div class="tabbar"><span>◎</span><span>≡</span><span class="on">▸</span><span>⋯</span></div>
+    </div>
+    <div class="ph-cap"><b><span class="no">3</span>新建会话（= W1 手机态）</b>Modal 全宽；分支卡同构；按钮全宽对半</div>
+  </div>
+
+  <!-- ④ 终端会话页 -->
+  <div class="ph-cell">
+    <div class="phone-frame">
+      <div class="notch"><i></i></div>
+      <div class="m-title"><span class="back">←</span> fix-login <span class="tag cyan" style="font-size:10.5px;height:17px">⎇ roam/fix-login</span><span style="flex:1"></span><span style="color:var(--text-dimmer);font-weight:400">⋮</span></div>
+      <div class="term-bg" style="flex:1;font-size:11.5px">
+        <div><span class="p">➜</span> <span class="c">roam-fix-login</span> <span class="t">git:(</span><span class="p">roam/fix-login</span><span class="t">)</span> claude</div>
+        <div class="t">CL Welcome to Claude Code!</div>
+        <div class="d">──────────────────────────</div>
+        <div class="t">&gt; 修复登录页在 Safari 下的 UA 判断…</div>
+        <div class="t">● 已修改 src/login.ts, src/api.ts</div>
+        <div class="t">● 新增 src/util/retry.ts</div>
+        <div class="t">● tests/login.spec.ts 3/3 通过 ✓</div>
+        <div class="d">tokens: 12.4k</div>
+        <div class="p">▌</div>
+      </div>
+      <div style="display:flex;gap:6px;padding:8px 10px;border-top:1px solid var(--border-subtle);background:var(--bg-container);align-items:center">
+        <span class="btn sm"></span><span class="btn sm" style="border-color:var(--blue);color:var(--blue)">⎇ Git</span><span class="btn sm">浏览器</span><span class="btn sm">语音</span>
+        <input class="input" placeholder="输入…" style="height:28px;font-size:12px;flex:1">
+      </div>
+      <div class="tabbar"><span>◎</span><span>≡</span><span class="on">▸</span><span>⋯</span></div>
+    </div>
+    <div class="ph-cap"><b><span class="no">4</span>终端会话页</b>标题栏带 ⎇ 分支 Tag（点击→⑤ Git 面板）；底部工具栏 ⎇Git 入口不变</div>
+  </div>
+
+  <!-- ⑤ Git 面板全屏（对比 main） -->
+  <div class="ph-cell">
+    <div class="phone-frame">
+      <div class="notch"><i></i></div>
+      <div class="m-title"><span class="back">←</span> <span class="mono" style="font-size:13px">⎇ roam/fix-login</span> <span class="mono" style="font-size:11px;color:var(--text-dim)">↑3↓0</span><span class="tag cyan" style="font-size:10.5px;height:17px">worktree</span><span style="flex:1"></span><span style="color:var(--text-dimmer);font-weight:400">⟳</span></div>
+      <div style="padding:8px 12px 0;font-size:11.5px;color:var(--text-dimmer)">基于 <span class="mono">main</span> · 主仓库 ~/codes/app</div>
+      <div style="padding:9px 12px"><div class="segmented" style="width:100%"><button style="flex:1">改动</button><button class="on" style="flex:1">对比 main <span class="badge-n">3</span></button></div></div>
+      <div style="flex:1;overflow:hidden">
+        <div style="padding:2px 12px 4px;font-size:12px;color:var(--text-dim)">3 文件 <span class="mono"><span style="color:var(--green)">+120</span> <span style="color:var(--red)">−45</span></span></div>
+        <div class="fstat" style="background:rgba(255,255,255,.04)"><span class="st M">M</span><span class="fp" style="font-size:12px">src/login.ts</span><span class="pm"><span class="p">+80</span><span class="m">−20</span></span></div>
+        <div class="fstat"><span class="st M">M</span><span class="fp" style="font-size:12px">src/api.ts</span><span class="pm"><span class="p">+30</span><span class="m">−25</span></span></div>
+        <div class="fstat"><span class="st A">A</span><span class="fp" style="font-size:12px">src/util/retry.ts</span><span class="pm"><span class="p">+10</span></span></div>
+        <div class="diff" style="border-top:1px solid var(--border-subtle);margin-top:6px;font-size:11px">
+          <div class="hunk">@@ -12,7 +12,9 @@</div>
+          <div class="del">-  if (safari) {</div>
+          <div class="add">+  if (isSafari(ua)) {</div>
+          <div class="add">+    legacyLogin({ retry: true })</div>
+          <div class="ctx">   }</div>
+        </div>
+      </div>
+      <div style="padding:9px 12px;border-top:1px solid var(--border-subtle);display:flex;gap:8px">
+        <span class="btn primary" style="flex:1;justify-content:center;height:34px">合并回 main ▾</span>
+        <span class="btn" style="height:34px">管理</span>
+      </div>
+      <div class="tabbar"><span>◎</span><span>≡</span><span class="on">▸</span><span>⋯</span></div>
+    </div>
+    <div class="ph-cap"><b><span class="no">5</span>Git 面板全屏（= W3 手机态）</b>Segmented 全宽；底部操作条固定；点文件全屏看 diff</div>
+  </div>
+
+  <!-- ⑥ Worktree 管理全屏 -->
+  <div class="ph-cell">
+    <div class="phone-frame">
+      <div class="notch"><i></i></div>
+      <div class="m-title"><span class="back">←</span> Worktree · app</div>
+      <div style="padding:9px 12px;display:flex;gap:8px;border-bottom:1px solid var(--border-subtle)">
+        <span class="btn primary sm">＋ 新建 ▾</span>
+        <input class="input" placeholder="筛选…" style="height:26px;font-size:12px;flex:1">
+      </div>
+      <div style="flex:1;overflow:hidden">
+        <div class="wt-row" style="padding:11px 13px">
+          <div class="r1"><span class="branch" style="font-size:12.5px">roam/fix-login</span><span style="margin-left:auto" class="tag green" style="font-size:10.5px">fix-login ●</span></div>
+          <div class="r2" style="font-size:11.5px">基于 main · <b class="hot-b">↑3</b>↓0 · <b class="hot-y">改动2</b> · 2小时前</div>
+          <div class="r3"><span class="btn sm">进入会话</span><span class="btn sm">⋯ 更多</span></div>
+        </div>
+        <div class="wt-row" style="padding:11px 13px;background:rgba(210,153,34,.03)">
+          <div class="r1"><span class="branch" style="font-size:12.5px">roam/try-idea</span><span style="margin-left:auto" class="tag yellow" style="font-size:10.5px">孤儿</span></div>
+          <div class="r2" style="font-size:11.5px">基于 main · ↑0<b>↓5</b> · 无改动 · 6天前</div>
+          <div class="r3"><span class="btn sm">新建进入</span><span class="btn sm">⋯ 更多</span></div>
+        </div>
+        <div class="wt-row" style="padding:11px 13px">
+          <div class="r1"><span class="branch" style="font-size:12.5px">hotfix-x</span><span style="margin-left:auto" class="tag ghost" style="font-size:10.5px">⧉ 外部</span></div>
+          <div class="r2" style="font-size:11.5px">基于 main · <b class="hot-b">↑1</b>↓0 · <b class="hot-y">改动1</b> · 30分钟前</div>
+          <div class="r3"><span class="btn sm">新建进入</span><span class="btn sm">⋯ 更多</span></div>
+        </div>
+        <div class="wt-row" style="padding:11px 13px;background:rgba(210,153,34,.03)">
+          <div class="r1"><span class="branch" style="font-size:12.5px;color:var(--text-dimmer)">_20260620153045</span><span style="margin-left:auto" class="tag yellow" style="font-size:10.5px">旧格式</span></div>
+          <div class="r2" style="font-size:11.5px">无改动 · 21天前</div>
+          <div class="r3"><span class="btn sm">新建进入</span><span class="btn sm danger">删除</span></div>
+        </div>
+        <!-- ⋯ 更多 ActionSheet -->
+        <div style="margin:12px 10px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:14px;overflow:hidden">
+          <div style="padding:8px 14px;font-size:11px;color:var(--text-dimmer);border-bottom:1px solid var(--border-subtle)">roam/fix-login 的更多操作 ↓（ActionSheet）</div>
+          <div style="padding:11px 14px;border-bottom:1px solid var(--border-subtle);font-size:13px">对比 base</div>
+          <div style="padding:11px 14px;border-bottom:1px solid var(--border-subtle);font-size:13px">合并回 main（merge / squash / rebase）</div>
+          <div style="padding:11px 14px;font-size:13px;color:var(--red)">删除 worktree…</div>
+        </div>
+      </div>
+      <div class="tabbar"><span>◎</span><span>≡</span><span class="on">▸</span><span>⋯</span></div>
+    </div>
+    <div class="ph-cap"><b><span class="no">6</span>Worktree 管理全屏（= W4 手机态）</b>行操作只留主动作，其余收进 ⋯ ActionSheet（下方展开示意）</div>
+  </div>
+
+  <!-- ⑦ 竞赛对比台 -->
+  <div class="ph-cell">
+    <div class="phone-frame">
+      <div class="notch"><i></i></div>
+      <div class="m-title"><span class="back">←</span> RACE dark-mode <span class="hint">×3 · 基于 main</span><span style="flex:1"></span><span style="color:var(--red);font-size:12px;font-weight:400">全部清理</span></div>
+      <div style="flex:1;overflow:hidden;padding:10px 12px;display:flex;flex-direction:column;gap:9px">
+        <div style="border:1px solid var(--blue);border-radius:12px;background:var(--bg-container);padding:11px 12px;box-shadow:0 0 0 1px rgba(88,166,255,.2)">
+          <div style="display:flex;gap:8px;font-weight:700;font-size:13px"><span style="color:var(--blue)">Claude -a</span><span style="margin-left:auto" class="tag green">● 完成</span></div>
+          <div class="mono" style="font-size:11px;color:var(--cyan);margin:5px 0">⎇ roam/dark-mode-a</div>
+          <div style="display:flex;gap:12px;font-size:11.5px;color:var(--text-dim)"><span><b style="color:var(--text-bright)">4</b> 文件</span><span class="mono"><span style="color:var(--green)">+210</span><span style="color:var(--red)">−12</span></span><span><b style="color:var(--text-bright)">2</b> 提交</span><span style="color:var(--green)">✓ 测试</span></div>
+          <div style="display:flex;gap:7px;margin-top:8px"><span class="btn sm">看 diff</span><span class="btn sm">进会话</span></div>
+        </div>
+        <div style="border:1px solid var(--border);border-radius:12px;background:var(--bg-container);padding:11px 12px">
+          <div style="display:flex;gap:8px;font-weight:700;font-size:13px"><span style="color:var(--blue)">Claude -b</span><span style="margin-left:auto" class="tag green">● 完成</span></div>
+          <div class="mono" style="font-size:11px;color:var(--cyan);margin:5px 0">⎇ roam/dark-mode-b</div>
+          <div style="display:flex;gap:12px;font-size:11.5px;color:var(--text-dim)"><span><b style="color:var(--text-bright)">2</b> 文件</span><span class="mono"><span style="color:var(--green)">+95</span><span style="color:var(--red)">−8</span></span><span><b style="color:var(--text-bright)">1</b> 提交</span></div>
+          <div style="display:flex;gap:7px;margin-top:8px"><span class="btn sm">看 diff</span><span class="btn sm">进会话</span></div>
+        </div>
+        <div style="border:1px solid var(--border);border-radius:12px;background:var(--bg-container);padding:11px 12px">
+          <div style="display:flex;gap:8px;font-weight:700;font-size:13px"><span style="color:var(--green)">Codex -c</span><span style="margin-left:auto" class="tag blue">进行中</span></div>
+          <div class="mono" style="font-size:11px;color:var(--cyan);margin:5px 0">⎇ roam/dark-mode-c</div>
+          <div style="display:flex;gap:12px;font-size:11.5px;color:var(--text-dim)"><span><b style="color:var(--text-bright)">3</b> 文件</span><span class="mono"><span style="color:var(--green)">+150</span><span style="color:var(--red)">−40</span></span><span><b style="color:var(--text-bright)">0</b> 提交</span></div>
+          <div style="display:flex;gap:7px;margin-top:8px"><span class="btn sm">看 diff</span><span class="btn sm">进会话</span></div>
+        </div>
+      </div>
+      <div style="padding:10px 12px;border-top:1px solid var(--border-subtle)">
+        <span class="btn" style="width:100%;justify-content:center;background:linear-gradient(135deg,#b8860b,#d4a017);border:0;color:#fff;height:36px">选 Claude -a 为赢家</span>
+      </div>
+      <div class="tabbar"><span>◎</span><span>≡</span><span class="on">▸</span><span>⋯</span></div>
+    </div>
+    <div class="ph-cap"><b><span class="no">7</span>竞赛对比台（= W6 手机态）</b>选手纵排卡片；点卡选中（描蓝边），底部固定赢家操作条随选中联动</div>
+  </div>
+
+  <!-- ⑧ 关闭三选一 -->
+  <div class="ph-cell">
+    <div class="phone-frame">
+      <div class="notch"><i></i></div>
+      <div class="m-title">会话</div>
+      <div style="flex:1;position:relative;overflow:hidden">
+        <div style="padding:4px 8px">
+          <div class="sess-row" style="padding:9px 8px"><i class="dot g"></i><div class="col"><div class="line1"><span class="name">fix-login</span><span class="tag cyan">⎇</span><span class="tag blue">CL</span></div><div class="meta">2小时前 · 1分钟前</div></div></div>
+        </div>
+        <div class="sheet-dim"></div>
+        <div class="sheet" style="bottom:12px">
+          <div style="padding:14px 16px 0;font-weight:700;font-size:15px">关闭会话 fix-login？</div>
+          <div style="padding:12px 16px;display:flex;flex-direction:column;gap:9px">
+            <div style="font-size:12.5px;color:var(--text-dim);line-height:1.7;background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:9px;padding:9px 11px">
+              worktree <span class="mono" style="color:var(--cyan)">⎇ roam/fix-login</span> 还有 <b style="color:var(--yellow)">2 个未提交改动</b>、<b style="color:var(--blue)">3 个未合并提交</b>
+            </div>
+            <div class="radio on"><span class="r"></span><span class="rt"><b>保留 worktree</b><span>稍后可在管理页处理</span></span></div>
+            <div class="radio"><span class="r"></span><span class="rt"><b>合并回 main 并删除</b><span>未提交改动先自动提交为 wip</span></span></div>
+            <div class="radio" style="border-color:rgba(248,81,73,.35)"><span class="r"></span><span class="rt"><b style="color:var(--red)">丢弃改动并删除 </b><span>永久删除，不可恢复</span></span></div>
+          </div>
+          <div style="padding:4px 16px 14px;display:flex;gap:10px">
+            <span class="btn" style="flex:1;justify-content:center">取消</span>
+            <span class="btn" style="flex:1;justify-content:center;background:var(--red);border-color:var(--red);color:#fff">关闭会话</span>
+          </div>
+        </div>
+      </div>
+      <div class="tabbar"><span>◎</span><span>≡</span><span class="on">▸</span><span>⋯</span></div>
+    </div>
+    <div class="ph-cap"><b><span class="no">8</span>收尾三选一（= W7 手机态）</b>底部弹层（Bottom Sheet）形态；默认保留、丢弃红色警示</div>
+  </div>
+
+</div>
+
+<div class="spec-note" style="border-top:1px solid var(--border-subtle)">
+  旅程与桌面一致：概览① → 会话②（新建③）→ 终端④ → Git 面板⑤（Review+合并）→ 管理⑥（收尾清理）→ 对比台⑦（竞赛收场）→ 关闭⑧（三选一兜底）。
+  手机端全部复用底部 Tab 框架与既有导航深度，不新增一级入口。
+</div>
+</body>
+</html>

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>W2 · 会话列表：仓库 → worktree 分组</title>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body>
+<div class="spec-bar">
+  <b>W2 · 会话列表分组</b><span class="spec-tag">仓库 → worktree · 桌面 + 手机</span>
+  <span class="spacer"></span>
+  <a href="w1-new-session.html">← W1</a><a href="index.html">↑ 索引</a><a href="w3-git-panel.html">W3 →</a>
+</div>
+<div class="spec-note">同仓库 ≥2 个 worktree 会话聚成分组（组头带 <em>[管理]</em> 入口）；竞赛组头带 RACE 与 <em>[对比台]</em>；普通会话照旧平铺。行结构 = 现有行 + 青色 ⎇ 分支 Tag。</div>
+
+<div class="stage">
+  <!-- 桌面 -->
+  <div class="app-frame" style="height:760px">
+    <div class="sider">
+      <div class="brand">Roam</div>
+      <div class="nav-item">◎ 概览</div>
+      <div class="nav-item">≡ 任务</div>
+      <div class="nav-item on">▸ 会话</div>
+      <div class="nav-item">⬡ 蜂群</div>
+      <div class="nav-item">⋯ 更多</div>
+    </div>
+    <div class="main-col">
+      <div class="page-pad">
+        <div class="card">
+          <div class="c-head">会话<span style="flex:1"></span><span class="btn primary sm">＋ 新建 <span class="caret">▾</span></span></div>
+          <div style="padding:8px 10px 12px">
+
+            <!-- 仓库分组：app -->
+            <div class="group-head">
+              <span class="tri">▾</span><span class="repo">app</span>
+              <span class="path">~/codes/app</span>
+              <span class="tag cyan" style="height:18px;font-size:11px">3 worktree</span>
+              <a>管理</a>
+            </div>
+            <div class="group-body">
+              <div class="sess-row active">
+                <i class="dot g"></i>
+                <div class="col">
+                  <div class="line1"><span class="name" style="color:#fff">fix-login</span><span class="tag cyan">⎇ roam/fix-login</span><span class="tag blue">Claude</span></div>
+                  <div class="meta">创建于 2小时前 · 活动 1分钟前</div>
+                </div>
+                <div class="acts"><a class="close">关闭</a></div>
+              </div>
+              <div class="sess-row">
+                <i class="dot y"></i>
+                <div class="col">
+                  <div class="line1"><span class="name">try-idea</span><span class="tag cyan">⎇ roam/try-idea</span><span class="tag green">Codex</span><span class="tag yellow">待输入</span></div>
+                  <div class="meta">创建于 1天前 · 活动 3小时前</div>
+                </div>
+                <div class="acts"><a class="close">关闭</a></div>
+              </div>
+              <div class="sess-row">
+                <i class="dot idle"></i>
+                <div class="col">
+                  <div class="line1"><span class="name">hotfix</span><span class="tag cyan">⎇ hotfix-x</span><span class="tag ghost">⧉ 外部</span></div>
+                  <div class="meta">创建于 30分钟前 · 活动 30分钟前</div>
+                </div>
+                <div class="acts"><a class="close">关闭</a></div>
+              </div>
+            </div>
+
+            <!-- 竞赛分组：blog -->
+            <div class="group-head" style="margin-top:8px">
+              <span class="tri">▾</span><span class="repo">blog</span>
+              <span class="path">~/codes/blog</span>
+              <span class="tag yellow" style="height:18px;font-size:11px">RACE dark-mode ×3</span>
+              <a>对比台</a><a>管理</a>
+            </div>
+            <div class="group-body">
+              <div class="sess-row">
+                <i class="dot g"></i>
+                <div class="col">
+                  <div class="line1"><span class="name">dark-mode-a</span><span class="tag cyan">⎇ roam/dark-mode-a</span><span class="tag blue">Claude</span></div>
+                  <div class="meta">创建于 20分钟前 · 活动 刚刚</div>
+                </div>
+                <div class="acts"><a class="close">关闭</a></div>
+              </div>
+              <div class="sess-row">
+                <i class="dot g"></i>
+                <div class="col">
+                  <div class="line1"><span class="name">dark-mode-b</span><span class="tag cyan">⎇ roam/dark-mode-b</span><span class="tag blue">Claude</span></div>
+                  <div class="meta">创建于 20分钟前 · 活动 2分钟前</div>
+                </div>
+                <div class="acts"><a class="close">关闭</a></div>
+              </div>
+              <div class="sess-row">
+                <i class="dot idle"></i>
+                <div class="col">
+                  <div class="line1"><span class="name">dark-mode-c</span><span class="tag cyan">⎇ roam/dark-mode-c</span><span class="tag green">Codex</span></div>
+                  <div class="meta">创建于 20分钟前 · 活动 8分钟前</div>
+                </div>
+                <div class="acts"><a class="close">关闭</a></div>
+              </div>
+            </div>
+
+            <hr class="hr" style="margin:10px 4px">
+
+            <!-- 平铺普通会话 -->
+            <div class="sess-row">
+              <i class="dot g"></i>
+              <div class="col">
+                <div class="line1"><span class="name">main-shell</span><span class="tag ghost">已连接</span><span class="meta" style="font-size:12px">窗口 2</span></div>
+                <div class="meta">创建于 3天前 · 活动 5分钟前</div>
+              </div>
+              <div class="acts"><a class="close">关闭</a></div>
+            </div>
+            <div class="sess-row">
+              <i class="dot idle"></i>
+              <div class="col">
+                <div class="line1"><span class="name">notes</span><span class="tag ghost">空闲</span><span class="meta" style="font-size:12px">窗口 1</span></div>
+                <div class="meta">创建于 1周前 · 活动 2天前</div>
+              </div>
+              <div class="acts"><a class="close">关闭</a></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 手机 -->
+  <div class="phone-frame" style="height:760px">
+    <div class="notch"><i></i></div>
+    <div style="padding:10px 14px;display:flex;align-items:center">
+      <b style="font-size:16px">会话</b><span style="flex:1"></span><span class="btn primary sm">＋ 新建</span>
+    </div>
+    <div style="flex:1;overflow:hidden;padding:0 8px">
+      <div class="group-head"><span class="tri">▾</span><span class="repo">app</span><span class="tag cyan" style="height:18px;font-size:11px">3</span><a>管理</a></div>
+      <div class="group-body">
+        <div class="sess-row active" style="padding:9px 8px">
+          <i class="dot g"></i>
+          <div class="col">
+            <div class="line1"><span class="name" style="color:#fff">fix-login</span><span class="tag cyan">⎇</span><span class="tag blue">CL</span></div>
+            <div class="meta">2小时前 · 1分钟前</div>
+          </div>
+        </div>
+        <div class="sess-row" style="padding:9px 8px">
+          <i class="dot y"></i>
+          <div class="col">
+            <div class="line1"><span class="name">try-idea</span><span class="tag cyan">⎇</span><span class="tag green">CX</span><span class="tag yellow">待输入</span></div>
+            <div class="meta">1天前 · 3小时前</div>
+          </div>
+        </div>
+        <div class="sess-row" style="padding:9px 8px">
+          <i class="dot idle"></i>
+          <div class="col">
+            <div class="line1"><span class="name">hotfix</span><span class="tag cyan">⎇</span><span class="tag ghost">⧉</span></div>
+            <div class="meta">30分钟前</div>
+          </div>
+        </div>
+      </div>
+      <div class="group-head" style="margin-top:6px"><span class="tri">▸</span><span class="repo">blog</span><span class="tag yellow" style="height:18px;font-size:11px">RACE ×3</span><a>对比台</a></div>
+      <hr class="hr" style="margin:8px 4px">
+      <div class="sess-row" style="padding:9px 8px">
+        <i class="dot g"></i>
+        <div class="col"><div class="line1"><span class="name">main-shell</span><span class="tag ghost">已连接</span></div><div class="meta">3天前 · 5分钟前</div></div>
+      </div>
+      <div class="sess-row" style="padding:9px 8px">
+        <i class="dot idle"></i>
+        <div class="col"><div class="line1"><span class="name">notes</span><span class="tag ghost">空闲</span></div><div class="meta">1周前 · 2天前</div></div>
+      </div>
+    </div>
+    <div class="tabbar"><span>◎</span><span>≡</span><span class="on">▸</span><span>⋯</span></div>
+  </div>
+</div>
+
+<div class="spec-note" style="border-top:1px solid var(--border-subtle)">
+  规则：① 分组仅在同仓库 ≥2 个 worktree 会话时出现，折叠态记 localStorage；② 手机端 ⎇ Tag 只显图标省宽度；
+  ③ 竞赛组头 = RACE 任务名 ×N + [对比台]（→ W6）；④ 组内排序与全局一致（活跃优先）；⑤ 「＋ 新建 ▾」下拉含「新建竞赛…」（→ W5）。
+</div>
+</body>
+</html>

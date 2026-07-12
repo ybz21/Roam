@@ -1,0 +1,397 @@
+/* ═══════════════════════════════════════════════════════════════
+   Roam Worktree v2 — 「VSCode 式纯黑」设计系统
+   方向：像 VSCode 一样 —— 中性纯黑分层、扁平、小圆角、树形缩进导线、
+        编辑器标签页、VSCode git 语义色；进度条为黑色哑光。
+   字体：系统 UI（同 VSCode）· JetBrains Mono（代码/分支）
+   ═══════════════════════════════════════════════════════════════ */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+:root {
+  /* 纯黑分层（VSCode Dark Modern 取向，整体压得更黑） */
+  --ink-0: #000000;          /* 终端/最深 */
+  --ink-1: #0a0a0a;          /* 页面底 */
+  --ink-2: #141414;          /* 侧栏/面板 */
+  --ink-3: #1e1e1e;          /* 编辑器/浮起层 */
+  --hair:  #262626;          /* 分割线 */
+  --hair-lit: #3c3c3c;
+  /* 文字（VSCode 灰阶） */
+  --tx-0: #d4d4d4;
+  --tx-1: #9d9d9d;
+  --tx-2: #6e6e6e;
+  /* 语义色：VSCode git/状态原色 */
+  --aur-a: #d4d4d4;          /* 分支/主文本（银灰） */
+  --aur-b: #9d9d9d;
+  --blue:  #0078d4;          /* VSCode 主按钮蓝 */
+  --focus: #3794ff;          /* 焦点/链接蓝 */
+  --live:  #73c991;          /* git added / 运行中 */
+  --warn:  #e2c08d;          /* git modified / 待输入 */
+  --dngr:  #f48771;          /* git deleted / 危险 */
+  --gold:  #c09a3e;          /* 赢家（压暗香槟） */
+  --claude:#75beff; --codex: #73c991;   /* agent 识别（VSCode 符号蓝/绿） */
+  --grad-aur: linear-gradient(120deg, #e8e8e8, #9d9d9d);
+  --grad-metal: linear-gradient(180deg, #f5f7fa 0%, #c3c9d1 46%, #9aa1ab 56%, #e7ebef 100%);
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-body: var(--font-ui);
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --r-lg: 8px; --r-md: 6px; --r-sm: 4px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { height: 100%; }
+body {
+  min-height: 100%; background: var(--ink-1); color: var(--tx-0);
+  font-family: var(--font-body); font-size: 13px; line-height: 1.55;
+  -webkit-font-smoothing: antialiased; overflow-x: hidden; position: relative;
+}
+main, .page-root { position: relative; z-index: 2; }
+a { color: var(--focus); text-decoration: none; cursor: pointer; }
+a:hover { color: #62aeff; }
+
+h1,h2,h3,.disp { font-family: var(--font-ui); letter-spacing: .01em; }
+.mono { font-family: var(--font-mono); }
+.num { font-family: var(--font-mono); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* ── 规格条（mockup 说明，非产品 UI）───────────────── */
+.spec-bar {
+  position: sticky; top: 0; z-index: 50;
+  display: flex; align-items: center; gap: 14px; padding: 10px 20px;
+  background: rgba(5,5,5,.92); backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--hair); font-size: 12.5px; color: var(--tx-1);
+}
+.spec-bar b { color: #ffffff; font-size: 13px; }
+.spec-bar .chip {
+  font-family: var(--font-mono); font-size: 10.5px; padding: 2px 9px; border-radius: 3px;
+  border: 1px solid var(--hair-lit); color: var(--tx-1); letter-spacing: .06em;
+}
+.spec-bar .sp { flex: 1; }
+.spec-bar a { color: var(--tx-2); } .spec-bar a:hover { color: var(--tx-0); }
+.spec-foot { padding: 14px 20px 40px; font-size: 12px; color: var(--tx-2); max-width: 1280px; margin: 0 auto; line-height: 1.9; position: relative; z-index: 2; }
+.spec-foot em { color: var(--warn); font-style: normal; }
+
+/* ── 舞台 ─────────────────────────────────────────── */
+.stage { position: relative; z-index: 2; padding: 34px 24px; display: flex; gap: 34px; justify-content: center; align-items: flex-start; flex-wrap: wrap; }
+
+/* ── 应用外框 ─────────────────────────────────────── */
+.frame {
+  width: 1220px; max-width: 97vw; height: 760px; position: relative;
+  border-radius: 10px; overflow: hidden; display: flex;
+  background: var(--ink-2);
+  border: 1px solid var(--hair);
+  box-shadow: 0 0 0 1px #000, 0 30px 70px rgba(0,0,0,.7);
+}
+.phone {
+  width: 384px; flex: 0 0 384px; height: 780px; position: relative;
+  border-radius: 30px; overflow: hidden; display: flex; flex-direction: column;
+  background: var(--ink-2);
+  border: 1px solid var(--hair);
+  box-shadow: 0 0 0 6px #0d0d0d, 0 0 0 7px #2c2c2c, 0 30px 70px rgba(0,0,0,.7);
+}
+.phone .notch { height: 26px; flex: 0 0 26px; display: grid; place-items: center; }
+.phone .notch i { width: 84px; height: 6px; border-radius: 99px; background: #222; }
+
+/* ── 导航 Sider（VSCode 侧栏味）───────────────────── */
+.sider {
+  width: 190px; flex: 0 0 190px; display: flex; flex-direction: column; gap: 1px;
+  padding: 16px 8px; border-right: 1px solid var(--hair);
+  background: var(--ink-2);
+}
+.brand {
+  font-weight: 700; font-size: 18px; letter-spacing: .06em;
+  padding: 0 12px 16px; background: var(--grad-metal);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+.brand small { font-size: 9px; letter-spacing: .28em; display: block; color: var(--tx-2); -webkit-text-fill-color: var(--tx-2); font-weight: 500; margin-top: 2px; }
+.nav {
+  display: flex; align-items: center; gap: 10px; padding: 7px 12px; border-radius: 4px;
+  color: var(--tx-1); font-size: 13px; cursor: pointer; position: relative;
+  transition: color .15s, background .15s;
+}
+.nav:hover { color: var(--tx-0); background: #1f1f1f; }
+.nav.on { color: #ffffff; background: #232323; }
+.nav.on::before {
+  content: ''; position: absolute; left: -8px; top: 4px; bottom: 4px; width: 2px;
+  background: #ffffff;
+}
+.nav .ic { width: 17px; text-align: center; opacity: .9; }
+
+/* ── 面板（扁平）─────────────────────────────────── */
+.panel {
+  background: var(--ink-3);
+  border: 1px solid var(--hair); border-radius: var(--r-lg);
+}
+.panel-head {
+  display: flex; align-items: center; gap: 10px; padding: 12px 16px 10px;
+  border-bottom: 1px solid var(--hair);
+  font-weight: 700; font-size: 11px; letter-spacing: .1em; color: #bbbbbb; text-transform: uppercase;
+}
+.panel-head .sub { font-family: var(--font-mono); font-weight: 400; font-size: 11px; color: var(--tx-2); letter-spacing: 0; text-transform: none; }
+
+/* ── 按钮（VSCode 味）─────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  height: 28px; padding: 0 13px; border-radius: 4px; cursor: pointer; white-space: nowrap;
+  font-size: 12.5px; font-weight: 500;
+  color: var(--tx-0); background: #2a2a2a; border: 1px solid #383838;
+  transition: background .15s, border-color .15s;
+}
+.btn:hover { background: #333333; border-color: #454545; }
+.btn.pri {
+  color: #ffffff; border: 1px solid transparent;
+  background: var(--blue);
+}
+.btn.pri:hover { background: #0f82dd; color: #fff; }
+.btn.gold { color: #1d1608; border: 1px solid transparent; background: linear-gradient(180deg, #d0ab52, #b08d38); }
+.btn.gold:hover { filter: brightness(1.06); color: #1d1608; }
+.btn.dngr { color: var(--dngr); }
+.btn.dngr:hover { border-color: rgba(244,135,113,.5); background: rgba(244,135,113,.08); }
+.btn.sm { height: 24px; padding: 0 10px; font-size: 11.5px; border-radius: 3px; }
+.btn .cr { font-size: 9px; opacity: .75; }
+
+/* ── 徽标（VSCode badge 味：小、方、扁）───────────── */
+.pill {
+  display: inline-flex; align-items: center; gap: 5px; height: 19px; padding: 0 7px;
+  border-radius: 3px; font-size: 11px; white-space: nowrap; letter-spacing: .01em;
+  border: 1px solid transparent; font-weight: 500;
+}
+.pill i.d { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.pill.aur  { color: #c5c5c5; background: #252525; border-color: #3a3a3a; font-family: var(--font-mono); }
+.pill.live { color: var(--live); background: rgba(115,201,145,.08); border-color: rgba(115,201,145,.3); }
+.pill.warn { color: var(--warn); background: rgba(226,192,141,.08); border-color: rgba(226,192,141,.3); }
+.pill.dngr { color: var(--dngr); background: rgba(244,135,113,.08); border-color: rgba(244,135,113,.3); }
+.pill.claude { color: var(--claude); background: rgba(117,190,255,.07); border-color: rgba(117,190,255,.28); }
+.pill.codex  { color: var(--codex); background: rgba(115,201,145,.07); border-color: rgba(115,201,145,.28); }
+.pill.ghost { color: var(--tx-2); border-color: var(--hair-lit); }
+.pill.gold { color: #d0ab52; background: rgba(192,154,62,.08); border-color: rgba(192,154,62,.35); }
+
+/* 呼吸活动点 */
+.beacon { width: 8px; height: 8px; border-radius: 50%; background: var(--live); flex: 0 0 8px; position: relative; }
+.beacon::after {
+  content: ''; position: absolute; inset: -4px; border-radius: 50%;
+  border: 1px solid var(--live); opacity: 0; animation: ping 2.2s ease-out infinite;
+}
+@keyframes ping { 0% { transform: scale(.5); opacity: .8; } 70% { transform: scale(1.5); opacity: 0; } 100% { opacity: 0; } }
+.beacon.amber { background: var(--warn); } .beacon.amber::after { border-color: var(--warn); }
+.beacon.off { background: #3c3c3c; } .beacon.off::after { display: none; }
+
+/* ── 输入（VSCode 输入框）─────────────────────────── */
+.inp {
+  width: 100%; height: 30px; padding: 0 10px; border-radius: 3px; outline: none;
+  border: 1px solid #383838; background: #1c1c1c; color: var(--tx-0);
+  font-size: 12.5px; font-family: var(--font-body); transition: border-color .15s;
+}
+.inp:focus { border-color: var(--focus); }
+.inp::placeholder { color: var(--tx-2); }
+textarea.inp { height: auto; padding: 8px 10px; resize: none; line-height: 1.7; }
+.sel { display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+.sel .cr { color: var(--tx-2); font-size: 10px; }
+.lbl { display: block; font-size: 11px; color: var(--tx-1); margin-bottom: 5px; font-weight: 600; letter-spacing: .06em; }
+
+/* ── Segmented（VSCode tab 组）────────────────────── */
+.seg {
+  position: relative; display: inline-flex; padding: 2px; border-radius: 5px;
+  background: #1c1c1c; border: 1px solid #333;
+}
+.seg button {
+  position: relative; z-index: 1; border: 0; background: none; cursor: pointer;
+  padding: 5px 14px; border-radius: 3px; color: var(--tx-2);
+  font-family: var(--font-ui); font-size: 12px; font-weight: 500;
+  display: inline-flex; align-items: center; gap: 7px; transition: color .18s;
+}
+.seg button.on { color: #ffffff; }
+.seg .thumb {
+  position: absolute; top: 2px; bottom: 2px; border-radius: 3px; z-index: 0;
+  background: #333333; border: 1px solid #454545;
+  transition: left .22s cubic-bezier(.6,.1,.2,1), width .22s cubic-bezier(.6,.1,.2,1);
+}
+.cnt {
+  min-width: 16px; height: 16px; padding: 0 5px; border-radius: 99px; font-size: 10px;
+  background: #4d4d4d; color: #ffffff; display: inline-grid; place-items: center;
+  font-family: var(--font-mono);
+}
+
+/* ── 分支航线 = VSCode 树缩进导线 ─────────────────── */
+.route-group { position: relative; padding-left: 4px; }
+.route-head {
+  display: flex; align-items: center; gap: 8px; padding: 8px 8px 6px 2px;
+  font-size: 12.5px; color: var(--tx-1);
+}
+.route-head .node {
+  width: 10px; height: 10px; border-radius: 50%; flex: 0 0 10px;
+  background: radial-gradient(circle at 35% 30%, #e8e8e8, #6e6e6e);
+}
+.route-head .repo { font-weight: 700; font-size: 13px; color: #ffffff; }
+.route-head .path { font-family: var(--font-mono); font-size: 10.5px; color: var(--tx-2); }
+.route-head .act { margin-left: auto; display: flex; gap: 12px; font-size: 12px; }
+.route-body { position: relative; margin-left: 6px; padding-left: 20px; }
+.route-body::before {  /* 缩进导线（indent guide） */
+  content: ''; position: absolute; left: 0; top: -2px; bottom: 12px; width: 1px;
+  background: #333333;
+}
+.route-row { position: relative; }
+.route-row::before { /* 弯头 */
+  content: ''; position: absolute; left: -20px; top: -8px; width: 14px; height: 28px;
+  border-left: 1px solid transparent; border-bottom: 1px solid #333333;
+  border-bottom-left-radius: 8px;
+}
+.route-row::after { /* 航点 */
+  content: ''; position: absolute; left: -8px; top: 17px; width: 5px; height: 5px; border-radius: 50%;
+  background: #8a8a8a;
+}
+
+/* ── 会话行（VSCode 列表行）───────────────────────── */
+.lane {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px; margin: 2px 0;
+  border-radius: 4px; cursor: pointer; border: 1px solid transparent;
+  transition: background .15s;
+}
+.lane:hover { background: #1f1f1f; }
+.lane.on {
+  background: #24313f;            /* VSCode 选中蓝黑 */
+  border-color: #2d4b64;
+}
+.lane .body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.lane .l1 { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.lane .nm { font-weight: 600; font-size: 13px; color: #e8e8e8; }
+.lane .mt { font-size: 11px; color: var(--tx-2); font-family: var(--font-mono); }
+.lane .acts { margin-left: auto; display: flex; gap: 12px; font-size: 12px; flex: 0 0 auto; opacity: .85; }
+
+/* ── worktree 卡（Hub）───────────────────────────── */
+.wt-card {
+  position: relative; border: 1px solid var(--hair-lit); border-radius: 6px; padding: 13px 15px;
+  background: var(--ink-3);
+  transition: border-color .15s, background .15s; overflow: hidden;
+}
+.wt-card:hover { border-color: #4d4d4d; background: #222222; }
+.wt-card::before { /* 顶缘状态条（细、实、扁 — VSCode 味） */
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: #4d4d4d;
+}
+.wt-card.orphan::before { background: var(--warn); }
+.wt-card.ext::before { background: #333333; }
+.wt-card .br { font-family: var(--font-mono); font-size: 13px; font-weight: 500; color: #c5c5c5; }
+.wt-card .br::before { content: '⎇ '; opacity: .6; }
+.wt-card .meta { display: flex; gap: 13px; margin: 8px 0 10px; font-size: 11px; color: var(--tx-2); font-family: var(--font-mono); }
+.wt-card .meta b { color: var(--tx-1); font-weight: 600; }
+.wt-card .meta .up { color: var(--focus); } .wt-card .meta .dirty { color: var(--warn); }
+.wt-card .ops { display: flex; gap: 7px; flex-wrap: wrap; }
+
+/* ── 仪表数字 ─────────────────────────────────────── */
+.gauge { display: flex; flex-direction: column; gap: 2px; }
+.gauge .v { font-family: var(--font-mono); font-weight: 700; font-size: 22px; line-height: 1.1; }
+.gauge .k { font-size: 10px; color: var(--tx-2); letter-spacing: .16em; font-weight: 600; }
+.gauge.aur .v { color: #ffffff; }
+.gauge.gold .v { color: #d0ab52; }
+
+/* ── 终端 ─────────────────────────────────────────── */
+.term {
+  background: var(--ink-0); font-family: var(--font-mono); font-size: 12px; line-height: 1.8;
+  padding: 13px 15px; position: relative; overflow: hidden;
+}
+.term .p { color: #73c991; } .term .c { color: #75beff; } .term .dm { color: #3c3c3c; } .term .t { color: #b5b5b5; }
+.term .cursor { display: inline-block; width: 7px; height: 15px; background: #d4d4d4; vertical-align: -2px; animation: blink 1.1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.term-tabs { display: flex; padding: 0; border-bottom: 1px solid var(--hair); background: var(--ink-2); }
+.ttab {
+  padding: 8px 18px 9px; font-size: 12.5px; color: var(--tx-2);
+  border-right: 1px solid var(--hair); position: relative; background: var(--ink-2);
+}
+.ttab.on { background: var(--ink-0); color: #ffffff; }
+.ttab.on::after { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1.5px; background: var(--blue); }
+.term-bar { display: flex; align-items: center; gap: 13px; padding: 7px 13px; font-size: 11.5px; color: var(--tx-1); border-bottom: 1px solid var(--hair); background: var(--ink-2); }
+
+/* ── Diff（VSCode git 色）─────────────────────────── */
+.diff { font-family: var(--font-mono); font-size: 12px; line-height: 1.65; background: var(--ink-0); }
+.diff > div { padding: 0 14px 0 8px; white-space: pre; display: flex; }
+.diff .no { width: 34px; flex: 0 0 34px; color: #3c3c3c; text-align: right; padding-right: 10px; user-select: none; }
+.diff .hunk { color: #75beff; background: rgba(117,190,255,.05); }
+.diff .add { color: #99d3a9; background: rgba(155,185,85,.1); }
+.diff .add .no { color: rgba(153,211,169,.4); }
+.diff .del { color: #f0a8a8; background: rgba(255,0,0,.12); }
+.diff .del .no { color: rgba(240,168,168,.4); }
+.diff .ctx { color: #7a7a7a; }
+.frow { display: flex; align-items: center; gap: 8px; padding: 6px 13px; font-size: 12px; cursor: pointer; border-left: 2px solid transparent; transition: background .13s; }
+.frow:hover, .frow.on { background: #1f1f1f; border-left-color: #ffffff; }
+.frow .st { font-family: var(--font-mono); font-weight: 700; width: 13px; }
+.frow .st.M { color: var(--warn); } .frow .st.A { color: var(--live); } .frow .st.D { color: var(--dngr); }
+.frow .fp { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); color: var(--tx-1); }
+.frow .pm { font-family: var(--font-mono); font-size: 10.5px; }
+.frow .pm .p { color: var(--live); } .frow .pm .m { color: var(--dngr); margin-left: 6px; }
+
+/* ── 进度条 / 赛道 —— 黑色哑光 ────────────────────
+   要求明确：进度条也是黑色。深炭填充 + 1px 银顶光，
+   领跑端一粒白色游标，不用彩色。 */
+.track { position: relative; height: 4px; border-radius: 2px; overflow: visible; background: #1c1c1c; box-shadow: 0 0 0 1px #2c2c2c; }
+.track i {
+  position: absolute; top: 0; bottom: 0; left: 0; border-radius: 2px;
+  background: linear-gradient(180deg, #454545, #111111);
+  box-shadow: 0 1px 0 rgba(255,255,255,.25) inset;
+}
+.track.done i { width: 100%; }
+.track.run i { width: 62%; }
+.track.run i::after {
+  content: ''; position: absolute; right: -3px; top: 50%; width: 6px; height: 6px; margin-top: -3px;
+  border-radius: 50%; background: #ffffff; box-shadow: 0 0 8px rgba(255,255,255,.7);
+  animation: dash 1.2s ease-in-out infinite alternate;
+}
+.track.done i::after {
+  content: ''; position: absolute; right: -2px; top: 50%; width: 4px; height: 4px; margin-top: -2px;
+  border-radius: 50%; background: #c5c5c5;
+}
+@keyframes dash { from { transform: translateX(-5px); opacity:.6 } to { transform: translateX(3px); opacity:1 } }
+
+/* ── 浮层（VSCode quick-input 味）─────────────────── */
+.dim { position: absolute; inset: 0; z-index: 20; background: rgba(0,0,0,.55); }
+.modal {
+  position: absolute; left: 50%; top: 56px; transform: translateX(-50%); z-index: 21;
+  width: 460px; max-width: 94%; border-radius: 6px; overflow: hidden;
+  background: #1f1f1f;
+  border: 1px solid #454545;
+  box-shadow: 0 8px 32px rgba(0,0,0,.7);
+  animation: rise .25s ease backwards;
+}
+.modal .mh {
+  display: flex; align-items: center; padding: 15px 18px 0;
+  font-weight: 700; font-size: 14.5px;
+}
+.modal .mh .x { margin-left: auto; color: var(--tx-2); cursor: pointer; font-size: 13px; }
+.modal .mb { padding: 13px 18px; display: flex; flex-direction: column; gap: 12px; }
+.modal .mf { padding: 3px 18px 16px; display: flex; justify-content: flex-end; gap: 9px; }
+@keyframes rise { from { opacity: 0; transform: translateX(-50%) translateY(10px); } }
+.overlay-panel {
+  position: absolute; inset: 24px; z-index: 21; border-radius: 8px; overflow: hidden;
+  background: #161616;
+  border: 1px solid #454545;
+  box-shadow: 0 16px 60px rgba(0,0,0,.8);
+  display: flex; flex-direction: column;
+  animation: riseP .3s ease backwards;
+}
+@keyframes riseP { from { opacity: 0; transform: translateY(10px); } }
+
+/* 单选卡 */
+.opt { display: flex; gap: 10px; padding: 11px 13px; border: 1px solid #383838; border-radius: 5px; cursor: pointer; transition: all .14s; align-items: flex-start; background: #1c1c1c; }
+.opt:hover { border-color: #4d4d4d; }
+.opt.on { border-color: var(--focus); background: #24313f; }
+.opt .r { width: 15px; height: 15px; border-radius: 50%; border: 1.5px solid var(--tx-2); flex: 0 0 15px; margin-top: 2px; position: relative; transition: border-color .14s; }
+.opt.on .r { border-color: var(--focus); }
+.opt.on .r::after { content: ''; position: absolute; inset: 3px; border-radius: 50%; background: var(--focus); }
+.opt b { display: block; font-size: 13px; font-weight: 600; margin-bottom: 2px; color: #e8e8e8; }
+.opt span { font-size: 11.5px; color: var(--tx-2); }
+
+/* ── 进场编排（克制）──────────────────────────────── */
+.in { animation: enter .4s ease backwards; }
+@keyframes enter { from { opacity: 0; transform: translateY(8px); } }
+.d1 { animation-delay: .04s; } .d2 { animation-delay: .09s; } .d3 { animation-delay: .14s; }
+.d4 { animation-delay: .19s; } .d5 { animation-delay: .24s; } .d6 { animation-delay: .29s; }
+
+/* ── 赢家框：静态香槟描边（去流光，VSCode 式克制）── */
+.champ { position: relative; border-radius: 7px; padding: 1px; background: linear-gradient(180deg, #c09a3e, #6e5a25); }
+.champ > .inner { border-radius: 6px; background: var(--ink-3); height: 100%; }
+
+/* misc */
+.hr { border: 0; border-top: 1px solid var(--hair); }
+.hint { font-size: 11.5px; color: var(--tx-2); }
+.hint.warn { color: var(--warn); }
+.kbd { font-family: var(--font-mono); font-size: 10px; border: 1px solid #454545; border-bottom-width: 2px; border-radius: 3px; padding: 1px 6px; color: var(--tx-1); background: #1c1c1c; }
+.tabbar { flex: 0 0 54px; border-top: 1px solid var(--hair); background: #101010; display: flex; align-items: center; justify-content: space-around; }
+.tabbar span { font-size: 18px; opacity: .38; transition: opacity .2s; }
+.tabbar span.on { opacity: 1; }

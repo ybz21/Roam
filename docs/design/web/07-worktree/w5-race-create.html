@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>W5 · 竞赛创建弹窗</title>
+<link rel="stylesheet" href="mock.css">
+<style>
+  .racer {
+    width: 118px; border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 10px 8px; position: relative; background: var(--bg-elevated);
+    display: flex; flex-direction: column; gap: 6px; align-items: center;
+  }
+  .racer .x { position: absolute; top: 5px; right: 8px; color: var(--text-dimmer); font-size: 11px; cursor: pointer; }
+  .racer .ag { font-size: 13px; font-weight: 700; }
+  .racer .ag.cl { color: var(--blue); } .racer .ag.cx { color: var(--green); }
+  .racer .sfx { font-family: var(--mono); font-size: 11.5px; color: var(--text-dimmer); }
+  .racer.add {
+    border-style: dashed; justify-content: center; color: var(--text-dimmer); cursor: pointer; min-height: 74px;
+  }
+  .racer.add:hover { border-color: var(--blue); color: var(--blue); }
+</style>
+</head>
+<body>
+<div class="spec-bar">
+  <b>W5 · 竞赛创建弹窗</b><span class="spec-tag">一个 prompt × N 选手 × N worktree</span>
+  <span class="spacer"></span>
+  <a href="w4-worktree-drawer.html">← W4</a><a href="index.html">↑ 索引</a><a href="w6-race-compare.html">W6 →</a>
+</div>
+<div class="spec-note">入口：W2「＋ 新建 ▾」下拉「新建竞赛…」。提交后纯编排：逐选手 建worktree → 建会话 → 发prompt → <span class="mono">Race Service 落库标组；失败单独重试不拖累其他选手。</div>
+
+<div class="stage">
+  <div class="app-frame" style="height:680px">
+    <div class="sider">
+      <div class="brand">Roam</div>
+      <div class="nav-item">◎ 概览</div>
+      <div class="nav-item">≡ 任务</div>
+      <div class="nav-item on">▸ 会话</div>
+      <div class="nav-item">⬡ 蜂群</div>
+      <div class="nav-item">⋯ 更多</div>
+    </div>
+    <div class="main-col"><div class="page-pad"><div class="card" style="height:100%"></div></div></div>
+
+    <div class="dim"></div>
+    <div class="modal" style="width:540px;top:52px">
+      <div class="m-head">RACE 新建竞赛<span class="x">✕</span></div>
+      <div class="m-body">
+        <div style="display:flex;gap:10px">
+          <div style="flex:1">
+            <span class="field-label">任务名</span>
+            <input class="input" value="fix-login">
+          </div>
+          <div style="flex:1.3">
+            <span class="field-label">仓库</span>
+            <div style="display:flex">
+              <input class="input" value="~/codes/app" style="border-radius:7px 0 0 7px">
+              <span class="btn" style="height:34px;border-radius:0 7px 7px 0;border-left:0">浏览</span>
+            </div>
+          </div>
+        </div>
+        <div>
+          <span class="field-label">基于（start-from）</span>
+          <div class="select"><span><span class="mono">main</span> <span class="hint">(默认分支)</span></span><span class="caret">▾</span></div>
+        </div>
+        <div>
+          <span class="field-label">选手（每人一个隔离 worktree + 会话，上限 5）</span>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <div class="racer"><span class="x">✕</span><span class="ag cl">Claude</span><span class="sfx">roam/fix-login-a</span></div>
+            <div class="racer"><span class="x">✕</span><span class="ag cl">Claude</span><span class="sfx">roam/fix-login-b</span></div>
+            <div class="racer"><span class="x">✕</span><span class="ag cx">Codex</span><span class="sfx">roam/fix-login-c</span></div>
+            <div class="racer add">＋ 添加选手<br><span style="font-size:11px">Claude / Codex</span></div>
+          </div>
+        </div>
+        <div>
+          <span class="field-label">Prompt（发给每位选手的同一道题）</span>
+          <textarea class="input" rows="4">修复登录页在 Safari 下 UA 判断失效的问题：
+- Safari 16- 不支持 credential API，需要走回退路径
+- 补一个带重试的请求封装
+- 跑通 tests/login.spec.ts</textarea>
+        </div>
+        <div class="hint" style="display:flex;align-items:center;gap:6px">
+          将创建 <b style="color:var(--text-bright)">3 个 worktree + 3 个 agent 会话</b>，并行消耗相应配额
+        </div>
+      </div>
+      <div class="m-foot">
+        <span class="btn">取消</span><span class="btn primary">开赛</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="spec-note" style="border-top:1px solid var(--border-subtle)">
+  组件：选手卡自绘（点 ＋ 弹 agent 类型菜单），后缀 -a/-b/-c 自动分配并实时预览分支名。
+  提交后自动跳 W2，竞赛组已聚合（组头 RACE fix-login ×3 + [对比台] → W6）。第 6 个选手起 ＋ 卡置灰提示上限。
+</div>
+</body>
+</html>

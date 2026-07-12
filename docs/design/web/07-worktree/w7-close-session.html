@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>W7 · 会话关闭钩子：收尾三选一</title>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body>
+<div class="spec-bar">
+  <b>W7 · 收尾三选一</b><span class="spec-tag">关闭 worktree 会话时的 Modal</span>
+  <span class="spacer"></span>
+  <a href="w6-race-compare.html">← W6</a><a href="index.html">↑ 索引</a><a href="w1-new-session.html">W1 ↺</a>
+</div>
+<div class="spec-note">仅当 worktree <em>有价值</em>（改动&gt;0 或 ahead&gt;0）才弹这层；干净的保持现有 Popconfirm、满足安全条件时提供显式勾选「随会话删除」。默认选最不具破坏性的「保留」。</div>
+
+<div class="stage">
+  <div class="app-frame" style="height:620px">
+    <div class="sider">
+      <div class="brand">Roam</div>
+      <div class="nav-item">◎ 概览</div>
+      <div class="nav-item">≡ 任务</div>
+      <div class="nav-item on">▸ 会话</div>
+      <div class="nav-item">⬡ 蜂群</div>
+      <div class="nav-item">⋯ 更多</div>
+    </div>
+    <div class="main-col">
+      <div class="page-pad">
+        <div class="card">
+          <div class="c-head">会话</div>
+          <div style="padding:8px">
+            <div class="sess-row">
+              <i class="dot g"></i>
+              <div class="col">
+                <div class="line1"><span class="name">fix-login</span><span class="tag cyan">⎇ roam/fix-login</span><span class="tag blue">Claude</span></div>
+                <div class="meta">创建于 2小时前 · 活动 1分钟前</div>
+              </div>
+              <div class="acts"><a class="close" style="text-decoration:underline">关闭 ←</a></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dim"></div>
+    <div class="modal" style="width:440px;top:110px">
+      <div class="m-head">关闭会话 fix-login？<span class="x">✕</span></div>
+      <div class="m-body">
+        <div style="font-size:13px;color:var(--text-dim);line-height:1.7;background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:9px;padding:10px 12px">
+          该会话的 worktree <span class="mono" style="color:var(--cyan)">⎇ roam/fix-login</span> 还有
+          <b style="color:var(--yellow)">2 个未提交改动</b>、<b style="color:var(--blue)">3 个未合并提交</b>。
+        </div>
+
+        <div class="radio on">
+          <span class="r"></span>
+          <span class="rt"><b>保留 worktree</b><span>只关会话，稍后可在 Worktree 管理页继续处理</span></span>
+        </div>
+        <div class="radio">
+          <span class="r"></span>
+          <span class="rt"><b>合并回 main 并删除 <span class="btn sm" style="margin-left:4px">squash <span class="caret">▾</span></span></b><span>未提交改动会先自动提交为一笔 wip</span></span>
+        </div>
+        <div class="radio" style="border-color:rgba(248,81,73,.35)">
+          <span class="r"></span>
+          <span class="rt"><b style="color:var(--red)">丢弃改动并删除 </b><span>worktree、分支、未提交改动一并永久删除</span></span>
+        </div>
+      </div>
+      <div class="m-foot">
+        <span class="btn">取消</span><span class="btn" style="background:var(--red);border-color:var(--red);color:#fff">关闭会话</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="spec-note" style="border-top:1px solid var(--border-subtle)">
+  组件：Modal + 自绘 Radio 卡（Antd Radio 语义）。竞赛成员会话叠加现有蜂群拦截：先「这是竞赛 fix-login 的选手」提示，再进此三选一。
+  「合并并删除」失败（冲突）时回落为「保留」，并弹 W4 的冲突指引。
+</div>
+<script>
+document.querySelectorAll('.radio').forEach(r => r.onclick = () => {
+  document.querySelectorAll('.radio').forEach(x => x.classList.remove('on'));
+  r.classList.add('on');
+});
+</script>
+</body>
+</html>

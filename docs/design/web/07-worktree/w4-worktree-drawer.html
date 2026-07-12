@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>W4 · Worktree 管理抽屉</title>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body>
+<div class="spec-bar">
+  <b>W4 · Worktree 管理抽屉</b><span class="spec-tag">核心新页面 · Drawer 480px / 手机全屏</span>
+  <span class="spacer"></span>
+  <a href="w3-git-panel.html">← W3</a><a href="index.html">↑ 索引</a><a href="w5-race-create.html">W5 →</a>
+</div>
+<div class="spec-note">关联徽章四态：<em>活会话</em> / <em>孤儿</em> / <em>⧉ 外部创建</em> / <em>旧格式</em>。有货（改动&gt;0 或 ↑&gt;0）的数字着色提示「有货未收」。入口：W2 组头 [管理]、W3 徽标/底部按钮。</div>
+
+<div class="stage">
+  <!-- 桌面：抽屉盖在终端上 -->
+  <div class="app-frame" style="height:780px">
+    <div class="main-col">
+      <div class="term-tabs"><span class="tt on">fix-login</span><span class="tt">main-shell</span></div>
+      <div class="term-bg">
+        <div><span class="p">➜</span> <span class="c">roam-fix-login</span> <span class="t">git:(</span><span class="p">roam/fix-login</span><span class="t">)</span></div>
+        <div class="d">…</div>
+      </div>
+    </div>
+    <div class="dim"></div>
+    <div class="drawer">
+      <div class="d-head">
+        Worktree · app <span class="hint mono" style="font-weight:400">~/codes/app</span>
+        <span class="x">✕</span>
+      </div>
+      <div style="padding:11px 16px;display:flex;gap:10px;border-bottom:1px solid var(--border-subtle)">
+        <span class="btn primary sm">＋ 新建 worktree <span class="caret">▾</span></span>
+        <input class="input" placeholder="筛选分支 / 会话…" style="height:26px;font-size:12px;flex:1">
+      </div>
+      <div style="flex:1;overflow:auto">
+
+        <div class="wt-row">
+          <div class="r1">
+            <span class="branch">roam/fix-login</span>
+            <span style="margin-left:auto" class="tag green">fix-login <i class="dot g" style="width:6px;height:6px;flex-basis:6px"></i></span>
+          </div>
+          <div class="r2">基于 <b class="mono">main</b> · <b class="hot-b">↑3</b> ↓0 · <b class="hot-y">改动 2</b> · 最近提交 2小时前</div>
+          <div class="r3">
+            <span class="btn sm">进入会话</span><span class="btn sm">对比</span>
+            <span class="btn sm primary">合并回 main <span class="caret">▾</span></span>
+            <span class="btn sm danger">删除</span>
+          </div>
+        </div>
+
+        <div class="wt-row" style="background:rgba(210,153,34,.03)">
+          <div class="r1">
+            <span class="branch">roam/try-idea</span>
+            <span style="margin-left:auto" class="tag yellow">无关联会话</span>
+          </div>
+          <div class="r2">基于 <b class="mono">main</b> · ↑0 <b>↓5</b> · 无改动 · 最近提交 6天前</div>
+          <div class="r3">
+            <span class="btn sm">新建会话进入</span><span class="btn sm">对比</span>
+            <span class="btn sm">合并 <span class="caret">▾</span></span>
+            <span class="btn sm danger">删除</span>
+          </div>
+        </div>
+
+        <div class="wt-row">
+          <div class="r1">
+            <span class="branch">hotfix-x</span>
+            <span style="margin-left:auto" class="tag ghost">⧉ 外部创建</span>
+          </div>
+          <div class="r2">基于 <b class="mono">main</b> · <b class="hot-b">↑1</b> ↓0 · <b class="hot-y">改动 1</b> · 最近提交 30分钟前</div>
+          <div class="r3">
+            <span class="btn sm">新建会话进入</span><span class="btn sm">对比</span>
+            <span class="btn sm">合并 <span class="caret">▾</span></span>
+            <span class="btn sm danger">删除</span>
+          </div>
+        </div>
+
+        <div class="wt-row" style="background:rgba(210,153,34,.03)">
+          <div class="r1">
+            <span class="branch" style="color:var(--text-dimmer)">_20260620153045</span>
+            <span style="margin-left:auto" class="tag yellow">旧格式</span>
+          </div>
+          <div class="r2">基于 <b class="mono">?</b> · 无改动 · 最近提交 21天前</div>
+          <div class="r3">
+            <span class="btn sm">新建会话进入</span>
+            <span class="btn sm danger">删除</span>
+          </div>
+        </div>
+
+      </div>
+      <div style="padding:9px 16px;border-top:1px solid var(--border-subtle)" class="hint">4 个 worktree · 5s 自动刷新 · 外部增删刷新即现；残留清理走显式按钮</div>
+    </div>
+
+    <!-- 删除确认弹层（叠加展示脏删除保护） -->
+    <div class="modal" style="top:200px;width:400px;z-index:8;left:38%">
+      <div class="m-head">删除 worktree roam/fix-login？<span class="x">✕</span></div>
+      <div class="m-body">
+        <div style="font-size:13px;color:var(--text-dim);line-height:1.7">
+          以下内容将<b style="color:var(--red)">永久丢失</b>：<br>
+          · <b class="hot-y" style="color:var(--yellow)">2 个未提交改动</b>（src/api.ts, src/util/retry.ts）<br>
+          · <b style="color:var(--blue)">3 个未合并提交</b>（未合并到 main）
+        </div>
+        <label style="display:flex;gap:8px;font-size:13px;align-items:center">
+          <input type="checkbox" checked style="accent-color:var(--blue-deep)">同时删除本地分支 <span class="mono" style="color:var(--cyan)">roam/fix-login</span>
+        </label>
+      </div>
+      <div class="m-foot"><span class="btn">取消</span><span class="btn" style="background:var(--red);border-color:var(--red);color:#fff">仍要删除</span></div>
+    </div>
+  </div>
+
+  <!-- 手机全屏 + 空态 -->
+  <div style="display:flex;flex-direction:column;gap:28px">
+    <div class="phone-frame" style="height:520px">
+      <div class="notch"><i></i></div>
+      <div class="d-head" style="padding:10px 14px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border-subtle);font-weight:700">
+        ← Worktree · app<span class="x" style="margin-left:auto;color:var(--text-dimmer)"></span>
+      </div>
+      <div style="padding:9px 12px;display:flex;gap:8px;border-bottom:1px solid var(--border-subtle)">
+        <span class="btn primary sm">＋ 新建</span>
+        <input class="input" placeholder="筛选…" style="height:26px;font-size:12px;flex:1">
+      </div>
+      <div style="flex:1;overflow:hidden">
+        <div class="wt-row" style="padding:11px 13px">
+          <div class="r1"><span class="branch" style="font-size:12.5px">roam/fix-login</span><span style="margin-left:auto" class="tag green" style="font-size:11px">●</span></div>
+          <div class="r2" style="font-size:11.5px"><b class="hot-b">↑3</b>↓0 · <b class="hot-y">改2</b> · 2小时前</div>
+          <div class="r3"><span class="btn sm">进入会话</span><span class="btn sm">⋯ 更多</span></div>
+        </div>
+        <div class="wt-row" style="padding:11px 13px;background:rgba(210,153,34,.03)">
+          <div class="r1"><span class="branch" style="font-size:12.5px">roam/try-idea</span><span style="margin-left:auto" class="tag yellow" style="font-size:11px"></span></div>
+          <div class="r2" style="font-size:11.5px">↑0<b>↓5</b> · 无改 · 6天前</div>
+          <div class="r3"><span class="btn sm">新建进入</span><span class="btn sm">⋯ 更多</span></div>
+        </div>
+        <div class="wt-row" style="padding:11px 13px">
+          <div class="r1"><span class="branch" style="font-size:12.5px">hotfix-x</span><span style="margin-left:auto" class="tag ghost" style="font-size:11px">⧉</span></div>
+          <div class="r2" style="font-size:11.5px"><b class="hot-b">↑1</b>↓0 · <b class="hot-y">改1</b> · 30分钟前</div>
+          <div class="r3"><span class="btn sm">新建进入</span><span class="btn sm">⋯ 更多</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="phone-frame" style="height:230px;border-radius:14px">
+      <div style="flex:1;display:grid;place-items:center;text-align:center;padding:18px">
+        <div>
+          <div style="font-size:26px;opacity:.5">⎇</div>
+          <div style="font-size:13px;margin:8px 0 4px">还没有 worktree</div>
+          <div class="hint" style="margin-bottom:12px">为每个任务建一个隔离工作区，互不干扰</div>
+          <span class="btn primary sm">＋ 新建 worktree</span>
+        </div>
+      </div>
+    </div>
+    <div class="stage-label" style="margin:0">↑ 空态（Result 风格）</div>
+  </div>
+</div>
+
+<div class="spec-note" style="border-top:1px solid var(--border-subtle)">
+  状态：加载 = Skeleton 三行；合并执行中 = 行内 Spin；<em>合并冲突</em> = 后端自动 abort，弹错误框「与 main 冲突（N 个文件），请进入会话手动 rebase 后再试」+ [进入会话]。
+  删除：干净的直接删；有货的弹上图确认框列明损失。手机端操作行收进「⋯ 更多」Dropdown。
+</div>
+</body>
+</html>

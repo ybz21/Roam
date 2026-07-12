@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v2 · 手机版 — 全套</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .cell { display: flex; flex-direction: column; gap: 12px; align-items: center; }
+  .cap { font-size: 12px; color: var(--tx-2); text-align: center; max-width: 350px; line-height: 1.7; }
+  .cap b { color: var(--tx-0); font-family: var(--font-ui); letter-spacing: .04em; display: block; font-size: 13px; }
+  .mhead { padding: 10px 16px; display: flex; align-items: center; gap: 9px; border-bottom: 1px solid var(--hair); font-family: var(--font-ui); font-weight: 700; font-size: 15px; letter-spacing: .04em; }
+  .mhead .bk { color: var(--tx-2); font-weight: 400; }
+  .sheet { position: absolute; left: 12px; right: 12px; z-index: 21; border-radius: 18px; overflow: hidden;
+    background: linear-gradient(180deg, rgba(31,31,31,.97), rgba(18,18,18,.97)); border: 1px solid var(--hair-lit);
+    box-shadow: 0 1px 0 rgba(255,255,255,.07) inset, 0 30px 70px rgba(0,0,0,.7); }
+</style>
+</head>
+<body>
+<div class="spec-bar">
+  <b>v2 · 手机版全套</b><span class="chip">5 SCREENS · TAB 结构不变</span>
+  <span class="sp"></span>
+  <a href="dialogs.html">← Dialogs</a><a href="index.html">↑ 设计总览</a>
+</div>
+
+<div class="stage" style="gap:36px 28px">
+
+  <!-- ① 会话航线 -->
+  <div class="cell in d1">
+    <div class="phone">
+      <div class="notch"><i></i></div>
+      <div class="mhead">会话<span style="flex:1"></span><span class="btn pri sm">＋ 新建 <span class="cr">▾</span></span></div>
+      <div style="flex:1;overflow:hidden;padding:6px 12px">
+        <div class="route-group">
+          <div class="route-head"><span class="node"></span><span class="repo">app</span><span class="pill aur" style="font-size:10px">3</span><span class="act"><a>管理</a></span></div>
+          <div class="route-body">
+            <div class="route-row"><div class="lane on" style="padding:10px 11px">
+              <span class="beacon"></span>
+              <div class="body"><div class="l1"><span class="nm" style="font-size:13px">fix-login</span><span class="pill claude" style="font-size:10px">CL</span></div><div class="mt">roam/fix-login · ↑3 · 1m</div></div>
+            </div></div>
+            <div class="route-row"><div class="lane" style="padding:10px 11px">
+              <span class="beacon amber"></span>
+              <div class="body"><div class="l1"><span class="nm" style="font-size:13px">try-idea</span><span class="pill codex" style="font-size:10px">CX</span><span class="pill warn" style="font-size:10px">待输入</span></div><div class="mt">roam/try-idea · ↓5 · 3h</div></div>
+            </div></div>
+            <div class="route-row"><div class="lane" style="padding:10px 11px">
+              <span class="beacon off"></span>
+              <div class="body"><div class="l1"><span class="nm" style="font-size:13px">hotfix</span><span class="pill ghost" style="font-size:10px">⧉</span></div><div class="mt">hotfix-x · ↑1 · 30m</div></div>
+            </div></div>
+          </div>
+        </div>
+        <div class="route-group" style="margin-top:4px">
+          <div class="route-head"><span class="node" style="background:radial-gradient(circle at 35% 30%,#d0ab52,#6e5a25);box-shadow:none"></span><span class="repo">blog</span><span class="pill gold" style="font-size:10px">RACE ×3</span><span class="act"><a style="color:var(--gold)">对比台</a></span></div>
+        </div>
+        <hr class="hr" style="margin:10px 4px">
+        <div class="lane" style="padding:10px 11px">
+          <span class="beacon"></span>
+          <div class="body"><div class="l1"><span class="nm" style="font-size:13px">main-shell</span><span class="pill ghost" style="font-size:10px">SHELL</span></div><div class="mt">窗口 2 · 5m</div></div>
+        </div>
+      </div>
+      <div class="tabbar"><span>◎</span><span>☰</span><span class="on">▸</span><span>⋯</span></div>
+    </div>
+    <div class="cap"><b>① 会话航线</b>分支拓扑同款缩编：节点 + 航线 + beacon；竞赛组折叠成金色组头</div>
+  </div>
+
+  <!-- ② Review 面板 -->
+  <div class="cell in d2">
+    <div class="phone">
+      <div class="notch"><i></i></div>
+      <div class="mhead"><span class="bk">←</span><span class="mono" style="font-size:13px;color:var(--aur-a)">⎇ roam/fix-login</span><span class="mono" style="font-size:10.5px;color:var(--aur-b)">↑3</span><span class="pill aur" style="font-size:9.5px">worktree</span><span style="flex:1"></span><span style="color:var(--tx-2);font-weight:400">⟳</span></div>
+      <div style="padding:10px 14px 0" class="hint mono">base main · ~/codes/app</div>
+      <div style="padding:10px 14px">
+        <div class="seg" style="width:100%"><div class="thumb" style="left:calc(50% + 1px);width:calc(50% - 4px)"></div><button style="flex:1">改动</button><button class="on" style="flex:1">对比 main <span class="cnt">3</span></button></div>
+      </div>
+      <div style="flex:1;overflow:hidden">
+        <div class="frow on"><span class="st M">M</span><span class="fp">src/login.ts</span><span class="pm"><span class="p">+80</span><span class="m">−20</span></span></div>
+        <div class="frow"><span class="st M">M</span><span class="fp">src/api.ts</span><span class="pm"><span class="p">+30</span><span class="m">−25</span></span></div>
+        <div class="frow"><span class="st A">A</span><span class="fp">src/util/retry.ts</span><span class="pm"><span class="p">+10</span></span></div>
+        <div class="diff" style="margin-top:6px;border-top:1px solid var(--hair);font-size:11px">
+          <div class="hunk"><span class="no">@@</span>@@ -12,7 +12,9 @@</div>
+          <div class="del"><span class="no">13</span>- if (safari) {</div>
+          <div class="add"><span class="no">13</span>+ if (isSafari(ua)) {</div>
+          <div class="add"><span class="no">14</span>+   legacyLogin({ retry: true })</div>
+          <div class="ctx"><span class="no">15</span>  }</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:9px;padding:11px 14px;border-top:1px solid var(--hair)">
+        <span class="btn pri" style="flex:1;height:38px">合并回 main <span class="cr">▾</span></span>
+        <span class="btn" style="height:38px">HUB</span>
+      </div>
+      <div class="tabbar"><span>◎</span><span>☰</span><span class="on">▸</span><span>⋯</span></div>
+    </div>
+    <div class="cap"><b>② Review 面板</b>滑块 Segmented 全宽；diff 带行号；合并操作条固定</div>
+  </div>
+
+  <!-- ③ Worktree Hub -->
+  <div class="cell in d3">
+    <div class="phone">
+      <div class="notch"><i></i></div>
+      <div class="mhead"><span class="bk">←</span>WORKTREE HUB <span class="hint mono" style="font-weight:400">app</span><span style="flex:1"></span><span class="btn pri sm">＋</span></div>
+      <div style="flex:1;overflow:hidden;padding:12px;display:flex;flex-direction:column;gap:11px">
+        <div class="wt-card" style="padding:12px 14px">
+          <div style="display:flex;align-items:center;gap:8px"><span class="br" style="font-size:12px">roam/fix-login</span><span style="flex:1"></span><span class="beacon" style="width:7px;height:7px"></span><span class="pill live" style="font-size:10px">fix-login</span></div>
+          <div class="meta" style="font-size:10px;margin:7px 0 9px"><span>base <b>main</b></span><span class="up">↑3</span><span class="dirty">改动 2</span><span>2h</span></div>
+          <div class="ops"><span class="btn sm">进入会话</span><span class="btn sm">⋯</span></div>
+        </div>
+        <div class="wt-card orphan" style="padding:12px 14px">
+          <div style="display:flex;align-items:center;gap:8px"><span class="br" style="font-size:12px">roam/try-idea</span><span style="flex:1"></span><span class="pill warn" style="font-size:10px">孤儿</span></div>
+          <div class="meta" style="font-size:10px;margin:7px 0 9px"><span>base <b>main</b></span><span>↓5</span><span>无改动</span><span>6d</span></div>
+          <div class="ops"><span class="btn sm">新建进入</span><span class="btn sm">⋯</span></div>
+        </div>
+        <div class="wt-card ext" style="padding:12px 14px">
+          <div style="display:flex;align-items:center;gap:8px"><span class="br" style="font-size:12px">hotfix-x</span><span style="flex:1"></span><span class="pill ghost" style="font-size:10px">⧉ 外部</span></div>
+          <div class="meta" style="font-size:10px;margin:7px 0 9px"><span>base <b>main</b></span><span class="up">↑1</span><span class="dirty">改动 1</span><span>30m</span></div>
+          <div class="ops"><span class="btn sm">新建进入</span><span class="btn sm">⋯</span></div>
+        </div>
+        <!-- ActionSheet 示意 -->
+        <div style="margin-top:auto;background:rgba(31,31,31,.9);border:1px solid var(--hair-lit);border-radius:16px;overflow:hidden">
+          <div style="padding:8px 15px;font-size:10px;color:var(--tx-2);border-bottom:1px solid var(--hair)" class="mono">roam/fix-login · ⋯ ACTIONS</div>
+          <div style="padding:11px 15px;border-bottom:1px solid var(--hair);font-size:13px">对比 base</div>
+          <div style="padding:11px 15px;border-bottom:1px solid var(--hair);font-size:13px">合并回 main <span class="hint">merge / squash / rebase</span></div>
+          <div style="padding:11px 15px;font-size:13px;color:var(--dngr)">删除 worktree…</div>
+        </div>
+      </div>
+      <div class="tabbar"><span>◎</span><span>☰</span><span class="on">▸</span><span>⋯</span></div>
+    </div>
+    <div class="cap"><b>③ Worktree Hub</b>卡片纵排，顶缘状态光同款；次要操作收 ⋯ ActionSheet（下方示意）</div>
+  </div>
+
+  <!-- ④ Race -->
+  <div class="cell in d4">
+    <div class="phone">
+      <div class="notch"><i></i></div>
+      <div class="mhead"><span class="bk">←</span>DARK-MODE <span class="hint mono" style="font-weight:400">×3</span><span style="flex:1"></span><span style="color:var(--dngr);font-size:12px;font-weight:400">清理</span></div>
+      <div style="flex:1;overflow:hidden;padding:12px;display:flex;flex-direction:column;gap:11px">
+        <div class="champ"><div class="inner" style="padding:12px 14px">
+          <div style="position:relative;height:3px;border-radius:3px;background:rgba(255,255,255,.12);margin-bottom:10px"><i style="position:absolute;inset:0;border-radius:3px;background:linear-gradient(180deg,#454545,#111111);box-shadow:0 1px 0 rgba(255,255,255,.25) inset"></i></div>
+          <div style="display:flex;align-items:center;gap:8px"><span class="disp" style="font-weight:700;font-size:15px;color:var(--claude)">CLAUDE -a</span><span style="flex:1"></span><span class="pill live" style="font-size:10px"><i class="d"></i>完成</span></div>
+          <div class="mono" style="font-size:10px;color:var(--aur-a);margin:5px 0 9px">⎇ roam/dark-mode-a</div>
+          <div style="display:flex;gap:16px;margin-bottom:10px">
+            <div><div class="num" style="font-size:15px">4</div><div class="hint" style="font-size:8.5px;letter-spacing:.14em">FILES</div></div>
+            <div><div class="num" style="font-size:15px"><span style="color:var(--live)">+210</span><span style="color:var(--dngr)">−12</span></div><div class="hint" style="font-size:8.5px;letter-spacing:.14em">LINES</div></div>
+            <div><div class="num" style="font-size:15px;color:var(--live)">3/3</div><div class="hint" style="font-size:8.5px;letter-spacing:.14em">TESTS</div></div>
+          </div>
+          <div style="display:flex;gap:7px"><span class="btn sm">看 diff</span><span class="btn sm">进会话</span></div>
+        </div></div>
+        <div class="lane-card" style="flex:0 0 auto;border:1px solid var(--hair);border-radius:15px;padding:12px 14px;background:linear-gradient(180deg,rgba(30,30,30,.7),rgba(20,20,20,.7))">
+          <div style="display:flex;align-items:center;gap:8px"><span class="disp" style="font-weight:700;font-size:15px;color:var(--claude)">CLAUDE -b</span><span style="flex:1"></span><span class="pill live" style="font-size:10px"><i class="d"></i>完成</span></div>
+          <div class="mono" style="font-size:10px;color:var(--aur-a);margin:5px 0 4px">⎇ roam/dark-mode-b · <span style="color:var(--live)">+95</span> <span style="color:var(--dngr)">−8</span></div>
+        </div>
+        <div style="border:1px solid var(--hair);border-radius:15px;padding:12px 14px;background:linear-gradient(180deg,rgba(30,30,30,.7),rgba(20,20,20,.7))">
+          <div style="display:flex;align-items:center;gap:8px"><span class="disp" style="font-weight:700;font-size:15px;color:var(--codex)">CODEX -c</span><span style="flex:1"></span><span class="pill warn" style="font-size:10px"><i class="d"></i>进行中</span></div>
+          <div class="mono" style="font-size:10px;color:var(--aur-a);margin:5px 0 4px">⎇ roam/dark-mode-c · <span style="color:var(--live)">+150</span> <span style="color:var(--dngr)">−40</span></div>
+        </div>
+      </div>
+      <div style="padding:11px 12px;border-top:1px solid var(--hair)">
+        <span class="btn gold" style="width:100%;height:40px">选 CLAUDE -a 为赢家</span>
+      </div>
+      <div class="tabbar"><span>◎</span><span>☰</span><span class="on">▸</span><span>⋯</span></div>
+    </div>
+    <div class="cap"><b>④ Race</b>赢家候选披香槟描边置顶；底部固定加冕操作条随选中联动</div>
+  </div>
+
+  <!-- ⑤ 收尾三选一（Bottom Sheet） -->
+  <div class="cell in d5">
+    <div class="phone">
+      <div class="notch"><i></i></div>
+      <div class="mhead">会话</div>
+      <div style="flex:1;position:relative;overflow:hidden">
+        <div style="padding:6px 12px">
+          <div class="lane" style="padding:10px 11px"><span class="beacon"></span><div class="body"><div class="l1"><span class="nm" style="font-size:13px">fix-login</span><span class="pill aur" style="font-size:10px">roam/fix-login</span></div><div class="mt">↑3 · 改动 2</div></div></div>
+        </div>
+        <div class="dim" style="border-radius:0"></div>
+        <div class="sheet" style="bottom:14px">
+          <div style="display:grid;place-items:center;padding:9px 0 2px"><i style="width:40px;height:4px;border-radius:99px;background:rgba(255,255,255,.25)"></i></div>
+          <div style="padding:6px 18px 0;font-family:var(--font-ui);font-weight:700;font-size:15px;letter-spacing:.03em">关闭会话 fix-login？</div>
+          <div style="padding:12px 18px;display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:12px;color:var(--tx-1);line-height:1.8;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:10px 12px">
+              <span class="mono" style="color:var(--aur-a)">⎇ roam/fix-login</span> 还有 <b style="color:var(--warn)">2 个未提交改动</b>、<b style="color:var(--aur-b)">3 个未合并提交</b>
+            </div>
+            <div class="opt on"><span class="r"></span><span><b>保留 worktree</b><span>稍后在 Hub 处理</span></span></div>
+            <div class="opt"><span class="r"></span><span><b>合并回 main 并删除</b><span>改动先自动提交为 wip</span></span></div>
+            <div class="opt" style="border-color:rgba(244,135,113,.35)"><span class="r"></span><span><b style="color:var(--dngr)">丢弃改动并删除 </b><span>永久删除不可恢复</span></span></div>
+          </div>
+          <div style="padding:2px 18px 16px;display:flex;gap:10px">
+            <span class="btn" style="flex:1;height:38px">取消</span>
+            <span class="btn" style="flex:1;height:38px;background:linear-gradient(180deg,#d9695a,#b04b3e);border:0;color:#1d0b07">关闭会话</span>
+          </div>
+        </div>
+      </div>
+      <div class="tabbar"><span>◎</span><span>☰</span><span class="on">▸</span><span>⋯</span></div>
+    </div>
+    <div class="cap"><b>⑤ 收尾三选一</b>Bottom Sheet + 拖拽把手；发光单选卡同桌面语法</div>
+  </div>
+
+</div>
+
+<div class="spec-foot">
+  手机版原则不变（不加一级入口 / 全屏化 / ⋯ ActionSheet），但视觉全面升级到 v2 语言：航线拓扑、beacon 呼吸、状态缘光、香槟描边在小屏同样成立。
+</div>
+<script>
+document.querySelectorAll('.opt').forEach(r => r.onclick = () => {
+  r.parentElement.querySelectorAll('.opt').forEach(x => x.classList.remove('on'));
+  r.classList.add('on');
+});
+</script>
+</body>
+</html>

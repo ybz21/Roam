@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>W3 · Git 面板：worktree 态 + 对比 base</title>
+<link rel="stylesheet" href="mock.css">
+<style>
+  .git-panel { width: 400px; flex: 0 0 400px; background: var(--bg-container); border-left: 1px solid var(--border); display: flex; flex-direction: column; }
+  .gp-head { padding: 11px 13px 9px; border-bottom: 1px solid var(--border-subtle); }
+  .gp-title { display: flex; align-items: center; gap: 8px; }
+  .gp-title .br { font-family: var(--mono); font-weight: 700; font-size: 13.5px; }
+  .gp-title .ab { font-family: var(--mono); font-size: 12px; color: var(--text-dim); }
+  .gp-sub { margin-top: 5px; font-size: 12px; color: var(--text-dimmer); }
+  .gp-sub .mono { font-size: 11.5px; }
+  .gp-body { flex: 1; overflow: auto; }
+  .gp-sec { padding: 7px 12px 3px; font-size: 11.5px; font-weight: 700; color: var(--text-dim); letter-spacing: .3px; }
+  .gp-foot { border-top: 1px solid var(--border-subtle); padding: 10px 12px; display: flex; gap: 10px; background: var(--bg-container); }
+</style>
+</head>
+<body>
+<div class="spec-bar">
+  <b>W3 · Git 面板 worktree 态</b><span class="spec-tag">徽标 + Segmented「改动 / 对比 main」+ 底部操作条</span>
+  <span class="spacer"></span>
+  <a href="w2-session-list.html">← W2</a><a href="index.html">↑ 索引</a><a href="w4-worktree-drawer.html">W4 →</a>
+</div>
+<div class="spec-note">左右并排展示同一面板的两个 tab 态。非 worktree 目录下无徽标、无「对比」tab、无底部操作条，<em>与现状完全一致</em>。点下方 tab 可切换。</div>
+
+<div class="stage">
+  <div class="app-frame" style="width:1240px;height:740px">
+    <!-- 终端主体 -->
+    <div class="main-col">
+      <div class="term-tabs"><span class="tt on">fix-login</span><span class="tt">main-shell</span><span class="tt">＋</span></div>
+      <div class="term-toolbar">文件 <span style="color:var(--blue)">⎇ Git</span> 浏览器 浏览器 语音 语音 <span style="margin-left:auto" class="mono">~/codes/app/.worktrees/roam-fix-login</span></div>
+      <div class="term-bg">
+        <div><span class="p">➜</span> <span class="c">roam-fix-login</span> <span class="t">git:(</span><span class="p">roam/fix-login</span><span class="t">)</span> claude</div>
+        <div class="t">CL Welcome to Claude Code!</div>
+        <div class="d">─────────────────────────────────────────</div>
+        <div class="t">&gt; 修复登录页在 Safari 下的 UA 判断…</div>
+        <div class="t">● 已修改 src/login.ts, src/api.ts</div>
+        <div class="t">● 新增 src/util/retry.ts</div>
+        <div class="d">tokens: 12.4k · 2 files changed</div>
+        <div class="p">▌</div>
+      </div>
+    </div>
+
+    <!-- Git 面板：改动 tab -->
+    <div class="git-panel">
+      <div class="gp-head">
+        <div class="gp-title">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="6" r="2.3"/><circle cx="6" cy="18" r="2.3"/><circle cx="18" cy="8" r="2.3"/><path d="M6 8.3v7.4"/><path d="M18 10.3a6 6 0 0 1-6 6H8.3"/></svg>
+          <span class="br">roam/fix-login</span><span class="ab">↑3 ↓0</span>
+          <span class="tag cyan" style="height:18px;font-size:11px;cursor:pointer" title="点击打开 Worktree 管理">worktree</span>
+          <span style="margin-left:auto;color:var(--text-dimmer);display:flex;gap:10px"><span>⟳</span><span>⋯</span><span>✕</span></span>
+        </div>
+        <div class="gp-sub">基于 <span class="mono">main</span> · 主仓库 <span class="mono">~/codes/app</span></div>
+        <div style="margin-top:9px" class="segmented">
+          <button class="on" data-t="1">改动</button>
+          <button data-t="2">对比 main <span class="badge-n">3</span></button>
+        </div>
+      </div>
+
+      <div class="gp-body" id="tab1">
+        <div style="padding:10px 12px;display:flex;gap:8px">
+          <input class="input" placeholder="提交信息（Ctrl+Enter 提交）" style="height:30px;font-size:12.5px">
+          <span class="btn primary sm" style="height:30px">✓ 提交</span>
+        </div>
+        <div class="gp-sec">▾ 暂存的更改 (1)</div>
+        <div class="fstat"><span class="st M">M</span><span class="fp">src/login.ts</span><span style="color:var(--text-dimmer)">−</span></div>
+        <div class="gp-sec">▾ 更改 (2)</div>
+        <div class="fstat"><span class="st M">M</span><span class="fp">src/api.ts</span><span style="color:var(--text-dimmer)">＋ ↩</span></div>
+        <div class="fstat"><span class="st A">?</span><span class="fp">src/util/retry.ts</span><span style="color:var(--text-dimmer)">＋ ↩</span></div>
+        <div class="gp-sec" style="margin-top:8px">▾ 最近提交</div>
+        <div class="fstat"><span class="mono" style="color:var(--text-dimmer);font-size:11px">e3a1f02</span><span class="fp" style="color:var(--text-dim)">fix: safari ua detect</span><span class="hint">2小时前</span></div>
+        <div class="fstat"><span class="mono" style="color:var(--text-dimmer);font-size:11px">9c07b41</span><span class="fp" style="color:var(--text-dim)">wip: login flow</span><span class="hint">3小时前</span></div>
+      </div>
+
+      <div class="gp-body" id="tab2" style="display:none">
+        <div style="padding:10px 12px 4px;font-size:12.5px;color:var(--text-dim)">
+          与 <span class="mono">main</span> 的累计差异 · 3 文件
+          <span class="mono" style="margin-left:6px"><span style="color:var(--green)">+120</span> <span style="color:var(--red)">−45</span></span>
+        </div>
+        <div class="fstat" style="background:rgba(255,255,255,.04)"><span class="st M">M</span><span class="fp">src/login.ts</span><span class="pm"><span class="p">+80</span><span class="m">−20</span></span></div>
+        <div class="fstat"><span class="st M">M</span><span class="fp">src/api.ts</span><span class="pm"><span class="p">+30</span><span class="m">−25</span></span></div>
+        <div class="fstat"><span class="st A">A</span><span class="fp">src/util/retry.ts</span><span class="pm"><span class="p">+10</span></span></div>
+        <div style="border-top:1px solid var(--border-subtle);margin-top:6px">
+          <div style="padding:7px 12px;font-size:12px;color:var(--text-dim)" class="mono">src/login.ts · merge-base…HEAD</div>
+          <div class="diff">
+            <div class="hunk">@@ -12,7 +12,9 @@ export function detectBrowser() {</div>
+            <div class="ctx">   const ua = navigator.userAgent</div>
+            <div class="del">-  if (safari) {</div>
+            <div class="del">-    legacyLogin()</div>
+            <div class="add">+  if (isSafari(ua)) {</div>
+            <div class="add">+    // Safari 16- 不支持 credential API，走回退</div>
+            <div class="add">+    legacyLogin({ retry: true })</div>
+            <div class="ctx">   }</div>
+            <div class="hunk">@@ -40,6 +42,8 @@ async function legacyLogin(opts) {</div>
+            <div class="add">+  const r = await withRetry(() => post('/login', opts))</div>
+            <div class="add">+  if (!r.ok) throw new LoginError(r)</div>
+            <div class="ctx">   return r</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="gp-foot">
+        <span class="btn primary" style="flex:1;justify-content:center">合并回 main <span class="caret">▾</span></span>
+        <span class="btn">Worktree 管理</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="spec-note" style="border-top:1px solid var(--border-subtle)">
+  组件：<span class="mono">Segmented</span>（badge 数 = 差异文件数）；「对比 main」列表数据来自新接口 <span class="mono">GET /git/diff-base</span>，
+  点文件行复用现有 DiffView。底部 <span class="mono">Dropdown.Button</span>：merge / squash / rebase。
+  worktree 徽标与「Worktree 管理」都通向 W4 抽屉。手机端同构（Git 面板本就全屏抽屉）。
+</div>
+<script>
+document.querySelectorAll('.segmented button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.segmented button').forEach(x => x.classList.remove('on'));
+  b.classList.add('on');
+  document.getElementById('tab1').style.display = b.dataset.t === '1' ? '' : 'none';
+  document.getElementById('tab2').style.display = b.dataset.t === '2' ? '' : 'none';
+});
+</script>
+</body>
+</html>
