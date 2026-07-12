@@ -318,6 +318,16 @@ const Term = forwardRef<TermHandle, {
       }
     }
     el.addEventListener('paste', onPasteCapture, { capture: true })
+    // 拖文件落进终端的兜底：xterm 会把隐藏 helper textarea 挪到「终端光标所在格」（正好是
+    // TUI 输入行、用户拖放的落点）。若 drop 默认行为没被上层拦掉，Chrome 会把 text/plain
+    // 原生插进这个 textarea——xterm 只认 insertText，不处理 insertFromDrop、也不清值，
+    // 残留路径随后会被中文输入法(keydown 229)的差分逻辑整段重放进终端，淹没正在输入的字。
+    // 这里对容器内所有 drop 统一 preventDefault（不拦冒泡，上层注入 @路径/上传照常）并清残值。
+    const onDropGuard = (e: DragEvent) => {
+      e.preventDefault()
+      if (textarea && !composing) textarea.value = ''
+    }
+    el.addEventListener('drop', onDropGuard)
 
     connect()
 
@@ -335,6 +345,7 @@ const Term = forwardRef<TermHandle, {
       el.removeEventListener('touchend', onTouchEnd)
       el.removeEventListener('contextmenu', onCtx)
       el.removeEventListener('paste', onPasteCapture, { capture: true } as any)
+      el.removeEventListener('drop', onDropGuard)
       if (textarea) {
         textarea.removeEventListener('compositionstart', onCompStart)
         textarea.removeEventListener('compositionend', onCompEnd)
