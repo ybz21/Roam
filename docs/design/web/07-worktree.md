@@ -4,6 +4,7 @@
 
 > 状态：设计 v0.6 — 已实现（§7 A–G 全部落地）。
 > v0.5 → v0.6：**创建流程反转**——组合 API 从「先建 worktree 再建会话」改为「先建 (sub)session（cwd=仓库）→ 建 worktree（占位分支）→ 会话内 cd 进去」；分支名不再提前指定，由 agent 开工后按任务 `git branch -m` 动态命名（W1 交互修订 4）。Race Service（W5/W6）落地：crown 状态机阶段持久化可续跑，expectedHead 在冻结时校验（wip-commit 会合法挪 HEAD，不传给 Merge）。
+> v0.6 增补（交互修订 5）：W1 字段顺序重排（名字→目录→在哪干活→Agent→需求）；base 缺省始终本地主干（origin/HEAD → main → master，绝不默认当前检出分支）；占位分支去 roam/ 前缀（纯会话名 slug，前缀由 agent/用户自定）。
 > v0.4 → v0.5：架构边界重定——**ttmux CLI 专注 Session/subSession，Worktree 完全由上层（backend）Worktree Service 管理**。撤销 v0.4「CLI 是 worktree 唯一写入口」的结论：ttmux 不新增 `wt` 命令族、不实现 `cli/internal/worktree`、不执行任何 git 操作；v0.4 吸收的 Git 底层安全规则全部保留，归属改为 Worktree Service（§2.3）。
 > 目标：把 git worktree 从「建会话时的一个复选框」升级为**有名字、看得见、有生命周期、能收尾、能并行竞赛**的一等能力。
 > 参照：[Orca](https://github.com/stablyai/orca) 的 worktree-native 模型。
@@ -98,7 +99,7 @@ ttmux 的能力止步于「平坦 tmux session + parent 关系」，**不理解 
 4. `info/exclude`：经 common-dir 定位，带锁幂等追加 `/.worktrees/`。
 
 **组合编排（service 调 ttmux，前端不再两段式；v0.6 顺序反转为先会话后 worktree）**：
-- 顶层 worktree 会话 = `ttmux new <名> --dir <仓库目录>` → service 建 worktree（分支缺省自动占位 `roam/<会话名 slug>`）→ 会话内注入 `cd <worktree>`（send-keys 排队，先于前端随后发送的 agent 启动指令）。
+- 顶层 worktree 会话 = `ttmux new <名> --dir <仓库目录>` → service 建 worktree（分支缺省自动占位 `<会话名 slug>`——纯 slug 无强制前缀，roam 身份在 roam.* config 不靠分支名）→ 会话内注入 `cd <worktree>`（send-keys 排队，先于前端随后发送的 agent 启动指令）。
 - 派生编码会话 = `ttmux fork <父> <子> --dir <仓库目录>` → 同上建 worktree + cd。
 - worktree 创建失败 → 反向补偿 `ttmux kill` 刚建的会话。
 - 为什么反转：分支名不该在创建时定死——占位分支只是技术需要，agent 读完任务后 `git branch -m` 起语义名（分支名与 roam.baseRef 解耦，rename 安全）；会话先活起来也让创建零等待、cd 过程在回滚里可见。
@@ -150,9 +151,15 @@ ttmux 的能力止步于「平坦 tmux session + parent 关系」，**不理解 
 
 ### W1. 新建会话弹窗（名称 + 需求 + 工作区三选一）
 
+> 交互修订 5（实现期）：**字段顺序重排 + base 缺省主干**——先定位置（名字 → 目录 →
+> 在哪干活），再定执行（Agent → 需求），需求不再插在名字与目录之间；「基于」缺省
+> 始终是本地主干（origin/HEAD 指向的本地分支 → main → master），绝不默认当前检出的
+> feature 分支。占位分支去掉 roam/ 前缀（纯会话名 slug）。
+
 > 交互修订 4（实现期）：**分支不再预指定**——去掉分支输入/派生预览/「高级」折叠，
 > 展开卡只剩「基于」。流程反转为先建 subsession 再建 worktree：占位分支按会话名
-> 派生（`roam/<slug>`），prompt 前置命名约定让 agent 开工后 `git branch -m` 语义化。
+> 派生（纯 slug，无强制前缀），prompt 前置命名约定让 agent 开工后 `git branch -m` 语义化
+> （前缀 feat/fix 等由 agent 自定）；想手动指定分支名走 W4 新建入口。
 > 无 agent 时提示可自行改名。
 
 > 交互修订 3（实现期）：需求派生的长句不适合当会话名——**名称回归一等短输入**（可留空，
@@ -175,14 +182,15 @@ ttmux 的能力止步于「平坦 tmux session + parent 关系」，**不理解 
 ┌─ 新建会话 ──────────────────────────────┐
 │ 名称  [ fix-login                  ]    │
 │ 目录  [ ~/codes/app         ][浏览]     │
-│ ( 无 )( ●Claude )( Codex )              │
-│ 在哪干活  (主仓库)(●新建 worktree)(已有(2))│ ← Segmented，仅 git 仓库时出现
+│ 在哪干活  (主仓库)(●新建 worktree)(已有(2))│ ← Segmented，非 git 目录置灰
 │ 「为这个任务开一个隔离工作区…」          │ ← 各态一句白话说明
 │ ┌─────────────────────────────────────┐ │
 │ │ 基于   [ main (默认)          ▾ ]   │ │ ← start-from 选择器（展开卡仅此一项）
 │ │ 分支与目录自动创建;Agent 开工后会    │ │ ← 灰字说明，无分支输入（交互修订 4）
 │ │ 按任务给分支起语义化名字             │ │
 │ └─────────────────────────────────────┘ │
+│ ( 无 )( ●Claude )( Codex )              │ ← Agent 在位置确定后选
+│ 「需求 / 任务(自然语言)…」textarea       │ ← 最后写要干什么
 │ ☐ 自动互审                              │
 │                    [取消]  [创建]        │
 └──────────────────────────────────────────┘
@@ -193,7 +201,7 @@ ttmux 的能力止步于「平坦 tmux session + parent 关系」，**不理解 
 - **已有 (N)**：下拉列出仓库现有 worktree（`⎇ 分支` + 孤儿/外部/占用会话徽章 + 改动数），
   选中即把会话 cwd 指进去——孤儿由此复活；无可选项时该档置灰。
 
-- **提交 = 一次 `POST /worktree-sessions`**（组合 API，§4，v0.6 先会话后 worktree）：`ttmux new --dir <仓库>` → Worktree Service 建 worktree（占位分支 `roam/<会话名 slug>`，锁内分配后缀）→ 会话内 cd；一次返回 `{session, path, branch, base}`。
+- **提交 = 一次 `POST /worktree-sessions`**（组合 API，§4，v0.6 先会话后 worktree）：`ttmux new --dir <仓库>` → Worktree Service 建 worktree（占位分支 `<会话名 slug>`，锁内分配后缀）→ 会话内 cd；一次返回 `{session, path, branch, base}`。
 - start-from 选远端时 UI 明确拆 `remote` + `ref` 两个值；fetch 中可取消。
 
 ### W2. 会话列表：仓库 → worktree 分组
@@ -220,7 +228,7 @@ ttmux 的能力止步于「平坦 tmux session + parent 关系」，**不理解 
 
 ### W5. 竞赛创建弹窗
 
-布局同前（选手卡、上限 5、资源预估）。入口 = W2「＋ 新建」下拉「新建竞赛…」。提交 = **一次调 `POST /races`**：service 逐选手「建会话（`<竞赛名>-<a/b/c>`，cwd=仓库）→ 建 worktree（分支 `roam/<竞赛名>-<字母>`，即赛道身份，**不随 agent 改名**）→ cd → 发同题」；`race_id/repo/base/branch/worktree/winner/crown 阶段` 落 **Race Service 数据模型**（`<dataDir>/races.json`，不进 SessionMeta、不进 swarm.db）。单个选手失败只标记该选手（`status=failed` + error），不拖累其他人。
+布局同前（选手卡、上限 5、资源预估）。入口 = W2「＋ 新建」下拉「新建竞赛…」。提交 = **一次调 `POST /races`**：service 逐选手「建会话（`<竞赛名>-<a/b/c>`，cwd=仓库）→ 建 worktree（分支 `<竞赛名>-<字母>`，即赛道身份，**不随 agent 改名**）→ cd → 发同题」；`race_id/repo/base/branch/worktree/winner/crown 阶段` 落 **Race Service 数据模型**（`<dataDir>/races.json`，不进 SessionMeta、不进 swarm.db）。单个选手失败只标记该选手（`status=failed` + error），不拖累其他人。
 
 ### W6. 竞赛对比台
 
@@ -234,7 +242,7 @@ ttmux 的能力止步于「平坦 tmux session + parent 关系」，**不理解 
 
 ```
 ┌─ 关闭会话 fix-login？ ──────────────────┐
-│ 该会话的 worktree roam/fix-login 还有   │
+│ 该会话的 worktree fix-login 还有   │
 │ 2 个未提交改动、3 个未合并到 main 的提交 │
 │ (●) 保留 worktree（稍后在管理页处理）    │
 │ ( ) 合并回 main 并删除    [squash ▾]    │

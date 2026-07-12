@@ -40,16 +40,12 @@
     <div class="modal" style="top:30px">
       <div class="m-head">新建会话<span class="x">✕</span></div>
       <div class="m-body">
+        <!-- 顺序(交互修订 5):先定位置(名字→目录→在哪干活),再定执行(Agent→需求) -->
         <input class="input" placeholder="会话名(短,留空则从需求自动起名)" style="color:var(--text-dimmer)">
-        <textarea class="input" rows="3" style="border-color:var(--blue)">修复登录页在 Safari 下的 UA 判断，兼容 16 以下版本</textarea>
         <div style="display:flex;gap:0">
           <input class="input" value="~/codes/app" style="border-radius:7px 0 0 7px">
           <span class="btn" style="height:34px;border-radius:0 7px 7px 0;border-left:0">浏览</span>
         </div>
-        <div class="segmented">
-          <button>不启动</button><button class="on">启动 Claude Code</button><button>启动 Codex</button>
-        </div>
-
         <div style="display:flex;align-items:center;gap:8px">
           <span class="hint" style="flex:0 0 auto">在哪干活</span>
           <div class="segmented">
@@ -58,8 +54,8 @@
         </div>
         <div class="hint">为这个任务开一个隔离工作区:独立分支,和主仓库/其他任务互不干扰</div>
 
-        <!-- 新建 worktree 卡(交互修订 4):只留「基于」。分支不预指定——先建会话再建
-             worktree,占位分支按会话名派生,Agent 开工后 git branch -m 语义化 -->
+        <!-- 新建 worktree 卡(交互修订 4):只留「基于」(缺省本地主干)。分支不预指定——
+             先建会话再建 worktree,占位分支按会话名派生,Agent 开工后 git branch -m 语义化 -->
         <div style="background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:10px;padding:12px 13px;display:flex;flex-direction:column;gap:10px">
           <div>
             <span class="field-label">基于(start-from)</span>
@@ -68,6 +64,10 @@
           <div class="hint">分支与目录自动创建;Agent 开工后会按任务给分支起语义化名字</div>
         </div>
 
+        <div class="segmented">
+          <button>不启动</button><button class="on">启动 Claude Code</button><button>启动 Codex</button>
+        </div>
+        <textarea class="input" rows="3" style="border-color:var(--blue)">修复登录页在 Safari 下的 UA 判断，兼容 16 以下版本</textarea>
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-dim)">
           <input type="checkbox" style="accent-color:var(--blue-deep)"> 自动互审
         </label>
