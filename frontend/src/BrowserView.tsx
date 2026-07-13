@@ -411,6 +411,14 @@ export default function BrowserView() {
     window.open(u, `ttmux-devtools-${target}`, 'width=1100,height=720')
   }
 
+  // 甩给宿主机真实浏览器打开当前地址：镜像 Chrome 终究是后端管的替身，
+  // WSL 下后端会转去唤起 Windows 侧浏览器（见 backend/browser/external.go）。
+  const openExternal = async () => {
+    if (!url) { message.warning(t('browser.openExternalNoUrl')); return }
+    try { await api('POST', '/browser/open-external', { url }) }
+    catch (e: any) { message.error(e.message || t('browser.openExternalFailed')) }
+  }
+
   // 把鼠标坐标换算成 CDP 期望的页面 CSS 像素坐标。
   // 关键：<img> 用 object-fit: contain（居中留黑边）且可能被旋转，
   // 所以先把屏幕点平移到舞台中心相对、再逆旋转回画面坐标系，最后扣黑边按真实显示区缩放。
@@ -656,6 +664,7 @@ export default function BrowserView() {
         />
         <Button size="small" onClick={navigate}>{t('browser.go')}</Button>
         <Button size="small" onClick={openDevtools} title={t('browser.devtoolsTitle')}>{t('browser.debug')}</Button>
+        <Button size="small" onClick={openExternal} title={t('browser.openExternalTitle')}>{t('browser.openExternal')}</Button>
         {/* 手机模式：紧跟调试按钮。选机型即模拟移动视口（持久化、重连生效） */}
         <Select
           size="small"

@@ -258,6 +258,7 @@ func New(cfg Config) *gin.Engine {
 		g.PUT("/browser/config", browser.SetConfig)               // Chrome 启动配置：存
 		g.POST("/browser/relaunch", browser.Relaunch)             // 按新配置重启 Chrome
 		g.GET("/browser/health", browser.Health)                  // Chrome 是否可用 + 启动失败原因
+		g.POST("/browser/open-external", browser.OpenExternal)    // 甩给宿主机真实浏览器打开（WSL 下唤起 Windows 浏览器）
 
 		// 手机镜像（Linux→Android adb；其它平台 health 明示不支持）
 		g.GET("/phone/stream", phone.Handler)          // 镜像手机画面 + 转发输入
