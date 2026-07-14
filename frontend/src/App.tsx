@@ -26,6 +26,7 @@ const PluginsPanel = lazy(() => import('./PluginsPanel'))
 const BrowserView = lazy(() => import('./BrowserView'))
 const PhoneView = lazy(() => import('./PhoneView'))
 const Swarm = lazy(() => import('./Swarm'))
+const Projects = lazy(() => import('./Projects'))
 import UpdateBanner from './UpdateBanner'
 import { useThemeMode } from './theme'
 import { useI18n } from './i18n'
@@ -43,6 +44,7 @@ const { Text } = Typography
 
 const NAV = [
   { key: 'overview', labelKey: 'nav.overview' },
+  { key: 'projects', labelKey: 'nav.projects' },
   { key: 'sessions', labelKey: 'nav.sessions' },
   { key: 'swarm', labelKey: 'nav.swarm' },
   { key: 'files', labelKey: 'nav.files' },
@@ -85,6 +87,7 @@ const svg = (paths: any) => (
 )
 const ICONS: Record<string, any> = {
   overview: svg(<><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>),
+  projects: svg(<><path d="M3 10.2 12 3l9 7.2" /><path d="M5.5 9v11h13V9" /><path d="M9.5 20v-5h5v5" /></>),
   sessions: svg(<><polyline points="5 8 9 12 5 16" /><line x1="12" y1="16" x2="18" y2="16" /></>),
   swarm: svg(<><circle cx="12" cy="5" r="2.4" /><circle cx="5" cy="17" r="2.4" /><circle cx="19" cy="17" r="2.4" /><line x1="12" y1="7.4" x2="6.5" y2="14.8" /><line x1="12" y1="7.4" x2="17.5" y2="14.8" /></>),
   files: svg(<><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><path d="M7 12h10" /><path d="M7 16h6" /></>),
@@ -162,7 +165,7 @@ function shellQuote(s: string): string {
 }
 
 // tmux 给的是 Unix 秒。转成「刚刚 / N 分钟前 …」相对时间，title 里再挂绝对时间。
-function relTime(sec: string | number | undefined, t: (k: string, v?: Record<string, string | number>) => string): string {
+export function relTime(sec: string | number | undefined, t: (k: string, v?: Record<string, string | number>) => string): string {
   const n = typeof sec === 'string' ? parseInt(sec, 10) : sec
   if (!n || !Number.isFinite(n)) return '—'
   const diff = Math.max(0, Math.floor(Date.now() / 1000 - n))
@@ -211,6 +214,7 @@ export default function App() {
   const [route, setRoute] = useState(() => normalizeRoute(location.hash.replace(/^#\/?/, '') || 'sessions'))
   const tab = route.split('/')[0]                                  // 基础页（swarm/leave → swarm）
   const swarmSub = tab === 'swarm' && route.includes('/') ? decodeURIComponent(route.slice(route.indexOf('/') + 1)) : '' // 深链选中的蜂群
+  const projectSub = tab === 'projects' && route.includes('/') ? decodeURIComponent(route.slice(route.indexOf('/') + 1)) : '' // 深链选中的项目
   const go = (k: string) => {
     const qi = location.hash.indexOf('?')
     const qs = qi >= 0 ? location.hash.slice(qi) : ''
@@ -396,6 +400,7 @@ export default function App() {
   const pages: any = {
     overview: <Overview go={go} openTerm={openTerm} />,
     swarm: <Swarm openTerm={openTerm} initialSwarm={swarmSub || undefined} onNav={(n) => { location.hash = n ? '#/swarm/' + encodeURIComponent(n) : '#/swarm' }} />,
+    projects: <Projects openTerm={openTerm} initialKey={projectSub || undefined} />,
     sessions: <Sessions openTerm={openTerm} closeTerm={closeTerm} activeTerm={active} />,
     files: <FilesPage openTerm={openTerm} />,
     settings: <EnvPage />,
@@ -1505,7 +1510,7 @@ export function DirPicker({ open, start, onPick, onClose }: { open: boolean; sta
 
 // worktree 分支默认名：会话名 slug（小写、非字母数字转 -）
 // prompt 派生任务名：取首行、去引号标点、截 24 字、空白转 -；中文原样保留（tmux 会话名支持中文）。
-function taskNameFromPrompt(p: string): string {
+export function taskNameFromPrompt(p: string): string {
   const first = (p.trim().split(/\n/)[0] || '').replace(/["'`«»""'']/g, '').trim()
   // 优先在首个标点处断句（够长时），再截 24 字、去尾部标点、空白转 -
   const seg = first.split(/[，。,.!！？?;；:：]/)[0]
@@ -1513,14 +1518,14 @@ function taskNameFromPrompt(p: string): string {
   return base.slice(0, 24).trim().replace(/[，。,.!！？?;；:：\s]+$/g, '').replace(/\s+/g, '-')
 }
 // POSIX 单引号安全包裹（prompt 作为 agent CLI 参数发送）。
-function shq(s: string): string {
+export function shq(s: string): string {
   return "'" + s.replace(/'/g, "'\\''") + "'"
 }
 
 // ── 新建会话（prompt-first 派活）/ 派生子会话 ──
 // parent 非空 = 派生模式：同一张表单（目录默认父 cwd 可改、三选一、命名约定 prompt 全同款），
 // 仅提交路由不同（fork / fork-worktree，meta 记父子关系）。两处不再各维护一份表单。
-function NewSessionModal({ open, parent, onClose, onDone }: { open: boolean; parent?: string | null; onClose: () => void; onDone: (name: string) => void }) {
+export function NewSessionModal({ open, parent, onClose, onDone }: { open: boolean; parent?: string | null; onClose: () => void; onDone: (name: string) => void }) {
   const [prompt, setPrompt] = useState('')
   const [name, setName] = useState('')
   const [nameTouched, setNameTouched] = useState(false)
