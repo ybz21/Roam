@@ -457,10 +457,11 @@ function ProjectHome({ proj, loaded, openTerm, refresh }: {
     if (running && !waiting) { done = 1; cur = 2; stage = t('project.stage.doing') }
     else if (waiting || ahead > 0) { done = 2; cur = 3; stage = t('project.stage.review') }
     return (
-      <div key={s.name} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 10px', borderRadius: 9, cursor: 'pointer', marginLeft: isChild ? 22 : 0 }}
+      // 顶对齐：tags 换行时点/操作停在首行，不再被撑到行中（窄屏错位修复）
+      <div key={s.name} style={{ display: 'flex', alignItems: 'flex-start', gap: 9, padding: '9px 10px', borderRadius: 9, cursor: 'pointer', marginLeft: isChild ? 22 : 0 }}
         onClick={() => openTerm(s.name)}>
-        {dot(false, waiting ? 'var(--yellow, #d29922)' : running ? 'var(--green, #3fb950)' : undefined)}
-        {isChild && <span style={{ color: 'var(--purple, #a371f7)', fontSize: 12 }}>⑂</span>}
+        <span style={{ marginTop: 7, display: 'inline-flex' }}>{dot(false, waiting ? 'var(--yellow, #d29922)' : running ? 'var(--green, #3fb950)' : undefined)}</span>
+        {isChild && <span style={{ color: 'var(--purple, #a371f7)', fontSize: 12, marginTop: 3 }}>⑂</span>}
         <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
             <span style={{ fontWeight: 700 }}>{s.name}</span>
@@ -487,7 +488,7 @@ function ProjectHome({ proj, loaded, openTerm, refresh }: {
             <span>{relTime(s.last_activity, t)}</span>
           </div>
         </div>
-        <span style={{ display: 'flex', gap: 12, fontSize: 12.5, flex: '0 0 auto' }} onClick={(e) => e.stopPropagation()}>
+        <span style={{ display: 'flex', gap: 12, fontSize: 12.5, flex: '0 0 auto', marginTop: 3 }} onClick={(e) => e.stopPropagation()}>
           <a onClick={() => openTerm(s.name)}>{t('project.enter')}</a>
           {hit.linked && <a onClick={() => setGitOpen(true)}>{t('project.compare')}</a>}
           <a onClick={() => setForking(s.name)}>{t('project.forkTask')}</a>
@@ -513,16 +514,14 @@ function ProjectHome({ proj, loaded, openTerm, refresh }: {
         <Button type="text" size="small" onClick={() => { location.hash = '#/projects' }}
           style={{ color: 'var(--text-dim)', paddingInline: 6 }}>‹ {t('project.title')}</Button>
         <span style={{ width: 1, height: 18, background: 'var(--border-subtle, #21262d)' }} />
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>{proj.name}</div>
-          <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: 11.5, color: 'var(--text-dimmer)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <span>{proj.dir}</span>
-            {isGit && defBranch && <span style={{ color: 'var(--cyan, #39c5cf)' }}>⎇ {defBranch}{mainHead ? ` @ ${mainHead}` : ''}</span>}
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{proj.name}</div>
+          <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: 11.5, color: 'var(--text-dimmer)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={proj.dir}>
+            {proj.dir}
+            {isGit && defBranch && <span style={{ color: 'var(--cyan, #39c5cf)' }}> · ⎇ {defBranch}{mainHead ? ` @ ${mainHead}` : ''}</span>}
           </div>
         </div>
-        <span style={{ flex: 1 }} />
         {isGit && <Button size="small" onClick={() => setGitOpen(true)}>{t('project.gitPanel')}</Button>}
-        {isGit && <Button size="small" onClick={() => setWtOpen(true)}>{t('project.wtManage')}</Button>}
       </div>
 
       {/* Composer（Codex 式）：需求 ⏎ 开干；pill 选项与 P2 图纸对齐 */}
@@ -545,9 +544,11 @@ function ProjectHome({ proj, loaded, openTerm, refresh }: {
           <Pill on={agent === 'claude'} onClick={() => setAgent('claude')}>Claude</Pill>
           <Pill on={agent === 'codex'} onClick={() => setAgent('codex')}>Codex</Pill>
           <Pill on={agent === 'none'} onClick={() => setAgent('none')}>{t('project.agent.none')}</Pill>
-          <span style={{ flex: 1 }} />
-          <span style={{ fontSize: 11.5, color: 'var(--text-dimmer)' }}>{t('project.autoName')} · <a style={{ fontSize: 11.5 }} onClick={() => setFullForm(true)}>{t('project.fullForm')} ›</a></span>
-          <Button type="primary" size="small" loading={creating} onClick={goCreate}>{t('project.go')}</Button>
+          {/* 尾组 marginLeft:auto：换行后整组靠右成独立一行，窄屏不散架 */}
+          <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 11.5, color: 'var(--text-dimmer)', whiteSpace: 'nowrap' }}>{t('project.autoName')} · <a style={{ fontSize: 11.5 }} onClick={() => setFullForm(true)}>{t('project.fullForm')} ›</a></span>
+            <Button type="primary" size="small" loading={creating} onClick={goCreate}>{t('project.go')}</Button>
+          </span>
         </div>
       </div>
 
@@ -617,6 +618,10 @@ function ProjectHome({ proj, loaded, openTerm, refresh }: {
       {tab === 'wt' && (
         <div style={{ background: 'var(--bg-container, rgba(177,186,196,.03))', border: '1px solid var(--border-subtle, #21262d)', borderRadius: 12, marginTop: 6 }}>
           {wts.length === 0 && <div style={{ color: 'var(--text-dimmer)', fontSize: 12.5, padding: 14 }}>{t('project.noTasks')}</div>}
+          {/* 管理入口收进本 tab（头部按钮与 tab 冲突已删）：新建/清理残留/跨仓库总览都在抽屉里 */}
+          <div style={{ padding: '10px 16px', borderTop: wts.length ? '1px solid var(--border-subtle, #21262d)' : undefined }}>
+            <a style={{ fontSize: 12.5 }} onClick={() => setWtOpen(true)}>{t('project.wtManage')} ›</a>
+          </div>
           {wts.map((w: any, i: number) => {
             const open = !!expanded[w.path]
             const live = (w.sessions || []).length
