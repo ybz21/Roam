@@ -150,7 +150,7 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
               display: 'flex', flexDirection: 'column', gap: 8,
             }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontWeight: 700, fontSize: 14.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>⌂ {p.name}</span>
+              <span style={{ fontWeight: 700, fontSize: 14.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
               {p.races > 0 && <Tag color="gold" style={{ margin: 0 }}>{t('project.race', { count: p.races })}</Tag>}
               <span style={{ flex: 1 }} />
               <span className="prj-acts" style={{ display: 'inline-flex', gap: 10, alignItems: 'center' }}>
@@ -513,11 +513,6 @@ function ProjectHome({ proj, loaded, openTerm, refresh }: {
         <Button type="text" size="small" onClick={() => { location.hash = '#/projects' }}
           style={{ color: 'var(--text-dim)', paddingInline: 6 }}>‹ {t('project.title')}</Button>
         <span style={{ width: 1, height: 18, background: 'var(--border-subtle, #21262d)' }} />
-        <span style={{
-          width: 34, height: 34, borderRadius: 9, display: 'grid', placeItems: 'center', fontSize: 16,
-          background: 'linear-gradient(135deg, rgba(57,197,207,.18), rgba(31,111,235,.16))',
-          border: '1px solid rgba(57,197,207,.3)', color: 'var(--cyan, #39c5cf)',
-        }}>⌂</span>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 16, fontWeight: 700 }}>{proj.name}</div>
           <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: 11.5, color: 'var(--text-dimmer)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
