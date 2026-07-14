@@ -8,6 +8,10 @@ import {
 } from 'antd'
 import { api } from './api'
 import { useI18n } from './i18n'
+import HostMonitorPanel from './HostMonitorPanel'
+
+// 有宿主侧内置面板的插件(v1 插件无自定义前端,面板由宿主按 id 挂载)
+const HOST_MONITOR_ID = 'roam.host-monitor'
 
 type LocaleText = Record<string, string> | undefined
 
@@ -296,6 +300,10 @@ function PluginDetail({ plugin, locale, t, onChanged }: {
       </Typography.Paragraph>
       <Tabs
         items={[
+          ...(m.id === HOST_MONITOR_ID ? [{
+            key: 'monitor', label: t('plugins.monitor.tab'),
+            children: <HostMonitorPanel pluginId={m.id} enabled={plugin.enabled} t={t} />,
+          }] : []),
           {
             key: 'config', label: t('plugins.tabConfig'),
             children: fields.length
