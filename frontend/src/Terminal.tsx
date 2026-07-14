@@ -288,6 +288,9 @@ const Term = forwardRef<TermHandle, {
     // 这样无论后端鼠标模式开关，右键都只剩前端这一个菜单。
     const onMouseDownCapture = (e: MouseEvent) => {
       if (e.button === 2) {
+        // 右键菜单里有「关闭当前窗格」等动作，得先把 tmux 服务端 active pane
+        // 同步到右键点击位置，否则菜单操作的还是上一次左键选中的旧 pane。
+        selectPaneAtClient(e.clientX, e.clientY)
         e.stopPropagation()
         return
       }
