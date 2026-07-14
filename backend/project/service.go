@@ -177,3 +177,78 @@ func (s *Store) Remove(key string) {
 		s.save()
 	}
 }
+
+// ── 收尾留痕（08 §5.2）：<dataDir>/activity.log JSONL，只增不改 ──
+// 不是任务真相源——丢弃删除后的提交不可达，留痕只保住「任务→动作→统计」的摘要。
+
+// TraceEntry 一条收尾留痕。Action: merged | discarded | cleaned。
+type TraceEntry struct {
+	Repo     string `json:"repo"`
+	Branch   string `json:"branch"`
+	HeadOid  string `json:"headOid,omitempty"`
+	Base     string `json:"base,omitempty"`
+	Action   string `json:"action"`
+	Strategy string `json:"strategy,omitempty"`
+	At       int64  `json:"at"`
+}
+
+func (s *Store) tracePath() string {
+	if s.path == "" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(s.path), "activity.log")
+}
+
+// Trace 追加留痕；超 5MB 轮转一代（.1），读放大有界。写失败只丢摘要，不影响主流程。
+func (s *Store) Trace(e TraceEntry) {
+	p := s.tracePath()
+	if p == "" {
+		return
+	}
+	if st, err := os.Stat(p); err == nil && st.Size() > 5<<20 {
+		_ = os.Rename(p, p+".1")
+	}
+	e.At = time.Now().Unix()
+	b, err := json.Marshal(e)
+	if err != nil {
+		return
+	}
+	f, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	_, _ = f.Write(append(b, '\n'))
+}
+
+// ReadTrace 读某仓库的留痕（两代合并、新在前、上限 limit）。
+func (s *Store) ReadTrace(repoDir string, limit int) []TraceEntry {
+	p := s.tracePath()
+	if p == "" {
+		return nil
+	}
+	var out []TraceEntry
+	for _, f := range []string{p + ".1", p} {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(b), "\n") {
+			if strings.TrimSpace(line) == "" {
+				continue
+			}
+			var e TraceEntry
+			if json.Unmarshal([]byte(line), &e) == nil && e.Repo == repoDir {
+				out = append(out, e)
+			}
+		}
+	}
+	// 文件本身按时间追加，倒序 = 新在前
+	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+		out[i], out[j] = out[j], out[i]
+	}
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out
+}

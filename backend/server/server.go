@@ -143,6 +143,7 @@ func New(cfg Config) *gin.Engine {
 		g.POST("/git/worktree/merge", h.WorktreeMerge)   // 合并回 base（执行位/冲突 abort/expected-head）
 		g.POST("/git/worktree/remove", h.WorktreeRemove) // 删除（占用检查 + 脏保护）
 		g.POST("/git/worktree/prune", h.WorktreePrune)   // 显式清理残留
+		g.POST("/git/worktree/finish", h.WorktreeFinish) // P3 孤儿收尾：冻结→wip→merge→remove→留痕
 		g.GET("/git/branches", h.GitBranches)            // 本地分支列表（W1 start-from）
 		// ── Session API 增量 ──
 		g.GET("/sessions/annotations", h.SessionAnnotations)              // session→worktree 归属（cwd join）

@@ -327,13 +327,17 @@ func (a *API) ProjectActivity(c *gin.Context) {
 	entries, err := a.WT.RecentLog(ctx, dir)
 	if err != nil {
 		if we, ok := err.(*worktree.Err); ok && we.Code == "NOT_GIT_REPO" {
-			c.JSON(http.StatusOK, gin.H{"data": []any{}}) // 非 git 项目：无活动流
+			entries = nil // 非 git 项目：无 git log，仍可有留痕
+		} else {
+			wtErr(c, err)
 			return
 		}
-		wtErr(c, err)
-		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": entries})
+	// 活动流 = git log ∪ 收尾留痕（08 §2.2：丢弃后的提交不可达，留痕保住摘要）
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{
+		"commits": entries,
+		"traces":  a.Projects.ReadTrace(dir, 50),
+	}})
 }
 
 // ProjectPrefs PATCH /projects/:key/prefs {pinned?, displayName?, defaultAgent?, defaultBase?}

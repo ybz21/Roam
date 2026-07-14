@@ -286,6 +286,107 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
   )
 }
 
+// ── P3 收尾抽屉：孤儿 worktree 的三选一（合并并删除 / 复活 / 丢弃删除）──
+// 合并档走 POST /git/worktree/finish（冻结 expectedHead→wip→merge→remove→留痕，
+// 08 §5.4）；复活 = 新命令行进入；丢弃 = force remove。损失清单先行。
+function FinishModal({ w, base, onClose, onDone, onRevive }: {
+  w: any | null; base: string
+  onClose: () => void; onDone: () => void; onRevive: (w: any) => void
+}) {
+  const { t } = useI18n()
+  const { message } = AntApp.useApp()
+  const [mode, setMode] = useState<'merge' | 'revive' | 'discard'>('merge')
+  const [strategy, setStrategy] = useState<'squash' | 'merge' | 'rebase'>('squash')
+  const [delBranch, setDelBranch] = useState(true)
+  const [diff, setDiff] = useState<any>(null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    if (!w) return
+    setMode('merge'); setStrategy('squash'); setDelBranch(true); setDiff(null)
+    api('GET', `/git/worktree/diff?path=${encodeURIComponent(w.path)}`)
+      .then((r) => setDiff(r?.data || null)).catch(() => {})
+  }, [w])
+  if (!w) return null
+  const wtBase = w.base || base
+  const uncommitted = (diff?.workingTree?.files?.length || 0) + (diff?.untracked ?? w.untracked ?? 0)
+  const ok = async () => {
+    if (mode === 'revive') { onRevive(w); onClose(); return }
+    setBusy(true)
+    try {
+      if (mode === 'merge') {
+        await api('POST', '/git/worktree/finish', { path: w.path, strategy, expectedHead: w.head, deleteBranch: delBranch })
+        message.success(t('project.finish.merged', { base: wtBase }))
+      } else {
+        await api('POST', '/git/worktree/remove', { path: w.path, forceWorktree: true, deleteBranch: delBranch, forceDeleteBranch: delBranch })
+        message.success(t('project.finish.discarded'))
+      }
+      onClose(); onDone()
+    } catch (e: any) {
+      const ae = e.apiError || {}
+      message.error(ae.stage ? t('worktree.close.failedAtStage', { stage: ae.stage, msg: e.message }) : e.message)
+    } finally { setBusy(false) }
+  }
+  const radio = (k: typeof mode, title: any, desc: string, danger?: boolean) => (
+    <div onClick={() => setMode(k)} style={{
+      display: 'flex', gap: 9, padding: '10px 12px', borderRadius: 10, cursor: 'pointer',
+      border: `1px solid ${mode === k ? 'rgba(88,166,255,.6)' : 'var(--border)'}`,
+      background: mode === k ? 'rgba(31,111,235,.09)' : 'transparent',
+    }}>
+      <span style={{
+        width: 14, height: 14, borderRadius: '50%', marginTop: 3, flex: '0 0 14px',
+        border: `1.5px solid ${mode === k ? '#58a6ff' : 'var(--text-dimmer)'}`,
+        background: mode === k ? 'radial-gradient(circle at center, #58a6ff 40%, transparent 45%)' : 'transparent',
+      }} />
+      <span style={{ minWidth: 0 }}>
+        <b style={{ display: 'block', fontSize: 13.5, color: danger ? '#f85149' : undefined }}>{title}</b>
+        <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>{desc}</span>
+      </span>
+    </div>
+  )
+  return (
+    <Modal open onCancel={onClose} onOk={ok} okText={t('project.finish.ok')} confirmLoading={busy}
+      okButtonProps={mode === 'discard' ? { danger: true } : undefined}
+      title={<span>{t('project.finish.title')} <Tag color="cyan" className="prj-mono" style={{ marginLeft: 4 }}>⎇ {w.branch}</Tag></span>} destroyOnClose>
+      <Space direction="vertical" style={{ width: '100%' }} size={12}>
+        <div className="prj-mono" style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.8, padding: '9px 12px', border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-term)' }}>
+          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t('project.finish.kept', { path: w.path })}</div>
+          <div>{t('project.finish.stats', { base: wtBase || '?', ahead: w.committedAhead, dirty: uncommitted })}</div>
+        </div>
+        {(diff?.committed?.files?.length || 0) > 0 && (
+          <div>
+            <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 5 }}>{t('project.finish.take', { base: wtBase })}</div>
+            <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '4px 2px', maxHeight: 160, overflow: 'auto' }}>
+              {diff.committed.files.slice(0, 20).map((f: any) => (
+                <div key={f.path} className="prj-mono" style={{ display: 'flex', gap: 8, padding: '3px 10px', fontSize: 12 }}>
+                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.path}</span>
+                  {f.binary ? <span style={{ color: 'var(--text-dimmer)' }}>bin</span> : (<span style={{ flex: '0 0 auto' }}>
+                    <span style={{ color: '#3fb950' }}>+{f.adds}</span> <span style={{ color: '#f85149' }}>-{f.dels}</span>
+                  </span>)}
+                </div>
+              ))}
+            </div>
+            {uncommitted > 0 && <div style={{ fontSize: 12, color: '#d29922', marginTop: 5 }}>{t('project.finish.uncommitted', { count: uncommitted })}</div>}
+          </div>
+        )}
+        {radio('merge', <>
+          {t('project.finish.optMerge', { base: wtBase || '?' })}
+          <Select size="small" value={strategy} onChange={(v) => setStrategy(v)} style={{ marginLeft: 8, minWidth: 96 }}
+            onClick={(e) => e.stopPropagation()}
+            options={[{ value: 'squash', label: 'squash' }, { value: 'merge', label: 'merge' }, { value: 'rebase', label: 'rebase' }]} />
+        </>, t('project.finish.optMergeDesc'))}
+        {radio('revive', t('project.finish.optRevive'), t('project.finish.optReviveDesc'))}
+        {radio('discard', t('project.finish.optDiscard'), t('project.finish.optDiscardDesc', { ahead: w.committedAhead }), true)}
+        {mode !== 'revive' && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--text-dim)' }}>
+            <input type="checkbox" checked={delBranch} onChange={(e) => setDelBranch(e.target.checked)} style={{ accentColor: '#1f6feb' }} />
+            {t('project.finish.delBranch', { branch: w.branch })}
+          </label>
+        )}
+      </Space>
+    </Modal>
+  )
+}
+
 // 终端捕获 → 尾行预览：去 ANSI/OSC，取最后一行非空输出
 function tailLine(raw: string): string {
   const clean = String(raw || '').replace(/\x1b\][^\x07]*(\x07|\x1b\\)/g, '').replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '')
@@ -316,6 +417,7 @@ function ProjectHome({ proj, loaded, openTerm, refresh }: {
   const [swarms, setSwarms] = useState<any[]>([])
   const [swarmOpen, setSwarmOpen] = useState(false)
   const [activity, setActivity] = useState<any[]>([])
+  const [finishing, setFinishing] = useState<any>(null)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [peeks, setPeeks] = useState<Record<string, string>>({})
   const [creating, setCreating] = useState(false)
@@ -381,8 +483,14 @@ function ProjectHome({ proj, loaded, openTerm, refresh }: {
   useEffect(() => {
     if (tab !== 'act' || !proj) return
     let stop = false
+    // 活动流 = git log(commits) ∪ 收尾留痕(traces)，按时间合并倒序（08 §2.2）
     const loadAct = () => api('GET', `/projects/${encodeURIComponent(proj.key)}/activity`)
-      .then((r) => { if (!stop) setActivity(Array.isArray(r?.data) ? r.data : []) }).catch(() => {})
+      .then((r) => {
+        if (stop) return
+        const commits = (r?.data?.commits || []).map((x: any) => ({ ...x, kind: 'commit' }))
+        const traces = (r?.data?.traces || []).map((x: any) => ({ ...x, kind: 'trace' }))
+        setActivity([...commits, ...traces].sort((a, b) => (b.at || 0) - (a.at || 0)))
+      }).catch(() => {})
     loadAct()
     const i = setInterval(loadAct, 30000)
     return () => { stop = true; clearInterval(i) }
@@ -684,7 +792,7 @@ function ProjectHome({ proj, loaded, openTerm, refresh }: {
                   </div>
                 </div>
                 <span className="acts">
-                  <a style={{ color: '#d29922' }} onClick={() => setWtOpen(true)}>{t('project.finish')}</a>
+                  <a style={{ color: '#d29922' }} onClick={() => setFinishing(w)}>{t('project.finish')}</a>
                   <a onClick={() => newCli(w, 'shell')}>{t('project.revive')}</a>
                   <a onClick={() => setGitOpen(true)}>{t('project.compare')}</a>
                 </span>
@@ -812,7 +920,17 @@ function ProjectHome({ proj, loaded, openTerm, refresh }: {
         {/* ── 活动 tab：全部分支近 30 天提交 ── */}
         {tab === 'act' && (
           <div className="prj-panel prj-in" style={{ padding: '6px 4px' }}>
-            {activity.map((e: any) => (
+            {activity.map((e: any) => e.kind === 'trace' ? (
+              <div key={'t' + e.at + e.branch} className="prj-mono" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', fontSize: 12.5 }}>
+                <span style={{ color: '#a371f7' }}>⇥</span>
+                <span style={{ color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {e.action === 'merged'
+                    ? t('project.act.traceMerged', { branch: e.branch, base: e.base || '?', strategy: e.strategy || 'squash' })
+                    : t('project.act.traceDiscarded', { branch: e.branch })}
+                </span>
+                <span style={{ marginLeft: 'auto', color: 'var(--text-dimmer)', fontSize: 11.5, flex: '0 0 auto' }}>{relTime(e.at, t)}</span>
+              </div>
+            ) : (
               <div key={e.oid + e.at} className="prj-mono" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', fontSize: 12.5 }}>
                 <span style={{ color: '#39c5cf', opacity: 0.8 }}>{e.oid}</span>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.subject}</span>
@@ -849,6 +967,8 @@ function ProjectHome({ proj, loaded, openTerm, refresh }: {
           onClose={() => { setFullForm(false); setForking(null) }}
           onDone={(n) => { openTerm(n); refresh() }} />
         <CloseWorktreeModal info={closing} onClose={() => setClosing(null)} onDone={() => { setClosing(null); refresh() }} />
+        <FinishModal w={finishing} base={defBranch} onClose={() => setFinishing(null)}
+          onDone={() => { setFinishing(null); refresh() }} onRevive={(w) => newCli(w, 'shell')} />
       </div>
     </div>
   )

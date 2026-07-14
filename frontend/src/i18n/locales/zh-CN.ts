@@ -1097,6 +1097,23 @@ const zhCN = {
   'project.newSwarm': '＋ 新建蜂群…',
   'project.swarm.board': '蜂群台',
   'project.swarm.members': '成员 {mine}/{total} 在本项目',
+  'project.finish.title': '收尾任务',
+  'project.finish.kept': '会话已关，worktree 留存于 {path}',
+  'project.finish.stats': '基于 {base} · ↑{ahead} 个提交未合并 · {dirty} 个未提交改动',
+  'project.finish.take': '将带走的内容（对比 {base}）',
+  'project.finish.uncommitted': '另有 {count} 个未提交改动 —— 合并前会先 wip-commit 收进分支',
+  'project.finish.optMerge': '合并回 {base} 并删除',
+  'project.finish.optMergeDesc': '执行：wip-commit → 合并 → 删 worktree；冲突自动中止并停在可恢复阶段',
+  'project.finish.optRevive': '复活会话，继续干',
+  'project.finish.optReviveDesc': '新建命令行进入该 worktree，任务回到「进行中」',
+  'project.finish.optDiscard': '丢弃改动并删除',
+  'project.finish.optDiscardDesc': '{ahead} 个提交与未提交改动将永久丢失',
+  'project.finish.delBranch': '同时删除分支 {branch}',
+  'project.finish.ok': '执行收尾',
+  'project.finish.merged': '已合并回 {base} 并删除 worktree',
+  'project.finish.discarded': '已丢弃并删除',
+  'project.act.traceMerged': '收尾留痕: ⎇{branch} 已合并回 {base}（{strategy}）',
+  'project.act.traceDiscarded': '收尾留痕: ⎇{branch} 已丢弃删除',
 }
 
 export default zhCN

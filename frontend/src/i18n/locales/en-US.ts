@@ -1097,6 +1097,23 @@ const enUS = {
   'project.newSwarm': '+ New swarm…',
   'project.swarm.board': 'Swarm board',
   'project.swarm.members': '{mine}/{total} members in this project',
+  'project.finish.title': 'Finish task',
+  'project.finish.kept': 'Session closed; worktree kept at {path}',
+  'project.finish.stats': 'Based on {base} · ↑{ahead} unmerged commits · {dirty} uncommitted changes',
+  'project.finish.take': 'What will be carried (vs {base})',
+  'project.finish.uncommitted': '{count} uncommitted change(s) — a wip-commit collects them before merging',
+  'project.finish.optMerge': 'Merge into {base} and delete',
+  'project.finish.optMergeDesc': 'Runs wip-commit → merge → remove worktree; conflicts abort into a recoverable stage',
+  'project.finish.optRevive': 'Revive and keep working',
+  'project.finish.optReviveDesc': 'Opens a new CLI in this worktree; the task returns to In-progress',
+  'project.finish.optDiscard': 'Discard changes and delete',
+  'project.finish.optDiscardDesc': '{ahead} commit(s) and uncommitted changes will be lost forever',
+  'project.finish.delBranch': 'Also delete branch {branch}',
+  'project.finish.ok': 'Finish',
+  'project.finish.merged': 'Merged into {base}, worktree removed',
+  'project.finish.discarded': 'Discarded and removed',
+  'project.act.traceMerged': 'Trace: ⎇{branch} merged into {base} ({strategy})',
+  'project.act.traceDiscarded': 'Trace: ⎇{branch} discarded',
 }
 
 export default enUS
