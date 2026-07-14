@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>P2 · 项目主页：composer + 任务流</title>
+<link rel="stylesheet" href="../07-worktree/mock.css">
+<link rel="stylesheet" href="project.css">
+</head>
+<body>
+<div class="spec-bar">
+  <b><span class="spec-tag">P2</span> 项目主页</b><span class="spec-tag">composer + 任务流 · tab 可点</span>
+  <span class="spacer"></span>
+  <a href="p1-project-list.html">← P1</a><a href="index.html">↑ 索引</a><a href="p3-task-finish.html">P3 →</a>
+</div>
+<div class="spec-note">项目的驻留页：顶部 <em>Codex 式 composer</em>（描述任务 ⏎ 开干 = 一次 <code>POST /worktree-sessions</code>，目录已定不再问）；任务流 = 会话 ∪ 孤儿 worktree 的统一投影，按 <em>进行中 / 待收尾 / 已合并</em> 分区，行内 4 段生命周期导轨（建→干→审→并）。Worktree / 竞赛 / 活动收进 tab（原 W4 抽屉、W6 对比台降为本页入口）。</div>
+
+<div class="stage">
+  <!-- 桌面 -->
+  <div class="app-frame" style="height:820px">
+    <div class="sider">
+      <div class="brand">Roam</div>
+      <div class="nav-item">◎ 概览</div>
+      <div class="nav-item on">⌂ 项目</div>
+      <div class="nav-item">⬡ 蜂群</div>
+      <div class="nav-item">🗀 文件</div>
+      <div class="nav-item">⋯ 更多</div>
+    </div>
+    <div class="main-col">
+      <div class="page-pad">
+
+        <!-- 项目头 -->
+        <div class="proj-head">
+          <div class="ico">⌂</div>
+          <div class="t">
+            <b>ttmux <span class="pin" style="color:var(--yellow);font-size:12px">★</span></b>
+            <div class="sub">~/codes/ttmux · <span style="color:var(--cyan)">⎇ main</span> @ a1b2c3 · <span style="color:var(--green)">✓ 与 origin 同步</span></div>
+          </div>
+          <div class="acts"><span class="btn sm">Git 面板</span><span class="btn sm">Worktree 管理</span></div>
+        </div>
+
+        <!-- Composer -->
+        <div class="composer">
+          <textarea placeholder="描述任务，回车开干 —— agent 会在独立 worktree 里干活，开工后自己给分支起语义化名字…"></textarea>
+          <div class="c-bar">
+            <span class="pill on cyan" data-g="where">⎇ 新建 worktree</span>
+            <span class="pill" data-g="where">主仓库</span>
+            <span class="pill" data-g="where">已有 (2) <span class="caret">▾</span></span>
+            <span class="pill" style="cursor:default">基于 main <span class="caret">▾</span></span>
+            <span style="width:1px;height:16px;background:var(--border)"></span>
+            <span class="pill on" data-g="agent">Claude</span>
+            <span class="pill" data-g="agent">Codex</span>
+            <span class="pill" data-g="agent">无</span>
+            <span class="grow"></span>
+            <span class="c-hint">名称自动派生 · <a style="font-size:11.5px">完整表单 ›</a></span>
+            <span class="btn primary sm">开干 ⏎</span>
+          </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="ptabs">
+          <span class="pt on" data-t="tasks">任务 <span class="n">6</span></span>
+          <span class="pt" data-t="wt">Worktree <span class="n">5</span></span>
+          <span class="pt" data-t="race">竞赛 <span class="n">1</span></span>
+          <span class="pt" data-t="act">活动</span>
+        </div>
+
+        <!-- ── 任务流 ── -->
+        <div class="pane" id="pane-tasks">
+          <div class="sect"><span class="tri">▾</span><b>进行中</b><span class="cnt">4</span><span class="ln"></span></div>
+
+          <div class="task-row">
+            <i class="dot g"></i>
+            <div class="col">
+              <div class="line1"><span class="name">fix-login</span><span class="tag cyan">⎇ fix-login</span><span class="tag blue">Claude</span></div>
+              <div class="meta">
+                <span class="lifec"><i class="s1"></i><i class="s2 cur"></i><i></i><i></i></span><span class="lstage">干活中</span>
+                <span><span class="stat-b">↑2</span> · 改动 <span class="stat-y">3</span></span><span>活动 刚刚</span>
+              </div>
+            </div>
+            <div class="acts"><a>进入</a><a>对比</a><a>派生</a><a class="close">收尾</a></div>
+          </div>
+          <div class="task-row sub">
+            <i class="dot g"></i>
+            <div class="col">
+              <div class="line1"><span class="fork-ico">⑂</span><span class="name">fix-login-tests</span><span class="tag cyan">⎇ fix-login-tests</span><span class="tag green">Codex</span></div>
+              <div class="meta">
+                <span class="lifec"><i class="s1"></i><i class="s2 cur"></i><i></i><i></i></span><span class="lstage">干活中</span>
+                <span>改动 <span class="stat-y">1</span></span><span>活动 2分钟前</span>
+              </div>
+            </div>
+            <div class="acts"><a>进入</a><a>对比</a><a class="close">收尾</a></div>
+          </div>
+
+          <div class="task-row">
+            <i class="dot y"></i>
+            <div class="col">
+              <div class="line1"><span class="name">i18n-audit</span><span class="tag cyan">⎇ i18n-audit</span><span class="tag green">Codex</span><span class="tag yellow">待输入</span></div>
+              <div class="meta">
+                <span class="lifec"><i class="s1"></i><i class="s2"></i><i class="s3 cur"></i><i></i></span><span class="lstage">Review</span>
+                <span><span class="stat-b">↑4</span> · 改动 0</span><span>活动 40分钟前</span>
+              </div>
+            </div>
+            <div class="acts"><a>进入</a><a>对比</a><a class="close">收尾</a></div>
+          </div>
+
+          <div class="task-row">
+            <i class="dot idle"></i>
+            <div class="col">
+              <div class="line1"><span class="name">docs-tweak</span><span class="tag ghost">主仓库</span></div>
+              <div class="meta"><span class="lifec"><i class="s1"></i><i class="s2"></i><i></i><i></i></span><span class="lstage">空闲</span><span>活动 3小时前</span></div>
+            </div>
+            <div class="acts"><a>进入</a><a class="close">关闭</a></div>
+          </div>
+
+          <div class="sect warn"><span class="tri">▾</span><b>待收尾</b><span class="cnt">1</span><span class="ln"></span></div>
+          <div class="task-row unfin">
+            <i class="dot idle" style="box-shadow:0 0 0 3px rgba(210,153,34,.15);background:var(--yellow)"></i>
+            <div class="col">
+              <div class="line1"><span class="name">dark-theme</span><span class="tag cyan">⎇ dark-theme</span><span class="tag yellow">会话已关 · worktree 留存</span></div>
+              <div class="meta">
+                <span class="lifec"><i class="s1"></i><i class="s2"></i><i class="s3 cur"></i><i></i></span><span class="lstage">待收尾</span>
+                <span><span class="stat-b">↑3 未合并</span> · 改动 <span class="stat-y">1</span></span><span>最后活动 昨天</span>
+              </div>
+            </div>
+            <div class="acts" style="opacity:1"><a style="color:var(--yellow)">收尾</a><a>复活会话</a><a>对比</a></div>
+          </div>
+
+          <div class="sect"><span class="tri">▾</span><b>已合并</b><span class="cnt">1</span><span class="ln"></span></div>
+          <div class="task-row done">
+            <i class="dot idle" style="background:var(--purple)"></i>
+            <div class="col">
+              <div class="line1"><span class="name">perf-audit</span><span class="tag purple">⇥ 已合并到 main</span></div>
+              <div class="meta"><span class="lifec"><i class="s1"></i><i class="s2"></i><i class="s3"></i><i class="s4"></i></span><span class="lstage">完成</span><span>合并于 2天前 · worktree 可清理</span></div>
+            </div>
+            <div class="acts"><a>清理</a></div>
+          </div>
+        </div>
+
+        <!-- ── Worktree tab（原 W4 语义，仓库内视角）── -->
+        <div class="pane" id="pane-wt" style="display:none">
+          <div class="card" style="margin-top:6px">
+            <div class="wt-row">
+              <div class="r1"><span class="branch">fix-login</span><span class="tag green">活会话 fix-login</span></div>
+              <div class="r2"><span>基于 <b>main</b></span>·<span class="hot-b">↑2</span>·<span class="hot-y">改动 3</span>·<span>2小时前</span></div>
+              <div class="r3"><span class="btn sm">进入会话</span><span class="btn sm">对比 base</span><span class="btn sm">合并回 main ▾</span><span class="btn sm danger">删除</span></div>
+            </div>
+            <div class="wt-row">
+              <div class="r1"><span class="branch">dark-theme</span><span class="tag yellow">孤儿</span></div>
+              <div class="r2"><span>基于 <b>main</b></span>·<span class="hot-b">↑3</span>·<span class="hot-y">改动 1</span>·<span>昨天</span></div>
+              <div class="r3"><span class="btn sm">新建会话进入</span><span class="btn sm">对比 base</span><span class="btn sm danger">删除</span></div>
+            </div>
+            <div class="wt-row">
+              <div class="r1"><span class="branch">hotfix-x</span><span class="tag ghost">⧉ 外部 · base ?</span></div>
+              <div class="r2"><span>基于 <b>?</b></span>·<span>改动 0</span>·<span>30分钟前</span></div>
+              <div class="r3"><span class="btn sm">新建会话进入</span><span class="btn sm">对比(选基准)</span><span class="btn sm danger">删除</span></div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:10px"><span class="btn sm">＋ 新建 worktree(指定分支)</span><span class="btn sm">清理残留</span><span class="hint" style="align-self:center">跨仓库总览 → P1 / 原 W4</span></div>
+        </div>
+
+        <!-- ── 竞赛 tab ── -->
+        <div class="pane" id="pane-race" style="display:none">
+          <div class="card" style="margin-top:6px;padding:13px 16px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="tag yellow">RACE</span><b>login-refactor</b><span class="hint">×2 选手 · 基于 main · 18分钟前开赛</span>
+              <span style="flex:1"></span><span class="btn sm primary">对比台 →</span>
+            </div>
+            <div class="hint" style="margin-top:8px">a: Claude <span style="color:var(--blue)">↑3</span> · b: Codex <span style="color:var(--blue)">↑1</span> —— 选赢家/清理在对比台（W6）完成</div>
+          </div>
+          <div style="margin-top:10px"><span class="btn sm">＋ 新建竞赛…</span></div>
+        </div>
+
+        <!-- ── 活动 tab ── -->
+        <div class="pane" id="pane-act" style="display:none">
+          <div class="card" style="margin-top:6px;padding:6px 4px">
+            <div class="fstat"><span class="st A">●</span><span class="fp mono">a1b2c3 feat(auth): token 刷新去抖 <span style="color:var(--text-dimmer)">— ⎇ fix-login · 5分钟前</span></span></div>
+            <div class="fstat"><span class="st M">●</span><span class="fp mono">99d0ef fix(i18n): 补 en-US 词条 <span style="color:var(--text-dimmer)">— ⎇ i18n-audit · 1小时前</span></span></div>
+            <div class="fstat"><span class="st A">●</span><span class="fp mono">7c21aa Merge: perf-audit → main <span style="color:var(--text-dimmer)">— main · 2天前</span></span></div>
+            <div class="fstat"><span class="st M">●</span><span class="fp mono">30ba91 style(theme): 暗色变量收敛 <span style="color:var(--text-dimmer)">— ⎇ dark-theme · 昨天</span></span></div>
+          </div>
+          <div class="hint" style="margin-top:8px;padding-left:4px">全部 worktree 的 git log 汇总（含已关会话的分支）——任务删掉后仍可在此溯源</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- 手机 -->
+  <div class="phone-frame" style="height:820px">
+    <div class="notch"><i></i></div>
+    <div style="padding:8px 14px 6px;display:flex;align-items:center;gap:8px">
+      <a style="color:var(--text-dim)">‹</a><b style="font-size:15.5px">ttmux</b>
+      <span class="tag green" style="height:18px;font-size:11px">main ✓</span>
+      <span style="flex:1"></span><span class="btn sm">⎇ 5</span>
+    </div>
+    <div class="ptabs" style="margin:0;padding:0 10px">
+      <span class="pt on">任务 <span class="n">6</span></span><span class="pt">Worktree</span><span class="pt">活动</span>
+    </div>
+    <div style="flex:1;overflow:hidden;padding:4px 8px">
+      <div class="task-row">
+        <i class="dot g"></i>
+        <div class="col">
+          <div class="line1"><span class="name">fix-login</span><span class="tag cyan">⎇</span><span class="tag blue">CL</span></div>
+          <div class="meta"><span class="lifec"><i class="s1"></i><i class="s2 cur"></i><i></i><i></i></span><span><span class="stat-b">↑2</span>·<span class="stat-y">~3</span></span><span>刚刚</span></div>
+        </div>
+      </div>
+      <div class="task-row sub">
+        <i class="dot g"></i>
+        <div class="col">
+          <div class="line1"><span class="fork-ico">⑂</span><span class="name">fix-login-tests</span><span class="tag green">CX</span></div>
+          <div class="meta"><span class="lifec"><i class="s1"></i><i class="s2 cur"></i><i></i><i></i></span><span>2分钟前</span></div>
+        </div>
+      </div>
+      <div class="task-row">
+        <i class="dot y"></i>
+        <div class="col">
+          <div class="line1"><span class="name">i18n-audit</span><span class="tag cyan">⎇</span><span class="tag yellow">待输入</span></div>
+          <div class="meta"><span class="lifec"><i class="s1"></i><i class="s2"></i><i class="s3 cur"></i><i></i></span><span class="stat-b">↑4</span><span>40分钟前</span></div>
+        </div>
+      </div>
+      <div class="sect warn"><span class="tri">▾</span><b>待收尾</b><span class="cnt">1</span><span class="ln"></span></div>
+      <div class="task-row unfin">
+        <i class="dot idle" style="background:var(--yellow)"></i>
+        <div class="col">
+          <div class="line1"><span class="name">dark-theme</span><span class="tag yellow">会话已关</span></div>
+          <div class="meta"><span class="stat-b">↑3 未合并</span><span>昨天</span></div>
+        </div>
+        <div class="acts" style="opacity:1"><a style="color:var(--yellow)">收尾</a></div>
+      </div>
+      <div class="sect"><span class="tri">▸</span><b>已合并</b><span class="cnt">1</span><span class="ln"></span></div>
+    </div>
+    <div class="m-composer">＋ 描述新任务，开干…<span class="go">⏎</span></div>
+    <div class="tabbar"><span>◎</span><span class="on">⌂</span><span>⬡</span><span>⋯</span></div>
+  </div>
+</div>
+
+<div class="spec-note" style="border-top:1px solid var(--border-subtle)">
+  规则：① composer 提交 = <code>POST /worktree-sessions</code>（「主仓库」档 = <code>POST /sessions</code>，「已有」档指向既有 worktree）；base 缺省本地主干（W1 修订 5），名称从需求派生（修订 3），占位分支 = 会话名 slug、agent 开工自改名（修订 4）；② 任务流分组优先级沿用 W2：竞赛 &gt; parent 树（⑂ 紫导线缩进） &gt; 平铺；③ 生命周期导轨 4 段 = 建(cyan)→干(green)→审(yellow)→并(purple)，当前段呼吸闪烁，「审」= 有未合并提交或待输入；④ 「收尾」→ P3 抽屉；「复活会话」= 已有 worktree 档新建会话进入；⑤ 「派生」= 现有 fork 表单（07 F 期），parent 固定；⑥ Worktree tab 为仓库内视角（原 W4 语义全保留），竞赛 tab 只列组、动作去 W6；⑦ 5s 轮询 + service 缓存，同 W4。
+</div>
+
+<script>
+document.querySelectorAll('.ptabs .pt[data-t]').forEach(t => t.addEventListener('click', () => {
+  document.querySelectorAll('.ptabs .pt[data-t]').forEach(x => x.classList.toggle('on', x === t))
+  document.querySelectorAll('.pane').forEach(p => p.style.display = p.id === 'pane-' + t.dataset.t ? '' : 'none')
+}))
+document.querySelectorAll('.pill[data-g]').forEach(p => p.addEventListener('click', () => {
+  document.querySelectorAll('.pill[data-g="' + p.dataset.g + '"]').forEach(x => {
+    x.classList.toggle('on', x === p)
+    if (p.dataset.g === 'where') x.classList.toggle('cyan', x === p && x.textContent.includes('worktree'))
+  })
+}))
+</script>
+</body>
+</html>

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>P3 · 任务收尾：孤儿 worktree 的归宿</title>
+<link rel="stylesheet" href="../07-worktree/mock.css">
+<link rel="stylesheet" href="project.css">
+</head>
+<body>
+<div class="spec-bar">
+  <b><span class="spec-tag">P3</span> 任务收尾</b><span class="spec-tag">待收尾抽屉 · 三选一可点</span>
+  <span class="spacer"></span>
+  <a href="p2-project-home.html">← P2</a><a href="index.html">↑ 索引</a>
+</div>
+<div class="spec-note">任务流「待收尾」行点 <em>[收尾]</em> 打开。与 W7（关会话时的钩子）互补：W7 管「关的那一刻」，P3 管「关完之后」——同一套三选一语义、同一套安全规则（损失先行、dry-run、expected-head、删分支独立勾选），入口从管理抽屉的「孤儿行」升级为项目页一等回访路径。</div>
+
+<div class="stage">
+  <div class="app-frame" style="height:780px">
+    <div class="sider">
+      <div class="brand">Roam</div>
+      <div class="nav-item">◎ 概览</div>
+      <div class="nav-item on">⌂ 项目</div>
+      <div class="nav-item">⬡ 蜂群</div>
+      <div class="nav-item">⋯ 更多</div>
+    </div>
+    <div class="main-col">
+      <div class="page-pad" style="filter:saturate(.9)">
+        <div class="proj-head">
+          <div class="ico">⌂</div>
+          <div class="t"><b>ttmux</b><div class="sub">~/codes/ttmux · ⎇ main @ a1b2c3</div></div>
+        </div>
+        <div class="sect warn"><span class="tri">▾</span><b>待收尾</b><span class="cnt">1</span><span class="ln"></span></div>
+        <div class="task-row unfin" style="border-color:rgba(210,153,34,.4)">
+          <i class="dot idle" style="background:var(--yellow)"></i>
+          <div class="col">
+            <div class="line1"><span class="name">dark-theme</span><span class="tag cyan">⎇ dark-theme</span><span class="tag yellow">会话已关 · worktree 留存</span></div>
+            <div class="meta"><span class="stat-b">↑3 未合并</span> · 改动 <span class="stat-y">1</span> · 最后活动 昨天</div>
+          </div>
+          <div class="acts" style="opacity:1"><a style="color:var(--yellow)">收尾</a></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dim"></div>
+    <div class="drawer" style="width:500px">
+      <div class="d-head">收尾任务 <span class="tag cyan">⎇ dark-theme</span><span class="x">✕</span></div>
+      <div style="flex:1;overflow:auto;padding:14px 16px;display:flex;flex-direction:column;gap:13px">
+
+        <!-- 现状摘要 -->
+        <div class="card" style="padding:11px 13px;font-size:12.5px;color:var(--text-dim);line-height:1.8">
+          会话 <b style="color:var(--text-bright)">dark-theme</b> 已关闭，worktree 留存于
+          <span class="mono" style="font-size:11.5px">.worktrees/dark-theme</span><br>
+          基于 <b style="color:var(--text-bright)">main</b> ·
+          <span style="color:var(--blue)">↑3 个提交未合并</span> ·
+          <span style="color:var(--yellow)">1 个未提交改动</span>
+        </div>
+
+        <!-- 对比 base：已提交 / 未提交分开 -->
+        <div>
+          <span class="field-label">将带走的内容（对比 main · mergeBase..HEAD）</span>
+          <div class="card" style="padding:4px 2px">
+            <div class="fstat"><span class="st A">A</span><span class="fp mono">frontend/src/theme-dark.ts</span><span class="pm"><span class="p">+214</span><span class="m">-0</span></span></div>
+            <div class="fstat"><span class="st M">M</span><span class="fp mono">frontend/src/theme.tsx</span><span class="pm"><span class="p">+48</span><span class="m">-12</span></span></div>
+            <div class="fstat"><span class="st M">M</span><span class="fp mono">frontend/src/index.css</span><span class="pm"><span class="p">+31</span><span class="m">-6</span></span></div>
+          </div>
+          <div class="hint warn" style="margin-top:6px">另有 1 个未提交改动（frontend/src/App.tsx）—— 合并前会先 wip-commit 收进分支</div>
+        </div>
+
+        <!-- 三选一 -->
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <label class="radio on" data-r>
+            <span class="r"></span>
+            <span class="rt"><b>合并回 main 并删除 <span class="btn sm" style="margin-left:6px">squash <span class="caret">▾</span></span></b>
+            <span>dry-run 通过后执行：wip-commit → merge → 删 worktree（分支 <code class="mono">-d</code>）；冲突则停在状态机可恢复</span></span>
+          </label>
+          <label class="radio" data-r>
+            <span class="r"></span>
+            <span class="rt"><b>复活会话，继续干</b>
+            <span>新建会话进入该 worktree（＝新建会话「已有」档），任务回到「进行中」</span></span>
+          </label>
+          <label class="radio" data-r>
+            <span class="r"></span>
+            <span class="rt"><b style="color:var(--red)">丢弃改动并删除</b>
+            <span>上面 3 个提交与未提交改动将<b style="color:var(--red)">永久丢失</b>；需二次确认</span></span>
+          </label>
+        </div>
+        <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--text-dim);padding-left:2px">
+          <input type="checkbox" checked style="accent-color:var(--blue-deep)">同时删除分支 dark-theme（未合并需强删时单独确认）
+        </label>
+      </div>
+      <div style="padding:12px 16px;border-top:1px solid var(--border-subtle);display:flex;gap:10px;justify-content:flex-end">
+        <span class="btn">取消</span><span class="btn primary">执行收尾</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="spec-note" style="border-top:1px solid var(--border-subtle)">
+  规则：① 全部走现有 API——合并=<code>/git/worktree/merge</code>(dry-run+expected-head)、删除=<code>/git/worktree/remove</code>(占用检查+脏保护)、复活=<code>POST /worktree-sessions</code> 指向既有 worktree；② 未提交改动在合并档自动 wip-commit（同 W6 crown 语义），丢弃档计入损失清单；③ 外部/旧格式 worktree（base=unknown）无合并档，只有 复活/对比(手选基准)/删除；④ 冲突返回 <code>{stage, conflictFiles}</code> + [进入会话处理]，同 W4；⑤ 执行成功后任务移入「已合并」或消失，活动 tab 留痕。
+</div>
+
+<script>
+document.querySelectorAll('.radio[data-r]').forEach(r => r.addEventListener('click', () =>
+  document.querySelectorAll('.radio[data-r]').forEach(x => x.classList.toggle('on', x === r))))
+</script>
+</body>
+</html>

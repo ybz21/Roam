@@ -17,6 +17,7 @@
 | 5 | [05-pages.md](./05-pages.md) | **逐页面设计** — 10 个页面的三端布局与线框 |
 | 6 | [06-roadmap.md](./06-roadmap.md) | **落地计划** — 里程碑、开放问题 |
 | 7 | [07-worktree.md](./07-worktree.md) | **Worktree 管理** — 命名创建、管理抽屉、对比 base、合并收尾、并行竞赛 |
+| 8 | [08-project.md](./08-project.md) | **项目概念** — 仓库即项目、composer 开干、任务=会话∪孤儿 worktree、待收尾一等 |
 
 ## 实现状态
 

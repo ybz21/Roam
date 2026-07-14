@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>P1 · 项目列表：仓库即项目</title>
+<link rel="stylesheet" href="../07-worktree/mock.css">
+<link rel="stylesheet" href="project.css">
+</head>
+<body>
+<div class="spec-bar">
+  <b><span class="spec-tag">P1</span> 项目列表</b><span class="spec-tag">仓库即项目 · 桌面 + 手机</span>
+  <span class="spacer"></span>
+  <a href="index.html">↑ 索引</a><a href="p2-project-home.html">P2 →</a>
+</div>
+<div class="spec-note">项目 = git 仓库（canonical common-dir），由「会话 cwd join ∪ worktree 总览」<em>现算推导</em>，无注册/删除流程。卡片 = 主干同步态 + 任务/worktree/待收尾计数 + 进行中任务前 2 条 + 7 日活动。顶部 Segmented 保留「全部会话」平铺老视图（即 W2）。非仓库会话落底部「散会话」区。</div>
+
+<div class="stage">
+  <!-- 桌面 -->
+  <div class="app-frame" style="height:760px">
+    <div class="sider">
+      <div class="brand">Roam</div>
+      <div class="nav-item">◎ 概览</div>
+      <div class="nav-item on">⌂ 项目</div>
+      <div class="nav-item">⬡ 蜂群</div>
+      <div class="nav-item">🗀 文件</div>
+      <div class="nav-item">⋯ 更多</div>
+    </div>
+    <div class="main-col">
+      <div class="page-pad">
+        <div class="card" style="background:transparent;border:0;box-shadow:none">
+          <div class="c-head" style="border:0;padding:2px 2px 14px">
+            项目
+            <div class="segmented" style="margin-left:14px">
+              <button class="on">项目</button><button>全部会话</button>
+            </div>
+            <span style="flex:1"></span>
+            <span class="btn primary sm">＋ 新任务 <span class="caret">▾</span></span>
+          </div>
+
+          <div class="proj-grid">
+            <!-- ttmux：置顶 + 有待收尾 -->
+            <div class="proj-card">
+              <div class="p-name">⌂ ttmux <span class="tag green" style="height:18px;font-size:11px">main ↑0</span><span class="pin">★</span></div>
+              <div class="p-path">~/codes/ttmux</div>
+              <div class="p-stats"><b>4</b> 任务 · <b>5</b> worktree · <span class="tag yellow" style="height:18px;font-size:11px">1 待收尾</span></div>
+              <div class="p-run">
+                <div class="r"><i class="dot g"></i><span class="nm">fix-login</span><span class="tag blue" style="height:17px;font-size:10.5px">Claude</span><span class="st">刚刚</span></div>
+                <div class="r"><i class="dot y"></i><span class="nm">i18n-audit</span><span class="tag green" style="height:17px;font-size:10.5px">Codex</span><span class="st">等输入</span></div>
+              </div>
+              <div class="p-foot">
+                <span class="btn sm">打开</span><span class="btn sm">＋ 新任务</span>
+                <span class="spark"><i style="height:6px"></i><i style="height:10px"></i><i style="height:8px"></i><i style="height:16px"></i><i style="height:12px"></i><i style="height:20px"></i><i style="height:22px"></i></span>
+              </div>
+            </div>
+
+            <!-- app：竞赛进行中 -->
+            <div class="proj-card">
+              <div class="p-name">⌂ app <span class="tag yellow" style="height:18px;font-size:11px">RACE ×3</span></div>
+              <div class="p-path">~/codes/app</div>
+              <div class="p-stats"><b>3</b> 任务 · <b>3</b> worktree</div>
+              <div class="p-run">
+                <div class="r"><i class="dot g"></i><span class="nm">dark-mode-a</span><span class="tag blue" style="height:17px;font-size:10.5px">Claude</span><span class="st">2分钟</span></div>
+                <div class="r"><i class="dot g"></i><span class="nm">dark-mode-b</span><span class="tag blue" style="height:17px;font-size:10.5px">Claude</span><span class="st">刚刚</span></div>
+              </div>
+              <div class="p-foot">
+                <span class="btn sm">打开</span><span class="btn sm">对比台</span>
+                <span class="spark"><i class="mute" style="height:4px"></i><i style="height:5px"></i><i class="mute" style="height:4px"></i><i style="height:8px"></i><i style="height:14px"></i><i style="height:18px"></i><i style="height:16px"></i></span>
+              </div>
+            </div>
+
+            <!-- blog：无活会话，只剩待收尾 -->
+            <div class="proj-card">
+              <div class="p-name">⌂ blog <span class="tag ghost" style="height:18px;font-size:11px">main ↑2</span></div>
+              <div class="p-path">~/codes/blog</div>
+              <div class="p-stats"><b>0</b> 任务 · <b>1</b> worktree · <span class="tag yellow" style="height:18px;font-size:11px">1 待收尾</span></div>
+              <div class="p-run" style="color:var(--text-dimmer)">
+                <div class="r"><i class="dot idle"></i><span class="nm">seo-meta</span><span class="tag ghost" style="height:17px;font-size:10.5px">会话已关</span><span class="st">↑3 未合并</span></div>
+              </div>
+              <div class="p-foot">
+                <span class="btn sm">打开</span><span class="btn sm" style="color:var(--yellow)">收尾</span>
+                <span class="spark"><i style="height:12px"></i><i style="height:6px"></i><i class="mute" style="height:4px"></i><i class="mute" style="height:4px"></i><i style="height:5px"></i><i class="mute" style="height:4px"></i><i class="mute" style="height:4px"></i></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 散会话：cwd 不在任何 git 仓库 -->
+          <div class="sect" style="margin-top:14px"><span class="tri">▾</span><b>散会话</b><span class="cnt">2</span><span class="ln"></span></div>
+          <div class="sess-row">
+            <i class="dot g"></i>
+            <div class="col">
+              <div class="line1"><span class="name">main-shell</span><span class="tag ghost">已连接</span><span class="meta" style="font-size:12px">~/ · 窗口 2</span></div>
+            </div>
+            <div class="acts"><a>进入</a><a class="close">关闭</a></div>
+          </div>
+          <div class="sess-row">
+            <i class="dot idle"></i>
+            <div class="col">
+              <div class="line1"><span class="name">notes</span><span class="tag ghost">空闲</span><span class="meta" style="font-size:12px">~/notes · 窗口 1</span></div>
+            </div>
+            <div class="acts"><a>进入</a><a class="close">关闭</a></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 手机 -->
+  <div class="phone-frame" style="height:760px">
+    <div class="notch"><i></i></div>
+    <div style="padding:10px 14px;display:flex;align-items:center;gap:10px">
+      <b style="font-size:16px">项目</b>
+      <div class="segmented"><button class="on" style="padding:3px 10px">项目</button><button style="padding:3px 10px">会话</button></div>
+      <span style="flex:1"></span><span class="btn primary sm">＋</span>
+    </div>
+    <div style="flex:1;overflow:hidden;padding:0 10px;display:flex;flex-direction:column;gap:10px">
+      <div class="proj-card">
+        <div class="p-name">⌂ ttmux <span class="tag green" style="height:18px;font-size:11px">main</span><span class="pin">★</span></div>
+        <div class="p-stats"><b>4</b> 任务 · <b>5</b> worktree · <span class="tag yellow" style="height:18px;font-size:11px">1 待收尾</span></div>
+        <div class="p-run">
+          <div class="r"><i class="dot g"></i><span class="nm">fix-login</span><span class="st">刚刚</span></div>
+          <div class="r"><i class="dot y"></i><span class="nm">i18n-audit</span><span class="st">等输入</span></div>
+        </div>
+      </div>
+      <div class="proj-card">
+        <div class="p-name">⌂ app <span class="tag yellow" style="height:18px;font-size:11px">RACE ×3</span></div>
+        <div class="p-stats"><b>3</b> 任务 · <b>3</b> worktree</div>
+        <div class="p-run">
+          <div class="r"><i class="dot g"></i><span class="nm">dark-mode-a · b</span><span class="st">刚刚</span></div>
+        </div>
+      </div>
+      <div class="proj-card" style="gap:6px">
+        <div class="p-name">⌂ blog <span class="tag yellow" style="height:18px;font-size:11px">1 待收尾</span></div>
+        <div class="p-stats"><b>0</b> 任务 · <b>1</b> worktree</div>
+      </div>
+      <div class="sect"><span class="tri">▾</span><b>散会话</b><span class="cnt">2</span><span class="ln"></span></div>
+      <div class="sess-row" style="padding:8px">
+        <i class="dot g"></i>
+        <div class="col"><div class="line1"><span class="name">main-shell</span><span class="tag ghost">已连接</span></div></div>
+      </div>
+    </div>
+    <div class="tabbar"><span>◎</span><span class="on">⌂</span><span>⬡</span><span>⋯</span></div>
+  </div>
+</div>
+
+<div class="spec-note" style="border-top:1px solid var(--border-subtle)">
+  规则：① 排序 = 置顶 ★ &gt; 有 running 任务 &gt; 最近活动时间；② 卡片「进行中」最多 2 条，超出「+n」；③ 待收尾计数 = 孤儿 worktree 且 committedAhead&gt;0（07 W4 判定复用），点「收尾」直达 P3；④ 项目无注册/删除——最后一个会话关掉且 worktree 清空即自然消失（置顶过的标「无活动」保留）；⑤ 「全部会话」= 现有 W2 平铺视图原样保留；⑥ 「＋ 新任务 ▾」下拉列最近项目 + 「其他目录…」（回落 W1 完整弹窗）。
+</div>
+</body>
+</html>
