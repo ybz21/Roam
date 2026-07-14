@@ -125,6 +125,11 @@ func (m Manifest) Validate() error {
 	if m.ID == "" || !strings.Contains(m.ID, ".") {
 		return fmt.Errorf("manifest: id must be <publisher>.<name>, got %q", m.ID)
 	}
+	// 冒号是 id 限定调用形式(<id>:<handler>)的保留分隔符:id 含冒号会让
+	// FullCommandOwner 按第一个冒号切出的 id 永远对不上,限定调用全挂
+	if strings.Contains(m.ID, ":") {
+		return fmt.Errorf("manifest: id must not contain ':', got %q", m.ID)
+	}
 	if m.Version == "" {
 		return fmt.Errorf("manifest %s: version is required", m.ID)
 	}

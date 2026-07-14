@@ -48,6 +48,11 @@ func TestValidateRejects(t *testing.T) {
 	if err := m.Validate(); err == nil {
 		t.Fatal("command id with ':' accepted")
 	}
+	m = sample()
+	m.ID = "ac:me.qc" // 同上:id 含冒号会让 <id>:<handler> 解析永远失败
+	if err := m.Validate(); err == nil {
+		t.Fatal("plugin id with ':' accepted")
+	}
 }
 
 func TestCommandOwner(t *testing.T) {
