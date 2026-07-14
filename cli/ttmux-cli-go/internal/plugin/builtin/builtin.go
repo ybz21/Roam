@@ -4,6 +4,7 @@
 package builtin
 
 import (
+	hostmonitor "roam-plugins/hostmonitor"
 	im "roam-plugins/im"
 	"roam-plugins/reviewmesh"
 	"ttmux-cli-go/internal/plugin"
@@ -27,6 +28,7 @@ func All() []Builtin {
 	return []Builtin{
 		{Manifest: reviewMeshManifest(), Activate: reviewmesh.Activate},
 		{Manifest: imManifest(), Activate: im.Activate},
+		{Manifest: hostMonitorManifest(), Activate: hostmonitor.Activate},
 	}
 }
 
@@ -77,6 +79,32 @@ func reviewMeshManifest() plugin.Manifest {
 					Title:       plugin.LocaleText{"zh-CN": "默认评审 Agent", "en-US": "Default reviewer agent"},
 					Description: plugin.LocaleText{"zh-CN": "留空则自动选择(codex 优先)", "en-US": "Empty = auto (prefer codex)"},
 					Options:     []string{"", "codex", "claude"}},
+			},
+		},
+	}
+}
+
+func hostMonitorManifest() plugin.Manifest {
+	return plugin.Manifest{
+		ManifestVersion: 1,
+		ID:              "roam.host-monitor",
+		Publisher:       "roam",
+		Name:            "host-monitor",
+		DisplayName:     plugin.LocaleText{"zh-CN": "主机监控", "en-US": "Host Monitor"},
+		Version:         "0.1.0",
+		Description: plugin.LocaleText{
+			"zh-CN": "宿主机资源监控:CPU/GPU/内存/磁盘/网络实时快照与趋势,Web 插件页内置仪表盘",
+			"en-US": "Host machine monitoring: real-time CPU/GPU/memory/disk/network snapshots and trends, with a built-in dashboard on the plugins page",
+		},
+		Runtime: plugin.Runtime{Kind: "builtin"},
+		Permissions: plugin.Perms{
+			// 采样读本机 /proc;GPU 经 nvidia-smi(声明白名单,采集不走宿主 API)
+			Commands: plugin.CommandPerms{Allow: []string{"nvidia-smi"}},
+		},
+		ActivationEvents: []string{"onCommand:host-monitor.stats"},
+		Contributes: plugin.Contribs{
+			Commands: []plugin.CommandContrib{
+				{ID: "host-monitor.stats", Title: plugin.LocaleText{"zh-CN": "采集一次资源快照(含近期趋势)", "en-US": "Take a resource snapshot (with recent trend)"}},
 			},
 		},
 	}

@@ -163,8 +163,11 @@ func (a *API) PluginRun(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
 		return
 	}
-	// 命令必须属于该插件,防止借任意插件 id 调他家命令
-	if !strings.HasPrefix(b.Command, c.Param("id")+".") {
+	// 命令必须属于该插件,防止借任意插件 id 调他家命令。命令 ID 前缀是
+	// 插件短名(review-mesh.review),而路由参数是全 id(roam.review-mesh),
+	// 取 publisher 后的短名比对。
+	_, short, ok := strings.Cut(c.Param("id"), ".")
+	if !ok || !strings.HasPrefix(b.Command, short+".") {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_COMMAND"}})
 		return
 	}
