@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -167,8 +168,9 @@ func (a *API) ProjectsList(c *gin.Context) {
 			}
 			top = append(top, ps)
 		}
-		// 退场 (b)：不存在任何 roam worktree（clean 也算存在）∧ 无会话 ∧ 未置顶
-		if roamWts == 0 && p.Sessions == 0 && !e.Pinned {
+		// 退场 (b) 只收敛「发现」通道：不存在任何 roam worktree（clean 也算存在）
+		// ∧ 无会话 ∧ 未置顶。用户显式创建（origin=user）的是一等对象，永不自动退场。
+		if e.Origin != "user" && roamWts == 0 && p.Sessions == 0 && !e.Pinned {
 			a.Projects.Remove(key)
 			continue
 		}
@@ -209,6 +211,47 @@ func (a *API) ProjectsList(c *gin.Context) {
 	projResp, projRespAt = resp, time.Now()
 	projRespMu.Unlock()
 	c.JSON(http.StatusOK, resp)
+}
+
+// ProjectCreate POST /projects {dir, displayName?}
+// 显式创建项目对象（origin=user，永不自动退场）。项目 = git 仓库：目录经
+// ResolveRepo 校验并 canonical 化（worktree 里建也归位到主仓库根），非 git 目录报错。
+func (a *API) ProjectCreate(c *gin.Context) {
+	var b struct {
+		Dir         string `json:"dir"`
+		DisplayName string `json:"displayName"`
+	}
+	if err := c.ShouldBindJSON(&b); err != nil || strings.TrimSpace(b.Dir) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
+	repo, err := a.WT.ResolveRepo(ctx, strings.TrimSpace(b.Dir))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "NOT_GIT_REPO", "message": err.Error()}})
+		return
+	}
+	key := a.Projects.Add(repo.Root, strings.TrimSpace(b.DisplayName))
+	projRespMu.Lock()
+	projResp = nil
+	projRespMu.Unlock()
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"key": key, "dir": repo.Root}})
+}
+
+// ProjectDelete DELETE /projects/:key
+// 纯台账操作：从项目列表移除，不动目录/worktree/会话；有会话在跑的仓库
+// 下次聚合会被发现通道重新记入（这是特性——项目列表反映实况）。
+func (a *API) ProjectDelete(c *gin.Context) {
+	if _, ok := a.Projects.Dir(c.Param("key")); !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "UNKNOWN_PROJECT"}})
+		return
+	}
+	a.Projects.Remove(c.Param("key"))
+	projRespMu.Lock()
+	projResp = nil
+	projRespMu.Unlock()
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"ok": true}})
 }
 
 // ProjectPrefs PATCH /projects/:key/prefs {pinned?, displayName?, defaultAgent?, defaultBase?}

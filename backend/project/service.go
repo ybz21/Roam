@@ -25,9 +25,13 @@ type Prefs struct {
 }
 
 // Entry 是台账里的一个仓库：dir 为 canonical 主仓库根（来自 cwd join 的
-// AnnotationHit.Repo，已 canonical 化，不在本包重复解析）。
+// AnnotationHit.Repo 或显式创建时的 ResolveRepo，均已 canonical 化）。
+// Origin 区分两条入册通道：
+//   - "user"：用户显式创建（POST /projects）——一等对象，永不自动退场，只能显式 DELETE；
+//   - ""（discovered）：会话 cwd join 自动发现——按退场规则读时收敛。
 type Entry struct {
-	Dir string `json:"dir"`
+	Dir    string `json:"dir"`
+	Origin string `json:"origin,omitempty"`
 	Prefs
 	FirstSeen int64 `json:"firstSeen"`
 	LastSeen  int64 `json:"lastSeen"`
@@ -104,6 +108,27 @@ func (s *Store) Touch(dir string) string {
 		return key
 	}
 	s.repos[key] = &Entry{Dir: dir, FirstSeen: now, LastSeen: now}
+	s.save()
+	return key
+}
+
+// Add 显式创建（POST /projects）：origin=user 的一等对象。已在册则升级为 user
+// （发现来的条目被用户「转正」），并可顺带设显示名。返回 repoKey。
+func (s *Store) Add(dir, displayName string) string {
+	key := KeyFor(dir)
+	now := time.Now().Unix()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e, ok := s.repos[key]
+	if !ok {
+		e = &Entry{Dir: dir, FirstSeen: now}
+		s.repos[key] = e
+	}
+	e.Origin = "user"
+	e.LastSeen = now
+	if displayName != "" {
+		e.DisplayName = displayName
+	}
 	s.save()
 	return key
 }

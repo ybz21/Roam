@@ -159,8 +159,10 @@ func New(cfg Config) *gin.Engine {
 		g.POST("/races/:id/cleanup", h.RaceCleanup) // 全部清理（会话+worktree+分支）
 		g.DELETE("/races/:id", h.RaceDelete)        // 删除竞赛记录
 
-		// ── 项目（08：项目=git 仓库，读模型聚合 + 弱台账偏好）──
-		g.GET("/projects", h.ProjectsList)              // 列表聚合（发现/退场都在读时收敛）
+		// ── 项目（08：项目=git 仓库，一等存储对象 + 读模型聚合）──
+		g.GET("/projects", h.ProjectsList)              // 列表聚合（发现通道读时收敛）
+		g.POST("/projects", h.ProjectCreate)            // 显式创建（origin=user，不自动退场）
+		g.DELETE("/projects/:key", h.ProjectDelete)     // 显式移除（纯台账，不动目录/会话）
 		g.PATCH("/projects/:key/prefs", h.ProjectPrefs) // 置顶/显示名/默认 agent/base
 
 		g.GET("/sessions", h.Sessions)

@@ -1052,6 +1052,13 @@ const enUS = {
   'project.finish': 'Finish',
   'project.manage': 'Manage',
   'project.mergedClean': 'Merged/clean, safe to delete',
+  'project.newModalTitle': 'New project',
+  'project.displayName': 'Display name (optional, defaults to dir name)',
+  'project.newHint': 'A project is a git repo, stored persistently in the list; start sessions/features from the task box inside the project',
+  'project.createdProject': 'Project created',
+  'project.notGit': 'Not a git repository',
+  'project.removed': 'Removed from list',
+  'project.removeConfirm': 'Remove this project from the list? Directory, worktrees and sessions are untouched',
 }
 
 export default enUS

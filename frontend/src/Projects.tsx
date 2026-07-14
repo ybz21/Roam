@@ -4,11 +4,11 @@
 //                     任务流（会话 ∪ 孤儿 worktree 的统一投影，收尾入口）
 // 数据零新真相源：/projects 只是聚合，写路径全部复用 worktree-sessions/sessions。
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
-import { App as AntApp, Button, Input, Segmented, Select, Spin, Tag, Tooltip } from 'antd'
+import { App as AntApp, AutoComplete, Button, Input, Modal, Popconfirm, Segmented, Select, Space, Spin, Tag, Tooltip } from 'antd'
 import { api } from './api'
 import { useI18n } from './i18n'
 import { usePreferences } from './preferences'
-import { relTime, taskNameFromPrompt, shq, NewSessionModal } from './App'
+import { relTime, taskNameFromPrompt, shq, NewSessionModal, DirPicker, recentDirs, pushRecentDir } from './App'
 
 const WorktreePanel = lazy(() => import('./WorktreePanel'))
 
@@ -43,6 +43,50 @@ export default function Projects({ openTerm, initialKey }: { openTerm: (n: strin
   return <ProjectList data={data} loaded={loaded} openTerm={openTerm} refresh={load} />
 }
 
+// ── 新项目弹窗：创建的是「项目」这个存储对象（POST /projects），不建任何会话。
+// 项目 = git 仓库；开 session / 建 feature 是进项目之后 composer 的事。
+function NewProjectModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t } = useI18n()
+  const { message } = AntApp.useApp()
+  const [dir, setDir] = useState('')
+  const [name, setName] = useState('')
+  const [pick, setPick] = useState(false)
+  const [creating, setCreating] = useState(false)
+  useEffect(() => { if (open) { setDir(''); setName('') } }, [open])
+  const ok = async () => {
+    if (!dir.trim()) { message.error(t('session.dirPlaceholder')); return }
+    try {
+      setCreating(true)
+      const res = await api('POST', '/projects', { dir: dir.trim(), displayName: name.trim() })
+      pushRecentDir(dir.trim())
+      message.success(t('project.createdProject'))
+      onClose()
+      location.hash = '#/projects/' + encodeURIComponent(res.data.key)
+    } catch (e: any) {
+      message.error(e.apiError?.code === 'NOT_GIT_REPO' ? t('project.notGit') : e.message)
+    } finally { setCreating(false) }
+  }
+  return (
+    <>
+      <Modal open={open} onCancel={onClose} onOk={ok} title={t('project.newModalTitle')}
+        okText={t('file.create')} destroyOnClose confirmLoading={creating}>
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <Space.Compact style={{ width: '100%' }}>
+            <AutoComplete style={{ flex: 1 }} value={dir} onChange={setDir} autoFocus
+              options={recentDirs().map((d) => ({ value: d }))}
+              filterOption={(input, opt) => String(opt?.value).toLowerCase().includes(input.toLowerCase())}
+              placeholder={t('session.dirPlaceholder')} />
+            <Button onClick={() => setPick(true)}>{t('common.browse')}</Button>
+          </Space.Compact>
+          <Input placeholder={t('project.displayName')} value={name} onChange={(e) => setName(e.target.value)} />
+          <div style={{ fontSize: 12, color: 'var(--text-dimmer)' }}>{t('project.newHint')}</div>
+        </Space>
+      </Modal>
+      <DirPicker open={pick} start={dir} onPick={(p) => { setDir(p); setPick(false) }} onClose={() => setPick(false)} />
+    </>
+  )
+}
+
 // ── P1 项目列表 ───────────────────────────────────────────
 function ProjectList({ data, loaded, openTerm, refresh }: {
   data: { projects: Proj[]; loose: ProjSession[] }; loaded: boolean
@@ -53,6 +97,10 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
   const [newOpen, setNewOpen] = useState(false)
   const pin = async (p: Proj) => {
     try { await api('PATCH', `/projects/${encodeURIComponent(p.key)}/prefs`, { pinned: !p.pinned }); refresh() }
+    catch (e: any) { message.error(e.message) }
+  }
+  const remove = async (p: Proj) => {
+    try { await api('DELETE', `/projects/${encodeURIComponent(p.key)}`); message.success(t('project.removed')); refresh() }
     catch (e: any) { message.error(e.message) }
   }
   const open = (p: Proj) => { location.hash = '#/projects/' + encodeURIComponent(p.key) }
@@ -89,6 +137,10 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
                 <a onClick={(e) => { e.stopPropagation(); pin(p) }}
                   style={{ color: p.pinned ? 'var(--yellow, #d29922)' : 'var(--text-dimmer)', fontSize: 13 }}>★</a>
               </Tooltip>
+              <Popconfirm title={t('project.removeConfirm')} onConfirm={() => remove(p)}
+                onPopupClick={(e) => e.stopPropagation()}>
+                <a onClick={(e) => e.stopPropagation()} style={{ color: 'var(--text-dimmer)', fontSize: 12 }}>✕</a>
+              </Popconfirm>
             </div>
             <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: 11, color: 'var(--text-dimmer)', marginTop: -4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.dir}>{p.dir}</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 12, color: 'var(--text-dim)' }}>
@@ -133,7 +185,7 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
           ))}
         </>
       )}
-      <NewSessionModal open={newOpen} onClose={() => setNewOpen(false)} onDone={(n) => { openTerm(n); refresh() }} />
+      <NewProjectModal open={newOpen} onClose={() => { setNewOpen(false); refresh() }} />
     </div>
   )
 }

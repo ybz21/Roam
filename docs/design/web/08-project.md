@@ -36,10 +36,15 @@
   **不能只靠会话现算**：现有 `GET /git/worktrees/all` 只枚举「当前会话触达的仓库」，
   仓库最后一个会话关掉后，留着未合并提交的孤儿 worktree 就没有任何来源能再发现它——
   「待收尾/复活」入口直接消失。
-- 因此 `<dataDir>/projects.json` 是**弱台账**：仓库首次被发现（会话 cwd join 命中）即
-  自动记入 `knownRepos`（canonical common-dir 列表）；移出仅当 **(a)** 仓库目录已不存在，
-  或 **(b)** 不存在任何 roam worktree（按存在与否判定，clean/已合并未清理的也算存在）
-  **且**无会话**且**未置顶。同文件顺带存 UI 偏好（置顶、默认 agent/base、自定显示名）。
+- 因此项目在 `<dataDir>/projects.json` 里是**存储对象**，有两条入册通道（v0.2 修订：
+  实现期用户反馈——「建的是项目不是 session」，新项目必须是后台一等对象）：
+  - **显式创建（origin=user）**：`POST /projects {dir, displayName?}`，目录经 ResolveRepo
+    校验并归位主仓库根，非 git 目录拒绝。**永不自动退场**，只能 `DELETE /projects/:key`
+    显式移除（纯台账操作，不动目录/worktree/会话）。开 session、建 feature 是进项目
+    之后 composer 的事，创建项目本身不建任何会话。
+  - **发现（origin=discovered）**：会话 cwd join 命中即自动记入；移出仅当 **(a)** 仓库
+    目录已不存在，或 **(b)** 不存在任何 roam worktree（clean/已合并未清理的也算存在）
+    **且**无会话**且**未置顶。同文件顺带存 UI 偏好（置顶、默认 agent/base、自定显示名）。
   git/session 真相源不变；台账丢失只损失「零会话仓库的可发现性」，活跃仓库下次开会话即重建。
 - cwd 不在任何 git 仓库的会话 → 「散会话」区，保留原会话语义，不强造项目。
 
@@ -133,7 +138,9 @@
 
 | 接口 | 说明 |
 |---|---|
-| `GET /projects` | 聚合：knownRepos（§2.1 弱台账）逐仓库 worktree 扫描 + `ttmux ls --tree` cwd join（顺带把新命中的仓库记入 knownRepos）+ races 计数 + 最近活动（worktree HEAD 时间的 max）|
+| `GET /projects` | 聚合：knownRepos（§2.1 台账）逐仓库 worktree 扫描 + `ttmux ls --tree` cwd join（顺带把新命中的仓库记入发现通道）+ races 计数 + 最近活动（worktree HEAD 时间的 max）|
+| `POST /projects` | 显式创建项目对象（origin=user，永不自动退场）；`{dir, displayName?}`，非 git 目录报 `NOT_GIT_REPO` |
+| `DELETE /projects/:key` | 显式移除（纯台账，不动目录/worktree/会话；有会话的仓库会被发现通道重新记入——列表反映实况）|
 | `GET /projects/:repoKey` | 单仓库详情：任务投影（§2.2）+ worktree 列表 + races + 活动流（各 worktree `git log --since` 汇总 + 收尾留痕，带缓存）|
 | `PATCH /projects/:repoKey/prefs` | UI 偏好（置顶/默认 agent/默认 base），落 projects.json；knownRepos 由发现流程自动维护，无手动接口 |
 | `POST /git/worktree/finish` | **新增组合 API（P3 合并档）**：复用 close-with-worktree 的状态机、去掉 kill 步——**冻结校验 expectedHead**（用户确认时的 source HEAD，此刻校验后即失效）→ CommitAll wip-commit → merge（用 wip 后的新 HEAD 内部传递，**不把旧 expectedHead 传给 merge**——wip-commit 合法挪 HEAD，同 W6 crown 语义，否则必然 `HEAD_MOVED`；base 侧 OID 仍在 merge 步校验）→ remove，失败停在可恢复阶段。必须新增：`/git/worktree/merge` 对脏树返回 `WORKTREE_DIRTY` 且不代为提交，而孤儿任务已无会话可走 close-with-worktree。执行成功落收尾留痕 |

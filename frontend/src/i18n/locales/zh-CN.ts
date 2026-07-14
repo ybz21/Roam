@@ -1052,6 +1052,13 @@ const zhCN = {
   'project.finish': '收尾',
   'project.manage': '管理',
   'project.mergedClean': '已合并/干净，可删除',
+  'project.newModalTitle': '新项目',
+  'project.displayName': '显示名（可选，缺省用目录名）',
+  'project.newHint': '项目 = 一个 git 仓库，创建后持久保存在项目列表；开会话/建 feature 请进入项目后在任务框操作',
+  'project.createdProject': '项目已创建',
+  'project.notGit': '该目录不是 git 仓库',
+  'project.removed': '已从列表移除',
+  'project.removeConfirm': '从列表移除该项目？不动目录、worktree 与会话',
 }
 
 export default zhCN
