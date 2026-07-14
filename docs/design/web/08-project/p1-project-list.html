@@ -13,7 +13,7 @@
   <span class="spacer"></span>
   <a href="index.html">↑ 索引</a><a href="p2-project-home.html">P2 →</a>
 </div>
-<div class="spec-note">项目 = git 仓库（canonical common-dir），由「会话 cwd join ∪ worktree 总览」<em>现算推导</em>，无注册/删除流程。卡片 = 主干同步态 + 任务/worktree/待收尾计数 + 进行中任务前 2 条 + 7 日活动。顶部 Segmented 保留「全部会话」平铺老视图（即 W2）。非仓库会话落底部「散会话」区。</div>
+<div class="spec-note">项目 = git 仓库（canonical common-dir），发现 = 「会话 cwd join <em>∪ knownRepos 弱台账</em>逐仓库扫描」（首次命中自动记入台账——零会话但留着孤儿 worktree 的仓库因此仍在列，如 blog），无注册/删除流程。卡片 = 主干同步态 + 任务/worktree/待收尾计数 + 进行中任务前 2 条 + 7 日活动。顶部 Segmented 保留「全部会话」平铺老视图（即 W2）。非仓库会话落底部「散会话」区。</div>
 
 <div class="stage">
   <!-- 桌面 -->
@@ -144,7 +144,7 @@
 </div>
 
 <div class="spec-note" style="border-top:1px solid var(--border-subtle)">
-  规则：① 排序 = 置顶 ★ &gt; 有 running 任务 &gt; 最近活动时间；② 卡片「进行中」最多 2 条，超出「+n」；③ 待收尾计数 = 孤儿 worktree 且 committedAhead&gt;0（07 W4 判定复用），点「收尾」直达 P3；④ 项目无注册/删除——最后一个会话关掉且 worktree 清空即自然消失（置顶过的标「无活动」保留）；⑤ 「全部会话」= 现有 W2 平铺视图原样保留；⑥ 「＋ 新任务 ▾」下拉列最近项目 + 「其他目录…」（回落 W1 完整弹窗）。
+  规则：① 排序 = 置顶 ★ &gt; 有 running 任务 &gt; 最近活动时间；② 卡片「进行中」最多 2 条，超出「+n」；③ 待收尾计数 = 孤儿 worktree 且 committedAhead&gt;0（07 W4 判定复用），点「收尾」直达 P3；④ 项目无注册/删除——发现走 knownRepos 弱台账（首次会话命中自动记入，projects.json），<b>零会话但有孤儿 worktree 的仓库持续在列</b>；worktree 清空且无会话才自动退场（置顶过的标「无活动」保留）；⑤ 「全部会话」= 现有 W2 平铺视图原样保留；⑥ 「＋ 新任务 ▾」下拉列最近项目 + 「其他目录…」（回落 W1 完整弹窗）。
 </div>
 </body>
 </html>

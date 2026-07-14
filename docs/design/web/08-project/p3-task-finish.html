@@ -97,7 +97,7 @@
 </div>
 
 <div class="spec-note" style="border-top:1px solid var(--border-subtle)">
-  规则：① 全部走现有 API——合并=<code>/git/worktree/merge</code>(dry-run+expected-head)、删除=<code>/git/worktree/remove</code>(占用检查+脏保护)、复活=<code>POST /worktree-sessions</code> 指向既有 worktree；② 未提交改动在合并档自动 wip-commit（同 W6 crown 语义），丢弃档计入损失清单；③ 外部/旧格式 worktree（base=unknown）无合并档，只有 复活/对比(手选基准)/删除；④ 冲突返回 <code>{stage, conflictFiles}</code> + [进入会话处理]，同 W4；⑤ 执行成功后任务移入「已合并」或消失，活动 tab 留痕。
+  规则：① 合并档走<em>新增组合 API</em> <code>POST /git/worktree/finish</code>——复用 close-with-worktree 的状态机、去掉 kill 步（CommitAll wip-commit → merge(dry-run+expected-head) → remove）。不能直接调 <code>/git/worktree/merge</code>：它对脏树返回 WORKTREE_DIRTY 且不代为提交，而孤儿任务已无会话可走 close-with-worktree；② 丢弃档=<code>/git/worktree/remove</code>(force,二次确认)、复活=<code>POST /worktree-sessions</code> 指向既有 worktree；③ 外部/旧格式 worktree（base=unknown）无合并档，只有 复活/对比(手选基准)/删除；④ 冲突返回 <code>{stage, conflictFiles}</code> + [进入会话处理]，同 W4；⑤ 执行成功后任务移入「已合并」或消失，并写<em>收尾留痕</em>（activity.log 摘要，活动 tab 可见）——丢弃后的提交不可达，只剩留痕，不承诺可恢复。
 </div>
 
 <script>
