@@ -45,7 +45,8 @@ function TabBar({ tabs, active, onSelect, onClose, onAdd, extra }: {
 }) {
   const { t } = useI18n()
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px 0', flex: '0 0 auto' }}>
+    // 全站统一：工具页首行贴 tt-page 的 (16,16)，不再自垫横向内边距
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 0, flex: '0 0 auto' }}>
       <div style={{ display: 'flex', gap: 4, overflowX: 'auto', flex: 1, minWidth: 0 }}>
         {tabs.map((t) => (
           <BrowserTab key={t.id} tab={t} active={t.id === active} onSelect={() => onSelect(t.id)} onClose={() => onClose(t.id)} />
@@ -639,8 +640,8 @@ export default function BrowserView() {
           </Space>
         }
       />
-      {/* 地址栏：紧凑一行，地址框自适应铺满 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 8px', flex: '0 0 auto' }}>
+      {/* 地址栏：紧凑一行，地址框自适应铺满（横向不自垫，与各页 16px 原点对齐） */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 0', flex: '0 0 auto' }}>
         <Button.Group size="small">
           <Button onClick={() => act('back')} title={t('file.back')}>←</Button>
           <Button onClick={() => act('forward')} title={t('file.forward')}>→</Button>
