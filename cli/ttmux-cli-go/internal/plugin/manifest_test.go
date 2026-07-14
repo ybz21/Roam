@@ -43,6 +43,11 @@ func TestValidateRejects(t *testing.T) {
 	if err := m.Validate(); err == nil {
 		t.Fatal("node runtime without main accepted")
 	}
+	m = sample()
+	m.Contributes.Commands = []CommandContrib{{ID: "qc.re:view"}} // 冒号是 id 限定形式的保留分隔符
+	if err := m.Validate(); err == nil {
+		t.Fatal("command id with ':' accepted")
+	}
 }
 
 func TestCommandOwner(t *testing.T) {
@@ -61,17 +66,17 @@ func TestCommandOwner(t *testing.T) {
 
 func TestFullCommandOwner(t *testing.T) {
 	m := sample()
-	handler, ok := m.FullCommandOwner("acme.qc.review")
+	handler, ok := m.FullCommandOwner("acme.qc:review")
 	if !ok || handler != "review" {
 		t.Fatalf("want review/true, got %q/%v", handler, ok)
 	}
 	if _, ok := m.FullCommandOwner("qc.review"); ok {
-		t.Fatal("short form must not match the full-id resolver")
+		t.Fatal("short form must not match the id-qualified resolver")
 	}
-	if _, ok := m.FullCommandOwner("evil.qc.review"); ok {
-		t.Fatal("forged publisher accepted")
+	if _, ok := m.FullCommandOwner("evil.qc:review"); ok {
+		t.Fatal("forged id accepted")
 	}
-	if _, ok := m.FullCommandOwner("acme.qc.unknown"); ok {
+	if _, ok := m.FullCommandOwner("acme.qc:unknown"); ok {
 		t.Fatal("undeclared command accepted")
 	}
 }

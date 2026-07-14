@@ -142,6 +142,10 @@ func (m Manifest) Validate() error {
 		if !strings.HasPrefix(c.ID, m.commandPrefix()) {
 			return fmt.Errorf("manifest %s: command id %q must be prefixed %q", m.ID, c.ID, m.commandPrefix())
 		}
+		// 冒号是 id 限定调用形式(<id>:<handler>)的保留分隔符
+		if strings.Contains(c.ID, ":") {
+			return fmt.Errorf("manifest %s: command id %q must not contain ':'", m.ID, c.ID)
+		}
 		if seen[c.ID] {
 			return fmt.Errorf("manifest %s: duplicate command id %q", m.ID, c.ID)
 		}
@@ -166,15 +170,19 @@ func (m Manifest) CommandOwner(commandID string) (string, bool) {
 	return "", false
 }
 
-// FullCommandOwner is CommandOwner for the full-id qualified form
-// "<id>.<handler>"(如 roam.host-monitor.stats):把命令钉死在这个插件上。
+// FullCommandOwner is CommandOwner for the id-qualified form
+// "<id>:<handler>"(如 roam.host-monitor:stats):把命令钉死在这个插件上。
 // 短名前缀(host-monitor.stats)在多 publisher 撞短名时会被最先匹配者接走,
 // 调用方(如 Web 按路由里的插件 id 调命令)需要精确归属时用这个形式。
+// 分隔符用冒号:命令 ID 禁含冒号(见 Validate),与点分短名不存在歧义——
+// 点分限定形式(<id>.<handler>)会和「短名恰为 <id 前缀> 的插件」的命令
+// 撞出解析二义。
 func (m Manifest) FullCommandOwner(commandID string) (string, bool) {
-	if rest, ok := strings.CutPrefix(commandID, m.ID+"."); ok {
-		return m.CommandOwner(m.commandPrefix() + rest)
+	id, handler, ok := strings.Cut(commandID, ":")
+	if !ok || id != m.ID {
+		return "", false
 	}
-	return "", false
+	return m.CommandOwner(m.commandPrefix() + handler)
 }
 
 // SinkMatches reports whether the plugin subscribes to a notification type.

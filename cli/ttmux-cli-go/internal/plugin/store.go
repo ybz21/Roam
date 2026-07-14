@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"ttmux-cli-go/internal/runtime"
@@ -273,8 +274,10 @@ func (s *Store) SetEnabled(id string, enabled bool) error {
 }
 
 // FindCommand resolves a command to its enabled owner plugin。两种形式:
-// 短名 "<name>.<cmd>"(CLI 手敲),与全 id 限定 "<id>.<cmd>"(Web 按路由
+// 短名 "<name>.<cmd>"(CLI 手敲),与 id 限定 "<id>:<cmd>"(Web 按路由
 // 插件 id 调用,精确归属——短名在多 publisher 撞名时会被最先匹配者接走)。
+// 限定形式解析失败不回退短名:否则伪造 id 拼出的串仍可能撞上某个短名
+// 恰好匹配的插件,归属又变得可混淆。
 func (s *Store) FindCommand(commandID string) (RegisteredPlugin, string, error) {
 	all, err := s.List()
 	if err != nil {
@@ -286,14 +289,17 @@ func (s *Store) FindCommand(commandID string) (RegisteredPlugin, string, error) 
 		}
 		return p, handler, nil
 	}
-	for _, p := range all { // 全 id 限定优先:唯一、不受短名撞名影响
-		if handler, ok := p.Manifest.FullCommandOwner(commandID); ok {
-			return pick(p, handler)
+	if strings.Contains(commandID, ":") { // id 限定形式,只按全 id 精确解析
+		for _, p := range all {
+			if handler, ok := p.Manifest.FullCommandOwner(commandID); ok {
+				return pick(p, handler)
+			}
 		}
-	}
-	for _, p := range all {
-		if handler, ok := p.Manifest.CommandOwner(commandID); ok {
-			return pick(p, handler)
+	} else {
+		for _, p := range all {
+			if handler, ok := p.Manifest.CommandOwner(commandID); ok {
+				return pick(p, handler)
+			}
 		}
 	}
 	return RegisteredPlugin{}, "", fmt.Errorf("unknown plugin command: %s", commandID)

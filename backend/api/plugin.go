@@ -165,16 +165,17 @@ func (a *API) PluginRun(c *gin.Context) {
 	}
 	// 命令必须属于该插件,防止借任意插件 id 调他家命令。命令 ID 前缀是
 	// 插件短名(review-mesh.review),而路由参数是全 id(roam.review-mesh):
-	// 先做短名前缀的形状校验,再把命令改写成全 id 限定形式(roam.review-mesh.review)
-	// 交给 CLI——归属由注册表精确判定,伪造 publisher(如 evil.review-mesh)
-	// 的路由 id 会因查无此插件被拒,不会落到短名匹配的真实所有者上。
+	// 先做短名前缀的形状校验,再把命令改写成 id 限定形式
+	// (roam.review-mesh:review)交给 CLI——归属由注册表按全 id 精确判定
+	// 且不回退短名匹配,伪造 publisher(如 evil.review-mesh)的路由 id 会
+	// 因查无此插件被拒,不会落到短名撞名的其他插件上。
 	id := c.Param("id")
 	_, short, ok := strings.Cut(id, ".")
 	if !ok || !strings.HasPrefix(b.Command, short+".") {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_COMMAND"}})
 		return
 	}
-	args := []string{"plugin", "run", id + strings.TrimPrefix(b.Command, short)}
+	args := []string{"plugin", "run", id + ":" + strings.TrimPrefix(b.Command, short+".")}
 	for k, v := range b.Args {
 		if strings.TrimSpace(k) == "" {
 			continue
