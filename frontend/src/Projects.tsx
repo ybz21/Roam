@@ -3,6 +3,10 @@
 //   #/projects/<key>  P2 主页：composer（描述任务 ⏎ 开干）+ 任务流（会话 ∪ 孤儿 worktree）
 //                     + Worktree / 编队 / 活动 tab（仅 git 项目开启）
 // 项目是后台存储对象（POST/DELETE /projects）；开 session、建 feature 是项目内的动作。
+//
+// 视觉基调：终端工业风的克制精修——居中 880px 阅读列、composer 是全页唯一 hero
+// （渐变卡面 + focus 辉光环）、git 数据一律等宽字、行 hover 左导轨渐显、
+// 分区头沿用设计图纸体例、入场一次性 stagger。全部颜色走 index.css token。
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { App as AntApp, AutoComplete, Button, Input, Modal, Popconfirm, Segmented, Select, Space, Spin, Tag, Tooltip } from 'antd'
 import { api } from './api'
@@ -23,10 +27,89 @@ type Proj = {
   lastActivity: number; top: ProjSession[] | null
 }
 
+// ── 页面级样式（一次注入；产品 token 之上只做布局/微交互）──
+const PRJ_CSS = `
+.prj-wrap{max-width:880px;margin:0 auto;padding:2px 2px 32px}
+.prj-wrap-wide{max-width:1080px;margin:0 auto;padding:2px 2px 32px}
+.prj-mono{font-family:ui-monospace,'SF Mono','JetBrains Mono',Menlo,Consolas,monospace}
+.prj-in{animation:prjIn .38s cubic-bezier(.2,.85,.3,1) backwards}
+@keyframes prjIn{from{opacity:0;transform:translateY(6px)}}
+@keyframes projLifecPulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+.prj-composer{background:linear-gradient(180deg,var(--bg-elevated),var(--bg-container));
+  border:1px solid var(--border);border-radius:14px;
+  box-shadow:0 1px 0 rgba(255,255,255,.04) inset,0 8px 28px rgba(1,4,9,.35);
+  transition:border-color .2s,box-shadow .2s;padding:4px 4px 10px}
+.prj-composer:focus-within{border-color:rgba(88,166,255,.55);
+  box-shadow:0 0 0 3px rgba(31,111,235,.16),0 1px 0 rgba(255,255,255,.05) inset,0 8px 28px rgba(1,4,9,.35)}
+.prj-composer textarea{font-size:14.5px !important;line-height:1.75 !important;padding:10px 12px 4px !important}
+.prj-cbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 10px 0}
+
+.prj-pill{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 11px;border-radius:999px;
+  font-size:12px;cursor:pointer;white-space:nowrap;user-select:none;color:var(--text-dim);
+  border:1px solid var(--border);background:rgba(177,186,196,.03);
+  transition:color .15s,border-color .15s,background .15s}
+.prj-pill:hover{color:var(--text-bright);border-color:#8b949e}
+.prj-pill.on{color:#79b8ff;border-color:rgba(56,139,253,.55);background:rgba(31,111,235,.14)}
+.prj-pill.on.cyan{color:#39c5cf;border-color:rgba(57,197,207,.5);background:rgba(57,197,207,.1)}
+.prj-pill.dis{opacity:.4;cursor:not-allowed}
+
+.prj-tabs{display:flex;gap:2px;margin:20px 0 2px;border-bottom:1px solid var(--border-subtle)}
+.prj-tab{padding:8px 13px 9px;font-size:13px;color:var(--text-dim);cursor:pointer;user-select:none;
+  display:inline-flex;align-items:center;gap:6px;border-bottom:2px solid transparent;margin-bottom:-1px;
+  transition:color .15s}
+.prj-tab:hover{color:var(--text-bright)}
+.prj-tab.on{color:var(--text-bright);border-bottom-color:#58a6ff;font-weight:600}
+.prj-tab .n{font-size:10.5px;font-family:ui-monospace,monospace;color:var(--text-dimmer);
+  background:rgba(177,186,196,.08);border-radius:999px;padding:1px 6px}
+
+.prj-sect{display:flex;align-items:center;gap:8px;margin:16px 2px 4px;
+  font-size:11px;letter-spacing:.08em;color:var(--text-dim);font-weight:700}
+.prj-sect .n{font-family:ui-monospace,monospace;font-size:10.5px;color:var(--text-dimmer);font-weight:400}
+.prj-sect .ln{flex:1;border-top:1px dashed var(--border-subtle)}
+.prj-sect.warn{color:#d29922}
+
+.prj-row{position:relative;display:flex;align-items:flex-start;gap:9px;padding:10px 12px;
+  border-radius:10px;cursor:pointer;transition:background .15s}
+.prj-row::before{content:'';position:absolute;left:0;top:9px;bottom:9px;width:2px;border-radius:2px;
+  background:transparent;transition:background .15s}
+.prj-row:hover{background:var(--list-hover)}
+.prj-row:hover::before{background:rgba(88,166,255,.5)}
+.prj-row .acts{opacity:.55;transition:opacity .15s;display:flex;gap:12px;font-size:12.5px;flex:0 0 auto;margin-top:3px}
+.prj-row:hover .acts{opacity:1}
+.prj-row.warn{background:rgba(210,153,34,.05);border:1px solid rgba(210,153,34,.18);margin-bottom:4px}
+.prj-row.warn:hover{background:rgba(210,153,34,.09)}
+.prj-row.warn::before{display:none}
+
+.prj-card{background:var(--bg-container);border:1px solid var(--border-subtle);border-radius:12px;
+  padding:13px 14px 11px;cursor:pointer;display:flex;flex-direction:column;gap:8px;
+  transition:border-color .18s,transform .18s,box-shadow .18s}
+.prj-card:hover{border-color:rgba(88,166,255,.45);transform:translateY(-1px);box-shadow:var(--card-hover-shadow)}
+.prj-card .prj-acts{opacity:.25;transition:opacity .15s;display:inline-flex;gap:10px;align-items:center}
+.prj-card:hover .prj-acts{opacity:1}
+.prj-card .prj-acts .pinned{opacity:1}
+
+.prj-panel{background:var(--bg-container);border:1px solid var(--border-subtle);border-radius:12px;margin-top:8px}
+.prj-wtrow{padding:13px 16px}
+.prj-wtrow+.prj-wtrow{border-top:1px solid var(--border-subtle)}
+.prj-subrow{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;cursor:pointer;transition:background .14s}
+.prj-subrow:hover{background:var(--list-hover)}
+.prj-peek{flex:1;min-width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-family:ui-monospace,monospace;font-size:11px;color:var(--text-dimmer);
+  background:var(--bg-term);border:1px solid var(--border-subtle);border-radius:6px;padding:3px 8px}
+.prj-addline{display:flex;align-items:center;gap:8px;padding:6px 10px;margin-top:2px;
+  border:1px dashed var(--border);border-radius:8px;color:var(--text-dim);font-size:12.5px;
+  transition:border-color .15s,color .15s}
+.prj-addline:hover{border-color:#8b949e;color:var(--text-bright)}
+
+.prj-empty{color:var(--text-dimmer);font-size:12.5px;padding:14px 12px}
+`
+
 const dot = (on: boolean, color?: string) => (
   <span style={{
     width: 8, height: 8, borderRadius: '50%', flex: '0 0 8px', display: 'inline-block',
-    background: color || (on ? 'var(--green, #3fb950)' : 'var(--text-dimmer, #6e7681)'),
+    background: color || (on ? '#3fb950' : 'var(--text-dimmer)'),
+    boxShadow: color || on ? `0 0 0 3px ${color ? 'rgba(210,153,34,.12)' : 'rgba(63,185,80,.12)'}` : undefined,
   }} />
 )
 
@@ -42,7 +125,6 @@ function Lifec({ done, cur }: { done: number; cur?: number }) {
           animation: i === cur ? 'projLifecPulse 1.6s ease-in-out infinite' : undefined,
         }} />
       ))}
-      <style>{'@keyframes projLifecPulse{0%,100%{opacity:1}50%{opacity:.35}}'}</style>
     </span>
   )
 }
@@ -56,11 +138,14 @@ export default function Projects({ openTerm, initialKey }: { openTerm: (n: strin
   }).catch(() => {})
   useEffect(() => { load(); const i = setInterval(load, 5000); return () => clearInterval(i) }, [])
 
-  if (initialKey) {
-    const p = data.projects.find((x) => x.key === initialKey)
-    return <ProjectHome proj={p} loaded={loaded} openTerm={openTerm} refresh={load} />
-  }
-  return <ProjectList data={data} loaded={loaded} openTerm={openTerm} refresh={load} />
+  return (
+    <>
+      <style>{PRJ_CSS}</style>
+      {initialKey
+        ? <ProjectHome proj={data.projects.find((x) => x.key === initialKey)} loaded={loaded} openTerm={openTerm} refresh={load} />
+        : <ProjectList data={data} loaded={loaded} openTerm={openTerm} refresh={load} />}
+    </>
+  )
 }
 
 // ── 新项目弹窗：创建的是「项目」这个存储对象（POST /projects），不建任何会话。
@@ -125,106 +210,84 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
   const open = (p: Proj) => { location.hash = '#/projects/' + encodeURIComponent(p.key) }
   return (
     <div style={{ height: '100%', overflow: 'auto' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 16, fontWeight: 700 }}>{t('project.title')}</span>
-        <Segmented size="small" value="projects"
-          options={[
-            { label: t('project.title'), value: 'projects' },
-            { label: t('project.allSessions'), value: 'sessions' },
-          ]}
-          onChange={(v) => { if (v === 'sessions') location.hash = '#/sessions' }} />
-        <span style={{ flex: 1 }} />
-        <Button type="primary" size="small" onClick={() => setNewOpen(true)}>{t('project.newProject')}</Button>
-      </div>
+      <div className="prj-wrap-wide">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 16, fontWeight: 700 }}>{t('project.title')}</span>
+          <Segmented size="small" value="projects"
+            options={[
+              { label: t('project.title'), value: 'projects' },
+              { label: t('project.allSessions'), value: 'sessions' },
+            ]}
+            onChange={(v) => { if (v === 'sessions') location.hash = '#/sessions' }} />
+          <span style={{ flex: 1 }} />
+          <Button type="primary" size="small" onClick={() => setNewOpen(true)}>{t('project.newProject')}</Button>
+        </div>
 
-      {loaded && data.projects.length === 0 && (
-        <div style={{ color: 'var(--text-dim)', padding: '24px 4px' }}>{t('project.empty')}</div>
-      )}
-      <style>{'.prj-card .prj-acts{opacity:.25;transition:opacity .15s}.prj-card:hover .prj-acts{opacity:1}.prj-card .prj-acts .pinned{opacity:1}'}</style>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(270px, 1fr))', gap: 12 }}>
-        {data.projects.map((p) => (
-          <div key={p.key} onClick={() => open(p)} className="prj-card"
-            style={{
-              background: 'var(--bg-container, rgba(177,186,196,.04))', border: '1px solid var(--border-subtle, #21262d)',
-              borderRadius: 12, padding: '13px 14px 11px', cursor: 'pointer',
-              display: 'flex', flexDirection: 'column', gap: 8,
-            }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontWeight: 700, fontSize: 14.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
-              {p.races > 0 && <Tag color="gold" style={{ margin: 0 }}>{t('project.race', { count: p.races })}</Tag>}
-              <span style={{ flex: 1 }} />
-              <span className="prj-acts" style={{ display: 'inline-flex', gap: 10, alignItems: 'center' }}>
-                <Tooltip title={p.pinned ? t('project.unpin') : t('project.pin')}>
-                  <a className={p.pinned ? 'pinned' : ''} onClick={(e) => { e.stopPropagation(); pin(p) }}
-                    style={{ color: p.pinned ? 'var(--yellow, #d29922)' : 'var(--text-dimmer)', fontSize: 13 }}>★</a>
-                </Tooltip>
-                <Popconfirm title={t('project.removeConfirm')} onConfirm={() => remove(p)}
-                  onPopupClick={(e) => e.stopPropagation()}>
-                  <a onClick={(e) => e.stopPropagation()} style={{ color: 'var(--text-dimmer)', fontSize: 12 }}>✕</a>
-                </Popconfirm>
-              </span>
-            </div>
-            <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: 11, color: 'var(--text-dimmer)', marginTop: -4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.dir}>{p.dir}</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 12, color: 'var(--text-dim)' }}>
-              <span><b style={{ color: 'var(--text-bright, inherit)' }}>{p.sessions}</b> {t('project.tasks')}</span>
-              {p.git && <>·<span><b style={{ color: 'var(--text-bright, inherit)' }}>{p.worktrees}</b> worktree</span></>}
-              {p.unfinished > 0 && <Tag color="warning" style={{ margin: 0 }}>{t('project.unfinished', { count: p.unfinished })}</Tag>}
-            </div>
-            {(p.top?.length || 0) > 0 && (
-              <div style={{
-                display: 'flex', flexDirection: 'column', gap: 5, padding: '7px 9px',
-                borderRadius: 8, background: 'rgba(1,4,9,.35)', border: '1px solid var(--border-subtle, #21262d)', fontSize: 12.5,
-              }}>
-                {p.top!.map((s) => (
-                  <div key={s.name} style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
-                    {dot(s.attached)}
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
-                    {s.branch && <Tag color="cyan" style={{ margin: 0, fontSize: 10.5, lineHeight: '16px', padding: '0 5px' }}>⎇</Tag>}
-                    <span style={{ marginLeft: 'auto', color: 'var(--text-dimmer)', fontSize: 11.5, flex: '0 0 auto' }}>{relTime(s.lastActivity, t)}</span>
-                  </div>
-                ))}
+        {loaded && data.projects.length === 0 && (
+          <div className="prj-empty" style={{ textAlign: 'center', padding: '48px 0' }}>{t('project.empty')}</div>
+        )}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(270px, 1fr))', gap: 14 }}>
+          {data.projects.map((p, i) => (
+            <div key={p.key} onClick={() => open(p)} className="prj-card prj-in" style={{ animationDelay: `${Math.min(i, 8) * 45}ms` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontWeight: 700, fontSize: 14.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                {p.races > 0 && <Tag color="gold" style={{ margin: 0 }}>{t('project.race', { count: p.races })}</Tag>}
+                <span style={{ flex: 1 }} />
+                <span className="prj-acts">
+                  <Tooltip title={p.pinned ? t('project.unpin') : t('project.pin')}>
+                    <a className={p.pinned ? 'pinned' : ''} onClick={(e) => { e.stopPropagation(); pin(p) }}
+                      style={{ color: p.pinned ? '#d29922' : 'var(--text-dimmer)', fontSize: 13 }}>★</a>
+                  </Tooltip>
+                  <Popconfirm title={t('project.removeConfirm')} onConfirm={() => remove(p)}
+                    onPopupClick={(e) => e.stopPropagation()}>
+                    <a onClick={(e) => e.stopPropagation()} style={{ color: 'var(--text-dimmer)', fontSize: 12 }}>✕</a>
+                  </Popconfirm>
+                </span>
               </div>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {data.loose.length > 0 && (
-        <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '16px 2px 6px', color: 'var(--text-dim)', fontSize: 12 }}>
-            <b>{t('project.loose')}</b><span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 10.5 }}>{data.loose.length}</span>
-            <span style={{ flex: 1, borderTop: '1px dashed var(--border-subtle, #21262d)' }} />
-          </div>
-          {data.loose.map((s) => (
-            <div key={s.name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, cursor: 'pointer' }}
-              onClick={() => openTerm(s.name)}>
-              {dot(s.attached)}
-              <span style={{ fontWeight: 600 }}>{s.name}</span>
-              <span style={{ color: 'var(--text-dimmer)', fontSize: 12 }}>{relTime(s.lastActivity, t)}</span>
-              <span style={{ flex: 1 }} />
-              <a style={{ fontSize: 12.5 }}>{t('project.enter')}</a>
+              <div className="prj-mono" style={{ fontSize: 11, color: 'var(--text-dimmer)', marginTop: -4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.dir}>{p.dir}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 12, color: 'var(--text-dim)' }}>
+                <span><b style={{ color: 'var(--text-bright)' }}>{p.sessions}</b> {t('project.tasks')}</span>
+                {p.git && <>·<span><b style={{ color: 'var(--text-bright)' }}>{p.worktrees}</b> worktree</span></>}
+                {p.unfinished > 0 && <Tag color="warning" style={{ margin: 0 }}>{t('project.unfinished', { count: p.unfinished })}</Tag>}
+              </div>
+              {(p.top?.length || 0) > 0 && (
+                <div style={{
+                  display: 'flex', flexDirection: 'column', gap: 5, padding: '7px 9px',
+                  borderRadius: 8, background: 'var(--bg-term)', border: '1px solid var(--border-subtle)', fontSize: 12.5,
+                }}>
+                  {p.top!.map((s) => (
+                    <div key={s.name} style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+                      {dot(s.attached)}
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
+                      {s.branch && <Tag color="cyan" style={{ margin: 0, fontSize: 10.5, lineHeight: '16px', padding: '0 5px' }}>⎇</Tag>}
+                      <span style={{ marginLeft: 'auto', color: 'var(--text-dimmer)', fontSize: 11.5, flex: '0 0 auto' }}>{relTime(s.lastActivity, t)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
-        </>
-      )}
-      <NewProjectModal open={newOpen} onClose={() => { setNewOpen(false); refresh() }} />
-    </div>
-  )
-}
+        </div>
 
-// ── composer 选项 pill（P2 图纸样式）─────────────────────
-function Pill({ on, cyan, disabled, onClick, children }: {
-  on?: boolean; cyan?: boolean; disabled?: boolean; onClick?: () => void; children: any
-}) {
-  const color = on ? (cyan ? '#39c5cf' : '#79b8ff') : 'var(--text-dim)'
-  return (
-    <span onClick={disabled ? undefined : onClick} style={{
-      display: 'inline-flex', alignItems: 'center', gap: 5, height: 26, padding: '0 11px',
-      borderRadius: 999, fontSize: 12, cursor: disabled ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
-      color, opacity: disabled ? 0.45 : 1,
-      border: `1px solid ${on ? (cyan ? 'rgba(57,197,207,.5)' : 'rgba(56,139,253,.55)') : 'var(--border, #30363d)'}`,
-      background: on ? (cyan ? 'rgba(57,197,207,.1)' : 'rgba(31,111,235,.14)') : 'rgba(177,186,196,.03)',
-    }}>{children}</span>
+        {data.loose.length > 0 && (
+          <>
+            <div className="prj-sect" style={{ marginTop: 22 }}>
+              <b>{t('project.loose')}</b><span className="n">{data.loose.length}</span><span className="ln" />
+            </div>
+            {data.loose.map((s) => (
+              <div key={s.name} className="prj-row" onClick={() => openTerm(s.name)}>
+                <span style={{ marginTop: 5, display: 'inline-flex' }}>{dot(s.attached)}</span>
+                <span style={{ fontWeight: 600 }}>{s.name}</span>
+                <span style={{ color: 'var(--text-dimmer)', fontSize: 12, marginTop: 2 }}>{relTime(s.lastActivity, t)}</span>
+                <span style={{ flex: 1 }} />
+                <span className="acts"><a>{t('project.enter')}</a></span>
+              </div>
+            ))}
+          </>
+        )}
+        <NewProjectModal open={newOpen} onClose={() => { setNewOpen(false); refresh() }} />
+      </div>
+    </div>
   )
 }
 
@@ -235,7 +298,7 @@ function tailLine(raw: string): string {
   return (lines[lines.length - 1] || '').slice(0, 90)
 }
 
-// ── P2 项目主页：头部 + composer + 任务流/Worktree/编队/活动 ──
+// ── P2 项目主页：头部 + composer(hero) + 任务流/Worktree/编队/活动 ──
 function ProjectHome({ proj, loaded, openTerm, refresh }: {
   proj?: Proj; loaded: boolean; openTerm: (n: string) => void; refresh: () => void
 }) {
@@ -331,10 +394,6 @@ function ProjectHome({ proj, loaded, openTerm, refresh }: {
   const mine = useMemo(() => {
     if (!dir) return []
     if (isGit) return sessions.filter((s) => ann[s.name]?.primary?.repo === dir)
-    // 非 git 项目：按后端 top 无法覆盖全部——用 loose 语义近似（后端已按 cwd 前缀归属，
-    // 这里直接复用后端 sessions 计数对应的名单：ann 无记录且会话 cwd 前端不可知，
-    // 退化为展示后端 top + 计数；完整名单等后端 detail 接口。先按 ann 缺失全列会有误，
-    // 故仅展示 proj.top（后端已认领的前 2）之外提示进「全部会话」。
     return sessions.filter((s) => (proj?.top || []).some((x) => x.name === s.name))
   }, [sessions, ann, dir, isGit, proj])
   // Agent 运行标注 + 待输入检测（仅本项目会话，量小）
@@ -435,16 +494,14 @@ function ProjectHome({ proj, loaded, openTerm, refresh }: {
   }
 
   const sect = (label: string, count: number, warn?: boolean) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '12px 2px 4px', fontSize: 12, color: warn ? 'var(--yellow, #d29922)' : 'var(--text-dim)' }}>
-      <b>{label}</b><span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 10.5, color: 'var(--text-dimmer)' }}>{count}</span>
-      <span style={{ flex: 1, borderTop: '1px dashed var(--border-subtle, #21262d)' }} />
+    <div className={`prj-sect${warn ? ' warn' : ''}`}>
+      <b>{label}</b><span className="n">{count}</span><span className="ln" />
     </div>
   )
 
   // 任务行：生命周期导轨 = 建(必亮)→干(agent 跑)→审(待输入/有未合并)→并(merged)
-  // 状态点语义收敛（设计 W2）：绿 = agent 正在干活，黄 = 待输入，其余一律灰——
-  // 「已连接」不配绿点，否则满屏绿。
-  const row = (s: any) => {
+  // 状态点语义（设计 W2）：绿 = agent 正在干活，黄 = 待输入，其余一律灰。
+  const row = (s: any, i: number) => {
     const a = ann[s.name] || {}
     const hit = a.primary || {}
     const isChild = !!s.parent && mine.some((x) => x.name === s.parent)
@@ -457,285 +514,277 @@ function ProjectHome({ proj, loaded, openTerm, refresh }: {
     if (running && !waiting) { done = 1; cur = 2; stage = t('project.stage.doing') }
     else if (waiting || ahead > 0) { done = 2; cur = 3; stage = t('project.stage.review') }
     return (
-      // 顶对齐：tags 换行时点/操作停在首行，不再被撑到行中（窄屏错位修复）
-      <div key={s.name} style={{ display: 'flex', alignItems: 'flex-start', gap: 9, padding: '9px 10px', borderRadius: 9, cursor: 'pointer', marginLeft: isChild ? 22 : 0 }}
+      <div key={s.name} className="prj-row prj-in" style={{ marginLeft: isChild ? 22 : 0, animationDelay: `${Math.min(i, 8) * 40}ms` }}
         onClick={() => openTerm(s.name)}>
-        <span style={{ marginTop: 7, display: 'inline-flex' }}>{dot(false, waiting ? 'var(--yellow, #d29922)' : running ? 'var(--green, #3fb950)' : undefined)}</span>
-        {isChild && <span style={{ color: 'var(--purple, #a371f7)', fontSize: 12, marginTop: 3 }}>⑂</span>}
+        <span style={{ marginTop: 7, display: 'inline-flex' }}>{dot(false, waiting ? '#d29922' : running ? '#3fb950' : undefined)}</span>
+        {isChild && <span style={{ color: '#a371f7', fontSize: 12, marginTop: 3 }}>⑂</span>}
         <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
             <span style={{ fontWeight: 700 }}>{s.name}</span>
-            {hit.linked && hit.branch && <Tag color="cyan" style={{ margin: 0 }}>⎇ {hit.branch}</Tag>}
+            {hit.linked && hit.branch && <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 11 }}>⎇ {hit.branch}</Tag>}
             {hit.external && hit.linked && <Tag style={{ margin: 0 }}>⧉</Tag>}
             {cc[s.name] && <Tag color="blue" style={{ margin: 0 }}>Claude</Tag>}
             {cx[s.name] && <Tag color="green" style={{ margin: 0 }}>Codex</Tag>}
             {waiting && <Tag color="warning" style={{ margin: 0 }}>{t('session.waiting')}</Tag>}
             {a.ambiguous && (
               <Tooltip title={(a.matches || []).map((m: any) => m.worktree).join('\n')}>
-                <span style={{ color: 'var(--yellow, #d29922)' }}>⚠</span>
+                <span style={{ color: '#d29922' }}>⚠</span>
               </Tooltip>
             )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12, color: 'var(--text-dimmer)' }}>
             <Lifec done={done} cur={cur} /><span>{stage}</span>
             {(ahead > 0 || changes > 0) && (
-              <span>
-                {ahead > 0 && <span style={{ color: 'var(--blue, #58a6ff)' }}>↑{ahead}</span>}
+              <span className="prj-mono" style={{ fontSize: 11.5 }}>
+                {ahead > 0 && <span style={{ color: '#58a6ff' }}>↑{ahead}</span>}
                 {ahead > 0 && changes > 0 && ' · '}
-                {changes > 0 && <span style={{ color: 'var(--yellow, #d29922)' }}>{t('project.wt.changes', { count: changes })}</span>}
+                {changes > 0 && <span style={{ color: '#d29922' }}>{t('project.wt.changes', { count: changes })}</span>}
               </span>
             )}
             <span>{relTime(s.last_activity, t)}</span>
           </div>
         </div>
-        <span style={{ display: 'flex', gap: 12, fontSize: 12.5, flex: '0 0 auto', marginTop: 3 }} onClick={(e) => e.stopPropagation()}>
+        <span className="acts" onClick={(e) => e.stopPropagation()}>
           <a onClick={() => openTerm(s.name)}>{t('project.enter')}</a>
           {hit.linked && <a onClick={() => setGitOpen(true)}>{t('project.compare')}</a>}
           <a onClick={() => setForking(s.name)}>{t('project.forkTask')}</a>
-          <a style={{ color: 'var(--red, #f85149)' }} onClick={() => beginClose(s.name)}>{hit.linked ? t('project.finish') : t('common.close')}</a>
+          <a style={{ color: '#f85149' }} onClick={() => beginClose(s.name)}>{hit.linked ? t('project.finish') : t('common.close')}</a>
         </span>
       </div>
     )
   }
 
   const tabBtn = (k: typeof tab, label: string, n?: number) => (
-    <span onClick={() => setTab(k)} style={{
-      padding: '8px 13px 9px', fontSize: 13, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
-      color: tab === k ? 'var(--text-bright, #e6edf3)' : 'var(--text-dim)',
-      borderBottom: `2px solid ${tab === k ? 'var(--blue, #58a6ff)' : 'transparent'}`, marginBottom: -1,
-      fontWeight: tab === k ? 600 : 400,
-    }}>{label}{n !== undefined && <span style={{ fontSize: 10.5, fontFamily: 'ui-monospace, monospace', color: 'var(--text-dimmer)', background: 'rgba(177,186,196,.08)', borderRadius: 999, padding: '1px 6px' }}>{n}</span>}</span>
+    <span key={k} className={`prj-tab${tab === k ? ' on' : ''}`} onClick={() => setTab(k)}>
+      {label}{n !== undefined && <span className="n">{n}</span>}
+    </span>
   )
 
   return (
     <div style={{ height: '100%', overflow: 'auto' }}>
-      {/* 项目头：面包屑返回 + ⌂ 图标块 + 名称 + 路径 · ⎇主干 @ HEAD + [Git 面板][Worktree 管理] */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-        <Button type="text" size="small" onClick={() => { location.hash = '#/projects' }}
-          style={{ color: 'var(--text-dim)', paddingInline: 6 }}>‹ {t('project.title')}</Button>
-        <span style={{ width: 1, height: 18, background: 'var(--border-subtle, #21262d)' }} />
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 16, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{proj.name}</div>
-          <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: 11.5, color: 'var(--text-dimmer)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={proj.dir}>
-            {proj.dir}
-            {isGit && defBranch && <span style={{ color: 'var(--cyan, #39c5cf)' }}> · ⎇ {defBranch}{mainHead ? ` @ ${mainHead}` : ''}</span>}
+      <div className="prj-wrap">
+        {/* 项目头：面包屑 | 名称 / 路径 · ⎇主干@HEAD | Git 面板 */}
+        <div className="prj-in" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <Button type="text" size="small" onClick={() => { location.hash = '#/projects' }}
+            style={{ color: 'var(--text-dim)', paddingInline: 6, flex: '0 0 auto' }}>‹ {t('project.title')}</Button>
+          <span style={{ width: 1, height: 18, background: 'var(--border-subtle)', flex: '0 0 auto' }} />
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{proj.name}</div>
+            <div className="prj-mono" style={{ fontSize: 11.5, color: 'var(--text-dimmer)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={proj.dir}>
+              {proj.dir}
+              {isGit && defBranch && <span style={{ color: '#39c5cf' }}> · ⎇ {defBranch}{mainHead ? ` @ ${mainHead}` : ''}</span>}
+            </div>
+          </div>
+          {isGit && <Button size="small" onClick={() => setGitOpen(true)}>{t('project.gitPanel')}</Button>}
+        </div>
+
+        {/* Composer（hero）：需求 ⏎ 开干 */}
+        <div className="prj-composer prj-in" style={{ animationDelay: '60ms' }}>
+          <Input.TextArea value={prompt} onChange={(e) => setPrompt(e.target.value)}
+            placeholder={isGit ? t('project.composerPlaceholder') : t('project.composerPlain')} autoSize={{ minRows: 2, maxRows: 6 }} variant="borderless"
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); goCreate() } }} />
+          <div className="prj-cbar">
+            {isGit && (<>
+              <span className={`prj-pill cyan${wtMode === 'new' ? ' on' : ''}`} onClick={() => setWtMode('new')}>⎇ {t('project.where.new')}</span>
+              <span className={`prj-pill${wtMode === 'repo' ? ' on' : ''}`} onClick={() => setWtMode('repo')}>{t('project.where.repo')}</span>
+              <span className={`prj-pill${wtMode === 'existing' ? ' on' : ''}${wts.length ? '' : ' dis'}`}
+                onClick={() => { if (wts.length) setWtMode('existing') }}>{t('project.where.existing', { count: wts.length })}</span>
+              {wtMode === 'existing' && (
+                <Select size="small" style={{ minWidth: 160 }} value={wtPath} onChange={setWtPath}
+                  options={wts.map((w: any) => ({ value: w.path, label: '⎇ ' + (w.branch || w.path.split('/').pop()) }))} />
+              )}
+              {wtMode === 'new' && <span className="prj-mono" style={{ fontSize: 11, color: 'var(--text-dimmer)' }}>{defBranch ? t('project.basedOn', { base: defBranch }) : t('project.baseDefault')}</span>}
+              <span style={{ width: 1, height: 16, background: 'var(--border)' }} />
+            </>)}
+            <span className={`prj-pill${agent === 'claude' ? ' on' : ''}`} onClick={() => setAgent('claude')}>Claude</span>
+            <span className={`prj-pill${agent === 'codex' ? ' on' : ''}`} onClick={() => setAgent('codex')}>Codex</span>
+            <span className={`prj-pill${agent === 'none' ? ' on' : ''}`} onClick={() => setAgent('none')}>{t('project.agent.none')}</span>
+            {/* 尾组 marginLeft:auto：换行后整组靠右成独立一行，窄屏不散架 */}
+            <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 11.5, color: 'var(--text-dimmer)', whiteSpace: 'nowrap' }}>{t('project.autoName')} · <a style={{ fontSize: 11.5 }} onClick={() => setFullForm(true)}>{t('project.fullForm')} ›</a></span>
+              <Button type="primary" size="small" loading={creating} onClick={goCreate}>{t('project.go')}</Button>
+            </span>
           </div>
         </div>
-        {isGit && <Button size="small" onClick={() => setGitOpen(true)}>{t('project.gitPanel')}</Button>}
-      </div>
 
-      {/* Composer（Codex 式）：需求 ⏎ 开干；pill 选项与 P2 图纸对齐 */}
-      <div style={{ background: 'var(--bg-container, rgba(177,186,196,.04))', border: '1px solid var(--border, #30363d)', borderRadius: 12, padding: '4px 4px 8px' }}>
-        <Input.TextArea value={prompt} onChange={(e) => setPrompt(e.target.value)}
-          placeholder={isGit ? t('project.composerPlaceholder') : t('project.composerPlain')} autoSize={{ minRows: 2, maxRows: 6 }} variant="borderless"
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); goCreate() } }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '4px 8px 0' }}>
-          {isGit && (<>
-            <Pill on={wtMode === 'new'} cyan onClick={() => setWtMode('new')}>⎇ {t('project.where.new')}</Pill>
-            <Pill on={wtMode === 'repo'} onClick={() => setWtMode('repo')}>{t('project.where.repo')}</Pill>
-            <Pill on={wtMode === 'existing'} disabled={!wts.length} onClick={() => setWtMode('existing')}>{t('project.where.existing', { count: wts.length })}</Pill>
-            {wtMode === 'existing' && (
-              <Select size="small" style={{ minWidth: 160 }} value={wtPath} onChange={setWtPath}
-                options={wts.map((w: any) => ({ value: w.path, label: '⎇ ' + (w.branch || w.path.split('/').pop()) }))} />
-            )}
-            {wtMode === 'new' && <span style={{ fontSize: 11.5, color: 'var(--text-dimmer)' }}>{defBranch ? t('project.basedOn', { base: defBranch }) : t('project.baseDefault')}</span>}
-            <span style={{ width: 1, height: 16, background: 'var(--border, #30363d)' }} />
-          </>)}
-          <Pill on={agent === 'claude'} onClick={() => setAgent('claude')}>Claude</Pill>
-          <Pill on={agent === 'codex'} onClick={() => setAgent('codex')}>Codex</Pill>
-          <Pill on={agent === 'none'} onClick={() => setAgent('none')}>{t('project.agent.none')}</Pill>
-          {/* 尾组 marginLeft:auto：换行后整组靠右成独立一行，窄屏不散架 */}
-          <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 11.5, color: 'var(--text-dimmer)', whiteSpace: 'nowrap' }}>{t('project.autoName')} · <a style={{ fontSize: 11.5 }} onClick={() => setFullForm(true)}>{t('project.fullForm')} ›</a></span>
-            <Button type="primary" size="small" loading={creating} onClick={goCreate}>{t('project.go')}</Button>
-          </span>
+        {/* Tabs：任务 | Worktree | 编队 | 活动（非 git 只有任务） */}
+        <div className="prj-tabs prj-in" style={{ animationDelay: '110ms' }}>
+          {tabBtn('tasks', t('project.tasks'), mine.length + unfinished.length + clean.length)}
+          {isGit && tabBtn('wt', 'Worktree', wts.length)}
+          {isGit && tabBtn('race', t('project.tab.race'), races.length)}
+          {isGit && tabBtn('act', t('project.tab.activity'))}
         </div>
-      </div>
 
-      {/* Tabs：任务 | Worktree | 编队 | 活动（非 git 只有任务） */}
-      <div style={{ display: 'flex', gap: 2, margin: '14px 0 6px', borderBottom: '1px solid var(--border-subtle, #21262d)' }}>
-        {tabBtn('tasks', t('project.tasks'), mine.length + unfinished.length + clean.length)}
-        {isGit && tabBtn('wt', 'Worktree', wts.length)}
-        {isGit && tabBtn('race', t('project.tab.race'), races.length)}
-        {isGit && tabBtn('act', t('project.tab.activity'))}
-      </div>
+        {/* ── 任务流 ── */}
+        {tab === 'tasks' && (<>
+          {sect(t('project.section.active'), mine.length)}
+          {mine.map(row)}
+          {mine.length === 0 && <div className="prj-empty">{t('project.noTasks')}</div>}
 
-      {/* ── 任务流 ── */}
-      {tab === 'tasks' && (<>
-        {sect(t('project.section.active'), mine.length)}
-        {mine.map(row)}
-        {mine.length === 0 && <div style={{ color: 'var(--text-dimmer)', fontSize: 12.5, padding: '4px 10px' }}>{t('project.noTasks')}</div>}
-
-        {unfinished.length > 0 && (<>
-          {sect(t('project.section.unfinished'), unfinished.length, true)}
-          {unfinished.map((w: any) => (
-            <div key={w.path} style={{
-              display: 'flex', alignItems: 'center', gap: 9, padding: '9px 10px', borderRadius: 9,
-              background: 'rgba(210,153,34,.05)', border: '1px solid rgba(210,153,34,.2)', marginBottom: 4, flexWrap: 'wrap',
-            }}>
-              {dot(false, 'var(--yellow, #d29922)')}
-              <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-                  <Tag color="cyan" style={{ margin: 0 }}>⎇ {w.branch}</Tag>
-                  <Tag color="warning" style={{ margin: 0 }}>{t('project.sessionClosed')}</Tag>
+          {unfinished.length > 0 && (<>
+            {sect(t('project.section.unfinished'), unfinished.length, true)}
+            {unfinished.map((w: any) => (
+              <div key={w.path} className="prj-row warn">
+                <span style={{ marginTop: 7, display: 'inline-flex' }}>{dot(false, '#d29922')}</span>
+                <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                    <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 11 }}>⎇ {w.branch}</Tag>
+                    <Tag color="warning" style={{ margin: 0 }}>{t('project.sessionClosed')}</Tag>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-dimmer)', flexWrap: 'wrap' }}>
+                    <Lifec done={2} cur={3} /><span>{t('project.stage.unfinished')}</span>
+                    <span className="prj-mono" style={{ fontSize: 11.5 }}>{t('project.aheadDirty', { ahead: w.committedAhead, dirty: w.dirty + w.untracked })}</span>
+                    <span>{relTime(w.lastCommitAt, t)}</span>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-dimmer)' }}>
-                  <Lifec done={2} cur={3} /><span>{t('project.stage.unfinished')}</span>
-                  <span>{t('project.aheadDirty', { ahead: w.committedAhead, dirty: w.dirty + w.untracked })}</span>
-                  <span>{relTime(w.lastCommitAt, t)}</span>
-                </div>
+                <span className="acts">
+                  <a style={{ color: '#d29922' }} onClick={() => setWtOpen(true)}>{t('project.finish')}</a>
+                  <a onClick={() => newCli(w, 'shell')}>{t('project.revive')}</a>
+                  <a onClick={() => setGitOpen(true)}>{t('project.compare')}</a>
+                </span>
               </div>
-              <span style={{ display: 'flex', gap: 12, fontSize: 12.5 }}>
-                <a style={{ color: 'var(--yellow, #d29922)' }} onClick={() => setWtOpen(true)}>{t('project.finish')}</a>
-                <a onClick={() => newCli(w, 'shell')}>{t('project.revive')}</a>
-                <a onClick={() => setGitOpen(true)}>{t('project.compare')}</a>
-              </span>
-            </div>
-          ))}
+            ))}
+          </>)}
+
+          {clean.length > 0 && (<>
+            {sect(t('project.section.clean'), clean.length)}
+            {clean.map((w: any) => (
+              <div key={w.path} className="prj-row">
+                <span style={{ marginTop: 7, display: 'inline-flex' }}>{dot(false, '#a371f7')}</span>
+                <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                    <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 11 }}>⎇ {w.branch}</Tag>
+                    <Tag color="purple" style={{ margin: 0 }}>⇥ {t('project.mergedClean')}</Tag>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-dimmer)' }}>
+                    <Lifec done={4} /><span>{t('project.stage.done')}</span>
+                  </div>
+                </div>
+                <span className="acts">
+                  <a onClick={() => newCli(w, 'shell')}>{t('project.revive')}</a>
+                  <a onClick={() => setWtOpen(true)}>{t('project.cleanup')}</a>
+                </span>
+              </div>
+            ))}
+          </>)}
         </>)}
 
-        {clean.length > 0 && (<>
-          {sect(t('project.section.clean'), clean.length)}
-          {clean.map((w: any) => (
-            <div key={w.path} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 9 }}>
-              {dot(false, 'var(--purple, #a371f7)')}
-              <Tag color="purple" style={{ margin: 0 }}>⇥ {t('project.mergedClean')}</Tag>
-              <Tag color="cyan" style={{ margin: 0 }}>⎇ {w.branch}</Tag>
-              <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', fontSize: 12, color: 'var(--text-dimmer)' }}>
-                <Lifec done={4} /><span>{t('project.stage.done')}</span>
-              </span>
-              <span style={{ flex: 1 }} />
-              <span style={{ display: 'flex', gap: 12, fontSize: 12.5 }}>
-                <a onClick={() => newCli(w, 'shell')}>{t('project.revive')}</a>
-                <a onClick={() => setWtOpen(true)}>{t('project.cleanup')}</a>
-              </span>
-            </div>
-          ))}
-        </>)}
-      </>)}
-
-      {/* ── Worktree tab（P4：行可展开 → 命令行 + 尾行预览 + 新开命令行）── */}
-      {tab === 'wt' && (
-        <div style={{ background: 'var(--bg-container, rgba(177,186,196,.03))', border: '1px solid var(--border-subtle, #21262d)', borderRadius: 12, marginTop: 6 }}>
-          {wts.length === 0 && <div style={{ color: 'var(--text-dimmer)', fontSize: 12.5, padding: 14 }}>{t('project.noTasks')}</div>}
-          {/* 管理入口收进本 tab（头部按钮与 tab 冲突已删）：新建/清理残留/跨仓库总览都在抽屉里 */}
-          <div style={{ padding: '10px 16px', borderTop: wts.length ? '1px solid var(--border-subtle, #21262d)' : undefined }}>
-            <a style={{ fontSize: 12.5 }} onClick={() => setWtOpen(true)}>{t('project.wtManage')} ›</a>
-          </div>
-          {wts.map((w: any, i: number) => {
-            const open = !!expanded[w.path]
-            const live = (w.sessions || []).length
-            return (
-              <div key={w.path} style={{ padding: '13px 16px', borderBottom: i < wts.length - 1 ? '1px solid var(--border-subtle, #21262d)' : undefined }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
-                  onClick={() => setExpanded((m) => ({ ...m, [w.path]: !open }))}>
-                  <span style={{ fontSize: 10, color: 'var(--text-dimmer)', width: 12, display: 'inline-block', transform: open ? 'rotate(90deg)' : undefined, transition: 'transform .15s' }}>▸</span>
-                  <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13.5, fontWeight: 600, color: 'var(--cyan, #39c5cf)' }}>⎇ {w.branch}</span>
-                  {w.external
-                    ? <Tag style={{ margin: 0 }}>{t('project.wt.externalTag')}</Tag>
-                    : live > 0
-                      ? <Tag style={{ margin: 0 }}>{t('project.wt.cli', { count: live })}</Tag>
-                      : <Tag color="warning" style={{ margin: 0 }}>{t('project.wt.orphanTag')}</Tag>}
-                </div>
-                <div style={{ marginLeft: 20, marginTop: 5, fontSize: 12, color: 'var(--text-dimmer)', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  <span>{t('project.basedOn', { base: w.base || '?' })}</span>·
-                  <span style={{ color: w.committedAhead > 0 ? 'var(--blue, #58a6ff)' : undefined }}>↑{w.committedAhead}</span>·
-                  <span style={{ color: (w.dirty + w.untracked) > 0 ? 'var(--yellow, #d29922)' : undefined }}>{t('project.wt.changes', { count: w.dirty + w.untracked })}</span>·
-                  <span>{relTime(w.lastCommitAt, t)}</span>
-                </div>
-                {open && (
-                  <div style={{ margin: '8px 0 2px 5px', paddingLeft: 12, borderLeft: '2px solid rgba(57,197,207,.25)', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    {(w.sessions || []).map((ref: any) => {
-                      return (
-                        <div key={ref.session} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 8, cursor: 'pointer' }}
-                          onClick={() => openTerm(ref.session)}>
-                          {dot(false, cc[ref.session] || cx[ref.session] ? 'var(--green, #3fb950)' : undefined)}
+        {/* ── Worktree tab（P4：行可展开 → 命令行 + 尾行预览 + 新开命令行）── */}
+        {tab === 'wt' && (
+          <div className="prj-panel prj-in">
+            {wts.length === 0 && <div className="prj-empty">{t('project.noTasks')}</div>}
+            {wts.map((w: any) => {
+              const open = !!expanded[w.path]
+              const live = (w.sessions || []).length
+              return (
+                <div key={w.path} className="prj-wtrow">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
+                    onClick={() => setExpanded((m) => ({ ...m, [w.path]: !open }))}>
+                    <span style={{ fontSize: 10, color: 'var(--text-dimmer)', width: 12, display: 'inline-block', transform: open ? 'rotate(90deg)' : undefined, transition: 'transform .15s' }}>▸</span>
+                    <span className="prj-mono" style={{ fontSize: 13.5, fontWeight: 600, color: '#39c5cf' }}>⎇ {w.branch}</span>
+                    {w.external
+                      ? <Tag style={{ margin: 0 }}>{t('project.wt.externalTag')}</Tag>
+                      : live > 0
+                        ? <Tag style={{ margin: 0 }}>{t('project.wt.cli', { count: live })}</Tag>
+                        : <Tag color="warning" style={{ margin: 0 }}>{t('project.wt.orphanTag')}</Tag>}
+                  </div>
+                  <div className="prj-mono" style={{ marginLeft: 20, marginTop: 5, fontSize: 11.5, color: 'var(--text-dimmer)', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <span>{t('project.basedOn', { base: w.base || '?' })}</span>·
+                    <span style={{ color: w.committedAhead > 0 ? '#58a6ff' : undefined }}>↑{w.committedAhead}</span>·
+                    <span style={{ color: (w.dirty + w.untracked) > 0 ? '#d29922' : undefined }}>{t('project.wt.changes', { count: w.dirty + w.untracked })}</span>·
+                    <span>{relTime(w.lastCommitAt, t)}</span>
+                  </div>
+                  {open && (
+                    <div style={{ margin: '8px 0 2px 5px', paddingLeft: 12, borderLeft: '2px solid rgba(57,197,207,.25)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {(w.sessions || []).map((ref: any) => (
+                        <div key={ref.session} className="prj-subrow" onClick={() => openTerm(ref.session)}>
+                          {dot(false, cc[ref.session] || cx[ref.session] ? '#3fb950' : undefined)}
                           <span style={{ fontWeight: 600, fontSize: 13 }}>{ref.session}</span>
                           {cc[ref.session] && <Tag color="blue" style={{ margin: 0, fontSize: 10.5, lineHeight: '16px' }}>Claude</Tag>}
                           {cx[ref.session] && <Tag color="green" style={{ margin: 0, fontSize: 10.5, lineHeight: '16px' }}>Codex</Tag>}
-                          <span style={{
-                            flex: 1, minWidth: 60, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                            fontFamily: 'ui-monospace, monospace', fontSize: 11, color: 'var(--text-dimmer)',
-                            background: 'rgba(1,4,9,.55)', border: '1px solid var(--border-subtle, #21262d)', borderRadius: 6, padding: '3px 8px',
-                          }}>{peeks[ref.session] || '…'}</span>
+                          <span className="prj-peek">{peeks[ref.session] || '…'}</span>
                           <a style={{ fontSize: 12 }} onClick={(e) => { e.stopPropagation(); openTerm(ref.session) }}>{t('project.enter')}</a>
                         </div>
-                      )
-                    })}
-                    {live === 0 && <div style={{ fontSize: 12, color: 'var(--text-dimmer)', padding: '4px 8px' }}>{t('project.wt.noCli')}</div>}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', border: '1px dashed var(--border, #30363d)', borderRadius: 8, color: 'var(--text-dim)', fontSize: 12.5 }}>
-                      {t('project.wt.newCli')}
-                      <a onClick={() => newCli(w, 'shell')}>shell</a>·<a onClick={() => newCli(w, 'claude')}>Claude</a>·<a onClick={() => newCli(w, 'codex')}>Codex</a>
+                      ))}
+                      {live === 0 && <div style={{ fontSize: 12, color: 'var(--text-dimmer)', padding: '4px 8px' }}>{t('project.wt.noCli')}</div>}
+                      <div className="prj-addline">
+                        {t('project.wt.newCli')}
+                        <a onClick={() => newCli(w, 'shell')}>shell</a>·<a onClick={() => newCli(w, 'claude')}>Claude</a>·<a onClick={() => newCli(w, 'codex')}>Codex</a>
+                      </div>
                     </div>
+                  )}
+                  <div style={{ marginTop: 9, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <Button size="small" onClick={() => setGitOpen(true)}>{t('project.wt.compareBase')}</Button>
+                    {!w.external && <Button size="small" onClick={() => setWtOpen(true)}>{t('worktree.mergeInto', { base: w.base || '?' })} ▾</Button>}
+                    <Tooltip title={live > 0 ? t('project.wt.busyDelete', { count: live }) : undefined}>
+                      <Button size="small" danger disabled={live > 0} onClick={() => setWtOpen(true)}>{t('project.wt.delete')}</Button>
+                    </Tooltip>
                   </div>
-                )}
-                <div style={{ marginTop: 9, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <Button size="small" onClick={() => setGitOpen(true)}>{t('project.wt.compareBase')}</Button>
-                  {!w.external && <Button size="small" onClick={() => setWtOpen(true)}>{t('worktree.mergeInto', { base: w.base || '?' })} ▾</Button>}
-                  <Tooltip title={live > 0 ? t('project.wt.busyDelete', { count: live }) : undefined}>
-                    <Button size="small" danger disabled={live > 0} onClick={() => setWtOpen(true)}>{t('project.wt.delete')}</Button>
-                  </Tooltip>
                 </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {/* ── 编队 tab：竞赛 + 蜂群（只列组，编排去对比台/蜂群页）── */}
-      {tab === 'race' && (<>
-        {races.map((r: any) => (
-          <div key={r.id} style={{ background: 'var(--bg-container, rgba(177,186,196,.03))', border: '1px solid var(--border-subtle, #21262d)', borderRadius: 12, padding: '13px 16px', marginTop: 8 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <Tag color="gold" style={{ margin: 0 }}>RACE</Tag>
-              <b>{r.name}</b>
-              <span style={{ fontSize: 12, color: 'var(--text-dimmer)' }}>{t('project.race.meta', { count: (r.contestants || []).length, base: r.base })}</span>
-              <span style={{ flex: 1 }} />
-              <Button size="small" type="primary" onClick={() => setCompareRace(r)}>{t('project.race.compare')} →</Button>
-            </div>
-          </div>
-        ))}
-        {races.length === 0 && <div style={{ color: 'var(--text-dimmer)', fontSize: 12.5, padding: '12px 4px' }}>{t('project.formation.empty')}</div>}
-        <div style={{ marginTop: 10 }}>
-          <Button size="small" onClick={() => setRaceOpen(true)}>{t('project.newRace')}</Button>
-        </div>
-      </>)}
-
-      {/* ── 活动 tab：全部分支近 30 天提交 ── */}
-      {tab === 'act' && (
-        <div style={{ background: 'var(--bg-container, rgba(177,186,196,.03))', border: '1px solid var(--border-subtle, #21262d)', borderRadius: 12, padding: '6px 4px', marginTop: 6 }}>
-          {activity.map((e: any) => (
-            <div key={e.oid + e.at} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', fontSize: 12.5, fontFamily: 'ui-monospace, monospace' }}>
-              <span style={{ color: 'var(--cyan, #39c5cf)', opacity: 0.8 }}>{e.oid}</span>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.subject}</span>
-              <span style={{ marginLeft: 'auto', color: 'var(--text-dimmer)', fontSize: 11.5, flex: '0 0 auto' }}>
-                {e.refs ? `${String(e.refs).split(',')[0]} · ` : ''}{relTime(e.at, t)}
-              </span>
-            </div>
-          ))}
-          {activity.length === 0 && <div style={{ color: 'var(--text-dimmer)', fontSize: 12.5, padding: 12 }}>{t('project.act.empty')}</div>}
-          <div style={{ fontSize: 11.5, color: 'var(--text-dimmer)', padding: '8px 12px', borderTop: '1px dashed var(--border-subtle, #21262d)' }}>{t('project.act.hint')}</div>
-        </div>
-      )}
-
-      <Suspense fallback={<Spin />}>
-        {wtOpen && <WorktreePanel open={wtOpen} onClose={() => { setWtOpen(false); refresh() }} openTerm={openTerm} initialDir={dir} />}
-        {gitOpen && (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(1,4,9,.6)' }} onClick={() => setGitOpen(false)}>
-            <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 'min(520px, 94vw)', background: 'var(--bg-container, #161b22)', borderLeft: '1px solid var(--border, #30363d)' }}
-              onClick={(e) => e.stopPropagation()}>
-              <GitPanel dir={dir} onClose={() => setGitOpen(false)} />
+              )
+            })}
+            {/* 管理入口收进本 tab：新建/清理残留/跨仓库总览都在抽屉里 */}
+            <div style={{ padding: '10px 16px', borderTop: wts.length ? '1px solid var(--border-subtle)' : undefined }}>
+              <a style={{ fontSize: 12.5 }} onClick={() => setWtOpen(true)}>{t('project.wtManage')} ›</a>
             </div>
           </div>
         )}
-        {raceOpen && <RaceCreateModal open={raceOpen} onClose={() => setRaceOpen(false)} onDone={() => { setRaceOpen(false); refresh() }} />}
-        {compareRace && <RaceComparePanel race={compareRace} onClose={() => setCompareRace(null)} openTerm={openTerm} onChanged={refresh} />}
-      </Suspense>
-      {/* 完整表单（W1 弹窗）与 派生（parent 固定）复用同一张表单；收尾走 W7 三选一 */}
-      <NewSessionModal open={fullForm || !!forking} parent={forking}
-        onClose={() => { setFullForm(false); setForking(null) }}
-        onDone={(n) => { openTerm(n); refresh() }} />
-      <CloseWorktreeModal info={closing} onClose={() => setClosing(null)} onDone={() => { setClosing(null); refresh() }} />
+
+        {/* ── 编队 tab：竞赛 + 蜂群（只列组，编排去对比台/蜂群页）── */}
+        {tab === 'race' && (<>
+          {races.map((r: any) => (
+            <div key={r.id} className="prj-panel prj-in" style={{ padding: '13px 16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <Tag color="gold" style={{ margin: 0 }}>RACE</Tag>
+                <b>{r.name}</b>
+                <span style={{ fontSize: 12, color: 'var(--text-dimmer)' }}>{t('project.race.meta', { count: (r.contestants || []).length, base: r.base })}</span>
+                <span style={{ flex: 1 }} />
+                <Button size="small" type="primary" onClick={() => setCompareRace(r)}>{t('project.race.compare')} →</Button>
+              </div>
+            </div>
+          ))}
+          {races.length === 0 && <div className="prj-empty">{t('project.formation.empty')}</div>}
+          <div style={{ marginTop: 10 }}>
+            <Button size="small" onClick={() => setRaceOpen(true)}>{t('project.newRace')}</Button>
+          </div>
+        </>)}
+
+        {/* ── 活动 tab：全部分支近 30 天提交 ── */}
+        {tab === 'act' && (
+          <div className="prj-panel prj-in" style={{ padding: '6px 4px' }}>
+            {activity.map((e: any) => (
+              <div key={e.oid + e.at} className="prj-mono" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', fontSize: 12.5 }}>
+                <span style={{ color: '#39c5cf', opacity: 0.8 }}>{e.oid}</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.subject}</span>
+                <span style={{ marginLeft: 'auto', color: 'var(--text-dimmer)', fontSize: 11.5, flex: '0 0 auto' }}>
+                  {e.refs ? `${String(e.refs).split(',')[0]} · ` : ''}{relTime(e.at, t)}
+                </span>
+              </div>
+            ))}
+            {activity.length === 0 && <div className="prj-empty">{t('project.act.empty')}</div>}
+            <div style={{ fontSize: 11.5, color: 'var(--text-dimmer)', padding: '8px 12px', borderTop: '1px dashed var(--border-subtle)' }}>{t('project.act.hint')}</div>
+          </div>
+        )}
+
+        <Suspense fallback={<Spin />}>
+          {wtOpen && <WorktreePanel open={wtOpen} onClose={() => { setWtOpen(false); refresh() }} openTerm={openTerm} initialDir={dir} />}
+          {gitOpen && (
+            <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(1,4,9,.6)' }} onClick={() => setGitOpen(false)}>
+              <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 'min(520px, 94vw)', background: 'var(--bg-container)', borderLeft: '1px solid var(--border)' }}
+                onClick={(e) => e.stopPropagation()}>
+                <GitPanel dir={dir} onClose={() => setGitOpen(false)} />
+              </div>
+            </div>
+          )}
+          {raceOpen && <RaceCreateModal open={raceOpen} onClose={() => setRaceOpen(false)} onDone={() => { setRaceOpen(false); refresh() }} />}
+          {compareRace && <RaceComparePanel race={compareRace} onClose={() => setCompareRace(null)} openTerm={openTerm} onChanged={refresh} />}
+        </Suspense>
+        {/* 完整表单（W1 弹窗）与 派生（parent 固定）复用同一张表单；收尾走 W7 三选一 */}
+        <NewSessionModal open={fullForm || !!forking} parent={forking}
+          onClose={() => { setFullForm(false); setForking(null) }}
+          onDone={(n) => { openTerm(n); refresh() }} />
+        <CloseWorktreeModal info={closing} onClose={() => setClosing(null)} onDone={() => { setClosing(null); refresh() }} />
+      </div>
     </div>
   )
 }
