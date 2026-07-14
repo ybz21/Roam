@@ -8,7 +8,7 @@
 // （渐变卡面 + focus 辉光环）、git 数据一律等宽字、行 hover 左导轨渐显、
 // 分区头沿用设计图纸体例、入场一次性 stagger。全部颜色走 index.css token。
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
-import { App as AntApp, AutoComplete, Button, Input, Modal, Popconfirm, Segmented, Select, Space, Spin, Tag, Tooltip, Typography } from 'antd'
+import { App as AntApp, AutoComplete, Button, Input, Modal, Popconfirm, Select, Space, Spin, Tag, Tooltip, Typography } from 'antd'
 import { api } from './api'
 import { useI18n } from './i18n'
 import { usePreferences } from './preferences'
@@ -213,12 +213,6 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
       <div className="prj-wrap-wide">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 16, fontWeight: 700 }}>{t('project.title')}</span>
-          <Segmented size="small" value="projects"
-            options={[
-              { label: t('project.title'), value: 'projects' },
-              { label: t('project.allSessions'), value: 'sessions' },
-            ]}
-            onChange={(v) => { if (v === 'sessions') location.hash = '#/sessions' }} />
           <span style={{ flex: 1 }} />
           <Button type="primary" size="small" onClick={() => setNewOpen(true)}>{t('project.newProject')}</Button>
         </div>

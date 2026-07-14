@@ -42,10 +42,11 @@ const { Sider, Content } = Layout
 const { useBreakpoint } = Grid
 const { Text } = Typography
 
+// 「会话」不再进导航：项目页是唯一入口（任务驱动，08 设计）；
+// 旧会话平铺页保留组件与 #/sessions 直达路由，概览页统计仍可跳转。
 const NAV = [
   { key: 'overview', labelKey: 'nav.overview' },
   { key: 'projects', labelKey: 'nav.projects' },
-  { key: 'sessions', labelKey: 'nav.sessions' },
   { key: 'swarm', labelKey: 'nav.swarm' },
   { key: 'files', labelKey: 'nav.files' },
   { key: 'browser', labelKey: 'nav.browser' },
@@ -72,7 +73,7 @@ function getHashParams(): URLSearchParams {
 
 function setHashParams(params: Record<string, string>) {
   const h = location.hash
-  const base = (h.split('?')[0]) || '#/sessions'
+  const base = (h.split('?')[0]) || '#/projects'
   const sp = new URLSearchParams()
   for (const [k, v] of Object.entries(params)) { if (v) sp.set(k, v) }
   const qs = sp.toString()
@@ -211,7 +212,7 @@ function FilesPage({ openTerm }: { openTerm: (name: string) => void }) {
 
 export default function App() {
   const [authed, setAuthed] = useState<boolean | null>(null)
-  const [route, setRoute] = useState(() => normalizeRoute(location.hash.replace(/^#\/?/, '') || 'sessions'))
+  const [route, setRoute] = useState(() => normalizeRoute(location.hash.replace(/^#\/?/, '') || 'projects'))
   const tab = route.split('/')[0]                                  // 基础页（swarm/leave → swarm）
   const swarmSub = tab === 'swarm' && route.includes('/') ? decodeURIComponent(route.slice(route.indexOf('/') + 1)) : '' // 深链选中的蜂群
   const projectSub = tab === 'projects' && route.includes('/') ? decodeURIComponent(route.slice(route.indexOf('/') + 1)) : '' // 深链选中的项目
@@ -282,7 +283,7 @@ export default function App() {
 
   // hash 路由：URL #/xxx 与当前页同步（支持前进/后退、刷新保持、收藏分享）
   useEffect(() => {
-    const apply = () => setRoute(normalizeRoute(location.hash.replace(/^#\/?/, '') || 'sessions'))
+    const apply = () => setRoute(normalizeRoute(location.hash.replace(/^#\/?/, '') || 'projects'))
     apply()
     window.addEventListener('hashchange', apply)
     return () => window.removeEventListener('hashchange', apply)
@@ -411,7 +412,7 @@ export default function App() {
   }
   // 懒加载页面 chunk 拉取期间的兜底：居中转圈（体量小，通常一闪而过）
   const lazyFallback = <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}><Spin /></div>
-  const page = <Suspense fallback={lazyFallback}>{pages[tab] || pages.sessions}</Suspense>
+  const page = <Suspense fallback={lazyFallback}>{pages[tab] || pages.projects}</Suspense>
   // browser 全幅(自带工具栏铺满)；phone 与概览/会话一致走 tt-page（同 16px 留白 + 满高，见 tt-page-phone）。
   const pageNode = tab === 'browser'
     ? page
