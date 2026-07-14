@@ -236,6 +236,63 @@ func TestMergeSquashAndConflict(t *testing.T) {
 	}
 }
 
+// 远端分支：Branches 列出 remote-tracking 分支（结构化拆 remote/name，含 / 的
+// 分支名不靠字符串猜），Create 可基于本地不存在、仅远端有的分支建 worktree。
+func TestBranchesAndCreateFromRemote(t *testing.T) {
+	ctx := context.Background()
+	s := New()
+	upstream := mkRepo(t)
+	gitIn := func(dir string, args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		cmd.Env = append(scrubGitEnv(),
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return string(out)
+	}
+	// 上游造一个仅远端存在的分支（带 /，验证切分）
+	gitIn(upstream, "checkout", "-q", "-b", "feat/remote-only")
+	commitFile(t, upstream, "remote.txt", "r\n", "remote change")
+	gitIn(upstream, "checkout", "-q", "main")
+
+	local := mkRepo(t)
+	gitIn(local, "remote", "add", "origin", upstream)
+	gitIn(local, "fetch", "-q", "origin")
+
+	_, _, remotes, err := s.Branches(ctx, local)
+	if err != nil {
+		t.Fatalf("branches: %v", err)
+	}
+	found := false
+	for _, rb := range remotes {
+		if rb.Remote == "origin" && rb.Name == "feat/remote-only" {
+			found = true
+		}
+		if rb.Name == "HEAD" {
+			t.Fatalf("HEAD should be skipped: %+v", remotes)
+		}
+	}
+	if !found {
+		t.Fatalf("origin/feat/remote-only not listed: %+v", remotes)
+	}
+
+	// 基于远端分支建 worktree：本地无 feat/remote-only，Create fetch 后锁 OID
+	resp, err := s.Create(ctx, CreateReq{Dir: local, Branch: "roam/from-remote", Base: "feat/remote-only", Remote: "origin"})
+	if err != nil {
+		t.Fatalf("create from remote: %v", err)
+	}
+	tip := strings.TrimSpace(gitIn(upstream, "rev-parse", "feat/remote-only"))
+	if resp.StartOid != tip {
+		t.Fatalf("start oid = %s, want upstream tip %s", resp.StartOid, tip)
+	}
+	if _, err := os.Stat(filepath.Join(resp.Path, "remote.txt")); err != nil {
+		t.Fatal("worktree missing file from remote branch")
+	}
+}
+
 func TestExpectedHeadGuard(t *testing.T) {
 	ctx := context.Background()
 	s := New()

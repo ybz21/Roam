@@ -1536,8 +1536,11 @@ function NewSessionModal({ open, parent, onClose, onDone }: { open: boolean; par
   const [creating, setCreating] = useState(false)
   // worktree 展开态（W1）：只选「基于」。分支不提前指定——后端按会话名占位，
   // Agent 开工后按任务 git branch -m 语义化（交互修订 4：先建会话再建 worktree）。
+  // base 选中值：本地分支存裸名；远端分支存 remote:<remote>:<branch> 编码
+  // （冒号在 git ref 名里非法，编码无歧义），提交前拆回 {base, remote}
   const [base, setBase] = useState('')
   const [branches, setBranches] = useState<string[]>([])
+  const [remoteBranches, setRemoteBranches] = useState<{ remote: string; name: string }[]>([])
   const [defBranch, setDefBranch] = useState('')
   const { message } = AntApp.useApp()
   const { t } = useI18n()
@@ -1545,7 +1548,7 @@ function NewSessionModal({ open, parent, onClose, onDone }: { open: boolean; par
   useEffect(() => {
     if (!open) return
     setPrompt(''); setName(''); setNameTouched(false); setDir(''); setAgent('claude'); setWtMode('repo'); setAutoReview(false); setIsGitRepo(false)
-    setBase(''); setBranches([]); setDefBranch(''); setExistingWts([]); setWtPath('')
+    setBase(''); setBranches([]); setRemoteBranches([]); setDefBranch(''); setExistingWts([]); setWtPath('')
     // 派生模式：目录默认父会话 cwd（可改成任意目录，与新建一致）
     if (parent) {
       let cancelled = false
@@ -1575,7 +1578,7 @@ function NewSessionModal({ open, parent, onClose, onDone }: { open: boolean; par
     }).catch(() => { if (!cancelled) setExistingWts([]) })
     return () => { cancelled = true }
   }, [isGitRepo, dir])
-  // 选「新建 worktree」时拉本地分支做「基于」候选
+  // 选「新建 worktree」时拉本地+远端分支做「基于」候选
   useEffect(() => {
     if (wtMode !== 'new' || !isGitRepo || !dir.trim()) return
     let cancelled = false
@@ -1583,8 +1586,9 @@ function NewSessionModal({ open, parent, onClose, onDone }: { open: boolean; par
       if (cancelled) return
       const bs: string[] = r?.data?.branches || []
       const def: string = r?.data?.default || ''
-      setBranches(bs); setDefBranch(def)
-      setBase((prev) => (prev && bs.includes(prev) ? prev : def))
+      const rs: { remote: string; name: string }[] = r?.data?.remotes || []
+      setBranches(bs); setDefBranch(def); setRemoteBranches(rs)
+      setBase((prev) => (prev && (bs.includes(prev) || rs.some((x) => `remote:${x.remote}:${x.name}` === prev)) ? prev : def))
     }).catch(() => {})
     return () => { cancelled = true }
   }, [wtMode, isGitRepo, dir])
@@ -1606,12 +1610,18 @@ function NewSessionModal({ open, parent, onClose, onDone }: { open: boolean; par
       if (wtMode === 'new' && isGitRepo && sessionDir) {
         // 组合 API（先会话后 worktree）：分支不传——后端按会话名占位，Agent 开工后语义化；
         // 派生模式走 fork-worktree（同编排 + meta 记父子）
+        let baseReq: { base?: string; remote?: string } = base ? { base } : {}
+        if (base.startsWith('remote:')) {
+          const rest = base.slice('remote:'.length)
+          const sep = rest.indexOf(':')
+          baseReq = { base: rest.slice(sep + 1), remote: rest.slice(0, sep) }
+        }
         const res = parent
           ? await api('POST', `/sessions/${encodeURIComponent(parent)}/fork-worktree`, {
-            child: finalName, dir: sessionDir, ...(base ? { base } : {}),
+            child: finalName, dir: sessionDir, ...baseReq,
           })
           : await api('POST', '/worktree-sessions', {
-            name: finalName, dir: sessionDir, ...(base ? { base } : {}),
+            name: finalName, dir: sessionDir, ...baseReq,
           })
         actual = res.name || res.data?.session || finalName
         sessionDir = res.data?.path || sessionDir
@@ -1734,13 +1744,25 @@ function NewSessionModal({ open, parent, onClose, onDone }: { open: boolean; par
                   <Select size="small" showSearch optionFilterProp="label" style={{ flex: 1, minWidth: 0 }}
                     value={base || undefined} onChange={(v) => setBase(v)}
                     placeholder={t('session.wt.basePlaceholder')}
-                    options={[
-                      ...(defBranch ? [{ value: defBranch, label: t('session.wt.defaultBranch', { name: defBranch }) }] : []),
-                      ...branches.filter((b) => b !== defBranch).map((b) => ({ value: b, label: b })),
-                    ]} />
+                    options={(() => {
+                      type Opt = { value?: string; label: string; options?: { value: string; label: string }[] }
+                      const locals = [
+                        ...(defBranch ? [{ value: defBranch, label: t('session.wt.defaultBranch', { name: defBranch }) }] : []),
+                        ...branches.filter((b) => b !== defBranch).map((b) => ({ value: b, label: b })),
+                      ]
+                      if (!remoteBranches.length) return locals as Opt[]
+                      return [
+                        { label: t('session.wt.localBranches'), options: locals },
+                        {
+                          label: t('session.wt.remoteBranches'),
+                          options: remoteBranches.map((rb) => ({ value: `remote:${rb.remote}:${rb.name}`, label: `${rb.remote}/${rb.name}` })),
+                        },
+                      ] as Opt[]
+                    })()} />
                 </div>
                 <div style={{ color: 'var(--text-dimmer)', fontSize: 12 }}>
-                  {agent !== 'none' ? t('session.wt.autoNote') : t('session.wt.autoNoteNoAgent')}
+                  {base.startsWith('remote:') ? t('session.wt.remoteFetchNote')
+                    : agent !== 'none' ? t('session.wt.autoNote') : t('session.wt.autoNoteNoAgent')}
                 </div>
               </div>
             )}

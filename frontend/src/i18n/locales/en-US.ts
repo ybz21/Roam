@@ -821,6 +821,9 @@ const enUS = {
   'session.wt.autoNote': 'Branch and directory are created automatically; the agent renames the branch after it reads the task',
   'session.wt.autoNoteNoAgent': 'Branch and directory are auto-created from the session name; rename later with git branch -m',
   'session.wt.defaultBranch': '{name} (default)',
+  'session.wt.localBranches': 'Local branches',
+  'session.wt.remoteBranches': 'Remote branches',
+  'session.wt.remoteFetchNote': 'Based on a remote branch: its latest commits are fetched at creation',
 
   // W4 worktree management drawer
   'worktree.entry': 'Worktrees',

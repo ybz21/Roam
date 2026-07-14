@@ -1007,15 +1007,23 @@ func (s *Service) Head(ctx context.Context, path string) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
-// Branches 返回本地分支列表与默认 base（W1 start-from 选择器用）。
-func (s *Service) Branches(ctx context.Context, dir string) ([]string, string, error) {
+// RemoteBranch 远端分支（结构化拆开 remote 与分支名：分支名可含 /，
+// 前端按 "remote/name" 字符串猜切分会错，真相源在这里拆好）。
+type RemoteBranch struct {
+	Remote string `json:"remote"`
+	Name   string `json:"name"`
+}
+
+// Branches 返回本地分支列表、默认 base 与已知远端分支（W1 start-from 选择器用）。
+// 远端分支来自本地已有的 remote-tracking ref（不主动 fetch——Create 选定后会 fetch 锁 OID）。
+func (s *Service) Branches(ctx context.Context, dir string) ([]string, string, []RemoteBranch, error) {
 	repo, err := s.ResolveRepo(ctx, dir)
 	if err != nil {
-		return nil, "", err
+		return nil, "", nil, err
 	}
 	out, e := git(ctx, repo.Root, "for-each-ref", "refs/heads", "--format=%(refname:short)", "--sort=-committerdate")
 	if e != nil {
-		return nil, "", errf("GIT_ERROR", "%s", out)
+		return nil, "", nil, errf("GIT_ERROR", "%s", out)
 	}
 	var branches []string
 	for _, l := range strings.Split(out, "\n") {
@@ -1023,7 +1031,51 @@ func (s *Service) Branches(ctx context.Context, dir string) ([]string, string, e
 			branches = append(branches, strings.TrimSpace(l))
 		}
 	}
-	return branches, s.defaultBase(ctx, repo), nil
+	return branches, s.defaultBase(ctx, repo), s.remoteBranches(ctx, repo), nil
+}
+
+// remoteBranches 列 refs/remotes 下的远端分支，按 remote 名精确切前缀
+// （remote 名取自 git remote，最长匹配——分支名可含 /）；跳过 HEAD 符号引用。
+func (s *Service) remoteBranches(ctx context.Context, repo Repo) []RemoteBranch {
+	remOut, e := git(ctx, repo.Root, "remote")
+	if e != nil {
+		return nil
+	}
+	var remotes []string
+	for _, l := range strings.Split(remOut, "\n") {
+		if r := strings.TrimSpace(l); r != "" {
+			remotes = append(remotes, r)
+		}
+	}
+	if len(remotes) == 0 {
+		return nil
+	}
+	out, e := git(ctx, repo.Root, "for-each-ref", "refs/remotes", "--format=%(refname:short)", "--sort=-committerdate")
+	if e != nil {
+		return nil
+	}
+	var list []RemoteBranch
+	for _, l := range strings.Split(out, "\n") {
+		short := strings.TrimSpace(l)
+		if short == "" {
+			continue
+		}
+		match := ""
+		for _, r := range remotes {
+			if strings.HasPrefix(short, r+"/") && len(r) > len(match) {
+				match = r
+			}
+		}
+		if match == "" {
+			continue
+		}
+		name := short[len(match)+1:]
+		if name == "" || name == "HEAD" {
+			continue
+		}
+		list = append(list, RemoteBranch{Remote: match, Name: name})
+	}
+	return list
 }
 
 func dedup(in []string) []string {

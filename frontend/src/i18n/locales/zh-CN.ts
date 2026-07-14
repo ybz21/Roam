@@ -821,6 +821,9 @@ const zhCN = {
   'session.wt.autoNote': '分支与目录自动创建;Agent 开工后会按任务给分支起语义化名字',
   'session.wt.autoNoteNoAgent': '分支与目录按会话名自动创建,之后可自行 git branch -m 改名',
   'session.wt.defaultBranch': '{name}（默认）',
+  'session.wt.localBranches': '本地分支',
+  'session.wt.remoteBranches': '远端分支',
+  'session.wt.remoteFetchNote': '基于远端分支:创建时会先 fetch 该分支的最新提交',
 
   // W4 Worktree 管理抽屉
   'worktree.entry': 'Worktree 管理',

@@ -155,12 +155,12 @@ func (a *API) WorktreePrune(c *gin.Context) {
 func (a *API) GitBranches(c *gin.Context) {
 	ctx, cancel := wtCtx(c)
 	defer cancel()
-	branches, def, err := a.WT.Branches(ctx, filepath.Clean(c.Query("dir")))
+	branches, def, remotes, err := a.WT.Branches(ctx, filepath.Clean(c.Query("dir")))
 	if err != nil {
 		wtErr(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": gin.H{"branches": branches, "default": def}})
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"branches": branches, "default": def, "remotes": remotes}})
 }
 
 // ── Session API 增量 ─────────────────────────────────────
@@ -298,7 +298,7 @@ func (a *API) SessionFork(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"session": b.Child, "parent": parent}, "name": b.Child})
 }
 
-// SessionForkWorktree POST /sessions/:name/fork-worktree {child, branch?, base?, dir?}
+// SessionForkWorktree POST /sessions/:name/fork-worktree {child, branch?, base?, remote?, dir?}
 // 编排（先 subSession 后 worktree）：ttmux fork（cwd=父仓库目录，meta 记 parent）→
 // 建 worktree（分支缺省自动占位）→ 子会话内注入 cd；失败反向补偿 kill 子会话。
 func (a *API) SessionForkWorktree(c *gin.Context) {
@@ -307,6 +307,7 @@ func (a *API) SessionForkWorktree(c *gin.Context) {
 		Child  string `json:"child"`
 		Branch string `json:"branch"`
 		Base   string `json:"base"`
+		Remote string `json:"remote"`
 		Dir    string `json:"dir"`
 	}
 	if err := c.ShouldBindJSON(&b); err != nil || b.Child == "" {
@@ -342,7 +343,7 @@ func (a *API) SessionForkWorktree(c *gin.Context) {
 	if branch == "" {
 		branch = autoBranch(b.Child)
 	}
-	wt, err := a.WT.Create(ctx, worktree.CreateReq{Dir: dir, Branch: branch, Base: b.Base})
+	wt, err := a.WT.Create(ctx, worktree.CreateReq{Dir: dir, Branch: branch, Base: b.Base, Remote: b.Remote})
 	if err != nil {
 		_, _ = a.TT.Run("kill", b.Child, "--yes")
 		wtErr(c, err)
