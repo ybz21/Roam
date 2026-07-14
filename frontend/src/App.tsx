@@ -1824,7 +1824,7 @@ function RenameSessionModal({ session, onClose, onDone }: { session: string | nu
 }
 
 // ── 关闭 worktree 会话的收尾三选一（W7）：保留 / 合并回 base 并删除 / 丢弃并删除 ──
-function CloseWorktreeModal({ info, onClose, onDone }: {
+export function CloseWorktreeModal({ info, onClose, onDone }: {
   info: { name: string; st: any } | null
   onClose: () => void
   onDone: (name: string) => void

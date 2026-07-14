@@ -607,6 +607,16 @@ func (s *Service) ListAll(ctx context.Context) []RepoWorktrees {
 	return out
 }
 
+// SessionCwds 全部会话的 pane cwd 快照（canonical）。供非 git 项目按目录
+// 前缀归属会话（08：项目不与 git 绑定，git 只是可选能力）。
+func (s *Service) SessionCwds(ctx context.Context) map[string][]string {
+	out := map[string][]string{}
+	for _, p := range tmuxPanes(ctx) {
+		out[p.Session] = append(out[p.Session], canonical(p.Cwd))
+	}
+	return out
+}
+
 // Annotations 返回 {session → {primary, matches[], ambiguous}}。
 func (s *Service) Annotations(ctx context.Context) map[string]*Annotation {
 	res := map[string]*Annotation{}
@@ -643,6 +653,59 @@ func (s *Service) Annotations(ctx context.Context) map[string]*Annotation {
 		}
 	}
 	return res
+}
+
+// ── 活动流（08 P2 活动 tab）───────────────────────────────
+
+type LogEntry struct {
+	Oid     string `json:"oid"`
+	At      int64  `json:"at"`
+	Refs    string `json:"refs,omitempty"` // 装饰引用（分支名等）
+	Subject string `json:"subject"`
+}
+
+var (
+	logCacheMu sync.Mutex
+	logCache   = map[string]struct {
+		at   time.Time
+		data []LogEntry
+	}{}
+)
+
+// RecentLog 全部分支近 30 天提交（--all 含各 worktree 分支），60s 缓存——
+// 活动比 worktree 列表变化慢（08 §5.3）。
+func (s *Service) RecentLog(ctx context.Context, dir string) ([]LogEntry, error) {
+	repo, err := s.ResolveRepo(ctx, dir)
+	if err != nil {
+		return nil, err
+	}
+	logCacheMu.Lock()
+	if c, ok := logCache[repo.CommonDir]; ok && time.Since(c.at) < 60*time.Second {
+		logCacheMu.Unlock()
+		return c.data, nil
+	}
+	logCacheMu.Unlock()
+	out, e := git(ctx, repo.Root, "log", "--all", "--since=30.days",
+		"-n", "120", "--format=%h%x09%ct%x09%D%x09%s")
+	if e != nil {
+		return nil, errf("GIT_ERROR", "%s", out)
+	}
+	entries := []LogEntry{}
+	for _, line := range strings.Split(out, "\n") {
+		parts := strings.SplitN(line, "\t", 4)
+		if len(parts) != 4 || parts[0] == "" {
+			continue
+		}
+		at, _ := strconv.ParseInt(parts[1], 10, 64)
+		entries = append(entries, LogEntry{Oid: parts[0], At: at, Refs: parts[2], Subject: parts[3]})
+	}
+	logCacheMu.Lock()
+	logCache[repo.CommonDir] = struct {
+		at   time.Time
+		data []LogEntry
+	}{time.Now(), entries}
+	logCacheMu.Unlock()
+	return entries, nil
 }
 
 // ── DiffBase ─────────────────────────────────────────────

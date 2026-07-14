@@ -160,10 +160,11 @@ func New(cfg Config) *gin.Engine {
 		g.DELETE("/races/:id", h.RaceDelete)        // 删除竞赛记录
 
 		// ── 项目（08：项目=git 仓库，一等存储对象 + 读模型聚合）──
-		g.GET("/projects", h.ProjectsList)              // 列表聚合（发现通道读时收敛）
-		g.POST("/projects", h.ProjectCreate)            // 显式创建（origin=user，不自动退场）
-		g.DELETE("/projects/:key", h.ProjectDelete)     // 显式移除（纯台账，不动目录/会话）
-		g.PATCH("/projects/:key/prefs", h.ProjectPrefs) // 置顶/显示名/默认 agent/base
+		g.GET("/projects", h.ProjectsList)                  // 列表聚合（发现通道读时收敛）
+		g.POST("/projects", h.ProjectCreate)                // 显式创建（origin=user，不自动退场）
+		g.DELETE("/projects/:key", h.ProjectDelete)         // 显式移除（纯台账，不动目录/会话）
+		g.GET("/projects/:key/activity", h.ProjectActivity) // 活动流（全部分支近 30 天）
+		g.PATCH("/projects/:key/prefs", h.ProjectPrefs)     // 置顶/显示名/默认 agent/base
 
 		g.GET("/sessions", h.Sessions)
 		g.POST("/sessions", h.NewSession)
