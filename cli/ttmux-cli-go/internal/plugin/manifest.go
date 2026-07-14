@@ -166,6 +166,17 @@ func (m Manifest) CommandOwner(commandID string) (string, bool) {
 	return "", false
 }
 
+// FullCommandOwner is CommandOwner for the full-id qualified form
+// "<id>.<handler>"(如 roam.host-monitor.stats):把命令钉死在这个插件上。
+// 短名前缀(host-monitor.stats)在多 publisher 撞短名时会被最先匹配者接走,
+// 调用方(如 Web 按路由里的插件 id 调命令)需要精确归属时用这个形式。
+func (m Manifest) FullCommandOwner(commandID string) (string, bool) {
+	if rest, ok := strings.CutPrefix(commandID, m.ID+"."); ok {
+		return m.CommandOwner(m.commandPrefix() + rest)
+	}
+	return "", false
+}
+
 // SinkMatches reports whether the plugin subscribes to a notification type.
 func (m Manifest) SinkMatches(notifType string) bool {
 	for _, s := range m.Contributes.NotificationSinks {

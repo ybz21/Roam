@@ -272,18 +272,28 @@ func (s *Store) SetEnabled(id string, enabled bool) error {
 	return err
 }
 
-// FindCommand resolves "<name>.<cmd>" to its enabled owner plugin.
+// FindCommand resolves a command to its enabled owner plugin。两种形式:
+// 短名 "<name>.<cmd>"(CLI 手敲),与全 id 限定 "<id>.<cmd>"(Web 按路由
+// 插件 id 调用,精确归属——短名在多 publisher 撞名时会被最先匹配者接走)。
 func (s *Store) FindCommand(commandID string) (RegisteredPlugin, string, error) {
 	all, err := s.List()
 	if err != nil {
 		return RegisteredPlugin{}, "", err
 	}
+	pick := func(p RegisteredPlugin, handler string) (RegisteredPlugin, string, error) {
+		if !p.Enabled {
+			return RegisteredPlugin{}, "", fmt.Errorf("plugin %s is disabled (enable with: ttmux plugin enable %s)", p.Manifest.ID, p.Manifest.Name)
+		}
+		return p, handler, nil
+	}
+	for _, p := range all { // 全 id 限定优先:唯一、不受短名撞名影响
+		if handler, ok := p.Manifest.FullCommandOwner(commandID); ok {
+			return pick(p, handler)
+		}
+	}
 	for _, p := range all {
 		if handler, ok := p.Manifest.CommandOwner(commandID); ok {
-			if !p.Enabled {
-				return RegisteredPlugin{}, "", fmt.Errorf("plugin %s is disabled (enable with: ttmux plugin enable %s)", p.Manifest.ID, p.Manifest.Name)
-			}
-			return p, handler, nil
+			return pick(p, handler)
 		}
 	}
 	return RegisteredPlugin{}, "", fmt.Errorf("unknown plugin command: %s", commandID)

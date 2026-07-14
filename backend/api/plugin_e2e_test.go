@@ -75,4 +75,11 @@ func TestPluginRunE2E(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("cross-plugin run should be rejected, got %d: %s", w.Code, w.Body.String())
 	}
+
+	// 伪造 publisher:短名前缀能对上,但注册表里查无 evil.host-monitor,
+	// CLI 按全 id 限定命令拒绝,不会落到短名匹配的真实所有者上
+	w = call("evil.host-monitor", map[string]any{"command": "host-monitor.stats"})
+	if w.Code == http.StatusOK {
+		t.Errorf("forged publisher id should be rejected, got 200: %s", w.Body.String())
+	}
 }

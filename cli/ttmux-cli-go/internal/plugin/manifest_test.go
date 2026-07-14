@@ -59,6 +59,23 @@ func TestCommandOwner(t *testing.T) {
 	}
 }
 
+func TestFullCommandOwner(t *testing.T) {
+	m := sample()
+	handler, ok := m.FullCommandOwner("acme.qc.review")
+	if !ok || handler != "review" {
+		t.Fatalf("want review/true, got %q/%v", handler, ok)
+	}
+	if _, ok := m.FullCommandOwner("qc.review"); ok {
+		t.Fatal("short form must not match the full-id resolver")
+	}
+	if _, ok := m.FullCommandOwner("evil.qc.review"); ok {
+		t.Fatal("forged publisher accepted")
+	}
+	if _, ok := m.FullCommandOwner("acme.qc.unknown"); ok {
+		t.Fatal("undeclared command accepted")
+	}
+}
+
 func TestCommandAllowed(t *testing.T) {
 	m := sample()
 	if !m.CommandAllowed([]string{"go", "test", "./..."}) {
