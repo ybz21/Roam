@@ -143,6 +143,7 @@ func New(cfg Config) *gin.Engine {
 		g.POST("/git/worktree/merge", h.WorktreeMerge)   // 合并回 base（执行位/冲突 abort/expected-head）
 		g.POST("/git/worktree/remove", h.WorktreeRemove) // 删除（占用检查 + 脏保护）
 		g.POST("/git/worktree/prune", h.WorktreePrune)   // 显式清理残留
+		g.POST("/git/worktree/finish", h.WorktreeFinish) // P3 孤儿收尾：冻结→wip→merge→remove→留痕
 		g.GET("/git/branches", h.GitBranches)            // 本地分支列表（W1 start-from）
 		// ── Session API 增量 ──
 		g.GET("/sessions/annotations", h.SessionAnnotations)              // session→worktree 归属（cwd join）
@@ -158,6 +159,13 @@ func New(cfg Config) *gin.Engine {
 		g.POST("/races/:id/crown", h.RaceCrown)     // 选为赢家：wip→merge→可选清理，阶段可续跑
 		g.POST("/races/:id/cleanup", h.RaceCleanup) // 全部清理（会话+worktree+分支）
 		g.DELETE("/races/:id", h.RaceDelete)        // 删除竞赛记录
+
+		// ── 项目（08：项目=git 仓库，一等存储对象 + 读模型聚合）──
+		g.GET("/projects", h.ProjectsList)                  // 列表聚合（发现通道读时收敛）
+		g.POST("/projects", h.ProjectCreate)                // 显式创建（origin=user，不自动退场）
+		g.DELETE("/projects/:key", h.ProjectDelete)         // 显式移除（纯台账，不动目录/会话）
+		g.GET("/projects/:key/activity", h.ProjectActivity) // 活动流（全部分支近 30 天）
+		g.PATCH("/projects/:key/prefs", h.ProjectPrefs)     // 置顶/显示名/默认 agent/base
 
 		g.GET("/sessions", h.Sessions)
 		g.POST("/sessions", h.NewSession)

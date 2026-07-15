@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"ttmux-web/project"
 	"ttmux-web/ttmux"
 	"ttmux-web/worktree"
 )
@@ -23,10 +24,11 @@ type API struct {
 	Speech      *SpeechStore      // 语音识别(ASR)配置 + 转录
 	Prefs       *PreferencesStore // 用户偏好（主题/语言/Agent 命令等）
 	Races       *RaceStore        // 竞赛（W5/W6）业务数据模型
+	Projects    *project.Store    // 项目（08）：knownRepos 弱台账 + UI 偏好
 }
 
 func New(tt *ttmux.Client, browserHome, dataDir string) *API {
-	return &API{TT: tt, WT: worktree.New(), BrowserHome: browserHome, Football: NewFootballStore(), Speech: NewSpeechStore(dataDir), Prefs: NewPreferencesStore(dataDir), Races: NewRaceStore(dataDir)}
+	return &API{TT: tt, WT: worktree.New(), BrowserHome: browserHome, Football: NewFootballStore(), Speech: NewSpeechStore(dataDir), Prefs: NewPreferencesStore(dataDir), Races: NewRaceStore(dataDir), Projects: project.NewStore(dataDir)}
 }
 
 // json 透传 ttmux 的 --json 输出

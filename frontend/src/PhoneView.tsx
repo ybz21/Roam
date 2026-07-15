@@ -194,8 +194,8 @@ export default function PhoneView() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* 第一栏：画质 + 连接状态 + 指标 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px 4px', flex: '0 0 auto', flexWrap: 'wrap' }}>
+      {/* 第一栏：画质 + 连接状态 + 指标（全站统一：首行贴 tt-page 的 16,16，不再自垫内边距） */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 0 6px', flex: '0 0 auto', flexWrap: 'wrap' }}>
         <Space.Compact size="small">
           {QUALITY_OPTS.map((o) => {
             const on = quality === o.value

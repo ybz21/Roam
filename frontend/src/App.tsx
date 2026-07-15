@@ -26,6 +26,8 @@ const PluginsPanel = lazy(() => import('./PluginsPanel'))
 const BrowserView = lazy(() => import('./BrowserView'))
 const PhoneView = lazy(() => import('./PhoneView'))
 const Swarm = lazy(() => import('./Swarm'))
+const Projects = lazy(() => import('./Projects'))
+const OverviewPage = lazy(() => import('./Overview'))
 import UpdateBanner from './UpdateBanner'
 import { useThemeMode } from './theme'
 import { useI18n } from './i18n'
@@ -41,10 +43,12 @@ const { Sider, Content } = Layout
 const { useBreakpoint } = Grid
 const { Text } = Typography
 
+// 「会话」「蜂群」不再进导航：项目页是唯一主入口（任务驱动，08 设计）——
+// 蜂群从项目编队 tab 进（蜂群台深链 #/swarm/<名>），会话平铺页留 #/sessions 直达；
+// 两页组件与路由都保留，概览页统计仍可跳转。
 const NAV = [
   { key: 'overview', labelKey: 'nav.overview' },
-  { key: 'sessions', labelKey: 'nav.sessions' },
-  { key: 'swarm', labelKey: 'nav.swarm' },
+  { key: 'projects', labelKey: 'nav.projects' },
   { key: 'files', labelKey: 'nav.files' },
   { key: 'browser', labelKey: 'nav.browser' },
   { key: 'phone', labelKey: 'nav.phone' },
@@ -70,7 +74,7 @@ function getHashParams(): URLSearchParams {
 
 function setHashParams(params: Record<string, string>) {
   const h = location.hash
-  const base = (h.split('?')[0]) || '#/sessions'
+  const base = (h.split('?')[0]) || '#/projects'
   const sp = new URLSearchParams()
   for (const [k, v] of Object.entries(params)) { if (v) sp.set(k, v) }
   const qs = sp.toString()
@@ -85,6 +89,7 @@ const svg = (paths: any) => (
 )
 const ICONS: Record<string, any> = {
   overview: svg(<><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>),
+  projects: svg(<><path d="M3 10.2 12 3l9 7.2" /><path d="M5.5 9v11h13V9" /><path d="M9.5 20v-5h5v5" /></>),
   sessions: svg(<><polyline points="5 8 9 12 5 16" /><line x1="12" y1="16" x2="18" y2="16" /></>),
   swarm: svg(<><circle cx="12" cy="5" r="2.4" /><circle cx="5" cy="17" r="2.4" /><circle cx="19" cy="17" r="2.4" /><line x1="12" y1="7.4" x2="6.5" y2="14.8" /><line x1="12" y1="7.4" x2="17.5" y2="14.8" /></>),
   files: svg(<><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><path d="M7 12h10" /><path d="M7 16h6" /></>),
@@ -162,7 +167,7 @@ function shellQuote(s: string): string {
 }
 
 // tmux 给的是 Unix 秒。转成「刚刚 / N 分钟前 …」相对时间，title 里再挂绝对时间。
-function relTime(sec: string | number | undefined, t: (k: string, v?: Record<string, string | number>) => string): string {
+export function relTime(sec: string | number | undefined, t: (k: string, v?: Record<string, string | number>) => string): string {
   const n = typeof sec === 'string' ? parseInt(sec, 10) : sec
   if (!n || !Number.isFinite(n)) return '—'
   const diff = Math.max(0, Math.floor(Date.now() / 1000 - n))
@@ -208,9 +213,10 @@ function FilesPage({ openTerm }: { openTerm: (name: string) => void }) {
 
 export default function App() {
   const [authed, setAuthed] = useState<boolean | null>(null)
-  const [route, setRoute] = useState(() => normalizeRoute(location.hash.replace(/^#\/?/, '') || 'sessions'))
+  const [route, setRoute] = useState(() => normalizeRoute(location.hash.replace(/^#\/?/, '') || 'projects'))
   const tab = route.split('/')[0]                                  // 基础页（swarm/leave → swarm）
   const swarmSub = tab === 'swarm' && route.includes('/') ? decodeURIComponent(route.slice(route.indexOf('/') + 1)) : '' // 深链选中的蜂群
+  const projectSub = tab === 'projects' && route.includes('/') ? decodeURIComponent(route.slice(route.indexOf('/') + 1)) : '' // 深链选中的项目
   const go = (k: string) => {
     const qi = location.hash.indexOf('?')
     const qs = qi >= 0 ? location.hash.slice(qi) : ''
@@ -278,7 +284,7 @@ export default function App() {
 
   // hash 路由：URL #/xxx 与当前页同步（支持前进/后退、刷新保持、收藏分享）
   useEffect(() => {
-    const apply = () => setRoute(normalizeRoute(location.hash.replace(/^#\/?/, '') || 'sessions'))
+    const apply = () => setRoute(normalizeRoute(location.hash.replace(/^#\/?/, '') || 'projects'))
     apply()
     window.addEventListener('hashchange', apply)
     return () => window.removeEventListener('hashchange', apply)
@@ -394,8 +400,9 @@ export default function App() {
   )
 
   const pages: any = {
-    overview: <Overview go={go} openTerm={openTerm} />,
+    overview: <OverviewPage openTerm={openTerm} />,
     swarm: <Swarm openTerm={openTerm} initialSwarm={swarmSub || undefined} onNav={(n) => { location.hash = n ? '#/swarm/' + encodeURIComponent(n) : '#/swarm' }} />,
+    projects: <Projects openTerm={openTerm} initialKey={projectSub || undefined} />,
     sessions: <Sessions openTerm={openTerm} closeTerm={closeTerm} activeTerm={active} />,
     files: <FilesPage openTerm={openTerm} />,
     settings: <EnvPage />,
@@ -406,11 +413,10 @@ export default function App() {
   }
   // 懒加载页面 chunk 拉取期间的兜底：居中转圈（体量小，通常一闪而过）
   const lazyFallback = <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}><Spin /></div>
-  const page = <Suspense fallback={lazyFallback}>{pages[tab] || pages.sessions}</Suspense>
+  const page = <Suspense fallback={lazyFallback}>{pages[tab] || pages.projects}</Suspense>
   // browser 全幅(自带工具栏铺满)；phone 与概览/会话一致走 tt-page（同 16px 留白 + 满高，见 tt-page-phone）。
-  const pageNode = tab === 'browser'
-    ? page
-    : <div className={`tt-page tt-page-${tab}${isMobile ? ' tt-page-mobile' : ''}`}>{page}</div>
+  // 浏览器页不再全幅特例：与 文件/手机 同走 tt-page 满高容器，五页左上角起点统一 (16,16)
+  const pageNode = <div className={`tt-page tt-page-${tab}${isMobile ? ' tt-page-mobile' : ''}`}>{page}</div>
 
   const menu = (
     <Menu
@@ -1265,127 +1271,7 @@ function Login({ onOk }: { onOk: () => void }) {
 
 // ── 概览（仪表盘）──
 // 蜂群状态 → 颜色/中文
-function SwarmStatusTag({ status }: { status?: string }) {
-  const { t } = useI18n()
-  const m: Record<string, [string, string]> = {
-    planning: ['blue', t('swarm.status.planning')], running: ['processing', t('common.running')],
-    integrating: ['gold', t('swarm.status.integrating')], done: ['success', t('common.done')], archived: ['default', t('swarm.status.archived')],
-  }
-  const [c, l] = m[status || ''] || ['default', status || '—']
-  return <Tag color={c} style={{ margin: 0 }}>{l}</Tag>
-}
-
-// 统计磁贴：左侧色块图标 + 大数字 + 标签，可点跳转
-function StatTile({ icon, label, value, accent, onClick }: {
-  icon: any; label: string; value: any; accent: string; onClick?: () => void
-}) {
-  return (
-    <Card size="small" hoverable={!!onClick} onClick={onClick}
-      style={{ cursor: onClick ? 'pointer' : 'default', background: 'var(--bg-container)', borderColor: 'var(--border-subtle)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{ width: 40, height: 40, borderRadius: 10, flex: '0 0 auto', display: 'grid', placeItems: 'center', color: accent, background: accent + '22' }}>{icon}</div>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 24, fontWeight: 700, lineHeight: 1.1, color: 'var(--text-bright)' }}>{value}</div>
-          <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>{label}</div>
-        </div>
-      </div>
-    </Card>
-  )
-}
-
-function Overview({ go, openTerm }: { go: (k: string) => void; openTerm: (n: string) => void }) {
-  const { t } = useI18n()
-  const [info, setInfo] = useState<any>(null)
-  const [swarms, setSwarms] = useState<any[]>([])
-  const [sessions, setSessions] = useState<any[]>([])
-  const load = () => {
-    api('GET', '/info').then(setInfo).catch(() => {})
-    api('GET', '/swarms').then((r) => setSwarms(Array.isArray(r) ? r : [])).catch(() => {})
-    api('GET', '/sessions').then((r) => setSessions(Array.isArray(r) ? r : [])).catch(() => {})
-  }
-  useEffect(() => { load(); const t = setInterval(load, 3000); return () => clearInterval(t) }, [])
-
-  const aliveMembers = swarms.reduce((n, x) => n + (x.alive || 0), 0)
-  const pendingMembers = swarms.reduce((n, x) => n + (x.pending || 0), 0)
-  const chip = { color: 'var(--text-dim)', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', fontSize: 12 }
-
-  return (
-    <Space direction="vertical" size={14} style={{ width: '100%' }}>
-      {/* Hero */}
-      <div style={{ borderRadius: 14, padding: '22px 24px', background: 'linear-gradient(135deg,var(--bg-container) 0%,var(--bg-base) 100%)', border: '1px solid var(--border-subtle)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-          <img src="/logo-mark.svg" width={48} height={48} alt="Roam" style={{ flex: '0 0 auto', borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,.5)' }} />
-          <div style={{ flex: 1, minWidth: 200 }}>
-            <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-bright)' }}>{t('overview.welcome')}</div>
-            <div style={{ color: 'var(--text-dim)', fontSize: 13, marginTop: 4 }}>{t('overview.subtitle')}</div>
-          </div>
-          <Space wrap>
-            <Button type="primary" onClick={() => go('sessions')}>{t('overview.enterSessions')}</Button>
-            <Button onClick={() => go('swarm')}>{t('overview.viewSwarm')}</Button>
-          </Space>
-        </div>
-        <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
-          <Tag bordered={false} style={chip}>ttmux {info?.version || '—'}</Tag>
-          <Tag bordered={false} style={chip}>tmux {info?.tmux_version || '—'}</Tag>
-          {info?.data_dir && <Tag bordered={false} style={chip}>📁 {info.data_dir}</Tag>}
-        </div>
-      </div>
-
-      {/* 统计磁贴 */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
-        {[
-          { icon: ICONS.sessions, label: t('nav.sessions'), value: info?.sessions ?? sessions.length, accent: '#58a6ff', onClick: () => go('sessions') },
-          { icon: ICONS.swarm, label: t('nav.swarm'), value: swarms.length, accent: '#58a6ff', onClick: () => go('swarm') },
-          { icon: ICONS.swarm, label: t('overview.activeMembers'), value: aliveMembers, accent: '#3fb950', onClick: () => go('swarm') },
-          { icon: ICONS.overview, label: t('overview.pendingUnlock'), value: pendingMembers, accent: '#d29922', onClick: () => go('swarm') },
-        ].map((p, i) => <div key={i} style={{ flex: '1 1 140px', minWidth: 140 }}><StatTile {...p} /></div>)}
-      </div>
-
-      {/* 会话 + 蜂群 双栏（会话在前，蜂群在后） */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
-        <div style={{ flex: '1 1 360px', minWidth: 280 }}>
-          <Card title={t('nav.sessions')} extra={<a onClick={() => go('sessions')}>{t('common.all')} →</a>}>
-            {sessions.length === 0 ? <Empty description={t('session.noActive')} /> : (
-              <List size="small" dataSource={sessions.slice(0, 6)} renderItem={(s: any) => (
-                <List.Item style={{ padding: '8px 0' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minWidth: 0 }}>
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ color: 'var(--text-bright)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.name}>{s.name}</div>
-                      <div style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap' }} title={`${t('session.createdAt')} ${absTime(s.created)} · ${t('session.lastActivity')} ${absTime(s.last_activity)}`}>{t('session.windows', { count: s.windows })} · {s.attached == 1 ? t('terminal.status.connected') : t('terminal.status.idle')} · {t('session.lastActivity')} {relTime(s.last_activity, t)}</div>
-                    </div>
-                    <a onClick={() => openTerm(s.name)} style={{ flex: '0 0 auto', whiteSpace: 'nowrap' }}>{t('common.terminal')}</a>
-                  </div>
-                </List.Item>
-              )} />
-            )}
-          </Card>
-        </div>
-        <div style={{ flex: '1 1 360px', minWidth: 280 }}>
-          <Card title={<Space><span style={{ color: '#58a6ff' }}>◆</span>{t('nav.swarm')}</Space>} extra={<a onClick={() => go('swarm')}>{t('common.all')} →</a>}>
-            {swarms.length === 0 ? <Empty description={t('overview.noSwarms')} /> : (
-              <Space direction="vertical" size={10} style={{ width: '100%' }}>
-                {swarms.slice(0, 5).map((s: any) => (
-                  <div key={s.id || s.name} onClick={() => go('swarm')}
-                    style={{ cursor: 'pointer', padding: '10px 12px', borderRadius: 10, background: 'var(--bg-base)', border: '1px solid var(--border-subtle)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' }}>
-                      <span style={{ fontWeight: 600, color: 'var(--text-bright)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
-                      <span style={{ flex: '0 0 auto' }}><SwarmStatusTag status={s.status} /></span>
-                      {s.supervisor && <Text type="secondary" style={{ fontSize: 12, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>◆{s.supervisor}</Text>}
-                      <span style={{ flex: 1, minWidth: 8 }} />
-                      <span style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap', flex: '0 0 auto' }}>{t('overview.swarmCounts', { alive: s.alive, total: s.total })}{s.pending ? ` · ${t('overview.pendingShort', { count: s.pending })}` : ''}</span>
-                    </div>
-                    <div style={{ color: 'var(--text-dim)', fontSize: 12, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.goal || t('overview.noGoal')}</div>
-                    <Progress percent={s.total ? Math.round((s.alive / s.total) * 100) : 0} showInfo={false} size="small" strokeColor="#58a6ff" trailColor="var(--border-subtle)" style={{ marginBottom: 0, marginTop: 6 }} />
-                  </div>
-                ))}
-              </Space>
-            )}
-          </Card>
-        </div>
-      </div>
-    </Space>
-  )
-}
+// 概览页已重构为「项目为主」的独立组件（Overview.tsx，08 设计 P6）。
 
 // ── 任务（命令 + Agent 统一） ──
 function Tasks({ openTerm }: { openTerm: (n: string) => void }) {
@@ -1505,7 +1391,7 @@ export function DirPicker({ open, start, onPick, onClose }: { open: boolean; sta
 
 // worktree 分支默认名：会话名 slug（小写、非字母数字转 -）
 // prompt 派生任务名：取首行、去引号标点、截 24 字、空白转 -；中文原样保留（tmux 会话名支持中文）。
-function taskNameFromPrompt(p: string): string {
+export function taskNameFromPrompt(p: string): string {
   const first = (p.trim().split(/\n/)[0] || '').replace(/["'`«»""'']/g, '').trim()
   // 优先在首个标点处断句（够长时），再截 24 字、去尾部标点、空白转 -
   const seg = first.split(/[，。,.!！？?;；:：]/)[0]
@@ -1513,14 +1399,14 @@ function taskNameFromPrompt(p: string): string {
   return base.slice(0, 24).trim().replace(/[，。,.!！？?;；:：\s]+$/g, '').replace(/\s+/g, '-')
 }
 // POSIX 单引号安全包裹（prompt 作为 agent CLI 参数发送）。
-function shq(s: string): string {
+export function shq(s: string): string {
   return "'" + s.replace(/'/g, "'\\''") + "'"
 }
 
 // ── 新建会话（prompt-first 派活）/ 派生子会话 ──
 // parent 非空 = 派生模式：同一张表单（目录默认父 cwd 可改、三选一、命名约定 prompt 全同款），
 // 仅提交路由不同（fork / fork-worktree，meta 记父子关系）。两处不再各维护一份表单。
-function NewSessionModal({ open, parent, onClose, onDone }: { open: boolean; parent?: string | null; onClose: () => void; onDone: (name: string) => void }) {
+export function NewSessionModal({ open, parent, onClose, onDone }: { open: boolean; parent?: string | null; onClose: () => void; onDone: (name: string) => void }) {
   const [prompt, setPrompt] = useState('')
   const [name, setName] = useState('')
   const [nameTouched, setNameTouched] = useState(false)
@@ -1819,7 +1705,7 @@ function RenameSessionModal({ session, onClose, onDone }: { session: string | nu
 }
 
 // ── 关闭 worktree 会话的收尾三选一（W7）：保留 / 合并回 base 并删除 / 丢弃并删除 ──
-function CloseWorktreeModal({ info, onClose, onDone }: {
+export function CloseWorktreeModal({ info, onClose, onDone }: {
   info: { name: string; st: any } | null
   onClose: () => void
   onDone: (name: string) => void

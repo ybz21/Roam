@@ -17,10 +17,12 @@ func (a *API) Swarms(c *gin.Context) { a.json(c, "swarm", "ls", "--json") }
 // POST /api/swarms —— 新建蜂群（默认自带 Leader；master=false 则 --no-master，字段名为历史兼容）
 func (a *API) SwarmNew(c *gin.Context) {
 	var b struct {
-		Name   string `json:"name"`
-		Goal   string `json:"goal"`
-		Dir    string `json:"dir"` // 工作目录(可空)：建群即 mkdir，Leader/上传都落到这里
-		Master *bool  `json:"master"`
+		Name     string   `json:"name"`
+		Goal     string   `json:"goal"`
+		Dir      string   `json:"dir"` // 工作目录(可空)：建群即 mkdir，Leader/上传都落到这里
+		Master   *bool    `json:"master"`
+		Roster   []string `json:"roster"`   // 项目页发起：班子建议（仅进开场白，09 §4）
+		Worktree bool     `json:"worktree"` // 项目页发起：成员独立 worktree 约定（仅进开场白）
 	}
 	if err := c.ShouldBindJSON(&b); err != nil || strings.TrimSpace(b.Name) == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
@@ -38,6 +40,7 @@ func (a *API) SwarmNew(c *gin.Context) {
 	} else if p := renderLeaderKickoff(promptCtx{
 		Swarm: b.Name, Goal: b.Goal, Member: "cc-" + b.Name,
 		Workdir: b.Dir, SkillsDir: skillsDir(),
+		Roster: b.Roster, WorktreePolicy: b.Worktree,
 	}); p != "" {
 		// 自动拉起的 Leader 用 auto_leader.md.tmpl 当开场白（含目标/工作目录/可用 skill/职责），
 		// 而不是裸 /cc-swarm —— 否则 Leader 容易自己闷头实现、不拆任务派活。
@@ -50,7 +53,9 @@ func (a *API) SwarmNew(c *gin.Context) {
 // 用于「先建群+上传文档、再起 Leader」的时序：建群时传 master=false，上传完文档后再调本接口。
 func (a *API) SwarmAdopt(c *gin.Context) {
 	var b struct {
-		Dir string `json:"dir"`
+		Dir      string   `json:"dir"`
+		Roster   []string `json:"roster"` // 与 SwarmNew 同款（先建群传文档再 adopt 的时序不丢上下文）
+		Worktree bool     `json:"worktree"`
 	}
 	_ = c.ShouldBindJSON(&b) // body 可空
 	n := c.Param("n")
@@ -70,6 +75,7 @@ func (a *API) SwarmAdopt(c *gin.Context) {
 	if p := renderLeaderKickoff(promptCtx{
 		Swarm: n, Goal: goal, Member: "cc-" + n,
 		Workdir: b.Dir, SkillsDir: skillsDir(),
+		Roster: b.Roster, WorktreePolicy: b.Worktree,
 	}); p != "" {
 		args = append(args, "--prompt", p)
 	}

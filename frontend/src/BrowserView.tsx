@@ -45,7 +45,8 @@ function TabBar({ tabs, active, onSelect, onClose, onAdd, extra }: {
 }) {
   const { t } = useI18n()
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px 0', flex: '0 0 auto' }}>
+    // 全站统一：工具页首行贴 tt-page 的 (16,16)，不再自垫横向内边距
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 0, flex: '0 0 auto' }}>
       <div style={{ display: 'flex', gap: 4, overflowX: 'auto', flex: 1, minWidth: 0 }}>
         {tabs.map((t) => (
           <BrowserTab key={t.id} tab={t} active={t.id === active} onSelect={() => onSelect(t.id)} onClose={() => onClose(t.id)} />
@@ -604,16 +605,6 @@ export default function BrowserView() {
         onAdd={newTab}
         extra={
           <Space size={10} style={{ paddingRight: 4 }}>
-            <Button size="small" onClick={rotate} title={t('browser.rotateTitle')}
-              style={rotation ? { color: '#58a6ff', borderColor: '#58a6ff66' } : undefined}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                {/* 屏幕旋转图标（倾斜设备框 + 对角双箭头），明显区别于刷新的环形箭头 */}
-                <svg viewBox="0 0 24 24" width={15} height={15} fill="url(#metalIcon)" style={{ display: 'block' }}>
-                  <path d="M16.48 2.52c3.27 1.55 5.61 4.72 5.97 8.48h1.5C23.44 4.84 18.29 0 12 0l-.66.03 3.81 3.81 1.33-1.32zM10.23 1.75c-.59-.59-1.54-.59-2.12 0L1.75 8.11c-.59.59-.59 1.54 0 2.12l12.02 12.02c.59.59 1.54.59 2.12 0l6.36-6.36c.59-.59.59-1.54 0-2.12L10.23 1.75zm4.6 19.44L2.81 9.17l6.36-6.36 12.02 12.02-6.36 6.36zM7.52 21.48C4.25 19.94 1.91 16.76 1.55 13H.05C.56 19.16 5.71 24 12 24l.66-.03-3.81-3.81-1.33 1.32z" />
-                </svg>
-                {rotation ? <span>{rotation}°</span> : null}
-              </span>
-            </Button>
             {/* 清晰度：选中档亮蓝底 + 白字加粗 + 辉光，未选中压暗，对比鲜明 */}
             <Space.Compact size="small">
               {QUALITY_OPTS.map((o) => {
@@ -631,6 +622,20 @@ export default function BrowserView() {
                 )
               })}
             </Space.Compact>
+            {/* 旋转：紧跟清晰度组之后，样式与清晰度档完全同款（激活=蓝底，未激活=灰边灰字） */}
+            <Button size="small" onClick={rotate} title={t('browser.rotateTitle')}
+              type={rotation ? 'primary' : 'default'}
+              style={rotation
+                ? { background: '#1f6feb', borderColor: '#1f6feb', color: '#fff', fontWeight: 700, boxShadow: '0 0 0 2px rgba(31,111,235,.35)' }
+                : { background: 'transparent', borderColor: 'var(--border)', color: 'var(--text-dim)' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                {/* 屏幕旋转图标（倾斜设备框 + 对角双箭头），明显区别于刷新的环形箭头 */}
+                <svg viewBox="0 0 24 24" width={15} height={15} fill={rotation ? '#fff' : 'url(#metalIcon)'} style={{ display: 'block' }}>
+                  <path d="M16.48 2.52c3.27 1.55 5.61 4.72 5.97 8.48h1.5C23.44 4.84 18.29 0 12 0l-.66.03 3.81 3.81 1.33-1.32zM10.23 1.75c-.59-.59-1.54-.59-2.12 0L1.75 8.11c-.59.59-.59 1.54 0 2.12l12.02 12.02c.59.59 1.54.59 2.12 0l6.36-6.36c.59-.59.59-1.54 0-2.12L10.23 1.75zm4.6 19.44L2.81 9.17l6.36-6.36 12.02 12.02-6.36 6.36zM7.52 21.48C4.25 19.94 1.91 16.76 1.55 13H.05C.56 19.16 5.71 24 12 24l.66-.03-3.81-3.81-1.33 1.32z" />
+                </svg>
+                {rotation ? <span>{rotation}°</span> : null}
+              </span>
+            </Button>
             <Tag color={connected ? 'green' : 'red'} style={{ marginInlineEnd: 0 }}>{connected ? t('browser.connected') : t('browser.disconnected')}</Tag>
             <span style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap' }}>
               {quality === 'auto' && levelName ? <span style={{ color: '#58a6ff' }}>{levelName} ·</span> : null}
@@ -639,8 +644,8 @@ export default function BrowserView() {
           </Space>
         }
       />
-      {/* 地址栏：紧凑一行，地址框自适应铺满 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 8px', flex: '0 0 auto' }}>
+      {/* 地址栏：紧凑一行，地址框自适应铺满（横向不自垫，与各页 16px 原点对齐） */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 0', flex: '0 0 auto' }}>
         <Button.Group size="small">
           <Button onClick={() => act('back')} title={t('file.back')}>←</Button>
           <Button onClick={() => act('forward')} title={t('file.forward')}>→</Button>

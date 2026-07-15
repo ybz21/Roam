@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>08 · 项目（Project）— 设计图纸</title>
+<link rel="stylesheet" href="../07-worktree/mock.css">
+<link rel="stylesheet" href="project.css">
+<style>
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 56px 28px 90px; }
+  .cover { margin-bottom: 44px; }
+  .cover .kicker {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .3em; color: var(--stage-faint);
+    margin-bottom: 14px;
+  }
+  .cover h1 {
+    font-size: 34px; font-weight: 800; letter-spacing: .01em; line-height: 1.2;
+    color: var(--plate); margin-bottom: 14px;
+  }
+  .cover h1 .brand {
+    background: var(--brand-grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .cover .meta { display: flex; gap: 22px; flex-wrap: wrap; font-size: 12px; color: var(--stage-ink); }
+  .cover .meta b { color: var(--plate); font-weight: 600; }
+  .cover .meta .k { font-family: var(--mono); font-size: 9.5px; letter-spacing: .18em; color: var(--stage-faint); display: block; margin-bottom: 3px; }
+
+  .flowmap {
+    margin: 34px 0 40px; padding: 20px 24px;
+    border: 1px solid var(--stage-line); border-radius: 14px;
+    background: rgba(148, 163, 184, .03);
+    font-family: var(--mono); font-size: 12px; line-height: 2.1; color: var(--stage-ink);
+    white-space: pre; overflow-x: auto;
+  }
+  .flowmap b { color: var(--cyan); font-weight: 600; }
+  .flowmap em { color: #e3b341; font-style: normal; }
+
+  .sec-h {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .26em; color: var(--stage-faint);
+    margin: 38px 0 16px; display: flex; align-items: center; gap: 14px;
+  }
+  .sec-h::after { content: ''; flex: 1; border-top: 1px dashed var(--stage-line); }
+
+  .plates { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+  .plate-card {
+    display: flex; gap: 14px; padding: 18px;
+    border: 1px solid var(--stage-line); border-radius: 14px;
+    background: linear-gradient(180deg, rgba(148, 163, 184, .05), rgba(148, 163, 184, .015));
+    color: var(--plate);
+    transition: border-color .18s, transform .18s, box-shadow .18s, background .18s;
+  }
+  .plate-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(88, 166, 255, .45); color: var(--plate);
+    box-shadow: 0 14px 40px -12px rgba(0, 0, 0, .6), 0 0 0 1px rgba(88, 166, 255, .12);
+    background: linear-gradient(180deg, rgba(148, 163, 184, .07), rgba(148, 163, 184, .02));
+  }
+  .plate-card .no {
+    flex: 0 0 44px; height: 44px; border-radius: 11px;
+    display: grid; place-items: center;
+    font-family: var(--mono); font-size: 13px; font-weight: 700; letter-spacing: .04em;
+    color: var(--cyan); background: rgba(57, 197, 207, .08);
+    border: 1px solid rgba(57, 197, 207, .28);
+  }
+  .plate-card .t { font-size: 14.5px; font-weight: 700; margin-bottom: 5px; letter-spacing: .01em; }
+  .plate-card .d { font-size: 12px; color: var(--stage-ink); line-height: 1.75; }
+  .plate-card .m { margin-top: 9px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .plate-card .m .tag { font-size: 10.5px; height: 18px; }
+
+  .in { animation: rise .5s cubic-bezier(.2, .85, .3, 1) backwards; }
+  @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
+</style>
+</head>
+<body>
+<div class="spec-bar">
+  <b>08 · 项目（Project）— 设计图纸</b><span class="spec-tag">SPEC SUITE · 提案 v0.1</span>
+  <span class="spacer"></span>
+  <a href="../08-project.md">设计文档 v0.1</a><a href="../07-worktree/index.html">07 图纸</a>
+</div>
+
+<div class="wrap">
+  <div class="cover in">
+    <div class="kicker">ROAM · DESIGN PLATES · 08-PROJECT</div>
+    <h1><span class="brand">Roam</span> 项目概念 · 页面设计</h1>
+    <div class="meta">
+      <span><span class="k">概念</span><b>项目 = git 仓库</b>（现算 ∪ knownRepos 弱台账）</span>
+      <span><span class="k">任务</span><b>会话 ∪ 孤儿 worktree</b> 的统一投影</span>
+      <span><span class="k">对照</span><b>Codex project/task</b>：composer 回车即开干</span>
+      <span><span class="k">交互</span><b>P2 tab / pill、P3 三选一</b> 页面内可点</span>
+    </div>
+  </div>
+
+  <div class="flowmap in" style="animation-delay:.06s">项目列表(<b>P1</b>) ──打开──→ 项目主页(<b>P2</b>) = composer + 任务流
+   │                         │  ├─任务行[进入]──→ 终端（面包屑 项目›任务 跳回）
+   │  Segmented「全部会话」    │  ├─任务行[收尾]──→ 收尾抽屉(<b>P3</b>) ──复活──→ 回「进行中」
+   └────→ 原 W2 平铺视图      │  └─tab: Worktree(原W4) · 竞赛(→W6) · 活动
+                              └─composer ⏎ ──→ <em>POST /worktree-sessions</em>（W1 弹窗降为「完整表单」）</div>
+
+  <div class="sec-h">PLATES · 逐页图版</div>
+  <div class="plates">
+    <a class="plate-card in" style="animation-delay:.1s" href="p1-project-list.html">
+      <span class="no">P1</span>
+      <span style="min-width:0">
+        <span class="t" style="display:block">项目列表</span>
+        <span class="d" style="display:block">卡片网格：主干同步态 + 任务/worktree/待收尾计数 + 进行中任务 + 7 日活动 spark；散会话区兜底；「全部会话」老视图保留。桌面 + 手机。</span>
+        <span class="m"><span class="tag cyan">仓库即项目</span><span class="tag ghost">提案</span></span>
+      </span>
+    </a>
+    <a class="plate-card in" style="animation-delay:.13s" href="p2-project-home.html">
+      <span class="no">P2</span>
+      <span style="min-width:0">
+        <span class="t" style="display:block">项目主页 · composer + 任务流</span>
+        <span class="d" style="display:block">Codex 式 composer（在哪干活/Agent pill，⏎ 开干）；任务流按 进行中/待收尾/已合并 分区，行内生命周期导轨 建→干→审→并，⑂ 派生缩进。桌面 + 手机。</span>
+        <span class="m"><span class="tag blue">composer</span><span class="tag yellow">待收尾一等</span><span class="tag ghost">提案</span></span>
+      </span>
+    </a>
+    <a class="plate-card in" style="animation-delay:.16s" href="p3-task-finish.html">
+      <span class="no">P3</span>
+      <span style="min-width:0">
+        <span class="t" style="display:block">任务收尾 · 孤儿的归宿</span>
+        <span class="d" style="display:block">损失清单先行（已提交/未提交分开）+ 三选一：合并并删除 / 复活会话 / 丢弃删除；与 W7 互补——W7 管关的那一刻，P3 管关完之后。</span>
+        <span class="m"><span class="tag red">防丢改动</span><span class="tag green">可复活</span><span class="tag ghost">提案</span></span>
+      </span>
+    </a>
+    <a class="plate-card in" style="animation-delay:.19s" href="p4-worktree-terminals.html">
+      <span class="no">P4</span>
+      <span style="min-width:0">
+        <span class="t" style="display:block">Worktree × 命令行</span>
+        <span class="d" style="display:block">worktree 行可展开列出全部派生命令行（agent + 裸 shell 同列，带终端尾行预览），行尾「＋ 新开命令行」三选；进入 → 停靠终端 + 面包屑。孤儿展开即复活。</span>
+        <span class="m"><span class="tag cyan">cwd join 实况</span><span class="tag blue">终端联动</span><span class="tag ghost">提案</span></span>
+      </span>
+    </a>
+    <a class="plate-card in" style="animation-delay:.25s" href="p6-overview.html">
+      <span class="no">P6</span>
+      <span style="min-width:0">
+        <span class="t" style="display:block">概览重构 · 项目为主</span>
+        <span class="d" style="display:block">「需要你」横幅置顶（待输入/待收尾/待解锁跨项目汇总）+ 统计条 + 活跃项目作战卡（内嵌任务/⬡蜂群/待收尾）+ 散会话/最近活动双列。会话蜂群不再各占一栏。</span>
+        <span class="m"><span class="tag yellow">需要你优先</span><span class="tag blue">作战卡</span><span class="tag ghost">提案</span></span>
+      </span>
+    </a>
+    <a class="plate-card in" style="animation-delay:.22s" href="p5-swarm-in-project.html">
+      <span class="no">P5</span>
+      <span style="min-width:0">
+        <span class="t" style="display:block">蜂群 × 项目</span>
+        <span class="d" style="display:block">编队卡展开（成员/职责/看板计数/广场尾声）+ 项目语境发起（班子与 worktree 约定写进指挥开场白）；编排权留给指挥，项目页只投影与跳转。</span>
+        <span class="m"><span class="tag purple">⬡ 编队</span><span class="tag ghost">零新编排 API</span><span class="tag ghost">提案</span></span>
+      </span>
+    </a>
+  </div>
+
+  <div class="sec-h">RELATION · 与 07 的关系</div>
+  <div class="flowmap in" style="animation-delay:.2s">W1 新建弹窗   → 降级为 composer 的「完整表单 ›」，字段/缺省规则全保留
+W2 会话列表   → 保留为 P1 的「全部会话」视图；分组优先级(竞赛&gt;父子&gt;仓库)被任务流继承
+W3 Git 面板   → 不变；终端顶部加面包屑 项目›任务
+W4 管理抽屉   → 仓库内视角收进 P2 Worktree tab；跨仓库总览由 P1 承担
+W5/W6 竞赛    → 不变；P2 竞赛 tab 与任务流组头是其入口
+W7 关闭钩子   → 不变；漏网之鱼（裸 kill / 选「保留」）由 P2 待收尾分区 + P3 兜底</div>
+</div>
+</body>
+</html>

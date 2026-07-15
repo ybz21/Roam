@@ -82,10 +82,15 @@ function SwarmList({ list, onOpen, reload }: { list: SwarmRow[]; onOpen: (n: str
   ]
   const shown = status === 'active' ? list.filter((s) => !isArchived(s)) : list.filter((s) => norm(s.status) === status)
   return (
-    <Card
-      title={<Space size={8}>{t('nav.swarm')}<Tag style={{ margin: 0 }}>{count('active')}</Tag></Space>}
-      extra={<Button type="primary" onClick={() => setCreating(true)}>+ {t('swarm.new')}</Button>}
-    >
+    // 页面头与「项目」页同款（全站统一：标题 16/700 起于 tt-page 左上角，操作靠右），
+    // 不再套 antd Card——卡头会把标题多缩进一层，五页起点就不齐了。
+    <div style={{ width: '100%' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 16, fontWeight: 700 }}>{t('nav.swarm')}</span>
+        <Tag style={{ margin: 0 }}>{count('active')}</Tag>
+        <span style={{ flex: 1 }} />
+        <Button type="primary" size="small" onClick={() => setCreating(true)}>+ {t('swarm.new')}</Button>
+      </div>
       {/* 按状态过滤 */}
       {list.length > 0 && options.length > 1 && (
         <Segmented value={status} onChange={(v) => setStatus(v as string)} options={options} style={{ marginBottom: 14 }} />
@@ -106,7 +111,7 @@ function SwarmList({ list, onOpen, reload }: { list: SwarmRow[]; onOpen: (n: str
         </div>
       )}
       <NewSwarmModal open={creating} onClose={() => setCreating(false)} onDone={reload} />
-    </Card>
+    </div>
   )
 }
 
@@ -154,16 +159,28 @@ function SwarmCard({ s, onOpen }: { s: SwarmRow; onOpen: (n: string) => void }) 
   )
 }
 
-function NewSwarmModal({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: () => void }) {
+// initialDir/lockDir：项目页入口预填并锁定目录（09 §3——「在项目里创建」的含义）。
+// roster/worktree 是 09 §4 的上下文字段：只写进指挥开场白，编排权仍在指挥。
+export function NewSwarmModal({ open, onClose, onDone, initialDir, lockDir }: {
+  open: boolean; onClose: () => void; onDone: (name?: string) => void
+  initialDir?: string; lockDir?: boolean
+}) {
   const { message } = AntApp.useApp()
   const { t } = useI18n()
   const [name, setName] = useState(''); const [goal, setGoal] = useState(''); const [master, setMaster] = useState(true)
   const [dir, setDir] = useState(''); const [pick, setPick] = useState(false)
   const [files, setFiles] = useState<File[]>([])
+  const [subroles, setSubroles] = useState<{ key: string; label: string; icon?: string }[]>([])
+  const [roster, setRoster] = useState<string[]>([])
+  const [worktree, setWorktree] = useState(true)
   const [busy, setBusy] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const dirRef = useRef<HTMLInputElement | null>(null)
-  useEffect(() => { if (open) { setName(''); setGoal(''); setMaster(true); setDir(''); setFiles([]) } }, [open])
+  useEffect(() => {
+    if (!open) return
+    setName(''); setGoal(''); setMaster(true); setDir(initialDir || ''); setFiles([]); setRoster([]); setWorktree(!!lockDir)
+    api('GET', '/swarm/subroles').then((r) => setSubroles(Array.isArray(r) ? r : [])).catch(() => {})
+  }, [open, initialDir, lockDir])
   const addFiles = (fl: FileList | null) => { if (fl?.length) setFiles((prev) => [...prev, ...Array.from(fl)]) }
   // webkitdirectory 非标准属性，React 类型里没有，用回调 ref 在 DOM 上补
   const setDirInput = (el: HTMLInputElement | null) => {
@@ -178,15 +195,25 @@ function NewSwarmModal({ open, onClose, onDone }: { open: boolean; onClose: () =
       const hasFiles = files.length > 0
       // 默认带 Leader 的行为保持原样：无文档时 swarm new 内部原子拉起 Leader。
       // 仅当要先上传文档时，才拆成 建群(不带 Leader)→上传→adopt，确保文档先就位。
-      await api('POST', '/swarms', { name: name.trim(), goal: goal.trim(), dir: dir.trim(), master: master && !hasFiles })
+      // roster/worktree 只影响指挥开场白（09 §4），adopt 时序同样带上，上下文不丢。
+      await api('POST', '/swarms', { name: name.trim(), goal: goal.trim(), dir: dir.trim(), master: master && !hasFiles, roster, worktree })
       if (hasFiles) {
         const r = await upload(dir.trim(), files)
         message.success(t('swarm.uploaded', { count: r.saved.length, dir: r.dir }))
-        if (master) await api('POST', `/swarms/${encodeURIComponent(name.trim())}/adopt`, { dir: dir.trim() })
+        if (master) await api('POST', `/swarms/${encodeURIComponent(name.trim())}/adopt`, { dir: dir.trim(), roster, worktree })
+      }
+      // 班子建议同步建看板卡（09 S2）：每个建议角色一张待办卡，指挥上板即见；
+      // 仍不建成员——组建谁、怎么派活的决定权在指挥。建卡失败不阻塞建群。
+      for (const key of roster) {
+        const label = subroles.find((r) => r.key === key)?.label || key
+        await api('POST', `/swarms/${encodeURIComponent(name.trim())}/task`, {
+          title: t('swarm.rosterCardTitle', { role: label }),
+          desc: t('swarm.rosterCardDesc'),
+        }).catch(() => {})
       }
       if (dir.trim()) pushRecentDir(dir.trim())
       message.success(master ? t('swarm.createdWithMaster') : t('swarm.created'))
-      onClose(); onDone()
+      onClose(); onDone(name.trim())
     } catch (e: any) { message.error(e.message) } finally { setBusy(false) }
   }
   return (
@@ -195,13 +222,39 @@ function NewSwarmModal({ open, onClose, onDone }: { open: boolean; onClose: () =
         <Space direction="vertical" style={{ width: '100%' }}>
           <Input placeholder={t('swarm.namePlaceholder')} value={name} onChange={(e) => setName(e.target.value)} autoFocus onPressEnter={ok} />
           <Input.TextArea rows={2} placeholder={t('swarm.goalPlaceholder')} value={goal} onChange={(e) => setGoal(e.target.value)} />
-          <Space.Compact style={{ width: '100%' }}>
-            <AutoComplete style={{ flex: 1 }} value={dir} onChange={setDir}
-              options={recentDirs().map((d) => ({ value: d }))}
-              filterOption={(input, opt) => String(opt?.value).toLowerCase().includes(input.toLowerCase())}
-              placeholder={t('swarm.dirPlaceholder')} />
-            <Button onClick={() => setPick(true)}>{t('common.browse')}</Button>
-          </Space.Compact>
+          {lockDir ? (
+            <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12, color: C.fg2, padding: '6px 10px', border: `1px solid ${C.line}`, borderRadius: 6 }} title={dir}>{dir}</div>
+          ) : (
+            <Space.Compact style={{ width: '100%' }}>
+              <AutoComplete style={{ flex: 1 }} value={dir} onChange={setDir}
+                options={recentDirs().map((d) => ({ value: d }))}
+                filterOption={(input, opt) => String(opt?.value).toLowerCase().includes(input.toLowerCase())}
+                placeholder={t('swarm.dirPlaceholder')} />
+              <Button onClick={() => setPick(true)}>{t('common.browse')}</Button>
+            </Space.Compact>
+          )}
+          {/* 班子建议：只写进指挥开场白，最终由指挥按 dev-roles 拆定（09 §3） */}
+          {subroles.length > 0 && (
+            <div>
+              <div style={{ fontSize: 12, color: C.fg2, marginBottom: 5 }}>{t('swarm.rosterLabel')}</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {subroles.map((r) => {
+                  const on = roster.includes(r.key)
+                  return (
+                    <Tag.CheckableTag key={r.key} checked={on}
+                      onChange={(v) => setRoster((prev) => (v ? [...prev, r.key] : prev.filter((x) => x !== r.key)))}>
+                      {r.icon} {r.label}
+                    </Tag.CheckableTag>
+                  )
+                })}
+              </div>
+              {roster.length > 5 && <div style={{ fontSize: 12, color: '#d29922', marginTop: 4 }}>{t('swarm.rosterTooMany')}</div>}
+            </div>
+          )}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: C.fg2, fontSize: 13 }}>
+            <input type="checkbox" checked={worktree} onChange={(e) => setWorktree(e.target.checked)} />
+            {t('swarm.wtPolicy')}
+          </label>
           <div>
             <input ref={fileRef} type="file" multiple style={{ display: 'none' }}
               onChange={(e) => { addFiles(e.target.files); e.target.value = '' }} />

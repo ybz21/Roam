@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"ttmux-web/project"
 	"ttmux-web/ttmux"
 	"ttmux-web/worktree"
 )
@@ -448,4 +449,89 @@ func (a *API) SessionCloseWithWorktree(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"done": stages}})
+}
+
+// WorktreeFinish POST /git/worktree/finish
+// {path, strategy?, expectedHead?, deleteBranch?, forceDeleteBranch?}
+// P3 孤儿任务收尾（08 §5.4）：与 close-with-worktree 的 merge 档同一条链但没有
+// kill 步（会话已不在）。冻结校验 expectedHead（确认时的 source HEAD，校验后即
+// 作废）→ wip-commit → merge（不把旧 expectedHead 传给 Merge——wip 合法挪 HEAD，
+// 同 crown 语义）→ remove → 留痕。每步幂等，失败返回 {stage, done} 前端重试即可，
+// 不做 crownDone 式跨请求持久化。
+func (a *API) WorktreeFinish(c *gin.Context) {
+	var b struct {
+		Path              string `json:"path"`
+		Strategy          string `json:"strategy"`
+		ExpectedHead      string `json:"expectedHead"`
+		DeleteBranch      bool   `json:"deleteBranch"`
+		ForceDeleteBranch bool   `json:"forceDeleteBranch"`
+	}
+	if err := c.ShouldBindJSON(&b); err != nil || strings.TrimSpace(b.Path) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
+		return
+	}
+	ctx, cancel := wtCtx(c)
+	defer cancel()
+	stages := []string{}
+	fail := func(stage string, err error) {
+		if we, ok := err.(*worktree.Err); ok {
+			body := gin.H{"code": we.Code, "message": we.Message, "stage": stage, "done": stages}
+			for k, v := range we.Extra {
+				body[k] = v
+			}
+			c.JSON(http.StatusConflict, gin.H{"error": body})
+			return
+		}
+		c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "STAGE_FAILED", "message": err.Error(), "stage": stage, "done": stages}})
+	}
+	// 留痕素材趁 worktree 还在时先取
+	branch := ""
+	base := ""
+	if list, err := a.WT.List(ctx, b.Path); err == nil {
+		for _, w := range list {
+			if w.Path == b.Path {
+				branch, base = w.Branch, w.Base
+			}
+		}
+	}
+	// freeze：确认后漂移即拒（此后该值作废，不再参与任何校验）
+	if b.ExpectedHead != "" {
+		cur, err := a.WT.Head(ctx, b.Path)
+		if err != nil {
+			fail("freeze", err)
+			return
+		}
+		if cur != b.ExpectedHead {
+			c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "HEAD_MOVED", "message": "worktree HEAD moved since confirmation", "stage": "freeze", "done": stages}})
+			return
+		}
+	}
+	stages = append(stages, "freeze")
+	if err := a.WT.CommitAll(ctx, b.Path, "wip: auto-commit before finish (roam)"); err != nil {
+		fail("wip-commit", err)
+		return
+	}
+	stages = append(stages, "wip-commit")
+	strategy := b.Strategy
+	if strategy == "" {
+		strategy = "squash"
+	}
+	if _, err := a.WT.Merge(ctx, worktree.MergeReq{Path: b.Path, Strategy: strategy}); err != nil {
+		fail("merge", err)
+		return
+	}
+	stages = append(stages, "merge")
+	head, _ := a.WT.Head(ctx, b.Path)
+	if err := a.WT.Remove(ctx, worktree.RemoveReq{
+		Path: b.Path, DeleteBranch: b.DeleteBranch,
+		ForceDeleteBranch: b.DeleteBranch && (b.ForceDeleteBranch || strategy == "squash"),
+	}); err != nil {
+		fail("remove", err)
+		return
+	}
+	stages = append(stages, "remove")
+	if repo, err := a.WT.ResolveRepo(ctx, filepath.Dir(b.Path)); err == nil {
+		a.Projects.Trace(project.TraceEntry{Repo: repo.Root, Branch: branch, HeadOid: head, Base: base, Action: "merged", Strategy: strategy})
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"done": stages, "branch": branch, "base": base}})
 }
