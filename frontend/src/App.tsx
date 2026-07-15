@@ -1059,6 +1059,8 @@ function TerminalPane(props: {
       {!inChat && (
         <div style={{ display: 'flex', gap: 6, padding: 8, borderTop: '1px solid var(--border)', overflowX: 'auto' }}>
           <Button type="primary" onMouseDown={noBlur} onClick={() => (isTouch ? submitLine() : sendKey('\r'))}>Enter</Button>
+          {/* 触屏没有 Ctrl+Shift+V / 右键菜单在长按选词后也不再弹出，丝带上补一个直达粘贴 */}
+          {isTouch && <Button onMouseDown={noBlur} onClick={() => active && pasteClipboard(active)} style={{ flex: '0 0 auto' }}>{t('terminal.pasteAction')}</Button>}
           {(prefsData.quickCommands || []).map((cmd) => (
             <Button key={cmd} onMouseDown={noBlur} onClick={() => { if (isTouch) { setLine(cmd); requestAnimationFrame(() => mobileInputRef.current?.focus()) } else { sendRaw(cmd) } }} style={{ flex: '0 0 auto' }}>{cmd}</Button>
           ))}
