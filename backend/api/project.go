@@ -172,6 +172,11 @@ func (a *API) ProjectsList(c *gin.Context) {
 			}
 			continue // 一时读不出（锁竞争/超时）：保留台账，本轮跳过
 		}
+		// 自愈：条目 dir 指向仓库子目录（历史脏数据/瞬时误判）→ 归位到仓库根
+		if repo, rerr := a.WT.ResolveRepo(ctx, e.Dir); rerr == nil && repo.Root != e.Dir {
+			a.Projects.Rekey(key, repo.Root)
+			continue // 本轮跳过，下轮以根条目出现（或并入已有根条目）
+		}
 		p.Git = true
 		roamWts := 0
 		for _, w := range wts {
@@ -286,6 +291,11 @@ func (a *API) ProjectCreate(c *gin.Context) {
 	git := true
 	if repo, err := a.WT.ResolveRepo(ctx, dir); err == nil {
 		dir = repo.Root
+	} else if we, ok := err.(*worktree.Err); !ok || we.Code != "NOT_GIT_REPO" {
+		// 瞬时错误（锁竞争/超时）不能当「非 git」处理——否则 git 子目录会被
+		// 存成独立项目（dir 未归位仓库根）。老实报错让用户重试。
+		wtErr(c, err)
+		return
 	} else {
 		// 非 git：目录不存在则创建（新建项目 = 也可以新建文件夹）；canonical 化对齐 cwd join 口径
 		if st, serr := os.Stat(dir); serr != nil {

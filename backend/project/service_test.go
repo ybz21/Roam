@@ -54,3 +54,25 @@ func TestSetPrefsUnknownKey(t *testing.T) {
 		t.Fatal("不在册 key 必须拒绝（API 防任意路径探测的前提）")
 	}
 }
+
+func TestRekeyMergesUserIntent(t *testing.T) {
+	s := NewStore(t.TempDir())
+	// 子目录脏条目（置顶过）+ 已存在的根条目
+	sub := s.Add("/repo/.worktrees", "")
+	s.SetPrefs(sub, func(p *Prefs) { p.Pinned = true })
+	root := s.Touch("/repo")
+	s.Rekey(sub, "/repo")
+	if _, ok := s.Dir(sub); ok {
+		t.Fatal("旧子目录条目应被移除")
+	}
+	e := s.Entries()[root]
+	if !e.Pinned || e.Origin != "user" {
+		t.Fatalf("合并须保留用户意志(置顶/origin=user): %+v", e)
+	}
+	// 目标不存在时 = 平移改 dir
+	k2 := s.Touch("/other/.worktrees")
+	s.Rekey(k2, "/other")
+	if d, ok := s.Dir(KeyFor("/other")); !ok || d != "/other" {
+		t.Fatal("目标不存在时应平移条目到新目录")
+	}
+}

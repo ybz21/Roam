@@ -252,3 +252,32 @@ func (s *Store) ReadTrace(repoDir string, limit int) []TraceEntry {
 	}
 	return out
 }
+
+// Rekey 把条目迁移到新目录（typically 仓库子目录归位到根）。目标 key 已存在则
+// 合并：置顶/origin=user/显示名等「用户意志」按或语义保留，不丢。
+func (s *Store) Rekey(oldKey, newDir string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e, ok := s.repos[oldKey]
+	if !ok {
+		return
+	}
+	delete(s.repos, oldKey)
+	newKey := KeyFor(newDir)
+	if dst, exists := s.repos[newKey]; exists {
+		dst.Pinned = dst.Pinned || e.Pinned
+		if dst.Origin == "" {
+			dst.Origin = e.Origin
+		}
+		if dst.DisplayName == "" {
+			dst.DisplayName = e.DisplayName
+		}
+		if e.FirstSeen > 0 && (dst.FirstSeen == 0 || e.FirstSeen < dst.FirstSeen) {
+			dst.FirstSeen = e.FirstSeen
+		}
+	} else {
+		e.Dir = newDir
+		s.repos[newKey] = e
+	}
+	s.save()
+}
