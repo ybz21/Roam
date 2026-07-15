@@ -1054,7 +1054,7 @@ const zhCN = {
   'project.mergedClean': '已合并/干净，可删除',
   'project.newModalTitle': '新项目',
   'project.displayName': '显示名（可选，缺省用目录名）',
-  'project.newHint': '项目 = 任意目录（git 可选：是 git 仓库才有 worktree/编队/活动能力），创建后持久保存；开会话/建 feature 请进入项目后在任务框操作',
+  'project.newHint': '项目 = 任意目录（git 可选：是 git 仓库才有 worktree/编队/活动能力）；目录不存在会自动创建。创建后持久保存，开会话/建 feature 请进入项目后在任务框操作',
   'project.createdProject': '项目已创建',
   'project.notGit': '该目录不是 git 仓库',
   'project.removed': '已从列表移除',

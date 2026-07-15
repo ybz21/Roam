@@ -1054,7 +1054,7 @@ const enUS = {
   'project.mergedClean': 'Merged/clean, safe to delete',
   'project.newModalTitle': 'New project',
   'project.displayName': 'Display name (optional, defaults to dir name)',
-  'project.newHint': 'A project is any directory (git optional — worktree/formation/activity need git), stored persistently; start sessions/features from the task box inside the project',
+  'project.newHint': 'A project is any directory (git optional — worktree/formation/activity need git); a missing directory is created automatically. Stored persistently; start sessions/features from the task box inside the project',
   'project.createdProject': 'Project created',
   'project.notGit': 'Not a git repository',
   'project.removed': 'Removed from list',

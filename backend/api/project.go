@@ -275,16 +275,29 @@ func (a *API) ProjectCreate(c *gin.Context) {
 		return
 	}
 	dir := strings.TrimSpace(b.Dir)
+	if strings.HasPrefix(dir, "~/") || dir == "~" {
+		if home, err := os.UserHomeDir(); err == nil {
+			dir = filepath.Join(home, strings.TrimPrefix(strings.TrimPrefix(dir, "~"), "/"))
+		}
+	}
+	if !filepath.IsAbs(dir) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_DIR", "message": "absolute path required"}})
+		return
+	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 	git := true
 	if repo, err := a.WT.ResolveRepo(ctx, dir); err == nil {
 		dir = repo.Root
 	} else {
-		// 非 git：目录须存在；canonical 化（对齐 cwd join 的路径口径）
-		st, serr := os.Stat(dir)
-		if serr != nil || !st.IsDir() {
-			c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_DIR", "message": "directory not found"}})
+		// 非 git：目录不存在则创建（新建项目 = 也可以新建文件夹）；canonical 化对齐 cwd join 口径
+		if st, serr := os.Stat(dir); serr != nil {
+			if mkerr := os.MkdirAll(dir, 0o755); mkerr != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_DIR", "message": mkerr.Error()}})
+				return
+			}
+		} else if !st.IsDir() {
+			c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_DIR", "message": "path exists but is not a directory"}})
 			return
 		}
 		if r, e := filepath.EvalSymlinks(dir); e == nil {
