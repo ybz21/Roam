@@ -42,12 +42,12 @@ const { Sider, Content } = Layout
 const { useBreakpoint } = Grid
 const { Text } = Typography
 
-// 「会话」不再进导航：项目页是唯一入口（任务驱动，08 设计）；
-// 旧会话平铺页保留组件与 #/sessions 直达路由，概览页统计仍可跳转。
+// 「会话」「蜂群」不再进导航：项目页是唯一主入口（任务驱动，08 设计）——
+// 蜂群从项目编队 tab 进（蜂群台深链 #/swarm/<名>），会话平铺页留 #/sessions 直达；
+// 两页组件与路由都保留，概览页统计仍可跳转。
 const NAV = [
   { key: 'overview', labelKey: 'nav.overview' },
   { key: 'projects', labelKey: 'nav.projects' },
-  { key: 'swarm', labelKey: 'nav.swarm' },
   { key: 'files', labelKey: 'nav.files' },
   { key: 'browser', labelKey: 'nav.browser' },
   { key: 'phone', labelKey: 'nav.phone' },
