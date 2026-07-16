@@ -21,7 +21,7 @@ const RaceCreateModal = lazy(() => import('./Race').then((m) => ({ default: m.Ra
 const RaceComparePanel = lazy(() => import('./Race').then((m) => ({ default: m.RaceComparePanel })))
 const NewSwarmModal = lazy(() => import('./Swarm').then((m) => ({ default: m.NewSwarmModal })))
 
-type ProjSession = { name: string; attached: boolean; running?: boolean; lastActivity: number; branch?: string; linked?: boolean }
+type ProjSession = { name: string; attached: boolean; running?: boolean; waiting?: boolean; lastActivity: number; branch?: string; linked?: boolean }
 type Proj = {
   key: string; name: string; dir: string; git: boolean; pinned: boolean
   sessions: number; attached: number; worktrees: number; unfinished: number; cleanable: number; races: number
@@ -276,7 +276,7 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
                 }}>
                   {p.top!.map((s) => (
                     <div key={s.name} style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
-                      {dot(false, s.running ? '#3fb950' : undefined)}
+                      {dot(false, s.waiting ? '#d29922' : s.running ? '#3fb950' : undefined)}
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
                       {s.branch && <Tag color="cyan" style={{ margin: 0, fontSize: 10.5, lineHeight: '16px', padding: '0 5px' }}>⎇</Tag>}
                       <span style={{ marginLeft: 'auto', color: 'var(--text-dimmer)', fontSize: 11.5, flex: '0 0 auto' }}>{relTime(s.lastActivity, t)}</span>
@@ -295,7 +295,7 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
             </div>
             {data.loose.map((s) => (
               <div key={s.name} className="prj-row" onClick={() => openTerm(s.name)}>
-                <span style={{ marginTop: 5, display: 'inline-flex' }}>{dot(false, s.running ? '#3fb950' : undefined)}</span>
+                <span style={{ marginTop: 5, display: 'inline-flex' }}>{dot(false, s.waiting ? '#d29922' : s.running ? '#3fb950' : undefined)}</span>
                 <span style={{ fontWeight: 600 }}>{s.name}</span>
                 <span style={{ color: 'var(--text-dimmer)', fontSize: 12, marginTop: 2 }}>{relTime(s.lastActivity, t)}</span>
                 <span style={{ flex: 1 }} />

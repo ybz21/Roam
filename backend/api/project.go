@@ -29,6 +29,7 @@ type projectSession struct {
 	Name         string `json:"name"`
 	Attached     bool   `json:"attached"`
 	Running      bool   `json:"running"` // 会话里跑着 claude/codex 进程——绿点语义（设计 W2）
+	Waiting      bool   `json:"waiting"` // 屏上有等待输入的交互框——黄点（设计 W2，优先于绿）
 	LastActivity int64  `json:"lastActivity"`
 	Branch       string `json:"branch,omitempty"` // 落在 worktree 里才有
 	Linked       bool   `json:"linked,omitempty"`
@@ -132,6 +133,9 @@ func (a *API) ProjectsList(c *gin.Context) {
 		claimed[name] = true
 		p.Sessions++
 		ps := projectSession{Name: name, Attached: attached, Running: agentRunning[name], LastActivity: last, Linked: linked, Branch: branch}
+		if ps.Running { // 只对在跑的会话抓屏判待输入，省掉给 idle 会话的 capture-pane
+			ps.Waiting = sessionWaiting(sessionCapture(name, 50))
+		}
 		if ps.Attached {
 			p.Attached++
 		}
@@ -251,7 +255,11 @@ func (a *API) ProjectsList(c *gin.Context) {
 
 	for _, s := range sessions {
 		if !claimed[s.Name] {
-			loose = append(loose, projectSession{Name: s.Name, Attached: rawInt(s.Attached) > 0, Running: agentRunning[s.Name], LastActivity: rawInt(s.LastActivity)})
+			ls := projectSession{Name: s.Name, Attached: rawInt(s.Attached) > 0, Running: agentRunning[s.Name], LastActivity: rawInt(s.LastActivity)}
+			if ls.Running {
+				ls.Waiting = sessionWaiting(sessionCapture(s.Name, 50))
+			}
+			loose = append(loose, ls)
 		}
 	}
 	// 散会话同样稳定排序（按名称）——活动时间只展示，不参与排序防跳变
