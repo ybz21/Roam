@@ -47,7 +47,7 @@ plugins/
    （`internal/plugin/builtin/imports_gen.go`）和 cli `go.mod` 的 `require`/`replace`。
 5. `go build` 重新构建安装 ttmux 才生效（builtin 编译期链接，不热更）。
 
-> 参考实现：`plugins/hostmonitor`（主机监控，最小样例）、`plugins/im`（IM 桥 + provider 适配 + 常驻 concierge）、`plugins/reviewmesh`。
+> 参考实现：`plugins/hostmonitor`（主机监控，最小样例）、`plugins/cron`（定时任务，常驻调度循环样例）、`plugins/im`（IM 桥 + provider 适配 + 常驻 concierge）、`plugins/reviewmesh`。
 
 > Go 插件也可以**不进 builtin、按地址注册**：加个 `main.go` 调 `sdk.Serve(Activate)` 编译成独立二进制，
 > 配一份 `roam-plugin.json`（`runtime.kind=exec`），`ttmux plugin install <目录>` 即注册，
