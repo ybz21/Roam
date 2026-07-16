@@ -19,6 +19,7 @@
 | 7 | [07-worktree.md](./07-worktree.md) | **Worktree 管理** — 命名创建、管理抽屉、对比 base、合并收尾、并行竞赛 |
 | 8 | [08-project.md](./08-project.md) | **项目概念** — 仓库即项目、composer 开干、任务=会话∪孤儿 worktree、待收尾一等 |
 | 9 | [09-swarm-in-project.md](./09-swarm-in-project.md) | **蜂群×项目创建动线** — 表单产出上下文不产出结构、开场白注入班子建议与 worktree 约定 |
+| 10 | [10-merge-detect-finish.md](./10-merge-detect-finish.md) | **已合入检测与收尾** — 周期 fetch 远端主干、ancestry/cherry 双信号识别 merge/squash、「待收尾」拆成 未合并·待决策 / 已合入·待清理 |
 
 ## 实现状态
 
