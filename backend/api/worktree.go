@@ -127,11 +127,70 @@ func (a *API) WorktreeRemove(c *gin.Context) {
 	}
 	ctx, cancel := wtCtx(c)
 	defer cancel()
+	// 留痕素材趁 worktree 还在时先取（连分支一起删才算收尾，纯摘 worktree 不留痕）
+	var gone *worktree.Worktree
+	if b.DeleteBranch {
+		if list, err := a.WT.List(ctx, b.Path); err == nil {
+			for i := range list {
+				if list[i].Path == b.Path {
+					gone = &list[i]
+				}
+			}
+		}
+	}
 	if err := a.WT.Remove(ctx, b); err != nil {
 		wtErr(c, err)
 		return
 	}
+	if gone != nil {
+		if repo, err := a.WT.ResolveRepo(ctx, filepath.Dir(b.Path)); err == nil {
+			action := "discarded"
+			if gone.MergedInto != "" {
+				action = "cleaned" // 已合入·清理（10 §5）：零损失，与丢弃区分
+			}
+			a.Projects.Trace(project.TraceEntry{
+				Repo: repo.Root, Branch: gone.Branch, HeadOid: gone.Head, Base: gone.Base,
+				Action: action, MergedInto: gone.MergedInto, MergedKind: gone.MergedKind,
+			})
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"ok": true}})
+}
+
+// WorktreeSync POST /git/worktree/sync {dir} —— 远端轻量同步（10 设计 §3）：
+// ls-remote 观测 + fetch 合并目标分支，随后 List 的合入判定吃到新 origin/<base>。
+// 只更新 refs/remotes，绝不动工作区（与 GitOp 的 pull/push 语义区分）。失败静默退化。
+func (a *API) WorktreeSync(c *gin.Context) {
+	var b struct {
+		Dir string `json:"dir"`
+	}
+	if err := c.ShouldBindJSON(&b); err != nil || strings.TrimSpace(b.Dir) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
+		return
+	}
+	ctx, cancel := wtCtx(c)
+	defer cancel()
+	res, err := a.WT.Sync(ctx, filepath.Clean(b.Dir))
+	if err != nil {
+		wtErr(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": res})
+}
+
+// SyncLoop 后台兜底远端同步（10 设计 §3 第三档）：每 30 分钟对台账内项目做一次
+// 轻量 Sync。前台驻留与事件触发由前端调 /git/worktree/sync 承担；这里只兜
+// 「没人看着」的时段。非 git 项目 / 失败一律静默跳过。
+func (a *API) SyncLoop() {
+	t := time.NewTicker(30 * time.Minute)
+	defer t.Stop()
+	for range t.C {
+		for _, e := range a.Projects.Entries() {
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			_, _ = a.WT.Sync(ctx, e.Dir)
+			cancel()
+		}
+	}
 }
 
 // WorktreePrune POST /git/worktree/prune {dir}
@@ -193,6 +252,8 @@ func (a *API) SessionWorktreeStatus(c *gin.Context) {
 				res["untracked"] = w.Untracked
 				res["committedAhead"] = w.CommittedAhead
 				res["external"] = w.External
+				res["mergedInto"] = w.MergedInto // 合入检测（10 §5）：W7 弹窗按此改文案
+				res["mergedKind"] = w.MergedKind
 			}
 		}
 	}
@@ -434,6 +495,15 @@ func (a *API) SessionCloseWithWorktree(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST", "message": "path required for discard mode"}})
 			return
 		}
+		// 留痕素材趁 worktree 还在时先取：已合入的丢弃 = cleaned（零损失），否则 discarded
+		var gone *worktree.Worktree
+		if list, err := a.WT.List(ctx, b.Path); err == nil {
+			for i := range list {
+				if list[i].Path == b.Path {
+					gone = &list[i]
+				}
+			}
+		}
 		if err := kill(); err != nil {
 			fail("kill", err)
 			return
@@ -444,6 +514,18 @@ func (a *API) SessionCloseWithWorktree(c *gin.Context) {
 			return
 		}
 		stages = append(stages, "remove")
+		if gone != nil {
+			if repo, err := a.WT.ResolveRepo(ctx, filepath.Dir(b.Path)); err == nil {
+				action := "discarded"
+				if gone.MergedInto != "" {
+					action = "cleaned"
+				}
+				a.Projects.Trace(project.TraceEntry{
+					Repo: repo.Root, Branch: gone.Branch, HeadOid: gone.Head, Base: gone.Base,
+					Action: action, MergedInto: gone.MergedInto, MergedKind: gone.MergedKind,
+				})
+			}
+		}
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_MODE", "message": b.Mode}})
 		return

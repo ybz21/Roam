@@ -190,6 +190,10 @@ type TraceEntry struct {
 	Action   string `json:"action"`
 	Strategy string `json:"strategy,omitempty"`
 	At       int64  `json:"at"`
+	// 合入检测补充（10 设计 §5）：cleaned 动作记录检出的合入目标与方式，
+	// 让「任务 → 已在主干」的映射在 worktree 删除后仍可追溯。
+	MergedInto string `json:"mergedInto,omitempty"`
+	MergedKind string `json:"mergedKind,omitempty"`
 }
 
 func (s *Store) tracePath() string {

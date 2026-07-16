@@ -57,6 +57,7 @@ func New(cfg Config) *gin.Engine {
 	tt := ttmux.New(cfg.TTmuxBin)
 	a := auth.New(cfg.Password, cfg.TOTPSecret, cfg.TOTPState, cfg.LockAfter, cfg.LockSecs, cfg.SavePassword)
 	h := api.New(tt, cfg.BrowserHome, cfg.DataDir)
+	go h.SyncLoop()                 // 后台兜底远端同步（10 §3 第三档），失败静默
 	browser.InitConfig(cfg.DataDir) // Chrome 启动配置持久化到 dataDir
 	phone.InitConfig(cfg.DataDir)   // 手机后端配置（本地/远程 redroid/真机）持久化到 dataDir
 	hub := stream.New(tt, cfg.LogsDir)
@@ -144,6 +145,7 @@ func New(cfg Config) *gin.Engine {
 		g.POST("/git/worktree/remove", h.WorktreeRemove) // 删除（占用检查 + 脏保护）
 		g.POST("/git/worktree/prune", h.WorktreePrune)   // 显式清理残留
 		g.POST("/git/worktree/finish", h.WorktreeFinish) // P3 孤儿收尾：冻结→wip→merge→remove→留痕
+		g.POST("/git/worktree/sync", h.WorktreeSync)     // 远端轻量同步：ls-remote+fetch 合并目标，只动 refs/remotes（10 §3）
 		g.GET("/git/branches", h.GitBranches)            // 本地分支列表（W1 start-from）
 		// ── Session API 增量 ──
 		g.GET("/sessions/annotations", h.SessionAnnotations)              // session→worktree 归属（cwd join）

@@ -24,7 +24,7 @@ const NewSwarmModal = lazy(() => import('./Swarm').then((m) => ({ default: m.New
 type ProjSession = { name: string; attached: boolean; lastActivity: number; branch?: string; linked?: boolean }
 type Proj = {
   key: string; name: string; dir: string; git: boolean; pinned: boolean
-  sessions: number; attached: number; worktrees: number; unfinished: number; races: number
+  sessions: number; attached: number; worktrees: number; unfinished: number; cleanable: number; races: number
   lastActivity: number; firstSeen: number; top: ProjSession[] | null
 }
 
@@ -74,6 +74,7 @@ const PRJ_CSS = `
 .prj-sect .n{font-family:ui-monospace,monospace;font-size:10.5px;color:var(--text-dimmer);font-weight:400}
 .prj-sect .ln{flex:1;border-top:1px dashed var(--border-subtle)}
 .prj-sect.warn{color:#d29922}
+.prj-sect.ok{color:#3fb950}
 
 .prj-row{position:relative;display:flex;align-items:flex-start;gap:9px;padding:10px 12px;
   border-radius:10px;cursor:pointer;transition:background .15s}
@@ -266,6 +267,7 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
                 <span><b style={{ color: 'var(--text-bright)' }}>{p.sessions}</b> {t('project.tasks')}</span>
                 {p.git && <>·<span><b style={{ color: 'var(--text-bright)' }}>{p.worktrees}</b> worktree</span></>}
                 {p.unfinished > 0 && <Tag color="warning" style={{ margin: 0 }}>{t('project.unfinished', { count: p.unfinished })}</Tag>}
+                {p.cleanable > 0 && <Tag color="success" style={{ margin: 0 }}>{t('project.cleanableCount', { count: p.cleanable })}</Tag>}
               </div>
               {(p.top?.length || 0) > 0 && (
                 <div style={{
@@ -324,11 +326,13 @@ function FinishModal({ w, base, onClose, onDone, onRevive }: {
   const [busy, setBusy] = useState(false)
   useEffect(() => {
     if (!w) return
-    setMode('merge'); setStrategy('squash'); setDelBranch(true); setDiff(null)
+    // 已合入（10 §5）：丢弃升为推荐首选——零损失，只是删掉本地载体
+    setMode(w.mergedInto ? 'discard' : 'merge'); setStrategy('squash'); setDelBranch(true); setDiff(null)
     api('GET', `/git/worktree/diff?path=${encodeURIComponent(w.path)}`)
       .then((r) => setDiff(r?.data || null)).catch(() => {})
   }, [w])
   if (!w) return null
+  const merged = !!w.mergedInto
   const wtBase = w.base || base
   const uncommitted = (diff?.workingTree?.files?.length || 0) + (diff?.untracked ?? w.untracked ?? 0)
   const ok = async () => {
@@ -367,12 +371,18 @@ function FinishModal({ w, base, onClose, onDone, onRevive }: {
   )
   return (
     <Modal open onCancel={onClose} onOk={ok} okText={t('project.finish.ok')} confirmLoading={busy}
-      okButtonProps={mode === 'discard' ? { danger: true } : undefined}
+      okButtonProps={mode === 'discard' && !merged ? { danger: true } : undefined}
       title={<span>{t('project.finish.title')} <Tag color="cyan" className="prj-mono" style={{ marginLeft: 4 }}>⎇ {w.branch}</Tag></span>} destroyOnClose>
       <Space direction="vertical" style={{ width: '100%' }} size={12}>
         <div className="prj-mono" style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.8, padding: '9px 12px', border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-term)' }}>
           <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t('project.finish.kept', { path: w.path })}</div>
-          <div>{t('project.finish.stats', { base: wtBase || '?', ahead: w.committedAhead, dirty: uncommitted })}</div>
+          {/* 已合入：损失清单换成绿色定心丸（10 §5），未提交改动仍如实提示 */}
+          {merged
+            ? (<>
+              <div style={{ color: '#3fb950' }}>{t('project.finish.mergedRemote', { target: w.mergedInto, kind: w.mergedKind })}</div>
+              {uncommitted > 0 && <div style={{ color: '#d29922' }}>{t('project.finish.uncommitted', { count: uncommitted })}</div>}
+            </>)
+            : <div>{t('project.finish.stats', { base: wtBase || '?', ahead: w.committedAhead, dirty: uncommitted })}</div>}
         </div>
         {(diff?.committed?.files?.length || 0) > 0 && (
           <div>
@@ -397,7 +407,9 @@ function FinishModal({ w, base, onClose, onDone, onRevive }: {
             options={[{ value: 'squash', label: 'squash' }, { value: 'merge', label: 'merge' }, { value: 'rebase', label: 'rebase' }]} />
         </>, t('project.finish.optMergeDesc'))}
         {radio('revive', t('project.finish.optRevive'), t('project.finish.optReviveDesc'))}
-        {radio('discard', t('project.finish.optDiscard'), t('project.finish.optDiscardDesc', { ahead: w.committedAhead }), true)}
+        {merged
+          ? radio('discard', t('project.finish.optDiscard'), t('project.finish.optDiscardMergedDesc', { target: w.mergedInto }))
+          : radio('discard', t('project.finish.optDiscard'), t('project.finish.optDiscardDesc', { ahead: w.committedAhead }), true)}
         {mode !== 'revive' && (
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--text-dim)' }}>
             <input type="checkbox" checked={delBranch} onChange={(e) => setDelBranch(e.target.checked)} style={{ accentColor: '#1f6feb' }} />
@@ -472,6 +484,15 @@ function ProjectHome({ proj, loaded, openTerm, refresh }: {
     if (!dir || !isGit) return
     api('GET', `/git/branches?dir=${encodeURIComponent(dir)}`)
       .then((r) => setDefBranch(r?.data?.default || '')).catch(() => {})
+  }, [dir, isGit])
+  // 远端轻量同步（10 §3 驻留档）：进项目页即同步一次，驻留期间每 5 分钟一次；
+  // 失败静默（判定退回本地），worktree 轮询自然吃到新判定。
+  useEffect(() => {
+    if (!dir || !isGit) return
+    const sync = () => api('POST', '/git/worktree/sync', { dir }).catch(() => {})
+    sync()
+    const i = setInterval(sync, 5 * 60_000)
+    return () => clearInterval(i)
   }, [dir, isGit])
   const wts = useMemo(() => wtsAll.filter((w: any) => !w.isMain && !w.prunable), [wtsAll])
   const mainHead = useMemo(() => (wtsAll.find((w: any) => w.isMain)?.head || '').slice(0, 7), [wtsAll])
@@ -612,8 +633,12 @@ function ProjectHome({ proj, loaded, openTerm, refresh }: {
   }, [swarms])
 
   const orphans = useMemo(() => wts.filter((w: any) => !w.external && !(w.sessions?.length)), [wts])
-  const unfinished = orphans.filter((w: any) => w.committedAhead > 0 || w.dirty > 0 || w.untracked > 0)
-  const clean = orphans.filter((w: any) => !(w.committedAhead > 0 || w.dirty > 0 || w.untracked > 0))
+  // 三桶（10 §5）：已合入·待清理（绿，零损失一键清）/ 真·未合并（黄，三选一决策，
+  // 含「已合入但有未提交改动」）/ 干净（老 ⇥ 语义，ahead=0）
+  const wtDirty = (w: any) => w.dirty > 0 || w.untracked > 0
+  const cleanable = orphans.filter((w: any) => w.mergedInto && w.committedAhead > 0 && !wtDirty(w))
+  const unfinished = orphans.filter((w: any) => (w.committedAhead > 0 || wtDirty(w)) && !(w.mergedInto && !wtDirty(w)))
+  const clean = orphans.filter((w: any) => !(w.committedAhead > 0 || wtDirty(w)))
   const wtOf = (s: any) => wts.find((w: any) => w.path === ann[s.name]?.primary?.worktree)
 
   // composer 提交：与 NewSessionModal 完全同款的派生/编排/命名约定（W1 修订 2/3/4）
@@ -701,11 +726,26 @@ function ProjectHome({ proj, loaded, openTerm, refresh }: {
     )
   }
 
-  const sect = (label: string, count: number, warn?: boolean) => (
-    <div className={`prj-sect${warn ? ' warn' : ''}`}>
+  const sect = (label: string, count: number, tone?: 'warn' | 'ok') => (
+    <div className={`prj-sect${tone ? ' ' + tone : ''}`}>
       <b>{label}</b><span className="n">{count}</span><span className="ln" />
     </div>
   )
+  // 已合入·待清理的一键清（10 §5）：零损失确认后删 worktree + 本地分支（留痕 cleaned）
+  const cleanupMerged = (w: any) => {
+    Modal.confirm({
+      title: t('project.cleanupConfirm', { branch: w.branch }),
+      content: t('project.cleanupConfirmDesc', { target: w.mergedInto }),
+      okText: t('project.cleanup'),
+      onOk: async () => {
+        try {
+          await api('POST', '/git/worktree/remove', { path: w.path, deleteBranch: true, forceDeleteBranch: true })
+          message.success(t('project.cleaned'))
+          refresh()
+        } catch (e: any) { message.error(e.message) }
+      },
+    })
+  }
 
   // 任务行：生命周期导轨 = 建(必亮)→干(agent 跑)→审(待输入/有未合并)→并(merged)
   // 状态点语义（设计 W2）：绿 = agent 正在干活，黄 = 待输入，其余一律灰。
@@ -716,11 +756,14 @@ function ProjectHome({ proj, loaded, openTerm, refresh }: {
     const w = wtOf(s)
     const ahead = w?.committedAhead || 0
     const changes = (w?.dirty || 0) + (w?.untracked || 0)
+    const merged = !!w?.mergedInto
     const running = cc[s.name] || cx[s.name]
     const waiting = needsInput[s.name]
     let done = 2, cur: number | undefined, stage = t('project.stage.idle')
     if (running && !waiting) { done = 1; cur = 2; stage = t('project.stage.doing') }
-    else if (waiting || ahead > 0) { done = 2; cur = 3; stage = t('project.stage.review') }
+    else if (waiting) { done = 2; cur = 3; stage = t('project.stage.review') }
+    else if (merged) { done = 4; stage = t('project.stage.merged') } // 合入检测（10 §5）：导轨走满
+    else if (ahead > 0) { done = 2; cur = 3; stage = t('project.stage.review') }
     return (
       <div key={s.name} className="prj-row prj-in" style={{ marginLeft: isChild ? 22 : 0, animationDelay: `${Math.min(i, 8) * 40}ms` }}
         onClick={() => openTerm(s.name)}>
@@ -745,10 +788,16 @@ function ProjectHome({ proj, loaded, openTerm, refresh }: {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12, color: 'var(--text-dimmer)' }}>
             <Lifec done={done} cur={cur} /><span>{stage}</span>
-            {(ahead > 0 || changes > 0) && (
+            {/* 已合入后 ↑n 不再展示（对比远端已零领先，只会误导）；未提交改动照常提示 */}
+            {merged && (
+              <Tooltip title={`${w.mergedInto} · ${w.mergedKind}`}>
+                <span style={{ color: '#3fb950', fontSize: 11.5 }}>✓ {t('project.mergedTag')}</span>
+              </Tooltip>
+            )}
+            {(!merged && ahead > 0 || changes > 0) && (
               <span className="prj-mono" style={{ fontSize: 11.5 }}>
-                {ahead > 0 && <span style={{ color: '#58a6ff' }}>↑{ahead}</span>}
-                {ahead > 0 && changes > 0 && ' · '}
+                {!merged && ahead > 0 && <span style={{ color: '#58a6ff' }}>↑{ahead}</span>}
+                {!merged && ahead > 0 && changes > 0 && ' · '}
                 {changes > 0 && <span style={{ color: '#d29922' }}>{t('project.wt.changes', { count: changes })}</span>}
               </span>
             )}
@@ -825,7 +874,7 @@ function ProjectHome({ proj, loaded, openTerm, refresh }: {
 
         {/* Tabs：任务 | Worktree | 编队 | 活动（非 git 只有任务） */}
         <div className="prj-tabs prj-in" style={{ animationDelay: '110ms' }}>
-          {tabBtn('tasks', t('project.tasks'), mine.length + unfinished.length + clean.length)}
+          {tabBtn('tasks', t('project.tasks'), mine.length + unfinished.length + cleanable.length + clean.length)}
           {isGit && tabBtn('wt', 'Worktree', wts.length)}
           {isGit && tabBtn('race', t('project.tab.race'), races.length + swarms.length)}
           {isGit && tabBtn('act', t('project.tab.activity'))}
@@ -868,8 +917,35 @@ function ProjectHome({ proj, loaded, openTerm, refresh }: {
           })()}
           {mine.length === 0 && <div className="prj-empty">{t('project.noTasks')}</div>}
 
+          {cleanable.length > 0 && (<>
+            {sect(t('project.section.cleanable'), cleanable.length, 'ok')}
+            {cleanable.map((w: any) => (
+              <div key={w.path} className="prj-row">
+                <span style={{ marginTop: 7, display: 'inline-flex' }}>{dot(false, '#3fb950')}</span>
+                <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                    <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 11 }}>⎇ {w.branch}</Tag>
+                    <Tooltip title={`${w.mergedInto} · ${w.mergedKind}`}>
+                      <Tag color="success" style={{ margin: 0 }}>✓ {t('project.mergedTag')}</Tag>
+                    </Tooltip>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-dimmer)', flexWrap: 'wrap' }}>
+                    <Lifec done={4} /><span>{t('project.stage.merged')}</span>
+                    <span className="prj-mono" style={{ fontSize: 11.5, color: '#3fb950' }}>{t('project.mergedInto', { target: w.mergedInto })}</span>
+                    <span>{relTime(w.lastCommitAt, t)}</span>
+                  </div>
+                </div>
+                <span className="acts">
+                  <a style={{ color: '#3fb950' }} onClick={() => cleanupMerged(w)}>{t('project.cleanup')}</a>
+                  <a onClick={() => newCli(w, 'shell')}>{t('project.revive')}</a>
+                  <a onClick={() => setGitOpen(true)}>{t('project.compare')}</a>
+                </span>
+              </div>
+            ))}
+          </>)}
+
           {unfinished.length > 0 && (<>
-            {sect(t('project.section.unfinished'), unfinished.length, true)}
+            {sect(t('project.section.unfinished'), unfinished.length, 'warn')}
             {unfinished.map((w: any) => (
               <div key={w.path} className="prj-row warn">
                 <span style={{ marginTop: 7, display: 'inline-flex' }}>{dot(false, '#d29922')}</span>
@@ -877,10 +953,22 @@ function ProjectHome({ proj, loaded, openTerm, refresh }: {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
                     <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 11 }}>⎇ {w.branch}</Tag>
                     <Tag color="warning" style={{ margin: 0 }}>{t('project.sessionClosed')}</Tag>
+                    {/* 已合入但还有未提交改动：绿标缓解焦虑，损失只剩 working tree */}
+                    {w.mergedInto && (
+                      <Tooltip title={`${w.mergedInto} · ${w.mergedKind}`}>
+                        <Tag color="success" style={{ margin: 0 }}>✓ {t('project.mergedTag')}</Tag>
+                      </Tooltip>
+                    )}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-dimmer)', flexWrap: 'wrap' }}>
                     <Lifec done={2} cur={3} /><span>{t('project.stage.unfinished')}</span>
-                    <span className="prj-mono" style={{ fontSize: 11.5 }}>{t('project.aheadDirty', { ahead: w.committedAhead, dirty: w.dirty + w.untracked })}</span>
+                    <span className="prj-mono" style={{ fontSize: 11.5 }}>
+                      {w.mergedInto
+                        ? <span style={{ color: '#d29922' }}>{t('project.wt.changes', { count: w.dirty + w.untracked })}</span>
+                        : t('project.aheadDirty', { ahead: w.committedAhead, dirty: w.dirty + w.untracked })}
+                    </span>
+                    {/* S3 佐证（10 §4）：远端分支已删只给线索，不替人拍板 */}
+                    {!w.mergedInto && w.remoteGone && <span style={{ color: '#d29922', fontSize: 11.5 }}>{t('project.remoteGoneHint')}</span>}
                     <span>{relTime(w.lastCommitAt, t)}</span>
                   </div>
                 </div>

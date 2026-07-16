@@ -44,7 +44,8 @@ type projectSummary struct {
 	Sessions     int              `json:"sessions"`
 	Attached     int              `json:"attached"`
 	Worktrees    int              `json:"worktrees"`  // 非 main、非 prunable
-	Unfinished   int              `json:"unfinished"` // 孤儿 roam worktree ∧ (未合并提交 ∨ 未提交改动)
+	Unfinished   int              `json:"unfinished"` // 孤儿 roam worktree ∧ 真·未合并（合入检测排除，10 §5）
+	Cleanable    int              `json:"cleanable"`  // 孤儿 roam worktree ∧ 已合入 ∧ 无未提交改动：一键清理
 	Races        int              `json:"races"`      // running 状态的竞赛数
 	LastActivity int64            `json:"lastActivity"`
 	FirstSeen    int64            `json:"firstSeen"`
@@ -186,8 +187,14 @@ func (a *API) ProjectsList(c *gin.Context) {
 			p.Worktrees++
 			if !w.External {
 				roamWts++
-				if len(w.Sessions) == 0 && (w.CommittedAhead > 0 || w.Dirty > 0 || w.Untracked > 0) {
-					p.Unfinished++
+				if len(w.Sessions) == 0 {
+					dirty := w.Dirty > 0 || w.Untracked > 0
+					switch {
+					case w.MergedInto != "" && !dirty:
+						p.Cleanable++ // 已合入·零损失：不进「需要你」，项目页一键清（10 §5）
+					case w.CommittedAhead > 0 || dirty:
+						p.Unfinished++
+					}
 				}
 			}
 			if w.LastCommitAt > p.LastActivity {

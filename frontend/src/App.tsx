@@ -1740,8 +1740,9 @@ export function CloseWorktreeModal({ info, onClose, onDone }: {
   const [busy, setBusy] = useState(false)
   const { message } = AntApp.useApp()
   const { t } = useI18n()
-  useEffect(() => { if (info) { setMode('keep'); setStrategy('squash') } }, [info])
   const st = info?.st || {}
+  const merged = !!st.mergedInto // 合入检测（10 §5）：已合入时丢弃=清理，默认直选
+  useEffect(() => { if (info) { setMode(info.st?.mergedInto ? 'discard' : 'keep'); setStrategy('squash') } }, [info])
   const ok = async () => {
     if (!info) return
     setBusy(true)
@@ -1759,21 +1760,32 @@ export function CloseWorktreeModal({ info, onClose, onDone }: {
   return (
     <Modal open={!!info} onCancel={onClose} onOk={ok} confirmLoading={busy} destroyOnClose
       title={t('worktree.close.title', { name: info?.name || '' })}
-      okText={t('session.close')} okButtonProps={{ danger: mode === 'discard' }}>
+      okText={t('session.close')}
+      okButtonProps={{ danger: mode === 'discard' && (!merged || (st.dirty || 0) + (st.untracked || 0) > 0) }}>
       <div style={{ color: 'var(--text-dim)', marginBottom: 12 }}>
-        {t('worktree.close.summary', {
-          branch: st.branch || '?',
-          dirty: (st.dirty || 0) + (st.untracked || 0),
-          ahead: st.committedAhead || 0,
-          base: st.base || '?',
-        })}
+        {/* 已合入（10 §5）：损失叙事换成绿色定心丸；未提交改动仍如实提示 */}
+        {merged
+          ? (<>
+            <div style={{ color: '#3fb950' }}>{t('project.finish.mergedRemote', { target: st.mergedInto, kind: st.mergedKind })}</div>
+            {(st.dirty || 0) + (st.untracked || 0) > 0 && (
+              <div style={{ color: '#d29922', marginTop: 4 }}>{t('project.finish.uncommitted', { count: (st.dirty || 0) + (st.untracked || 0) })}</div>
+            )}
+          </>)
+          : t('worktree.close.summary', {
+            branch: st.branch || '?',
+            dirty: (st.dirty || 0) + (st.untracked || 0),
+            ahead: st.committedAhead || 0,
+            base: st.base || '?',
+          })}
       </div>
       <Radio.Group value={mode} onChange={(e) => setMode(e.target.value)}
         style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <Radio value="keep">{t('worktree.close.keep')}</Radio>
-        <Radio value="merge" disabled={!st.base}>
+        {/* 已合入后本地再合并只会空转/添乱：禁用并提示走清理 */}
+        <Radio value="merge" disabled={!st.base || merged}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             {t('worktree.close.merge', { base: st.base || '?' })}
+            {merged && <span style={{ fontSize: 12, color: 'var(--text-dimmer)' }}>{t('worktree.close.mergeDisabledMerged')}</span>}
             {mode === 'merge' && (
               <Select size="small" value={strategy} onChange={(v) => setStrategy(v)} style={{ width: 100 }}
                 onClick={(e) => e.stopPropagation()}
@@ -1781,7 +1793,11 @@ export function CloseWorktreeModal({ info, onClose, onDone }: {
             )}
           </span>
         </Radio>
-        <Radio value="discard"><span style={{ color: '#f85149' }}>{t('worktree.close.discard')}</span></Radio>
+        <Radio value="discard">
+          {merged
+            ? <span style={{ color: '#3fb950' }}>{t('worktree.close.discardMerged', { target: st.mergedInto })}</span>
+            : <span style={{ color: '#f85149' }}>{t('worktree.close.discard')}</span>}
+        </Radio>
       </Radio.Group>
     </Modal>
   )

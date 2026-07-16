@@ -4,10 +4,12 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +19,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"ttmux-web/ttmux"
+	"ttmux-web/worktree"
 )
 
 // scrubGitEnv 同 worktree 包：剥掉钩子注入的 GIT_*，避免子进程 git 被劫持。
@@ -315,5 +318,75 @@ func TestRaceLifecycle(t *testing.T) {
 	}
 	if _, err := os.Stat(winPath); err == nil {
 		t.Fatal("winner worktree survived full cleanup")
+	}
+}
+
+// /git/worktree/sync 路由（10 §3/§4）：本地 bare origin 上「合并」后，sync → list
+// 能看到 mergedInto/mergedKind。不依赖 tmux/CLI（session join 优雅降级为空）。
+func TestWorktreeSyncRoute(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	tmp := t.TempDir()
+	h := New(ttmux.New(filepath.Join(tmp, "ttmux-absent")), "", tmp)
+	r := gin.New()
+	r.POST("/git/worktree/sync", h.WorktreeSync)
+	r.GET("/git/worktrees", h.WorktreeList)
+	repo := e2eRepo(t, tmp)
+	gitIn := func(dir string, args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		cmd.Env = append(scrubGitEnv(),
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	origin := filepath.Join(tmp, "origin.git")
+	gitIn(repo, "clone", "--bare", repo, origin)
+	gitIn(repo, "remote", "add", "origin", origin)
+
+	wt, err := h.WT.Create(context.Background(), worktree.CreateReq{Dir: repo, Branch: "roam/feat-sync", Base: "main"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wt.Path, "f.txt"), []byte("f\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(wt.Path, "add", ".")
+	gitIn(wt.Path, "commit", "-m", "feat sync")
+	head := gitIn(wt.Path, "rev-parse", "HEAD")
+	gitIn(repo, "push", "-q", "origin", "roam/feat-sync")
+	gitIn(origin, "update-ref", "refs/heads/main", head) // 远端 ff「合并」，本地 main 不动
+
+	code, resp := post(t, r, "/git/worktree/sync", map[string]any{"dir": repo})
+	if code != 200 {
+		t.Fatalf("sync http %d: %v", code, resp)
+	}
+	data, _ := resp["data"].(map[string]any)
+	if at, _ := data["syncedAt"].(float64); at == 0 {
+		t.Fatalf("syncedAt missing: %v", resp)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/git/worktrees?dir="+url.QueryEscape(repo), nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	var lresp struct {
+		Data []worktree.Worktree `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &lresp); err != nil {
+		t.Fatalf("list decode: %v\n%s", err, w.Body.String())
+	}
+	found := false
+	for _, x := range lresp.Data {
+		if x.Path == wt.Path {
+			found = true
+			if x.MergedInto != "origin/main" || x.MergedKind != "ancestry" {
+				t.Fatalf("want merged ancestry via route, got %+v", x)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("worktree not in list: %s", w.Body.String())
 	}
 }

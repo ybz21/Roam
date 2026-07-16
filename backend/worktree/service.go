@@ -45,8 +45,9 @@ func errf(code, format string, a ...any) *Err {
 // ── 服务与仓库解析 ────────────────────────────────────────
 
 type Service struct {
-	mu    sync.Mutex
-	cache map[string]listCache // key: commonDir
+	mu     sync.Mutex
+	cache  map[string]listCache   // key: commonDir
+	remote map[string]remoteState // key: commonDir（Sync 的远端观测，进程内缓存）
 }
 
 type listCache struct {
@@ -54,7 +55,17 @@ type listCache struct {
 	data []Worktree
 }
 
-func New() *Service { return &Service{cache: map[string]listCache{}} }
+// remoteState 一次 Sync 的远端观测（10 设计 §3/§4 S3）：heads = ls-remote 到的
+// 远端分支集合，用于 branch-gone 判定；nil = 尚未成功观测，S3 静默退化不报 gone。
+type remoteState struct {
+	at    time.Time
+	err   string
+	heads map[string]bool
+}
+
+func New() *Service {
+	return &Service{cache: map[string]listCache{}, remote: map[string]remoteState{}}
+}
 
 const listCacheTTL = 3 * time.Second
 
@@ -190,6 +201,12 @@ type Worktree struct {
 	Locked         bool      `json:"locked"`
 	Prunable       bool      `json:"prunable"`
 	Sessions       []SessRef `json:"sessions"`
+	// 合入检测（10 设计 §4）：对比目标优先 origin/<base>（Sync fetch 来的远端真相），
+	// 无远端时退回本地 base——此时语义与旧版一致。
+	MergedInto  string `json:"mergedInto,omitempty"`  // 非空 = 已检出合入的目标 ref
+	MergedKind  string `json:"mergedKind,omitempty"`  // ancestry(S1) | squash(S2 patch-id 等价)
+	RemoteGone  bool   `json:"remoteGone,omitempty"`  // S3：曾推送、远端分支现已删（仅佐证）
+	AheadUnique int    `json:"aheadUnique,omitempty"` // git cherry 的 + 数（补丁级真领先）
 }
 
 // ── Create ───────────────────────────────────────────────
@@ -398,6 +415,10 @@ func (s *Service) List(ctx context.Context, dir string) ([]Worktree, error) {
 	}
 	flush()
 
+	s.mu.Lock()
+	rs := s.remote[repo.CommonDir]
+	s.mu.Unlock()
+
 	for i := range list {
 		w := &list[i]
 		w.IsMain = w.Path == repo.Root
@@ -429,11 +450,43 @@ func (s *Service) List(ctx context.Context, dir string) ([]Worktree, error) {
 			}
 		}
 		if w.Base != "" && !w.IsMain {
-			if cnt, e := git(ctx, w.Path, "rev-list", "--left-right", "--count", w.Base+"...HEAD"); e == nil {
+			// 对比目标优先远端主干（Sync fetch 更新的 origin/<base>）：远端 PR 合并后
+			// 本地 base 没 pull 也能翻绿；无远端跟踪 ref 时退回本地 base（旧行为）。
+			target := w.Base
+			if _, e := git(ctx, w.Path, "rev-parse", "--verify", "-q", "refs/remotes/origin/"+w.Base); e == nil {
+				target = "origin/" + w.Base
+			}
+			if cnt, e := git(ctx, w.Path, "rev-list", "--left-right", "--count", target+"...HEAD"); e == nil {
 				parts := strings.Fields(cnt)
 				if len(parts) == 2 {
 					w.Behind, _ = strconv.Atoi(parts[0])
 					w.CommittedAhead, _ = strconv.Atoi(parts[1])
+				}
+			}
+			// S1 祖先：merge commit / ff / rebase 后 ff 都命中
+			if _, e := git(ctx, w.Path, "merge-base", "--is-ancestor", "HEAD", target); e == nil {
+				w.MergedInto, w.MergedKind = target, "ancestry"
+			} else if w.CommittedAhead > 0 {
+				// S2 补丁等价：squash/逐提交 rebase 后，任务分支提交按 patch-id 全部
+				// 被 target 覆盖（cherry 全 `-`）。出现 `+` 即有真领先，宁可漏判不错判。
+				if out, e := git(ctx, w.Path, "cherry", target, "HEAD"); e == nil {
+					plus := 0
+					for _, l := range strings.Split(out, "\n") {
+						if strings.HasPrefix(l, "+ ") {
+							plus++
+						}
+					}
+					w.AheadUnique = plus
+					if plus == 0 && strings.TrimSpace(out) != "" {
+						w.MergedInto, w.MergedKind = target, "squash"
+					}
+				}
+			}
+			// S3 branch-gone（仅佐证）：曾有远端跟踪 ref，而最近一次 ls-remote 观测里
+			// 远端分支已不在。观测缺失（nil）时静默退化，不报 gone。
+			if w.Branch != "" && rs.heads != nil && !rs.heads[w.Branch] {
+				if _, e := git(ctx, w.Path, "rev-parse", "--verify", "-q", "refs/remotes/origin/"+w.Branch); e == nil {
+					w.RemoteGone = true
 				}
 			}
 		}
@@ -445,6 +498,89 @@ func (s *Service) List(ctx context.Context, dir string) ([]Worktree, error) {
 	s.cache[repo.CommonDir] = listCache{at: time.Now(), data: list}
 	s.mu.Unlock()
 	return s.joinSessions(ctx, list), nil
+}
+
+// ── 远端同步（10 设计 §3）────────────────────────────────
+
+type SyncResult struct {
+	SyncedAt int64  `json:"syncedAt"`           // 最近一次成功观测（unix 秒）；0 = 从未成功
+	Error    string `json:"error,omitempty"`    // 本次失败原因（判定沿用上次观测）
+	NoRemote bool   `json:"noRemote,omitempty"` // 无 origin：纯本地仓库，无需同步
+}
+
+const syncTimeout = 10 * time.Second
+
+// Sync 轻量同步远端：一次 ls-remote 观测远端分支集合（S3 branch-gone 的数据源），
+// 再 fetch 各 worktree 的合并目标分支（更新 origin/<base>，S1/S2 的对比对象）。
+// 失败静默退化：保留上次观测、只记错误，绝不阻塞/弹凭据提示（GIT_TERMINAL_PROMPT=0
+// + 硬超时兜底）。无 origin 的纯本地仓库直接短路。
+func (s *Service) Sync(ctx context.Context, dir string) (SyncResult, error) {
+	repo, err := s.ResolveRepo(ctx, dir)
+	if err != nil {
+		return SyncResult{}, err
+	}
+	if _, e := git(ctx, repo.Root, "remote", "get-url", "origin"); e != nil {
+		return SyncResult{NoRemote: true}, nil
+	}
+	nctx, cancel := context.WithTimeout(ctx, syncTimeout)
+	defer cancel()
+
+	prev := func() remoteState { s.mu.Lock(); defer s.mu.Unlock(); return s.remote[repo.CommonDir] }()
+	fail := func(msg string) SyncResult {
+		s.mu.Lock()
+		s.remote[repo.CommonDir] = remoteState{at: prev.at, err: msg, heads: prev.heads}
+		s.mu.Unlock()
+		var at int64
+		if !prev.at.IsZero() {
+			at = prev.at.Unix()
+		}
+		return SyncResult{SyncedAt: at, Error: msg}
+	}
+
+	out, e := git(nctx, repo.Root, "ls-remote", "--heads", "origin")
+	if e != nil {
+		return fail(strings.TrimSpace(out)), nil
+	}
+	heads := map[string]bool{}
+	for _, line := range strings.Split(out, "\n") {
+		if _, ref, ok := strings.Cut(line, "\t"); ok {
+			if name := strings.TrimPrefix(ref, "refs/heads/"); name != ref {
+				heads[strings.TrimSpace(name)] = true
+			}
+		}
+	}
+
+	// 合并目标 = 默认主干 ∪ 各 roam worktree 记录的 base（去重，且远端确有该分支）
+	bases := map[string]bool{}
+	if b := s.defaultBase(nctx, repo); b != "" {
+		bases[b] = true
+	}
+	if list, e := s.List(ctx, dir); e == nil {
+		for _, w := range list {
+			if !w.IsMain && !w.External && w.Base != "" {
+				bases[w.Base] = true
+			}
+		}
+	}
+	var refspecs []string
+	for b := range bases {
+		if heads[b] {
+			refspecs = append(refspecs, "+refs/heads/"+b+":refs/remotes/origin/"+b)
+		}
+	}
+	sort.Strings(refspecs)
+	if len(refspecs) > 0 {
+		if out, e := git(nctx, repo.Root, append([]string{"fetch", "--no-tags", "origin"}, refspecs...)...); e != nil {
+			return fail(strings.TrimSpace(out)), nil
+		}
+	}
+
+	now := time.Now()
+	s.mu.Lock()
+	s.remote[repo.CommonDir] = remoteState{at: now, heads: heads}
+	s.mu.Unlock()
+	s.invalidate(repo) // 让下一次 List 立即吃到新 origin/<base>
+	return SyncResult{SyncedAt: now.Unix()}, nil
 }
 
 // ── session ↔ worktree join（cwd 现算，不写台账）──────────
@@ -969,7 +1105,14 @@ func (s *Service) Remove(ctx context.Context, req RemoveReq) error {
 	path := canonical(req.Path)
 	repo, err := s.ResolveRepo(ctx, path)
 	if err != nil {
-		return err
+		// 半删残缺态（10 §7 实测）：上次删除半路失败后 gitfile 已没，从 path 解析
+		// 仓库必败。改从父目录解析，且必须仍在注册表里（worktree list 可见），
+		// 才允许继续走删除（后面的 git remove 失败会落入 RemoveAll 兜底）。
+		repo2, e2 := s.ResolveRepo(ctx, filepath.Dir(path))
+		if e2 != nil || !s.isRegisteredWorktree(ctx, repo2, path) {
+			return err
+		}
+		repo = repo2
 	}
 	if path == repo.Root {
 		return errf("MAIN_WORKTREE", "refusing to remove the main worktree")
@@ -1014,7 +1157,17 @@ func (s *Service) Remove(ctx context.Context, req RemoveReq) error {
 	}
 	args = append(args, "--", path)
 	if out, e := git(ctx, repo.Root, args...); e != nil {
-		return errf("WORKTREE_REMOVE_FAILED", "%s", out)
+		// 兜底（10 §7 实测）：git 删工作树半路失败（如删除中有并发写入 →
+		// Directory not empty）会留下「gitfile 已删、注册表还在」的卡死残缺态，
+		// 重试连 status 都跑不了。仅当调用方明示 force（破坏性意图明确）且 path
+		// 确为本仓库注册的 linked worktree 时，直接 RemoveAll + prune 收干净。
+		if !req.ForceWorktree || !s.isRegisteredWorktree(ctx, repo, path) {
+			return errf("WORKTREE_REMOVE_FAILED", "%s", out)
+		}
+		if rmErr := os.RemoveAll(path); rmErr != nil {
+			return errf("WORKTREE_REMOVE_FAILED", "%s; fallback rm: %v", out, rmErr)
+		}
+		_, _ = git(ctx, repo.Root, "worktree", "prune", "--expire", "now")
 	}
 	if (req.DeleteBranch || req.ForceDeleteBranch) && branch != "" && branch != "HEAD" {
 		flag := "-d"
@@ -1026,6 +1179,23 @@ func (s *Service) Remove(ctx context.Context, req RemoveReq) error {
 		}
 	}
 	return nil
+}
+
+// isRegisteredWorktree 校验 path 是本仓库注册的 linked worktree（含半删残缺态——
+// gitfile 没了注册表还在时 worktree list 依然列出）。RemoveAll 兜底前的安全闸。
+func (s *Service) isRegisteredWorktree(ctx context.Context, repo Repo, path string) bool {
+	out, err := git(ctx, repo.Root, "worktree", "list", "--porcelain")
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if p, ok := strings.CutPrefix(line, "worktree "); ok {
+			if c := canonical(p); c == path && c != repo.Root {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (s *Service) Prune(ctx context.Context, dir string) error {

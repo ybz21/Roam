@@ -316,3 +316,136 @@ func TestExpectedHeadGuard(t *testing.T) {
 		t.Fatalf("want HEAD_MOVED, got %v", err)
 	}
 }
+
+// 合入检测（10 设计 §4）：远端 merge/squash 后，本地 base 不 pull 也要能翻绿；
+// 远端分支被删（branch-gone）只作佐证标记。全程用本地 bare 仓库当 origin，离线可跑。
+func TestMergedDetection(t *testing.T) {
+	ctx := context.Background()
+	s := New()
+	repo := mkRepo(t)
+	gitIn := func(dir string, args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		cmd.Env = append(scrubGitEnv(),
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	origin := filepath.Join(t.TempDir(), "origin.git")
+	gitIn(repo, "clone", "--bare", repo, origin)
+	gitIn(repo, "remote", "add", "origin", origin)
+
+	find := func(path string) Worktree {
+		t.Helper()
+		s.invalidate(Repo{CommonDir: canonical(filepath.Join(repo, ".git"))})
+		list, err := s.List(ctx, repo)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, w := range list {
+			if w.Path == path {
+				return w
+			}
+		}
+		t.Fatalf("worktree %s not in list", path)
+		return Worktree{}
+	}
+
+	// ── S1 祖先：远端 main fast-forward 到任务分支，本地 main 不动 ──
+	wa, err := s.Create(ctx, CreateReq{Dir: repo, Branch: "roam/feat-a", Base: "main"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitFile(t, wa.Path, "a2.txt", "a2\n", "feat a")
+	headA := gitIn(wa.Path, "rev-parse", "HEAD")
+	if w := find(wa.Path); w.MergedInto != "" {
+		t.Fatalf("before sync: unexpectedly merged: %+v", w)
+	}
+	gitIn(repo, "push", "-q", "origin", "roam/feat-a")
+	gitIn(origin, "update-ref", "refs/heads/main", headA) // 远端「merge」（对象已随 push 到位）
+	if res, err := s.Sync(ctx, repo); err != nil || res.Error != "" || res.SyncedAt == 0 {
+		t.Fatalf("sync: %v %+v", err, res)
+	}
+	w := find(wa.Path)
+	if w.MergedInto != "origin/main" || w.MergedKind != "ancestry" {
+		t.Fatalf("S1 want merged ancestry into origin/main, got %+v", w)
+	}
+	if w.RemoteGone {
+		t.Fatalf("S1: branch still on remote, gone=false expected: %+v", w)
+	}
+
+	// ── S3 branch-gone：远端删掉任务分支后再 Sync ──
+	gitIn(origin, "update-ref", "-d", "refs/heads/roam/feat-a")
+	if _, err := s.Sync(ctx, repo); err != nil {
+		t.Fatal(err)
+	}
+	if w := find(wa.Path); !w.RemoteGone {
+		t.Fatalf("S3 want remoteGone after remote branch deleted, got %+v", w)
+	}
+
+	// ── S2 补丁等价（squash）：远端 main 上是同补丁的新提交 ──
+	wb, err := s.Create(ctx, CreateReq{Dir: repo, Branch: "roam/feat-b", Base: "main", Remote: "origin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitFile(t, wb.Path, "b.txt", "b\n", "feat b")
+	headB := gitIn(wb.Path, "rev-parse", "HEAD")
+	remoteMain := gitIn(origin, "rev-parse", "refs/heads/main")
+	squash := gitIn(repo, "commit-tree", headB+"^{tree}", "-p", remoteMain, "-m", "squash: feat b (#1)")
+	gitIn(repo, "push", "-q", "origin", squash+":refs/heads/main") // 远端「squash 合并」
+	if _, err := s.Sync(ctx, repo); err != nil {
+		t.Fatal(err)
+	}
+	w = find(wb.Path)
+	if w.MergedInto != "origin/main" || w.MergedKind != "squash" {
+		t.Fatalf("S2 want merged squash, got %+v", w)
+	}
+	if w.AheadUnique != 0 {
+		t.Fatalf("S2 want aheadUnique=0, got %d", w.AheadUnique)
+	}
+
+	// ── 未合并的真领先：分支再长一个新提交 → 翻回未合并，aheadUnique=1 ──
+	commitFile(t, wb.Path, "b2.txt", "b2\n", "feat b followup")
+	w = find(wb.Path)
+	if w.MergedInto != "" {
+		t.Fatalf("followup commit must flip back to unmerged, got %+v", w)
+	}
+	if w.AheadUnique != 1 {
+		t.Fatalf("want aheadUnique=1 after followup, got %d", w.AheadUnique)
+	}
+}
+
+// 半删残缺态自愈（10 §7 实测）：git 删工作树半路失败会留下 gitfile 已删、注册表
+// 还在的卡死状态——Remove(force) 应能从父目录解析仓库并 RemoveAll+prune 收干净。
+func TestRemoveHalfDeadWorktree(t *testing.T) {
+	ctx := context.Background()
+	s := New()
+	repo := mkRepo(t)
+	wt, err := s.Create(ctx, CreateReq{Dir: repo, Branch: "roam/half-dead", Base: "main"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 模拟半删：gitfile 没了、目录里还剩东西
+	if err := os.Remove(filepath.Join(wt.Path, ".git")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wt.Path, "leftover.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Remove(ctx, RemoveReq{Path: wt.Path, ForceWorktree: true, IgnoreSessions: true}); err != nil {
+		t.Fatalf("remove half-dead: %v", err)
+	}
+	if pathExists(wt.Path) {
+		t.Fatal("worktree dir should be gone")
+	}
+	out, err := exec.Command("git", "-C", repo, "worktree", "list", "--porcelain").CombinedOutput()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(out), wt.Path) {
+		t.Fatalf("registry entry should be pruned:\n%s", out)
+	}
+}
