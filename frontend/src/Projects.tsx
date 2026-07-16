@@ -636,9 +636,12 @@ function ProjectHome({ proj, loaded, openTerm, refresh }: {
   // 三桶（10 §5）：已合入·待清理（绿，零损失一键清）/ 真·未合并（黄，三选一决策，
   // 含「已合入但有未提交改动」）/ 干净（老 ⇥ 语义，ahead=0）
   const wtDirty = (w: any) => w.dirty > 0 || w.untracked > 0
-  const cleanable = orphans.filter((w: any) => w.mergedInto && w.committedAhead > 0 && !wtDirty(w))
+  // 判据与后端概览 (api/project.go) 对齐：cleanable = 已合入 ∧ 无未提交改动，不看
+  // committedAhead——S1 祖先(FF)合入 committedAhead==0 也算零损失可清，否则外层「可清理」
+  // 计数与详情页对不上（详情把它落进「干净」桶、丢了已合入徽标）。
+  const cleanable = orphans.filter((w: any) => w.mergedInto && !wtDirty(w))
   const unfinished = orphans.filter((w: any) => (w.committedAhead > 0 || wtDirty(w)) && !(w.mergedInto && !wtDirty(w)))
-  const clean = orphans.filter((w: any) => !(w.committedAhead > 0 || wtDirty(w)))
+  const clean = orphans.filter((w: any) => !w.mergedInto && !(w.committedAhead > 0 || wtDirty(w)))
   const wtOf = (s: any) => wts.find((w: any) => w.path === ann[s.name]?.primary?.worktree)
 
   // composer 提交：与 NewSessionModal 完全同款的派生/编排/命名约定（W1 修订 2/3/4）
