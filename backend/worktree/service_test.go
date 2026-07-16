@@ -427,6 +427,54 @@ func TestMergedDetection(t *testing.T) {
 	}
 }
 
+// 分叉点(StartOid)守空 worktree：base 仅在远端、本地无 refs/heads/<base> 时，旧
+// 「相对本地 base 有无独占提交」的兜底判据会退化成放行——空 worktree HEAD==远端 base
+// tip，又是 origin/<base> 的祖先，S1 秒判「已合入」。改用 Head==StartOid 判 ownWork
+// 后与本地 base ref 是否存在无关，空 worktree 恒不合入。
+func TestMergedEmptyWorktreeRemoteOnlyBase(t *testing.T) {
+	ctx := context.Background()
+	s := New()
+	repo := mkRepo(t)
+	gitIn := func(dir string, args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		cmd.Env = append(scrubGitEnv(),
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	origin := filepath.Join(t.TempDir(), "origin.git")
+	gitIn(repo, "clone", "--bare", repo, origin)
+	gitIn(repo, "remote", "add", "origin", origin)
+	// base 分支只留在远端：本地建 relbase→推送→删本地，制造「无 refs/heads/relbase」
+	gitIn(repo, "branch", "relbase")
+	gitIn(repo, "push", "-q", "origin", "relbase")
+	gitIn(repo, "branch", "-D", "relbase")
+
+	// 从远端 relbase 建空 worktree（Remote 走 fetch 锁 OID），一行未改
+	wt, err := s.Create(ctx, CreateReq{Dir: repo, Branch: "roam/rel", Base: "relbase", Remote: "origin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.invalidate(Repo{CommonDir: canonical(filepath.Join(repo, ".git"))})
+	list, err := s.List(ctx, repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range list {
+		if w.Path == wt.Path {
+			if w.MergedInto != "" {
+				t.Fatalf("empty worktree on remote-only base must NOT be merged, got %+v", w)
+			}
+			return
+		}
+	}
+	t.Fatalf("worktree %s not in list", wt.Path)
+}
+
 // 半删残缺态自愈（10 §7 实测）：git 删工作树半路失败会留下 gitfile 已删、注册表
 // 还在的卡死状态——Remove(force) 应能从父目录解析仓库并 RemoveAll+prune 收干净。
 func TestRemoveHalfDeadWorktree(t *testing.T) {

@@ -370,6 +370,44 @@ func (s *Service) ensureExclude(repo Repo) {
 	_, _ = f.WriteString(line + "\n")
 }
 
+// ── 合入信号链（10 设计 §4）─────────────────────────────────
+
+// mergeSignal 判定 worktree 是否已并入 target；命中返回 (kind, true)，否则 (_, false)。
+// 允许读/标注 w（如 S2 顺手记 AheadUnique）。约定：调用前已确保 ownWork（worktree 真
+// 离开分叉点），故各判据只管「HEAD 是否已进 target」，无需再自防空 worktree。
+type mergeSignal func(ctx context.Context, w *Worktree, target string) (kind string, merged bool)
+
+// mergeSignals 合入判据链，顺序即优先级——命中即止。横向可扩展：加新判据（如
+// note-based、PR 号回填、reflog 溯源…）只需往本表追加一项，List 主流程零改动。
+var mergeSignals = []mergeSignal{
+	// S1 祖先：merge commit / ff / rebase 后 ff——HEAD 已是 target 的祖先。
+	func(ctx context.Context, w *Worktree, target string) (string, bool) {
+		if _, e := git(ctx, w.Path, "merge-base", "--is-ancestor", "HEAD", target); e == nil {
+			return "ancestry", true
+		}
+		return "", false
+	},
+	// S2 补丁等价：squash/逐提交 rebase 后，任务分支提交按 patch-id 全被 target 覆盖
+	// （cherry 全 `-`）。出现 `+` 即有真领先，宁可漏判不错判。
+	func(ctx context.Context, w *Worktree, target string) (string, bool) {
+		if w.CommittedAhead <= 0 {
+			return "", false
+		}
+		out, e := git(ctx, w.Path, "cherry", target, "HEAD")
+		if e != nil {
+			return "", false
+		}
+		plus := 0
+		for _, l := range strings.Split(out, "\n") {
+			if strings.HasPrefix(l, "+ ") {
+				plus++
+			}
+		}
+		w.AheadUnique = plus
+		return "squash", plus == 0 && strings.TrimSpace(out) != ""
+	},
+}
+
 // ── List ─────────────────────────────────────────────────
 
 // List 解析 porcelain 清单并补状态；带 3s 缓存。无任何写副作用。
@@ -463,38 +501,20 @@ func (s *Service) List(ctx context.Context, dir string) ([]Worktree, error) {
 					w.CommittedAhead, _ = strconv.Atoi(parts[1])
 				}
 			}
-			// 空 worktree 兜底：新开对话建的 worktree HEAD==本地 base tip，本身就是
-			// target 的祖先，S1 会把它秒判「已合入」。要求相对本地 base 分支确有独占
-			// 提交（真做过事）才进入合入判定；HEAD 一旦被合进 target，本地 base 不 pull
-			// 就还落后 HEAD，own>0 依旧成立（S1 test 的「本地 main 不动」正是此路）。
-			// 本地 base ref 不存在（base 仅在远端）时无从判断，退回旧行为不做抑制。
-			ownWork := true
-			if _, e := git(ctx, w.Path, "rev-parse", "--verify", "-q", "refs/heads/"+w.Base); e == nil {
-				ownWork = false
-				if cnt, e := git(ctx, w.Path, "rev-list", "--count", w.Base+"..HEAD"); e == nil {
-					if n, _ := strconv.Atoi(strings.TrimSpace(cnt)); n > 0 {
-						ownWork = true
-					}
-				}
+			// 合入判定：横向可扩展的信号链（mergeSignals），命中即定 kind、靠前优先。
+			// 统一前置 ownWork——worktree 必须真离开建时分叉点(StartOid)才算干过活；否则
+			// 新开的空 worktree HEAD==分叉点，天然是 target 的祖先，S1 会把它秒判「已合入」。
+			// StartOid 建时锁定、不随本地 base 分支移动/删除而失真，比对本地 base ref 更稳；
+			// 老 worktree 无 StartOid 时退回「相对 target 有领先提交」兜底（空 worktree=0 不判）。
+			ownWork := w.Head != w.StartOid
+			if w.StartOid == "" {
+				ownWork = w.CommittedAhead > 0
 			}
-			// S1 祖先：merge commit / ff / rebase 后 ff 都命中
 			if ownWork {
-				if _, e := git(ctx, w.Path, "merge-base", "--is-ancestor", "HEAD", target); e == nil {
-					w.MergedInto, w.MergedKind = target, "ancestry"
-				} else if w.CommittedAhead > 0 {
-					// S2 补丁等价：squash/逐提交 rebase 后，任务分支提交按 patch-id 全部
-					// 被 target 覆盖（cherry 全 `-`）。出现 `+` 即有真领先，宁可漏判不错判。
-					if out, e := git(ctx, w.Path, "cherry", target, "HEAD"); e == nil {
-						plus := 0
-						for _, l := range strings.Split(out, "\n") {
-							if strings.HasPrefix(l, "+ ") {
-								plus++
-							}
-						}
-						w.AheadUnique = plus
-						if plus == 0 && strings.TrimSpace(out) != "" {
-							w.MergedInto, w.MergedKind = target, "squash"
-						}
+				for _, sig := range mergeSignals {
+					if kind, ok := sig(ctx, w, target); ok {
+						w.MergedInto, w.MergedKind = target, kind
+						break
 					}
 				}
 			}
