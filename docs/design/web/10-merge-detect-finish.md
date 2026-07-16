@@ -139,7 +139,7 @@ unmerged = 其余
 
 **仓库级同步状态**（挂在项目投影上）：`{ syncedAt, syncError? }`。
 
-**新端点**：`POST /git/sync {dir}`——手动「刷新远端」，也是事件触发档的内部入口。
+**新端点**：`POST /git/worktree/sync {dir}`——手动「刷新远端」，也是事件触发档的内部入口（归入 worktree API 组，避免与 GitOp 已有的 `op=sync`=pull+push 撞名）。
 返回同步后的 worktree 列表（复用 List 缓存失效）。
 
 实现落点：全部在 `backend/worktree`（fetch/判定与 List 同栈，享受同一把仓库锁与缓存）；
@@ -177,7 +177,7 @@ token/企业私服等平台差异污染核心链路。
 | 片 | 内容 | 验收 |
 |---|---|---|
 | M1 判定 | List 增算 S1/S2/S3 + 新字段（先用本地已有 refs，不 fetch） | 本地 pull 过 main 后，squash 合并的任务能翻绿（今天翻不了） |
-| M2 同步 | 仓库级 fetch（三档触发 + 护栏）+ `POST /git/sync` | 不 pull 本地 main，GitHub merge 后 ≤5 分钟任务翻绿；断网退化无感 |
+| M2 同步 | 仓库级 fetch（三档触发 + 护栏）+ `POST /git/worktree/sync` | 不 pull 本地 main，GitHub merge 后 ≤5 分钟任务翻绿；断网退化无感 |
 | M3 UI | 绿条/黄条拆分、P3 文案重排、导轨「并」吃新信号、P6 计数只算未合并、留痕补字段 | 用户能一眼区分「等我决策」和「顺手清理」 |
 | M4 可选 | 自动清理 opt-in（merged ∧ clean ∧ 会话已关 ∧ 留痕后删）、PR 插件位 | 默认关；开了也只清零风险项 |
 
