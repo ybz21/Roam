@@ -31,10 +31,24 @@ type Web struct {
 	LockSecs   int      `yaml:"lock_secs"`
 }
 
+// Cluster 对应 config.yaml 里的 cluster: 段（横向扩展：标准节点 / 云端 Broker）。
+// mode=standard（默认）为现在的单机 Roam，填了 broker 就额外出站注册进云端；
+// mode=cloud 是云端 Broker，只做路由 + 注册表 + 控制台，不跑业务。见
+// docs/design/cluster/客户端-服务端横向扩展设计.md。
+type Cluster struct {
+	Mode     string `yaml:"mode"`     // standard（默认）| cloud
+	Broker   string `yaml:"broker"`   // 云端 Broker 地址，如 https://broker:443（standard 模式填了才上云）
+	Token    string `yaml:"token"`    // 一次性 enrollment token（首次注册用，之后换长期节点凭证）
+	Name     string `yaml:"name"`     // 节点显示名（默认 hostname）
+	Group    string `yaml:"group"`    // 分组（可选）
+	Insecure bool   `yaml:"insecure"` // 跳过 Broker TLS 校验（自签证书调试用，生产勿开）
+}
+
 // Config 是解析后的配置（env 覆盖已叠加，默认值已填充）。
 type Config struct {
-	Web  Web
-	Path string // 实际配置文件路径（供 SavePassword 落盘）
+	Web     Web
+	Cluster Cluster
+	Path    string // 实际配置文件路径（供 SavePassword 落盘）
 }
 
 // Home 返回 Roam 主目录（数据/配置根）。优先 ROAM_HOME，兼容旧 TTMUX_HOME。
@@ -73,12 +87,13 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 	var file struct {
-		Web Web `yaml:"web"`
+		Web     Web     `yaml:"web"`
+		Cluster Cluster `yaml:"cluster"`
 	}
 	if err := yaml.Unmarshal(b, &file); err != nil {
 		return nil, err
 	}
-	c := &Config{Web: file.Web, Path: path}
+	c := &Config{Web: file.Web, Cluster: file.Cluster, Path: path}
 	c.applyDefaults()
 	c.applyEnv()
 	return c, nil
@@ -93,6 +108,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Web.LockSecs <= 0 {
 		c.Web.LockSecs = 30
+	}
+	if c.Cluster.Mode == "" {
+		c.Cluster.Mode = "standard"
 	}
 }
 
@@ -125,6 +143,25 @@ func (c *Config) applyEnv() {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			c.Web.LockSecs = n
 		}
+	}
+	// cluster 段的环境变量覆盖（横向扩展）。
+	if v := firstEnv("ROAM_CLUSTER_MODE"); v != "" {
+		c.Cluster.Mode = v
+	}
+	if v := firstEnv("ROAM_CLUSTER_BROKER"); v != "" {
+		c.Cluster.Broker = v
+	}
+	if v := firstEnv("ROAM_CLUSTER_TOKEN"); v != "" {
+		c.Cluster.Token = v
+	}
+	if v := firstEnv("ROAM_CLUSTER_NAME"); v != "" {
+		c.Cluster.Name = v
+	}
+	if v := firstEnv("ROAM_CLUSTER_GROUP"); v != "" {
+		c.Cluster.Group = v
+	}
+	if v := firstEnv("ROAM_CLUSTER_INSECURE"); v != "" {
+		c.Cluster.Insecure = truthy(v)
 	}
 }
 

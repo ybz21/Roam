@@ -62,43 +62,8 @@ func New(cfg Config) *gin.Engine {
 	phone.InitConfig(cfg.DataDir)   // 手机后端配置（本地/远程 redroid/真机）持久化到 dataDir
 	hub := stream.New(tt, cfg.LogsDir)
 
-	// 公开端点
-	r.POST("/api/login", a.Login)
-	r.POST("/api/logout", a.Logout)
-	r.POST("/api/setup", a.Setup)                // 首次设置口令（仅当尚未设置口令时可用），成功即发会话
-	r.GET("/api/pubconfig", a.PubConfig)         // 登录页据此决定是否要动态码 / 是否需首次设置
-	r.GET("/api/version", func(c *gin.Context) { // roam 版本 + 仓库（关于页/检测更新，免登录）
-		c.JSON(http.StatusOK, gin.H{"data": gin.H{"version": cfg.Version, "repo": roamRepo}})
-	})
-	// 检测更新：后端查 GitHub Releases（带缓存 + 优雅降级），避免浏览器直连 GitHub API
-	// 遇到的限流/跨域/网络不通问题。无论成功与否都返回 releases 页地址供手动前往。
-	r.GET("/api/update-check", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"data": checkUpdate(cfg.Version)})
-	})
-
-	// 下载自签证书（免登录）：手机装为受信任证书后即把本站当安全上下文，
-	// 可装成全屏 PWA、麦克风/剪贴板可用。TLS 关闭或证书不存在时返回 404。
-	r.GET("/cert.crt", func(c *gin.Context) {
-		if cfg.TLSCertPath == "" {
-			c.String(404, "TLS 未启用，无证书可下载")
-			return
-		}
-		pem, err := os.ReadFile(cfg.TLSCertPath)
-		if err != nil {
-			c.String(404, "证书不存在")
-			return
-		}
-		// application/x-x509-ca-cert：安卓据此弹出「安装 CA 证书」流程。
-		c.Header("Content-Type", "application/x-x509-ca-cert")
-		c.Header("Content-Disposition", `attachment; filename="ttmux-ca.crt"`)
-		c.Data(200, "application/x-x509-ca-cert", pem)
-	})
-
-	// 导航起始页（免登录）：供被投屏的 Chrome 当默认主页，因此不能挂在认证组里
-	hm := home.New(cfg.DataDir)
-	r.GET("/home", hm.Page)
-	r.GET("/home/sites", hm.GetSites)
-	r.PUT("/home/sites", hm.PutSites)
+	// 公开端点（登录 / 首次设置 / 版本 / 证书 / 导航页）——与云端 Broker 共用
+	mountPublic(r, a, cfg)
 
 	// 受保护端点
 	g := r.Group("/api", a.Middleware())
@@ -374,6 +339,47 @@ func firstNonEmptyStr(a, b string) string {
 		return a
 	}
 	return b
+}
+
+// mountPublic 注册免登录的公开端点（登录 / 首次设置 / 版本 / 检测更新 / 下载证书 /
+// 导航起始页）。单机（New）与云端 Broker（NewBroker）共用同一套入口。
+func mountPublic(r *gin.Engine, a *auth.Auth, cfg Config) {
+	r.POST("/api/login", a.Login)
+	r.POST("/api/logout", a.Logout)
+	r.POST("/api/setup", a.Setup)                // 首次设置口令（仅当尚未设置口令时可用），成功即发会话
+	r.GET("/api/pubconfig", a.PubConfig)         // 登录页据此决定是否要动态码 / 是否需首次设置
+	r.GET("/api/version", func(c *gin.Context) { // roam 版本 + 仓库（关于页/检测更新，免登录）
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"version": cfg.Version, "repo": roamRepo}})
+	})
+	// 检测更新：后端查 GitHub Releases（带缓存 + 优雅降级），避免浏览器直连 GitHub API
+	// 遇到的限流/跨域/网络不通问题。无论成功与否都返回 releases 页地址供手动前往。
+	r.GET("/api/update-check", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"data": checkUpdate(cfg.Version)})
+	})
+
+	// 下载自签证书（免登录）：手机装为受信任证书后即把本站当安全上下文，
+	// 可装成全屏 PWA、麦克风/剪贴板可用。TLS 关闭或证书不存在时返回 404。
+	r.GET("/cert.crt", func(c *gin.Context) {
+		if cfg.TLSCertPath == "" {
+			c.String(404, "TLS 未启用，无证书可下载")
+			return
+		}
+		pem, err := os.ReadFile(cfg.TLSCertPath)
+		if err != nil {
+			c.String(404, "证书不存在")
+			return
+		}
+		// application/x-x509-ca-cert：安卓据此弹出「安装 CA 证书」流程。
+		c.Header("Content-Type", "application/x-x509-ca-cert")
+		c.Header("Content-Disposition", `attachment; filename="ttmux-ca.crt"`)
+		c.Data(200, "application/x-x509-ca-cert", pem)
+	})
+
+	// 导航起始页（免登录）：供被投屏的 Chrome 当默认主页，因此不能挂在认证组里
+	hm := home.New(cfg.DataDir)
+	r.GET("/home", hm.Page)
+	r.GET("/home/sites", hm.GetSites)
+	r.PUT("/home/sites", hm.PutSites)
 }
 
 func mountWeb(r *gin.Engine, frontendDir string) {

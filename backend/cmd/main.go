@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"net"
@@ -12,7 +13,9 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/gin-gonic/gin"
 	"ttmux-web/browser"
+	"ttmux-web/cluster/node"
 	"ttmux-web/config"
 	"ttmux-web/internal/clibin"
 	"ttmux-web/internal/webui"
@@ -110,7 +113,30 @@ func main() {
 		Version: version,
 	}
 
-	r := server.New(cfg)
+	// 横向扩展模式分流（见 docs/design/cluster/客户端-服务端横向扩展设计.md §4）：
+	//   - cloud：云端 Broker，只做路由 + 注册表 + 控制台，不构造业务 runtime；
+	//   - standard（默认）：现在的单机 Roam；若配了 cluster.broker，则额外出站注册进云端。
+	var r *gin.Engine
+	if conf.Cluster.Mode == "cloud" {
+		log.Printf("以云端 Broker 模式启动（只做路由 + 注册表 + 控制台，不跑本机业务）")
+		r = server.NewBroker(cfg)
+	} else {
+		r = server.New(cfg)
+		if conf.Cluster.Broker != "" {
+			cl := &node.Client{
+				Broker:   conf.Cluster.Broker,
+				Token:    conf.Cluster.Token,
+				Name:     conf.Cluster.Name,
+				Group:    conf.Cluster.Group,
+				Insecure: conf.Cluster.Insecure,
+				Version:  version,
+				CredPath: filepath.Join(dataDir(), "cluster", "node.json"),
+				Handler:  r, // 业务 Handler 不变，隧道请求经内部主体放行本地鉴权
+			}
+			go cl.Run(context.Background())
+			log.Printf("标准模式：出站注册到云端 Broker %s", conf.Cluster.Broker)
+		}
+	}
 
 	// 退出时回收本进程拉起的 Chrome（含其子进程组），避免泄漏孤儿进程
 	sig := make(chan os.Signal, 1)
