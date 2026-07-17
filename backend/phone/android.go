@@ -148,6 +148,11 @@ func (d *androidDevice) Ensure() error {
 		}
 	}
 	d.keepAwake() // 连上即设常亮，镜像不因锁屏黑屏
+	if androidCfg().Mode == "device" {
+		// 真机恒原生：清掉可能残留的 redroid 平板档 override，自愈物理屏尺寸/密度。
+		_, _ = d.shell(6*time.Second, "wm", "size", "reset")
+		_, _ = d.shell(6*time.Second, "wm", "density", "reset")
+	}
 	return nil
 }
 

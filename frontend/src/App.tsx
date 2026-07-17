@@ -2504,7 +2504,7 @@ function PhoneSettingsCard() {
               <span style={dim}>{isA ? (c.mode === 'remote' ? t('phone.addrHelpRemote') : t('phone.addrHelpDevice')) : t('phone.addrHelpIOS')}</span>
             </Space>
           )}
-          {isA && (
+          {isA && c.mode !== 'device' && (
             <Space direction="vertical" size={4} style={{ width: '100%' }}>
               <span style={dim}>{t('phone.resolution')}</span>
               <Segmented value={c.resolution || 'phone'} onChange={(v) => patch(p, { resolution: (v as string) === 'phone' ? '' : v })}
