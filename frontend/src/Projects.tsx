@@ -567,8 +567,13 @@ function ProjectHome({ proj, loaded, openTerm, closeTerm, refresh }: {
   const mine = useMemo(() => {
     if (!dir) return []
     if (isGit) return sessions.filter((s) => ann[s.name]?.primary?.repo === dir)
-    return sessions.filter((s) => (proj?.top || []).some((x) => x.name === s.name))
-  }, [sessions, ann, dir, isGit, proj])
+    // 非 git 项目：按 pane cwd 目录前缀认领（对齐后端 project.go 的两阶段归属），
+    // 而不是只取 P1 卡片的 top(≤2)——否则该项目的第 3+ 个会话在详情页永远不出现。
+    // 已被某 git 仓库认领的会话(annotation 有 primary.repo)排除，避免嵌套 git 子项目
+    // 的会话重复挂到非 git 父目录下。
+    const under = (c: string) => !!c && (c === dir || c.startsWith(dir + '/'))
+    return sessions.filter((s) => !ann[s.name]?.primary?.repo && under(s.cwd))
+  }, [sessions, ann, dir, isGit])
   // 蜂群归属（08 §2.2）：swarm ls 无 dir 字段——按「指挥/成员会话 ∈ 本项目会话」现算
   const mineKey = useMemo(() => mine.map((s) => s.name).sort().join('\n'), [mine])
   useEffect(() => {
