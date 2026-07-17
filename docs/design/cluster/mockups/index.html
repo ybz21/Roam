@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>多机切换 · 页面初版原型索引</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <h1>多机切换 · 页面初版原型</h1>
+  <p class="lede">
+    每个页面一个独立 HTML（评审样机，无 emoji，左侧栏对齐现有实现）。点卡片进入；
+    页内左侧导航为真实跳转，机器切换器选中的当前机器跨页保持（localStorage 模拟全局 currentNode）。
+    寻址 <code>/n/&lt;nodeId&gt;/...</code>、Broker-local <code>/api/broker/*</code>。配套文档见
+    <code>../多机切换交互设计.md</code>。
+  </p>
+
+  <div class="idxgrid">
+    <a class="idxcard" href="overview.html">
+      <span class="ic"><svg class="i"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span>
+      <div><div class="t">概览</div><div class="d">当前机器统计 + 活动任务 + 告警</div></div>
+    </a>
+    <a class="idxcard" href="projects.html">
+      <span class="ic"><svg class="i"><path d="M3 10.2 12 3l9 7.2"/><path d="M5.5 9v11h13V9"/><path d="M9.5 20v-5h5v5"/></svg></span>
+      <div><div class="t">项目</div><div class="d">项目列表 + 会话详情</div></div>
+    </a>
+    <a class="idxcard" href="files.html">
+      <span class="ic"><svg class="i"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M7 12h10"/><path d="M7 16h6"/></svg></span>
+      <div><div class="t">文件</div><div class="d">面包屑带机器名 + 预览</div></div>
+    </a>
+    <a class="idxcard" href="browser.html">
+      <span class="ic"><svg class="i"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><circle cx="6" cy="6.5" r="0.6"/><circle cx="8.4" cy="6.5" r="0.6"/></svg></span>
+      <div><div class="t">浏览器</div><div class="d">当前机器 Chrome 镜像</div></div>
+    </a>
+    <a class="idxcard" href="phone.html">
+      <span class="ic"><svg class="i"><rect x="6" y="2" width="12" height="20" rx="2.5"/><line x1="10" y1="18.5" x2="14" y2="18.5"/></svg></span>
+      <div><div class="t">手机</div><div class="d">当前机器连着的安卓真机</div></div>
+    </a>
+    <a class="idxcard" href="nodes.html">
+      <span class="ic"><svg class="i"><rect x="3" y="4" width="18" height="7" rx="1.6"/><rect x="3" y="13" width="18" height="7" rx="1.6"/><circle cx="7" cy="7.5" r="0.9"/><circle cx="7" cy="16.5" r="0.9"/></svg></span>
+      <div><div class="t">机器（新增）</div><div class="d">机器管理卡片墙 + 离线告警</div></div>
+    </a>
+    <a class="idxcard" href="plugins.html">
+      <span class="ic"><svg class="i"><path d="M10 3.5a1.8 1.8 0 0 1 3.6 0V5H17a2 2 0 0 1 2 2v3.4h1.5a1.8 1.8 0 0 1 0 3.6H19V17a2 2 0 0 1-2 2h-3.4v1.5a1.8 1.8 0 0 1-3.6 0V19H7a2 2 0 0 1-2-2v-3.4H3.5a1.8 1.8 0 0 1 0-3.6H5V7a2 2 0 0 1 2-2h3z"/></svg></span>
+      <div><div class="t">插件</div><div class="d">已装插件 + 启用开关</div></div>
+    </a>
+    <a class="idxcard" href="settings.html">
+      <span class="ic"><svg class="i"><line x1="4" y1="7" x2="20" y2="7"/><circle cx="9" cy="7" r="2.3"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="15" cy="17" r="2.3"/></svg></span>
+      <div><div class="t">设置</div><div class="d">当前机器信息 + 弱联动开关</div></div>
+    </a>
+    <a class="idxcard" href="mobile.html">
+      <span class="ic"><svg class="i"><rect x="6" y="2" width="12" height="20" rx="2.5"/><line x1="10" y1="18.5" x2="14" y2="18.5"/></svg></span>
+      <div><div class="t">手机端合集</div><div class="d">置顶细条 + 底部 Tab + 底部选择 sheet</div></div>
+    </a>
+  </div>
+
+  <p class="note">
+    <b>与设计文档对应：</b>切换器位置 = 交互 §3；终端标签色点/前缀（仅显示，寻址用 nodeId）= §4 / §9；
+    切机器各页行为 + 弱联动（设置可关）= §5；逐页面改动 = §6；机器管理 = §7；离线告警/重连/置灰 = §8；
+    深链 + bootstrap（<code>/api/broker/bootstrap</code>）= §9 / §9.1；路由 <code>/n/&lt;nodeId&gt;/...</code> 与
+    <code>/api/broker/*</code> = 架构 §7.2。<b>单机模式（未连 Broker）：切换器整体不渲染，界面与今天一致。</b>
+  </p>
+</body>
+</html>
