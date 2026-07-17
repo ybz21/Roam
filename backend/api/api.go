@@ -144,7 +144,9 @@ func (a *API) RenameSession(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"name": newName}})
 		return
 	}
-	out, err := a.TT.Run("rename-session", "-t", oldName, newName)
+	// 走 ttmux rename（而非裸 rename-session 透传到 tmux）：改名后 CLI 内
+	// 会同步 meta parent 外键，子会话才不会被 Reconcile 当孤儿收养。
+	out, err := a.TT.Run("rename", oldName, newName)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "TTMUX_ERROR", "message": ttmux.StripANSI(out)}})
 		return
