@@ -149,7 +149,7 @@ export default function Projects({ openTerm, closeTerm, initialKey }: { openTerm
     <>
       <style>{PRJ_CSS}</style>
       {initialKey
-        ? <ProjectHome proj={data.projects.find((x) => x.key === initialKey)} loaded={loaded} openTerm={openTerm} closeTerm={closeTerm} refresh={load} />
+        ? <ProjectHome proj={data.projects.find((x) => x.key === initialKey)} allProjects={data.projects} loaded={loaded} openTerm={openTerm} closeTerm={closeTerm} refresh={load} />
         : <ProjectList data={data} loaded={loaded} openTerm={openTerm} refresh={load} />}
     </>
   )
@@ -429,8 +429,8 @@ function tailLine(raw: string): string {
 }
 
 // ── P2 项目主页：头部 + composer(hero) + 任务流/Worktree/编队/活动 ──
-function ProjectHome({ proj, loaded, openTerm, closeTerm, refresh }: {
-  proj?: Proj; loaded: boolean; openTerm: (n: string) => void; closeTerm: (n: string) => void; refresh: () => void
+function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }: {
+  proj?: Proj; allProjects: Proj[]; loaded: boolean; openTerm: (n: string) => void; closeTerm: (n: string) => void; refresh: () => void
 }) {
   const { t } = useI18n()
   const { message } = AntApp.useApp()
@@ -574,8 +574,12 @@ function ProjectHome({ proj, loaded, openTerm, closeTerm, refresh }: {
     // 已被某 git 仓库认领的会话(annotation 有 primary.repo)排除，避免嵌套 git 子项目
     // 的会话重复挂到非 git 父目录下。
     const under = (c: string) => !!c && (c === dir || c.startsWith(dir + '/'))
-    return sessions.filter((s) => !ann[s.name]?.primary?.repo && under(s.cwd))
-  }, [sessions, ann, dir, isGit])
+    // 同一会话归最深(最长前缀)的非 git 项目：排除落在更具体的非 git 兄弟项目里的会话，
+    // 与后端最长前缀口径一致，否则父项目详情页会把子项目会话重复计入（外层少、里层多）。
+    const deeper = allProjects.filter((p) => !p.git && p.dir !== dir && p.dir.startsWith(dir + '/')).map((p) => p.dir)
+    const claimedByDeeper = (c: string) => deeper.some((d) => c === d || c.startsWith(d + '/'))
+    return sessions.filter((s) => !ann[s.name]?.primary?.repo && under(s.cwd) && !claimedByDeeper(s.cwd))
+  }, [sessions, ann, dir, isGit, allProjects])
   // 蜂群归属（08 §2.2）：swarm ls 无 dir 字段——按「指挥/成员会话 ∈ 本项目会话」现算
   const mineKey = useMemo(() => mine.map((s) => s.name).sort().join('\n'), [mine])
   useEffect(() => {

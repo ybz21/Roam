@@ -229,28 +229,36 @@ func (a *API) ProjectsList(c *gin.Context) {
 		finish(&p, top)
 	}
 
-	// 非 git 项目：pane cwd 目录前缀认领未归属会话
-	for _, ng := range nonGit {
+	// 非 git 项目：pane cwd 目录前缀认领未归属会话。同一会话归**最深(最长前缀)**
+	// 的非 git 项目——嵌套目录(父/子都是非 git 项目，如 /codes 与 /codes/tmp)不能按
+	// map 迭代序抢占，否则父项目先跑就把子目录会话抢走，计数在父/子间随机漂移
+	// （详情页各按自身 dir 认领无此去重，于是子项目外层 0、里层 1）。对齐 worktree
+	// joinSessions 的「最长前缀命中」口径。
+	if len(nonGit) > 0 {
 		if cwds == nil {
 			cwds = a.WT.SessionCwds(ctx)
 		}
-		var top []projectSession
+		tops := make([][]projectSession, len(nonGit))
 		for _, s := range sessions {
 			if claimed[s.Name] {
 				continue
 			}
-			under := false
-			for _, c := range cwds[s.Name] {
-				if c == ng.e.Dir || strings.HasPrefix(c, ng.e.Dir+string(filepath.Separator)) {
-					under = true
-					break
+			best, bestLen := -1, -1
+			for i, ng := range nonGit {
+				for _, c := range cwds[s.Name] {
+					if (c == ng.e.Dir || strings.HasPrefix(c, ng.e.Dir+string(filepath.Separator))) && len(ng.e.Dir) > bestLen {
+						best, bestLen = i, len(ng.e.Dir)
+					}
 				}
 			}
-			if under {
-				addSession(ng.p, &top, s.Name, rawInt(s.Attached) > 0, rawInt(s.LastActivity), "", false)
+			if best >= 0 {
+				ng := nonGit[best]
+				addSession(ng.p, &tops[best], s.Name, rawInt(s.Attached) > 0, rawInt(s.LastActivity), "", false)
 			}
 		}
-		finish(ng.p, top)
+		for i, ng := range nonGit {
+			finish(ng.p, tops[i])
+		}
 	}
 
 	for _, s := range sessions {
