@@ -269,6 +269,9 @@ func (s *Service) Create(ctx context.Context, req CreateReq) (CreateResp, error)
 	}
 
 	base := strings.TrimSpace(req.Base)
+	// 缺省基准（未显式指定 base/remote）：默认跟随远端主干最新处开分叉，
+	// 避免本地 base 落后于 origin 时新 worktree 从旧提交起步。
+	autoBase := base == "" && req.Remote == ""
 	if base == "" {
 		base = s.defaultBase(ctx, repo)
 		if base == "" {
@@ -282,6 +285,18 @@ func (s *Service) Create(ctx context.Context, req CreateReq) (CreateResp, error)
 			return CreateResp{}, errf("FETCH_FAILED", "%s", out)
 		}
 		startRef = req.Remote + "/" + base
+	} else if autoBase {
+		// 配了 origin 就尽力拉一把最新 origin/<base>（20s 上限，不阻断创建）；
+		// 无远端 / 离线 / fetch 失败一律静默回退本地 base。ahead/behind 与合入
+		// 判定本就优先比对 origin/<base>（见 List），故 baseref 仍记 base 名、口径一致。
+		if _, e := git(ctx, repo.Root, "config", "--get", "remote.origin.url"); e == nil {
+			fctx, fcancel := context.WithTimeout(ctx, 20*time.Second)
+			_, _ = git(fctx, repo.Root, "fetch", "--no-tags", "origin", "+refs/heads/"+base+":refs/remotes/origin/"+base)
+			fcancel()
+		}
+		if _, e := git(ctx, repo.Root, "rev-parse", "--verify", "-q", "refs/remotes/origin/"+base); e == nil {
+			startRef = "origin/" + base
+		}
 	}
 	startOid, e := git(ctx, repo.Root, "rev-parse", "--verify", "--end-of-options", startRef+"^{commit}")
 	if e != nil {
