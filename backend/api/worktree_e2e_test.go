@@ -321,6 +321,60 @@ func TestRaceLifecycle(t *testing.T) {
 	}
 }
 
+// 缺省基准跟随远端主干最新：本地 main 落后于 origin/main 时，未显式指定 base/remote
+// 建 worktree 应从 origin/main 最新处开分叉（自动 fetch），而非本地旧 main。
+func TestWorktreeCreateAutoBaseFollowsRemote(t *testing.T) {
+	tmp := t.TempDir()
+	h := New(ttmux.New(filepath.Join(tmp, "ttmux-absent")), "", tmp)
+	repo := e2eRepo(t, tmp)
+	gitIn := func(dir string, args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		cmd.Env = append(scrubGitEnv(),
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	origin := filepath.Join(tmp, "origin.git")
+	gitIn(repo, "clone", "--bare", repo, origin)
+	gitIn(repo, "remote", "add", "origin", origin)
+	localHead := gitIn(repo, "rev-parse", "HEAD")
+
+	// 在独立克隆里推进 origin/main 一格：本地 repo 的 main 与 origin 跟踪 ref 都不动，
+	// 从而制造「本地 main 落后于 origin/main」的局面。
+	work := filepath.Join(tmp, "work")
+	gitIn(tmp, "clone", origin, work)
+	if err := os.WriteFile(filepath.Join(work, "b.txt"), []byte("b\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(work, "add", ".")
+	gitIn(work, "commit", "-m", "advance main")
+	remoteHead := gitIn(work, "rev-parse", "HEAD")
+	gitIn(work, "push", "-q", "origin", "main")
+	if remoteHead == localHead {
+		t.Fatal("setup: origin/main not advanced")
+	}
+
+	// 不传 base/remote → autoBase 路径应自动 fetch 并从 origin/main 起步。
+	wt, err := h.WT.Create(context.Background(), worktree.CreateReq{Dir: repo, Branch: "roam/auto-base"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := gitIn(wt.Path, "rev-parse", "HEAD")
+	if got != remoteHead {
+		t.Fatalf("auto-base worktree should start from origin/main %s, got %s (local main %s)", remoteHead, got, localHead)
+	}
+	if wt.Base != "main" {
+		t.Fatalf("baseref should stay \"main\", got %q", wt.Base)
+	}
+	if wt.StartOid != remoteHead {
+		t.Fatalf("startOid should be origin/main %s, got %s", remoteHead, wt.StartOid)
+	}
+}
+
 // /git/worktree/sync 路由（10 §3/§4）：本地 bare origin 上「合并」后，sync → list
 // 能看到 mergedInto/mergedKind。不依赖 tmux/CLI（session join 优雅降级为空）。
 func TestWorktreeSyncRoute(t *testing.T) {
