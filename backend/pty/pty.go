@@ -149,9 +149,9 @@ func tmuxSelectPaneAt(name string, col, row int) {
 // tmuxMoveCursorAt 把前端「单击/轻点」的窗口格子坐标翻译成方向键，移动点中 pane 里应用的
 // 输入光标，对齐原生输入框「点哪光标到哪」的体验——镜像终端的光标在远端 TUI/shell 手里，
 // 点击本身移不动，此前只能靠丝带/键盘上的方向键一格格挪。
-//   - 备用屏(全屏 TUI：Claude Code/Codex/vim)：先竖直 ↑/↓ 再水平 ←/→，越界由应用自己钳住；
-//     竖直距离过远(>8 行)视为无意编辑（点的是对话区/输出区），忽略，避免 ↑ 连发误触发
-//     TUI 的历史回填。
+//   - 备用屏(全屏 TUI：Claude Code/Codex/vim)：只发水平 ←/→，绝不发竖直 ↑/↓——TUI 输入框里
+//     ↑/↓ 普遍绑了历史/滚动(上翻/下翻)，点按稍一偏行就会误触；竖直定位交键盘方向键。
+//     竖直距离过远(>8 行)视为点在对话区/输出区（非输入行），整体忽略。
 //   - 普通屏(shell readline)：↑/↓ 会翻命令历史，绝不能发；把竖直距离按 pane 宽折算成
 //     字符数（折行的长命令 ←/→ 本就会跨行走），只发 ←/→，越过行首行尾由 readline 钳住。
 //   - pane 处于 copy-mode 等模式时不动作（按键会被导航吃掉）。
@@ -192,10 +192,11 @@ func tmuxMoveCursorAt(name string, col, row int) {
 		}
 		dx, dy := (col-left)-cx, (row-top)-cy
 		if alt {
+			// 点在对话/输出区（离输入行太远）忽略；否则只按水平差移光标，竖直不动。
 			if dy > 8 || dy < -8 {
 				return
 			}
-			sendArrows(parts[0], dy, dx)
+			sendArrows(parts[0], 0, dx)
 		} else {
 			if dy > 3 || dy < -3 {
 				return
