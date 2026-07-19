@@ -29,6 +29,19 @@ type Web struct {
 	TwoFA      string   `yaml:"two_fa"`
 	LockAfter  int      `yaml:"lock_after"`
 	LockSecs   int      `yaml:"lock_secs"`
+
+	// P2P 直连（浏览器 ↔ pion 经 WebRTC DataChannel）。M0a spike：STUN-only。
+	// P2PEnabled 为灰度总开关；P2PICEServers 为 STUN/TURN 服务列表。
+	P2PEnabled    bool     `yaml:"p2p_enabled"`
+	P2PICEServers []string `yaml:"p2p_ice_servers"`
+
+	// M0b 跨网穿透杠杆（默认关时行为与 M0a 逐字节一致）：
+	// P2PUDPPort>0 → 固定 UDP 端口 + UDPMux（便于手动端口转发/UPnP 端口一致）；0=随机。
+	// P2PUPnP → 仅当 P2PUDPPort>0 时尝试 UPnP 端口映射，external==internal 才注入 srflx。
+	// P2PMDNS → pion 解析浏览器 .local mDNS 候选；默认 true（对 localhost/LAN 无害有益）。
+	P2PUDPPort int  `yaml:"p2p_udp_port"`
+	P2PUPnP    bool `yaml:"p2p_upnp"`
+	P2PMDNS    bool `yaml:"p2p_mdns"`
 }
 
 // Config 是解析后的配置（env 覆盖已叠加，默认值已填充）。
@@ -78,6 +91,17 @@ func Load(path string) (*Config, error) {
 	if err := yaml.Unmarshal(b, &file); err != nil {
 		return nil, err
 	}
+	// p2p_mdns 缺省为 true：用 *bool 探测「文件里是否显式写了该键」，
+	// 未写则默认开（对 localhost/LAN 无害且有益），显式 false 才关。
+	var mdnsProbe struct {
+		Web struct {
+			P2PMDNS *bool `yaml:"p2p_mdns"`
+		} `yaml:"web"`
+	}
+	_ = yaml.Unmarshal(b, &mdnsProbe)
+	if mdnsProbe.Web.P2PMDNS == nil {
+		file.Web.P2PMDNS = true
+	}
 	c := &Config{Web: file.Web, Path: path}
 	c.applyDefaults()
 	c.applyEnv()
@@ -93,6 +117,10 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Web.LockSecs <= 0 {
 		c.Web.LockSecs = 30
+	}
+	if len(c.Web.P2PICEServers) == 0 {
+		// 默认公共 STUN 仅供开发/自测；生产应改为 frps 自建 STUN（见 docs/design/p2p）。
+		c.Web.P2PICEServers = []string{"stun:stun.l.google.com:19302"}
 	}
 }
 
@@ -125,6 +153,23 @@ func (c *Config) applyEnv() {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			c.Web.LockSecs = n
 		}
+	}
+	if v := firstEnv("ROAM_WEB_P2P_ENABLE", "TTMUX_WEB_P2P_ENABLE"); v != "" {
+		c.Web.P2PEnabled = truthy(v)
+	}
+	if v := firstEnv("ROAM_WEB_P2P_ICE_SERVERS", "TTMUX_WEB_P2P_ICE_SERVERS"); v != "" {
+		c.Web.P2PICEServers = splitCSV(v)
+	}
+	if v := firstEnv("ROAM_WEB_P2P_UDP_PORT", "TTMUX_WEB_P2P_UDP_PORT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			c.Web.P2PUDPPort = n
+		}
+	}
+	if v := firstEnv("ROAM_WEB_P2P_UPNP", "TTMUX_WEB_P2P_UPNP"); v != "" {
+		c.Web.P2PUPnP = truthy(v)
+	}
+	if v := firstEnv("ROAM_WEB_P2P_MDNS", "TTMUX_WEB_P2P_MDNS"); v != "" {
+		c.Web.P2PMDNS = truthy(v)
 	}
 }
 
