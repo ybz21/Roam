@@ -26,6 +26,11 @@ type iceOptions struct {
 func buildAPI(opt iceOptions) (api *webrtc.API, injectedUPnPIP string) {
 	se := webrtc.SettingEngine{}
 
+	// SCTP 接收缓冲：默认 1 MiB 在高 RTT 跨网链路上会把吞吐限在 缓冲/RTT（BDP 限制，
+	// 如 100ms RTT 下 1MiB≈10MB/s）。调大到 16 MiB 让高延迟链路也能跑满窗口。
+	// 注意：仅影响 pion 侧接收（浏览器→服务器 上传方向）；下载(服务器→浏览器)受浏览器 SCTP 窗口限制。
+	se.SetSCTPMaxReceiveBufferSize(16 * 1024 * 1024)
+
 	// 网络类型：始终开 UDP4；仅当本机存在可路由的全局 IPv6（非 fe80 链路本地、非 ::1、
 	// 非 ULA fc00::/7）时才加 UDP6。没有全局 v6 却开 UDP6，pion 会对着无出口的 v6 地址
 	// 反复尝试 gather，刷 "udp6 network unreachable" 日志并拖慢/干扰 v4 侧 srflx 收集。

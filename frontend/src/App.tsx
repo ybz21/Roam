@@ -2375,6 +2375,18 @@ function P2PCard() {
             <span style={hint}>{t('settings.p2pGatherHelp')}</span>
           </Space>
         </div>
+        {/* P2P 最低速率(KB/s)：直连平均落盘速率长期低于此值就回退中转；0=不回退，永远坚持 P2P。 */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, opacity: on ? 1 : 0.5 }}>
+          <span style={dim}>{t('settings.p2pMinSpeed')}</span>
+          <Space align="center" wrap>
+            <InputNumber
+              disabled={!on} min={0} max={100000} step={50} value={prefs.p2pMinSpeedKBps}
+              onChange={(v) => setPrefs({ p2pMinSpeedKBps: typeof v === 'number' && v >= 0 ? v : 200 })}
+              addonAfter={t('settings.p2pMinSpeedUnit')} style={{ width: 150 }}
+            />
+            <span style={hint}>{t('settings.p2pMinSpeedHelp')}</span>
+          </Space>
+        </div>
       </Space>
     </Card>
   )

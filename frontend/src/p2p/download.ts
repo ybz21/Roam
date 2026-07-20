@@ -18,10 +18,11 @@
 // UI 极简（M1）：只透出 path / rate / 完成 / 失败回调；进度角标详版是 M2。
 
 import { connectFile } from './transport'
-import { GoodputMeter, type PairDiag } from './stats'
+import { GoodputMeter, type GoodputSample, type PairDiag } from './stats'
 import { pathLabelKey, type P2PPathLabel } from './labels'
 import { canStreamSave, createStreamWriter } from './stream-saver'
-import { parseDataFrame, resetSinkForFallback, SeqValidator, validateFinalSize, WriteChain } from './download-proto'
+import { parseDataFrame, resetSinkForFallback, SeqValidator, shouldFallbackSlow, validateFinalSize, WriteChain, type ByteSample } from './download-proto'
+import { getPreferences } from '../preferences'
 import type { CtrlFrame } from './types'
 
 // 下载目标（对齐 FileBrowser 的 FileTarget 子集）。
@@ -66,6 +67,12 @@ export interface DownloadHooks {
 
 // 连链超时（30s）已下沉到 transport.connectFile（超时→peer.onFallback）；本层只留【连后】看门狗：
 const STALL_TIMEOUT_MS = 15_000    // 连后「无进展看门狗」：连续 N 秒无 meta/数据帧即判卡死回退
+
+// 连后「测速看门狗」（P2P 直连测速自适应回退）：跨网 P2P UDP 被运营商限速时（实测 ~48K/s，
+// 反比 frp ~450K/s 慢 10 倍）自动切回 frp。仅真实 download(report:true) 启用；path==='lan'
+// 同网千兆不受限故不启用；阈值(p2pMinSpeedKBps)===0 也禁用。
+const SLOW_GRACE_MS = 3_000        // 宽限期：连上后前 3s 不判（让直连 ramp 到稳定速率）
+const SLOW_WINDOW_MS = 5_000       // 滚动评估窗口：连续 ~5s 平均落盘速率低于阈值才判「太慢」
 
 // 埋点上报（§7/§10）：真实 download 完成时 POST /api/p2p/metric（同源 cookie 自动带）。
 // 仅真实 download 走此路；roamP2PVerify/spike 测试钩子不传 report → 不上报。
@@ -146,21 +153,36 @@ async function runTransfer(
   }
 
   const meter = new GoodputMeter(() => written, pc)
-  meter.onSample = (s) => {
+  // 测速看门狗判定（连上后每秒采样一次驱动；返回 true 即调 toFallback('slow')，与 stall 看门狗并存）。
+  // 抽成闭包便于放到 meter.onSample 尾部；实际决策全在纯函数 shouldFallbackSlow 里（可单测）。
+  let evalSlow: () => void = () => {}
+  const meterOnSample = (s: GoodputSample) => {
     if (done.flag) return
     hooks.onRate?.(s.ratePerSec, s.written)
     if (s.diag) hooks.onDiagnostics?.(s.diag)
     emitProgress(s.ratePerSec)
+    evalSlow()
   }
+  meter.onSample = meterOnSample
 
   // 连后「无进展看门狗」句柄（收 meta/数据帧即重置；连续 STALL 秒无进展 → 回退）。
   let stallTimer = 0
   const clearStall = () => { if (stallTimer) { clearTimeout(stallTimer); stallTimer = 0 } }
 
+  // 连后「测速看门狗」状态（P2P 直连测速自适应回退）：
+  //   - slowEnabled：仅真实 download(report) + 阈值>0 + path!=='lan' + 允许回退时启用。
+  //   - slowSamples：连上以来按秒采的 (时刻ms, 累计落盘字节) 序列，喂给纯函数 shouldFallbackSlow 判定。
+  //   - slowMinBps ：p2pMinSpeedKBps*1024，连上瞬间快照（避免中途改偏好抖动）。
+  let slowEnabled = false
+  let slowMinBps = 0
+  let slowConnPath = ''
+  const slowSamples: ByteSample[] = []
+
   // 拆连接（幂等）：停采样、停看门狗，底层 PC/dc/ws 交给 transport.close()。
   const teardown = () => {
     meter.stop()
     clearStall()
+    slowEnabled = false // 停测速看门狗（回退/完成后不再判）
     try { peer.close() } catch { /* ignore */ }
   }
 
@@ -189,6 +211,22 @@ async function runTransfer(
       if (done.flag) return
       clearStall()
       stallTimer = window.setTimeout(() => { void toFallback('stall') }, STALL_TIMEOUT_MS)
+    }
+
+    // 测速看门狗：每次 goodput 采样(约每秒)记一个 (时刻, 累计落盘字节) 样本，交纯函数判定。
+    // 判「太慢」→ 调现有 toFallback('slow')（复用 P0-1 的 sink 重置/abort→全新 frp）。
+    // 触发一次即置 done（toFallback 幂等），与 stall 看门狗并存不冲突。
+    evalSlow = () => {
+      if (!slowEnabled || done.flag) return
+      slowSamples.push({ atMs: performance.now(), bytes: written })
+      if (shouldFallbackSlow(slowSamples, {
+        path: slowConnPath,
+        minBps: slowMinBps,
+        graceMs: SLOW_GRACE_MS,
+        windowMs: SLOW_WINDOW_MS,
+      })) {
+        void toFallback('slow')
+      }
     }
 
     // 成功完成（P0-3 + P1-5）：先 await 全部 write 落定，再校验 size，最后才 close。
@@ -343,6 +381,13 @@ async function runTransfer(
       state = 'p2p'
       curPath = path
       bumpStall() // 起「无进展看门狗」（收数据帧会持续重置）
+      // 起「测速看门狗」（仅真实 download + 允许回退 + 非同网 + 阈值>0）：
+      //   同网 path==='lan' 千兆不受限 → 不启用；roamP2PVerify/spike(report 缺省) 不启用测速回退。
+      slowConnPath = path
+      slowMinBps = Math.max(0, Math.floor(getPreferences().p2pMinSpeedKBps || 0)) * 1024
+      slowEnabled = !!opts.report && !!opts.allowFallback && path !== 'lan' && slowMinBps > 0
+      slowSamples.length = 0
+      if (slowEnabled) slowSamples.push({ atMs: performance.now(), bytes: written }) // 连上瞬间基准点
       hooks.onState?.('p2p')
       hooks.onPath?.(curPath)
       // connected 也可能直接带诊断（local/remote/rttMs），先喂一份给详情浮层。

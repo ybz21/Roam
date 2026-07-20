@@ -18,6 +18,7 @@ export interface Preferences {
   p2pStunServers: string // 逗号分隔的 STUN 服务器；留空用服务端默认（/api/p2p/config）。仅影响本浏览器
   p2pConnectTimeoutSec: number // 打洞建链超时（秒），超时回退 frp。默认 30
   p2pGatherTimeoutSec: number // ICE 候选收集上限（秒）：等 srflx 等这么久，慢网(手机蜂窝)可调大。默认 30
+  p2pMinSpeedKBps: number // P2P 直连测速回退阈值(KB/s)：平均落盘速率长期低于此值就回退 frp；0=禁用，永远坚持 P2P。默认 200
   _migrated: boolean
 }
 
@@ -38,6 +39,7 @@ const DEFAULTS: Preferences = {
   p2pStunServers: '',
   p2pConnectTimeoutSec: 30,
   p2pGatherTimeoutSec: 30,
+  p2pMinSpeedKBps: 200,
   _migrated: false,
 }
 

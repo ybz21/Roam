@@ -94,3 +94,57 @@ export async function resetSinkForFallback(sink: RewindableSink): Promise<void> 
   await sink.truncate(0) // 丢掉已写的 P2P 前缀
   await sink.seek(0)     // 光标回到文件头
 }
+
+// —— P2P 下载测速自适应回退：判定纯函数（可单测，无 DOM / 无计时器）—— //
+//
+// 背景：跨网 STUN 打洞能连上，但国内运营商对跨网 P2P UDP 大流量限速——实测直连可能只有
+// ~48 K/s，比 frp 中转(~450 K/s)还慢 10 倍。所以「跨网也盲目坚持 P2P」是错的：P2P 直连
+// 平均落盘速率长期低于阈值时应自动切回 frp。同网(path==='lan')千兆不受限，不测不回退。
+//
+// 把「是否应回退」的判定抽成纯函数，输入落盘字节的时间序列 + 阈值 + 宽限 + 窗口，输出决策；
+// download.ts 只负责按 goodput 周期喂样本并在返回 true 时调 toFallback('slow')。
+
+// 一个 (时刻ms, 累计落盘字节) 采样点。
+export interface ByteSample {
+  atMs: number
+  bytes: number
+}
+
+export interface SlowFallbackConfig {
+  path: string           // 连上后的实际路径；'lan' 直接不判（同网必快）
+  minBps: number         // 最低平均落盘速率(bytes/s)；0=禁用测速回退，永远坚持 P2P
+  graceMs: number        // 宽限期(ms)：连上后前这么久不判（让它 ramp）
+  windowMs: number       // 滚动评估窗口(ms)：窗口内平均 goodput 低于 minBps 才回退
+}
+
+// 判定「P2P 直连是否太慢、应回退 frp」。samples 为连上以来按时间递增的 (atMs, bytes) 序列
+// （bytes = 该时刻累计落盘字节，单调不减）。返回 true 表示应触发一次回退。
+//
+// 规则（全部满足才回退）：
+//   1. minBps > 0                         —— 阈值 0 视为禁用，永不回退。
+//   2. path !== 'lan'                     —— 同网千兆不受限，不测不回退。
+//   3. 已过宽限期（末样本 - 首样本 ≥ graceMs）—— 前 graceMs 让连接 ramp，不误判。
+//   4. 存在一段覆盖 ≥ windowMs 的评估区间   —— 至少攒够一个完整窗口才有统计意义。
+//   5. 该窗口内平均 goodput < minBps        —— (末字节-窗口起字节)/(末时刻-窗口起时刻) < minBps。
+export function shouldFallbackSlow(samples: ByteSample[], cfg: SlowFallbackConfig): boolean {
+  if (cfg.minBps <= 0) return false          // 禁用
+  if (cfg.path === 'lan') return false        // 同网不判
+  if (samples.length < 2) return false        // 不够两点算不出速率
+  const first = samples[0]
+  const last = samples[samples.length - 1]
+  // 宽限期：连上后前 graceMs 内一律放行（让直连 ramp 到稳定速率）。
+  if (last.atMs - first.atMs < cfg.graceMs) return false
+  // 找覆盖 ≥ windowMs 的窗口起点：从末样本往前推 windowMs，取第一个 atMs ≤ (last - windowMs) 的样本。
+  // 该样本即窗口左端；若不存在（序列还没跨满一个窗口）则不判。
+  const windowStartMs = last.atMs - cfg.windowMs
+  let startIdx = -1
+  for (let i = samples.length - 1; i >= 0; i--) {
+    if (samples[i].atMs <= windowStartMs) { startIdx = i; break }
+  }
+  if (startIdx < 0) return false              // 还没攒够一个完整窗口
+  const start = samples[startIdx]
+  const dtMs = last.atMs - start.atMs
+  if (dtMs <= 0) return false
+  const avgBps = ((last.bytes - start.bytes) * 1000) / dtMs
+  return avgBps < cfg.minBps
+}

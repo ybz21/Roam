@@ -2,8 +2,10 @@ import { describe, it, expect } from 'vitest'
 import {
   parseDataFrame,
   SeqValidator,
+  shouldFallbackSlow,
   validateFinalSize,
   WriteChain,
+  type ByteSample,
 } from './download-proto'
 
 // 构造一个数据帧：[seq:u32 LE][payload]。
@@ -149,5 +151,83 @@ describe('WriteChain (P0-3: 写入串行 + EOF 前 drain)', () => {
       chain.enqueue(() => { ranSecond = true; return Promise.resolve() }),
     ).rejects.toThrow()
     expect(ranSecond).toBe(false)
+  })
+})
+
+describe('shouldFallbackSlow (P2P 测速自适应回退判定)', () => {
+  const GRACE = 3_000
+  const WINDOW = 5_000
+  const MIN = 200 * 1024 // 200 KB/s 阈值(bytes/s)
+
+  // 生成一段等间隔样本：从 0ms 起每 stepMs 一个点，每步累加 bytesPerStep 字节。
+  function ramp(bytesPerStep: number, stepMs: number, steps: number): ByteSample[] {
+    const out: ByteSample[] = []
+    let bytes = 0
+    for (let i = 0; i <= steps; i++) {
+      out.push({ atMs: i * stepMs, bytes })
+      bytes += bytesPerStep
+    }
+    return out
+  }
+
+  const cfg = (over: Partial<Parameters<typeof shouldFallbackSlow>[1]> = {}) => ({
+    path: 'stun', minBps: MIN, graceMs: GRACE, windowMs: WINDOW, ...over,
+  })
+
+  it('path==="lan" 永不回退（同网千兆不受限）', () => {
+    // 慢到极点(1KB/s)但同网 → 不判。
+    const samples = ramp(1024, 1_000, 12) // 12s, 1KB/s
+    expect(shouldFallbackSlow(samples, cfg({ path: 'lan' }))).toBe(false)
+  })
+
+  it('minBps===0 禁用看门狗（永远坚持 P2P）', () => {
+    const samples = ramp(1024, 1_000, 12)
+    expect(shouldFallbackSlow(samples, cfg({ minBps: 0 }))).toBe(false)
+  })
+
+  it('快速直连不回退（远超阈值）', () => {
+    // 1MB/s，远超 200KB/s，跑满宽限+窗口也不判。
+    const samples = ramp(1024 * 1024, 1_000, 12)
+    expect(shouldFallbackSlow(samples, cfg())).toBe(false)
+  })
+
+  it('宽限期内不判（哪怕很慢也放行让它 ramp）', () => {
+    // 只有前 2s 的慢速样本(<graceMs) → 还在宽限期，不回退。
+    const samples = ramp(1024, 1_000, 2) // 0..2s
+    expect(samples[samples.length - 1].atMs - samples[0].atMs).toBeLessThan(GRACE)
+    expect(shouldFallbackSlow(samples, cfg())).toBe(false)
+  })
+
+  it('还没攒够一个完整窗口不判', () => {
+    // 已过宽限(4s>3s)但总时长 4s < windowMs(5s) → 无完整窗口，不判。
+    const samples = ramp(1024, 1_000, 4) // 0..4s
+    expect(shouldFallbackSlow(samples, cfg())).toBe(false)
+  })
+
+  it('慢速超过窗口 → 触发回退（跨网被限速场景）', () => {
+    // 48 KB/s 持续 12s（远低于 200KB/s，且跨过宽限+满一个窗口）→ 回退。
+    const samples = ramp(48 * 1024, 1_000, 12)
+    expect(shouldFallbackSlow(samples, cfg())).toBe(true)
+  })
+
+  it('刚好压线不回退，略低于阈值回退（窗口平均边界）', () => {
+    // 恰好 200KB/s → 不小于阈值，不回退。
+    expect(shouldFallbackSlow(ramp(200 * 1024, 1_000, 12), cfg())).toBe(false)
+    // 199KB/s → 略低于阈值，回退。
+    expect(shouldFallbackSlow(ramp(199 * 1024, 1_000, 12), cfg())).toBe(true)
+  })
+
+  it('先慢后快：只看末尾滚动窗口，近端已提速则不回退', () => {
+    // 前段慢(48KB/s 4s)，随后提速到 1MB/s；末尾窗口平均已达标 → 不回退。
+    const samples: ByteSample[] = []
+    let bytes = 0
+    for (let i = 0; i <= 4; i++) { samples.push({ atMs: i * 1000, bytes }); bytes += 48 * 1024 }
+    for (let i = 5; i <= 12; i++) { samples.push({ atMs: i * 1000, bytes }); bytes += 1024 * 1024 }
+    expect(shouldFallbackSlow(samples, cfg())).toBe(false)
+  })
+
+  it('样本不足两点不判', () => {
+    expect(shouldFallbackSlow([], cfg())).toBe(false)
+    expect(shouldFallbackSlow([{ atMs: 0, bytes: 0 }], cfg())).toBe(false)
   })
 })
