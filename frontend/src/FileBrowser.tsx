@@ -151,8 +151,9 @@ function FileContextMenu({ target, children, actions }: {
 }
 
 // 统一：一行文件/目录的图标 + 名称 + 大小 + @插入 + 下载。平铺列表与树共用（外层容器各自处理缩进/展开）。
-function FileRowBody({ full, name, isDir, size, accent, onInsertPath }: {
+function FileRowBody({ full, name, isDir, size, accent, onInsertPath, onDownload }: {
   full: string; name: string; isDir: boolean; size: number; accent: string; onInsertPath?: (p: string) => void
+  onDownload?: (t: FileTarget) => void
 }) {
   const { t } = useI18n()
   return (
@@ -168,8 +169,14 @@ function FileRowBody({ full, name, isDir, size, accent, onInsertPath }: {
       {!isDir && (
         <span data-file-action>
           <Tooltip title={t('file.download')}>
-            <Button type="text" size="small" href={`/api/file/raw?path=${encodeURIComponent(full)}&dl=1`} download={name}
-              style={{ width: 24, height: 24, minWidth: 24, padding: 0, color: 'var(--text-dim)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><DownloadIcon /></Button>
+            {/* 走 downloadEntry(P2P 直连状态机)，不再直连 frp 的 file/raw；无 onDownload 时才退回锚点。 */}
+            {onDownload ? (
+              <Button type="text" size="small" onClick={(e) => { e.stopPropagation(); onDownload({ path: full, name, dir: isDir, size, mtime: 0, ctime: 0 }) }}
+                style={{ width: 24, height: 24, minWidth: 24, padding: 0, color: 'var(--text-dim)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><DownloadIcon /></Button>
+            ) : (
+              <Button type="text" size="small" href={`/api/file/raw?path=${encodeURIComponent(full)}&dl=1`} download={name}
+                style={{ width: 24, height: 24, minWidth: 24, padding: 0, color: 'var(--text-dim)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><DownloadIcon /></Button>
+            )}
           </Tooltip>
         </span>
       )}
@@ -259,7 +266,7 @@ function FileTree({
                 <span style={{ flex: '0 0 auto', width: 14, display: 'inline-flex', justifyContent: 'center', color: 'var(--text-dim)' }}>
                   {e.dir ? <Chevron open={!!isOpen} /> : null}
                 </span>
-                <FileRowBody full={full} name={e.name} isDir={e.dir} size={e.size} accent={accent} onInsertPath={actions.onInsertPath} />
+                <FileRowBody full={full} name={e.name} isDir={e.dir} size={e.size} accent={accent} onInsertPath={actions.onInsertPath} onDownload={actions.onDownload} />
               </div>
             </div>
           </FileContextMenu>
@@ -826,7 +833,7 @@ export default function FileBrowser({
                   e.dir ? navigate(full) : openFile(full)
                 }}
                 style={{ ...rowStyle(), background: full === sel ? '#1f6feb22' : undefined }}>
-                <FileRowBody full={full} name={e.name} isDir={e.dir} size={e.size} accent={accent} onInsertPath={onInsertPath} />
+                <FileRowBody full={full} name={e.name} isDir={e.dir} size={e.size} accent={accent} onInsertPath={onInsertPath} onDownload={downloadEntry} />
               </div>
             </FileContextMenu>
           )
