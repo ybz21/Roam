@@ -205,9 +205,13 @@ func (s *session) startLink(m SignalMsg) {
 	s.links[class] = l
 	s.mu.Unlock()
 
-	if err := s.answerOffer(p, cfg, m.SDP); err != nil {
-		s.finishLink(class)
-	}
+	// 非 trickle：answerOffer 会等 ICE gathering 完成后再回携带全部候选的完整 answer SDP，
+	// 可能阻塞数秒。放到 goroutine 里执行，避免卡住信令 WS 读循环（不再需要 trickle ICE 消息）。
+	go func() {
+		if err := s.answerOffer(p, cfg, m.SDP); err != nil {
+			s.finishLink(class)
+		}
+	}()
 }
 
 // serveEcho 是 DuplexTransport 分派骨架的验证 handler（label 前缀 "echo"）：

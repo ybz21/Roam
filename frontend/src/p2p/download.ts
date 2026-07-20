@@ -21,6 +21,7 @@ import { connectFile } from './transport'
 import { GoodputMeter, type PairDiag } from './stats'
 import { pathLabelKey, type P2PPathLabel } from './labels'
 import { canStreamSave, createStreamWriter } from './stream-saver'
+import { parseDataFrame, resetSinkForFallback, SeqValidator, validateFinalSize, WriteChain } from './download-proto'
 import type { CtrlFrame } from './types'
 
 // 下载目标（对齐 FileBrowser 的 FileTarget 子集）。
@@ -97,6 +98,11 @@ interface Sink {
   // 可选：不可恢复失败时中断落地（StreamSink 用它让浏览器下载报错，而非落一个截断文件）。
   // picker/Blob sink 不实现（close 即可）。
   abort?(): void
+  // 可选：把文件截断到 0 并回到起点（picker 的 FileSystemWritableFileStream 实现）。
+  // 用于「P2P 已写过前缀 → 回退 HTTP」时清掉前缀再从头 pipe 全量（P0-1）。
+  // 不可倒带的 sink（StreamSaver/Blob）不实现 → 回退侧改走 abort + 全新下载。
+  truncate?(size: number): Promise<void>
+  seek?(offset: number): Promise<void>
 }
 
 // —— 状态机核心：拿到 sink 后走完整 negotiating → p2p/fallback → http —— //
@@ -105,16 +111,25 @@ async function runTransfer(
   target: FileTarget,
   sink: Sink,
   hooks: DownloadHooks,
-  opts: { allowFallback: boolean; report?: boolean },
+  opts: {
+    allowFallback: boolean
+    report?: boolean
+    // 回退到 HTTP 但 sink 不能倒带（StreamSaver/Blob 已写过 P2P 前缀）时的兜底：
+    // 中断当前流 + 触发一次全新的 frp 系统下载（a[download]）。返回 true 表示已接管兜底。
+    legacyFallback?: () => void
+  },
 ): Promise<void> {
   const done = { flag: false } // 终结标志：置 1 后忽略迟到 connected/数据
   let written = 0
+  let writtenAny = false // 是否已向 sink 写过至少一个字节（决定回退能否干净切 / 需倒带兜底，P0-1）
   let total: number | undefined = target.size // meta.size 到达后覆盖
   let state: P2PState = 'negotiating'
   let curPath: P2PPathLabel = 'stun' // 实际路径，供埋点；回退置 'frp'
   let fellBack = false
   const startedAt = performance.now()
   let firstByteAt = 0 // 首个落盘字节时刻，算平均 goodput 用
+  const seqCheck = new SeqValidator() // 收端 seq 连续/递增校验（P1-5）
+  const writeChain = new WriteChain()  // P2P 段写入串行链（EOF 前 drain，P0-3）
 
   // 底层建链全托给 transport.connectFile()：临时 file PC + 'file' 可靠通道 + offer-answer-ice + 连链超时。
   // 拿回业务通道(tp)、pc（取 RTT）、transferId（发 cancel）、connected/fallback 事件。
@@ -176,26 +191,60 @@ async function runTransfer(
       stallTimer = window.setTimeout(() => { void toFallback('stall') }, STALL_TIMEOUT_MS)
     }
 
-    // 成功完成：关 sink → onDone → 埋点。
+    // 成功完成（P0-3 + P1-5）：先 await 全部 write 落定，再校验 size，最后才 close。
+    //   - drain：EOF 可能早于末尾 write 完成 → 必须等写链清空（否则 close 早于末尾 write）。
+    //   - validateFinalSize：written 必须 === meta.size（源中途截断绝不提示成功）。
+    //   任一步失败 → abort 落地（避免留截断文件）+ onError，不 close。
     const complete = async () => {
       done.flag = true
       clearStall()
-      teardown()
+      // 注意：先不 teardown 底层，等确认写链落定；但采样/看门狗可停。
+      meter.stop()
+      clearStall()
       try {
-        await sink.close()
+        await writeChain.drain() // ① 等末尾 write 全部成功
+        const sizeErr = validateFinalSize(written, total)
+        if (sizeErr) throw new Error(sizeErr) // ② size 校验
+        await sink.close()                    // ③ 确认无误才收尾落盘
+        try { peer.close() } catch { /* ignore */ }
         maybeReport()
         hooks.onDone?.()
+        settle()
       } catch (e: any) {
-        try { sink.abort?.() } catch { /* ignore */ }
-        hooks.onError?.(String(e?.message ?? e))
+        // 写链 reject / size 不符 / close 失败：中断落地，走回退（若允许）或报错。
+        try { peer.close() } catch { /* ignore */ }
+        void failAfterWrite(String(e?.message ?? e))
       }
+    }
+
+    // 写入阶段（drain/size/close）失败后的收尾：能回退就回退，否则 abort + onError。
+    // 已进入 http 段的失败由 toFallback 自己的 catch 处理，这里只管 p2p 段落盘失败。
+    const failAfterWrite = async (reason: string) => {
+      if (state === 'http' || state === 'fallback') { settle(); return }
+      done.flag = true
+      if (opts.allowFallback && !writtenAny) {
+        // 还没真正写进字节（理论上少见）：可干净切 frp。
+        await toFallback(reason)
+        return
+      }
+      // 已写过前缀且无法安全续写：中断落地（避免截断文件），交回退兜底或报错。
+      try { if (sink.abort) sink.abort(); else await sink.close() } catch { /* ignore */ }
+      if (opts.allowFallback && sink.truncate && sink.seek) {
+        // 可倒带 sink（picker）：重置文件后走全量 http。
+        await toFallback(reason)
+        return
+      }
+      if (opts.legacyFallback) { opts.legacyFallback(); settle(); return }
+      hooks.onError?.(reason)
       settle()
     }
 
     // 回退（评审点3）：拆干净 + 通知后端 cancel + 置 done（此后迟到消息全忽略），
     // 再 fetch 同 URL 把响应体 pipeTo 到同一个 sink —— 绝不二次 picker / a[download]。
     const toFallback = async (reason: string) => {
-      if (done.flag || state === 'http' || state === 'fallback') return
+      // 已进入 http/fallback 或已 settle 就不再重入；done.flag 单独不拦——
+      // complete() 的 size 校验失败会先置 done 再经 failAfterWrite 触发回退（picker 可倒带）。
+      if (settled || state === 'http' || state === 'fallback') return
       state = 'fallback'
       hooks.onState?.('fallback')
       clearStall()
@@ -210,6 +259,39 @@ async function runTransfer(
         hooks.onError?.(reason)
         settle()
         return
+      }
+
+      // —— P0-1：绝不在同一 sink 里「P2P 前缀 + HTTP 全量」拼接 —— //
+      // 已向 sink 写过 P2P 前缀时，必须先把 sink 复位到干净起点，才能 pipe HTTP 全量：
+      //   - 可倒带 sink（picker）：先 drain 掉在途 write，再 truncate(0)+seek(0) 清掉前缀。
+      //   - 不可倒带 sink（StreamSaver/Blob）：中断当前流 + 交 legacyFallback 触发全新系统下载，不复用。
+      if (writtenAny) {
+        if (sink.truncate && sink.seek) {
+          try {
+            await writeChain.drain().catch(() => {}) // 等在途 P2P write 落定（否则 truncate 与其竞争）
+          } catch { /* ignore */ }
+          try {
+            await resetSinkForFallback({ truncate: sink.truncate, seek: sink.seek })
+          } catch (e: any) {
+            // 复位失败：宁可中断也不拼接损坏文件。
+            try { if (sink.abort) sink.abort(); else await sink.close() } catch { /* ignore */ }
+            if (opts.legacyFallback) { opts.legacyFallback(); settle(); return }
+            hooks.onError?.(String(e?.message ?? e))
+            settle()
+            return
+          }
+        } else {
+          // 不可倒带：中断已写前缀的流，触发一次全新的 frp 下载（a[download]）。
+          try { if (sink.abort) sink.abort(); else await sink.close() } catch { /* ignore */ }
+          fellBack = true
+          curPath = 'frp'
+          hooks.onFallback?.(reason)
+          hooks.onPath?.('frp')
+          if (opts.legacyFallback) { opts.legacyFallback() }
+          else { hooks.onError?.(reason) }
+          settle()
+          return
+        }
       }
 
       state = 'http'
@@ -292,13 +374,25 @@ async function runTransfer(
         }
         return
       }
-      // 数据帧：[seq:u32 LE][payload]，写入 sink（跳过 4 字节 seq 头）。
+      // 数据帧：[seq:u32 LE][payload]。校验 seq 连续（P1-5）→ 串行写 sink（P0-3）。
       if (firstByteAt === 0) firstByteAt = performance.now()
-      const buf = data as ArrayBuffer
-      const payload = new Uint8Array(buf, 4)
-      const p = sink.write(payload)
-      written += payload.byteLength
-      void p
+      let frame
+      try { frame = parseDataFrame(data as ArrayBuffer) }
+      catch (e: any) { void toFallback(String(e?.message ?? e)); return }
+      const seqErr = seqCheck.check(frame.seq)
+      if (seqErr) { void toFallback(seqErr); return } // 乱序/缺号/重复 → 回退（绝不拼错文件）
+      const payload = frame.payload
+      writtenAny = true
+      // 串行入链：write 只有前一次成功后才发起；written 只在本次 write 成功 resolve 后累加。
+      writeChain.enqueue(() => sink.write(payload)).then(
+        () => { written += payload.byteLength },
+        (e) => {
+          // write reject 不静默：终结并走回退/报错（写链已记 failure，这里驱动收尾）。
+          if (!done.flag && state !== 'http' && state !== 'fallback') {
+            void failAfterWrite(`sink write failed: ${String(e?.message ?? e)}`)
+          }
+        },
+      )
     }
     // 通道意外关闭：若还没进 http/完成，判回退（超时/fallback 另有 peer.onFallback 兜底）。
     tp.onclose = () => { if (!done.flag && state !== 'http' && state !== 'fallback') void toFallback('dc-closed') }
@@ -310,6 +404,17 @@ async function runTransfer(
 // Blob sink 的大小上限：超过则不走内存累积（防 OOM），改由调用方回退系统下载。
 // 有 showSaveFilePicker 的浏览器不受此限（边收边落盘，不占内存）。
 const BLOB_SINK_MAX_BYTES = 2 * 1024 * 1024 * 1024 // 2 GiB
+
+// 触发一次全新的 frp 系统下载（a[download] 指向后端 HTTP 下载端点）。
+// 用于「不可倒带的 sink（StreamSaver）已写过 P2P 前缀」的回退兜底：绝不复用被污染的流（P0-1）。
+function legacyAnchorDownload(path: string, name: string): void {
+  const a = document.createElement('a')
+  a.href = `/api/file/download?path=${encodeURIComponent(path)}`
+  a.download = name
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+}
 
 // 触发浏览器把内存 Blob 存成文件（Blob sink 收完 eof 后调用）。
 function triggerBlobDownload(blob: Blob, name: string): void {
@@ -343,16 +448,25 @@ export async function download(
     // picking：必须在点击的用户激活窗口内先弹（不能等 ICE），拿到 handle 才继续。
     // FileSystemWritableFileStream 类型在 lib.dom 各版本对 Uint8Array<ArrayBufferLike> 挑剔，
     // 这里按 File System Access 实际契约用 any 收 writable。
-    let writable: { write: (c: Uint8Array) => Promise<void>; close: () => Promise<void> }
+    let writable: {
+      write: (c: Uint8Array | { type: string; size?: number; position?: number }) => Promise<void>
+      close: () => Promise<void>
+      truncate?: (size: number) => Promise<void>
+      seek?: (position: number) => Promise<void>
+    }
     try {
       const handle = await (window as any).showSaveFilePicker({ suggestedName: target.name })
       writable = await handle.createWritable()
     } catch {
       return // 用户取消 → 结束，不建 PC、不发信令
     }
+    const w = writable
     const sink: Sink = {
-      write: (chunk) => writable.write(chunk),
-      close: () => writable.close(),
+      write: (chunk) => w.write(chunk),
+      close: () => w.close(),
+      // 回退时倒带：优先用 FileSystemWritableFileStream.truncate/seek（部分实现只有 write({type})）。
+      truncate: (size) => (w.truncate ? w.truncate(size) : w.write({ type: 'truncate', size })),
+      seek: (offset) => (w.seek ? w.seek(offset) : w.write({ type: 'seek', position: offset })),
     }
     // report:true —— 只有真实 download 才上报埋点；测试钩子(spike/verify)不传即不上报。
     await runTransfer(target, sink, hooks, { allowFallback: true, report: true })
@@ -374,9 +488,26 @@ export async function download(
         write: (chunk) => w.write(chunk),
         close: () => w.close(),
         abort: () => w.abort(),
+        // 注意：StreamSaver 不可倒带（无 truncate/seek）—— 一旦写过 P2P 前缀就不能再往同流灌 HTTP 全量。
       }
-      // allowFallback:true —— StreamSink 是真流，状态机可原地把 frp 响应体 pipeTo 同一流（不占内存、不二次弹窗）。
-      await runTransfer(target, sink, hooks, { allowFallback: true, report: true })
+      // allowFallback:true —— 尚未写字节时可干净切 frp 到同一流（不占内存、不二次弹窗）；
+      // 已写过 P2P 前缀时（不可倒带）走 legacyFallback：abort 当前流 + 触发一次全新的 frp 系统下载（P0-1）。
+      let fellBackLegacy = false
+      await runTransfer(target, { ...sink }, {
+        ...hooks,
+        onFallback: (m) => { hooks.onFallback?.(m) },
+      }, {
+        allowFallback: true,
+        report: true,
+        legacyFallback: () => {
+          fellBackLegacy = true
+          hooks.onPath?.('frp')
+          if (opts.blobFallback) opts.blobFallback()
+          else legacyAnchorDownload(target.path, target.name)
+          hooks.onDone?.()
+        },
+      })
+      void fellBackLegacy
       return
     }
   }

@@ -29,9 +29,18 @@ self.addEventListener('message', (event) => {
   const port = event.ports && event.ports[0]
   if (!port) return
 
-  // 用主页面通过 port 送来的 chunk 喂一个 ReadableStream。
+  // 用主页面通过 port 送来的 chunk 喂一个 ReadableStream（带背压：pull + 信用 ACK，P1-4）。
+  //
+  // 背压模型：ReadableStream 有一个高水位队列，浏览器下载消费一块就调 pull() 补货。
+  // 我们不无条件 enqueue，而是每消费/enqueue 一块就回主页面一个 credit（{ ack: 1 }）；
+  // 主页面在信用耗尽时暂停 postMessage。这样数据不会无界堆在 MessagePort/SW 队列里。
+  //
+  // 初始信用 = HWM_CHUNKS（预填满一个水位窗口），之后 pull 一次补一个。
+  const HWM_CHUNKS = 16
   const stream = new ReadableStream({
     start(controller) {
+      // 开局先给主页面 HWM 个信用，允许它先灌满一个窗口。
+      try { port.postMessage({ ack: HWM_CHUNKS }) } catch (_) {}
       port.onmessage = (evt) => {
         const msg = evt.data
         if (msg === 'end') { controller.close(); return }
@@ -42,11 +51,15 @@ self.addEventListener('message', (event) => {
         controller.enqueue(msg) // 数据块（Uint8Array / ArrayBuffer）
       }
     },
+    // 下游（浏览器下载）每消费一块 → pull → 回主页面一个信用，允许它再推一块。
+    pull() {
+      try { port.postMessage({ ack: 1 }) } catch (_) {}
+    },
     cancel() {
       // 浏览器/用户取消下载：通知主页面停止推送。
       try { port.postMessage('cancelled') } catch (_) {}
     },
-  })
+  }, { highWaterMark: HWM_CHUNKS })
 
   const headers = new Headers(data.headers || {})
   headers.set('Content-Type', 'application/octet-stream; charset=utf-8')

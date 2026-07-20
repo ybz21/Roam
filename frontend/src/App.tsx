@@ -2337,6 +2337,7 @@ function P2PCard() {
       <Space direction="vertical" size="middle" style={{ width: '100%' }}>
         <Space align="center" wrap>
           <Switch checked={on} onChange={(v) => setPrefs({ p2pEnabled: v })} />
+          <Tag color="orange" style={{ margin: 0 }}>{t('settings.p2pExperimental')}</Tag>
           <span style={dim}>{t('settings.p2pHelp')}</span>
         </Space>
         {/* STUN 服务器（留空用服务端默认）。仅影响本浏览器的打洞。 */}

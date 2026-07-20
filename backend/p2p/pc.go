@@ -69,24 +69,18 @@ func (s *session) newPeer(cfg peerConfig) (*peer, error) {
 	}
 	p := &peer{pc: pc}
 
-	// trickle ICE：本端候选回传前端。link 逐条打印以复验 gather，transfer 不打。
+	// 非 trickle（P0-2）：本端候选**不再**逐个回传前端——answerOffer 等 gathering 完成后一次性
+	// 把全部候选编进 answer 完整 SDP 发出。这里只保留候选诊断日志（复验 gather 到没到 srflx）。
 	pc.OnICECandidate(func(c *webrtc.ICECandidate) {
+		if !cfg.verboseCand {
+			return
+		}
 		if c == nil {
-			if cfg.verboseCand {
-				log.Printf("p2p: %s local-cand gathering-complete", cfg.keyLog)
-			}
+			log.Printf("p2p: %s local-cand gathering-complete", cfg.keyLog)
 			return
 		}
-		if cfg.verboseCand {
-			log.Printf("p2p: %s local-cand typ=%s proto=%s addr=%s:%d",
-				cfg.keyLog, c.Typ.String(), c.Protocol.String(), c.Address, c.Port)
-		}
-		raw, err := json.Marshal(c.ToJSON())
-		if err != nil {
-			return
-		}
-		rm := json.RawMessage(raw)
-		_ = s.send(s.iceMsg(cfg, &rm))
+		log.Printf("p2p: %s local-cand typ=%s proto=%s addr=%s:%d",
+			cfg.keyLog, c.Typ.String(), c.Protocol.String(), c.Address, c.Port)
 	})
 
 	pc.OnConnectionStateChange(func(st webrtc.PeerConnectionState) {
@@ -115,8 +109,12 @@ func (s *session) newPeer(cfg peerConfig) (*peer, error) {
 	return p, nil
 }
 
-// answerOffer 设远端 offer、CreateAnswer、SetLocal，并回 answer 信令。任一步失败返回 error，
-// 由上层 finish/finishLink 清理。SDP 与 answer 消息字段与收敛前逐字节一致。
+// answerOffer 设远端 offer（完整 SDP）、CreateAnswer、SetLocal，**等 ICE gathering 完成**后再回
+// 一次性携带全部候选的 answer 完整 SDP（非 trickle）。任一步失败返回 error，由上层 finish/finishLink 清理。
+//
+// 非 trickle 动机（P0-2）：trickle 下前端候选可能早于 offer 到（无 PC 被忽略）、后端候选可能早于
+// answer 到（前端 remoteDescription 未设，addIceCandidate 静默失败），LAN 通但跨网 srflx 常丢候选。
+// 改为两端各自等 gathering 完成、一次性发含全部候选的完整 SDP，消除候选与描述的到达顺序竞态。
 func (s *session) answerOffer(p *peer, cfg peerConfig, offerSDP string) error {
 	if err := p.pc.SetRemoteDescription(webrtc.SessionDescription{
 		Type: webrtc.SDPTypeOffer,
@@ -130,11 +128,20 @@ func (s *session) answerOffer(p *peer, cfg peerConfig, offerSDP string) error {
 		log.Printf("p2p: %s CreateAnswer: %v", cfg.keyLog, err)
 		return err
 	}
+	// 在 SetLocalDescription 前拿到 gathering 完成 promise（SetLocalDescription 会启动 gathering）。
+	gatherDone := webrtc.GatheringCompletePromise(p.pc)
 	if err := p.pc.SetLocalDescription(ans); err != nil {
 		log.Printf("p2p: %s SetLocalDescription: %v", cfg.keyLog, err)
 		return err
 	}
-	if err := s.send(s.answerMsg(cfg, ans.SDP)); err != nil {
+	// 等 ICE gathering 完成，让 LocalDescription 携带全部候选（含 srflx）后再发。PC 关闭时 promise
+	// 也会 resolve，此时 LocalDescription 仍可用（含已 gather 的候选），不阻塞终结。
+	<-gatherDone
+	sdp := ans.SDP
+	if ld := p.pc.LocalDescription(); ld != nil {
+		sdp = ld.SDP
+	}
+	if err := s.send(s.answerMsg(cfg, sdp)); err != nil {
 		log.Printf("p2p: %s send answer: %v", cfg.keyLog, err)
 		return err
 	}
@@ -162,18 +169,8 @@ func (s *session) addRemoteICE(p *peer, cfg peerConfig, cand *json.RawMessage) {
 	}
 }
 
-// iceMsg / answerMsg 按 cfg.byClass 把定位字段填进 SignalMsg 对应位置（Class 或 TransferID），
+// answerMsg 按 cfg.byClass 把定位字段填进 SignalMsg 对应位置（Class 或 TransferID），
 // 保证回发线协议与收敛前一致：link 走 Class，transfer 走 TransferID。
-func (s *session) iceMsg(cfg peerConfig, cand *json.RawMessage) SignalMsg {
-	m := SignalMsg{Type: "ice", Candidate: cand}
-	if cfg.byClass {
-		m.Class = cfg.signalKey
-	} else {
-		m.TransferID = cfg.signalKey
-	}
-	return m
-}
-
 func (s *session) answerMsg(cfg peerConfig, sdp string) SignalMsg {
 	m := SignalMsg{Type: "answer", SDP: sdp}
 	if cfg.byClass {

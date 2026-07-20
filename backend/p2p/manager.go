@@ -225,9 +225,13 @@ func (s *session) startTransfer(m SignalMsg) {
 	}()
 
 	// 设远端 offer、回 answer——建链样板走共享底层（pc.go）。失败即拆。
-	if err := s.answerOffer(p, cfg, m.SDP); err != nil {
-		s.finish(t.id)
-	}
+	// 非 trickle：answerOffer 会等 ICE gathering 完成后再回携带全部候选的完整 answer SDP，
+	// 可能阻塞数秒。放到 goroutine 里执行，避免卡住信令 WS 读循环。
+	go func() {
+		if err := s.answerOffer(p, cfg, m.SDP); err != nil {
+			s.finish(t.id)
+		}
+	}()
 }
 
 // classifyPath 尽力分类选中候选对的路径，并返回诊断信息。

@@ -71,6 +71,46 @@ export interface StreamWriter {
   abort(): void
 }
 
+// —— 消费信用（背压，P1-4）——
+// SW 每消费/腾出一块就回一个 credit（{ ack: n }）；本类记账，write 前若信用不足则 await，
+// 直到 SW 回信用 → 真正不把数据无界堆在 MessagePort/SW 队列（不再假称"不占内存"）。
+// 纯逻辑、无 DOM，供 stream-saver.test.ts 单测。
+export class CreditController {
+  private credit = 0
+  private waiters: Array<() => void> = []
+  private closed = false
+
+  // SW 回信用：累加并唤醒等待者。
+  grant(n: number): void {
+    if (this.closed) return
+    this.credit += n
+    while (this.credit > 0 && this.waiters.length > 0) {
+      this.credit -= 1
+      const w = this.waiters.shift()!
+      w()
+    }
+  }
+
+  // 取一个信用发一块数据：有则立即返回，无则 await 到 SW 回信用。
+  acquire(): Promise<void> {
+    if (this.closed) return Promise.resolve()
+    if (this.credit > 0) { this.credit -= 1; return Promise.resolve() }
+    return new Promise<void>((resolve) => { this.waiters.push(resolve) })
+  }
+
+  // 流关闭/中断：放行所有在等的 write（避免永久挂起）。
+  release(): void {
+    this.closed = true
+    const ws = this.waiters
+    this.waiters = []
+    for (const w of ws) w()
+  }
+
+  // 供测试观察：当前可用信用 / 阻塞中的写数。
+  get available(): number { return this.credit }
+  get pending(): number { return this.waiters.length }
+}
+
 // 触发对下载 url 的导航请求（命中 SW fetch 拦截 → attachment 响应）。用隐藏 iframe，不打断宿主页面。
 function triggerNavigation(url: string): HTMLIFrameElement {
   const frame = document.createElement('iframe')
@@ -96,6 +136,7 @@ export async function createStreamWriter(opts: { name: string; size?: number }):
 
   let aborted = false
   let closed = false
+  const credit = new CreditController() // 背压：SW 回 { ack } → grant；write 前 acquire（P1-4）
 
   // 等 SW 回执 { download } 后才触发导航 —— 保证 SW 已登记该 url。
   let navFrame: HTMLIFrameElement | null = null
@@ -103,7 +144,10 @@ export async function createStreamWriter(opts: { name: string; size?: number }):
     const timer = window.setTimeout(() => reject(new Error('streamsaver register timeout')), 10_000)
     port.onmessage = (e) => {
       const m = e.data
-      if (m && m.download) {
+      if (m && typeof m.ack === 'number') {
+        // SW 消费信用回执：放行等待中的 write。
+        credit.grant(m.ack)
+      } else if (m && m.download) {
         window.clearTimeout(timer)
         navFrame = triggerNavigation(m.download)
         resolve()
@@ -113,6 +157,7 @@ export async function createStreamWriter(opts: { name: string; size?: number }):
       } else if (m === 'cancelled') {
         // 下载被取消：让写入侧后续 write/close 变 no-op（不抛，避免打断已完成的 P2P）。
         aborted = true
+        credit.release() // 放行在等的 write，避免永久挂起
       }
     }
   })
@@ -134,23 +179,27 @@ export async function createStreamWriter(opts: { name: string; size?: number }):
   }
 
   return {
-    write(chunk: Uint8Array): Promise<void> {
-      if (aborted || closed) return Promise.resolve()
+    async write(chunk: Uint8Array): Promise<void> {
+      if (aborted || closed) return
+      // 背压：先取一个消费信用（信用不足则 await 到 SW 回信用），再推 chunk —— 真正不堆积（P1-4）。
+      await credit.acquire()
+      if (aborted || closed) return
       // 转移底层 buffer，零拷贝送给 SW。chunk 可能是别人 buffer 的视图，拷一份保证可转移。
       const copy = chunk.byteOffset === 0 && chunk.byteLength === chunk.buffer.byteLength
         ? chunk
         : new Uint8Array(chunk)
       try { port.postMessage(copy, [copy.buffer]) } catch { port.postMessage(copy) }
-      return Promise.resolve()
     },
     close(): Promise<void> {
       if (!aborted && !closed) { closed = true; try { port.postMessage('end') } catch { /* ignore */ } }
+      credit.release()
       cleanupNav()
       try { port.close() } catch { /* ignore */ }
       return Promise.resolve()
     },
     abort(): void {
       if (!closed) { aborted = true; try { port.postMessage('abort') } catch { /* ignore */ } }
+      credit.release()
       cleanupNav()
       try { port.close() } catch { /* ignore */ }
     },

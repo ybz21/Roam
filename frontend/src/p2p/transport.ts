@@ -17,6 +17,32 @@ import type { SignalMsg } from './types'
 import type { P2PPathLabel } from './labels'
 import { getPreferences } from '../preferences'
 
+// dev-gate：ICE 生命周期诊断日志只在开发构建打印，生产静默（避免控制台噪音/泄漏地址）。
+const P2P_DEBUG = import.meta.env.DEV
+function dlog(...args: unknown[]) { if (P2P_DEBUG) console.log(...args) }
+
+// 非 trickle（P0-2）：ICE gathering 完成才发 offer/answer 完整 SDP。等 iceGatheringState==='complete'，
+// 或到 GATHER_TIMEOUT_MS 上限（跨网 srflx 偶尔迟迟不 complete）就用当前 pc.localDescription 兜底发出。
+const GATHER_TIMEOUT_MS = 4_000
+// exported for unit test（非产品 API）。
+export function waitForIceGathering(peer: RTCPeerConnection): Promise<void> {
+  if (peer.iceGatheringState === 'complete') return Promise.resolve()
+  return new Promise((resolve) => {
+    let done = false
+    const finish = () => {
+      if (done) return
+      done = true
+      peer.removeEventListener('icegatheringstatechange', onChange)
+      clearTimeout(timer)
+      resolve()
+    }
+    const onChange = () => { if (peer.iceGatheringState === 'complete') finish() }
+    peer.addEventListener('icegatheringstatechange', onChange)
+    // 上限兜底：超时用已 gather 的候选（当前 localDescription）发出，不无限等。
+    const timer = setTimeout(finish, GATHER_TIMEOUT_MS)
+  })
+}
+
 // —— DuplexTransport：伪-WebSocket 抽象（两端对称），让功能层从 new WebSocket 平滑切到 connect() —— //
 export interface DuplexTransport {
   send(data: string | ArrayBuffer): void
@@ -174,23 +200,25 @@ const wsSend = (m: SignalMsg) => {
 // 每个本地候选打印 typ(host/srflx/relay)+地址；gathering/iceConnection/connection 每次变化打印。
 // 前缀 [p2p-ice control] / [p2p-ice media] / [p2p-ice file]，方便复验。
 function logLocalCandidate(tag: string, c: RTCIceCandidate | null) {
-  if (!c) { console.log(`[p2p-ice ${tag}] local candidates: gathering done (null)`); return }
+  if (!P2P_DEBUG) return
+  if (!c) { dlog(`[p2p-ice ${tag}] local candidates: gathering done (null)`); return }
   // candidate 字符串形如 "candidate:... typ srflx raddr ... 地址 端口 ..."；直接透出便于核对 srflx。
   const typ = /\btyp (\w+)\b/.exec(c.candidate)?.[1] ?? '?'
   const addr = c.address ? `${c.address}:${c.port ?? '?'}` : c.candidate
-  console.log(`[p2p-ice ${tag}] local candidate typ=${typ} ${addr}`)
+  dlog(`[p2p-ice ${tag}] local candidate typ=${typ} ${addr}`)
 }
 
-// 给一个 PC 挂上 gathering/iceConnection/connection 三态变化日志（诊断用，不改行为）。
+// 给一个 PC 挂上 gathering/iceConnection/connection 三态变化日志（诊断用，不改行为）。dev-gate。
 function attachIceDiagLogs(tag: string, peer: RTCPeerConnection) {
+  if (!P2P_DEBUG) return
   peer.addEventListener('icegatheringstatechange', () => {
-    console.log(`[p2p-ice ${tag}] iceGatheringState=${peer.iceGatheringState}`)
+    dlog(`[p2p-ice ${tag}] iceGatheringState=${peer.iceGatheringState}`)
   })
   peer.addEventListener('iceconnectionstatechange', () => {
-    console.log(`[p2p-ice ${tag}] iceConnectionState=${peer.iceConnectionState}`)
+    dlog(`[p2p-ice ${tag}] iceConnectionState=${peer.iceConnectionState}`)
   })
   peer.addEventListener('connectionstatechange', () => {
-    console.log(`[p2p-ice ${tag}] connectionState=${peer.connectionState}`)
+    dlog(`[p2p-ice ${tag}] connectionState=${peer.connectionState}`)
   })
 }
 
@@ -240,11 +268,9 @@ async function negotiate() {
     scheduleReconnect()
   }, connectTimeoutMs())
 
-  peer.onicecandidate = (e) => {
-    logLocalCandidate('control', e.candidate)
-    // 把所有候选（含较晚到的 srflx）都 trickle 出去；e.candidate=null 是 gather 结束信号，不发。
-    if (e.candidate) wsSend({ type: 'ice', transferId: CONTROL_ID, class: 'control', candidate: e.candidate.toJSON() })
-  }
+  // 非 trickle（P0-2）：不再逐个 wsSend 候选——offer 会等 gathering 完成后一次性带全部候选发出。
+  // 这里只保留候选诊断日志（dev-gate）。
+  peer.onicecandidate = (e) => { logLocalCandidate('control', e.candidate) }
 
   peer.onconnectionstatechange = () => {
     if (!pc) return
@@ -263,9 +289,8 @@ async function negotiate() {
     // 只认 control 类（class 空的是老下载 file 流，忽略）。
     if (m.class !== 'control' && m.transferId !== CONTROL_ID) return
     if (m.type === 'answer' && m.sdp) {
+      // 非 trickle：answer 完整 SDP 已含后端全部候选，直接 setRemoteDescription 即可，无需 addIceCandidate。
       peer.setRemoteDescription({ type: 'answer', sdp: m.sdp }).catch(() => { /* ignore */ })
-    } else if (m.type === 'ice' && m.candidate) {
-      peer.addIceCandidate(m.candidate).catch(() => { /* 迟到候选忽略 */ })
     } else if (m.type === 'connected') {
       if (connectTimer) { clearTimeout(connectTimer); connectTimer = 0 }
       attempt = 0 // 连上即重置退避
@@ -292,7 +317,11 @@ async function negotiate() {
   try {
     const offer = await peer.createOffer()
     await peer.setLocalDescription(offer)
-    const sendOffer = () => wsSend({ type: 'offer', transferId: CONTROL_ID, class: 'control', sdp: offer.sdp })
+    // 非 trickle：等 ICE gathering 完成，用含全部候选的 localDescription 一次性发 offer 完整 SDP。
+    await waitForIceGathering(peer)
+    if (pc !== peer || stopped) return // 已被下一轮/停机取代
+    const fullSdp = peer.localDescription?.sdp ?? offer.sdp
+    const sendOffer = () => wsSend({ type: 'offer', transferId: CONTROL_ID, class: 'control', sdp: fullSdp })
     if (socket.readyState === WebSocket.OPEN) sendOffer()
     else socket.addEventListener('open', sendOffer, { once: true })
   } catch {
@@ -421,10 +450,8 @@ async function negotiateMedia() {
     scheduleMediaReconnect()
   }, connectTimeoutMs())
 
-  peer.onicecandidate = (e) => {
-    logLocalCandidate('media', e.candidate)
-    if (e.candidate) mediaWsSend({ type: 'ice', transferId: MEDIA_ID, class: 'media', candidate: e.candidate.toJSON() })
-  }
+  // 非 trickle（P0-2）：不再逐个 wsSend 候选；offer 等 gathering 完成后一次性带全部候选发出。
+  peer.onicecandidate = (e) => { logLocalCandidate('media', e.candidate) }
 
   peer.onconnectionstatechange = () => {
     if (!mediaPc) return
@@ -442,12 +469,13 @@ async function negotiateMedia() {
     // 只认 media 类（避免同源信令 WS 上的 control/file 消息串扰）。
     if (m.class !== 'media' && m.transferId !== MEDIA_ID) return
     if (m.type === 'answer' && m.sdp) {
+      // 非 trickle：answer 完整 SDP 已含后端全部候选，直接 setRemoteDescription。
       peer.setRemoteDescription({ type: 'answer', sdp: m.sdp }).catch(() => { /* ignore */ })
-    } else if (m.type === 'ice' && m.candidate) {
-      peer.addIceCandidate(m.candidate).catch(() => { /* 迟到候选忽略 */ })
     } else if (m.type === 'connected') {
       if (mediaConnectTimer) { clearTimeout(mediaConnectTimer); mediaConnectTimer = 0 }
       mediaAttempt = 0
+      // media PC 完整重协商成功：清掉「强制 WS」标记，给业务 DataChannel 再走一次 p2p 的机会（P1-6）。
+      forceWsServices.clear()
       setMedia('connected', (m.path as P2PPathLabel) ?? undefined)
     } else if (m.type === 'link') {
       if (m.state === 'down') setMedia('relay')
@@ -465,7 +493,11 @@ async function negotiateMedia() {
   try {
     const offer = await peer.createOffer()
     await peer.setLocalDescription(offer)
-    const sendOffer = () => mediaWsSend({ type: 'offer', transferId: MEDIA_ID, class: 'media', sdp: offer.sdp })
+    // 非 trickle：等 gathering 完成，用含全部候选的 localDescription 一次性发 offer。
+    await waitForIceGathering(peer)
+    if (mediaPc !== peer || mediaStopped) return // 已被下一轮/释放取代
+    const fullSdp = peer.localDescription?.sdp ?? offer.sdp
+    const sendOffer = () => mediaWsSend({ type: 'offer', transferId: MEDIA_ID, class: 'media', sdp: fullSdp })
     if (socket.readyState === WebSocket.OPEN) sendOffer()
     else socket.addEventListener('open', sendOffer, { once: true })
   } catch {
@@ -639,11 +671,8 @@ export async function connectFile(opts: ConnectFileOptions): Promise<FilePeer> {
     fail('timeout')
   }, connectTimeoutMs())
 
-  peer.onicecandidate = (e) => {
-    logLocalCandidate('file', e.candidate)
-    // 线协议：file 类 ICE 一律 class 留空（后端按空 class 路由到 file PC）。trickle 全部候选。
-    if (e.candidate) wsSend({ type: 'ice', transferId, candidate: e.candidate.toJSON() })
-  }
+  // 非 trickle（P0-2）：不再逐个 wsSend 候选；offer 等 gathering 完成后一次性带全部候选发出。
+  peer.onicecandidate = (e) => { logLocalCandidate('file', e.candidate) }
 
   peer.onconnectionstatechange = () => {
     // 只有真正 failed 才回退（超时另有兜底）；'disconnected' 交给 ICE 自愈，不提前拆。
@@ -657,9 +686,8 @@ export async function connectFile(opts: ConnectFileOptions): Promise<FilePeer> {
     // 只认本 transferId 的 file 类（class 空）消息；忽略串扰/迟到/持久 link 消息。
     if (m.transferId !== transferId || done) return
     if (m.type === 'answer' && m.sdp) {
+      // 非 trickle：answer 完整 SDP 已含后端全部候选，直接 setRemoteDescription。
       peer.setRemoteDescription({ type: 'answer', sdp: m.sdp }).catch(() => { /* ignore */ })
-    } else if (m.type === 'ice' && m.candidate) {
-      peer.addIceCandidate(m.candidate).catch(() => { /* 迟到候选忽略 */ })
     } else if (m.type === 'connected') {
       clearConnectTimer()
       setFile('connected', (m.path as P2PPathLabel) ?? undefined)
@@ -678,13 +706,17 @@ export async function connectFile(opts: ConnectFileOptions): Promise<FilePeer> {
   ws.onerror = () => { /* onclose 接管回退 */ }
 
   // 发 offer（空 class + transfer{path,op}）。op 由调用方给（真实下载=download；spike=spike）。
+  // 非 trickle：等 ICE gathering 完成后用含全部候选的 localDescription 一次性发。
   try {
     const offer = await peer.createOffer()
     await peer.setLocalDescription(offer)
+    await waitForIceGathering(peer)
+    if (done) return peerObj // 已被 close()/timeout 终结，别再发
+    const fullSdp = peer.localDescription?.sdp ?? offer.sdp
     const sendOffer = () => wsSend({
       type: 'offer',
       transferId,
-      sdp: offer.sdp,
+      sdp: fullSdp,
       transfer: { path: opts.path, op: opts.op ?? 'download' },
     })
     if (ws.readyState === WebSocket.OPEN) sendOffer()
@@ -763,6 +795,93 @@ function wrapChannel(dc: RTCDataChannel): DuplexTransport {
   return tp
 }
 
+// P1-6：媒体业务 DataChannel open 超时（media PC 已 connected 但 DC 迟迟不 open→判 DC 层坏）。
+const MEDIA_DC_OPEN_TIMEOUT_MS = 5_000
+
+// forceWsServices：某服务的 media DataChannel 曾经 open 失败/意外断过 → 标记它下次 connect 直接走
+// frp WS，别再赌 p2p（避免消费者反复重连都卡在坏 DC 上）。media PC 完整重协商后清空（下次或有救）。
+const forceWsServices = new Set<Service>()
+
+// mediaDcWithFallback：给镜像业务 DataChannel 包一层「open 超时 + 意外 close」→ 无感切 frpUrl。
+//
+// media PC 已 connected 不代表其上的业务 DataChannel 一定能 open（SCTP 抖动/后端 handler 没接线/
+// 通道中途被关）。这里返回一个可切换底层的代理 DuplexTransport：
+//   - 先接 DataChannel；MEDIA_DC_OPEN_TIMEOUT_MS 内未 open → 关 DC、标记该服务强制 WS、切 frpUrl。
+//   - DC open 后又意外 close（非消费者主动 close）→ 同样标记强制 WS 并切 frpUrl，触发消费者层重连逻辑。
+// 切换对消费者透明：代理把 onopen/onmessage/onclose 转发到当前底层；切到 WS 时 WS 的 onopen 会再触发
+// 一次（消费者据此重发 emulate/init，语义与迁移前 ws.onopen 一致）。
+function mediaDcWithFallback(dc: RTCDataChannel, service: Service, frpUrl?: string): DuplexTransport {
+  let current = wrapChannel(dc)
+  let opened = dc.readyState === 'open'
+  let switched = false     // 已切到 frp（幂等）
+  let userClosed = false   // 消费者主动 close（不再回退）
+  let openTimer = 0
+
+  // 代理对象：把消费者挂的回调转发给「当前底层」；切底层时重绑，对消费者透明。
+  const proxy: DuplexTransport = {
+    kind: current.kind,
+    onmessage: () => {},
+    onopen: () => {},
+    onclose: () => {},
+    send: (d) => current.send(d),
+    close: () => {
+      userClosed = true
+      if (openTimer) { clearTimeout(openTimer); openTimer = 0 }
+      current.close()
+    },
+  }
+
+  // 把一条底层 transport 的事件接到 proxy 上。DC 底层额外接管 open 超时 / 意外 close 的回退。
+  const bindDc = (tp: DuplexTransport) => {
+    tp.onopen = () => {
+      opened = true
+      if (openTimer) { clearTimeout(openTimer); openTimer = 0 }
+      ;(proxy as { kind: DuplexTransport['kind'] }).kind = tp.kind
+      proxy.onopen()
+    }
+    tp.onmessage = (d) => proxy.onmessage(d)
+    tp.onclose = () => {
+      // DC 意外 close（非消费者主动关且未回退过）→ 切 frp；否则如常向上抛 close。
+      if (!userClosed && !switched) {
+        dlog(`[p2p-ice media] business dc '${service}' closed unexpectedly; falling back to frp`)
+        toFrp()
+        return
+      }
+      proxy.onclose()
+    }
+  }
+  const bindWs = (tp: DuplexTransport) => {
+    tp.onopen = () => { (proxy as { kind: DuplexTransport['kind'] }).kind = tp.kind; proxy.onopen() }
+    tp.onmessage = (d) => proxy.onmessage(d)
+    tp.onclose = () => proxy.onclose()
+  }
+
+  // 切到 frp WS（幂等）。消费者主动 close 时不切。
+  function toFrp() {
+    if (switched || userClosed) return
+    switched = true
+    if (openTimer) { clearTimeout(openTimer); openTimer = 0 }
+    forceWsServices.add(service) // 该服务下次 connect 直接走 WS
+    try { current.close() } catch { /* ignore */ }
+    if (!frpUrl) { proxy.onclose(); return } // 无回退目标：按断开处理，让消费者走自身重连
+    current = wrapWebSocket(new WebSocket(frpUrl))
+    bindWs(current)
+  }
+
+  bindDc(current)
+
+  // open 超时：DC 迟迟不 open（SCTP 抖动/后端没接线）→ 判 DC 层坏，切 frp。
+  if (!opened) {
+    openTimer = window.setTimeout(() => {
+      if (opened || switched || userClosed) return
+      dlog(`[p2p-ice media] business dc '${service}' open timeout (${MEDIA_DC_OPEN_TIMEOUT_MS}ms); falling back to frp`)
+      toFrp()
+    }, MEDIA_DC_OPEN_TIMEOUT_MS)
+  }
+
+  return proxy
+}
+
 // connect() 选项：不同服务的回退目标 / 通道语义。
 export interface ConnectOptions {
   // frp 回退用的 WebSocket URL（P2P 不可用时直接连它，行为=迁移前的裸 WS）。
@@ -784,6 +903,9 @@ export function connect(service: Service, opts: ConnectOptions = {}): DuplexTran
     // 重连，下次 connect 可升级到 p2p）。close() 时经 withRelease 归还，计数归零才拆 media PC。
     ensureMediaLink()
     const frp = () => (opts.frpUrl ? wrapWebSocket(new WebSocket(opts.frpUrl)) : frpPlaceholder())
+    // P1-6：该服务上一次 media DataChannel open 失败/意外断过 → 本次直接走 frp，别再赌坏 DC。
+    // media PC 完整重协商（下一次 connected）会清空该标记，给 p2p 再一次机会。
+    if (forceWsServices.has(service)) return withRelease(frp())
     if (isMediaConnected() && mediaPc) {
       const id = crypto.randomUUID().slice(0, 8)
       try {
@@ -795,7 +917,8 @@ export function connect(service: Service, opts: ConnectOptions = {}): DuplexTran
         const label = qs ? `${service}#${id}?${qs}` : `${service}#${id}`
         // 镜像：丢帧优于阻塞 → 不可靠·无序（maxRetransmits:0, ordered:false），与 control/file 隔离。
         const dc = mediaPc.createDataChannel(label, { ordered: false, maxRetransmits: 0 })
-        const tp = wrapChannel(dc)
+        // P1-6：media PC 已连但业务 DataChannel 迟迟不 open / 中途意外 close → 无感切到 frpUrl。
+        const tp = mediaDcWithFallback(dc, service, opts.frpUrl)
         return withRelease(tp)
       } catch { /* 建通道失败 → 落到下面 frp 回退 */ }
     }
