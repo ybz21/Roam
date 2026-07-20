@@ -32,6 +32,8 @@ type dcHandler func(dc *webrtc.DataChannel)
 //   - "echo"：Phase 1a 双向通道自测。
 //   - "screencast"：Phase 1b 浏览器镜像走 media PC 的 DataChannel。其 handler 由 browser
 //     包在启动时经 RegisterScreencastHandler 注入（见下），避免 p2p↔browser 循环 import。
+//   - "phone"：Phase 1b 手机镜像走 media PC 的 DataChannel。同法由 phone 包经
+//     RegisterPhoneHandler 注入，避免 p2p↔phone 循环 import。
 var linkHandlers = map[string]dcHandler{
 	"echo": serveEcho,
 }
@@ -41,6 +43,13 @@ var linkHandlers = map[string]dcHandler{
 // 接线时不注册 → 收到 screencast 通道按「无 handler」关闭（media 消费者自行回退 WS）。
 func RegisterScreencastHandler(h func(dc *webrtc.DataChannel)) {
 	linkHandlers["screencast"] = dcHandler(h)
+}
+
+// RegisterPhoneHandler 注入手机镜像的 DataChannel handler（label 前缀 "phone"）。
+// 由 server 层接线：p2p.RegisterPhoneHandler(phone.PhoneDCHandler)。P2P 关或未接线时不注册
+// → 收到 phone 通道按「无 handler」关闭（前端自行回退 WS /api/phone/stream）。
+func RegisterPhoneHandler(h func(dc *webrtc.DataChannel)) {
+	linkHandlers["phone"] = dcHandler(h)
 }
 
 // dispatchDataChannel 按 label 前缀查表分派；未匹配的 label 直接关闭该通道。

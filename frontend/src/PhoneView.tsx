@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Button, Select, Space, Tag, App as AntApp } from 'antd'
 import { api } from './api'
 import { useI18n } from './i18n'
+import { connect, type DuplexTransport } from './p2p/transport'
 
 interface PhoneApp { id: string; name?: string }
 
@@ -29,7 +30,9 @@ export default function PhoneView() {
   const { t } = useI18n()
   const imgRef = useRef<HTMLImageElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
-  const wsRef = useRef<WebSocket | null>(null)
+  // 镜像收发底层：p2p 时是 media PC 上的不可靠 DataChannel，回退时是 /api/phone/stream 的 WS。
+  // 二进制帧解析/ack/ping/输入逻辑不感知底层（DuplexTransport ≈ WebSocket）。
+  const tpRef = useRef<DuplexTransport | null>(null)
   const sizeRef = useRef({ w: 1080, h: 2400 }) // 画面内在尺寸（设备像素）
 
   const [connected, setConnected] = useState(false)
@@ -54,8 +57,9 @@ export default function PhoneView() {
   const dragRef = useRef({ x: 0, y: 0, dx: 0, dy: 0, t: 0, active: false })
 
   const send = (o: any) => {
-    const ws = wsRef.current
-    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(o))
+    // DuplexTransport.send 对 p2p 自带 open-before-send 排队、对 frp 内部判 readyState，
+    // 这里直接发即可（未连时 frp 分支静默丢弃，与迁移前 ws.readyState 守卫等价）。
+    tpRef.current?.send(JSON.stringify(o))
   }
 
   // 屏幕坐标 → 设备像素（<img> 用 object-fit:contain，居中留黑边，先扣黑边再按比例缩放）
@@ -136,27 +140,34 @@ export default function PhoneView() {
   // quality 变化才重建连接；断开(掉线/切设备/redroid 停起)自动重连，画面自愈无需刷新。
   useEffect(() => {
     let stopped = false
-    let ws: WebSocket | null = null
+    let tp: DuplexTransport | null = null
     let objURL: string | null = null
     let retry: any = null
-    const connect = () => {
+    // 通用传输 Phase 3：镜像走 media PC 的不可靠 DataChannel；media 未连/P2P 不可用 → 回退
+    // 到原 /api/phone/stream WS（frpUrl），行为与迁移前逐字节一致。p2p 分支把 query 里的
+    // params（control/auto|q）经 label 带给后端（原本靠 WS query 传）。
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+    const qParam = quality === 'auto' ? 'auto=1' : `q=${quality}`
+    const frpUrl = `${proto}://${location.host}/api/phone/stream?control=1&${qParam}`
+    const initParams: Record<string, string> = { control: '1' }
+    if (quality === 'auto') initParams.auto = '1'
+    else initParams.q = String(quality)
+    const openConn = () => {
       if (stopped) return
-      const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-      const qParam = quality === 'auto' ? 'auto=1' : `q=${quality}`
-      const sock = new WebSocket(`${proto}://${location.host}/api/phone/stream?control=1&${qParam}`)
-      sock.binaryType = 'arraybuffer'
-      ws = sock; wsRef.current = sock
-      sock.onopen = () => { setConnected(true); setHealthMsg('') }
-      sock.onclose = () => {
+      const t = connect('phone', { frpUrl, initParams })
+      tp = t; tpRef.current = t
+      // 连上（frp=WS open / p2p=DataChannel open）语义等价迁移前 ws.onopen。
+      t.onopen = () => { setConnected(true); setHealthMsg('') }
+      t.onclose = () => {
         setConnected(false)
         if (stopped) return
         api('GET', '/phone/health').then((r) => { if (!r?.data?.ok) setHealthMsg(r?.data?.error || '') }).catch(() => {})
-        retry = setTimeout(connect, 1500) // 自动重连
+        retry = setTimeout(openConn, 1500) // 自动重连（设备/链路自愈）
       }
-      sock.onmessage = (e) => {
-        if (typeof e.data !== 'string') {
+      t.onmessage = (data) => {
+        if (typeof data !== 'string') {
           if (!imgRef.current) return
-          const buf = e.data as ArrayBuffer
+          const buf = data as ArrayBuffer
           const dv = new DataView(buf)
           const w = dv.getUint16(0, true), h = dv.getUint16(2, true), seq = dv.getUint16(4, true)
           sizeRef.current = { w: w || 1080, h: h || 2400 }
@@ -165,19 +176,17 @@ export default function PhoneView() {
           if (objURL) URL.revokeObjectURL(objURL)
           objURL = URL.createObjectURL(new Blob([new Uint8Array(buf, 6)], { type: 'image/jpeg' }))
           imgRef.current.src = objURL
-          if (sock.readyState === WebSocket.OPEN) sock.send(JSON.stringify({ type: 'ack', n: seq }))
+          t.send(JSON.stringify({ type: 'ack', n: seq }))
           return
         }
-        const msg = JSON.parse(e.data)
+        const msg = JSON.parse(data)
         if (msg.type === 'error') { setHealthMsg(msg.msg); return }
         if (msg.type === 'pong') { setLatency(Math.round(performance.now() - msg.t)); return }
         if (msg.type === 'level') { setLevelName(msg.name || ''); return }
       }
     }
-    connect()
-    const ping = setInterval(() => {
-      if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ping', t: performance.now() }))
-    }, 1000)
+    openConn()
+    const ping = setInterval(() => { tp?.send(JSON.stringify({ type: 'ping', t: performance.now() })) }, 1000)
     const meter = setInterval(() => {
       setBw(bytesRef.current); setFps(framesRef.current)
       bytesRef.current = 0; framesRef.current = 0
@@ -186,7 +195,9 @@ export default function PhoneView() {
       stopped = true
       clearInterval(ping); clearInterval(meter); clearTimeout(retry)
       if (objURL) URL.revokeObjectURL(objURL)
-      ws?.close()
+      if (tp) { tp.onmessage = () => {}; tp.onclose = () => {} } // 卸载后忽略在途回调
+      tp?.close()
+      if (tpRef.current === tp) tpRef.current = null
     }
   }, [quality])
 

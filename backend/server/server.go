@@ -142,6 +142,9 @@ func New(cfg Config) *gin.Engine {
 		// Phase 1b：浏览器镜像走 media PC 的 DataChannel（label 前缀 "screencast"）。
 		// 在此接线避免 p2p↔browser 循环 import；WS 回退 /api/browser/stream 不受影响。
 		p2p.RegisterScreencastHandler(browser.ScreencastDCHandler)
+		// Phase 1b：手机镜像同法走 media PC 的 DataChannel（label 前缀 "phone"）。
+		// 未接线/P2P 关时收到 phone 通道按「无 handler」关闭 → 前端回退 WS /api/phone/stream。
+		p2p.RegisterPhoneHandler(phone.PhoneDCHandler)
 		g.GET("/p2p/signal", p2pHub.SignalHandler)
 		g.GET("/p2p/config", func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{

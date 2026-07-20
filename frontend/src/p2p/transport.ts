@@ -773,25 +773,26 @@ export interface ConnectOptions {
 }
 
 // connect(service, opts)：
-//   - 'screencast'：media PC 已连 → 开一条【不可靠·无序】DataChannel(label=`screencast#<id>`)，
-//     open 后先发 initParams 握手；否则/失败 → 回退到 opts.frpUrl 的 frp WebSocket（kind='frp'）。
+//   - 'screencast' / 'phone'：media PC 已连 → 开一条【不可靠·无序】DataChannel(label=`<service>#<id>`)，
+//     入参编进 label 的 query（随通道建立可靠送达）；否则/失败 → 回退到 opts.frpUrl 的 frp
+//     WebSocket（kind='frp'）。两者都是高带宽、可丢帧的镜像流，共用 media PC + 引用计数。
 //   - 其它服务：control PC 已连 → 开一条【可靠·有序】DataChannel；否则 → frp 占位。
-// 后端按 label 前缀分派回原 handler。
+// 后端按 label 前缀分派回原 handler（screencast→浏览器镜像；phone→手机镜像）。
 export function connect(service: Service, opts: ConnectOptions = {}): DuplexTransport {
-  if (service === 'screencast') {
-    // 引用计数 +1：只要有 screencast 视图打开，media PC 就该在（哪怕本次调用回退 frp，也让它
-    // 持续重连，下次 connect 可升级到 p2p）。close() 时经 withRelease 归还，计数归零才拆 media PC。
+  if (service === 'screencast' || service === 'phone') {
+    // 引用计数 +1：只要有镜像视图打开，media PC 就该在（哪怕本次调用回退 frp，也让它持续
+    // 重连，下次 connect 可升级到 p2p）。close() 时经 withRelease 归还，计数归零才拆 media PC。
     ensureMediaLink()
     const frp = () => (opts.frpUrl ? wrapWebSocket(new WebSocket(opts.frpUrl)) : frpPlaceholder())
     if (isMediaConnected() && mediaPc) {
       const id = crypto.randomUUID().slice(0, 8)
       try {
         // 入参（target/control/auto/q/...）编进 DataChannel label 的 query（原本靠 WS query 传）。
-        // 关键：镜像通道是【不可靠·无序】的，绝不能把 target/control 这类一次性关键入参放进业务
-        // 消息里发——会丢帧或乱序（实测首帧常是 emulate 抢在 init 前到，且 init 可能整包丢失）。
-        // 放 label 里则随 DataChannel 建立可靠送达，后端 parseDCOptions 解析，无需握手。
+        // 关键：镜像通道是【不可靠·无序】的，绝不能把 control/auto 这类一次性关键入参放进业务
+        // 消息里发——会丢帧或乱序（实测首帧常抢在 init 前到，且 init 可能整包丢失）。
+        // 放 label 里则随 DataChannel 建立可靠送达，后端按前缀解析，无需握手。
         const qs = opts.initParams ? new URLSearchParams(opts.initParams).toString() : ''
-        const label = qs ? `screencast#${id}?${qs}` : `screencast#${id}`
+        const label = qs ? `${service}#${id}?${qs}` : `${service}#${id}`
         // 镜像：丢帧优于阻塞 → 不可靠·无序（maxRetransmits:0, ordered:false），与 control/file 隔离。
         const dc = mediaPc.createDataChannel(label, { ordered: false, maxRetransmits: 0 })
         const tp = wrapChannel(dc)
