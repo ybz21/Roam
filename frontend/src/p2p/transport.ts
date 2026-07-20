@@ -3,7 +3,7 @@
 // 设计见 docs/design/p2p/general-transport-plan.md §2（DuplexTransport 抽象）/§3（左边栏全局状态）。
 //
 // 一条会话级常驻 control PC：
-//   - 应用登录后，若 P2P 可用（/api/p2p/config 拉到）且用户偏好开（p2pDownloadEnabled），
+//   - 应用登录后，若 P2P 可用（/api/p2p/config 拉到）且用户偏好开（p2pEnabled），
 //     经信令 WS 建一条带 class:"control" 的 PeerConnection（offer 里 class 标 control）。
 //   - 后端按 class 走「会话级常驻 link PC」逻辑，连上后回 connected + 持续发 link{state,path}。
 //   - 断线自动重连（指数退避）；建链失败/超时标记回退，供左边栏显示「中转」。
@@ -294,7 +294,7 @@ async function negotiate() {
 // startControlLink：应用登录后调用。幂等；偏好关闭时不建（保持 disabled/隐藏）。
 export function startControlLink() {
   if (started) return
-  if (!getPreferences().p2pDownloadEnabled) {
+  if (!getPreferences().p2pEnabled) {
     setStatus({ state: 'disabled' })
     return
   }
@@ -476,7 +476,7 @@ function ensureMediaLink() {
   mediaRefs += 1
   // 有新消费者接手：取消挂起的宽限拆链（重挂场景下 media PC 得以存活）。
   if (mediaReleaseTimer) { clearTimeout(mediaReleaseTimer); mediaReleaseTimer = 0 }
-  if (!getPreferences().p2pDownloadEnabled) { setStatus({ media: 'disabled', mediaPath: undefined }); return }
+  if (!getPreferences().p2pEnabled) { setStatus({ media: 'disabled', mediaPath: undefined }); return }
   if (mediaStarted) return
   mediaStarted = true
   mediaStopped = false

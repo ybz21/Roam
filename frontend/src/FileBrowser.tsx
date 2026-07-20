@@ -572,7 +572,7 @@ export default function FileBrowser({
   const dropTransfer = (id: string) => setTransfers((list) => list.filter((tf) => tf.id !== id))
   const downloadEntry = (target: FileTarget) => {
     // 用户开关关闭（网络抖动等）→ 一律走 frp 中转，不碰 P2P。
-    if (!prefs.p2pDownloadEnabled) {
+    if (!prefs.p2pEnabled) {
       legacyAnchorDownload(target)
       return
     }

@@ -14,7 +14,7 @@ export interface Preferences {
   quickCommands: string[]
   showVoiceButton: boolean
   overviewTab: 'projects' | 'sessions' // 概览页 项目/会话 切换 tab，记住上次选择
-  p2pDownloadEnabled: boolean // P2P 直连下载开关；关闭后下载始终走 frp 中转（网络抖动时可关）
+  p2pEnabled: boolean // P2P 直连总开关；关闭后 下载/镜像等一律走 frp 中转（网络抖动时可关）
   _migrated: boolean
 }
 
@@ -31,7 +31,7 @@ const DEFAULTS: Preferences = {
   quickCommands: [],
   showVoiceButton: true,
   overviewTab: 'projects',
-  p2pDownloadEnabled: true,
+  p2pEnabled: true,
   _migrated: false,
 }
 

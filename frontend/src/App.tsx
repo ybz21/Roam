@@ -329,9 +329,9 @@ export default function App() {
   // 通用传输 Phase 1a：登录后且用户偏好开 P2P → 建会话级常驻 control PC（左边栏全局状态）。
   // 偏好关闭 / 登出即拆链。P2P 是否真正可用由 transport 内部拉 /api/p2p/config 决定。
   useEffect(() => {
-    if (authed && prefs.p2pDownloadEnabled) startControlLink()
+    if (authed && prefs.p2pEnabled) startControlLink()
     else stopControlLink()
-  }, [authed, prefs.p2pDownloadEnabled])
+  }, [authed, prefs.p2pEnabled])
 
   if (authed === null) return <div style={{ height: '100dvh', display: 'grid', placeItems: 'center' }}><Spin size="large" /></div>
   if (!authed) return <Login onOk={() => { setAuthed(true); loadPreferences(); go('overview') }} />
@@ -2312,14 +2312,14 @@ function PromptPopupCard() {
   )
 }
 
-function P2PDownloadCard() {
+function P2PCard() {
   const { t } = useI18n()
   const [prefs, setPrefs] = usePreferences()
   return (
-    <Card title={t('settings.p2pDownload')}>
+    <Card title={t('settings.p2p')}>
       <Space align="center" wrap>
-        <Switch checked={prefs.p2pDownloadEnabled} onChange={(on) => setPrefs({ p2pDownloadEnabled: on })} />
-        <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('settings.p2pDownloadHelp')}</span>
+        <Switch checked={prefs.p2pEnabled} onChange={(on) => setPrefs({ p2pEnabled: on })} />
+        <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('settings.p2pHelp')}</span>
       </Space>
     </Card>
   )
@@ -2689,7 +2689,7 @@ function EnvPage() {
           <AgentCommandsCard />
           <QuickCommandsCard />
           <PromptPopupCard />
-          <P2PDownloadCard />
+          <P2PCard />
           <Card title={t('install.settingsTitle')}>
             <Space align="center" wrap>
               {pwaInstalled
