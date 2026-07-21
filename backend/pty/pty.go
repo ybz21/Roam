@@ -146,6 +146,87 @@ func tmuxSelectPaneAt(name string, col, row int) {
 	}
 }
 
+// tmuxMoveCursorAt 把前端「单击/轻点」的窗口格子坐标翻译成方向键，移动点中 pane 里应用的
+// 输入光标，对齐原生输入框「点哪光标到哪」的体验——镜像终端的光标在远端 TUI/shell 手里，
+// 点击本身移不动，此前只能靠丝带/键盘上的方向键一格格挪。
+//   - 备用屏(全屏 TUI：Claude Code/Codex/vim)：只发水平 ←/→，绝不发竖直 ↑/↓——TUI 输入框里
+//     ↑/↓ 普遍绑了历史/滚动(上翻/下翻)，点按稍一偏行就会误触；竖直定位交键盘方向键。
+//     竖直距离过远(>8 行)视为点在对话区/输出区（非输入行），整体忽略。
+//   - 普通屏(shell readline)：↑/↓ 会翻命令历史，绝不能发；把竖直距离按 pane 宽折算成
+//     字符数（折行的长命令 ←/→ 本就会跨行走），只发 ←/→，越过行首行尾由 readline 钳住。
+//   - pane 处于 copy-mode 等模式时不动作（按键会被导航吃掉）。
+func tmuxMoveCursorAt(name string, col, row int) {
+	if col < 0 || row < 0 {
+		return
+	}
+	out, err := exec.Command("tmux", "list-panes", "-t", name, "-F",
+		"#{pane_id}\t#{pane_left}\t#{pane_top}\t#{pane_width}\t#{pane_height}\t#{alternate_on}\t#{cursor_x}\t#{cursor_y}\t#{pane_in_mode}").Output()
+	if err != nil {
+		return
+	}
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		parts := strings.Split(line, "\t")
+		if len(parts) != 9 {
+			continue
+		}
+		nums := make([]int, 8)
+		ok := true
+		for i := 1; i < len(parts); i++ {
+			n, err := strconv.Atoi(parts[i])
+			if err != nil {
+				ok = false
+				break
+			}
+			nums[i-1] = n
+		}
+		if !ok {
+			continue
+		}
+		left, top, width, height := nums[0], nums[1], nums[2], nums[3]
+		alt, cx, cy, inMode := nums[4] == 1, nums[5], nums[6], nums[7] == 1
+		if col < left || col >= left+width || row < top || row >= top+height {
+			continue
+		}
+		if inMode {
+			return
+		}
+		dx, dy := (col-left)-cx, (row-top)-cy
+		if alt {
+			// 点在对话/输出区（离输入行太远）忽略；否则只按水平差移光标，竖直不动。
+			if dy > 8 || dy < -8 {
+				return
+			}
+			sendArrows(parts[0], 0, dx)
+		} else {
+			if dy > 3 || dy < -3 {
+				return
+			}
+			sendArrows(parts[0], 0, dy*width+dx)
+		}
+		return
+	}
+}
+
+// sendArrows 先竖直后水平发方向键。用 tmux 命名键(Up/Down/Left/Right)而非裸序列，
+// 让 tmux 按应用的光标键模式(DECCKM)选 CSI/SS3 编码。
+func sendArrows(pane string, dy, dx int) {
+	send := func(key string, n int) {
+		if n > 0 {
+			_ = exec.Command("tmux", "send-keys", "-t", pane, "-N", strconv.Itoa(n), key).Run()
+		}
+	}
+	if dy > 0 {
+		send("Down", dy)
+	} else {
+		send("Up", -dy)
+	}
+	if dx > 0 {
+		send("Right", dx)
+	} else {
+		send("Left", -dx)
+	}
+}
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
 	WriteBufferSize: 4096,
@@ -262,6 +343,10 @@ func Handler(c *gin.Context) {
 					continue
 				case "select-pane":
 					tmuxSelectPaneAt(name, ctrl.Col, ctrl.Row)
+					continue
+				case "move-cursor":
+					// 若 pane 停在 copy-mode(含本连接滚动进入的)，内部会跳过，不打断浏览历史。
+					tmuxMoveCursorAt(name, ctrl.Col, ctrl.Row)
 					continue
 				}
 			}

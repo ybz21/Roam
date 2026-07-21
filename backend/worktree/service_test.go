@@ -236,6 +236,72 @@ func TestMergeSquashAndConflict(t *testing.T) {
 	}
 }
 
+// 远端分支：Branches 列出 remote-tracking 分支（结构化拆 remote/name，含 / 的
+// 分支名不靠字符串猜），Create 可基于本地不存在、仅远端有的分支建 worktree。
+func TestBranchesAndCreateFromRemote(t *testing.T) {
+	ctx := context.Background()
+	s := New()
+	upstream := mkRepo(t)
+	gitIn := func(dir string, args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		cmd.Env = append(scrubGitEnv(),
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return string(out)
+	}
+	// 上游造一个仅远端存在的分支（带 /，验证切分）
+	gitIn(upstream, "checkout", "-q", "-b", "feat/remote-only")
+	commitFile(t, upstream, "remote.txt", "r\n", "remote change")
+	gitIn(upstream, "checkout", "-q", "main")
+
+	local := mkRepo(t)
+	gitIn(local, "remote", "add", "origin", upstream)
+	gitIn(local, "fetch", "-q", "origin")
+	// 歧义引用名：本地分支恰叫 origin/main 时 %(refname:short) 会输出
+	// remotes/origin/main——远端分支不能因此被漏掉
+	gitIn(local, "branch", "origin/main")
+
+	_, _, remotes, err := s.Branches(ctx, local)
+	if err != nil {
+		t.Fatalf("branches: %v", err)
+	}
+	foundFeat, foundMain := false, false
+	for _, rb := range remotes {
+		if rb.Remote == "origin" && rb.Name == "feat/remote-only" {
+			foundFeat = true
+		}
+		if rb.Remote == "origin" && rb.Name == "main" {
+			foundMain = true
+		}
+		if rb.Name == "HEAD" {
+			t.Fatalf("HEAD should be skipped: %+v", remotes)
+		}
+	}
+	if !foundFeat {
+		t.Fatalf("origin/feat/remote-only not listed: %+v", remotes)
+	}
+	if !foundMain {
+		t.Fatalf("origin/main dropped under ambiguous local branch name: %+v", remotes)
+	}
+
+	// 基于远端分支建 worktree：本地无 feat/remote-only，Create fetch 后锁 OID
+	resp, err := s.Create(ctx, CreateReq{Dir: local, Branch: "roam/from-remote", Base: "feat/remote-only", Remote: "origin"})
+	if err != nil {
+		t.Fatalf("create from remote: %v", err)
+	}
+	tip := strings.TrimSpace(gitIn(upstream, "rev-parse", "feat/remote-only"))
+	if resp.StartOid != tip {
+		t.Fatalf("start oid = %s, want upstream tip %s", resp.StartOid, tip)
+	}
+	if _, err := os.Stat(filepath.Join(resp.Path, "remote.txt")); err != nil {
+		t.Fatal("worktree missing file from remote branch")
+	}
+}
+
 func TestExpectedHeadGuard(t *testing.T) {
 	ctx := context.Background()
 	s := New()
@@ -248,5 +314,261 @@ func TestExpectedHeadGuard(t *testing.T) {
 	_, err = s.Merge(ctx, MergeReq{Path: resp.Path, Strategy: "merge", ExpectedHead: "deadbeef"})
 	if we, ok := err.(*Err); !ok || we.Code != "HEAD_MOVED" {
 		t.Fatalf("want HEAD_MOVED, got %v", err)
+	}
+}
+
+// 合入检测（10 设计 §4）：远端 merge/squash 后，本地 base 不 pull 也要能翻绿；
+// 远端分支被删（branch-gone）只作佐证标记。全程用本地 bare 仓库当 origin，离线可跑。
+func TestMergedDetection(t *testing.T) {
+	ctx := context.Background()
+	s := New()
+	repo := mkRepo(t)
+	gitIn := func(dir string, args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		cmd.Env = append(scrubGitEnv(),
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	origin := filepath.Join(t.TempDir(), "origin.git")
+	gitIn(repo, "clone", "--bare", repo, origin)
+	gitIn(repo, "remote", "add", "origin", origin)
+
+	find := func(path string) Worktree {
+		t.Helper()
+		s.invalidate(Repo{CommonDir: canonical(filepath.Join(repo, ".git"))})
+		list, err := s.List(ctx, repo)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, w := range list {
+			if w.Path == path {
+				return w
+			}
+		}
+		t.Fatalf("worktree %s not in list", path)
+		return Worktree{}
+	}
+
+	// ── 空 worktree：新建即秒判「已合入」的回归（HEAD==base tip，是 target 祖先）──
+	we, err := s.Create(ctx, CreateReq{Dir: repo, Branch: "roam/empty", Base: "main"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w := find(we.Path); w.MergedInto != "" {
+		t.Fatalf("empty worktree must NOT be merged, got %+v", w)
+	}
+
+	// ── S1 祖先：远端 main fast-forward 到任务分支，本地 main 不动 ──
+	wa, err := s.Create(ctx, CreateReq{Dir: repo, Branch: "roam/feat-a", Base: "main"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitFile(t, wa.Path, "a2.txt", "a2\n", "feat a")
+	headA := gitIn(wa.Path, "rev-parse", "HEAD")
+	if w := find(wa.Path); w.MergedInto != "" {
+		t.Fatalf("before sync: unexpectedly merged: %+v", w)
+	}
+	gitIn(repo, "push", "-q", "origin", "roam/feat-a")
+	gitIn(origin, "update-ref", "refs/heads/main", headA) // 远端「merge」（对象已随 push 到位）
+	if res, err := s.Sync(ctx, repo); err != nil || res.Error != "" || res.SyncedAt == 0 {
+		t.Fatalf("sync: %v %+v", err, res)
+	}
+	w := find(wa.Path)
+	if w.MergedInto != "origin/main" || w.MergedKind != "ancestry" {
+		t.Fatalf("S1 want merged ancestry into origin/main, got %+v", w)
+	}
+	if w.RemoteGone {
+		t.Fatalf("S1: branch still on remote, gone=false expected: %+v", w)
+	}
+
+	// ── S3 branch-gone：远端删掉任务分支后再 Sync ──
+	gitIn(origin, "update-ref", "-d", "refs/heads/roam/feat-a")
+	if _, err := s.Sync(ctx, repo); err != nil {
+		t.Fatal(err)
+	}
+	if w := find(wa.Path); !w.RemoteGone {
+		t.Fatalf("S3 want remoteGone after remote branch deleted, got %+v", w)
+	}
+
+	// ── S2 补丁等价（squash）：远端 main 上是同补丁的新提交 ──
+	wb, err := s.Create(ctx, CreateReq{Dir: repo, Branch: "roam/feat-b", Base: "main", Remote: "origin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitFile(t, wb.Path, "b.txt", "b\n", "feat b")
+	headB := gitIn(wb.Path, "rev-parse", "HEAD")
+	remoteMain := gitIn(origin, "rev-parse", "refs/heads/main")
+	squash := gitIn(repo, "commit-tree", headB+"^{tree}", "-p", remoteMain, "-m", "squash: feat b (#1)")
+	gitIn(repo, "push", "-q", "origin", squash+":refs/heads/main") // 远端「squash 合并」
+	if _, err := s.Sync(ctx, repo); err != nil {
+		t.Fatal(err)
+	}
+	w = find(wb.Path)
+	if w.MergedInto != "origin/main" || w.MergedKind != "squash" {
+		t.Fatalf("S2 want merged squash, got %+v", w)
+	}
+	if w.AheadUnique != 0 {
+		t.Fatalf("S2 want aheadUnique=0, got %d", w.AheadUnique)
+	}
+
+	// ── 未合并的真领先：分支再长一个新提交 → 翻回未合并，aheadUnique=1 ──
+	commitFile(t, wb.Path, "b2.txt", "b2\n", "feat b followup")
+	w = find(wb.Path)
+	if w.MergedInto != "" {
+		t.Fatalf("followup commit must flip back to unmerged, got %+v", w)
+	}
+	if w.AheadUnique != 1 {
+		t.Fatalf("want aheadUnique=1 after followup, got %d", w.AheadUnique)
+	}
+}
+
+// 分叉点(StartOid)守空 worktree：base 仅在远端、本地无 refs/heads/<base> 时，旧
+// 「相对本地 base 有无独占提交」的兜底判据会退化成放行——空 worktree HEAD==远端 base
+// tip，又是 origin/<base> 的祖先，S1 秒判「已合入」。改用 Head==StartOid 判 ownWork
+// 后与本地 base ref 是否存在无关，空 worktree 恒不合入。
+func TestMergedEmptyWorktreeRemoteOnlyBase(t *testing.T) {
+	ctx := context.Background()
+	s := New()
+	repo := mkRepo(t)
+	gitIn := func(dir string, args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		cmd.Env = append(scrubGitEnv(),
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	origin := filepath.Join(t.TempDir(), "origin.git")
+	gitIn(repo, "clone", "--bare", repo, origin)
+	gitIn(repo, "remote", "add", "origin", origin)
+	// base 分支只留在远端：本地建 relbase→推送→删本地，制造「无 refs/heads/relbase」
+	gitIn(repo, "branch", "relbase")
+	gitIn(repo, "push", "-q", "origin", "relbase")
+	gitIn(repo, "branch", "-D", "relbase")
+
+	// 从远端 relbase 建空 worktree（Remote 走 fetch 锁 OID），一行未改
+	wt, err := s.Create(ctx, CreateReq{Dir: repo, Branch: "roam/rel", Base: "relbase", Remote: "origin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.invalidate(Repo{CommonDir: canonical(filepath.Join(repo, ".git"))})
+	list, err := s.List(ctx, repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range list {
+		if w.Path == wt.Path {
+			if w.MergedInto != "" {
+				t.Fatalf("empty worktree on remote-only base must NOT be merged, got %+v", w)
+			}
+			return
+		}
+	}
+	t.Fatalf("worktree %s not in list", wt.Path)
+}
+
+// 三态细化（已提交→已推送→已合入）：Pushed 靠本地 origin/<branch> 跟踪 ref 判定。
+// 关键前提是 `git push` 成功后会更新对应 remote-tracking ref（git ≥1.8.4），故无需联网
+// 也无需 Sync 抓任务分支——本测试用本地 bare 当 origin 全程离线验证这条通路。
+func TestPushedDetection(t *testing.T) {
+	ctx := context.Background()
+	s := New()
+	repo := mkRepo(t)
+	gitIn := func(dir string, args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		cmd.Env = append(scrubGitEnv(),
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	origin := filepath.Join(t.TempDir(), "origin.git")
+	gitIn(repo, "clone", "--bare", repo, origin)
+	gitIn(repo, "remote", "add", "origin", origin)
+
+	find := func(path string) Worktree {
+		t.Helper()
+		s.invalidate(Repo{CommonDir: canonical(filepath.Join(repo, ".git"))})
+		list, err := s.List(ctx, repo)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, w := range list {
+			if w.Path == path {
+				return w
+			}
+		}
+		t.Fatalf("worktree %s not in list", path)
+		return Worktree{}
+	}
+
+	wt, err := s.Create(ctx, CreateReq{Dir: repo, Branch: "roam/feat-p", Base: "main"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitFile(t, wt.Path, "p.txt", "p\n", "feat p")
+
+	// 本地已提交、未推送：Pushed=false（origin/roam/feat-p 跟踪 ref 尚不存在）
+	if w := find(wt.Path); w.Pushed {
+		t.Fatalf("before push: want pushed=false, got %+v", w)
+	}
+
+	// push 成功后 remote-tracking ref 更新 → Pushed=true，但未合入（MergedInto 为空）
+	gitIn(wt.Path, "push", "-q", "origin", "roam/feat-p")
+	w := find(wt.Path)
+	if !w.Pushed {
+		t.Fatalf("after push: want pushed=true, got %+v", w)
+	}
+	if w.MergedInto != "" {
+		t.Fatalf("after push: still unmerged expected, got %+v", w)
+	}
+
+	// 推送后又长新提交 → HEAD 不再是 origin 祖先 → 翻回未推送
+	commitFile(t, wt.Path, "p2.txt", "p2\n", "feat p followup")
+	if w := find(wt.Path); w.Pushed {
+		t.Fatalf("after local followup: want pushed=false, got %+v", w)
+	}
+}
+
+// 半删残缺态自愈（10 §7 实测）：git 删工作树半路失败会留下 gitfile 已删、注册表
+// 还在的卡死状态——Remove(force) 应能从父目录解析仓库并 RemoveAll+prune 收干净。
+func TestRemoveHalfDeadWorktree(t *testing.T) {
+	ctx := context.Background()
+	s := New()
+	repo := mkRepo(t)
+	wt, err := s.Create(ctx, CreateReq{Dir: repo, Branch: "roam/half-dead", Base: "main"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 模拟半删：gitfile 没了、目录里还剩东西
+	if err := os.Remove(filepath.Join(wt.Path, ".git")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wt.Path, "leftover.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Remove(ctx, RemoveReq{Path: wt.Path, ForceWorktree: true, IgnoreSessions: true}); err != nil {
+		t.Fatalf("remove half-dead: %v", err)
+	}
+	if pathExists(wt.Path) {
+		t.Fatal("worktree dir should be gone")
+	}
+	out, err := exec.Command("git", "-C", repo, "worktree", "list", "--porcelain").CombinedOutput()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(out), wt.Path) {
+		t.Fatalf("registry entry should be pruned:\n%s", out)
 	}
 }

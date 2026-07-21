@@ -57,6 +57,9 @@ export default function FileWorkspace({
   const [focus, setFocus] = useState<Group>('A')
   const [dirtyFiles, setDirtyFiles] = useState<Set<string>>(new Set())
   const [dropHint, setDropHint] = useState<Group | 'split' | null>(null) // 拖拽落点提示
+  // tab 条容器引用：标签多到溢出时，新开/切到的 tab 可能落在横向滚动区域外点不到，
+  // 靠 scrollIntoView 把当前激活的 tab 拉回可见区（见下方 effect）。
+  const tabStripRef = useRef<Record<Group, HTMLDivElement | null>>({ A: null, B: null })
   const [dragging, setDragging] = useState(false) // 原生拖拽进行中 → 每栏内容盖一层透明接盘层，压过终端/Monaco
   // 拖的是 tab/会话(需接盘层压过终端才能移栏) 还是文件路径(要落回终端/对话做 @引用注入,不能被接盘层截走)
   const [dragKind, setDragKind] = useState<'tab' | 'lead' | 'path' | null>(null)
@@ -75,6 +78,23 @@ export default function FileWorkspace({
   const setFilesOf = (g: Group, v: string[]) => (g === 'A' ? setFilesA(v) : setFilesB(v))
   const activeOf = (g: Group) => (g === 'A' ? activeA : activeB)
   const setActiveOf = (g: Group, v: string | null) => (g === 'A' ? setActiveA(v) : setActiveB(v))
+
+  useEffect(() => {
+    ;(['A', 'B'] as Group[]).forEach((g) => {
+      const strip = tabStripRef.current[g]
+      if (!strip) return
+      const key = activeOf(g) ?? 'lead'
+      const el = strip.querySelector<HTMLElement>(`[data-tab-key="${CSS.escape(key)}"]`)
+      if (!el) return
+      // 只挪 tab 条自己的 scrollLeft，不用 Element.scrollIntoView——它会顺带滚动外层
+      // 祖先(哪怕 overflow:hidden 不出滚动条也会被program改 scrollLeft)，
+      // 标签一多就把旁边的文件树 dock 也一起挤出可视区。
+      const stripRect = strip.getBoundingClientRect()
+      const elRect = el.getBoundingClientRect()
+      if (elRect.left < stripRect.left) strip.scrollLeft -= stripRect.left - elRect.left
+      else if (elRect.right > stripRect.right) strip.scrollLeft += elRect.right - stripRect.right
+    })
+  }, [activeA, activeB, filesA, filesB])
 
   const setFileDirty = (p: string, dirty: boolean) => setDirtyFiles((prev) => {
     if (prev.has(p) === dirty) return prev
@@ -281,7 +301,7 @@ export default function FileWorkspace({
     const isDirty = !prev && dirtyFiles.has(f)
     const act = activeOf(g) === f
     return (
-      <div key={g + f} title={prev ? `${t('file.preview')} · ${rp}` : f} draggable
+      <div key={g + f} data-tab-key={f} title={prev ? `${t('file.preview')} · ${rp}` : f} draggable
         onDragStart={(e) => { e.dataTransfer.setData(TAB_MIME, JSON.stringify({ path: f, from: g })); e.dataTransfer.effectAllowed = 'move'; setDragging(true); setDragKind('tab') }}
         onPointerDown={(e) => startTouchDrag(e, { kind: 'tab', path: f, from: g }, baseName(f))}
         onClick={() => { if (draggedRef.current) return; setActiveOf(g, f); setFocus(g) }}
@@ -307,12 +327,12 @@ export default function FileWorkspace({
       <div style={{ flex: `${grow} 1 0`, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}
         onClick={() => setFocus(g)}>
         <div style={{ display: 'flex', alignItems: 'stretch', borderBottom: '1px solid var(--border)', background: 'var(--bg-container)' }}>
-          <div data-drop-group={g} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'stretch', overflowX: 'auto' }}
+          <div data-drop-group={g} ref={(el) => { tabStripRef.current[g] = el }} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'stretch', overflowX: 'auto' }}
             onDragOver={(e) => { if (dragHasPayload(e)) { e.preventDefault(); setDropHint(g) } }}
             onDragLeave={() => setDropHint((h) => (h === g ? null : h))}
             onDrop={(e) => { if (dragHasPayload(e)) { e.preventDefault(); setDropHint(null); applyDrop(e, g) } }}>
             {primary && hasLeading && (
-              <div onClick={() => { if (draggedRef.current) return; setActiveOf('A', null) }} title={leadingTitle}
+              <div data-tab-key="lead" onClick={() => { if (draggedRef.current) return; setActiveOf('A', null) }} title={leadingTitle}
                 draggable={split}
                 onDragStart={(e) => { e.dataTransfer.setData(LEAD_MIME, '1'); e.dataTransfer.effectAllowed = 'move'; setDragging(true); setDragKind('lead') }}
                 onPointerDown={(e) => { if (split) startTouchDrag(e, { kind: 'lead' }, leadingTitle || '') }}

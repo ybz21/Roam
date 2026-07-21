@@ -5,13 +5,13 @@ package api
 import (
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"ttmux-web/project"
 	"ttmux-web/ttmux"
 	"ttmux-web/worktree"
 )
@@ -24,10 +24,11 @@ type API struct {
 	Speech      *SpeechStore      // 语音识别(ASR)配置 + 转录
 	Prefs       *PreferencesStore // 用户偏好（主题/语言/Agent 命令等）
 	Races       *RaceStore        // 竞赛（W5/W6）业务数据模型
+	Projects    *project.Store    // 项目（08）：knownRepos 弱台账 + UI 偏好
 }
 
 func New(tt *ttmux.Client, browserHome, dataDir string) *API {
-	return &API{TT: tt, WT: worktree.New(), BrowserHome: browserHome, Football: NewFootballStore(), Speech: NewSpeechStore(dataDir), Prefs: NewPreferencesStore(dataDir), Races: NewRaceStore(dataDir)}
+	return &API{TT: tt, WT: worktree.New(), BrowserHome: browserHome, Football: NewFootballStore(), Speech: NewSpeechStore(dataDir), Prefs: NewPreferencesStore(dataDir), Races: NewRaceStore(dataDir), Projects: project.NewStore(dataDir)}
 }
 
 // json 透传 ttmux 的 --json 输出
@@ -93,8 +94,15 @@ func sessionParam(c *gin.Context) string {
 	return SanitizeSessionName(c.Param("name"))
 }
 
-// Sessions
-func (a *API) Sessions(c *gin.Context) { a.json(c, "ls", "--json") }
+// Sessions GET /sessions[?tree=1] —— tree=1 返回 parent 投影树（ls --tree --json，
+// 节点带 parent/children，供 W2 父子分组）；缺省平铺（兼容旧调用方）。
+func (a *API) Sessions(c *gin.Context) {
+	if c.Query("tree") == "1" {
+		a.json(c, "ls", "--tree", "--json")
+		return
+	}
+	a.json(c, "ls", "--json")
+}
 func (a *API) NewSession(c *gin.Context) {
 	var b struct {
 		Name string `json:"name"`
@@ -136,7 +144,9 @@ func (a *API) RenameSession(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"name": newName}})
 		return
 	}
-	out, err := a.TT.Run("rename-session", "-t", oldName, newName)
+	// 走 ttmux rename（而非裸 rename-session 透传到 tmux）：改名后 CLI 内
+	// 会同步 meta parent 外键，子会话才不会被 Reconcile 当孤儿收养。
+	out, err := a.TT.Run("rename", oldName, newName)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "TTMUX_ERROR", "message": ttmux.StripANSI(out)}})
 		return
@@ -175,7 +185,8 @@ func (a *API) Keys(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
 		return
 	}
-	args := []string{"send-keys", "-t", name}
+	// =name: 精确匹配（send-keys 的 pane 目标对裸 =name 报 can't find pane）；走 ttmux 转发尊重 TMUX_BIN
+	args := []string{"send-keys", "-t", "=" + name + ":"}
 	for _, k := range b.Keys {
 		ok := allowedKeys[k]
 		if !ok && len(k) == 1 {
@@ -188,19 +199,25 @@ func (a *API) Keys(c *gin.Context) {
 		}
 		args = append(args, k)
 	}
-	if err := exec.Command("tmux", args...).Run(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "TMUX_ERROR", "message": err.Error()}})
+	if out, err := a.TT.Run(args...); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "TMUX_ERROR", "message": ttmux.StripANSI(out)}})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": "ok"})
 }
 
 // SessionCwd GET /sessions/:name/cwd —— 返回会话活动 pane 的工作目录（供文件侧栏定位根）。
+// 走 ttmux 转发（尊重 TMUX_BIN）+ =name 精确匹配；display-message 对 =name 静默输出空，
+// 所以用 list-panes 取 active pane（与 fork 的父 cwd 解析同款）。
 func (a *API) SessionCwd(c *gin.Context) {
-	out, err := exec.Command("tmux", "display-message", "-p", "-t", sessionParam(c), "#{pane_current_path}").Output()
 	dir := ""
-	if err == nil {
-		dir = strings.TrimSpace(string(out))
+	if out, err := a.TT.Run("list-panes", "-t", "="+sessionParam(c), "-F", "#{pane_active}\t#{pane_current_path}"); err == nil {
+		for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+			active, cwd, ok := strings.Cut(line, "\t")
+			if ok && (dir == "" || active == "1") {
+				dir = cwd
+			}
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"dir": dir}})
 }

@@ -176,8 +176,11 @@ func ensureChrome() error {
 	}
 	// 无头/有头：auto=按有无显示器自动判断；on=强制无头；off=强制有头。
 	// 强制有头但无显示器(DISPLAY 空)时 Chrome 会起不来——属用户显式选择。
+	// WSL 下 WSLg 会自带一个 DISPLAY，但那不是「有真实显示器」——有头模式会被 WSLg 转发成
+	// 一个糊在 Windows 桌面上的杂散 Linux 窗口，而非「浏览器镜像」想要的服务端截屏。
+	// 所以 WSL 下即便 DISPLAY 非空也按无头处理，除非用户显式选了「off」。
 	headless := cfg.Headless == "on" ||
-		(cfg.Headless != "off" && runtime.GOOS != "darwin" && os.Getenv("DISPLAY") == "")
+		(cfg.Headless != "off" && runtime.GOOS != "darwin" && (isWSL() || os.Getenv("DISPLAY") == ""))
 	if headless { // screencast 在无头下同样可用
 		args = append(args, "--headless=new", "--window-size="+cfg.WindowSize)
 	} else if cfg.Fullscreen != nil && *cfg.Fullscreen { // 有头：全屏启动，画面铺满宿主屏幕

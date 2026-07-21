@@ -208,6 +208,14 @@ ttmux 的能力止步于「平坦 tmux session + parent 关系」，**不理解 
 
 同仓库 ≥2 个 worktree 会话聚组；分组优先按 parent 树（fork 关系），无 parent 的按 cwd join 兜底。行尾 `⎇ 分支` Tag；session 多 pane 命中多个 worktree 时显示 primary 并加歧义标记（hover 列全部 matches）。其余同前（分组头 [管理] 入口、竞赛组头 [对比台]、手机端只显图标、折叠记 localStorage）。
 
+> 实现补充（F 期收尾）：数据源改 `GET /sessions?tree=1`（parent 投影树拍平）；分组优先级
+> **竞赛 > 父子树 > 仓库**——有活父/子的会话按 parent 树渲染（子行 ⑂ 紫色导线、按深度缩进），
+> 不再落入仓库分组。会话行新增「派生」入口 → 复用新建会话同一张表单（parent 模式）：
+> 目录固定 = 父会话 cwd（派生的语义就是在父目录干活，只读展示），其余与新建完全一致——
+> 在哪干活三选一（父目录 / 新建 worktree / 已有(N)，非仓库父置灰并说明原因）、
+> 勾新建 worktree 时 prompt 同样前置命名约定。提交走 `POST /sessions/:parent/fork-worktree`
+> 或（父目录/已有档）`POST /sessions/:parent/fork`。
+
 ### W3. Git 面板：worktree 态 + 「对比 base」
 
 - 头部加 `worktree` 徽标与「基于 <roam.baseRef> · 主仓库 <路径>」；**base=unknown（外部 worktree）显示 `base ?`，隐藏合并按钮**。
@@ -225,6 +233,12 @@ ttmux 的能力止步于「平坦 tmux session + parent 关系」，**不理解 
 | 合并 | 走 §2.3 状态机；冲突弹 `{stage, conflictFiles}` + [进入会话处理]；成功后询问删除 |
 | 删除 | 先查占用（有 session/pane 在内 → 默认禁止，引导先关会话）；dry-run 报告将丢失的 dirty/committedAhead 明细；删分支默认 `-d`，需 `-D` 时单独红字勾选 |
 | 刷新 | 5s 轮询（service 缓存兜底）；**不顺带 prune**，底部显式「清理残留」按钮 |
+
+> 实现补充（重做版）：默认**跨仓库总览**——`GET /git/worktrees/all` 汇总当前全部会话触达的
+> 仓库（cwd join），按仓库分组、组头可「聚焦」；目录框留空即总览。行有状态导轨色 + 有货
+> 着色（↑ 蓝/改动 黄），操作补齐 进入会话/新建会话进入（孤儿复活）、对比 base（已提交/未
+> 提交分开统计 + 逐文件补丁，对比到工作区）；删除先列损失（改动/未合并提交）再确认 +
+> 「同时删分支」勾选；筛选 = 状态档（带计数）+ 文本；新建（可手动指定分支名）仅聚焦时可用。
 
 ### W5. 竞赛创建弹窗
 

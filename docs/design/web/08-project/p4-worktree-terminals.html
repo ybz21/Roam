@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>P4 · Worktree × 命令行：每个 worktree 下的派生终端</title>
+<link rel="stylesheet" href="../07-worktree/mock.css">
+<link rel="stylesheet" href="project.css">
+</head>
+<body>
+<div class="spec-bar">
+  <b><span class="spec-tag">P4</span> Worktree × 命令行</b><span class="spec-tag">worktree 行可展开 · 新开命令行菜单可点</span>
+  <span class="spacer"></span>
+  <a href="p3-task-finish.html">← P3</a><a href="index.html">↑ 索引</a>
+</div>
+<div class="spec-note">P2 Worktree tab 的完整交互：每个 worktree 行<em>可展开</em>，列出 cwd join 命中的全部命令行（会话）——agent 会话与裸 shell 同列，行内带<em>最后一行终端输出预览</em>（capture-pane 尾行，5s 轮询）；行尾「＋ 在此 worktree 新开命令行」三选（shell / Claude / Codex）。点「进入」→ 右侧停靠终端打开，工具栏面包屑 <code>项目 › ⎇ 分支 › 命令行</code>。孤儿 worktree 的展开态即复活入口。</div>
+
+<div class="stage">
+  <!-- 桌面：页面 + 右侧停靠终端 -->
+  <div class="app-frame" style="height:820px">
+    <div class="sider" style="width:64px;flex:0 0 64px;padding:16px 8px;align-items:center">
+      <div class="brand" style="font-size:15px;padding:2px 0 18px">R</div>
+      <div class="nav-item" style="padding:9px">◎</div>
+      <div class="nav-item on" style="padding:9px">⌂</div>
+      <div class="nav-item" style="padding:9px">⬡</div>
+      <div class="nav-item" style="padding:9px">⋯</div>
+    </div>
+    <div class="main-col">
+      <div class="page-pad" style="padding:12px 14px">
+        <div class="proj-head" style="padding-bottom:8px">
+          <div class="ico">⌂</div>
+          <div class="t"><b>ttmux</b><div class="sub">~/codes/ttmux · ⎇ main @ a1b2c3</div></div>
+        </div>
+        <div class="ptabs" style="margin-top:2px">
+          <span class="pt">任务 <span class="n">6</span></span>
+          <span class="pt on">Worktree <span class="n">4</span></span>
+          <span class="pt">竞赛 <span class="n">1</span></span>
+          <span class="pt">活动</span>
+        </div>
+
+        <div class="card">
+          <!-- 1. 活 worktree（展开）：2 条命令行 + 新开菜单 -->
+          <div class="wt-row open" id="w1">
+            <div class="r1" data-toggle><span class="tri">▸</span><span class="branch">fix-login</span><span class="tag green">命令行 ×2</span></div>
+            <div class="r2" style="margin-left:20px"><span>基于 <b>main</b></span>·<span class="hot-b">↑2</span>·<span class="hot-y">改动 3</span>·<span>2小时前</span></div>
+            <div class="wt-sess-list">
+              <div class="wt-sess active">
+                <i class="dot g"></i><span class="nm" style="color:#fff">fix-login</span><span class="tag blue" style="height:17px;font-size:10.5px">Claude</span>
+                <span class="term-peek"><span class="c">✳</span> Refactoring token refresh… (esc to interrupt)</span>
+                <span class="meta">2 pane · 刚刚</span>
+                <span class="acts"><a>进入</a><a>派生</a><a class="close">关闭</a></span>
+              </div>
+              <div class="wt-sess">
+                <i class="dot idle"></i><span class="nm">fix-login-sh</span><span class="tag ghost" style="height:17px;font-size:10.5px">shell</span>
+                <span class="amb" title="该会话另有 pane 位于 ~/codes/ttmux（主仓库）">⚠</span>
+                <span class="term-peek"><span class="p">$</span> go test ./auth/...  ok  0.41s</span>
+                <span class="meta">1 pane · 5分钟前</span>
+                <span class="acts"><a>进入</a><a class="close">关闭</a></span>
+              </div>
+              <div class="add-line" id="add1">＋ 在此 worktree 新开命令行
+                <div class="menu" id="menu1">
+                  <div class="mi">▸ shell<span class="d">裸终端，跑测试/查日志</span></div>
+                  <div class="mi">✳ Claude<span class="d">接管此分支继续干</span></div>
+                  <div class="mi">◆ Codex<span class="d">换个 agent 试</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="r3" style="margin-top:9px"><span class="btn sm">对比 base</span><span class="btn sm">合并回 main ▾</span><span class="btn sm danger" style="opacity:.5" title="仍有 2 个命令行在此目录内">删除</span><span class="hint" style="align-self:center">删除前先关闭上面 2 个命令行</span></div>
+          </div>
+
+          <!-- 2. 活 worktree（收起） -->
+          <div class="wt-row" id="w2">
+            <div class="r1" data-toggle><span class="tri">▸</span><span class="branch">i18n-audit</span><span class="tag green">命令行 ×1</span></div>
+            <div class="r2" style="margin-left:20px"><span>基于 <b>main</b></span>·<span class="hot-b">↑4</span>·<span>改动 0</span>·<span>40分钟前</span></div>
+            <div class="wt-sess-list" style="display:none">
+              <div class="wt-sess">
+                <i class="dot y"></i><span class="nm">i18n-audit</span><span class="tag green" style="height:17px;font-size:10.5px">Codex</span>
+                <span class="term-peek">? 是否将 fallback 文案抽入词条 (y/n)</span>
+                <span class="meta">1 pane · 40分钟前</span>
+                <span class="acts"><a>进入</a><a>派生</a><a class="close">关闭</a></span>
+              </div>
+              <div class="add-line">＋ 在此 worktree 新开命令行</div>
+            </div>
+          </div>
+
+          <!-- 3. 孤儿（展开 = 复活入口） -->
+          <div class="wt-row open" id="w3">
+            <div class="r1" data-toggle><span class="tri">▸</span><span class="branch">dark-theme</span><span class="tag yellow">孤儿</span></div>
+            <div class="r2" style="margin-left:20px"><span>基于 <b>main</b></span>·<span class="hot-b">↑3</span>·<span class="hot-y">改动 1</span>·<span>昨天</span></div>
+            <div class="wt-sess-list" style="border-left-color:rgba(210,153,34,.35)">
+              <div class="hint" style="padding:5px 8px">无命令行 —— 会话已关，worktree 留存</div>
+              <div class="add-line" style="border-color:rgba(210,153,34,.5);color:var(--yellow)">＋ 复活：新开命令行进入（shell / Claude / Codex）</div>
+            </div>
+            <div class="r3" style="margin-top:9px"><span class="btn sm" style="color:var(--yellow)">收尾…</span><span class="btn sm">对比 base</span></div>
+          </div>
+
+          <!-- 4. 外部 -->
+          <div class="wt-row" id="w4" style="border-bottom:0">
+            <div class="r1" data-toggle><span class="tri">▸</span><span class="branch">hotfix-x</span><span class="tag ghost">⧉ 外部 · base ?</span></div>
+            <div class="r2" style="margin-left:20px"><span>基于 <b>?</b></span>·<span>改动 0</span>·<span>30分钟前</span></div>
+            <div class="wt-sess-list" style="display:none">
+              <div class="hint" style="padding:5px 8px">无命令行（外部创建，无 roam 元信息）</div>
+              <div class="add-line">＋ 收编：新开命令行进入</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右侧停靠终端：进入 fix-login 后 -->
+    <div class="dock">
+      <div class="term-tabs">
+        <span class="tt on">fix-login</span><span class="tt">fix-login-sh</span><span class="tt" style="padding:6px 9px">＋</span>
+      </div>
+      <div class="term-toolbar">
+        <span class="crumb"><a>⌂ ttmux</a><span class="sep">›</span><a style="color:var(--cyan)">⎇ fix-login</a><span class="sep">›</span><span style="color:var(--text-bright)">fix-login</span></span>
+        <span style="flex:1"></span><span>tmux ▾</span><span>✕</span>
+      </div>
+      <div class="term-bg">
+        <div><span class="p">~/codes/ttmux/.worktrees/fix-login</span> <span class="d">⎇ fix-login</span></div>
+        <div class="t">✳ Refactoring token refresh flow…</div>
+        <div class="d">  · auth/token.go: 去抖窗口收敛为单飞</div>
+        <div class="d">  · auth/token_test.go: 补并发刷新用例</div>
+        <div class="t">  Running: go test ./auth/... <span class="c">⏎</span></div>
+        <div><span class="p">ok</span>   ttmux-web/auth   0.41s</div>
+        <div class="d">esc to interrupt · ctrl+t todos</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 手机 -->
+  <div class="phone-frame" style="height:820px">
+    <div class="notch"><i></i></div>
+    <div style="padding:8px 14px 6px;display:flex;align-items:center;gap:8px">
+      <a style="color:var(--text-dim)">‹</a><b style="font-size:15.5px">ttmux</b>
+      <span style="flex:1"></span><span class="btn sm">清理残留</span>
+    </div>
+    <div class="ptabs" style="margin:0;padding:0 10px">
+      <span class="pt">任务</span><span class="pt on">Worktree <span class="n">4</span></span><span class="pt">活动</span>
+    </div>
+    <div style="flex:1;overflow:hidden;padding:4px 8px">
+      <div class="wt-row open" style="padding:11px 8px">
+        <div class="r1"><span class="tri">▸</span><span class="branch">fix-login</span><span class="tag green" style="height:18px;font-size:10.5px">×2</span></div>
+        <div class="r2" style="margin-left:18px"><span class="hot-b">↑2</span>·<span class="hot-y">改动 3</span>·<span>2小时前</span></div>
+        <div class="wt-sess-list">
+          <div class="wt-sess" style="padding:6px">
+            <i class="dot g"></i><span class="nm">fix-login</span><span class="tag blue" style="height:17px;font-size:10.5px">CL</span>
+            <span class="term-peek">✳ Refactoring…</span>
+          </div>
+          <div class="wt-sess" style="padding:6px">
+            <i class="dot idle"></i><span class="nm">fix-login-sh</span>
+            <span class="term-peek"><span class="p">$</span> go test ok</span>
+          </div>
+          <div class="add-line" style="padding:6px 8px">＋ 新开命令行</div>
+        </div>
+      </div>
+      <div class="wt-row" style="padding:11px 8px">
+        <div class="r1"><span class="tri">▸</span><span class="branch">i18n-audit</span><span class="tag green" style="height:18px;font-size:10.5px">×1</span></div>
+        <div class="r2" style="margin-left:18px"><span class="hot-b">↑4</span>·<span>40分钟前</span></div>
+      </div>
+      <div class="wt-row" style="padding:11px 8px;border-bottom:0">
+        <div class="r1"><span class="tri">▸</span><span class="branch">dark-theme</span><span class="tag yellow" style="height:18px;font-size:10.5px">孤儿</span></div>
+        <div class="r2" style="margin-left:18px"><span class="hot-b">↑3</span>·<span class="hot-y">改动 1</span>·<span>昨天</span></div>
+      </div>
+    </div>
+    <div class="tabbar"><span>◎</span><span class="on">⌂</span><span>⬡</span><span>⋯</span></div>
+  </div>
+</div>
+
+<div class="spec-note" style="border-top:1px solid var(--border-subtle)">
+  规则：① 命令行 = 会话粒度（pane 归 tmux 自己管，只展示 pane 数）；挂靠关系 = cwd join 实况，会话 cd 走了自动离组、cd 进来自动入列；多 pane 命中多 worktree 显 ⚠（hover 列全部 matches，同 07 §2.4 ambiguous）；② 新开命令行：shell = <code>ttmux new --dir &lt;worktree&gt;</code>（纯目录语义，命名 <code>&lt;分支&gt;-sh</code> 自动后缀）；Claude/Codex = <code>POST /worktree-sessions</code>「已有」档（注入 cd + agent 启动）——孤儿由此复活、外部由此收编；③ 输出预览 = <code>tmux capture-pane</code> 尾行，展开的 worktree 才拉取（懒加载 + 5s 缓存），只读不交互；④ 「进入」→ 右侧停靠终端（手机全屏），工具栏面包屑 项目 › ⎇ 分支 › 命令行，点分支段回本 tab；⑤ 删除按钮在有命令行挂靠时置灰（占用检查前置到 UI，后端 Remove 仍兜底）；⑥ 「派生」= fork 表单（parent 固定，默认同 worktree）。
+</div>
+
+<script>
+document.querySelectorAll('.wt-row .r1[data-toggle]').forEach(r1 => r1.addEventListener('click', () => {
+  const row = r1.closest('.wt-row')
+  const list = row.querySelector('.wt-sess-list')
+  const open = row.classList.toggle('open')
+  if (list) list.style.display = open ? '' : 'none'
+}))
+const add1 = document.getElementById('add1'), menu1 = document.getElementById('menu1')
+add1.addEventListener('click', e => { e.stopPropagation(); menu1.style.display = menu1.style.display === 'none' ? '' : 'none' })
+</script>
+</body>
+</html>

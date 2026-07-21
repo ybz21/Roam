@@ -23,8 +23,10 @@ type promptCtx struct {
 	Task, Deps, Workdir, SkillsDir  string
 	MasterName                      string
 	Peers                           []string
-	Subrole, SubroleLabel, Duty     string // 细分角色 key/中文 + 长期职责
-	RoleTrait                       string // prompts/roles/<subrole>.md 渲染前注入（角色工作方式）
+	Subrole, SubroleLabel, Duty     string   // 细分角色 key/中文 + 长期职责
+	RoleTrait                       string   // prompts/roles/<subrole>.md 渲染前注入（角色工作方式）
+	Roster                          []string // 项目页发起时的班子建议（仅供指挥参考，09 设计 §4）
+	WorktreePolicy                  bool     // 成员独立 worktree 约定（写进开场白，指挥执行）
 }
 
 // skillsDir 返回 agent 自动加载 skill 的目录（install.sh / start.sh --dev 同步到此）。

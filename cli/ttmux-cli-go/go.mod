@@ -26,11 +26,16 @@ require (
 )
 
 require (
+	roam-plugins/cron v0.0.0
+	roam-plugins/hostmonitor v0.0.0
 	roam-plugins/im v0.0.0
 	roam-plugins/reviewmesh v0.0.0
 )
 
 replace (
+	roam-plugins/hostmonitor => ../../plugins/hostmonitor
 	roam-plugins/im => ../../plugins/im
 	roam-plugins/reviewmesh => ../../plugins/reviewmesh
 )
+
+replace roam-plugins/cron => ../../plugins/cron

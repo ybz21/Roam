@@ -25,6 +25,7 @@ export function FileView({
   tabbed,
   forcePreview,
   onClose,
+  onBack,
   onOpenPath,
   onOpenAgent,
   onDirtyChange,
@@ -41,6 +42,8 @@ export function FileView({
   // 专用预览 tab（VSCode「侧栏预览」）：始终渲染 markdown/HTML，不显示编辑器/切换钮。
   forcePreview?: boolean
   onClose: () => void
+  // 移动端二级页语境：标题栏最左显「←」返回（代替右侧关闭 ×），工具按钮可换行。
+  onBack?: () => void
   onOpenPath: (p: string) => void
   onOpenAgent?: (kind: 'claude' | 'codex', path: string) => void
   // 编辑器脏状态上报（供外层 tab 显示未保存圆点）
@@ -145,7 +148,12 @@ export function FileView({
   }
 
   const titleNode = (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingRight: inline ? 0 : 28, minWidth: 0 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingRight: inline ? 0 : 28, minWidth: 0, flexWrap: onBack ? 'wrap' : undefined, rowGap: onBack ? 6 : undefined }}>
+      {onBack && (
+        <IconButton title={t('common.back')} onClick={onBack}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+        </IconButton>
+      )}
       {!tabbed && (
         <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           <span style={{ color: accent }}>▸</span> {name}
@@ -168,7 +176,7 @@ export function FileView({
       <Button size="small" onClick={copyPath}>{t('file.copyPath')}</Button>
       <Button size="small" href={downloadUrl} download={downloadName}>{t('file.download')}</Button>
       <a href={rawUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('file.raw')}</a>
-      {inline && !tabbed && <IconButton title={t('file.closePreview')} onClick={onClose}><CloseIcon /></IconButton>}
+      {inline && !tabbed && !onBack && <IconButton title={t('file.closePreview')} onClick={onClose}><CloseIcon /></IconButton>}
     </div>
   )
   const bodyNode = (

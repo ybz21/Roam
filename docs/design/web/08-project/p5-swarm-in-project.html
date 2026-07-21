@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>P5 · 蜂群 × 项目：编队卡与发起动线</title>
+<link rel="stylesheet" href="../07-worktree/mock.css">
+<link rel="stylesheet" href="project.css">
+<style>
+  .member { display:flex; align-items:center; gap:8px; padding:8px; border-radius:8px; transition:background .14s; cursor:pointer }
+  .member:hover { background:rgba(177,186,196,.05) }
+  .member .nm { font-weight:600; font-size:13px; white-space:nowrap }
+  .member .meta { color:var(--text-dimmer); font-size:11.5px; white-space:nowrap }
+  .member .acts { margin-left:auto; display:flex; gap:10px; font-size:12px; flex:0 0 auto }
+  .member.far { opacity:.5 }
+  .feed-line { display:flex; align-items:center; gap:8px; margin-top:9px; padding:7px 10px; border-radius:8px; background:rgba(1,4,9,.5); border:1px solid var(--border-subtle); font-size:12px; color:var(--text-dim) }
+  .feed-line .who { color:#c4a5f9; font-weight:600 }
+  .chip-row { display:flex; gap:7px; flex-wrap:wrap }
+</style>
+</head>
+<body>
+<div class="spec-bar">
+  <b><span class="spec-tag">P5</span> 蜂群 × 项目</b><span class="spec-tag">编队卡展开 · 发起弹窗 · 零新增编排 API</span>
+  <span class="spacer"></span>
+  <a href="p4-worktree-terminals.html">← P4</a><a href="index.html">↑ 索引</a>
+</div>
+<div class="spec-note">蜂群在项目里的<em>体现</em>（帧一：编队 tab 蜂群卡展开 = 成员即任务行 + 广场尾声 + 看板计数投影）与<em>使用</em>（帧二：项目语境发起——目录预填、班子建议与「成员独立 worktree」约定写进指挥开场白，同 W1 命名约定手法）。编排真相全在蜂群通道（swarm.db + 广场/看板），项目页只读投影 + 跳转；<em>完成判定 = 指挥显式 swarm done</em>，项目页绝不代标。</div>
+
+<div class="stage">
+  <!-- 帧一：体现 —— 编队 tab 蜂群卡展开态 -->
+  <div class="app-frame" style="height:700px;width:1080px">
+    <div class="sider" style="width:64px;flex:0 0 64px;padding:16px 8px;align-items:center">
+      <div class="brand" style="font-size:15px;padding:2px 0 18px">R</div>
+      <div class="nav-item" style="padding:9px">◎</div>
+      <div class="nav-item on" style="padding:9px">⌂</div>
+      <div class="nav-item" style="padding:9px">⬡</div>
+      <div class="nav-item" style="padding:9px">⋯</div>
+    </div>
+    <div class="main-col">
+      <div class="page-pad" style="padding:12px 14px">
+        <div class="proj-head" style="padding-bottom:8px">
+          <div class="ico">⌂</div>
+          <div class="t"><b>ttmux</b><div class="sub">~/codes/ttmux · ⎇ main @ a1b2c3</div></div>
+        </div>
+        <div class="ptabs" style="margin-top:2px">
+          <span class="pt">任务 <span class="n">8</span></span>
+          <span class="pt">Worktree <span class="n">4</span></span>
+          <span class="pt on">编队 <span class="n">2</span></span>
+          <span class="pt">活动</span>
+        </div>
+
+        <!-- 蜂群卡（展开） -->
+        <div class="card" style="margin-top:6px;padding:13px 16px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="tag purple">⬡ 蜂群</span><b>dark-ui</b>
+            <span class="hint">goal: 全站暗色主题与主题切换 · 1小时前开工</span>
+            <span style="flex:1"></span>
+            <span class="tag ghost" style="height:19px">看板 待办2 · 进行1 · 待验收1 · 完成1</span>
+            <span class="btn sm">给指挥发话</span><span class="btn sm primary">蜂群台 →</span>
+          </div>
+
+          <div style="margin:10px 0 0;padding-left:6px;border-left:2px solid rgba(163,113,247,.3);display:flex;flex-direction:column;gap:2px">
+            <div class="member">
+              <i class="dot g"></i><span class="nm">dark-ui-leader</span><span class="tag purple" style="height:17px;font-size:10.5px">指挥</span><span class="tag blue" style="height:17px;font-size:10.5px">Claude</span>
+              <span class="term-peek"><span class="c">⬡</span> 正在审 w1 的分支，w2 已验收…</span>
+              <span class="meta">主仓库 · 刚刚</span>
+              <span class="acts"><a>进入</a></span>
+            </div>
+            <div class="member">
+              <i class="dot g"></i><span class="nm">dark-ui-w1</span><span class="tag ghost" style="height:17px;font-size:10.5px">frontend</span><span class="tag green" style="height:17px;font-size:10.5px">Codex</span><span class="tag cyan">⎇ dark-ui-w1</span>
+              <span class="meta"><span style="color:var(--blue)">↑1</span> · 改动 2 · 干活中</span>
+              <span class="acts"><a>进入</a><a>对比</a></span>
+            </div>
+            <div class="member">
+              <i class="dot idle" style="background:var(--green)"></i><span class="nm">dark-ui-w2</span><span class="tag ghost" style="height:17px;font-size:10.5px">backend</span><span class="tag green" style="height:17px;font-size:10.5px">done ✓ 待集成</span><span class="tag cyan">⎇ dark-ui-w2</span>
+              <span class="meta"><span style="color:var(--blue)">↑3</span> · 改动 0 · 指挥已 done</span>
+              <span class="acts"><a>对比</a><a style="color:var(--purple)">集成 → 蜂群台</a></span>
+            </div>
+            <div class="member far">
+              <i class="dot idle"></i><span class="nm">dark-ui-api</span><span class="tag ghost" style="height:17px;font-size:10.5px">backend</span>
+              <span class="meta">在项目 api-server —— 本页不列其任务</span>
+              <span class="acts"><a>去 api-server ›</a></span>
+            </div>
+          </div>
+
+          <div class="feed-line">
+            <span class="who">leader</span>广场：w1 的对比 base 我看过了，主题变量命名按 index.css 收敛后再提验收
+            <span style="margin-left:auto"><a style="font-size:12px">广场 →</a></span>
+          </div>
+        </div>
+
+        <!-- 竞赛卡（收起，对照） -->
+        <div class="card" style="margin-top:10px;padding:13px 16px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="tag yellow">RACE</span><b>login-refactor</b><span class="hint">×2 选手 · 基于 main</span>
+            <span style="flex:1"></span><span class="btn sm primary">对比台 →</span>
+          </div>
+        </div>
+        <div style="margin-top:10px;display:flex;gap:8px"><span class="btn sm">＋ 新建竞赛…</span><span class="btn sm">＋ 新建蜂群…</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 帧二：使用 —— 项目语境发起蜂群 -->
+  <div class="app-frame" style="height:700px;width:1080px">
+    <div class="sider" style="width:64px;flex:0 0 64px;padding:16px 8px;align-items:center">
+      <div class="brand" style="font-size:15px;padding:2px 0 18px">R</div>
+      <div class="nav-item" style="padding:9px">◎</div>
+      <div class="nav-item on" style="padding:9px">⌂</div>
+      <div class="nav-item" style="padding:9px">⬡</div>
+      <div class="nav-item" style="padding:9px">⋯</div>
+    </div>
+    <div class="main-col">
+      <div class="page-pad" style="padding:12px 14px;filter:saturate(.9)">
+        <div class="proj-head" style="padding-bottom:8px">
+          <div class="ico">⌂</div>
+          <div class="t"><b>ttmux</b><div class="sub">~/codes/ttmux · ⎇ main @ a1b2c3</div></div>
+        </div>
+        <div class="ptabs" style="margin-top:2px">
+          <span class="pt">任务 <span class="n">8</span></span><span class="pt">Worktree <span class="n">4</span></span><span class="pt on">编队 <span class="n">2</span></span><span class="pt">活动</span>
+        </div>
+      </div>
+    </div>
+    <div class="dim"></div>
+    <div class="modal" style="width:480px;top:56px">
+      <div class="m-head">新建蜂群<span class="x">✕</span></div>
+      <div class="m-body">
+        <div>
+          <span class="field-label">名称</span>
+          <input class="input" value="perf-sprint">
+        </div>
+        <div>
+          <span class="field-label">目录（项目固定）</span>
+          <div class="input" style="display:flex;align-items:center;color:var(--text-dim);background:var(--bg-elevated)">~/codes/ttmux</div>
+        </div>
+        <div>
+          <span class="field-label">目标 / 需求（指挥的开场任务书）</span>
+          <textarea class="input" rows="3" style="border-color:var(--blue);box-shadow:0 0 0 3px rgba(31,111,235,.22)">首屏加载压到 1s 内：产物瘦身、路由级拆包、终端懒加载，量化前后对比</textarea>
+        </div>
+        <div>
+          <span class="field-label">班子建议（写进指挥开场白，最终由指挥拆定）</span>
+          <div class="chip-row">
+            <span class="pill on" style="cursor:default">⬡ 指挥（必）</span>
+            <span class="pill on">frontend</span>
+            <span class="pill on">perf</span>
+            <span class="pill">qa</span>
+            <span class="pill">＋ 角色 ▾</span>
+          </div>
+        </div>
+        <label style="display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:var(--text-dim)">
+          <input type="checkbox" checked style="accent-color:var(--blue-deep);margin-top:2px">
+          <span>成员各自独立 worktree（默认）——约定写进指挥开场白：改代码的成员一律经
+          <code class="mono" style="font-size:11px">fork-worktree</code> 开进独立分支，互不踩文件</span>
+        </label>
+        <div class="hint">提交 = 一次 <code class="mono" style="font-size:11px">POST /swarms</code>（goal+dir+开场白）；指挥拆任务、建成员、派活——项目页不代做编排</div>
+      </div>
+      <div class="m-foot"><span class="btn">取消</span><span class="btn primary">开工</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="spec-note" style="border-top:1px solid var(--border-subtle)">
+  规则：① 体现三层 = P1 卡片 ⬡ 计数 → P2 任务流 ⬡ 编队组（成员即任务行，lifec 导轨照常）→ 编队 tab 蜂群卡展开（成员/职责/看板计数/广场尾声）；② 数据全部现有通道：<code>GET /swarms/:n</code>(status) + board/feed + cwd join 定位成员会话落在哪个 worktree，<em>零新增编排 API</em>；③ 发起：目录预填 = 项目仓库，班子 chips（<code>GET /swarm/subroles</code>）与 worktree 约定只进指挥开场白——同 W1 命名约定手法，编排权留给指挥（cc-swarm 全生命周期）；④ 成员 done 由指挥显式 <code>swarm done</code>（项目页不代标）；done 后成员行变「待集成」，其 worktree 合并建议走蜂群台集成验收（integration/octopus），P3 单独收尾时提示「该 worktree 属蜂群 dark-ui」；⑤ 「给指挥发话」= <code>POST /swarms/:n/say</code>（广场，署名 human）或直接进指挥终端；⑥ 跨仓库成员在本项目置灰只留跳转，防止双处操作同一成员。
+</div>
+</body>
+</html>

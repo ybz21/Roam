@@ -4,8 +4,13 @@ import { type ReactNode, Fragment, useEffect, useMemo, useRef, useState } from '
 import { AutoComplete, Button, ConfigProvider, Dropdown, Input, Modal, Spin, App as AntApp, Tooltip, type MenuProps } from 'antd'
 import { api, upload } from './api'
 import { useI18n } from './i18n'
+import { download as p2pDownload } from './p2p/download'
+import { pathLabelKey, type P2PPathLabel } from './p2p/labels'
+import { P2PTransferStatus, type TransferView } from './p2p/P2PTransferStatus'
 import { recentDirs } from './App'
+import { usePreferences } from './preferences'
 import { dirname, fileNameOf, fmtSize, joinPath, normalizePath } from './file-utils'
+import { copyText } from './chat/blocks'
 import {
   BackIcon, Chevron, ClosePanelButton, CloseIcon, DownloadIcon, EyeIcon, EyeOffIcon, FileTypeIcon, FolderIcon,
   FolderUpIcon, ForwardIcon, IconButton, ListIcon, NewFolderIcon, RefreshIcon, SearchIcon, SortIcon, TreeIcon, UploadIcon,
@@ -79,53 +84,76 @@ function startPathDrag(ev: React.DragEvent, full: string) {
   ev.dataTransfer.effectAllowed = 'copy'
 }
 
-function FileContextMenu({ target, children, onContextFocus, onContextBlur, onOpen, onRename, onCopyTo, onUploadHere, onDownload, onProperties, onDelete, onInsertPath }: {
-  target: FileTarget
-  children: ReactNode
+// 右键菜单的全部动作，收拢成一个对象在 FileBrowser → FileTree → FileContextMenu 间传递。
+interface FileMenuActions {
   onContextFocus: (target: FileTarget) => void
   onContextBlur: (target: FileTarget) => void
   onOpen: (target: FileTarget) => void
   onRename: (target: FileTarget) => void
   onCopyTo: (target: FileTarget) => void
+  onMoveTo: (target: FileTarget) => void
   onUploadHere: (target: FileTarget) => void
+  onNewFile: (target: FileTarget) => void
+  onNewFolder: (target: FileTarget) => void
   onDownload: (target: FileTarget) => void
+  onCopyPath: (target: FileTarget) => void
   onProperties: (target: FileTarget) => void
   onDelete: (target: FileTarget) => void
   onInsertPath?: (path: string) => void
+}
+
+function FileContextMenu({ target, children, actions }: {
+  target: FileTarget
+  children: ReactNode
+  actions: FileMenuActions
 }) {
   const { t } = useI18n()
   const items: MenuProps['items'] = [
     { key: 'open', label: target.dir ? t('file.openFolder') : t('file.open') },
+    { type: 'divider' as const },
+    ...(target.dir ? [
+      { key: 'newFile', label: t('file.newFile') },
+      { key: 'newFolder', label: t('file.newFolder') },
+      { key: 'uploadHere', label: t('file.uploadHere') },
+      { type: 'divider' as const },
+    ] : []),
     { key: 'rename', label: t('file.rename') },
     { key: 'copyTo', label: t('file.copyTo') },
-    ...(target.dir ? [{ key: 'uploadHere', label: t('file.uploadHere') }] : []),
+    { key: 'moveTo', label: t('file.moveTo') },
+    { type: 'divider' as const },
     { key: 'download', label: target.dir ? t('file.downloadZip') : t('file.download') },
-    ...(onInsertPath ? [{ key: 'insertPath', label: t('file.insertPath') }] : []),
+    ...(actions.onInsertPath ? [{ key: 'insertPath', label: t('file.insertPath') }] : []),
+    { key: 'copyPath', label: t('file.copyPath') },
     { key: 'properties', label: t('file.properties') },
     { type: 'divider' as const },
     { key: 'delete', label: t('file.delete'), danger: true },
   ]
   const onClick: MenuProps['onClick'] = ({ key, domEvent }) => {
     domEvent.stopPropagation()
-    if (key === 'open') onOpen(target)
-    else if (key === 'rename') onRename(target)
-    else if (key === 'copyTo') onCopyTo(target)
-    else if (key === 'uploadHere') onUploadHere(target)
-    else if (key === 'download') onDownload(target)
-    else if (key === 'insertPath') onInsertPath?.(target.path)
-    else if (key === 'properties') onProperties(target)
-    else if (key === 'delete') onDelete(target)
+    if (key === 'open') actions.onOpen(target)
+    else if (key === 'newFile') actions.onNewFile(target)
+    else if (key === 'newFolder') actions.onNewFolder(target)
+    else if (key === 'uploadHere') actions.onUploadHere(target)
+    else if (key === 'rename') actions.onRename(target)
+    else if (key === 'copyTo') actions.onCopyTo(target)
+    else if (key === 'moveTo') actions.onMoveTo(target)
+    else if (key === 'download') actions.onDownload(target)
+    else if (key === 'insertPath') actions.onInsertPath?.(target.path)
+    else if (key === 'copyPath') actions.onCopyPath(target)
+    else if (key === 'properties') actions.onProperties(target)
+    else if (key === 'delete') actions.onDelete(target)
   }
   return (
-    <Dropdown trigger={['contextMenu']} menu={{ items, onClick }} onOpenChange={(open) => { open ? onContextFocus(target) : onContextBlur(target) }}>
-      <div onContextMenu={(ev) => { ev.stopPropagation(); onContextFocus(target) }}>{children}</div>
+    <Dropdown trigger={['contextMenu']} menu={{ items, onClick }} onOpenChange={(open) => { open ? actions.onContextFocus(target) : actions.onContextBlur(target) }}>
+      <div onContextMenu={(ev) => { ev.stopPropagation(); actions.onContextFocus(target) }}>{children}</div>
     </Dropdown>
   )
 }
 
 // 统一：一行文件/目录的图标 + 名称 + 大小 + @插入 + 下载。平铺列表与树共用（外层容器各自处理缩进/展开）。
-function FileRowBody({ full, name, isDir, size, accent, onInsertPath }: {
+function FileRowBody({ full, name, isDir, size, accent, onInsertPath, onDownload }: {
   full: string; name: string; isDir: boolean; size: number; accent: string; onInsertPath?: (p: string) => void
+  onDownload?: (t: FileTarget) => void
 }) {
   const { t } = useI18n()
   return (
@@ -141,8 +169,14 @@ function FileRowBody({ full, name, isDir, size, accent, onInsertPath }: {
       {!isDir && (
         <span data-file-action>
           <Tooltip title={t('file.download')}>
-            <Button type="text" size="small" href={`/api/file/raw?path=${encodeURIComponent(full)}&dl=1`} download={name}
-              style={{ width: 24, height: 24, minWidth: 24, padding: 0, color: 'var(--text-dim)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><DownloadIcon /></Button>
+            {/* 走 downloadEntry(P2P 直连状态机)，不再直连 frp 的 file/raw；无 onDownload 时才退回锚点。 */}
+            {onDownload ? (
+              <Button type="text" size="small" onClick={(e) => { e.stopPropagation(); onDownload({ path: full, name, dir: isDir, size, mtime: 0, ctime: 0 }) }}
+                style={{ width: 24, height: 24, minWidth: 24, padding: 0, color: 'var(--text-dim)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><DownloadIcon /></Button>
+            ) : (
+              <Button type="text" size="small" href={`/api/file/raw?path=${encodeURIComponent(full)}&dl=1`} download={name}
+                style={{ width: 24, height: 24, minWidth: 24, padding: 0, color: 'var(--text-dim)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><DownloadIcon /></Button>
+            )}
           </Tooltip>
         </span>
       )}
@@ -153,8 +187,7 @@ function FileRowBody({ full, name, isDir, size, accent, onInsertPath }: {
 // VSCode 风格可展开目录树：以 root 为根，子目录首次展开时懒加载（复用 GET /files?path=）。
 // 排序/隐藏文件过滤、点文件预览、拖入终端 @mention、右键删除都与平铺行一致。
 function FileTree({
-  root, rootEntries, accent, showHidden, sortKey, tick, selected,
-  onContextFocus, onContextBlur, onOpenFile, onOpenEntry, onRenameEntry, onCopyEntry, onUploadEntry, onDownloadEntry, onPropertiesEntry, onDeleteEntry, onInsertPath,
+  root, rootEntries, accent, showHidden, sortKey, tick, selected, onOpenFile, actions,
 }: {
   root: string
   rootEntries: Entry[]
@@ -163,17 +196,8 @@ function FileTree({
   sortKey: SortKey
   tick: number
   selected: string | null
-  onContextFocus: (target: FileTarget) => void
-  onContextBlur: (target: FileTarget) => void
   onOpenFile: (full: string) => void
-  onOpenEntry: (target: FileTarget) => void
-  onRenameEntry: (target: FileTarget) => void
-  onCopyEntry: (target: FileTarget) => void
-  onUploadEntry: (target: FileTarget) => void
-  onDownloadEntry: (target: FileTarget) => void
-  onPropertiesEntry: (target: FileTarget) => void
-  onDeleteEntry: (target: FileTarget) => void
-  onInsertPath?: (full: string) => void
+  actions: FileMenuActions
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [childMap, setChildMap] = useState<Record<string, Entry[]>>({})
@@ -224,7 +248,7 @@ function FileTree({
       const isOpen = e.dir && expanded.has(full)
       return (
         <Fragment key={full}>
-          <FileContextMenu target={target} onContextFocus={onContextFocus} onContextBlur={onContextBlur} onOpen={onOpenEntry} onRename={onRenameEntry} onCopyTo={onCopyEntry} onUploadHere={onUploadEntry} onDownload={onDownloadEntry} onProperties={onPropertiesEntry} onDelete={onDeleteEntry} onInsertPath={onInsertPath}>
+          <FileContextMenu target={target} actions={actions}>
             <div className="cc-filerow"
               draggable
               onDragStart={(ev) => startPathDrag(ev, full)}
@@ -242,7 +266,7 @@ function FileTree({
                 <span style={{ flex: '0 0 auto', width: 14, display: 'inline-flex', justifyContent: 'center', color: 'var(--text-dim)' }}>
                   {e.dir ? <Chevron open={!!isOpen} /> : null}
                 </span>
-                <FileRowBody full={full} name={e.name} isDir={e.dir} size={e.size} accent={accent} onInsertPath={onInsertPath} />
+                <FileRowBody full={full} name={e.name} isDir={e.dir} size={e.size} accent={accent} onInsertPath={actions.onInsertPath} onDownload={actions.onDownload} />
               </div>
             </div>
           </FileContextMenu>
@@ -295,6 +319,13 @@ export default function FileBrowser({
   const [renameTarget, setRenameTarget] = useState<FileTarget | null>(null)
   const [renameName, setRenameName] = useState('')
   const [renameBusy, setRenameBusy] = useState(false)
+  const [mkdirDir, setMkdirDir] = useState<string | null>(null) // 右键「新建目录」的目标目录；空则用当前目录
+  const [touchDir, setTouchDir] = useState<string | null>(null) // 新建文件弹窗的目标目录；null 表示关闭
+  const [touchName, setTouchName] = useState('')
+  const [touchBusy, setTouchBusy] = useState(false)
+  const [moveTarget, setMoveTarget] = useState<FileTarget | null>(null)
+  const [moveDest, setMoveDest] = useState('')
+  const [moveBusy, setMoveBusy] = useState(false)
   const [copyTarget, setCopyTarget] = useState<FileTarget | null>(null)
   const [copyDest, setCopyDest] = useState('')
   const [copyBusy, setCopyBusy] = useState(false)
@@ -304,6 +335,8 @@ export default function FileBrowser({
   const [contextPath, setContextPath] = useState<string | null>(null)
   const [showHidden, setShowHidden] = useState(false) // 隐藏文件（点号开头）默认不显示，眼睛开关切换
   const [sortKey, setSortKey] = useState<SortKey>('name')
+  // P2P 传输可见状态：按 transferId 维护进行中的下载，展示角标/进度/详情（§5.7）。
+  const [transfers, setTransfers] = useState<TransferView[]>([])
   // 递归按文件名搜索（当前目录向下），放大镜开关切换；有查询词时列表区改显搜索结果。
   const [searchOpen, setSearchOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -325,6 +358,7 @@ export default function FileBrowser({
   const uploadTargetRef = useRef<string | null>(null)
   const { message, modal } = AntApp.useApp()
   const { t, locale } = useI18n()
+  const [prefs] = usePreferences() // P2P 直连下载开关（设置页可关，网络抖动时回退纯 frp）
 
   // 会话切换（dir 变化）→ 回到工作目录根，并重置历史
   useEffect(() => {
@@ -404,20 +438,36 @@ export default function FileBrowser({
   }
   const doMkdir = async () => {
     const name = mkdirName.trim()
-    if (!name || !cur || mkdirBusy) return
+    const dir = mkdirDir || cur
+    if (!name || !dir || mkdirBusy) return
     setMkdirBusy(true)
     try {
-      await api('POST', '/file/mkdir', { dir: cur, name })
+      await api('POST', '/file/mkdir', { dir, name })
       message.success(t('file.folderCreated'))
       setMkdirOpen(false)
       setMkdirName('')
+      setMkdirDir(null)
       refresh()
     } catch (e: any) { message.error(t('file.mkdirFailed', { message: e.message })) }
     finally { setMkdirBusy(false) }
   }
-  const deletePath = async (target: string) => {
+  const doTouch = async () => {
+    const name = touchName.trim()
+    if (!name || !touchDir || touchBusy) return
+    setTouchBusy(true)
     try {
-      const res = await api('DELETE', `/file?path=${encodeURIComponent(target)}`)
+      const res = await api('POST', '/file/touch', { dir: touchDir, name })
+      message.success(t('file.fileCreated'))
+      setTouchDir(null)
+      setTouchName('')
+      refresh()
+      if (res.data?.path) openFile(res.data.path)
+    } catch (e: any) { message.error(t('file.newFileFailed', { message: e.message })) }
+    finally { setTouchBusy(false) }
+  }
+  const deletePath = async (target: string, recursive = false) => {
+    try {
+      const res = await api('DELETE', `/file?path=${encodeURIComponent(target)}${recursive ? '&recursive=1' : ''}`)
       message.success(res.data?.missing ? t('file.alreadyMissingRefreshed') : t('file.deleted'))
       if (view === target) setView(null)
       refresh()
@@ -428,12 +478,12 @@ export default function FileBrowser({
   }
   const confirmDelete = (target: string, isDir: boolean) => {
     modal.confirm({
-      title: isDir ? t('file.deleteEmptyDirConfirm') : t('file.deleteFileConfirm'),
+      title: isDir ? t('file.deleteDirConfirm') : t('file.deleteFileConfirm'),
       content: target,
       okText: t('file.delete'),
       cancelText: t('common.cancel'),
       okButtonProps: { danger: true },
-      onOk: () => deletePath(target),
+      onOk: () => deletePath(target, isDir),
     })
   }
   const confirmDeleteTarget = (target: FileTarget) => confirmDelete(target.path, target.dir)
@@ -473,17 +523,91 @@ export default function FileBrowser({
     } catch (e: any) { message.error(t('file.copyToFailed', { message: e.message })) }
     finally { setCopyBusy(false) }
   }
+  const startMove = (target: FileTarget) => {
+    setMoveTarget(target)
+    setMoveDest(joinPath(dirname(target.path), target.name))
+  }
+  const doMove = async () => {
+    const target = moveDest.trim()
+    if (!moveTarget || !target || moveBusy) return
+    setMoveBusy(true)
+    try {
+      const res = await api('POST', '/file/move', { path: moveTarget.path, target: resolveTypedPath(target) })
+      message.success(t('file.movedToPath'))
+      if (view === moveTarget.path) setView(res.data?.path || null)
+      setMoveTarget(null)
+      refresh()
+    } catch (e: any) { message.error(t('file.moveToFailed', { message: e.message })) }
+    finally { setMoveBusy(false) }
+  }
+  const mkdirInto = (target: FileTarget) => {
+    setMkdirDir(target.path)
+    setMkdirName('')
+    setMkdirOpen(true)
+  }
+  const touchInto = (target: FileTarget) => {
+    setTouchDir(target.path)
+    setTouchName('')
+  }
+  const copyEntryPath = (target: FileTarget) => {
+    copyText(target.path)
+    message.success(t('file.pathCopied'))
+  }
   const uploadInto = (target: FileTarget) => {
     uploadTargetRef.current = target.dir ? target.path : dirname(target.path)
     fileRef.current?.click()
   }
-  const downloadEntry = (target: FileTarget) => {
+  // legacy：系统 a[download]（走 frp）。手机护栏命中或不支持 File System Access 时用它。
+  const legacyAnchorDownload = (target: FileTarget) => {
     const a = document.createElement('a')
     a.href = `/api/file/download?path=${encodeURIComponent(target.path)}`
     a.download = target.dir ? `${target.name}.zip` : target.name
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
+  }
+  // 更新某条传输的视图字段（按 transferId 合并）。
+  const patchTransfer = (id: string, patch: Partial<TransferView>) =>
+    setTransfers((list) => list.map((tf) => (tf.id === id ? { ...tf, ...patch } : tf)))
+  const dropTransfer = (id: string) => setTransfers((list) => list.filter((tf) => tf.id !== id))
+  const downloadEntry = (target: FileTarget) => {
+    // 用户开关关闭（网络抖动等）→ 一律走 frp 中转，不碰 P2P。
+    if (!prefs.p2pEnabled) {
+      legacyAnchorDownload(target)
+      return
+    }
+    // 护栏（技术拆解 §4.5）：只有目录仍走 legacy（目录 P2P 是后续）。
+    // 大小/浏览器能力判断已收敛进 download.ts 的三级 sink：
+    //   picker（Chromium 桌面）/ StreamSaver（移动端·Firefox·Safari，自托管流式落盘，不占内存、任意大小）
+    //   都是流式落盘，移动端大文件也走 P2P；只有「无 picker 且无 StreamSaver 且超 Blob 上限」才由
+    //   download.ts 经 blobFallback 回退 frp。故此处不再对移动端大文件无脑走 frp。
+    if (target.dir) {
+      legacyAnchorDownload(target)
+      return
+    }
+    // 一条可见传输：先建条目（negotiating），download.ts 各回调实时刷角标/进度/详情。
+    const id = `${target.path}#${Date.now()}`
+    const initial: TransferView = { id, name: target.name, state: 'negotiating', fellBack: false }
+    setTransfers((list) => [...list, initial])
+    void p2pDownload({ path: target.path, name: target.name, size: target.size }, {
+      onState: (state) => patchTransfer(id, { state }),
+      onFallback: (reason) => { patchTransfer(id, { fellBack: true, fallbackReason: reason }); message.info(t('p2p.fellBackToHttp')) },
+      onPath: (label: P2PPathLabel) => {
+        patchTransfer(id, { path: label })
+        if (label !== 'frp') message.success(t('p2p.connectedVia', { path: t(pathLabelKey(label)) }))
+      },
+      onProgress: (p) => patchTransfer(id, { progress: p }),
+      onDiagnostics: (d) => patchTransfer(id, { diag: d }),
+      onDone: () => {
+        message.success(t('p2p.downloadDone', { name: target.name }))
+        // 完成后短暂保留完成态，随后移除角标。
+        window.setTimeout(() => dropTransfer(id), 4000)
+      },
+      onError: (msg) => { message.error(t('p2p.downloadFailed', { message: msg })); dropTransfer(id) },
+    }, {
+      // Blob sink 路径（无 picker）P2P 真失败时兜底：触发 legacy frp 系统下载（唯一一次）。
+      blobFallback: () => legacyAnchorDownload(target),
+    })
   }
   const showProperties = async (target: FileTarget) => {
     setPropertiesTarget(target)
@@ -509,6 +633,24 @@ export default function FileBrowser({
   const openFile = (target: string) => { if (onOpenFile) onOpenFile(target); else setView(target) }
   // 浏览器里高亮的选中项：外层受控（selectedPath）优先，否则用内部 view。
   const sel = contextPath || (selectedPath !== undefined ? selectedPath : view)
+
+  // 右键菜单全部动作，平铺列表与树共用一份。
+  const menuActions: FileMenuActions = {
+    onContextFocus: markContextTarget,
+    onContextBlur: clearContextTarget,
+    onOpen: openEntry,
+    onRename: startRename,
+    onCopyTo: startCopy,
+    onMoveTo: startMove,
+    onUploadHere: uploadInto,
+    onNewFile: touchInto,
+    onNewFolder: mkdirInto,
+    onDownload: downloadEntry,
+    onCopyPath: copyEntryPath,
+    onProperties: showProperties,
+    onDelete: confirmDeleteTarget,
+    onInsertPath,
+  }
 
   const openPath = async (target: string) => {
     try {
@@ -584,7 +726,7 @@ export default function FileBrowser({
               <Button type="text" size="small" style={{ width: 24, height: 24, minWidth: 24, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><SortIcon /></Button>
             </Tooltip>
           </Dropdown>
-          <IconButton title={t('file.newFolder')} disabled={!cur} onClick={() => { setMkdirName(''); setMkdirOpen(true) }}><NewFolderIcon /></IconButton>
+          <IconButton title={t('file.newFolder')} disabled={!cur} onClick={() => { setMkdirName(''); setMkdirDir(null); setMkdirOpen(true) }}><NewFolderIcon /></IconButton>
           <IconButton title={t('file.uploadHere')} disabled={uploading || !cur} onClick={() => { uploadTargetRef.current = cur; fileRef.current?.click() }}>{uploading ? '…' : <UploadIcon />}</IconButton>
         </div>
       </div>
@@ -677,12 +819,12 @@ export default function FileBrowser({
           </div>
         )}
         {browseMode === 'tree' ? (
-          <FileTree root={cur} rootEntries={data?.entries || []} accent={accent} showHidden={showHidden} sortKey={sortKey} tick={tick} selected={sel} onContextFocus={markContextTarget} onContextBlur={clearContextTarget} onOpenFile={openFile} onOpenEntry={openEntry} onRenameEntry={startRename} onCopyEntry={startCopy} onUploadEntry={uploadInto} onDownloadEntry={downloadEntry} onPropertiesEntry={showProperties} onDeleteEntry={confirmDeleteTarget} onInsertPath={onInsertPath} />
+          <FileTree root={cur} rootEntries={data?.entries || []} accent={accent} showHidden={showHidden} sortKey={sortKey} tick={tick} selected={sel} onOpenFile={openFile} actions={menuActions} />
         ) : visibleEntries.map((e) => {
           const full = joinPath(cur, e.name)
           const target: FileTarget = { ...e, path: full }
           return (
-            <FileContextMenu key={e.name} target={target} onContextFocus={markContextTarget} onContextBlur={clearContextTarget} onOpen={openEntry} onRename={startRename} onCopyTo={startCopy} onUploadHere={uploadInto} onDownload={downloadEntry} onProperties={showProperties} onDelete={confirmDeleteTarget} onInsertPath={onInsertPath}>
+            <FileContextMenu key={e.name} target={target} actions={menuActions}>
               <div className="cc-filerow"
                 draggable
                 onDragStart={(ev) => startPathDrag(ev, full)}
@@ -691,7 +833,7 @@ export default function FileBrowser({
                   e.dir ? navigate(full) : openFile(full)
                 }}
                 style={{ ...rowStyle(), background: full === sel ? '#1f6feb22' : undefined }}>
-                <FileRowBody full={full} name={e.name} isDir={e.dir} size={e.size} accent={accent} onInsertPath={onInsertPath} />
+                <FileRowBody full={full} name={e.name} isDir={e.dir} size={e.size} accent={accent} onInsertPath={onInsertPath} onDownload={downloadEntry} />
               </div>
             </FileContextMenu>
           )
@@ -703,6 +845,7 @@ export default function FileBrowser({
         </>
         )}
       </div>
+      <P2PTransferStatus transfers={transfers} onDismiss={dropTransfer} />
       <Modal
         open={mkdirOpen}
         title={t('file.newFolder')}
@@ -710,11 +853,39 @@ export default function FileBrowser({
         cancelText={t('common.cancel')}
         confirmLoading={mkdirBusy}
         onOk={doMkdir}
-        onCancel={() => { setMkdirOpen(false); setMkdirName('') }}
+        onCancel={() => { setMkdirOpen(false); setMkdirName(''); setMkdirDir(null) }}
       >
         <Input autoFocus value={mkdirName} onChange={(e) => setMkdirName(e.target.value)} onPressEnter={doMkdir} placeholder={t('file.folderName')} />
         <div style={{ marginTop: 8, color: 'var(--text-dimmer)', fontSize: 12, wordBreak: 'break-all' }}>
-          {t('file.createUnder', { path: displayPath(cur) })}
+          {t('file.createUnder', { path: displayPath(mkdirDir || cur) })}
+        </div>
+      </Modal>
+      <Modal
+        open={touchDir !== null}
+        title={t('file.newFile')}
+        okText={t('file.create')}
+        cancelText={t('common.cancel')}
+        confirmLoading={touchBusy}
+        onOk={doTouch}
+        onCancel={() => { setTouchDir(null); setTouchName('') }}
+      >
+        <Input autoFocus value={touchName} onChange={(e) => setTouchName(e.target.value)} onPressEnter={doTouch} placeholder={t('file.fileName')} />
+        <div style={{ marginTop: 8, color: 'var(--text-dimmer)', fontSize: 12, wordBreak: 'break-all' }}>
+          {touchDir ? t('file.createUnder', { path: displayPath(touchDir) }) : null}
+        </div>
+      </Modal>
+      <Modal
+        open={!!moveTarget}
+        title={t('file.moveTo')}
+        okText={t('common.move')}
+        cancelText={t('common.cancel')}
+        confirmLoading={moveBusy}
+        onOk={doMove}
+        onCancel={() => { setMoveTarget(null); setMoveDest('') }}
+      >
+        <Input autoFocus value={moveDest} onChange={(e) => setMoveDest(e.target.value)} onPressEnter={doMove} placeholder={t('file.copyTargetPlaceholder')} />
+        <div style={{ marginTop: 8, color: 'var(--text-dimmer)', fontSize: 12, wordBreak: 'break-all' }}>
+          {moveTarget ? t('file.copySourceHint', { path: moveTarget.path }) : null}
         </div>
       </Modal>
       <Modal

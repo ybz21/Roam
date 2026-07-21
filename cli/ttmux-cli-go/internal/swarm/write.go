@@ -222,7 +222,7 @@ func (s *Store) MemberDone(swarm, member string) bool {
 	}
 	sess := swarm + "-" + member
 	if tmuxHasSession(s.opt.TmuxBin, sess) {
-		dead := strings.TrimSpace(runTmux(s.opt.TmuxBin, "display-message", "-t", sess, "-p", "#{pane_dead}"))
+		dead := strings.TrimSpace(runTmux(s.opt.TmuxBin, "display-message", "-t", "="+sess, "-p", "#{pane_dead}"))
 		return dead == "1"
 	}
 	_, err := os.Stat(filepath.Join(s.opt.DataDir, "logs", sess+".log"))

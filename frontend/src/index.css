@@ -65,13 +65,15 @@ body {
   min-width: 0;
 }
 .tt-page-files,
-.tt-page-phone {
+.tt-page-phone,
+.tt-page-browser {
   height: 100%;
   min-height: 0;
   overflow: hidden;
 }
 .tt-page-files > *,
-.tt-page-phone > * {
+.tt-page-phone > *,
+.tt-page-browser > * {
   height: 100%;
   min-height: 0;
 }

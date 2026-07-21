@@ -3,7 +3,40 @@ package reviewmesh
 import (
 	"strings"
 	"testing"
+
+	"ttmux-cli-go/pkg/plugin/sdk"
 )
+
+func TestResolveRounds(t *testing.T) {
+	cases := []struct {
+		name   string
+		config string
+		arg    string
+		hasArg bool
+		want   int
+	}{
+		{"default when unset", "", "", false, defaultAutoRounds},
+		{"config overrides default", "5", "", false, 5},
+		{"arg overrides config", "5", "8", true, 8},
+		{"blank config falls back", "  ", "", false, defaultAutoRounds},
+		{"non-numeric ignored", "abc", "", false, defaultAutoRounds},
+		{"clamp below one", "0", "", false, 1},
+		{"clamp above cap", "999", "", false, maxAutoRoundsCap},
+		{"arg clamps too", "3", "-4", true, 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := &sdk.Ctx{Config: map[string]string{"rounds": tc.config}}
+			var args map[string]string
+			if tc.hasArg {
+				args = map[string]string{"rounds": tc.arg}
+			}
+			if got := resolveRounds(ctx, args); got != tc.want {
+				t.Fatalf("resolveRounds = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
 
 func TestParseFindings(t *testing.T) {
 	log := strings.Join([]string{

@@ -7,6 +7,7 @@ import { Button, Input, Select, Space, Tag, App as AntApp } from 'antd'
 import { api } from './api'
 import { useI18n } from './i18n'
 import { usePreferences, savePreferences } from './preferences'
+import { connect, type DuplexTransport } from './p2p/transport'
 
 interface TabInfo { id: string; title: string; url: string }
 
@@ -45,7 +46,8 @@ function TabBar({ tabs, active, onSelect, onClose, onAdd, extra }: {
 }) {
   const { t } = useI18n()
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px 0', flex: '0 0 auto' }}>
+    // 全站统一：工具页首行贴 tt-page 的 (16,16)，不再自垫横向内边距
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 0, flex: '0 0 auto' }}>
       <div style={{ display: 'flex', gap: 4, overflowX: 'auto', flex: 1, minWidth: 0 }}>
         {tabs.map((t) => (
           <BrowserTab key={t.id} tab={t} active={t.id === active} onSelect={() => onSelect(t.id)} onClose={() => onClose(t.id)} />
@@ -133,7 +135,9 @@ export default function BrowserView() {
   const [prefs] = usePreferences()
   const imgRef = useRef<HTMLImageElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
-  const wsRef = useRef<WebSocket | null>(null)
+  // 镜像收发底层：p2p 时是 media PC 上的不可靠 DataChannel，回退时是 /api/browser/stream 的 WS。
+  // 二进制帧解析/ack/ping/自适应逻辑不感知底层（DuplexTransport ≈ WebSocket）。
+  const tpRef = useRef<DuplexTransport | null>(null)
   const sizeRef = useRef({ w: 1280, h: 800 }) // 画面内在尺寸（CDP 设备像素）
   const control = true // 始终接管（鼠标/键盘转发给 Chrome）
   const controlRef = useRef(true)
@@ -177,6 +181,13 @@ export default function BrowserView() {
   const touchRef = useRef({ x: 0, y: 0, t: 0, moved: false })
   const lastEmuRef = useRef('')       // 上次已发的 emulate 载荷（去重：载荷没变绝不重发 → 不重设视口 → 不跳）
   const emuTimerRef = useRef(0 as any) // emulate 防抖计时器
+  // 中文等输入法（IME）输入：普通 div 持焦时浏览器不会启动输入法组合，敲拼音只会落下
+  // 原始字母。用一个视觉隐藏的 textarea 承接焦点与组合过程，组合结束后把整段文本经
+  // 现有 char 消息发往远端（后端 Input.insertText 支持多字符）。textarea 定位在最近
+  // 一次点击处，让候选词窗口出现在输入位置附近而不是面板角落。
+  const imeRef = useRef<HTMLTextAreaElement>(null)
+  const composingRef = useRef(false)
+  const [imePos, setImePos] = useState({ x: 8, y: 8 })
 
   // control 开关用 ref 同步，供事件回调读取最新值
   useEffect(() => { controlRef.current = control }, [control])
@@ -269,8 +280,9 @@ export default function BrowserView() {
   }
 
   const send = (o: any) => {
-    const ws = wsRef.current
-    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(o))
+    // DuplexTransport.send 对 p2p 自带 open-before-send 排队、对 frp 内部判 readyState，
+    // 这里直接发即可（未连时 frp 分支静默丢弃，与迁移前 ws.readyState 守卫等价）。
+    tpRef.current?.send(JSON.stringify(o))
   }
 
   // 作用于当前标签的导航控制
@@ -322,22 +334,21 @@ export default function BrowserView() {
     if (quality === 'auto') params.set('auto', '1') // 仅首连/换 target 时用来定初始档；之后靠消息切
     else params.set('q', String(quality))
     if (target) params.set('target', target)
-    const ws = new WebSocket(`${proto}://${location.host}/api/browser/stream?${params}`)
-    ws.binaryType = 'arraybuffer'
-    wsRef.current = ws
+    // 通用传输 Phase 1b：镜像走 media PC 的不可靠 DataChannel；media 未连/P2P 不可用 → 回退
+    // 到原 /api/browser/stream WS（frpUrl），行为与迁移前逐字节一致。p2p 分支把 query 里的
+    // params 经 init 握手带给后端（原本靠 WS query 传）。
+    const frpUrl = `${proto}://${location.host}/api/browser/stream?${params}`
+    const tp = connect('screencast', { frpUrl, initParams: Object.fromEntries(params) })
+    tpRef.current = tp
     lastEmuRef.current = '' // 新连接：后端会话尚无视口覆盖，onopen 必须强制发一次 emulate
     let objURL: string | null = null
-    ws.onopen = () => { setConnected(true); setHealthMsg(''); sendEmulate(true) } // 连上即同步当前设备/尺寸
-    ws.onclose = () => {
-      setConnected(false)
-      // 连不上时问后端为什么（Chrome 启动失败原因），显示给用户而非干瞪黑屏
-      api('GET', '/browser/health').then((r) => { if (!r?.data?.alive) setHealthMsg(r?.data?.error || '') }).catch(() => {})
-    }
-    ws.onmessage = (e) => {
+    // 连上（frp=WS open / p2p=DataChannel open）即同步当前设备/尺寸，语义等价迁移前 ws.onopen。
+    tp.onopen = () => { setConnected(true); setHealthMsg(''); sendEmulate(true) }
+    tp.onmessage = (data) => {
       // 二进制 = 一帧：[w:u16][h:u16][seq:u16][jpeg...]；显示后回 ack 归还信用
-      if (typeof e.data !== 'string') {
+      if (typeof data !== 'string') {
         if (!imgRef.current) return
-        const buf = e.data as ArrayBuffer
+        const buf = data as ArrayBuffer
         const dv = new DataView(buf)
         const w = dv.getUint16(0, true), h = dv.getUint16(2, true), seq = dv.getUint16(4, true)
         sizeRef.current = { w: w || 1280, h: h || 800 }
@@ -346,10 +357,10 @@ export default function BrowserView() {
         if (objURL) URL.revokeObjectURL(objURL)
         objURL = URL.createObjectURL(new Blob([new Uint8Array(buf, 6)], { type: 'image/jpeg' }))
         imgRef.current.src = objURL
-        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ack', n: seq }))
+        tp.send(JSON.stringify({ type: 'ack', n: seq }))
         return
       }
-      const msg = JSON.parse(e.data)
+      const msg = JSON.parse(data)
       if (msg.type === 'error') { message.error(msg.msg); return }
       if (msg.type === 'pong') { setLatency(Math.round(performance.now() - msg.t)); return }
       if (msg.type === 'level') { setLevelName(msg.name || ''); return }
@@ -365,10 +376,13 @@ export default function BrowserView() {
         return
       }
     }
+    tp.onclose = () => {
+      setConnected(false)
+      // 连不上时问后端为什么（Chrome 启动失败原因），显示给用户而非干瞪黑屏
+      api('GET', '/browser/health').then((r) => { if (!r?.data?.alive) setHealthMsg(r?.data?.error || '') }).catch(() => {})
+    }
     // 每秒打一次 ping 测 RTT，并结算带宽/帧率
-    const ping = setInterval(() => {
-      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ping', t: performance.now() }))
-    }, 1000)
+    const ping = setInterval(() => { tp.send(JSON.stringify({ type: 'ping', t: performance.now() })) }, 1000)
     const meter = setInterval(() => {
       setBw(bytesRef.current); setFps(framesRef.current)
       bytesRef.current = 0; framesRef.current = 0
@@ -376,7 +390,9 @@ export default function BrowserView() {
     return () => {
       clearInterval(ping); clearInterval(meter)
       if (objURL) URL.revokeObjectURL(objURL)
-      ws.close()
+      tp.onmessage = () => {}; tp.onclose = () => {} // 卸载后忽略在途回调
+      tp.close()
+      if (tpRef.current === tp) tpRef.current = null
     }
   }, [control, target]) // 画质/device 切换都不重连，靠 quality / emulate 消息现场切换
 
@@ -409,6 +425,14 @@ export default function BrowserView() {
     const u = `${location.origin}/api/browser/cdp/devtools/inspector.html`
       + `?${wsParam}=${location.host}/api/browser/cdp/devtools/page/${target}`
     window.open(u, `ttmux-devtools-${target}`, 'width=1100,height=720')
+  }
+
+  // 甩给宿主机真实浏览器打开当前地址：镜像 Chrome 终究是后端管的替身，
+  // WSL 下后端会转去唤起 Windows 侧浏览器（见 backend/browser/external.go）。
+  const openExternal = async () => {
+    if (!url) { message.warning(t('browser.openExternalNoUrl')); return }
+    try { await api('POST', '/browser/open-external', { url }) }
+    catch (e: any) { message.error(e.message || t('browser.openExternalFailed')) }
   }
 
   // 把鼠标坐标换算成 CDP 期望的页面 CSS 像素坐标。
@@ -459,7 +483,16 @@ export default function BrowserView() {
     if (!controlRef.current) return
     e.preventDefault()
     const pt = mapXY(e)
-    if (sub === 'down') { stageRef.current?.focus(); addRipple(e); dragRef.current = { x: pt.x, y: pt.y, active: true, moved: false } } // 拿焦点 + 涟漪 + 记拖动起点
+    if (sub === 'down') {
+      const st = stageRef.current
+      if (st) {
+        const r = st.getBoundingClientRect()
+        setImePos({ x: e.clientX - r.left, y: e.clientY - r.top })
+      }
+      imeRef.current?.focus({ preventScroll: true }) // 焦点落在隐藏 textarea 上，输入法才会启动组合
+      addRipple(e)
+      dragRef.current = { x: pt.x, y: pt.y, active: true, moved: false } // 记拖动起点
+    } // 拿焦点 + 涟漪 + 记拖动起点
     send({ type: 'mouse', sub, x: pt.x, y: pt.y, button: 'left', buttons: sub === 'down' ? 1 : 0, modifiers: mods(e) })
     if (sub === 'up') {
       const d = dragRef.current
@@ -558,8 +591,19 @@ export default function BrowserView() {
       () => send({ type: 'paste' }),
     )
   }
+  // 组合结束（或非组合的文本插入，如 macOS 长按选音标）后，把 textarea 里攒出的整段
+  // 文本一次发往远端。组合中的退格/选词等按键都由输入法在本地消费，不会到这里。
+  const flushIme = () => {
+    const ta = imeRef.current
+    if (!ta || !ta.value) return
+    send({ type: 'key', sub: 'char', text: ta.value })
+    ta.value = ''
+  }
   const onKey = (e: React.KeyboardEvent) => {
     if (!controlRef.current) return
+    // 输入法组合中：按键属于输入法（key 为 "Process"/keyCode 229），不转发也不
+    // preventDefault，否则组合被打断；组合结果统一由 flushIme 发送。
+    if (composingRef.current || e.nativeEvent.isComposing || e.keyCode === 229) return
     const mod = e.ctrlKey || e.metaKey
     // 复制/粘贴走「跨屏」桥，不把组合键转发给远端：用本机剪贴板，不碰远端那台机器的剪贴板
     if (mod && (e.key === 'v' || e.key === 'V')) { e.preventDefault(); pasteFromClipboard(); return }
@@ -596,16 +640,6 @@ export default function BrowserView() {
         onAdd={newTab}
         extra={
           <Space size={10} style={{ paddingRight: 4 }}>
-            <Button size="small" onClick={rotate} title={t('browser.rotateTitle')}
-              style={rotation ? { color: '#58a6ff', borderColor: '#58a6ff66' } : undefined}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                {/* 屏幕旋转图标（倾斜设备框 + 对角双箭头），明显区别于刷新的环形箭头 */}
-                <svg viewBox="0 0 24 24" width={15} height={15} fill="url(#metalIcon)" style={{ display: 'block' }}>
-                  <path d="M16.48 2.52c3.27 1.55 5.61 4.72 5.97 8.48h1.5C23.44 4.84 18.29 0 12 0l-.66.03 3.81 3.81 1.33-1.32zM10.23 1.75c-.59-.59-1.54-.59-2.12 0L1.75 8.11c-.59.59-.59 1.54 0 2.12l12.02 12.02c.59.59 1.54.59 2.12 0l6.36-6.36c.59-.59.59-1.54 0-2.12L10.23 1.75zm4.6 19.44L2.81 9.17l6.36-6.36 12.02 12.02-6.36 6.36zM7.52 21.48C4.25 19.94 1.91 16.76 1.55 13H.05C.56 19.16 5.71 24 12 24l.66-.03-3.81-3.81-1.33 1.32z" />
-                </svg>
-                {rotation ? <span>{rotation}°</span> : null}
-              </span>
-            </Button>
             {/* 清晰度：选中档亮蓝底 + 白字加粗 + 辉光，未选中压暗，对比鲜明 */}
             <Space.Compact size="small">
               {QUALITY_OPTS.map((o) => {
@@ -623,6 +657,20 @@ export default function BrowserView() {
                 )
               })}
             </Space.Compact>
+            {/* 旋转：紧跟清晰度组之后，样式与清晰度档完全同款（激活=蓝底，未激活=灰边灰字） */}
+            <Button size="small" onClick={rotate} title={t('browser.rotateTitle')}
+              type={rotation ? 'primary' : 'default'}
+              style={rotation
+                ? { background: '#1f6feb', borderColor: '#1f6feb', color: '#fff', fontWeight: 700, boxShadow: '0 0 0 2px rgba(31,111,235,.35)' }
+                : { background: 'transparent', borderColor: 'var(--border)', color: 'var(--text-dim)' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                {/* 屏幕旋转图标（倾斜设备框 + 对角双箭头），明显区别于刷新的环形箭头 */}
+                <svg viewBox="0 0 24 24" width={15} height={15} fill={rotation ? '#fff' : 'url(#metalIcon)'} style={{ display: 'block' }}>
+                  <path d="M16.48 2.52c3.27 1.55 5.61 4.72 5.97 8.48h1.5C23.44 4.84 18.29 0 12 0l-.66.03 3.81 3.81 1.33-1.32zM10.23 1.75c-.59-.59-1.54-.59-2.12 0L1.75 8.11c-.59.59-.59 1.54 0 2.12l12.02 12.02c.59.59 1.54.59 2.12 0l6.36-6.36c.59-.59.59-1.54 0-2.12L10.23 1.75zm4.6 19.44L2.81 9.17l6.36-6.36 12.02 12.02-6.36 6.36zM7.52 21.48C4.25 19.94 1.91 16.76 1.55 13H.05C.56 19.16 5.71 24 12 24l.66-.03-3.81-3.81-1.33 1.32z" />
+                </svg>
+                {rotation ? <span>{rotation}°</span> : null}
+              </span>
+            </Button>
             <Tag color={connected ? 'green' : 'red'} style={{ marginInlineEnd: 0 }}>{connected ? t('browser.connected') : t('browser.disconnected')}</Tag>
             <span style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap' }}>
               {quality === 'auto' && levelName ? <span style={{ color: '#58a6ff' }}>{levelName} ·</span> : null}
@@ -631,8 +679,8 @@ export default function BrowserView() {
           </Space>
         }
       />
-      {/* 地址栏：紧凑一行，地址框自适应铺满 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 8px', flex: '0 0 auto' }}>
+      {/* 地址栏：紧凑一行，地址框自适应铺满（横向不自垫，与各页 16px 原点对齐） */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 0', flex: '0 0 auto' }}>
         <Button.Group size="small">
           <Button onClick={() => act('back')} title={t('file.back')}>←</Button>
           <Button onClick={() => act('forward')} title={t('file.forward')}>→</Button>
@@ -656,6 +704,7 @@ export default function BrowserView() {
         />
         <Button size="small" onClick={navigate}>{t('browser.go')}</Button>
         <Button size="small" onClick={openDevtools} title={t('browser.devtoolsTitle')}>{t('browser.debug')}</Button>
+        <Button size="small" onClick={openExternal} title={t('browser.openExternalTitle')}>{t('browser.openExternal')}</Button>
         {/* 手机模式：紧跟调试按钮。选机型即模拟移动视口（持久化、重连生效） */}
         <Select
           size="small"
@@ -703,6 +752,32 @@ export default function BrowserView() {
             height: rotated ? stage.w : Math.round((stage.w * vp.h) / vp.w),
             objectFit: 'contain',
             transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
+          }}
+        />
+        <textarea
+          ref={imeRef}
+          aria-label={t('browser.imeProxyLabel')}
+          tabIndex={-1}
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          onCompositionStart={() => { composingRef.current = true }}
+          onCompositionEnd={() => { composingRef.current = false; flushIme() }}
+          onInput={() => {
+            // 组合中的中间态（isComposing 的 input 事件）不发；只有非组合插入
+            //（如 macOS 长按选音标）才在这里落地。
+            if (!composingRef.current) flushIme()
+          }}
+          onBlur={() => {
+            // 失焦时丢弃半截组合，避免残留拼音在下次聚焦时被误发到远端。
+            composingRef.current = false
+            if (imeRef.current) imeRef.current.value = ''
+          }}
+          style={{
+            position: 'absolute', left: imePos.x, top: imePos.y, width: 2, height: 2,
+            opacity: 0, padding: 0, border: 'none', outline: 'none', resize: 'none',
+            overflow: 'hidden', background: 'transparent', caretColor: 'transparent',
+            pointerEvents: 'none',
           }}
         />
         {ripples.map((p) => (

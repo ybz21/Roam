@@ -23,6 +23,7 @@ import (
 	"ttmux-web/auth"
 	"ttmux-web/browser"
 	"ttmux-web/home"
+	"ttmux-web/p2p"
 	"ttmux-web/phone"
 	"ttmux-web/pty"
 	"ttmux-web/stream"
@@ -46,6 +47,14 @@ type Config struct {
 	LockSecs     int
 	SavePassword func(string) error // 把登录口令落盘到 config.yaml（首次设置/改密用）
 	Version      string             // roam 版本号（关于页展示 + 检测更新）
+
+	// P2P 直连（M0a spike）：灰度开关 + STUN/TURN 服务列表。
+	P2PEnabled    bool
+	P2PICEServers []string
+	// M0b 跨网穿透杠杆（默认值等价 M0a 行为）：固定 UDP 端口 / UPnP 映射 / mDNS。
+	P2PUDPPort int
+	P2PUPnP    bool
+	P2PMDNS    bool
 }
 
 func New(cfg Config) *gin.Engine {
@@ -57,6 +66,7 @@ func New(cfg Config) *gin.Engine {
 	tt := ttmux.New(cfg.TTmuxBin)
 	a := auth.New(cfg.Password, cfg.TOTPSecret, cfg.TOTPState, cfg.LockAfter, cfg.LockSecs, cfg.SavePassword)
 	h := api.New(tt, cfg.BrowserHome, cfg.DataDir)
+	go h.SyncLoop()                 // 后台兜底远端同步（10 §3 第三档），失败静默
 	browser.InitConfig(cfg.DataDir) // Chrome 启动配置持久化到 dataDir
 	phone.InitConfig(cfg.DataDir)   // 手机后端配置（本地/远程 redroid/真机）持久化到 dataDir
 	hub := stream.New(tt, cfg.LogsDir)
@@ -119,10 +129,37 @@ func New(cfg Config) *gin.Engine {
 		g.GET("/file/preview", h.FilePreview)   // 文件侧栏：Office 转 PDF 预览
 		g.GET("/file/stat", h.FileStat)
 		g.GET("/file/download", h.FileDownload)
+
+		// P2P 直连（M0a spike）：信令 WS + ICE 配置下发，均挂 g 组 cookie 自动鉴权。
+		p2pHub := p2p.NewHub(p2p.HubConfig{
+			Enabled:    cfg.P2PEnabled,
+			ICEServers: cfg.P2PICEServers,
+			UDPPort:    cfg.P2PUDPPort,
+			UPnP:       cfg.P2PUPnP,
+			MDNS:       cfg.P2PMDNS,
+			DataDir:    cfg.DataDir,
+		})
+		// Phase 1b：浏览器镜像走 media PC 的 DataChannel（label 前缀 "screencast"）。
+		// 在此接线避免 p2p↔browser 循环 import；WS 回退 /api/browser/stream 不受影响。
+		p2p.RegisterScreencastHandler(browser.ScreencastDCHandler)
+		// Phase 1b：手机镜像同法走 media PC 的 DataChannel（label 前缀 "phone"）。
+		// 未接线/P2P 关时收到 phone 通道按「无 handler」关闭 → 前端回退 WS /api/phone/stream。
+		p2p.RegisterPhoneHandler(phone.PhoneDCHandler)
+		g.GET("/p2p/signal", p2pHub.SignalHandler)
+		g.GET("/p2p/config", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{
+				"iceServers": []gin.H{{"urls": cfg.P2PICEServers}},
+			})
+		})
+		// M2 埋点接收端：前端一次传输结束（成功/回退）后上报 goodput 等指标。
+		g.POST("/p2p/metric", p2pHub.MetricHandler)
+
 		g.POST("/file/rename", h.FileRename)
 		g.POST("/file/copy", h.FileCopy)
+		g.POST("/file/move", h.FileMove) // 文件侧栏：移动文件/目录
 		g.DELETE("/file", h.FileDelete)
 		g.POST("/file/mkdir", h.FileMkdir) // 文件侧栏：在当前目录新建子目录
+		g.POST("/file/touch", h.FileTouch) // 文件侧栏：在指定目录新建空文件
 		g.POST("/upload", h.Upload)        // 上传文件到指定目录（拖拽到对话框 / 文件侧栏）
 
 		g.GET("/git/status", h.GitStatus)    // Git 面板：当前工作目录所属仓库状态
@@ -136,16 +173,20 @@ func New(cfg Config) *gin.Engine {
 		// ── Worktree API（worktree.Service 独占 git 操作，设计 07 §4）──
 		g.POST("/git/worktree", h.WorktreeCreate)        // 新建（锁内命名 + roam.* 身份）
 		g.GET("/git/worktrees", h.WorktreeList)          // 清单 + 状态 + 会话 join（无写副作用）
+		g.GET("/git/worktrees/all", h.WorktreeListAll)   // 跨仓库总览（会话触达的全部仓库）
 		g.GET("/git/worktree/diff", h.WorktreeDiff)      // 对比 base（committed 与 workingTree 分开）
 		g.POST("/git/worktree/merge", h.WorktreeMerge)   // 合并回 base（执行位/冲突 abort/expected-head）
 		g.POST("/git/worktree/remove", h.WorktreeRemove) // 删除（占用检查 + 脏保护）
 		g.POST("/git/worktree/prune", h.WorktreePrune)   // 显式清理残留
+		g.POST("/git/worktree/finish", h.WorktreeFinish) // P3 孤儿收尾：冻结→wip→merge→remove→留痕
+		g.POST("/git/worktree/sync", h.WorktreeSync)     // 远端轻量同步：ls-remote+fetch 合并目标，只动 refs/remotes（10 §3）
 		g.GET("/git/branches", h.GitBranches)            // 本地分支列表（W1 start-from）
 		// ── Session API 增量 ──
 		g.GET("/sessions/annotations", h.SessionAnnotations)              // session→worktree 归属（cwd join）
 		g.GET("/sessions/:name/worktree-status", h.SessionWorktreeStatus) // W7 关闭前预检
 		// ── 组合 WorktreeSession API（事务编排）──
 		g.POST("/worktree-sessions", h.WorktreeSessionCreate)                     // 建 worktree + 会话
+		g.POST("/sessions/:name/fork", h.SessionFork)                             // 派生子会话（继承父 cwd）
 		g.POST("/sessions/:name/fork-worktree", h.SessionForkWorktree)            // 派生子会话进新 worktree
 		g.POST("/sessions/:name/close-with-worktree", h.SessionCloseWithWorktree) // W7 三选一
 		// ── Race Service（W5/W6：一题多解竞赛，设计 07 §3）──
@@ -154,6 +195,13 @@ func New(cfg Config) *gin.Engine {
 		g.POST("/races/:id/crown", h.RaceCrown)     // 选为赢家：wip→merge→可选清理，阶段可续跑
 		g.POST("/races/:id/cleanup", h.RaceCleanup) // 全部清理（会话+worktree+分支）
 		g.DELETE("/races/:id", h.RaceDelete)        // 删除竞赛记录
+
+		// ── 项目（08：项目=git 仓库，一等存储对象 + 读模型聚合）──
+		g.GET("/projects", h.ProjectsList)                  // 列表聚合（发现通道读时收敛）
+		g.POST("/projects", h.ProjectCreate)                // 显式创建（origin=user，不自动退场）
+		g.DELETE("/projects/:key", h.ProjectDelete)         // 显式移除（纯台账，不动目录/会话）
+		g.GET("/projects/:key/activity", h.ProjectActivity) // 活动流（全部分支近 30 天）
+		g.PATCH("/projects/:key/prefs", h.ProjectPrefs)     // 置顶/显示名/默认 agent/base
 
 		g.GET("/sessions", h.Sessions)
 		g.POST("/sessions", h.NewSession)
@@ -258,6 +306,7 @@ func New(cfg Config) *gin.Engine {
 		g.PUT("/browser/config", browser.SetConfig)               // Chrome 启动配置：存
 		g.POST("/browser/relaunch", browser.Relaunch)             // 按新配置重启 Chrome
 		g.GET("/browser/health", browser.Health)                  // Chrome 是否可用 + 启动失败原因
+		g.POST("/browser/open-external", browser.OpenExternal)    // 甩给宿主机真实浏览器打开（WSL 下唤起 Windows 浏览器）
 
 		// 手机镜像（Linux→Android adb；其它平台 health 明示不支持）
 		g.GET("/phone/stream", phone.Handler)          // 镜像手机画面 + 转发输入

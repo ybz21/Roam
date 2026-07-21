@@ -21,3 +21,20 @@ web:
   # 登录失败锁定：连续失败 lock_after 次后锁 lock_secs 秒。
   lock_after: 10
   lock_secs: 30
+
+  # P2P 直连（浏览器 ↔ 后端 WebRTC DataChannel，M0a spike）。
+  # p2p_enabled 为灰度总开关（默认关）；开启后 /api/p2p/signal 才接受升级。
+  # p2p_ice_servers 为 STUN/TURN 列表；下面是公共 STUN，仅供开发自测，
+  # 生产应改为 frps 自建 STUN（见 docs/design/p2p）。
+  p2p_enabled: false
+  p2p_ice_servers:
+    - stun:stun.l.google.com:19302
+  # M0b 跨网穿透杠杆（默认值等价 M0a 行为）：
+  # p2p_udp_port：固定 ICE 本地 UDP 端口 + UDPMux，便于手动端口转发/配合 UPnP 端口一致；
+  #   0=随机（走 M0a 路径，不设 mux）。
+  # p2p_upnp：仅当 p2p_udp_port>0 时尝试 UPnP 端口映射；只有 external==internal 才注入公网
+  #   srflx 候选，端口不一致/失败一律静默跳过（绝不崩后端）。
+  # p2p_mdns：pion 解析浏览器 .local mDNS 候选，默认 true（对 localhost/LAN 无害且有益）。
+  p2p_udp_port: 0
+  p2p_upnp: false
+  p2p_mdns: true

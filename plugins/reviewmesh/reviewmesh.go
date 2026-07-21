@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,8 +24,38 @@ import (
 const (
 	findingsBegin = "TTMUX_FINDINGS_BEGIN"
 	findingsEnd   = "TTMUX_FINDINGS_END"
-	maxAutoRounds = 3 // 自动互审轮次上限,防 Agent 互相无限循环(评审设计 §10.1)
+	// 自动互审轮次上限默认值,防 Agent 互相无限循环(评审设计 §10.1);
+	// 可由设置页 rounds 配置或命令 --rounds 覆盖,见 resolveRounds。
+	defaultAutoRounds = 3
+	maxAutoRoundsCap  = 20 // 硬上限:配置再大也不放任无限互审
 )
+
+// resolveRounds 解析本次互审的轮次上限:命令 --rounds 优先,其次设置页
+// rounds,再退回默认值;越界(<1 或 >cap)时夹到合法区间。
+func resolveRounds(ctx *sdk.Ctx, args map[string]string) int {
+	pick := func(s string) (int, bool) {
+		if n, err := strconv.Atoi(strings.TrimSpace(s)); err == nil {
+			return n, true
+		}
+		return 0, false
+	}
+	n := defaultAutoRounds
+	if v, ok := pick(ctx.Config["rounds"]); ok {
+		n = v
+	}
+	if args != nil {
+		if v, ok := pick(args["rounds"]); ok {
+			n = v
+		}
+	}
+	if n < 1 {
+		n = 1
+	}
+	if n > maxAutoRoundsCap {
+		n = maxAutoRoundsCap
+	}
+	return n
+}
 
 // Activate registers the plugin's commands (sdk.Serve 的入口).
 func Activate(ctx *sdk.Ctx) sdk.Plugin {
@@ -73,7 +104,7 @@ func onAgentExited(ctx *sdk.Ctx, payload json.RawMessage) error {
 			ctx.Logf("auto-review for %s deferred to its watch session", ev.Session)
 			return nil
 		}
-		reviewed, err := autoReviewOnce(ctx, ev.Session, workdir, false)
+		reviewed, err := autoReviewOnce(ctx, ev.Session, workdir, resolveRounds(ctx, nil), false)
 		if err != nil {
 			ctx.Logf("auto-review for %s (%s): %v", ev.Session, workdir, err)
 			return nil // 无 diff 等情况不算错误,不重试
@@ -191,10 +222,11 @@ func resolveProvider(ctx *sdk.Ctx, arg string) string {
 func watch(ctx *sdk.Ctx, args map[string]string) (any, error) {
 	dev, workdir := args["session"], args["workdir"]
 	if dev == "" || workdir == "" {
-		return nil, fmt.Errorf("usage: review-mesh.watch --session <dev> --workdir <abs-dir>")
+		return nil, fmt.Errorf("usage: review-mesh.watch --session <dev> --workdir <abs-dir> [--rounds N]")
 	}
-	ctx.Logf("watch: monitoring %s (workdir %s)", dev, workdir)
-	fmt.Fprintf(os.Stderr, "== review-mesh 陪跑 %s ==\n对话空闲 30s 即互审;意见自动回灌;同一 diff 只审一次,最多 %d 轮\n", dev, maxAutoRounds)
+	rounds := resolveRounds(ctx, args)
+	ctx.Logf("watch: monitoring %s (workdir %s, max %d rounds)", dev, workdir, rounds)
+	fmt.Fprintf(os.Stderr, "== review-mesh 陪跑 %s ==\n对话空闲 30s 即互审;意见自动回灌;同一 diff 只审一次,最多 %d 轮\n", dev, rounds)
 	// 新一次陪跑 = 新一轮周期:清掉同名会话遗留的轮次/哈希,否则会话名
 	// 复用时自动互审会被旧状态静默跳过
 	_ = ctx.StorageSet("auto:"+dev, "")
@@ -205,20 +237,20 @@ func watch(ctx *sdk.Ctx, args map[string]string) (any, error) {
 		// "成功"返回,曾让这个循环永远退不出去(陪跑会话变僵尸)
 		if !ctx.SessionAlive(dev) {
 			fmt.Fprintf(os.Stderr, "[%s] 开发会话已结束,做收尾检查\n", now())
-			_, _ = autoReviewOnce(ctx, dev, workdir, true)
+			_, _ = autoReviewOnce(ctx, dev, workdir, rounds, true)
 			return map[string]string{"stopped": "session exited"}, nil
 		}
 		out, err := ctx.SessionCapture(dev, 40)
 		if err != nil { // 会话没了:收尾前做最后一轮兜底互审
 			fmt.Fprintf(os.Stderr, "[%s] 开发会话已结束,做收尾检查\n", now())
-			_, _ = autoReviewOnce(ctx, dev, workdir, true)
+			_, _ = autoReviewOnce(ctx, dev, workdir, rounds, true)
 			return map[string]string{"stopped": "session exited"}, nil
 		}
 		sum := fmt.Sprintf("%x", sha1.Sum([]byte(out)))
 		if sum != lastPane {
 			lastPane, stableSince = sum, time.Now()
 		} else if time.Since(stableSince) >= 30*time.Second {
-			reviewed, err := autoReviewOnce(ctx, dev, workdir, true)
+			reviewed, err := autoReviewOnce(ctx, dev, workdir, rounds, true)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "[%s] 互审失败: %v\n", now(), err)
 			}
@@ -236,9 +268,9 @@ type autoState struct {
 }
 
 // autoReviewOnce 对 dev 会话的 workdir 做一轮受控互审:diff 为空/未变化/
-// 轮次用尽都跳过;wait 时阻塞完成整轮并把 findings send 回 dev 会话,
-// 不 wait 则拉起异步会话 `<dev>-review-final`(消亡兜底路径)。
-func autoReviewOnce(ctx *sdk.Ctx, dev, workdir string, wait bool) (bool, error) {
+// 轮次用尽(≥ maxRounds)都跳过;wait 时阻塞完成整轮并把 findings send 回
+// dev 会话,不 wait 则拉起异步会话 `<dev>-review-final`(消亡兜底路径)。
+func autoReviewOnce(ctx *sdk.Ctx, dev, workdir string, maxRounds int, wait bool) (bool, error) {
 	diff, err := ctx.WorkspaceDiff(workdir)
 	if err != nil {
 		return false, err
@@ -256,9 +288,9 @@ func autoReviewOnce(ctx *sdk.Ctx, dev, workdir string, wait bool) (bool, error) 
 	if st.LastDiff == diffSum {
 		return false, nil // 这份变更已审过(空闲但没新改动,或复审后未再动)
 	}
-	if st.Rounds >= maxAutoRounds {
+	if st.Rounds >= maxRounds {
 		fmt.Fprintf(os.Stderr, "[%s] 已达 %d 轮上限,不再自动复审(手动: ttmux plugin run review-mesh.review --workdir %s)\n",
-			now(), maxAutoRounds, workdir)
+			now(), maxRounds, workdir)
 		return false, nil
 	}
 

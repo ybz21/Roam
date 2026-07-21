@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>P6 · 概览重构：项目为主的作战地图</title>
+<link rel="stylesheet" href="../07-worktree/mock.css">
+<link rel="stylesheet" href="project.css">
+<style>
+  /* ── P6 专属：需要你横幅 / 统计条 / 项目作战卡 ── */
+  .p6-attn {
+    border: 1px solid rgba(210, 153, 34, .4); border-radius: 12px;
+    background: linear-gradient(180deg, rgba(210, 153, 34, .09), rgba(210, 153, 34, .04));
+    padding: 10px 14px;
+  }
+  .p6-attn .hd { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 13px; color: #e3b341; }
+  .p6-attn .it { display: flex; align-items: center; gap: 8px; padding: 6px 2px 0; font-size: 12.5px; }
+  .p6-attn .it .proj { color: var(--text-dimmer); }
+  .p6-attn .it .sep { color: var(--text-dimmer); opacity: .6; }
+  .p6-attn .it a { margin-left: auto; font-size: 12px; }
+
+  .p6-stats { display: flex; gap: 10px; flex-wrap: wrap; }
+  .p6-stat {
+    flex: 1 1 120px; min-width: 110px; cursor: pointer;
+    background: var(--bg-container); border: 1px solid var(--border-subtle); border-radius: 11px;
+    padding: 10px 13px; transition: border-color .15s, transform .15s;
+  }
+  .p6-stat:hover { border-color: rgba(88, 166, 255, .4); transform: translateY(-1px); }
+  .p6-stat .v { font-size: 20px; font-weight: 800; font-family: var(--mono); }
+  .p6-stat .k { font-size: 11.5px; color: var(--text-dim); margin-top: 1px; }
+  .p6-stat.b .v { color: #58a6ff; } .p6-stat.g .v { color: #3fb950; }
+  .p6-stat.y .v { color: #d29922; } .p6-stat.p .v { color: #a371f7; }
+
+  /* 项目作战卡：比 P1 卡宽，内嵌 任务/蜂群/待收尾 */
+  .p6-proj {
+    background: var(--bg-container); border: 1px solid var(--border-subtle); border-radius: 12px;
+    padding: 12px 14px 10px; display: flex; flex-direction: column; gap: 6px;
+    transition: border-color .15s;
+  }
+  .p6-proj:hover { border-color: rgba(88, 166, 255, .35); }
+  .p6-proj .hd { display: flex; align-items: center; gap: 8px; }
+  .p6-proj .hd b { font-size: 14px; }
+  .p6-proj .hd .br { font-family: var(--mono); font-size: 11px; color: var(--cyan); }
+  .p6-proj .hd a { margin-left: auto; font-size: 12px; }
+  .p6-proj .trow {
+    display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 7px;
+    font-size: 12.5px; cursor: pointer; transition: background .14s;
+  }
+  .p6-proj .trow:hover { background: var(--list-hover, rgba(255,255,255,.03)); }
+  .p6-proj .trow .nm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .p6-proj .trow .tm { margin-left: auto; color: var(--text-dimmer); font-size: 11px; flex: 0 0 auto; }
+  .p6-proj .swarm-line {
+    display: flex; align-items: center; gap: 7px; padding: 6px 8px; border-radius: 8px;
+    border: 1px solid rgba(163, 113, 247, .25); background: rgba(163, 113, 247, .06); font-size: 12px;
+  }
+  .p6-proj .unfin-line {
+    display: flex; align-items: center; gap: 7px; padding: 5px 8px; border-radius: 8px;
+    border: 1px solid rgba(210, 153, 34, .25); background: rgba(210, 153, 34, .06);
+    font-size: 12px; color: #e3b341;
+  }
+  .p6-proj .unfin-line a, .p6-proj .swarm-line a { margin-left: auto; font-size: 11.5px; }
+
+  .p6-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .p6-mini { background: var(--bg-container); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 10px 12px; }
+  .p6-mini .hd { font-size: 11px; letter-spacing: .08em; font-weight: 700; color: var(--text-dim); margin-bottom: 6px; display: flex; gap: 8px; align-items: center; }
+  .p6-mini .hd .ln { flex: 1; border-top: 1px dashed var(--border-subtle); }
+  .p6-mini .row { display: flex; align-items: center; gap: 8px; padding: 4px 2px; font-size: 12px; color: var(--text-dim); }
+  .p6-mini .row .mono { font-size: 11px; }
+  .p6-mini .row .tm { margin-left: auto; color: var(--text-dimmer); font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="spec-bar">
+  <b><span class="spec-tag">P6</span> 概览重构</b><span class="spec-tag">项目为主的作战地图 · 桌面 + 手机</span>
+  <span class="spacer"></span>
+  <a href="index.html">↑ 索引</a>
+</div>
+<div class="spec-note">概览从「会话/蜂群双栏」转为<em>项目为主</em>：① 「需要你」横幅把跨项目的 待输入/待收尾/蜂群待解锁 拱到最上（首页的首要职责）；② 统计条一排直达；③ 主体 = <em>活跃项目作战卡</em>——每卡内嵌 进行中任务前 3 + ⬡ 蜂群摘要 + 待收尾黄条，会话与蜂群都以项目为容器呈现，不再各占一栏；④ 散会话 / 最近活动（跨项目 commit+留痕）收进底部双列。品牌 hero 压缩成标题行，版本信息挪去设置。</div>
+
+<div class="stage">
+  <!-- 桌面 -->
+  <div class="app-frame" style="height:860px">
+    <div class="sider">
+      <div class="brand">Roam</div>
+      <div class="nav-item on">◎ 概览</div>
+      <div class="nav-item">⌂ 项目</div>
+      <div class="nav-item">🗀 文件</div>
+      <div class="nav-item">⛶ 浏览器</div>
+      <div class="nav-item">▭ 手机</div>
+      <div class="nav-item">⋯ 更多</div>
+    </div>
+    <div class="main-col">
+      <div class="page-pad" style="display:flex;flex-direction:column;gap:12px">
+
+        <!-- 标题行（hero 压缩）：主角是项目，不是品牌 -->
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="font-size:16px;font-weight:700">概览</span>
+          <span class="hint">3 个项目活跃 · 09:41 更新</span>
+          <span style="flex:1"></span>
+          <span class="btn sm">＋ 新项目</span>
+          <span class="btn primary sm">进入项目页 →</span>
+        </div>
+
+        <!-- ① 需要你（条件出现）：跨项目待人工事项，点击直达 -->
+        <div class="p6-attn">
+          <div class="hd">⚠ 需要你 <span class="hint" style="font-weight:400">3 件事在等人工介入</span></div>
+          <div class="it"><span class="dot y"></span><span class="proj">ttmux</span><span class="sep">›</span><b>增加项目概念</b><span class="tag yellow" style="height:17px;font-size:10.5px">待输入</span><a>进入终端 →</a></div>
+          <div class="it"><span class="dot y"></span><span class="proj">blade-oauth</span><span class="sep">›</span><b>⎇ oauth-refactor</b><span class="tag yellow" style="height:17px;font-size:10.5px">待收尾 · ↑3</span><a>去收尾 →</a></div>
+          <div class="it"><span class="dot y"></span><span class="proj">ttmux</span><span class="sep">›</span><b>⬡ perf-sprint</b><span class="tag yellow" style="height:17px;font-size:10.5px">1 成员待解锁</span><a>蜂群台 →</a></div>
+        </div>
+
+        <!-- ② 统计条：一排直达 -->
+        <div class="p6-stats">
+          <div class="p6-stat"><div class="v">5</div><div class="k">项目</div></div>
+          <div class="p6-stat g"><div class="v">4</div><div class="k">运行中任务</div></div>
+          <div class="p6-stat y"><div class="v">2</div><div class="k">待输入</div></div>
+          <div class="p6-stat y"><div class="v">1</div><div class="k">待收尾</div></div>
+          <div class="p6-stat p"><div class="v">1</div><div class="k">蜂群</div></div>
+        </div>
+
+        <!-- ③ 活跃项目作战卡（主体）：任务/蜂群/待收尾 都以项目为容器 -->
+        <div class="prj-sect" style="margin:2px 2px 0;display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.08em;color:var(--text-dim);font-weight:700">
+          活跃项目 <span style="font-family:var(--mono);font-size:10.5px;color:var(--text-dimmer);font-weight:400">3</span>
+          <span style="flex:1;border-top:1px dashed var(--border-subtle)"></span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <!-- ttmux：任务 + 蜂群 + 全要素 -->
+          <div class="p6-proj">
+            <div class="hd"><b>ttmux</b><span class="tag green" style="height:17px;font-size:10.5px">main ✓</span><span class="br">⎇ main @ d694038</span><a>进入项目 →</a></div>
+            <div class="trow"><span class="dot g"></span><span class="nm">增加项目概念</span><span class="tag cyan" style="height:17px;font-size:10.5px">⎇</span><span class="lifec"><i class="s1"></i><i class="s2 cur"></i><i></i><i></i></span><span class="tm">刚刚</span></div>
+            <div class="trow"><span class="dot idle"></span><span class="nm">roam</span><span class="lifec"><i class="s1"></i><i class="s2"></i><i></i><i></i></span><span class="tm">1小时前</span></div>
+            <div class="swarm-line"><span style="color:var(--purple)">⬡</span><b>perf-sprint</b><span class="hint">成员 2/3 · 看板 进行2 待审1</span><a>蜂群台 →</a></div>
+          </div>
+          <!-- blade-agent -->
+          <div class="p6-proj">
+            <div class="hd"><b>blade-agent</b><span class="br">⎇ main @ 8ebc015</span><a>进入项目 →</a></div>
+            <div class="trow"><span class="dot g"></span><span class="nm">软件工厂开始写prd拆分设计文档</span><span class="tag cyan" style="height:17px;font-size:10.5px">⎇</span><span class="lifec"><i class="s1"></i><i class="s2 cur"></i><i></i><i></i></span><span class="tm">3分钟前</span></div>
+            <div class="trow"><span class="dot idle"></span><span class="nm">blade-agent-sh</span><span class="lifec"><i class="s1"></i><i class="s2"></i><i></i><i></i></span><span class="tm">14小时前</span></div>
+          </div>
+          <!-- blade-oauth：带待收尾 -->
+          <div class="p6-proj">
+            <div class="hd"><b>blade-oauth</b><span class="br">⎇ main @ 03b35b3</span><a>进入项目 →</a></div>
+            <div class="trow"><span class="dot idle"></span><span class="nm">blade-oauth-sh</span><span class="lifec"><i class="s1"></i><i class="s2"></i><i></i><i></i></span><span class="tm">2小时前</span></div>
+            <div class="unfin-line">⚑ 1 个任务待收尾（⎇ oauth-refactor ↑3）<a>去收尾 →</a></div>
+          </div>
+          <!-- 空位提示：无活动项目不上概览 -->
+          <div class="p6-proj" style="border-style:dashed;align-items:center;justify-content:center;color:var(--text-dimmer);font-size:12.5px;min-height:96px">
+            其余 2 个项目无活动 —— 在「项目」页查看全部
+          </div>
+        </div>
+
+        <!-- ④ 底部双列：散会话 ｜ 最近活动（跨项目 commit+留痕） -->
+        <div class="p6-cols">
+          <div class="p6-mini">
+            <div class="hd">散会话 <span style="font-family:var(--mono);font-weight:400">1</span><span class="ln"></span></div>
+            <div class="row"><span class="dot idle"></span><b style="color:var(--text-bright)">xiaohui</b><span class="tm">28分钟前</span><a style="font-size:11.5px;margin-left:10px">进入</a></div>
+          </div>
+          <div class="p6-mini">
+            <div class="hd">最近活动<span class="ln"></span></div>
+            <div class="row"><span class="mono" style="color:var(--cyan)">cc7c555</span><span class="mono" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">feat(project): 列表排序可选</span><span class="tm">ttmux · 12分钟前</span></div>
+            <div class="row"><span style="color:var(--purple)">⇥</span><span class="mono" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">留痕: ⎇try-feature 已合并回 main</span><span class="tm">blade-oauth · 1小时前</span></div>
+            <div class="row"><span class="mono" style="color:var(--cyan)">7e7a691</span><span class="mono" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">feat(project): 新建项目支持新建文件夹</span><span class="tm">ttmux · 2小时前</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 手机 -->
+  <div class="phone-frame" style="height:860px">
+    <div class="notch"><i></i></div>
+    <div style="padding:10px 14px 6px;display:flex;align-items:center;gap:8px">
+      <b style="font-size:16px">概览</b><span style="flex:1"></span><span class="btn primary sm">＋ 新项目</span>
+    </div>
+    <div style="flex:1;overflow:hidden;padding:0 10px;display:flex;flex-direction:column;gap:10px">
+      <div class="p6-attn">
+        <div class="hd">⚠ 需要你 <span class="hint" style="font-weight:400">3 件</span></div>
+        <div class="it"><span class="dot y"></span><span class="proj">ttmux</span><span class="sep">›</span><b>增加项目概念</b><span class="tag yellow" style="height:17px;font-size:10.5px">待输入</span><a>→</a></div>
+        <div class="it"><span class="dot y"></span><span class="proj">blade-oauth</span><span class="sep">›</span><b>⎇ oauth-refactor</b><span class="tag yellow" style="height:17px;font-size:10.5px">待收尾</span><a>→</a></div>
+      </div>
+      <div class="p6-stats" style="flex-wrap:nowrap;overflow-x:auto">
+        <div class="p6-stat" style="min-width:86px"><div class="v">5</div><div class="k">项目</div></div>
+        <div class="p6-stat g" style="min-width:86px"><div class="v">4</div><div class="k">运行中</div></div>
+        <div class="p6-stat y" style="min-width:86px"><div class="v">3</div><div class="k">需要你</div></div>
+        <div class="p6-stat p" style="min-width:86px"><div class="v">1</div><div class="k">蜂群</div></div>
+      </div>
+      <div class="p6-proj">
+        <div class="hd"><b>ttmux</b><span class="tag green" style="height:17px;font-size:10.5px">main ✓</span><a>进入 →</a></div>
+        <div class="trow"><span class="dot g"></span><span class="nm">增加项目概念</span><span class="tag cyan" style="height:17px;font-size:10.5px">⎇</span><span class="tm">刚刚</span></div>
+        <div class="swarm-line"><span style="color:var(--purple)">⬡</span><b>perf-sprint</b><span class="hint">2/3</span><a>→</a></div>
+      </div>
+      <div class="p6-proj">
+        <div class="hd"><b>blade-agent</b><a>进入 →</a></div>
+        <div class="trow"><span class="dot g"></span><span class="nm">软件工厂开始写prd拆分…</span><span class="tm">3分钟前</span></div>
+      </div>
+      <div class="p6-proj">
+        <div class="hd"><b>blade-oauth</b><a>进入 →</a></div>
+        <div class="unfin-line">⚑ 1 个待收尾<a>→</a></div>
+      </div>
+    </div>
+    <div class="tabbar"><span class="on">◎</span><span>⌂</span><span>🗀</span><span>⋯</span></div>
+  </div>
+</div>
+
+<div class="spec-note" style="border-top:1px solid var(--border-subtle)">
+  规则：① 「需要你」= 跨项目汇总（待输入任务 + 待收尾孤儿 + 蜂群 pending 成员），最多列 5 条超出「+n」，零事项时整条横幅消失；② 活跃项目 = 有 running/waiting 任务 ∨ 有待收尾 ∨ 有蜂群，按「需要你数 &gt; 最近活跃」排序，每卡任务最多 3 行（超出「+n 更多」）；③ 数据全部复用现有接口：/projects（统计与卡片）+ per-session claude/codex/capture（待输入）+ /swarms 投影（蜂群行）+ /projects/:key/activity（最近活动，取各项目头 2 条合并）；④ 无活动项目不上概览（「项目」页看全量），品牌/版本信息挪至 关于/设置；⑤ 手机端统计条横滑、作战卡纵排。
+</div>
+</body>
+</html>

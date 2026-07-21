@@ -33,15 +33,25 @@ plugins/
 - 想**快速迭代**、用非 Go 语言、或做**第三方**分发 → **路径 B（插件包）**。
 
 ### 路径 A：builtin Go 插件
-每个插件是独立 Go 模块，经 cli 模块 `replace` 编译进二进制。新增一个：
+每个插件是独立 Go 模块，**manifest 与实现同住插件包、init() 自注册**，宿主代码零手改。新增一个：
 
 1. 建目录与模块：`plugins/<名>/go.mod`（模块名 `roam-plugins/<名>`）。
-2. 只依赖公开 SDK `ttmux-cli-go/pkg/plugin/sdk`，**不碰宿主 internal**。
-3. 在 cli 的 `go.mod` 加 `require` + `replace` 指向 `../plugins/<名>`。
-4. 在注册表 `cli/ttmux-cli-go/internal/plugin/builtin/builtin.go` 加一行：manifest 声明 + `Activate` 接线。
-5. `go build` 重新构建安装 ttmux 才生效（builtin 编译期接入，不热更）。
+2. 只依赖公开 SDK `ttmux-cli-go/pkg/plugin/sdk` 与 `ttmux-cli-go/pkg/plugin/manifest`，**不碰宿主 internal**。
+3. 包里写 `register.go` 自注册（manifest 声明也在这里）：
 
-> 参考实现：`plugins/im`（IM 桥 + provider 适配 + 常驻 concierge）、`plugins/reviewmesh`。
+   ```go
+   func init() { sdk.RegisterBuiltin(Manifest(), Activate) }
+   ```
+
+4. 跑 `bash scripts/dev/gen-builtin-plugins.sh`：扫 `plugins/` 目录自动生成 blank-import 接线
+   （`internal/plugin/builtin/imports_gen.go`）和 cli `go.mod` 的 `require`/`replace`。
+5. `go build` 重新构建安装 ttmux 才生效（builtin 编译期链接，不热更）。
+
+> 参考实现：`plugins/hostmonitor`（主机监控，最小样例）、`plugins/cron`（定时任务，常驻调度循环样例）、`plugins/im`（IM 桥 + provider 适配 + 常驻 concierge）、`plugins/reviewmesh`。
+
+> Go 插件也可以**不进 builtin、按地址注册**：加个 `main.go` 调 `sdk.Serve(Activate)` 编译成独立二进制，
+> 配一份 `roam-plugin.json`（`runtime.kind=exec`），`ttmux plugin install <目录>` 即注册，
+> Roam 负责拉起子进程与生命周期——协议与 builtin 完全相同，宿主与 cli 一行不用改。
 
 ### 路径 B：插件包（node/exec）
 manifest 驱动，走安装流程，不用改宿主代码：

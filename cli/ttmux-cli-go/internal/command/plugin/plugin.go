@@ -15,6 +15,7 @@ import (
 	"ttmux-cli-go/internal/plugin"
 	"ttmux-cli-go/internal/plugin/builtin"
 	"ttmux-cli-go/internal/runtime"
+	"ttmux-cli-go/internal/sessmeta"
 	"ttmux-cli-go/internal/ui"
 	"ttmux-cli-go/pkg/plugin/sdk"
 )
@@ -592,6 +593,13 @@ func track(env plugin.Env, args []string, out io.Writer) error {
 			if err := env.RT.Tmux("new-session", "-d", "-s", watchSess, cmd); err != nil {
 				ui.Warn(out, "监控会话拉起失败: %v", err)
 			} else {
+				// meta 记 parent=被陪跑会话:Web 父子树把陪跑会话归到同一组,
+				// 而不是游离的顶层会话(被陪跑会话本身是 fork 出来的时尤其明显)
+				if err := sessmeta.New(env.RT.HomeDir).Put(sessmeta.Row{
+					Session: watchSess, Parent: session, CreatedBy: "review-watch", InitialCwd: labels["workdir"],
+				}); err != nil {
+					ui.Warn(out, "监控会话 parent 元数据写入失败: %v", err)
+				}
 				ui.Ok(out, "监控会话 %s 已陪跑(围观: ttmux a %s)", ui.Bold(watchSess), watchSess)
 			}
 		}

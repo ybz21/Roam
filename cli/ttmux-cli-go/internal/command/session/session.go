@@ -29,7 +29,10 @@ type infoJSON struct {
 }
 
 func ListJSON(rt runtime.Runtime, exclude map[string]bool, w io.Writer) error {
-	out, err := rt.TmuxOutput("list-sessions", "-F", "#{session_name}\t#{session_windows}\t#{session_created}\t#{session_attached}\t#{session_activity}")
+	// window_activity 补上 session_activity 的盲区：tmux 只在 attach/输入/焦点变化时
+	// 刷新 session_activity,后台无人 attach 的会话即便一直有输出(agent 干活)也不动;
+	// window_activity 会随前台窗口的 pane 输出走。取两者较大值 = 真正的「最近活跃」。
+	out, err := rt.TmuxOutput("list-sessions", "-F", "#{session_name}\t#{session_windows}\t#{session_created}\t#{session_attached}\t#{session_activity}\t#{window_activity}")
 	if err != nil {
 		// tmux server 未启动时输出的是 stderr 错误文本（out 非空），只看 err
 		_, _ = io.WriteString(w, "[]\n")
@@ -52,6 +55,9 @@ func ListJSON(rt runtime.Runtime, exclude map[string]bool, w io.Writer) error {
 		lastActivity := ""
 		if len(parts) > 4 {
 			lastActivity = parts[4]
+		}
+		if len(parts) > 5 {
+			lastActivity = maxNumeric(lastActivity, parts[5]) // max(session_activity, window_activity)
 		}
 		sessions = append(sessions, sessionInfo{
 			Name:         parts[0],
@@ -115,6 +121,17 @@ func Capture(rt runtime.Runtime, args []string, w io.Writer) error {
 
 func must(s string, _ error) string {
 	return s
+}
+
+// maxNumeric returns whichever of two tmux epoch strings is the larger number,
+// tolerating empty/garbage (parses as 0). Keeps the string form for the JSON.
+func maxNumeric(a, b string) string {
+	na, _ := strconv.ParseInt(strings.TrimSpace(a), 10, 64)
+	nb, _ := strconv.ParseInt(strings.TrimSpace(b), 10, 64)
+	if nb > na {
+		return b
+	}
+	return a
 }
 
 func IsTerminal() bool {

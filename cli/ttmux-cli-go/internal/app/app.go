@@ -91,11 +91,12 @@ func (a App) Run(args []string) error {
 	case "killall":
 		return session.KillAll(a.rt, a.swarmSessions(), out)
 	case "rename":
-		if err := session.Rename(a.rt, a.swarmSessions(), rest, out); err != nil {
+		old, neu, err := session.Rename(a.rt, a.swarmSessions(), rest, out)
+		if err != nil {
 			return err
 		}
-		if len(rest) >= 2 { // 显式双参改名成功后同步 meta 外键
-			_ = a.meta().OnRename(rest[0], rest[1])
+		if old != "" && neu != "" { // 改名成功后同步 meta 外键（含交互式选名）
+			_ = a.meta().OnRename(old, neu)
 		}
 		return nil
 	case "send":

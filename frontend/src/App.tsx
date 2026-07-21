@@ -6,7 +6,7 @@
 import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import {
   Layout, Menu, Button, Card, List, Tag, Form, Input, Select, Segmented, Tabs, Descriptions,
-  Statistic, Row, Col, Space, Popconfirm, Empty, Modal, Grid, App as AntApp, Typography, Spin, Tooltip, Dropdown, Checkbox, Progress, AutoComplete, Radio, Switch, Collapse,
+  Statistic, Row, Col, Space, Popconfirm, Empty, Modal, Grid, App as AntApp, Typography, Spin, Tooltip, Dropdown, Checkbox, Progress, AutoComplete, Radio, Switch, Collapse, InputNumber,
 } from 'antd'
 import { QRCodeSVG } from 'qrcode.react'
 import { api, upload, makeClipboardImageFile, setUnauthorizedHandler } from './api'
@@ -16,6 +16,8 @@ import CodexChat from './CodexChat'
 import FileBrowser from './FileBrowser'
 import FileWorkspace from './FileWorkspace'
 import FloatingFileDrawer from './FloatingFileDrawer'
+import MobileSubPage from './MobileSubPage'
+import { FileView } from './fileview'
 // 非首屏的重页面（蜂群/Git 面板/浏览器/手机镜像/插件）按路由懒加载：切到对应 tab 才拉 chunk，
 // 缩小首屏 index 块。都渲染在同一个 Suspense 边界内（见 lazyFallback，App 内 page）。
 const GitPanel = lazy(() => import('./GitPanel'))
@@ -26,6 +28,8 @@ const PluginsPanel = lazy(() => import('./PluginsPanel'))
 const BrowserView = lazy(() => import('./BrowserView'))
 const PhoneView = lazy(() => import('./PhoneView'))
 const Swarm = lazy(() => import('./Swarm'))
+const Projects = lazy(() => import('./Projects'))
+const OverviewPage = lazy(() => import('./Overview'))
 import UpdateBanner from './UpdateBanner'
 import { useThemeMode } from './theme'
 import { useI18n } from './i18n'
@@ -34,6 +38,8 @@ import { usePreferences, savePreferences, loadPreferences } from './preferences'
 import { PromptDialog, detectPrompt } from './prompt'
 import { copyText } from './chat/blocks'
 import { VoiceInput } from './chat/VoiceInput'
+import LinkStatus from './p2p/LinkStatus'
+import { startControlLink, stopControlLink } from './p2p/transport'
 
 interface ClaudeInfo { running: boolean; file?: string; dir?: string }
 
@@ -41,10 +47,12 @@ const { Sider, Content } = Layout
 const { useBreakpoint } = Grid
 const { Text } = Typography
 
+// 「会话」「蜂群」不再进导航：项目页是唯一主入口（任务驱动，08 设计）——
+// 蜂群从项目编队 tab 进（蜂群台深链 #/swarm/<名>），会话平铺页留 #/sessions 直达；
+// 两页组件与路由都保留，概览页统计仍可跳转。
 const NAV = [
   { key: 'overview', labelKey: 'nav.overview' },
-  { key: 'sessions', labelKey: 'nav.sessions' },
-  { key: 'swarm', labelKey: 'nav.swarm' },
+  { key: 'projects', labelKey: 'nav.projects' },
   { key: 'files', labelKey: 'nav.files' },
   { key: 'browser', labelKey: 'nav.browser' },
   { key: 'phone', labelKey: 'nav.phone' },
@@ -70,7 +78,7 @@ function getHashParams(): URLSearchParams {
 
 function setHashParams(params: Record<string, string>) {
   const h = location.hash
-  const base = (h.split('?')[0]) || '#/sessions'
+  const base = (h.split('?')[0]) || '#/projects'
   const sp = new URLSearchParams()
   for (const [k, v] of Object.entries(params)) { if (v) sp.set(k, v) }
   const qs = sp.toString()
@@ -85,6 +93,7 @@ const svg = (paths: any) => (
 )
 const ICONS: Record<string, any> = {
   overview: svg(<><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>),
+  projects: svg(<><path d="M3 10.2 12 3l9 7.2" /><path d="M5.5 9v11h13V9" /><path d="M9.5 20v-5h5v5" /></>),
   sessions: svg(<><polyline points="5 8 9 12 5 16" /><line x1="12" y1="16" x2="18" y2="16" /></>),
   swarm: svg(<><circle cx="12" cy="5" r="2.4" /><circle cx="5" cy="17" r="2.4" /><circle cx="19" cy="17" r="2.4" /><line x1="12" y1="7.4" x2="6.5" y2="14.8" /><line x1="12" y1="7.4" x2="17.5" y2="14.8" /></>),
   files: svg(<><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><path d="M7 12h10" /><path d="M7 16h6" /></>),
@@ -162,7 +171,7 @@ function shellQuote(s: string): string {
 }
 
 // tmux 给的是 Unix 秒。转成「刚刚 / N 分钟前 …」相对时间，title 里再挂绝对时间。
-function relTime(sec: string | number | undefined, t: (k: string, v?: Record<string, string | number>) => string): string {
+export function relTime(sec: string | number | undefined, t: (k: string, v?: Record<string, string | number>) => string): string {
   const n = typeof sec === 'string' ? parseInt(sec, 10) : sec
   if (!n || !Number.isFinite(n)) return '—'
   const diff = Math.max(0, Math.floor(Date.now() / 1000 - n))
@@ -182,6 +191,11 @@ function FilesPage({ openTerm }: { openTerm: (name: string) => void }) {
   const { message } = AntApp.useApp()
   const { t } = useI18n()
   const [prefs] = usePreferences()
+  // 手机(窄屏)两级导航：一级整页文件列表，点文件后详情以全屏二级页(MobileSubPage)展开；
+  // 桌面仍是 FileWorkspace(文件树 dock + 多 tab 编辑)。
+  const screens = useBreakpoint()
+  const isMobile = !screens.md
+  const [mobileFile, setMobileFile] = useState<string | null>(null)
   const openAgent = async (kind: 'claude' | 'codex', file: string) => {
     const base = pathBasename(file).replace(/[^a-zA-Z0-9_.-]+/g, '-').slice(0, 28) || 'file'
     const name = `${kind}-${base}-${Date.now().toString(36).slice(-5)}`
@@ -199,6 +213,19 @@ function FilesPage({ openTerm }: { openTerm: (name: string) => void }) {
       message.error(t('file.openFailed', { message: e.message }))
     }
   }
+  if (isMobile) {
+    return (
+      <div style={{ height: '100%', minHeight: 0, display: 'flex' }}>
+        <FileBrowser dir="" accent="#58a6ff" layout="dock" onOpenFile={setMobileFile} onOpenAgent={openAgent} />
+        {mobileFile && (
+          <MobileSubPage onBack={() => setMobileFile(null)}>
+            <FileView path={mobileFile} accent="#58a6ff" inline onBack={() => setMobileFile(null)}
+              onClose={() => setMobileFile(null)} onOpenPath={setMobileFile} onOpenAgent={openAgent} />
+          </MobileSubPage>
+        )}
+      </div>
+    )
+  }
   return (
     <div style={{ height: '100%', minHeight: 0, display: 'flex' }}>
       <FileWorkspace dir="" accent="#58a6ff" onOpenAgent={openAgent} />
@@ -208,9 +235,10 @@ function FilesPage({ openTerm }: { openTerm: (name: string) => void }) {
 
 export default function App() {
   const [authed, setAuthed] = useState<boolean | null>(null)
-  const [route, setRoute] = useState(() => normalizeRoute(location.hash.replace(/^#\/?/, '') || 'sessions'))
+  const [route, setRoute] = useState(() => normalizeRoute(location.hash.replace(/^#\/?/, '') || 'projects'))
   const tab = route.split('/')[0]                                  // 基础页（swarm/leave → swarm）
   const swarmSub = tab === 'swarm' && route.includes('/') ? decodeURIComponent(route.slice(route.indexOf('/') + 1)) : '' // 深链选中的蜂群
+  const projectSub = tab === 'projects' && route.includes('/') ? decodeURIComponent(route.slice(route.indexOf('/') + 1)) : '' // 深链选中的项目
   const go = (k: string) => {
     const qi = location.hash.indexOf('?')
     const qs = qi >= 0 ? location.hash.slice(qi) : ''
@@ -218,6 +246,7 @@ export default function App() {
   }
   const { mode, toggle: toggleTheme } = useThemeMode()
   const { t } = useI18n()
+  const [prefs] = usePreferences()
   const themeIcon = mode === 'dark'
     ? svg(<><circle cx="12" cy="12" r="4.2" /><path d="M12 2v2.2M12 19.8V22M4.2 4.2l1.6 1.6M18.2 18.2l1.6 1.6M2 12h2.2M19.8 12H22M4.2 19.8l1.6-1.6M18.2 5.8l1.6-1.6" /></>)
     : svg(<><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z" /></>)
@@ -278,7 +307,7 @@ export default function App() {
 
   // hash 路由：URL #/xxx 与当前页同步（支持前进/后退、刷新保持、收藏分享）
   useEffect(() => {
-    const apply = () => setRoute(normalizeRoute(location.hash.replace(/^#\/?/, '') || 'sessions'))
+    const apply = () => setRoute(normalizeRoute(location.hash.replace(/^#\/?/, '') || 'projects'))
     apply()
     window.addEventListener('hashchange', apply)
     return () => window.removeEventListener('hashchange', apply)
@@ -296,6 +325,13 @@ export default function App() {
     const t = setInterval(check, 5000)
     return () => { stop = true; clearInterval(t) }
   }, [authed, terms])
+
+  // 通用传输 Phase 1a：登录后且用户偏好开 P2P → 建会话级常驻 control PC（左边栏全局状态）。
+  // 偏好关闭 / 登出即拆链。P2P 是否真正可用由 transport 内部拉 /api/p2p/config 决定。
+  useEffect(() => {
+    if (authed && prefs.p2pEnabled) startControlLink()
+    else stopControlLink()
+  }, [authed, prefs.p2pEnabled])
 
   if (authed === null) return <div style={{ height: '100dvh', display: 'grid', placeItems: 'center' }}><Spin size="large" /></div>
   if (!authed) return <Login onOk={() => { setAuthed(true); loadPreferences(); go('overview') }} />
@@ -394,8 +430,9 @@ export default function App() {
   )
 
   const pages: any = {
-    overview: <Overview go={go} openTerm={openTerm} />,
+    overview: <OverviewPage openTerm={openTerm} renderSessions={() => <Sessions openTerm={openTerm} closeTerm={closeTerm} activeTerm={active} />} />,
     swarm: <Swarm openTerm={openTerm} initialSwarm={swarmSub || undefined} onNav={(n) => { location.hash = n ? '#/swarm/' + encodeURIComponent(n) : '#/swarm' }} />,
+    projects: <Projects openTerm={openTerm} closeTerm={closeTerm} initialKey={projectSub || undefined} />,
     sessions: <Sessions openTerm={openTerm} closeTerm={closeTerm} activeTerm={active} />,
     files: <FilesPage openTerm={openTerm} />,
     settings: <EnvPage />,
@@ -406,11 +443,10 @@ export default function App() {
   }
   // 懒加载页面 chunk 拉取期间的兜底：居中转圈（体量小，通常一闪而过）
   const lazyFallback = <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}><Spin /></div>
-  const page = <Suspense fallback={lazyFallback}>{pages[tab] || pages.sessions}</Suspense>
+  const page = <Suspense fallback={lazyFallback}>{pages[tab] || pages.projects}</Suspense>
   // browser 全幅(自带工具栏铺满)；phone 与概览/会话一致走 tt-page（同 16px 留白 + 满高，见 tt-page-phone）。
-  const pageNode = tab === 'browser'
-    ? page
-    : <div className={`tt-page tt-page-${tab}${isMobile ? ' tt-page-mobile' : ''}`}>{page}</div>
+  // 浏览器页不再全幅特例：与 文件/手机 同走 tt-page 满高容器，五页左上角起点统一 (16,16)
+  const pageNode = <div className={`tt-page tt-page-${tab}${isMobile ? ' tt-page-mobile' : ''}`}>{page}</div>
 
   const menu = (
     <Menu
@@ -453,8 +489,9 @@ export default function App() {
               )}
             </div>
             <div style={{ flex: 1, overflowY: 'auto' }}>{menu}</div>
-            {/* 底部：收起 在上，其次 全屏，最后 退出，始终竖向堆叠（展开带文字，折叠仅图标居中）。*/}
+            {/* 底部：全局 P2P 链路状态在最上（未启用时自隐藏），其次 关于/收起/全屏/退出，竖向堆叠。*/}
             <div style={{ borderTop: '1px solid var(--border-subtle)', padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <LinkStatus collapsed={collapsed} />
               <Button type="text" block onClick={() => go('about')} title={t('nav.about')}
                 style={{ ...bottomBtnStyle, color: tab === 'about' ? '#58a6ff' : 'var(--text-dim)' }}>
                 {collapsed ? ICONS.github : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{ICONS.github}{t('nav.about')}</span>}
@@ -887,6 +924,7 @@ function TerminalPane(props: {
     { type: 'divider' as const },
     { key: 'scroll-up', label: t('terminal.scrollHistory') },
     { key: 'bottom', label: t('terminal.toBottom') },
+    { key: 'redraw', label: t('terminal.redraw') },
     { key: 'reconnect', label: t('terminal.reconnect') },
     { type: 'divider' as const },
     {
@@ -911,6 +949,7 @@ function TerminalPane(props: {
     else if (key === 'manual-paste') openManualPaste(ctx.session)
     else if (key === 'scroll-up') h?.scroll(-12)
     else if (key === 'bottom') h?.toBottom()
+    else if (key === 'redraw') h?.redraw()
     else if (key === 'reconnect') h?.reconnect()
     else h?.send(key)
     setCtx(null)
@@ -1000,6 +1039,7 @@ function TerminalPane(props: {
       <Tooltip title={t('terminal.toBottom')}><Button size="small" onClick={() => active && termRefs.current[active]?.toBottom()}>{t('terminal.bottomShort')}</Button></Tooltip>
       <Tooltip title={t('terminal.decreaseFont')}><Button size="small" onClick={() => setFontSize(Math.max(10, fontSize - 1))}>A-</Button></Tooltip>
       <Tooltip title={t('terminal.increaseFont')}><Button size="small" onClick={() => setFontSize(Math.min(22, fontSize + 1))}>A+</Button></Tooltip>
+      <Tooltip title={t('terminal.redraw')}><Button size="small" onClick={() => active && termRefs.current[active]?.redraw()}>{t('terminal.redrawShort')}</Button></Tooltip>
       <Tooltip title={t('terminal.reconnect')}><Button size="small" onClick={() => active && termRefs.current[active]?.reconnect()}>{t('terminal.reconnectShort')}</Button></Tooltip>
     </div>
   )
@@ -1059,6 +1099,8 @@ function TerminalPane(props: {
       {!inChat && (
         <div style={{ display: 'flex', gap: 6, padding: 8, borderTop: '1px solid var(--border)', overflowX: 'auto' }}>
           <Button type="primary" onMouseDown={noBlur} onClick={() => (isTouch ? submitLine() : sendKey('\r'))}>Enter</Button>
+          {/* 触屏没有 Ctrl+Shift+V / 右键菜单在长按选词后也不再弹出，丝带上补一个直达粘贴 */}
+          {isTouch && <Button onMouseDown={noBlur} onClick={() => active && pasteClipboard(active)} style={{ flex: '0 0 auto' }}>{t('terminal.pasteAction')}</Button>}
           {(prefsData.quickCommands || []).map((cmd) => (
             <Button key={cmd} onMouseDown={noBlur} onClick={() => { if (isTouch) { setLine(cmd); requestAnimationFrame(() => mobileInputRef.current?.focus()) } else { sendRaw(cmd) } }} style={{ flex: '0 0 auto' }}>{cmd}</Button>
           ))}
@@ -1265,127 +1307,7 @@ function Login({ onOk }: { onOk: () => void }) {
 
 // ── 概览（仪表盘）──
 // 蜂群状态 → 颜色/中文
-function SwarmStatusTag({ status }: { status?: string }) {
-  const { t } = useI18n()
-  const m: Record<string, [string, string]> = {
-    planning: ['blue', t('swarm.status.planning')], running: ['processing', t('common.running')],
-    integrating: ['gold', t('swarm.status.integrating')], done: ['success', t('common.done')], archived: ['default', t('swarm.status.archived')],
-  }
-  const [c, l] = m[status || ''] || ['default', status || '—']
-  return <Tag color={c} style={{ margin: 0 }}>{l}</Tag>
-}
-
-// 统计磁贴：左侧色块图标 + 大数字 + 标签，可点跳转
-function StatTile({ icon, label, value, accent, onClick }: {
-  icon: any; label: string; value: any; accent: string; onClick?: () => void
-}) {
-  return (
-    <Card size="small" hoverable={!!onClick} onClick={onClick}
-      style={{ cursor: onClick ? 'pointer' : 'default', background: 'var(--bg-container)', borderColor: 'var(--border-subtle)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{ width: 40, height: 40, borderRadius: 10, flex: '0 0 auto', display: 'grid', placeItems: 'center', color: accent, background: accent + '22' }}>{icon}</div>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 24, fontWeight: 700, lineHeight: 1.1, color: 'var(--text-bright)' }}>{value}</div>
-          <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>{label}</div>
-        </div>
-      </div>
-    </Card>
-  )
-}
-
-function Overview({ go, openTerm }: { go: (k: string) => void; openTerm: (n: string) => void }) {
-  const { t } = useI18n()
-  const [info, setInfo] = useState<any>(null)
-  const [swarms, setSwarms] = useState<any[]>([])
-  const [sessions, setSessions] = useState<any[]>([])
-  const load = () => {
-    api('GET', '/info').then(setInfo).catch(() => {})
-    api('GET', '/swarms').then((r) => setSwarms(Array.isArray(r) ? r : [])).catch(() => {})
-    api('GET', '/sessions').then((r) => setSessions(Array.isArray(r) ? r : [])).catch(() => {})
-  }
-  useEffect(() => { load(); const t = setInterval(load, 3000); return () => clearInterval(t) }, [])
-
-  const aliveMembers = swarms.reduce((n, x) => n + (x.alive || 0), 0)
-  const pendingMembers = swarms.reduce((n, x) => n + (x.pending || 0), 0)
-  const chip = { color: 'var(--text-dim)', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', fontSize: 12 }
-
-  return (
-    <Space direction="vertical" size={14} style={{ width: '100%' }}>
-      {/* Hero */}
-      <div style={{ borderRadius: 14, padding: '22px 24px', background: 'linear-gradient(135deg,var(--bg-container) 0%,var(--bg-base) 100%)', border: '1px solid var(--border-subtle)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-          <img src="/logo-mark.svg" width={48} height={48} alt="Roam" style={{ flex: '0 0 auto', borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,.5)' }} />
-          <div style={{ flex: 1, minWidth: 200 }}>
-            <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-bright)' }}>{t('overview.welcome')}</div>
-            <div style={{ color: 'var(--text-dim)', fontSize: 13, marginTop: 4 }}>{t('overview.subtitle')}</div>
-          </div>
-          <Space wrap>
-            <Button type="primary" onClick={() => go('sessions')}>{t('overview.enterSessions')}</Button>
-            <Button onClick={() => go('swarm')}>{t('overview.viewSwarm')}</Button>
-          </Space>
-        </div>
-        <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
-          <Tag bordered={false} style={chip}>ttmux {info?.version || '—'}</Tag>
-          <Tag bordered={false} style={chip}>tmux {info?.tmux_version || '—'}</Tag>
-          {info?.data_dir && <Tag bordered={false} style={chip}>📁 {info.data_dir}</Tag>}
-        </div>
-      </div>
-
-      {/* 统计磁贴 */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
-        {[
-          { icon: ICONS.sessions, label: t('nav.sessions'), value: info?.sessions ?? sessions.length, accent: '#58a6ff', onClick: () => go('sessions') },
-          { icon: ICONS.swarm, label: t('nav.swarm'), value: swarms.length, accent: '#58a6ff', onClick: () => go('swarm') },
-          { icon: ICONS.swarm, label: t('overview.activeMembers'), value: aliveMembers, accent: '#3fb950', onClick: () => go('swarm') },
-          { icon: ICONS.overview, label: t('overview.pendingUnlock'), value: pendingMembers, accent: '#d29922', onClick: () => go('swarm') },
-        ].map((p, i) => <div key={i} style={{ flex: '1 1 140px', minWidth: 140 }}><StatTile {...p} /></div>)}
-      </div>
-
-      {/* 会话 + 蜂群 双栏（会话在前，蜂群在后） */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
-        <div style={{ flex: '1 1 360px', minWidth: 280 }}>
-          <Card title={t('nav.sessions')} extra={<a onClick={() => go('sessions')}>{t('common.all')} →</a>}>
-            {sessions.length === 0 ? <Empty description={t('session.noActive')} /> : (
-              <List size="small" dataSource={sessions.slice(0, 6)} renderItem={(s: any) => (
-                <List.Item style={{ padding: '8px 0' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minWidth: 0 }}>
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ color: 'var(--text-bright)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.name}>{s.name}</div>
-                      <div style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap' }} title={`${t('session.createdAt')} ${absTime(s.created)} · ${t('session.lastActivity')} ${absTime(s.last_activity)}`}>{t('session.windows', { count: s.windows })} · {s.attached == 1 ? t('terminal.status.connected') : t('terminal.status.idle')} · {t('session.lastActivity')} {relTime(s.last_activity, t)}</div>
-                    </div>
-                    <a onClick={() => openTerm(s.name)} style={{ flex: '0 0 auto', whiteSpace: 'nowrap' }}>{t('common.terminal')}</a>
-                  </div>
-                </List.Item>
-              )} />
-            )}
-          </Card>
-        </div>
-        <div style={{ flex: '1 1 360px', minWidth: 280 }}>
-          <Card title={<Space><span style={{ color: '#58a6ff' }}>◆</span>{t('nav.swarm')}</Space>} extra={<a onClick={() => go('swarm')}>{t('common.all')} →</a>}>
-            {swarms.length === 0 ? <Empty description={t('overview.noSwarms')} /> : (
-              <Space direction="vertical" size={10} style={{ width: '100%' }}>
-                {swarms.slice(0, 5).map((s: any) => (
-                  <div key={s.id || s.name} onClick={() => go('swarm')}
-                    style={{ cursor: 'pointer', padding: '10px 12px', borderRadius: 10, background: 'var(--bg-base)', border: '1px solid var(--border-subtle)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' }}>
-                      <span style={{ fontWeight: 600, color: 'var(--text-bright)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
-                      <span style={{ flex: '0 0 auto' }}><SwarmStatusTag status={s.status} /></span>
-                      {s.supervisor && <Text type="secondary" style={{ fontSize: 12, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>◆{s.supervisor}</Text>}
-                      <span style={{ flex: 1, minWidth: 8 }} />
-                      <span style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap', flex: '0 0 auto' }}>{t('overview.swarmCounts', { alive: s.alive, total: s.total })}{s.pending ? ` · ${t('overview.pendingShort', { count: s.pending })}` : ''}</span>
-                    </div>
-                    <div style={{ color: 'var(--text-dim)', fontSize: 12, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.goal || t('overview.noGoal')}</div>
-                    <Progress percent={s.total ? Math.round((s.alive / s.total) * 100) : 0} showInfo={false} size="small" strokeColor="#58a6ff" trailColor="var(--border-subtle)" style={{ marginBottom: 0, marginTop: 6 }} />
-                  </div>
-                ))}
-              </Space>
-            )}
-          </Card>
-        </div>
-      </div>
-    </Space>
-  )
-}
+// 概览页已重构为「项目为主」的独立组件（Overview.tsx，08 设计 P6）。
 
 // ── 任务（命令 + Agent 统一） ──
 function Tasks({ openTerm }: { openTerm: (n: string) => void }) {
@@ -1505,7 +1427,7 @@ export function DirPicker({ open, start, onPick, onClose }: { open: boolean; sta
 
 // worktree 分支默认名：会话名 slug（小写、非字母数字转 -）
 // prompt 派生任务名：取首行、去引号标点、截 24 字、空白转 -；中文原样保留（tmux 会话名支持中文）。
-function taskNameFromPrompt(p: string): string {
+export function taskNameFromPrompt(p: string): string {
   const first = (p.trim().split(/\n/)[0] || '').replace(/["'`«»""'']/g, '').trim()
   // 优先在首个标点处断句（够长时），再截 24 字、去尾部标点、空白转 -
   const seg = first.split(/[，。,.!！？?;；:：]/)[0]
@@ -1513,12 +1435,14 @@ function taskNameFromPrompt(p: string): string {
   return base.slice(0, 24).trim().replace(/[，。,.!！？?;；:：\s]+$/g, '').replace(/\s+/g, '-')
 }
 // POSIX 单引号安全包裹（prompt 作为 agent CLI 参数发送）。
-function shq(s: string): string {
+export function shq(s: string): string {
   return "'" + s.replace(/'/g, "'\\''") + "'"
 }
 
-// ── 新建会话（prompt-first 派活）──
-function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: (name: string) => void }) {
+// ── 新建会话（prompt-first 派活）/ 派生子会话 ──
+// parent 非空 = 派生模式：同一张表单（目录默认父 cwd 可改、三选一、命名约定 prompt 全同款），
+// 仅提交路由不同（fork / fork-worktree，meta 记父子关系）。两处不再各维护一份表单。
+export function NewSessionModal({ open, parent, onClose, onDone }: { open: boolean; parent?: string | null; onClose: () => void; onDone: (name: string) => void }) {
   const [prompt, setPrompt] = useState('')
   const [name, setName] = useState('')
   const [nameTouched, setNameTouched] = useState(false)
@@ -1534,18 +1458,27 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
   const [creating, setCreating] = useState(false)
   // worktree 展开态（W1）：只选「基于」。分支不提前指定——后端按会话名占位，
   // Agent 开工后按任务 git branch -m 语义化（交互修订 4：先建会话再建 worktree）。
+  // base 选中值：本地分支存裸名；远端分支存 remote:<remote>:<branch> 编码
+  // （冒号在 git ref 名里非法，编码无歧义），提交前拆回 {base, remote}
   const [base, setBase] = useState('')
   const [branches, setBranches] = useState<string[]>([])
+  const [remoteBranches, setRemoteBranches] = useState<{ remote: string; name: string }[]>([])
   const [defBranch, setDefBranch] = useState('')
   const { message } = AntApp.useApp()
   const { t } = useI18n()
   const [prefs] = usePreferences()
   useEffect(() => {
-    if (open) {
-      setPrompt(''); setName(''); setNameTouched(false); setDir(''); setAgent('claude'); setWtMode('repo'); setAutoReview(false); setIsGitRepo(false)
-      setBase(''); setBranches([]); setDefBranch(''); setExistingWts([]); setWtPath('')
+    if (!open) return
+    setPrompt(''); setName(''); setNameTouched(false); setDir(''); setAgent('claude'); setWtMode('repo'); setAutoReview(false); setIsGitRepo(false)
+    setBase(''); setBranches([]); setRemoteBranches([]); setDefBranch(''); setExistingWts([]); setWtPath('')
+    // 派生模式：目录默认父会话 cwd（可改成任意目录，与新建一致）
+    if (parent) {
+      let cancelled = false
+      api('GET', `/sessions/${encodeURIComponent(parent)}/cwd`)
+        .then((r) => { if (!cancelled) setDir(r?.data?.dir || '') }).catch(() => {})
+      return () => { cancelled = true }
     }
-  }, [open])
+  }, [open, parent])
   useEffect(() => {
     const d = dir.trim()
     if (!d) { setIsGitRepo(false); return }
@@ -1567,7 +1500,7 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
     }).catch(() => { if (!cancelled) setExistingWts([]) })
     return () => { cancelled = true }
   }, [isGitRepo, dir])
-  // 选「新建 worktree」时拉本地分支做「基于」候选
+  // 选「新建 worktree」时拉本地+远端分支做「基于」候选
   useEffect(() => {
     if (wtMode !== 'new' || !isGitRepo || !dir.trim()) return
     let cancelled = false
@@ -1575,8 +1508,9 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
       if (cancelled) return
       const bs: string[] = r?.data?.branches || []
       const def: string = r?.data?.default || ''
-      setBranches(bs); setDefBranch(def)
-      setBase((prev) => (prev && bs.includes(prev) ? prev : def))
+      const rs: { remote: string; name: string }[] = r?.data?.remotes || []
+      setBranches(bs); setDefBranch(def); setRemoteBranches(rs)
+      setBase((prev) => (prev && (bs.includes(prev) || rs.some((x) => `remote:${x.remote}:${x.name}` === prev)) ? prev : def))
     }).catch(() => {})
     return () => { cancelled = true }
   }, [wtMode, isGitRepo, dir])
@@ -1596,17 +1530,32 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
       let sessionDir = dir.trim()
       let actual: string
       if (wtMode === 'new' && isGitRepo && sessionDir) {
-        // 组合 API（先会话后 worktree）：分支不传——后端按会话名占位，Agent 开工后语义化
-        const res = await api('POST', '/worktree-sessions', {
-          name: finalName, dir: sessionDir,
-          ...(base ? { base } : {}),
-        })
+        // 组合 API（先会话后 worktree）：分支不传——后端按会话名占位，Agent 开工后语义化；
+        // 派生模式走 fork-worktree（同编排 + meta 记父子）
+        let baseReq: { base?: string; remote?: string } = base ? { base } : {}
+        if (base.startsWith('remote:')) {
+          const rest = base.slice('remote:'.length)
+          const sep = rest.indexOf(':')
+          baseReq = { base: rest.slice(sep + 1), remote: rest.slice(0, sep) }
+        }
+        const res = parent
+          ? await api('POST', `/sessions/${encodeURIComponent(parent)}/fork-worktree`, {
+            child: finalName, dir: sessionDir, ...baseReq,
+          })
+          : await api('POST', '/worktree-sessions', {
+            name: finalName, dir: sessionDir, ...baseReq,
+          })
         actual = res.name || res.data?.session || finalName
         sessionDir = res.data?.path || sessionDir
       } else {
-        // 主仓库直接用所选目录；「已有 worktree」= 会话 cwd 指进该 worktree
+        // 主仓库直接用所选目录；「已有 worktree」= 会话 cwd 指进该 worktree；
+        // 派生模式走 fork（dir 留空则继承父 cwd）
         if (wtMode === 'existing' && wtPath) sessionDir = wtPath
-        const res = await api('POST', '/sessions', { name: finalName, dir: sessionDir })
+        const res = parent
+          ? await api('POST', `/sessions/${encodeURIComponent(parent)}/fork`, {
+            child: finalName, ...(sessionDir ? { dir: sessionDir } : {}),
+          })
+          : await api('POST', '/sessions', { name: finalName, dir: sessionDir })
         actual = res.name || finalName
       }
       if (agent !== 'none') {
@@ -1629,53 +1578,62 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
           }).catch((e: any) => message.warning(t('session.autoReviewTrackFailed') + ': ' + e.message))
         }
       }
-      pushRecentDir(dir); message.success(t('session.created')); onClose(); onDone(actual)
+      pushRecentDir(dir); message.success(t(parent ? 'session.fork.created' : 'session.created')); onClose(); onDone(actual)
     }
     catch (e: any) { message.error(e.message) }
     finally { setCreating(false) }
   }
   return (
     <>
-      <Modal open={open} onCancel={onClose} onOk={ok} okText={t('file.create')} title={t('session.new')} destroyOnClose
+      <Modal open={open} onCancel={onClose} onOk={ok}
+        okText={parent ? t('session.fork.ok') : t('file.create')}
+        title={parent ? t('session.fork.title', { parent }) : t('session.new')} destroyOnClose
         confirmLoading={creating}>
         <Space direction="vertical" style={{ width: '100%' }}>
           {/* 名称是一等短输入(可留空自动命名)；需求是任务本体,发给 Agent/派生分支 */}
           <Input placeholder={t('session.namePlaceholder2')} value={name} autoFocus
             onChange={(e) => { setName(e.target.value); setNameTouched(true) }} />
-          {/* 顺序（交互修订 5）：先定位置——名字 → 目录 → 在哪干活；再定执行——Agent → 需求 */}
-          <Space.Compact style={{ width: '100%' }}>
-            <AutoComplete style={{ flex: 1 }} value={dir} onChange={setDir}
-              options={recentDirs().map((d) => ({ value: d }))}
-              filterOption={(input, opt) => String(opt?.value).toLowerCase().includes(input.toLowerCase())}
-              placeholder={t('session.dirPlaceholder')} />
-            <Button onClick={() => setPick(true)}>{t('common.browse')}</Button>
-          </Space.Compact>
-          {recentDirs().length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-              {recentDirs().map((d) => (
-                <Tooltip key={d} title={d}>
-                  <Tag color={d === dir ? 'blue' : undefined} style={{ cursor: 'pointer', margin: 0, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }}
-                    onClick={() => setDir(d)}>
-                    {d.split('/').filter(Boolean).pop() || d}
-                  </Tag>
-                </Tooltip>
-              ))}
-            </div>
-          )}
+          {/* 顺序（交互修订 5）：先定位置——名字 → 目录 → 在哪干活；再定执行——Agent → 需求。
+              派生模式目录固定 = 父会话 cwd（派生的语义就是在父目录干活），只读展示 */}
+          {parent ? (
+            <div style={{ color: 'var(--text-dimmer)', fontSize: 12, fontFamily: 'ui-monospace, monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={dir}>{dir || '…'}</div>
+          ) : (<>
+            <Space.Compact style={{ width: '100%' }}>
+              <AutoComplete style={{ flex: 1 }} value={dir} onChange={setDir}
+                options={recentDirs().map((d) => ({ value: d }))}
+                filterOption={(input, opt) => String(opt?.value).toLowerCase().includes(input.toLowerCase())}
+                placeholder={t('session.dirPlaceholder')} />
+              <Button onClick={() => setPick(true)}>{t('common.browse')}</Button>
+            </Space.Compact>
+            {recentDirs().length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {recentDirs().map((d) => (
+                  <Tooltip key={d} title={d}>
+                    <Tag color={d === dir ? 'blue' : undefined} style={{ cursor: 'pointer', margin: 0, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }}
+                      onClick={() => setDir(d)}>
+                      {d.split('/').filter(Boolean).pop() || d}
+                    </Tag>
+                  </Tooltip>
+                ))}
+              </div>
+            )}
+          </>)}
           {/* 工作区三选一（W1 交互修订）：常驻不隐藏(cc96123 教训)——非 git 目录整组置灰+tooltip */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <span style={{ color: 'var(--text-dim)', fontSize: 13, flex: '0 0 auto' }}>{t('session.wt.where')}</span>
-              <Tooltip title={isGitRepo ? '' : t('session.worktreeNeedsRepo')}>
+              <Tooltip title={isGitRepo ? '' : parent ? t('session.fork.parentNotRepo') : t('session.worktreeNeedsRepo')}>
                 <Segmented size="small" value={isGitRepo ? wtMode : 'repo'} onChange={(v) => setWtMode(v as any)} options={[
-                  { label: t('session.wt.mainRepo'), value: 'repo' },
+                  { label: parent ? t('session.fork.parentDir') : t('session.wt.mainRepo'), value: 'repo' },
                   { label: t('session.wt.newWt'), value: 'new', disabled: !isGitRepo },
                   { label: t('session.wt.existingWt', { count: existingWts.length }), value: 'existing', disabled: !isGitRepo || !existingWts.length },
                 ]} />
               </Tooltip>
             </div>
             <div style={{ color: 'var(--text-dimmer)', fontSize: 12 }}>
-              {!isGitRepo ? t('session.worktreeNeedsRepo') : wtMode === 'repo' ? t('session.wt.hintRepo') : wtMode === 'new' ? t('session.wt.hintNew') : t('session.wt.hintExisting')}
+              {!isGitRepo ? (parent ? t('session.fork.parentNotRepo') : t('session.worktreeNeedsRepo'))
+                : wtMode === 'repo' ? (parent ? t('session.fork.hintParent') : t('session.wt.hintRepo'))
+                  : wtMode === 'new' ? t('session.wt.hintNew') : t('session.wt.hintExisting')}
             </div>
             {wtMode === 'existing' && (
               <Select value={wtPath || undefined} onChange={(v) => setWtPath(v)} placeholder={t('session.wt.pickExisting')}
@@ -1708,13 +1666,25 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
                   <Select size="small" showSearch optionFilterProp="label" style={{ flex: 1, minWidth: 0 }}
                     value={base || undefined} onChange={(v) => setBase(v)}
                     placeholder={t('session.wt.basePlaceholder')}
-                    options={[
-                      ...(defBranch ? [{ value: defBranch, label: t('session.wt.defaultBranch', { name: defBranch }) }] : []),
-                      ...branches.filter((b) => b !== defBranch).map((b) => ({ value: b, label: b })),
-                    ]} />
+                    options={(() => {
+                      type Opt = { value?: string; label: string; options?: { value: string; label: string }[] }
+                      const locals = [
+                        ...(defBranch ? [{ value: defBranch, label: t('session.wt.defaultBranch', { name: defBranch }) }] : []),
+                        ...branches.filter((b) => b !== defBranch).map((b) => ({ value: b, label: b })),
+                      ]
+                      if (!remoteBranches.length) return locals as Opt[]
+                      return [
+                        { label: t('session.wt.localBranches'), options: locals },
+                        {
+                          label: t('session.wt.remoteBranches'),
+                          options: remoteBranches.map((rb) => ({ value: `remote:${rb.remote}:${rb.name}`, label: `${rb.remote}/${rb.name}` })),
+                        },
+                      ] as Opt[]
+                    })()} />
                 </div>
                 <div style={{ color: 'var(--text-dimmer)', fontSize: 12 }}>
-                  {agent !== 'none' ? t('session.wt.autoNote') : t('session.wt.autoNoteNoAgent')}
+                  {base.startsWith('remote:') ? t('session.wt.remoteFetchNote')
+                    : agent !== 'none' ? t('session.wt.autoNote') : t('session.wt.autoNoteNoAgent')}
                 </div>
               </div>
             )}
@@ -1740,6 +1710,7 @@ function NewSessionModal({ open, onClose, onDone }: { open: boolean; onClose: ()
     </>
   )
 }
+
 
 function RenameSessionModal({ session, onClose, onDone }: { session: string | null; onClose: () => void; onDone: (oldName: string, newName: string) => void }) {
   const [name, setName] = useState('')
@@ -1770,7 +1741,7 @@ function RenameSessionModal({ session, onClose, onDone }: { session: string | nu
 }
 
 // ── 关闭 worktree 会话的收尾三选一（W7）：保留 / 合并回 base 并删除 / 丢弃并删除 ──
-function CloseWorktreeModal({ info, onClose, onDone }: {
+export function CloseWorktreeModal({ info, onClose, onDone }: {
   info: { name: string; st: any } | null
   onClose: () => void
   onDone: (name: string) => void
@@ -1780,8 +1751,9 @@ function CloseWorktreeModal({ info, onClose, onDone }: {
   const [busy, setBusy] = useState(false)
   const { message } = AntApp.useApp()
   const { t } = useI18n()
-  useEffect(() => { if (info) { setMode('keep'); setStrategy('squash') } }, [info])
   const st = info?.st || {}
+  const merged = !!st.mergedInto // 合入检测（10 §5）：已合入时丢弃=清理，默认直选
+  useEffect(() => { if (info) { setMode(info.st?.mergedInto ? 'discard' : 'keep'); setStrategy('squash') } }, [info])
   const ok = async () => {
     if (!info) return
     setBusy(true)
@@ -1799,21 +1771,32 @@ function CloseWorktreeModal({ info, onClose, onDone }: {
   return (
     <Modal open={!!info} onCancel={onClose} onOk={ok} confirmLoading={busy} destroyOnClose
       title={t('worktree.close.title', { name: info?.name || '' })}
-      okText={t('session.close')} okButtonProps={{ danger: mode === 'discard' }}>
+      okText={t('session.close')}
+      okButtonProps={{ danger: mode === 'discard' && (!merged || (st.dirty || 0) + (st.untracked || 0) > 0) }}>
       <div style={{ color: 'var(--text-dim)', marginBottom: 12 }}>
-        {t('worktree.close.summary', {
-          branch: st.branch || '?',
-          dirty: (st.dirty || 0) + (st.untracked || 0),
-          ahead: st.committedAhead || 0,
-          base: st.base || '?',
-        })}
+        {/* 已合入（10 §5）：损失叙事换成绿色定心丸；未提交改动仍如实提示 */}
+        {merged
+          ? (<>
+            <div style={{ color: '#3fb950' }}>{t('project.finish.mergedRemote', { target: st.mergedInto, kind: st.mergedKind })}</div>
+            {(st.dirty || 0) + (st.untracked || 0) > 0 && (
+              <div style={{ color: '#d29922', marginTop: 4 }}>{t('project.finish.uncommitted', { count: (st.dirty || 0) + (st.untracked || 0) })}</div>
+            )}
+          </>)
+          : t('worktree.close.summary', {
+            branch: st.branch || '?',
+            dirty: (st.dirty || 0) + (st.untracked || 0),
+            ahead: st.committedAhead || 0,
+            base: st.base || '?',
+          })}
       </div>
       <Radio.Group value={mode} onChange={(e) => setMode(e.target.value)}
         style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <Radio value="keep">{t('worktree.close.keep')}</Radio>
-        <Radio value="merge" disabled={!st.base}>
+        {/* 已合入后本地再合并只会空转/添乱：禁用并提示走清理 */}
+        <Radio value="merge" disabled={!st.base || merged}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             {t('worktree.close.merge', { base: st.base || '?' })}
+            {merged && <span style={{ fontSize: 12, color: 'var(--text-dimmer)' }}>{t('worktree.close.mergeDisabledMerged')}</span>}
             {mode === 'merge' && (
               <Select size="small" value={strategy} onChange={(v) => setStrategy(v)} style={{ width: 100 }}
                 onClick={(e) => e.stopPropagation()}
@@ -1821,7 +1804,11 @@ function CloseWorktreeModal({ info, onClose, onDone }: {
             )}
           </span>
         </Radio>
-        <Radio value="discard"><span style={{ color: '#f85149' }}>{t('worktree.close.discard')}</span></Radio>
+        <Radio value="discard">
+          {merged
+            ? <span style={{ color: '#3fb950' }}>{t('worktree.close.discardMerged', { target: st.mergedInto })}</span>
+            : <span style={{ color: '#f85149' }}>{t('worktree.close.discard')}</span>}
+        </Radio>
       </Radio.Group>
     </Modal>
   )
@@ -1846,9 +1833,17 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
   // W7 关闭流程：confirmKill = 普通 Popconfirm 受控打开；closing = worktree 收尾三选一弹窗
   const [confirmKill, setConfirmKill] = useState<string | null>(null)
   const [closing, setClosing] = useState<{ name: string; st: any } | null>(null)
+  // 派生子会话（fork）弹窗：值为父会话名
+  const [forking, setForking] = useState<string | null>(null)
   const { message, modal } = AntApp.useApp()
   const { t } = useI18n()
-  const load = () => api('GET', '/sessions').then(setList).catch(() => {})
+  // tree=1：拿 parent 投影树后拍平（节点字段与平铺一致 + parent），W2 父子分组用
+  const load = () => api('GET', '/sessions?tree=1').then((roots) => {
+    const flat: any[] = []
+    const walk = (nodes: any[]) => { for (const n of nodes || []) { flat.push(n); walk(n.children) } }
+    walk(Array.isArray(roots) ? roots : [])
+    setList(flat)
+  }).catch(() => {})
   useEffect(() => { load(); const t = setInterval(load, 3000); return () => clearInterval(t) }, [])
   useEffect(() => {
     let stop = false
@@ -2024,8 +2019,27 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
     if (rc.status === 'cleaned') continue
     for (const ct of rc.contestants || []) raceOf[ct.session] = rc
   }
+  // 父子树（设计 §2.2）：parent 是显式强关系（fork 意图），分组优先级 竞赛 > 父子树 > 仓库
+  const alive = new Set(sorted.map((s: any) => s.name))
+  const byName: Record<string, any> = {}
+  for (const s of sorted) byName[s.name] = s
+  const kidsOf: Record<string, any[]> = {}
+  for (const s of sorted) {
+    if (raceOf[s.name]) continue
+    if (s.parent && alive.has(s.parent) && !raceOf[s.parent]) (kidsOf[s.parent] ||= []).push(s)
+  }
+  const famRootOf = (s: any) => {
+    let cur = s
+    const seen = new Set<string>([s.name])
+    while (cur.parent && alive.has(cur.parent) && !raceOf[cur.parent] && !seen.has(cur.parent)) {
+      seen.add(cur.parent); cur = byName[cur.parent]
+    }
+    return cur
+  }
+  const famInvolved = (s: any) => !raceOf[s.name] &&
+    ((kidsOf[s.name]?.length || 0) > 0 || (s.parent && alive.has(s.parent) && !raceOf[s.parent]))
   const groupCounts: Record<string, number> = {}
-  for (const s of sorted) { const r = repoOf(s.name); if (r && !raceOf[s.name]) groupCounts[r] = (groupCounts[r] || 0) + 1 }
+  for (const s of sorted) { const r = repoOf(s.name); if (r && !raceOf[s.name] && !famInvolved(s)) groupCounts[r] = (groupCounts[r] || 0) + 1 }
   const entries: any[] = []
   {
     const consumed = new Set<string>()
@@ -2041,9 +2055,26 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
         if (!wtCollapsed[key]) members.forEach((m: any) => entries.push({ kind: 'sess', s: m, indent: true, race: true }))
         continue
       }
+      if (famInvolved(s)) {
+        // 父子树：根行照常，子孙 DFS 缩进（⑂ 紫色导线）
+        const root = famRootOf(s)
+        if (consumed.has(root.name)) continue
+        consumed.add(root.name)
+        entries.push({ kind: 'sess', s: root, indent: false })
+        const dfs = (parent: string, depth: number) => {
+          for (const kid of kidsOf[parent] || []) {
+            if (consumed.has(kid.name)) continue
+            consumed.add(kid.name)
+            entries.push({ kind: 'sess', s: kid, indent: true, fam: true, depth })
+            dfs(kid.name, depth + 1)
+          }
+        }
+        dfs(root.name, 1)
+        continue
+      }
       const r = repoOf(s.name)
       if (r && groupCounts[r] >= 2) {
-        const members = sorted.filter((x: any) => repoOf(x.name) === r && !raceOf[x.name])
+        const members = sorted.filter((x: any) => repoOf(x.name) === r && !raceOf[x.name] && !famInvolved(x))
         members.forEach((m: any) => consumed.add(m.name))
         entries.push({ kind: 'group', repo: r, count: members.length })
         if (!wtCollapsed[r]) members.forEach((m: any) => entries.push({ kind: 'sess', s: m, indent: true }))
@@ -2058,7 +2089,9 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
     <Card
       title={<Space size={8}>{t('nav.sessions')}<Tag style={{ margin: 0 }}>{cnt('all')}</Tag></Space>}
       extra={<Space size={8}>
-        <Button onClick={() => { setWtDir(undefined); setWtOpen(true) }}>{t('worktree.entry')}</Button>
+        <Tooltip title={t('worktree.entryTip')}>
+          <Button onClick={() => { setWtDir(undefined); setWtOpen(true) }}>{t('worktree.entry')}</Button>
+        </Tooltip>
         {/* 新建下拉(W5 入口)：主点 = 新建会话；菜单 = 新建竞赛 */}
         <Dropdown.Button type="primary" onClick={() => setNewOpen(true)}
           menu={{ items: [{ key: 'race', label: t('race.new') }], onClick: () => setRaceOpen(true) }}>
@@ -2155,8 +2188,8 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
                 // 整行点击直接进入终端；右侧操作区 stopPropagation 不触发进入
                 <List.Item style={{
                   position: 'relative', overflow: 'hidden',
-                  marginLeft: indent ? 14 : 0,
-                  borderLeft: indent ? (en.race ? '2px solid rgba(212,160,23,.35)' : '2px solid rgba(57,197,207,.3)') : undefined,
+                  marginLeft: indent ? 14 * (en.depth || 1) : 0,
+                  borderLeft: indent ? (en.race ? '2px solid rgba(212,160,23,.35)' : en.fam ? '2px solid rgba(163,113,247,.4)' : '2px solid rgba(57,197,207,.3)') : undefined,
                   padding: '10px 8px 10px 12px', cursor: 'pointer', borderRadius: indent ? '0 8px 8px 0' : 8,
                   background: activeRow ? 'linear-gradient(90deg, rgba(31,111,235,.38), rgba(31,111,235,.16))' : undefined,
                   border: activeRow ? '1px solid #58a6ff' : '1px solid transparent',
@@ -2168,6 +2201,7 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
                       <i title={waiting ? t('prompt.confirmRequired') : connected ? t('terminal.status.connected') : t('terminal.status.idle')} style={{ width: 8, height: 8, borderRadius: '50%', flex: '0 0 8px', background: waiting ? '#d29922' : connected ? '#3fb950' : 'var(--text-dimmer)' }} />
                       <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' }}>
+                          {en.fam && <Tooltip title={t('session.fork.childOf', { parent: s.parent })}><span style={{ color: '#a371f7', flex: '0 0 auto', fontSize: 13 }}>⑂</span></Tooltip>}
                           <span style={{ fontWeight: 700, color: activeRow ? '#fff' : 'var(--text-bright)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.name}>{s.name}</span>
                           {(() => { // worktree 归属：⎇ 分支紧跟会话名(设计 W2)；外部 worktree 加 ⧉ 标识；手机端只显图标
                             const ann = wtAnn[s.name]
@@ -2199,6 +2233,7 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
                       </div>
                     </div>
                     <div onClick={(e) => e.stopPropagation()} style={{ marginLeft: 'auto', display: 'flex', gap: 14, alignItems: 'center', flex: '0 0 auto', whiteSpace: 'nowrap' }}>
+                      {!sw && screens.md && <a onClick={() => setForking(s.name)}>{t('session.fork.entry')}</a>}
                       {sw && <a onClick={() => goSwarm(sw.swarm)}>{t('session.swarmPage')}</a>}
                       {sw ? (
                         <Popconfirm
@@ -2223,7 +2258,8 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
               )
             }} />
           )}
-      <NewSessionModal open={newOpen} onClose={() => setNewOpen(false)} onDone={(name) => { load(); openTerm(name) }} />
+      <NewSessionModal open={newOpen || !!forking} parent={forking}
+        onClose={() => { setNewOpen(false); setForking(null) }} onDone={(name) => { load(); openTerm(name) }} />
       <CloseWorktreeModal info={closing} onClose={() => setClosing(null)} onDone={(name) => { closeTerm(name); load() }} />
       <Suspense fallback={null}>
         <WorktreePanel open={wtOpen} onClose={() => { setWtOpen(false); setWtDir(undefined) }} openTerm={openTerm} initialDir={wtDir} />
@@ -2271,6 +2307,86 @@ function PromptPopupCard() {
       <Space align="center" wrap>
         <Switch checked={!prefs.promptPopupOff} onChange={(on) => setPrefs({ promptPopupOff: !on })} />
         <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('settings.promptPopupDefaultHelp')}</span>
+      </Space>
+    </Card>
+  )
+}
+
+function P2PCard() {
+  const { t } = useI18n()
+  const [prefs, setPrefs] = usePreferences()
+  const [serverStun, setServerStun] = useState('')
+  // 拉服务端默认 STUN 预填进输入框（用户未自定义时展示当前默认；改了才存自定义偏好）。
+  useEffect(() => {
+    fetch('/api/p2p/config', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const cfg = d?.data ?? d ?? {}
+        const urls = (cfg.iceServers || []).flatMap((s: { urls?: string | string[] }) => (Array.isArray(s.urls) ? s.urls : s.urls ? [s.urls] : [])).filter(Boolean)
+        if (urls.length) setServerStun(urls.join(', '))
+      })
+      .catch(() => { /* ignore */ })
+  }, [])
+  const on = prefs.p2pEnabled
+  // 输入框展示：用户自定义优先，否则预填服务端默认。留空(未自定义)时 transport 仍走服务端默认。
+  const stunValue = prefs.p2pStunServers || serverStun
+  const dim = { color: 'var(--text-dim)', fontSize: 12 }
+  const hint = { color: 'var(--text-dimmer)', fontSize: 11 }
+  return (
+    <Card title={t('settings.p2p')}>
+      <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+        <Space align="center" wrap>
+          <Switch checked={on} onChange={(v) => setPrefs({ p2pEnabled: v })} />
+          <Tag color="orange" style={{ margin: 0 }}>{t('settings.p2pExperimental')}</Tag>
+          <span style={dim}>{t('settings.p2pHelp')}</span>
+        </Space>
+        {/* STUN 服务器（留空用服务端默认）。仅影响本浏览器的打洞。 */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, opacity: on ? 1 : 0.5 }}>
+          <span style={dim}>{t('settings.p2pStun')}</span>
+          <Input
+            disabled={!on} allowClear value={stunValue}
+            placeholder={t('settings.p2pStunPh')}
+            onChange={(e) => setPrefs({ p2pStunServers: e.target.value })}
+            style={{ maxWidth: 460 }}
+          />
+          <span style={hint}>{t('settings.p2pStunHelp')}</span>
+        </div>
+        {/* 连接超时（秒）：打洞建链超时后回退 frp。 */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, opacity: on ? 1 : 0.5 }}>
+          <span style={dim}>{t('settings.p2pTimeout')}</span>
+          <Space align="center" wrap>
+            <InputNumber
+              disabled={!on} min={5} max={120} step={5} value={prefs.p2pConnectTimeoutSec}
+              onChange={(v) => setPrefs({ p2pConnectTimeoutSec: typeof v === 'number' ? v : 30 })}
+              addonAfter={t('settings.p2pTimeoutUnit')} style={{ width: 130 }}
+            />
+            <span style={hint}>{t('settings.p2pTimeoutHelp')}</span>
+          </Space>
+        </div>
+        {/* 候选收集(gather)上限（秒）：慢网(手机蜂窝 srflx 迟到)可调大。 */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, opacity: on ? 1 : 0.5 }}>
+          <span style={dim}>{t('settings.p2pGather')}</span>
+          <Space align="center" wrap>
+            <InputNumber
+              disabled={!on} min={3} max={300} step={5} value={prefs.p2pGatherTimeoutSec}
+              onChange={(v) => setPrefs({ p2pGatherTimeoutSec: typeof v === 'number' ? v : 30 })}
+              addonAfter={t('settings.p2pTimeoutUnit')} style={{ width: 130 }}
+            />
+            <span style={hint}>{t('settings.p2pGatherHelp')}</span>
+          </Space>
+        </div>
+        {/* P2P 最低速率(KB/s)：直连平均落盘速率长期低于此值就回退中转；0=不回退，永远坚持 P2P。 */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, opacity: on ? 1 : 0.5 }}>
+          <span style={dim}>{t('settings.p2pMinSpeed')}</span>
+          <Space align="center" wrap>
+            <InputNumber
+              disabled={!on} min={0} max={100000} step={50} value={prefs.p2pMinSpeedKBps}
+              onChange={(v) => setPrefs({ p2pMinSpeedKBps: typeof v === 'number' && v >= 0 ? v : 200 })}
+              addonAfter={t('settings.p2pMinSpeedUnit')} style={{ width: 150 }}
+            />
+            <span style={hint}>{t('settings.p2pMinSpeedHelp')}</span>
+          </Space>
+        </div>
       </Space>
     </Card>
   )
@@ -2451,7 +2567,9 @@ function PhoneSettingsCard() {
       ? [{ label: t('phone.mode.local'), value: 'local' }, { label: t('phone.mode.remote'), value: 'remote' }, { label: t('phone.mode.device'), value: 'device' }]
       : [{ label: t('phone.ios.simulator'), value: 'simulator' }, { label: t('phone.ios.device'), value: 'device' }]
     const opts = (devs[p] || []).map((d: any) => ({ value: d.id, label: `${d.name} (${d.id})${d.kind && d.kind !== 'android' ? ' · ' + d.kind : ''}` }))
-    const changeSrc = (m: string) => patch(p, isA && m === 'local' ? { mode: m, address: 'localhost:5555' } : { mode: m })
+    // 切来源要连地址一起换：每种来源的目标地址各自独立(本地 redroid=loopback / 远程=待填 / 真机=默认设备)。
+    // 否则从「本地 redroid」切到「真机」会把 localhost:5555 带过去，adb 一直连不存在的 loopback，真机被忽略→连不上。
+    const changeSrc = (m: string) => patch(p, isA ? { mode: m, address: m === 'local' ? 'localhost:5555' : '' } : { mode: m, address: '' })
     return (
       <Card size="small" title={
         <Space align="center">
@@ -2477,7 +2595,7 @@ function PhoneSettingsCard() {
               <span style={dim}>{isA ? (c.mode === 'remote' ? t('phone.addrHelpRemote') : t('phone.addrHelpDevice')) : t('phone.addrHelpIOS')}</span>
             </Space>
           )}
-          {isA && (
+          {isA && c.mode !== 'device' && (
             <Space direction="vertical" size={4} style={{ width: '100%' }}>
               <span style={dim}>{t('phone.resolution')}</span>
               <Segmented value={c.resolution || 'phone'} onChange={(v) => patch(p, { resolution: (v as string) === 'phone' ? '' : v })}
@@ -2638,6 +2756,7 @@ function EnvPage() {
           <AgentCommandsCard />
           <QuickCommandsCard />
           <PromptPopupCard />
+          <P2PCard />
           <Card title={t('install.settingsTitle')}>
             <Space align="center" wrap>
               {pwaInstalled

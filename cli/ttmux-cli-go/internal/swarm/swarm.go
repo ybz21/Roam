@@ -400,7 +400,7 @@ func liveStatus(opt Options, meta swarmMeta, m SwarmMember) string {
 		}
 		return "exited"
 	}
-	dead := strings.TrimSpace(runTmux(opt.TmuxBin, "display-message", "-t", m.Session, "-p", "#{pane_dead}"))
+	dead := strings.TrimSpace(runTmux(opt.TmuxBin, "display-message", "-t", "="+m.Session, "-p", "#{pane_dead}"))
 	if dead == "1" {
 		return "done"
 	}
@@ -430,7 +430,9 @@ func liveStatus(opt Options, meta swarmMeta, m SwarmMember) string {
 }
 
 func tmuxHasSession(bin, session string) bool {
-	cmd := exec.Command(bin, "has-session", "-t", session)
+	// "=" 强制精确匹配:tmux -t 默认按前缀匹配,dev 会话死后 has-session
+	// 会命中它的陪跑会话 <dev>-review,导致存活误判、退出/完成事件永不触发。
+	cmd := exec.Command(bin, "has-session", "-t", "="+session)
 	return cmd.Run() == nil
 }
 
@@ -443,7 +445,7 @@ func runTmux(bin string, args ...string) string {
 }
 
 func captureRecent(bin, session string) string {
-	out := runTmux(bin, "capture-pane", "-t", session, "-p", "-J", "-S", "-80")
+	out := runTmux(bin, "capture-pane", "-t", "="+session, "-p", "-J", "-S", "-80")
 	lines := strings.Split(out, "\n")
 	if len(lines) > 18 {
 		lines = lines[len(lines)-18:]

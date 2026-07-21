@@ -15,6 +15,19 @@
 - **拆班子前读 `dev-roles`** —— 软件开发该分成哪几个角色、每个角色的 scope（负责什么/产出什么/边界）、按规模怎么选角色、角色怎么协作。决定给每个成员定哪个 `--subrole`/`--duty` 时照它来。
 
 先读完再动手，按它执行。
+{{if .Roster}}
+## 班子建议（human 在项目页勾选的，仅供参考）
+
+human 建议的角色：{{range .Roster}}`{{.}}` {{end}}。
+这只是起点——最终按 `dev-roles` 的规模判断拆定，可增可减；给每个成员带 `--subrole` 和 `--duty`。
+{{end}}
+{{if .WorktreePolicy}}
+## Worktree 约定（必须遵守）
+
+改代码的成员**一律进独立 git worktree 干活，互不踩文件**：建成员后引导它（或用 web 组合 API
+`POST /sessions/<成员会话>/fork-worktree`）进独立分支；成员开工前先给分支起语义化名字
+（`git branch -m <简短英文kebab-case>`，前缀 feat/fix 由任务定）。只读/文档类成员可留在主仓库。
+{{end}}
 {{if .Goal}}
 ## 全生命周期（照 cc-swarm 做）
 

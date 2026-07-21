@@ -183,8 +183,10 @@ func KillAll(rt runtime.Runtime, exclude map[string]bool, w io.Writer) error {
 	return nil
 }
 
-// Rename renames a session (mirrors the `rename` case).
-func Rename(rt runtime.Runtime, exclude map[string]bool, args []string, w io.Writer) error {
+// Rename renames a session (mirrors the `rename` case). 返回解析后的
+// (旧名, 新名) 供调用方同步 meta parent 外键——交互式改名时 args 不含名字，
+// 必须靠返回值而非 args 来同步，否则子会话会被 Reconcile 当孤儿收养。
+func Rename(rt runtime.Runtime, exclude map[string]bool, args []string, w io.Writer) (string, string, error) {
 	var old, neu string
 	switch {
 	case len(args) >= 2:
@@ -195,22 +197,22 @@ func Rename(rt runtime.Runtime, exclude map[string]bool, args []string, w io.Wri
 		} else {
 			t, err := PickSession(rt, exclude, "重命名会话", w)
 			if err != nil {
-				return err
+				return "", "", err
 			}
 			old = t
 		}
 		n, ok := ui.ReadLine("   新名称: ")
 		if !ok || n == "" {
 			ui.Err(w, "名称不能为空")
-			return fmt.Errorf("empty name")
+			return "", "", fmt.Errorf("empty name")
 		}
 		neu = n
 	}
 	if err := rt.Tmux("rename-session", "-t", old, neu); err != nil {
-		return err
+		return "", "", err
 	}
 	ui.Ok(w, "%s → %s", ui.Bold(old), ui.Bold(neu))
-	return nil
+	return old, neu, nil
 }
 
 // Send sends a command line to a session (mirrors the top-level `send` case).

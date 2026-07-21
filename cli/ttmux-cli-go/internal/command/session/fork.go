@@ -223,7 +223,8 @@ func buildTree(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool
 	rows := meta.All()
 
 	// 会话基础信息（一次 list-sessions）
-	out, _ := rt.TmuxOutput("list-sessions", "-F", "#{session_name}\t#{session_windows}\t#{session_created}\t#{session_attached}\t#{session_activity}")
+	// window_activity 补 session_activity 盲区（后台有输出但无人 attach 时不动),取较大值。
+	out, _ := rt.TmuxOutput("list-sessions", "-F", "#{session_name}\t#{session_windows}\t#{session_created}\t#{session_attached}\t#{session_activity}\t#{window_activity}")
 	nodes := map[string]*treeNode{}
 	var order []string
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
@@ -236,6 +237,9 @@ func buildTree(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool
 		fmt.Sscanf(parts[3], "%d", &n.Attached)
 		if len(parts) > 4 {
 			n.LastActivity = parts[4]
+		}
+		if len(parts) > 5 {
+			n.LastActivity = maxNumeric(n.LastActivity, parts[5])
 		}
 		nodes[n.Name] = n
 		order = append(order, n.Name)
