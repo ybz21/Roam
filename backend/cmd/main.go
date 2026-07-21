@@ -107,7 +107,12 @@ func main() {
 		SavePassword: func(newPW string) error {
 			return config.SavePassword(cfgPath, newPW)
 		},
-		Version: version,
+		Version:       version,
+		P2PEnabled:    conf.Web.P2PEnabled,
+		P2PICEServers: conf.Web.P2PICEServers,
+		P2PUDPPort:    conf.Web.P2PUDPPort,
+		P2PUPnP:       conf.Web.P2PUPnP,
+		P2PMDNS:       conf.Web.P2PMDNS,
 	}
 
 	r := server.New(cfg)

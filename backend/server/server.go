@@ -23,6 +23,7 @@ import (
 	"ttmux-web/auth"
 	"ttmux-web/browser"
 	"ttmux-web/home"
+	"ttmux-web/p2p"
 	"ttmux-web/phone"
 	"ttmux-web/pty"
 	"ttmux-web/stream"
@@ -46,6 +47,14 @@ type Config struct {
 	LockSecs     int
 	SavePassword func(string) error // 把登录口令落盘到 config.yaml（首次设置/改密用）
 	Version      string             // roam 版本号（关于页展示 + 检测更新）
+
+	// P2P 直连（M0a spike）：灰度开关 + STUN/TURN 服务列表。
+	P2PEnabled    bool
+	P2PICEServers []string
+	// M0b 跨网穿透杠杆（默认值等价 M0a 行为）：固定 UDP 端口 / UPnP 映射 / mDNS。
+	P2PUDPPort int
+	P2PUPnP    bool
+	P2PMDNS    bool
 }
 
 func New(cfg Config) *gin.Engine {
@@ -120,6 +129,31 @@ func New(cfg Config) *gin.Engine {
 		g.GET("/file/preview", h.FilePreview)   // 文件侧栏：Office 转 PDF 预览
 		g.GET("/file/stat", h.FileStat)
 		g.GET("/file/download", h.FileDownload)
+
+		// P2P 直连（M0a spike）：信令 WS + ICE 配置下发，均挂 g 组 cookie 自动鉴权。
+		p2pHub := p2p.NewHub(p2p.HubConfig{
+			Enabled:    cfg.P2PEnabled,
+			ICEServers: cfg.P2PICEServers,
+			UDPPort:    cfg.P2PUDPPort,
+			UPnP:       cfg.P2PUPnP,
+			MDNS:       cfg.P2PMDNS,
+			DataDir:    cfg.DataDir,
+		})
+		// Phase 1b：浏览器镜像走 media PC 的 DataChannel（label 前缀 "screencast"）。
+		// 在此接线避免 p2p↔browser 循环 import；WS 回退 /api/browser/stream 不受影响。
+		p2p.RegisterScreencastHandler(browser.ScreencastDCHandler)
+		// Phase 1b：手机镜像同法走 media PC 的 DataChannel（label 前缀 "phone"）。
+		// 未接线/P2P 关时收到 phone 通道按「无 handler」关闭 → 前端回退 WS /api/phone/stream。
+		p2p.RegisterPhoneHandler(phone.PhoneDCHandler)
+		g.GET("/p2p/signal", p2pHub.SignalHandler)
+		g.GET("/p2p/config", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{
+				"iceServers": []gin.H{{"urls": cfg.P2PICEServers}},
+			})
+		})
+		// M2 埋点接收端：前端一次传输结束（成功/回退）后上报 goodput 等指标。
+		g.POST("/p2p/metric", p2pHub.MetricHandler)
+
 		g.POST("/file/rename", h.FileRename)
 		g.POST("/file/copy", h.FileCopy)
 		g.POST("/file/move", h.FileMove) // 文件侧栏：移动文件/目录

@@ -6,6 +6,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -347,6 +348,23 @@ func findSoffice() string {
 	return ""
 }
 
+// ErrBadPath 表示下载路径为空或非绝对路径。抽出以便 HTTP 与 P2P 两处判定完全一致（评审点4）。
+var ErrBadPath = errors.New("bad download path")
+
+// ValidateDownloadPath 校验下载路径：Clean + 必须绝对 + 目标存在（Stat 成功）。
+// 与 FileDownload 原有内联校验逐字节一致：路径空/非绝对 → ErrBadPath；Stat 失败 → 原始错误。
+// HTTP 下载与 P2P serveFile 共用同一函数，保证两处权限完全一致（评审点4）。
+func ValidateDownloadPath(raw string) (string, error) {
+	p := filepath.Clean(raw)
+	if p == "" || !filepath.IsAbs(p) {
+		return "", ErrBadPath
+	}
+	if _, err := os.Stat(p); err != nil {
+		return "", err
+	}
+	return p, nil
+}
+
 func serveAttachment(c *gin.Context, path, filename string) {
 	c.Header("Content-Disposition", contentDisposition("attachment", filename))
 	if ct := mime.TypeByExtension(filepath.Ext(filename)); ct != "" {
@@ -648,9 +666,13 @@ func (a *API) FileTouch(c *gin.Context) {
 
 // FileDownload GET /file/download?path=<file-or-dir> —— 下载文件；目录会流式打包为 Zip。
 func (a *API) FileDownload(c *gin.Context) {
-	p := filepath.Clean(c.Query("path"))
-	if p == "" || !filepath.IsAbs(p) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_PATH"}})
+	p, err := ValidateDownloadPath(c.Query("path"))
+	if err != nil {
+		if errors.Is(err, ErrBadPath) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_PATH"}})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "FS_ERROR", "message": err.Error()}})
 		return
 	}
 	info, err := os.Stat(p)

@@ -1,19 +1,25 @@
-// screencast.go：/api/browser/stream 的 WebSocket 桥。
+// screencast.go：浏览器镜像的 CDP 桥核心 + 传输 sink 抽象。
 //
 // 传输优化（针对 frp / 低带宽场景）：
 //
-//   - 二进制帧：JPEG 字节直接走 WS binary（省掉 base64 的 33% 膨胀 + 两端编解码）
+//   - 二进制帧：JPEG 字节直接走 sink binary（省掉 base64 的 33% 膨胀 + 两端编解码）
 //     帧格式 = [w:u16 LE][h:u16 LE][seq:u16 LE][jpeg...]
-//
-//   - 信用背压：服务端只保留「最新一帧」，慢链路时丢弃中间帧；客户端每显示一帧回
-//     {type:'ack',n:seq} 归还信用，服务端凭信用发下一帧 → 端到端在途帧被限在 window 内，
-//     杜绝旧帧在内核/frp 缓冲里排队回放（"越点越卡"的根因）。
 //
 //   - 自适应码率（?auto=1）：以「发出→收到 ack」的耗时(deliveryMs)为信号，太慢降档、
 //     有余量升档，动态调 JPEG 质量 / 分辨率(maxWidth/Height) / everyNthFrame。
 //
 //     CDP  → 前端：Page.startScreencast 的 JPEG 帧（二进制）
-//     前端 → CDP：鼠标/键盘/滚轮/导航（仅 ?control=1 时转发输入；默认只读镜像）
+//     前端 → CDP：鼠标/键盘/滚轮/导航（仅 control=1 时转发输入；默认只读镜像）
+//
+// 传输层（写帧 + 背压）被抽象为 frameSink（见下）：
+//
+//   - wsSink（screencast_ws.go）：现有 gorilla WebSocket 实现，走 /api/browser/stream，
+//     信用·ack 背压（在途帧限窗，慢链路丢中间帧）。P2P 回退路径，行为不变。
+//   - dcSink（screencast_dc.go）：WebRTC DataChannel（media PC）实现，不可靠·无序通道，
+//     背压用 BufferedAmount()（超高水位丢当前帧，符合不可靠语义）。
+//
+// 核心 runScreencast 不感知底层是 WS 还是 DataChannel：只调 sink 的 writeBinary /
+// writeText，并把入站控制 JSON 经 onCtrl 喂回原逻辑（ping/ack/nav/emulate/quality/输入）。
 package browser
 
 import (
@@ -27,7 +33,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
 
@@ -76,8 +81,32 @@ func (c *cdp) sendID(method string, params map[string]any) int {
 	return id
 }
 
-func fail(front *websocket.Conn, msg string) {
-	_ = front.WriteJSON(map[string]any{"type": "error", "msg": msg})
+// frameSink 是镜像传输层抽象：核心只用它「写帧 / 写控制 / 收控制 / 关闭」，不感知底层是
+// gorilla WebSocket 还是 WebRTC DataChannel。见文件头。
+//
+//   - writeBinary(frame)：发一帧（二进制）；出错返回 err → 核心停机。
+//   - writeText(v)：发一条控制 JSON（level/pong/error/copied/newtab）。
+//   - onCtrl(fn)：注册入站控制回调（前端发来的 JSON 文本，逐条喂 fn）。核心在此注册后，
+//     由 sink 自己的读循环（WS）或 DataChannel.OnMessage（DC）驱动调用。
+//   - awaitSlot()：阻塞直到「可以发下一帧」——WS 有信用即可，DC 用 BufferedAmount 限流
+//     （水位过高就丢帧：返回 (0,false) 表示本轮跳过不发）。返回的 seq 是本帧序号（帧头用）。
+//     ok=false 且未关闭 = 丢帧继续；closed=true = 核心退出。
+//   - onAck(n)：ack 一帧（归还信用/记 deliveryMs 供自适应）。WS/DC 都调，DC 无信用只记时延。
+//   - closed()：sink 是否已关闭（读循环退出/对端断）。
+//   - close()：主动关闭 sink（核心侧发生致命错误时调）。
+//   - wait()：阻塞直到 sink 关闭，作为 runScreencast 的生命周期驱动。
+type frameSink interface {
+	writeBinary(b []byte) error
+	writeText(v any) error
+	onCtrl(fn func([]byte))
+	close()
+	closed() bool
+	wait()
+
+	// 帧调度 / 背压：核心的发送 goroutine 用这三者。sink 内部维护自己的背压状态
+	// （WS：信用+ack；DC：BufferedAmount 丢帧），核心只负责产帧与解码。
+	awaitSlot() (seq uint16, ok bool)
+	onAck(n uint16) (deliveryMs float64, matched bool)
 }
 
 func atoiDefault(s string, d int) int {
@@ -165,49 +194,45 @@ func absInt(n int) int {
 	return n
 }
 
-// Handler 处理 /api/browser/stream 的 WebSocket 升级与 CDP 桥接。
-func Handler(c *gin.Context) {
-	front, err := upgrader.Upgrade(c.Writer, c.Request, nil)
-	if err != nil {
-		return
-	}
-	defer front.Close()
+// scOptions 是一次镜像会话的入参（从 WS query 或 DataChannel label 的 query 解析）。
+// 与底层传输无关，故 WS handler 与 DataChannel handler 共用。
+type scOptions struct {
+	target  string // 目标标签页 id（空=第一个）
+	control bool   // 是否转发鼠标/键盘输入（默认只读镜像）
+	auto    bool   // 自适应码率
+	q       int    // 手动模式初始 JPEG 质量（10~100；auto 时忽略）
+	// 初始视口覆盖（一般由前端连上后发 emulate 决定，这里只是兜底）
+	mobile bool
+	mw, mh int
+	dpr    float64
+	ua     string
+}
 
+// runScreencast 是镜像 CDP 桥核心：连 Chrome page、按 sink 收发帧与控制，自适应调档。
+// 不感知底层传输（WS/DataChannel）——只调 sink 的 writeBinary/writeText/awaitSlot 等。
+// 阻塞直到 sink 关闭或 CDP 断开。sink 的 wait() 驱动整体生命周期。
+func runScreencast(sink frameSink, opts scOptions) {
 	if err := ensureChrome(); err != nil {
-		fail(front, err.Error())
+		_ = sink.writeText(map[string]any{"type": "error", "msg": err.Error()})
 		return
 	}
-	wsURL, err := targetWS(c.Query("target")) // 空 = 第一个标签页
+	wsURL, err := targetWS(opts.target) // 空 = 第一个标签页
 	if err != nil {
-		fail(front, err.Error())
+		_ = sink.writeText(map[string]any{"type": "error", "msg": err.Error()})
 		return
 	}
 	back, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
-		fail(front, "连接 Chrome 失败: "+err.Error())
+		_ = sink.writeText(map[string]any{"type": "error", "msg": "连接 Chrome 失败: " + err.Error()})
 		return
 	}
 	defer back.Close()
 	conn := &cdp{ws: back}
-	control := c.Query("control") == "1"
-	auto := c.Query("auto") == "1"
+	control := opts.control
+	auto := opts.auto
 	defaultUA := browserUA() // 浏览器原生 UA，切回桌面时用它复位（CDP 没有 clearUserAgentOverride）
 
-	// gorilla 不支持并发写同一连接：帧/控制/pong 都经此串行化
-	var fmu sync.Mutex
-	writeJSON := func(v any) error {
-		fmu.Lock()
-		defer fmu.Unlock()
-		return front.WriteJSON(v)
-	}
-	writeBin := func(b []byte) error {
-		fmu.Lock()
-		defer fmu.Unlock()
-		return front.WriteMessage(websocket.BinaryMessage, b)
-	}
-
-	// ── 信用背压 + 自适应共享状态 ──
-	const window = 2 // 在途帧上限（兼顾隐藏 RTT 与不堆积）
+	// ── 自适应共享状态（背压/信用在 sink 内，这里只保留自适应 + CDP 侧状态） ──
 	var mu sync.Mutex
 	cond := sync.NewCond(&mu)
 	type pend struct {
@@ -215,15 +240,13 @@ func Handler(c *gin.Context) {
 		w, h int
 	}
 	var (
-		pending   *pend                // 最新一帧（未发出的），新帧覆盖旧帧 = latest-only 丢帧
-		credits   = window             // 可发帧的信用，发一帧 -1，收到 ack +1
-		seq       uint16               // 帧序号（与 ack 对应）
-		sentAt    = map[uint16]int64{} // seq → 发出时刻，用于算 deliveryMs
-		ewma      float64              // deliveryMs 的指数滑动平均（自适应控制信号）
-		level     = autoStart          // 当前档位（仅 auto 模式移动）
-		closed    bool
-		frameW    = 1280 // 最近一帧/视口 CSS 宽高（流帧 metadata 缺失时补帧头用）
-		frameH    = 800
+		pending *pend // 最新一帧（未发出的），新帧覆盖旧帧 = latest-only 丢帧
+		ewma    float64
+		level   = autoStart // 当前档位（仅 auto 模式移动）
+		closed  bool
+		frameW  = 1280 // 最近一帧/视口 CSS 宽高（流帧 metadata 缺失时补帧头用）
+		frameH  = 800
+		// prevMobile/prevUA 记当前生效的「机型态」，用于判断 emulate 是否真切换了设备/UA。
 		copyReqID int // 复制选区的 Runtime.evaluate 请求 id；读取循环据此匹配回包(0=无在途)
 		// 视口自愈：CDP device metrics 覆盖是「最后写入者赢」，chrome-cli 截图等外部会话会把本会话
 		// 的覆盖踩掉且退出后仍卡在渲染器上 → 布局重排、用户看到内容突然变大/变小。流帧 metadata
@@ -237,7 +260,10 @@ func Handler(c *gin.Context) {
 	// 初始档：auto 用阶梯，手动用前端给的 q（分辨率给足，质量听用户）
 	cur := ladder[autoStart]
 	if !auto {
-		q := atoiDefault(c.Query("q"), 80)
+		q := opts.q
+		if q == 0 {
+			q = 80
+		}
 		if q < 10 {
 			q = 10
 		} else if q > 100 {
@@ -314,7 +340,7 @@ func Handler(c *gin.Context) {
 	// 手机模式：把本镜像连接对应的渲染器切到移动视口（设备指标/触摸/UA 覆盖作用于整个
 	// page 渲染，故镜像里看到的就是真实移动端布局，agent 用 chrome-cli 截同一页也是移动端）。
 	//
-	// 关键设计：设备切换【不重连】，由前端在本条 WS 上发 {type:'emulate'} 消息现场切换。
+	// 关键设计：设备切换【不重连】，由前端在本条连接上发 {type:'emulate'} 消息现场切换。
 	// 因为 CDP 的 setDeviceMetricsOverride 是「会话级」——clearDeviceMetricsOverride 只能撤销
 	// 【本会话】设的覆盖，撤不掉别会话留的。若每次切换都重连，旧会话的 defer 清理与新连接会
 	// 抢跑（来回切尤其容易卡住）。改成同一会话 set/clear，既不泄漏也无竞态。
@@ -374,13 +400,11 @@ func Handler(c *gin.Context) {
 		}
 	}
 	overrideOn := false // 本会话当前是否设了任何视口覆盖；仅在主消息 goroutine 与其后的 defer 读写
-	// prevMobile/prevUA 记当前生效的「机型态」，用于判断 emulate 是否真切换了设备/UA → 需要
-	// reload 页面让 UA 嗅探的站点改出移动版（仅尺寸变化即桌面 resize 不 reload，避免刷屏）。
 	prevMobile, prevUA := false, ""
-	if c.Query("mobile") == "1" { // 初始态兜底（一般由前端连上后发 emulate 决定）
-		applyMobile(atoiDefault(c.Query("mw"), 390), atoiDefault(c.Query("mh"), 844), atofDefault(c.Query("dpr"), 3), c.Query("ua"))
+	if opts.mobile { // 初始态兜底（一般由前端连上后发 emulate 决定）
+		applyMobile(orDefaultInt(opts.mw, 390), orDefaultInt(opts.mh, 844), orDefaultFloat(opts.dpr, 3), opts.ua)
 		overrideOn = true
-		prevMobile, prevUA = true, c.Query("ua")
+		prevMobile, prevUA = true, opts.ua
 	}
 	// 断开前清掉本会话覆盖（在 back.Close 之前，conn 仍可写）→ 不泄漏给后续镜像 / chrome-cli / DevTools。
 	defer func() {
@@ -395,6 +419,7 @@ func Handler(c *gin.Context) {
 		closed = true
 		cond.Broadcast()
 		mu.Unlock()
+		sink.close()
 	}
 
 	// CDP → 服务端：收帧即 ack Chrome（保持产帧、画面最新），最新帧塞进单槽（丢旧帧）
@@ -428,7 +453,7 @@ func Handler(c *gin.Context) {
 			if msg.Method != "Page.screencastFrame" {
 				// 被镜像页打开新窗口/标签（target=_blank、window.open、表单提交等）→ 通知前端跟过去
 				if msg.Method == "Page.windowOpen" {
-					_ = writeJSON(map[string]any{"type": "newtab"})
+					_ = sink.writeText(map[string]any{"type": "newtab"})
 					continue
 				}
 				// 非帧消息：可能是「复制选区」的 Runtime.evaluate 回包，按 id 匹配后转发给前端
@@ -444,7 +469,7 @@ func Handler(c *gin.Context) {
 						browserClip.mu.Lock() // 存进浏览器内部剪贴板，供 Ctrl+V 兜底（不依赖本机剪贴板）
 						browserClip.text = txt
 						browserClip.mu.Unlock()
-						_ = writeJSON(map[string]any{"type": "copied", "text": txt})
+						_ = sink.writeText(map[string]any{"type": "copied", "text": txt})
 					}
 				}
 				continue
@@ -478,11 +503,12 @@ func Handler(c *gin.Context) {
 		}
 	}()
 
-	// 服务端 → 前端：有信用且有帧才发；解码放到发送时刻（被丢弃的帧不白解）
+	// 服务端 → 前端：sink.awaitSlot() 决定何时可发（WS 有信用/DC 水位够）；解码放到发送时刻
+	// （被丢弃的帧不白解）。帧序号由 sink 分配（与其内部背压/ack 记账对齐）。
 	go func() {
 		for {
 			mu.Lock()
-			for (pending == nil || credits <= 0) && !closed {
+			for pending == nil && !closed {
 				cond.Wait()
 			}
 			if closed {
@@ -493,18 +519,19 @@ func Handler(c *gin.Context) {
 			pending = nil
 			mu.Unlock()
 
+			seq, ok := sink.awaitSlot()
+			if sink.closed() {
+				return
+			}
+			if !ok {
+				continue // 背压：本轮丢帧（DC 水位过高），不解码不发送
+			}
+
 			raw, derr := base64.StdEncoding.DecodeString(p.b64)
 			if derr != nil {
-				continue // 解码失败：未占用信用，跳过
+				continue // 解码失败：跳过（sink 侧信用未占用，见各 sink awaitSlot 语义）
 			}
-			mu.Lock()
-			credits--
-			seq++
-			s := seq
-			sentAt[s] = nowMs()
-			mu.Unlock()
-
-			if writeBin(buildFrame(raw, p.w, p.h, s)) != nil {
+			if sink.writeBinary(buildFrame(raw, p.w, p.h, seq)) != nil {
 				shutdown()
 				return
 			}
@@ -513,9 +540,9 @@ func Handler(c *gin.Context) {
 
 	// 初始档位标签（自适应显示实时档名，手动显示「手动」）
 	if auto {
-		_ = writeJSON(map[string]any{"type": "level", "q": ladder[level].q, "name": ladder[level].name})
+		_ = sink.writeText(map[string]any{"type": "level", "q": ladder[level].q, "name": ladder[level].name})
 	} else {
-		_ = writeJSON(map[string]any{"type": "level", "q": cur.q, "name": cur.name})
+		_ = sink.writeText(map[string]any{"type": "level", "q": cur.q, "name": cur.name})
 	}
 
 	// 自适应控制环：按 deliveryMs 升降档。常驻运行，每拍读 auto 决定是否调档——
@@ -567,19 +594,15 @@ func Handler(c *gin.Context) {
 				mu.Unlock()
 				if changed {
 					applyLevel(ladder[next])
-					_ = writeJSON(map[string]any{"type": "level", "q": ladder[next].q, "name": ladder[next].name})
+					_ = sink.writeText(map[string]any{"type": "level", "q": ladder[next].q, "name": ladder[next].name})
 				}
 			}
 		}
 	}()
 
-	// 前端 → CDP：导航任何模式都允许；鼠标/键盘仅 control 模式转发
-	defer shutdown()
-	for {
-		_, data, err := front.ReadMessage()
-		if err != nil {
-			return
-		}
+	// 入站控制消息处理：ping/ack/nav/emulate/quality + control 模式下的鼠标/键盘/复制/粘贴。
+	// WS 由自身读循环喂、DC 由 OnMessage 喂；逻辑同一份。
+	handleCtrl := func(data []byte) {
 		var ev struct {
 			Type      string  `json:"type"`
 			Sub       string  `json:"sub"`
@@ -608,38 +631,32 @@ func Handler(c *gin.Context) {
 			Q         int     `json:"q"`      // quality：手动 JPEG 质量(10~100)
 		}
 		if json.Unmarshal(data, &ev) != nil {
-			continue
+			return
 		}
 		switch ev.Type {
 		case "ping": // 测延迟：原样回带客户端时间戳
-			writeJSON(map[string]any{"type": "pong", "t": ev.T})
-			continue
-		case "ack": // 归还信用 + 记 deliveryMs
-			mu.Lock()
-			if ts, ok := sentAt[ev.N]; ok {
-				d := float64(nowMs() - ts)
-				delete(sentAt, ev.N)
+			_ = sink.writeText(map[string]any{"type": "pong", "t": ev.T})
+			return
+		case "ack": // 归还信用（sink 内） + 记 deliveryMs 供自适应
+			if d, matched := sink.onAck(ev.N); matched {
+				mu.Lock()
 				if ewma == 0 {
 					ewma = d
 				} else {
 					ewma = ewma*0.7 + d*0.3
 				}
+				mu.Unlock()
 			}
-			if credits < window {
-				credits++
-			}
-			cond.Signal()
-			mu.Unlock()
-			continue
+			return
 		case "nav":
 			if ev.URL != "" {
 				conn.send("Page.navigate", map[string]any{"url": ev.URL})
 				scheduleForceFrame()
 			}
-			continue
+			return
 		case "refresh":
 			scheduleForceFrame()
-			continue
+			return
 		case "emulate": // 设备切换：同一会话现场 set/clear，不重连 → 无泄漏/无竞态
 			// 机型/UA 真变了才 reload（让 UA 嗅探站点切移动/桌面版）；纯尺寸变化(桌面 resize)不 reload
 			needReload := ev.Mobile != prevMobile || ev.UA != prevUA
@@ -668,7 +685,7 @@ func Handler(c *gin.Context) {
 			if needReload { // UA 已先于此设好，reload 的首个请求即带新 UA → 服务端出对应版本
 				conn.send("Page.reload", nil)
 			}
-			continue
+			return
 		case "quality": // 切画质：同一连接现场改档，【不重连】。
 			// 重连会重设 device metrics，其后的首帧是「视口还没稳」的畸形帧，object-fit 一
 			// letterbox 就是「画面一跳 / 页面忽大忽小」——正是切标清/超清时看到的抖动。改成在
@@ -680,7 +697,7 @@ func Handler(c *gin.Context) {
 				l := ladder[level]
 				mu.Unlock()
 				applyLevel(l)
-				_ = writeJSON(map[string]any{"type": "level", "q": l.q, "name": l.name})
+				_ = sink.writeText(map[string]any{"type": "level", "q": l.q, "name": l.name})
 			} else {
 				q := ev.Q
 				if q < 10 {
@@ -694,12 +711,12 @@ func Handler(c *gin.Context) {
 				l := cur
 				mu.Unlock()
 				applyLevel(l)
-				_ = writeJSON(map[string]any{"type": "level", "q": l.q, "name": l.name})
+				_ = sink.writeText(map[string]any{"type": "level", "q": l.q, "name": l.name})
 			}
-			continue
+			return
 		}
 		if !control {
-			continue
+			return
 		}
 		switch ev.Type {
 		case "paste": // 把文本写进远端当前焦点元素（比模拟按键更可靠）
@@ -713,7 +730,6 @@ func Handler(c *gin.Context) {
 				conn.send("Input.insertText", map[string]any{"text": text})
 				scheduleForceFrame()
 			}
-			continue
 		case "copy": // 浏览器 → 本地：取远端页面当前选区文本，回包后前端写进本机剪贴板
 			id := conn.sendID("Runtime.evaluate", map[string]any{
 				// 取页面当前选区：① window 选区(选正文，最常见) ② 焦点 input/textarea 选区
@@ -729,11 +745,10 @@ func Handler(c *gin.Context) {
 			mu.Lock()
 			copyReqID = id
 			mu.Unlock()
-			continue
 		case "mouse":
 			t := map[string]string{"down": "mousePressed", "up": "mouseReleased", "move": "mouseMoved"}[ev.Sub]
 			if t == "" {
-				continue
+				return
 			}
 			p := map[string]any{"type": t, "x": ev.X, "y": ev.Y, "modifiers": ev.Modifiers}
 			if ev.Sub != "move" {
@@ -774,7 +789,7 @@ func Handler(c *gin.Context) {
 					conn.send("Input.insertText", map[string]any{"text": ev.Text})
 					scheduleForceFrame()
 				}
-				continue
+				return
 			}
 			// 特殊键（回车/退格/方向键/带修饰键的组合）走 dispatchKeyEvent + 虚拟键码
 			typ := "keyDown"
@@ -796,4 +811,23 @@ func Handler(c *gin.Context) {
 			}
 		}
 	}
+
+	sink.onCtrl(handleCtrl)
+	// 生命周期：阻塞到 sink 关闭（WS 读循环退出 / DC 关闭），随后 defer 清视口覆盖 + 关 CDP。
+	sink.wait()
+	shutdown()
+}
+
+func orDefaultInt(v, d int) int {
+	if v == 0 {
+		return d
+	}
+	return v
+}
+
+func orDefaultFloat(v, d float64) float64 {
+	if v == 0 {
+		return d
+	}
+	return v
 }

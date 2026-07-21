@@ -7,6 +7,7 @@ import { Button, Input, Select, Space, Tag, App as AntApp } from 'antd'
 import { api } from './api'
 import { useI18n } from './i18n'
 import { usePreferences, savePreferences } from './preferences'
+import { connect, type DuplexTransport } from './p2p/transport'
 
 interface TabInfo { id: string; title: string; url: string }
 
@@ -134,7 +135,9 @@ export default function BrowserView() {
   const [prefs] = usePreferences()
   const imgRef = useRef<HTMLImageElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
-  const wsRef = useRef<WebSocket | null>(null)
+  // 镜像收发底层：p2p 时是 media PC 上的不可靠 DataChannel，回退时是 /api/browser/stream 的 WS。
+  // 二进制帧解析/ack/ping/自适应逻辑不感知底层（DuplexTransport ≈ WebSocket）。
+  const tpRef = useRef<DuplexTransport | null>(null)
   const sizeRef = useRef({ w: 1280, h: 800 }) // 画面内在尺寸（CDP 设备像素）
   const control = true // 始终接管（鼠标/键盘转发给 Chrome）
   const controlRef = useRef(true)
@@ -277,8 +280,9 @@ export default function BrowserView() {
   }
 
   const send = (o: any) => {
-    const ws = wsRef.current
-    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(o))
+    // DuplexTransport.send 对 p2p 自带 open-before-send 排队、对 frp 内部判 readyState，
+    // 这里直接发即可（未连时 frp 分支静默丢弃，与迁移前 ws.readyState 守卫等价）。
+    tpRef.current?.send(JSON.stringify(o))
   }
 
   // 作用于当前标签的导航控制
@@ -330,22 +334,21 @@ export default function BrowserView() {
     if (quality === 'auto') params.set('auto', '1') // 仅首连/换 target 时用来定初始档；之后靠消息切
     else params.set('q', String(quality))
     if (target) params.set('target', target)
-    const ws = new WebSocket(`${proto}://${location.host}/api/browser/stream?${params}`)
-    ws.binaryType = 'arraybuffer'
-    wsRef.current = ws
+    // 通用传输 Phase 1b：镜像走 media PC 的不可靠 DataChannel；media 未连/P2P 不可用 → 回退
+    // 到原 /api/browser/stream WS（frpUrl），行为与迁移前逐字节一致。p2p 分支把 query 里的
+    // params 经 init 握手带给后端（原本靠 WS query 传）。
+    const frpUrl = `${proto}://${location.host}/api/browser/stream?${params}`
+    const tp = connect('screencast', { frpUrl, initParams: Object.fromEntries(params) })
+    tpRef.current = tp
     lastEmuRef.current = '' // 新连接：后端会话尚无视口覆盖，onopen 必须强制发一次 emulate
     let objURL: string | null = null
-    ws.onopen = () => { setConnected(true); setHealthMsg(''); sendEmulate(true) } // 连上即同步当前设备/尺寸
-    ws.onclose = () => {
-      setConnected(false)
-      // 连不上时问后端为什么（Chrome 启动失败原因），显示给用户而非干瞪黑屏
-      api('GET', '/browser/health').then((r) => { if (!r?.data?.alive) setHealthMsg(r?.data?.error || '') }).catch(() => {})
-    }
-    ws.onmessage = (e) => {
+    // 连上（frp=WS open / p2p=DataChannel open）即同步当前设备/尺寸，语义等价迁移前 ws.onopen。
+    tp.onopen = () => { setConnected(true); setHealthMsg(''); sendEmulate(true) }
+    tp.onmessage = (data) => {
       // 二进制 = 一帧：[w:u16][h:u16][seq:u16][jpeg...]；显示后回 ack 归还信用
-      if (typeof e.data !== 'string') {
+      if (typeof data !== 'string') {
         if (!imgRef.current) return
-        const buf = e.data as ArrayBuffer
+        const buf = data as ArrayBuffer
         const dv = new DataView(buf)
         const w = dv.getUint16(0, true), h = dv.getUint16(2, true), seq = dv.getUint16(4, true)
         sizeRef.current = { w: w || 1280, h: h || 800 }
@@ -354,10 +357,10 @@ export default function BrowserView() {
         if (objURL) URL.revokeObjectURL(objURL)
         objURL = URL.createObjectURL(new Blob([new Uint8Array(buf, 6)], { type: 'image/jpeg' }))
         imgRef.current.src = objURL
-        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ack', n: seq }))
+        tp.send(JSON.stringify({ type: 'ack', n: seq }))
         return
       }
-      const msg = JSON.parse(e.data)
+      const msg = JSON.parse(data)
       if (msg.type === 'error') { message.error(msg.msg); return }
       if (msg.type === 'pong') { setLatency(Math.round(performance.now() - msg.t)); return }
       if (msg.type === 'level') { setLevelName(msg.name || ''); return }
@@ -373,10 +376,13 @@ export default function BrowserView() {
         return
       }
     }
+    tp.onclose = () => {
+      setConnected(false)
+      // 连不上时问后端为什么（Chrome 启动失败原因），显示给用户而非干瞪黑屏
+      api('GET', '/browser/health').then((r) => { if (!r?.data?.alive) setHealthMsg(r?.data?.error || '') }).catch(() => {})
+    }
     // 每秒打一次 ping 测 RTT，并结算带宽/帧率
-    const ping = setInterval(() => {
-      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ping', t: performance.now() }))
-    }, 1000)
+    const ping = setInterval(() => { tp.send(JSON.stringify({ type: 'ping', t: performance.now() })) }, 1000)
     const meter = setInterval(() => {
       setBw(bytesRef.current); setFps(framesRef.current)
       bytesRef.current = 0; framesRef.current = 0
@@ -384,7 +390,9 @@ export default function BrowserView() {
     return () => {
       clearInterval(ping); clearInterval(meter)
       if (objURL) URL.revokeObjectURL(objURL)
-      ws.close()
+      tp.onmessage = () => {}; tp.onclose = () => {} // 卸载后忽略在途回调
+      tp.close()
+      if (tpRef.current === tp) tpRef.current = null
     }
   }, [control, target]) // 画质/device 切换都不重连，靠 quality / emulate 消息现场切换
 

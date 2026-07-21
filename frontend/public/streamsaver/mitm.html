@@ -1,0 +1,51 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Roam stream download bridge</title></head>
+<body>
+<!--
+  Roam 自托管流式落盘「中间人」iframe（StreamSaver 的 mitm.html 精简自托管版）。
+
+  职责：在本站 /streamsaver/ 作用域下注册 sw.js，并把主页面的一个 MessagePort 原样转交给 SW。
+  之所以要这层 iframe：service worker 的 fetch 拦截只在其 scope(/streamsaver/) 内生效，
+  用 iframe(src=/streamsaver/mitm.html) 承载注册最干净，也和 PWA /sw.js 隔离。
+
+  数据通道（单条 MessageChannel，端口只转移一次）：
+    - 主页面：new MessageChannel()，port1 自留写数据，port2 postMessage 给本 iframe。
+    - 本 iframe：把 port2 连同登记信息 transfer 给 SW。
+    - 之后主页面在 port1 上：先收到 SW 回执 { download } → 由 SW 触发不了导航（跨端），
+      故 SW 把 download url 发回 port1，主页面自己 triggerDownload；再持续 postMessage 数据块，
+      最后 'end' 关流 / 'abort' 中断。
+  本 iframe 只做一次「注册 SW + 转交端口」，之后不参与数据搬运。
+-->
+<script>
+'use strict'
+
+let swReady = null
+function ensureSW() {
+  if (swReady) return swReady
+  swReady = navigator.serviceWorker
+    .register('sw.js', { scope: './' })
+    .then(() => navigator.serviceWorker.ready)
+    .then((reg) => reg.active)
+  return swReady
+}
+
+window.addEventListener('message', (event) => {
+  const data = event.data
+  if (!data || data.type !== 'register-download') return
+  const port = event.ports && event.ports[0]
+  if (!port) return
+
+  ensureSW().then((sw) => {
+    if (!sw) { port.postMessage({ error: 'sw-unavailable' }); return }
+    // 把主页面给的端口连同登记信息原样转交给 SW（端口转移，仅一次）。
+    // 之后主页面 <-> SW 直接在该端口上收发（回执/数据/end/abort），本 iframe 不再介入。
+    sw.postMessage({ url: data.url, filename: data.filename, headers: data.headers, size: data.size }, [port])
+  }).catch(() => { try { port.postMessage({ error: 'sw-register-failed' }) } catch (e) {} })
+})
+
+// 就绪信号：主页面等到这条再 postMessage 登记。
+if (window.parent !== window) window.parent.postMessage('streamsaver-mitm-ready', '*')
+</script>
+</body>
+</html>

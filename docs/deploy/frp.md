@@ -146,6 +146,111 @@ curl -sk -o /dev/null -w "%{http_code}\n" https://<public-host>:13579/  # 200
 warning); with Option B it validates cleanly.
 
 ---
+
+## P2P direct transfer (optional, cross-network acceleration)
+
+By default every byte of a download flows through the public frps host, so the
+cloud server's bandwidth is the ceiling — no matter how fast the browser and the
+Roam host really are. Roam can instead negotiate a **WebRTC DataChannel that
+goes peer-to-peer and does not pass through frps**, using frp only for signaling
+(SDP/ICE, a few KB). When the hole punch succeeds, downloads run at the two
+endpoints' real speed; when it fails they transparently fall back to the normal
+frp download. It is a pure optimization — nothing new can break.
+
+> **The client stays a plain browser** pointed at your public `https://` frp URL.
+> Everything below is one-time **server-side** setup on the frps / public host.
+> No per-user or per-browser configuration is needed.
+
+There is **no TURN** — zero relay, zero extra cloud bandwidth. STUN traffic is
+address reflection only (≈0 bytes). Cross-network success hinges on the Roam
+host's NAT; the knobs below all cost nothing and raise the odds.
+
+### Stand up STUN on the frps host
+
+Run a STUN-only responder on the public frps machine (it already has a public
+IP). With `coturn`:
+
+```bash
+# coturn, STUN only — no relay, no auth, ≈0 traffic
+turnserver --stun-only --no-cli --no-tls --no-dtls \
+  --listening-port=3478 --listening-ip=0.0.0.0
+```
+
+Or a minimal `turnserver.conf`:
+
+```ini
+listening-port=3478
+no-tls
+no-dtls
+stun-only          # respond to STUN Binding only; never allocate relays
+no-cli
+```
+
+A tiny [pion/turn](https://github.com/pion/turn) STUN-only server works equally
+well if you prefer no coturn dependency. Open **UDP 3478** on the frps host's
+firewall/security group, then point Roam at it:
+
+```dotenv
+ROAM_WEB_P2P_ENABLE=1
+ROAM_WEB_P2P_ICE_SERVERS=stun:<frps-public-ip>:3478
+```
+
+Do **not** stand up TURN — on the same box it is pointless, and on another box it
+costs relay bandwidth, which is exactly what this feature exists to avoid.
+
+### Optional: fixed UDP port + manual router forwarding
+
+Pin the ICE UDP port and forward it on the Roam host's router to give ICE a
+stable, reachable endpoint — this **markedly raises** cross-network success:
+
+```dotenv
+ROAM_WEB_P2P_UDP_PORT=41234
+```
+
+Then in the Roam **host's** router, forward `UDP 41234` (external) → the Roam
+host's LAN IP, **same port**. Caveat: if the host sits behind CGNAT or an
+upstream firewall you don't control, forwarding on your own router still can't
+open the path — it may fail anyway, and Roam falls back to frp.
+
+### Optional: UPnP automatic port mapping
+
+Let the Roam host ask its gateway to map the port automatically:
+
+```dotenv
+ROAM_WEB_P2P_UPNP=1
+ROAM_WEB_P2P_UDP_PORT=41234   # required — UPnP needs a fixed local port to map
+```
+
+UPnP only helps when the router maps the **external port to the same internal
+port** (Roam advertises `public-ip:local-port`; a mismatched external port is
+unreachable and is silently skipped). Many home routers enable UPnP by default,
+but consistency varies by device — treat it as a free bonus, not a guarantee.
+
+### IPv6 (the CGNAT cure)
+
+If **both ends have public IPv6**, there is no NAT to punch and direct connection
+is natural — this is the most reliable path and the answer to carrier CGNAT /
+symmetric NAT on the IPv4 side. Requirements on the server: a globally routable
+IPv6 address (`ip -6 addr` shows a non-`fe80`, non-ULA address) and a firewall
+that **allows inbound UDP** over IPv6. Browsers gather IPv6 natively; no client
+work is needed.
+
+### New environment variables
+
+All accept a primary `ROAM_WEB_P2P_*` name and a legacy `TTMUX_WEB_P2P_*` fallback.
+
+| Env (primary) | Fallback | Meaning |
+| --- | --- | --- |
+| `ROAM_WEB_P2P_ENABLE` | `TTMUX_WEB_P2P_ENABLE` | Master switch (gradual rollout); off = always frp |
+| `ROAM_WEB_P2P_ICE_SERVERS` | `TTMUX_WEB_P2P_ICE_SERVERS` | Comma-separated STUN URLs; point at your frps STUN |
+| `ROAM_WEB_P2P_UDP_PORT` | `TTMUX_WEB_P2P_UDP_PORT` | Fixed ICE UDP port for manual forwarding / UPnP; empty = random |
+| `ROAM_WEB_P2P_UPNP` | `TTMUX_WEB_P2P_UPNP` | Try UPnP/NAT-PMP port mapping on start; needs a fixed UDP port |
+| `ROAM_WEB_P2P_MDNS` | `TTMUX_WEB_P2P_MDNS` | Resolve browser `*.local` mDNS candidates (same-LAN fast path) |
+
+Priority order tried by ICE: IPv6 direct → UPnP-mapped srflx → STUN srflx →
+LAN host. If none connect, the download quietly uses the normal frp path.
+
+---
 ---
 
 # 通过 frp 暴露 Roam（带 HTTPS）
@@ -278,3 +383,96 @@ curl -sk -o /dev/null -w "%{http_code}\n" https://<公网地址>:13579/      # 2
 ```
 
 `-k` 跳过证书校验。方案 A 证书仍是自签（告警属预期）；方案 B 可正常校验通过。
+
+---
+
+## P2P 直连传输（可选，跨网加速）
+
+默认下载的每个字节都过公网 frps 中转，所以云服务器那段带宽就是天花板——无论浏览器和
+Roam 本机实际网速多快都卡在这。Roam 可以改为协商一条**走点对点、不经过 frps 的 WebRTC
+DataChannel**，frp 只用来传信令（SDP/ICE，几 KB）。打洞成功时，下载按两端真实网速跑；打
+不通就透明回退到普通 frp 下载。这是纯优化项——不会引入「传不了」的新风险。
+
+> **客户端仍只是一个浏览器**，打开你的公网 `https://` frp 地址即可。下面全是一次性的
+> **服务端**配置，做在 frps / 公网机上，**无需**任何按用户或按浏览器的设置。
+
+**不建 TURN**——零中转、零额外云带宽。STUN 只做地址反射（流量≈0）。跨网成败取决于 Roam
+本机的 NAT；下列开关都零成本，只为把成功率拉满。
+
+### 在 frps 公网机上架 STUN
+
+在公网 frps 机器上（它本就有公网 IP）跑一个只做 STUN 的响应器。用 `coturn`：
+
+```bash
+# coturn，仅 STUN——不中转、不鉴权、流量≈0
+turnserver --stun-only --no-cli --no-tls --no-dtls \
+  --listening-port=3478 --listening-ip=0.0.0.0
+```
+
+或用最小 `turnserver.conf`：
+
+```ini
+listening-port=3478
+no-tls
+no-dtls
+stun-only          # 只回 STUN Binding，绝不分配 relay
+no-cli
+```
+
+不想装 coturn，也可以用极小的 [pion/turn](https://github.com/pion/turn) 仅开 STUN，一样
+好使。在 frps 主机的防火墙/安全组放行 **UDP 3478**，然后让 Roam 指向它：
+
+```dotenv
+ROAM_WEB_P2P_ENABLE=1
+ROAM_WEB_P2P_ICE_SERVERS=stun:<frps公网IP>:3478
+```
+
+**不要**架 TURN——同机上毫无意义，异机上要付中转带宽费，而这正是本功能要避开的东西。
+
+### 可选：固定 UDP 端口 + 路由器手动转发
+
+钉死 ICE 的 UDP 端口，并在 Roam 本机所在路由器上把它转发进来，给 ICE 一个稳定、可达的端
+点——这能**显著提高**跨网成功率：
+
+```dotenv
+ROAM_WEB_P2P_UDP_PORT=41234
+```
+
+然后在 Roam **本机**的路由器上，把 `UDP 41234`（external）转发到 Roam 本机的局域网 IP，
+**用同一个端口**。注意：如果本机在 CGNAT 或你管不到的上游防火墙后面，自家路由器转发也打不
+通——仍可能失败，此时 Roam 回退 frp。
+
+### 可选：UPnP 自动端口映射
+
+让 Roam 本机向网关申请自动映射端口：
+
+```dotenv
+ROAM_WEB_P2P_UPNP=1
+ROAM_WEB_P2P_UDP_PORT=41234   # 必填——UPnP 需要一个固定本地端口来映射
+```
+
+UPnP 仅在路由器能把 **external 端口映射成与内部一致的端口**时才有效（Roam 广播的是
+`公网IP:本地端口`，端口对不上就不可达、会被静默跳过）。很多家用路由器默认开 UPnP，但一致
+性因设备而异——当作免费加成，别当保证。
+
+### IPv6（专治 CGNAT）
+
+若**两端都有公网 IPv6**，就没有 NAT 要打洞，直连天然成立——这是最可靠的一条路，也是 IPv4
+侧运营商 CGNAT / 对称 NAT 的解药。服务器前置条件：有可路由的全局 IPv6 地址（`ip -6 addr`
+能看到非 `fe80`、非 ULA 的地址），且防火墙**放行 IPv6 入站 UDP**。浏览器原生收集 IPv6，客
+户端无需额外工作。
+
+### 新增环境变量
+
+均支持主键 `ROAM_WEB_P2P_*` 与旧别名回退 `TTMUX_WEB_P2P_*`。
+
+| 环境变量（主键） | 回退别名 | 含义 |
+| --- | --- | --- |
+| `ROAM_WEB_P2P_ENABLE` | `TTMUX_WEB_P2P_ENABLE` | 总开关（灰度用）；关=永远走 frp |
+| `ROAM_WEB_P2P_ICE_SERVERS` | `TTMUX_WEB_P2P_ICE_SERVERS` | 逗号分隔的 STUN URL；指向你 frps 上的 STUN |
+| `ROAM_WEB_P2P_UDP_PORT` | `TTMUX_WEB_P2P_UDP_PORT` | 固定 ICE UDP 端口，便于手动转发/UPnP；留空则随机 |
+| `ROAM_WEB_P2P_UPNP` | `TTMUX_WEB_P2P_UPNP` | 启动时尝试 UPnP/NAT-PMP 端口映射；需配合固定 UDP 端口 |
+| `ROAM_WEB_P2P_MDNS` | `TTMUX_WEB_P2P_MDNS` | 解析浏览器 `*.local` mDNS 候选（同 LAN 快速通道） |
+
+ICE 的尝试优先级：IPv6 直连 → UPnP 映射 srflx → STUN srflx → 局域网 host。全都连不上，下
+载就静默改走普通 frp 路径。

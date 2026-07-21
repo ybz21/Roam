@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roam · P2P 直连传输架构</title>
+<style>
+  :root{
+    --bg:#0a0e16; --panel:#111826; --panel2:#0e1420; --line:#1f2a3b;
+    --text:#e6ebf2; --muted:#94a3b8; --dim:#64748b;
+    --cyan:#22d3ee; --violet:#a78bfa; --green:#34d399; --amber:#f59e0b; --red:#f87171;
+    --grad:linear-gradient(90deg,#22d3ee,#a78bfa);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 70% -10%,#152033 0,var(--bg) 55%);
+    color:var(--text);font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;padding:32px 20px 64px}
+  .wrap{max-width:1080px;margin:0 auto}
+  code,.mono{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.86em}
+  h1{font-size:26px;margin:0 0 4px;letter-spacing:.3px}
+  h1 .g{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--muted);margin:0 0 14px}
+  .pills{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 26px}
+  .pill{font-size:12.5px;padding:5px 11px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--muted)}
+  .pill b{color:var(--text)}
+  .pill.ok{border-color:#1f7a53;background:#0f2a20;color:#9ff0cf}
+  .pill.warn{border-color:#7a5a1f;background:#2a2110;color:#f4d18c}
+  h2{font-size:14px;text-transform:uppercase;letter-spacing:2px;color:var(--dim);margin:38px 0 14px;font-weight:600}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px}
+  /* ---- architecture ---- */
+  .arch{background:var(--panel2);border:1px solid var(--line);border-radius:18px;padding:22px}
+  .grid{display:grid;grid-template-columns:1fr 150px 1fr;gap:14px 16px;align-items:stretch}
+  .cell{display:flex;flex-direction:column;gap:10px}
+  .colhdr{text-align:center;font-size:12px;letter-spacing:1px;color:var(--dim);margin-bottom:2px}
+  .box{border:1px solid var(--line);border-radius:12px;background:linear-gradient(180deg,#141c2b,#101724);padding:11px 13px}
+  .box .t{font-weight:600;font-size:13.5px;margin-bottom:3px}
+  .box .d{font-size:12px;color:var(--muted)}
+  .box.consumer{border-color:#2a3550}
+  .box.transport{border-color:#3a4a6b;background:linear-gradient(180deg,#16203a,#111a2e)}
+  .box.p2p{border-color:#1f6f6f;background:linear-gradient(180deg,#0f2a2c,#0c1f22)}
+  .box.p2p .t{color:#7ff0ef}
+  .arrow{align-self:center;color:var(--dim);font-size:15px;line-height:1;margin:-3px 0}
+  .tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .tag{font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid var(--line);background:#0d1420;color:var(--muted)}
+  .tag.rel{border-color:#1e6a6a;color:#7fdede}
+  .tag.unrel{border-color:#7a5a1f;color:#f4c877}
+  /* middle direct link */
+  .mid{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;position:relative}
+  .directwrap{width:100%;display:flex;flex-direction:column;align-items:center;gap:8px;padding-bottom:36px}
+  .directline{width:100%;height:0;border-top:3px solid transparent;
+    border-image:linear-gradient(90deg,#22d3ee,#34d399,#a78bfa) 1;position:relative}
+  .directline::before,.directline::after{content:"";position:absolute;top:-6px;width:0;height:0;
+    border-top:5px solid transparent;border-bottom:5px solid transparent}
+  .directline::before{left:-1px;border-right:8px solid #22d3ee}
+  .directline::after{right:-1px;border-left:8px solid #a78bfa}
+  .directpill{font-size:11.5px;font-weight:600;color:#c9f7e6;background:#0f2a24;border:1px solid #1f7a53;
+    padding:5px 10px;border-radius:999px;white-space:nowrap;text-align:center;box-shadow:0 0 24px rgba(52,211,153,.15)}
+  .midnote{font-size:10.5px;color:var(--dim);text-align:center}
+  /* frps bar */
+  .frps{margin-top:16px;display:flex;flex-direction:column;align-items:center;gap:7px}
+  .frpsbar{width:min(560px,100%);text-align:center;border:1px dashed #7a5a1f;background:linear-gradient(180deg,#241c0f,#1b1710);
+    color:#f4d18c;border-radius:12px;padding:11px 14px;font-size:13px}
+  .frpsbar b{color:#ffcf7a}
+  .frpsnote{font-size:11.5px;color:var(--dim)}
+  .frpsnote .up{color:var(--muted)}
+  /* nat strip */
+  .nat{margin-top:16px;border:1px solid var(--line);border-radius:12px;background:#0d1420;padding:12px 14px}
+  .nat .h{font-size:11.5px;letter-spacing:1px;color:var(--dim);margin-bottom:9px;text-transform:uppercase}
+  .chips{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  .chip{border:1px solid var(--line);border-radius:10px;padding:9px 11px;background:linear-gradient(180deg,#131c2b,#0f1622)}
+  .chip .n{font-size:12.5px;font-weight:600}
+  .chip .s{font-size:11px;color:var(--muted);margin-top:2px}
+  .chip.c1 .n{color:var(--green)} .chip.c2 .n{color:var(--cyan)}
+  .chip.c3 .n{color:var(--violet)} .chip.c4 .n{color:#f0b866}
+  /* playbook / generic cards */
+  .cols{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+  .pb{padding:15px 16px}
+  .pb .num{display:inline-flex;width:22px;height:22px;border-radius:7px;align-items:center;justify-content:center;
+    font-size:12px;font-weight:700;background:#12202f;border:1px solid #24405c;color:var(--cyan);margin-right:8px}
+  .pb .t{font-weight:600;font-size:14px}
+  .pb .d{font-size:12.5px;color:var(--muted);margin-top:7px}
+  .zc{font-size:10.5px;color:var(--green);border:1px solid #1f7a53;border-radius:6px;padding:1px 6px;margin-left:8px;vertical-align:1px}
+  /* table */
+  table{width:100%;border-collapse:collapse;font-size:13px;overflow:hidden;border-radius:12px}
+  th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line)}
+  th{background:#0e1622;color:var(--dim);font-size:11.5px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+  tr:last-child td{border-bottom:0}
+  td .lbl{font-family:ui-monospace,monospace;font-size:12px;color:#8fd6d6}
+  .rel-b{color:#7fdede} .unrel-b{color:#f4c877;font-weight:600}
+  /* state machine */
+  .fsm{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:16px}
+  .st{border:1px solid var(--line);border-radius:9px;padding:7px 11px;font-size:12.5px;background:#0f1725;white-space:nowrap}
+  .st.a{border-color:#3a4a6b;color:#bcd2ff}
+  .st.good{border-color:#1f7a53;background:#0f241d;color:#9ff0cf}
+  .st.bad{border-color:#7a3b3b;background:#241213;color:#f6b6b6}
+  .sep{color:var(--dim);font-size:12px}
+  .fsmnote{font-size:12px;color:var(--muted);padding:0 16px 15px;margin-top:-4px}
+  /* decisions */
+  .dec{padding:15px 16px}
+  .dec li{margin:7px 0;font-size:13px;color:#cdd6e2}
+  .dec li b{color:var(--text)}
+  .k{color:var(--cyan)} .g2{color:var(--green)} .a2{color:var(--amber)} .r2{color:var(--red)}
+  ul{margin:6px 0 0;padding-left:20px}
+  /* deployment */
+  .dep{padding:16px}
+  .depmain{font-size:13.5px;color:#cdd6e2}
+  .depmain b{color:#fff}
+  .lanes{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0}
+  .lane{border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+  .lane.frp{border-color:#7a5a1f;background:linear-gradient(180deg,#241c0f,#1b1710)}
+  .lane.p2p{border-color:#1f6f6f;background:linear-gradient(180deg,#0f2a2c,#0c1f22)}
+  .lane .lh{font-size:12px;letter-spacing:.5px;color:var(--dim);margin-bottom:6px}
+  .lane.frp .lh{color:#f4d18c} .lane.p2p .lh{color:#7ff0ef}
+  .lane .ld{font-size:13px;color:#dbe4ee}
+  .lane .lt{font-size:11.5px;margin-top:8px;font-weight:600}
+  .lane.frp .lt{color:#f4d18c} .lane.p2p .lt{color:#34d399}
+  .depnote{font-size:12.5px;color:var(--muted);border-left:2px solid #2a3550;padding-left:12px;margin-top:2px}
+  .depnote b{color:var(--text)}
+  footer{margin-top:40px;color:var(--dim);font-size:12px;text-align:center;border-top:1px solid var(--line);padding-top:18px}
+  @media(max-width:760px){
+    .grid{grid-template-columns:1fr}
+    .mid{order:3;margin:6px 0}
+    .directwrap{padding-bottom:8px}
+    .cols,.chips{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Roam · <span class="g">P2P 直连传输</span></h1>
+  <p class="sub">终端 / 镜像 / 手机 / 文件共享一条直连数据面，绕过 frps 带宽瓶颈；frp 退居「信令 + 兜底」。</p>
+  <div class="pills">
+    <span class="pill ok">评审：<b>批准 spike</b></span>
+    <span class="pill">客户端 <b>浏览器</b> · WebRTC DataChannel</span>
+    <span class="pill">纯 <b>STUN 打洞</b> · 不建 TURN · 零带宽成本</span>
+    <span class="pill warn">MVP：<b>每下载一个 PC</b> · 通用传输延后到 ROI 之后</span>
+  </div>
+
+  <h2>整体架构</h2>
+  <div class="arch">
+    <div class="grid">
+      <!-- CLIENT -->
+      <div class="cell">
+        <div class="colhdr">客户端 · 浏览器 / 手机 WebView</div>
+        <div class="box consumer"><div class="t">消费者层（现有功能，改动最小）</div>
+          <div class="d">终端 · 浏览器镜像 · 手机镜像 · 文件 · REST/控制 · 语音</div></div>
+        <div class="arrow">▼ <span style="font-size:11px;color:#64748b">connect(service)</span></div>
+        <div class="box transport"><div class="t">DuplexTransport 抽象</div>
+          <div class="d">send / onmessage / close ≈ 一个 WebSocket<br>工厂：PC 已连 → P2P；否则/失败 → frp</div></div>
+        <div class="arrow">▼</div>
+        <div class="box p2p"><div class="t">P2P · 多路复用</div>
+          <div class="d">1 × RTCPeerConnection，多条 DataChannel</div>
+          <div class="tags">
+            <span class="tag rel">term 可靠</span><span class="tag unrel">screencast 不可靠</span>
+            <span class="tag unrel">phone 不可靠</span><span class="tag rel">file 可靠+背压</span>
+          </div></div>
+      </div>
+
+      <!-- MIDDLE: direct link -->
+      <div class="mid">
+        <div class="directwrap">
+          <div class="directpill">⚡ WebRTC 直连数据面</div>
+          <div class="directline"></div>
+          <div class="midnote">SCTP / DTLS / UDP<br><b style="color:#34d399">不经过 frps</b></div>
+        </div>
+      </div>
+
+      <!-- SERVER -->
+      <div class="cell">
+        <div class="colhdr">服务器 · Roam 后端（NAT 后）</div>
+        <div class="box consumer"><div class="t">同一批 handler（改动最小）</div>
+          <div class="d">终端 · 镜像 · 手机 · 文件 · API</div></div>
+        <div class="arrow">▲ <span style="font-size:11px;color:#64748b">dispatch(label)</span></div>
+        <div class="box transport"><div class="t">DuplexTransport（对称）</div>
+          <div class="d">OnDataChannel 按 label 分派回原 handler<br>handler 不感知底层是 P2P 还是 frp</div></div>
+        <div class="arrow">▲</div>
+        <div class="box p2p"><div class="t">pion · 多路复用</div>
+          <div class="d">1 × PeerConnection · pion/webrtc（纯 Go）</div>
+          <div class="tags"><span class="tag">路径校验与 HTTP 一致</span><span class="tag">背压 + 取消</span></div></div>
+      </div>
+    </div>
+
+    <!-- frps -->
+    <div class="frps">
+      <div class="frpsnote"><span class="up">▲ 信令 SDP/ICE（几 KB） + 兜底流量 经此 ▲</span></div>
+      <div class="frpsbar">公网 <b>frps</b>（云服务器 · <b>带宽瓶颈</b>）— 只做信令与失败兜底，直连数据不经它</div>
+    </div>
+
+    <!-- NAT strip -->
+    <div class="nat">
+      <div class="h">NAT 穿透候选 · 喂给唯一的 PeerConnection（按此优先级择优）</div>
+      <div class="chips">
+        <div class="chip c1"><div class="n">① IPv6 host</div><div class="s">两端有公网 v6 → 免打洞，专治 CGNAT</div></div>
+        <div class="chip c2"><div class="n">② UPnP srflx</div><div class="s">服务器端口映射，须 external==internal</div></div>
+        <div class="chip c3"><div class="n">③ STUN@frps</div><div class="s">IPv4 打洞，流量≈0</div></div>
+        <div class="chip c4"><div class="n">④ 手动转发</div><div class="s">固定 UDP 端口，可选逃生口</div></div>
+      </div>
+    </div>
+  </div>
+
+  <h2>部署与使用 · 客户端就是一个浏览器</h2>
+  <div class="card dep">
+    <div class="depmain">开发机部署一套 Roam → frp 穿透到公网。客户端<b>只需一个浏览器打开公网 <span class="mono">https://</span> frp 地址</b>，任意地点 / 任意数量、零安装。P2P 是<b>透明升级，入口不变</b>。</div>
+    <div class="lanes">
+      <div class="lane frp">
+        <div class="lh">① 入口 · 信令 · 兜底</div>
+        <div class="ld">浏览器 ──▶ 公网 frp 地址<br>（加载页面 + 交换 SDP/ICE + 打洞失败时中转）</div>
+        <div class="lt">永远走 frp</div>
+      </div>
+      <div class="lane p2p">
+        <div class="lh">② 重流量数据面</div>
+        <div class="ld">文件 / 镜像 ──▶ STUN · IPv6 · UPnP 打洞后<br>点对点直连</div>
+        <div class="lt">★ 绕开 frps，省带宽 ★</div>
+      </div>
+    </div>
+    <div class="depnote">关键区分：「穿透 frp 地址」= 入口与信令（理解正确，永远走 frp）；P2P 数据<b>不是穿透 frp，而是绕开 frp 直连</b> —— frp 只牵线，牵上后两端自己直连；打不通自动退回 frp，同一个浏览器全程无感。</div>
+    <div class="cols" style="margin-top:14px">
+      <div class="card pb"><div class="t">前提 1 · 入口必须 <span class="mono">https</span></div>
+        <div class="d">WebRTC / 麦克风 / 剪贴板只在安全上下文可用；Roam frp 部署默认开自签 HTTPS，frp 地址须为 https。</div></div>
+      <div class="card pb"><div class="t">前提 2 · 客户端零配置 ≠ 服务端零配置</div>
+        <div class="d">吃到 P2P 加速要在<b>服务端 / frps</b> 侧一次性配置 STUN（+ 可选 IPv6 / UPnP）；客户端仍什么都不用装。</div></div>
+    </div>
+  </div>
+
+  <h2>跨网穿透 Playbook（零成本 · 不建 TURN）</h2>
+  <div class="cols">
+    <div class="card pb"><div class="t"><span class="num">1</span>IPv6 直连<span class="zc">zero-cost</span></div>
+      <div class="d">两端都有公网 IPv6 时无需打洞，<b>显著提高</b>成功率，专治 IPv4 侧 CGNAT / 对称 NAT。注意 IPv6 防火墙仍可能拦截入站 UDP，非必成。</div></div>
+    <div class="card pb"><div class="t"><span class="num">2</span>UPnP / NAT-PMP 映射<span class="zc">zero-cost</span></div>
+      <div class="d"><b class="a2">端口必须一致</b>：<code>SetNAT1To1IPs</code> 只改 IP 不改端口。先固定 UDP 端口 + UDPMux，映射同一端口；<b>external==internal 才宣称</b> candidate，否则跳过。M0 实测。</div></div>
+    <div class="card pb"><div class="t"><span class="num">3</span>STUN 架在 frps 上<span class="zc">zero-cost</span></div>
+      <div class="d">现成公网 IP、流量≈0、免依赖 Google。对全锥 / 端口受限锥 NAT 有效。</div></div>
+    <div class="card pb"><div class="t"><span class="num">4</span>手动 UDP 端口转发<span class="zc">zero-cost</span></div>
+      <div class="d">能转发时<b>显著提高</b>成功率（上游 CGNAT / 防火墙仍拦则无效）。文档给步骤 + 固定端口。</div></div>
+  </div>
+
+  <h2>多路复用通道（一个 PC 多条 DataChannel · 远期）</h2>
+  <div class="card">
+    <table>
+      <tr><th>DataChannel</th><th>可靠性</th><th>承载</th><th>相比现状增益</th></tr>
+      <tr><td><span class="lbl">term:&lt;id&gt;</span></td><td class="rel-b">可靠 · 有序</td><td>终端 I/O</td><td>直连低延迟</td></tr>
+      <tr><td><span class="lbl">screencast</span></td><td class="unrel-b">不可靠 · 无序</td><td>浏览器镜像帧</td><td>丢帧而非队头阻塞，实时性↑</td></tr>
+      <tr><td><span class="lbl">phone</span></td><td class="unrel-b">不可靠 · 无序</td><td>手机镜像帧</td><td>同上</td></tr>
+      <tr><td><span class="lbl">file:&lt;id&gt;</span></td><td class="rel-b">可靠 · 有序 + 背压</td><td>文件传输</td><td>绕开 frps 带宽</td></tr>
+      <tr><td><span class="lbl">api/ctrl</span></td><td class="rel-b">可靠 · 有序</td><td>REST / 控制 / 剪贴板</td><td>可选，轻量也可留 frp</td></tr>
+    </table>
+  </div>
+
+  <h2>下载回退状态机（无二次下载 · 无双传竞态）</h2>
+  <div class="card">
+    <div class="fsm">
+      <span class="st a">idle</span><span class="sep">─click─▶</span>
+      <span class="st a">picking<br><span style="font-size:10px;color:#8aa0c0">先弹 showSaveFilePicker</span></span><span class="sep">─▶</span>
+      <span class="st a">negotiating<br><span style="font-size:10px;color:#8aa0c0">SDP/ICE · transferId</span></span>
+      <span class="sep">┳</span>
+      <span class="st good">p2p ─▶ 落盘完成</span>
+      <span class="sep">／超时 8–12s／failed ▶</span>
+      <span class="st bad">fallback → http<br><span style="font-size:10px;color:#e0a0a0">写入同一 handle</span></span>
+    </div>
+    <div class="fsmnote">回退即：拆 PC/DC + 发 <code>p2p/cancel</code> 停后端读取 + 置终结标志，<b>忽略迟到的</b> <code>p2p/connected</code>／数据帧。速率用 <b>goodput（落盘字节增量）</b>，candidate-pair 字节/RTT 仅作诊断。</div>
+  </div>
+
+  <h2>关键决策</h2>
+  <div class="card dec">
+    <ul class="dec">
+      <li><b class="k">纯增益、零新增风险</b>：P2P 建不起来就全体走 frp，行为等同现状；按服务通道独立兜底。</li>
+      <li><b class="k">picker 先于协商</b>：<code>showSaveFilePicker()</code> 必须在点击的用户激活窗口内调用；回退写入同一 handle，绝不二次下载。</li>
+      <li><b class="k">DataChannel 是消息通道</b>（非字节流）：一条 message = 一帧，16 KiB 保守基线。</li>
+      <li><b class="a2">MVP 每下载一个 PC</b>：共享 PC 涉及 SCTP 关联拥塞共享、大文件冲击实时流，须 ROI 后专门压测再做。</li>
+      <li><b class="g2">i18n 强制</b>：所有连接状态 / 错误 / 按钮文案走全局 i18n，zh-CN + en-US 双份。</li>
+      <li><b class="r2">诚实下限</b>：服务器纯 CGNAT-IPv4、无 IPv6、不能转发 → 打洞失败回退 frp，零成本无解（拓扑硬约束）。</li>
+    </ul>
+  </div>
+
+  <h2>交付顺序</h2>
+  <div class="card fsm" style="gap:10px">
+    <span class="st a"><b>M0a</b> STUN + 随机数据<br><span style="font-size:10px;color:#8aa0c0">实测能不能连</span></span><span class="sep">▶</span>
+    <span class="st a"><b>M0b</b> UDPMux<br><span style="font-size:10px;color:#8aa0c0">逐条测 IPv6/UPnP/转发</span></span><span class="sep">▶</span>
+    <span class="st a"><b>M1</b> 状态机 + 真实文件<br><span style="font-size:10px;color:#8aa0c0">picker/取消/回退</span></span><span class="sep">▶</span>
+    <span class="st a"><b>M2</b> goodput + 指标 + 灰度</span><span class="sep">▶</span>
+    <span class="st good">数据证明 ROI → 通用传输</span>
+  </div>
+
+  <footer>
+    Roam / ttmux · P2P 直连传输设计（浓缩版）· 详见 <span class="mono">docs/design/p2p/p2p-direct-transfer.md</span> 与 <span class="mono">…-mvp-plan.md</span>
+  </footer>
+
+</div>
+</body>
+</html>

@@ -14,6 +14,11 @@ export interface Preferences {
   quickCommands: string[]
   showVoiceButton: boolean
   overviewTab: 'projects' | 'sessions' // 概览页 项目/会话 切换 tab，记住上次选择
+  p2pEnabled: boolean // P2P 直连总开关（实验性，默认关）；关闭后 下载/镜像等一律走 frp 中转
+  p2pStunServers: string // 逗号分隔的 STUN 服务器；留空用服务端默认（/api/p2p/config）。仅影响本浏览器
+  p2pConnectTimeoutSec: number // 打洞建链超时（秒），超时回退 frp。默认 30
+  p2pGatherTimeoutSec: number // ICE 候选收集上限（秒）：等 srflx 等这么久，慢网(手机蜂窝)可调大。默认 30
+  p2pMinSpeedKBps: number // P2P 直连测速回退阈值(KB/s)：平均落盘速率长期低于此值就回退 frp；0=禁用，永远坚持 P2P。默认 200
   _migrated: boolean
 }
 
@@ -30,6 +35,11 @@ const DEFAULTS: Preferences = {
   quickCommands: [],
   showVoiceButton: true,
   overviewTab: 'projects',
+  p2pEnabled: false, // 实验性：待真实跨网/Android/iOS 验收后再默认开
+  p2pStunServers: '',
+  p2pConnectTimeoutSec: 30,
+  p2pGatherTimeoutSec: 30,
+  p2pMinSpeedKBps: 200,
   _migrated: false,
 }
 

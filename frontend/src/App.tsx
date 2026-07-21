@@ -6,7 +6,7 @@
 import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import {
   Layout, Menu, Button, Card, List, Tag, Form, Input, Select, Segmented, Tabs, Descriptions,
-  Statistic, Row, Col, Space, Popconfirm, Empty, Modal, Grid, App as AntApp, Typography, Spin, Tooltip, Dropdown, Checkbox, Progress, AutoComplete, Radio, Switch, Collapse,
+  Statistic, Row, Col, Space, Popconfirm, Empty, Modal, Grid, App as AntApp, Typography, Spin, Tooltip, Dropdown, Checkbox, Progress, AutoComplete, Radio, Switch, Collapse, InputNumber,
 } from 'antd'
 import { QRCodeSVG } from 'qrcode.react'
 import { api, upload, makeClipboardImageFile, setUnauthorizedHandler } from './api'
@@ -38,6 +38,8 @@ import { usePreferences, savePreferences, loadPreferences } from './preferences'
 import { PromptDialog, detectPrompt } from './prompt'
 import { copyText } from './chat/blocks'
 import { VoiceInput } from './chat/VoiceInput'
+import LinkStatus from './p2p/LinkStatus'
+import { startControlLink, stopControlLink } from './p2p/transport'
 
 interface ClaudeInfo { running: boolean; file?: string; dir?: string }
 
@@ -244,6 +246,7 @@ export default function App() {
   }
   const { mode, toggle: toggleTheme } = useThemeMode()
   const { t } = useI18n()
+  const [prefs] = usePreferences()
   const themeIcon = mode === 'dark'
     ? svg(<><circle cx="12" cy="12" r="4.2" /><path d="M12 2v2.2M12 19.8V22M4.2 4.2l1.6 1.6M18.2 18.2l1.6 1.6M2 12h2.2M19.8 12H22M4.2 19.8l1.6-1.6M18.2 5.8l1.6-1.6" /></>)
     : svg(<><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z" /></>)
@@ -322,6 +325,13 @@ export default function App() {
     const t = setInterval(check, 5000)
     return () => { stop = true; clearInterval(t) }
   }, [authed, terms])
+
+  // 通用传输 Phase 1a：登录后且用户偏好开 P2P → 建会话级常驻 control PC（左边栏全局状态）。
+  // 偏好关闭 / 登出即拆链。P2P 是否真正可用由 transport 内部拉 /api/p2p/config 决定。
+  useEffect(() => {
+    if (authed && prefs.p2pEnabled) startControlLink()
+    else stopControlLink()
+  }, [authed, prefs.p2pEnabled])
 
   if (authed === null) return <div style={{ height: '100dvh', display: 'grid', placeItems: 'center' }}><Spin size="large" /></div>
   if (!authed) return <Login onOk={() => { setAuthed(true); loadPreferences(); go('overview') }} />
@@ -479,8 +489,9 @@ export default function App() {
               )}
             </div>
             <div style={{ flex: 1, overflowY: 'auto' }}>{menu}</div>
-            {/* 底部：收起 在上，其次 全屏，最后 退出，始终竖向堆叠（展开带文字，折叠仅图标居中）。*/}
+            {/* 底部：全局 P2P 链路状态在最上（未启用时自隐藏），其次 关于/收起/全屏/退出，竖向堆叠。*/}
             <div style={{ borderTop: '1px solid var(--border-subtle)', padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <LinkStatus collapsed={collapsed} />
               <Button type="text" block onClick={() => go('about')} title={t('nav.about')}
                 style={{ ...bottomBtnStyle, color: tab === 'about' ? '#58a6ff' : 'var(--text-dim)' }}>
                 {collapsed ? ICONS.github : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{ICONS.github}{t('nav.about')}</span>}
@@ -2301,6 +2312,86 @@ function PromptPopupCard() {
   )
 }
 
+function P2PCard() {
+  const { t } = useI18n()
+  const [prefs, setPrefs] = usePreferences()
+  const [serverStun, setServerStun] = useState('')
+  // 拉服务端默认 STUN 预填进输入框（用户未自定义时展示当前默认；改了才存自定义偏好）。
+  useEffect(() => {
+    fetch('/api/p2p/config', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const cfg = d?.data ?? d ?? {}
+        const urls = (cfg.iceServers || []).flatMap((s: { urls?: string | string[] }) => (Array.isArray(s.urls) ? s.urls : s.urls ? [s.urls] : [])).filter(Boolean)
+        if (urls.length) setServerStun(urls.join(', '))
+      })
+      .catch(() => { /* ignore */ })
+  }, [])
+  const on = prefs.p2pEnabled
+  // 输入框展示：用户自定义优先，否则预填服务端默认。留空(未自定义)时 transport 仍走服务端默认。
+  const stunValue = prefs.p2pStunServers || serverStun
+  const dim = { color: 'var(--text-dim)', fontSize: 12 }
+  const hint = { color: 'var(--text-dimmer)', fontSize: 11 }
+  return (
+    <Card title={t('settings.p2p')}>
+      <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+        <Space align="center" wrap>
+          <Switch checked={on} onChange={(v) => setPrefs({ p2pEnabled: v })} />
+          <Tag color="orange" style={{ margin: 0 }}>{t('settings.p2pExperimental')}</Tag>
+          <span style={dim}>{t('settings.p2pHelp')}</span>
+        </Space>
+        {/* STUN 服务器（留空用服务端默认）。仅影响本浏览器的打洞。 */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, opacity: on ? 1 : 0.5 }}>
+          <span style={dim}>{t('settings.p2pStun')}</span>
+          <Input
+            disabled={!on} allowClear value={stunValue}
+            placeholder={t('settings.p2pStunPh')}
+            onChange={(e) => setPrefs({ p2pStunServers: e.target.value })}
+            style={{ maxWidth: 460 }}
+          />
+          <span style={hint}>{t('settings.p2pStunHelp')}</span>
+        </div>
+        {/* 连接超时（秒）：打洞建链超时后回退 frp。 */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, opacity: on ? 1 : 0.5 }}>
+          <span style={dim}>{t('settings.p2pTimeout')}</span>
+          <Space align="center" wrap>
+            <InputNumber
+              disabled={!on} min={5} max={120} step={5} value={prefs.p2pConnectTimeoutSec}
+              onChange={(v) => setPrefs({ p2pConnectTimeoutSec: typeof v === 'number' ? v : 30 })}
+              addonAfter={t('settings.p2pTimeoutUnit')} style={{ width: 130 }}
+            />
+            <span style={hint}>{t('settings.p2pTimeoutHelp')}</span>
+          </Space>
+        </div>
+        {/* 候选收集(gather)上限（秒）：慢网(手机蜂窝 srflx 迟到)可调大。 */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, opacity: on ? 1 : 0.5 }}>
+          <span style={dim}>{t('settings.p2pGather')}</span>
+          <Space align="center" wrap>
+            <InputNumber
+              disabled={!on} min={3} max={300} step={5} value={prefs.p2pGatherTimeoutSec}
+              onChange={(v) => setPrefs({ p2pGatherTimeoutSec: typeof v === 'number' ? v : 30 })}
+              addonAfter={t('settings.p2pTimeoutUnit')} style={{ width: 130 }}
+            />
+            <span style={hint}>{t('settings.p2pGatherHelp')}</span>
+          </Space>
+        </div>
+        {/* P2P 最低速率(KB/s)：直连平均落盘速率长期低于此值就回退中转；0=不回退，永远坚持 P2P。 */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, opacity: on ? 1 : 0.5 }}>
+          <span style={dim}>{t('settings.p2pMinSpeed')}</span>
+          <Space align="center" wrap>
+            <InputNumber
+              disabled={!on} min={0} max={100000} step={50} value={prefs.p2pMinSpeedKBps}
+              onChange={(v) => setPrefs({ p2pMinSpeedKBps: typeof v === 'number' && v >= 0 ? v : 200 })}
+              addonAfter={t('settings.p2pMinSpeedUnit')} style={{ width: 150 }}
+            />
+            <span style={hint}>{t('settings.p2pMinSpeedHelp')}</span>
+          </Space>
+        </div>
+      </Space>
+    </Card>
+  )
+}
+
 function QuickCommandsCard() {
   const { message } = AntApp.useApp()
   const { t } = useI18n()
@@ -2665,6 +2756,7 @@ function EnvPage() {
           <AgentCommandsCard />
           <QuickCommandsCard />
           <PromptPopupCard />
+          <P2PCard />
           <Card title={t('install.settingsTitle')}>
             <Space align="center" wrap>
               {pwaInstalled
