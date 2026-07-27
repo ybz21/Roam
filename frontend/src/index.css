@@ -188,8 +188,9 @@ body {
   transform: translateZ(0);
   contain: layout paint;
 }
+/* 悬浮抽屉旁的文件/差异预览面板：吃满抽屉左侧剩余宽度（大屏封顶 1440），窄弹窗看代码太挤 */
 .tt-file-detail {
-  width: min(760px, calc(100vw - min(420px, 92vw)));
+  width: min(1440px, calc(100vw - min(420px, 92vw)));
   min-width: 360px;
 }
 .tt-file-drawer .ant-btn,

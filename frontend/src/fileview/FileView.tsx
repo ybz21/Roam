@@ -260,7 +260,8 @@ export function FileView({
   }
 
   return (
-    <Modal open onCancel={onClose} footer={null} width="min(900px,94vw)" title={titleNode}>
+    // 弹窗预览：代码/表格/PDF 在窄弹窗里很难看 → 尽量吃满视口宽度（大屏封顶 1440），并上移留出更高正文。
+    <Modal open onCancel={onClose} footer={null} width="min(1440px, 94vw)" style={{ top: 40 }} title={titleNode}>
       <ErrorBoundary>{bodyNode}</ErrorBoundary>
     </Modal>
   )

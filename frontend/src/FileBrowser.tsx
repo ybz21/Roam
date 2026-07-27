@@ -159,7 +159,10 @@ function FileRowBody({ full, name, isDir, size, accent, onInsertPath, onDownload
   return (
     <>
       <span style={{ color: isDir ? accent : 'var(--text-dimmer)', flex: '0 0 auto', display: 'inline-flex', width: 22, justifyContent: 'center' }}>{isDir ? <FolderIcon /> : <FileTypeIcon name={name} />}</span>
-      <span style={{ color: 'var(--text-bright)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+      {/* 面板窄时名字被省略号截断 → 悬浮显示完整名字（长名换行显示，不再被裁掉） */}
+      <Tooltip title={name} placement="topLeft" mouseEnterDelay={0.4} styles={{ root: { maxWidth: 420, wordBreak: 'break-all' } }}>
+        <span style={{ color: 'var(--text-bright)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+      </Tooltip>
       {!isDir && <span style={{ color: 'var(--text-dimmer)', fontSize: 11, flex: '0 0 auto' }}>{fmtSize(size)}</span>}
       {onInsertPath && (
         <span data-file-action>
@@ -796,15 +799,17 @@ export default function FileBrowser({
             <>
               {searchTrunc && <div style={{ color: '#d29922', fontSize: 11, padding: '4px 10px' }}>{t('file.searchTruncated')}</div>}
               {(results || []).map((r) => (
-                <div key={r.path} className="cc-filerow" draggable title={r.rel}
+                <div key={r.path} className="cc-filerow" draggable
                   onDragStart={(ev) => startPathDrag(ev, r.path)}
                   onClick={() => openFile(r.path)}
                   style={{ ...rowStyle(), background: r.path === sel ? '#1f6feb22' : undefined }}>
                   <span style={{ color: 'var(--text-dimmer)', flex: '0 0 auto', display: 'inline-flex', width: 25, justifyContent: 'center' }}><FileTypeIcon name={r.name} /></span>
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ color: 'var(--text-bright)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
-                    <span style={{ color: 'var(--text-dimmer)', fontSize: 11, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.rel}</span>
-                  </span>
+                  <Tooltip title={<><div>{r.name}</div><div style={{ opacity: .65, fontSize: 11 }}>{r.rel}</div></>} placement="topLeft" mouseEnterDelay={0.4} styles={{ root: { maxWidth: 420, wordBreak: 'break-all' } }}>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ color: 'var(--text-bright)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
+                      <span style={{ color: 'var(--text-dimmer)', fontSize: 11, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.rel}</span>
+                    </span>
+                  </Tooltip>
                 </div>
               ))}
             </>
