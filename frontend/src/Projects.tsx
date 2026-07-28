@@ -8,7 +8,8 @@
 // （渐变卡面 + focus 辉光环）、git 数据一律等宽字、行 hover 左导轨渐显、
 // 分区头沿用设计图纸体例、入场一次性 stagger。全部颜色走 index.css token。
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
-import { App as AntApp, AutoComplete, Button, Input, Modal, Popconfirm, Segmented, Select, Space, Spin, Tag, Tooltip, Typography } from 'antd'
+import { App as AntApp, AutoComplete, Button, Dropdown, Input, Modal, Popconfirm, Segmented, Select, Space, Spin, Tag, Tooltip, Typography } from 'antd'
+import type { MenuProps } from 'antd'
 import { api, upload, makeClipboardImageFile } from './api'
 import { useI18n } from './i18n'
 import { usePreferences } from './preferences'
@@ -111,7 +112,36 @@ const PRJ_CSS = `
 .prj-addline:hover{border-color:#8b949e;color:var(--text-bright)}
 
 .prj-empty{color:var(--text-dimmer);font-size:12.5px;padding:14px 12px}
+
+/* 分叉图：主干是整行高的绝对定位线（行高随内容变，画进 svg 必断），
+   svg 只画「从主干拐出来的一小段 + 节点」，钉在行顶 22px 处。 */
+.prj-fork{position:relative;display:flex;padding:0 14px 0 40px}
+.prj-fork::before{content:'';position:absolute;left:15px;top:0;bottom:0;width:1.6px;background:hsl(212,78%,58%)}
+.prj-fork.head::before{top:22px}
+.prj-fork:last-child::before{bottom:auto;height:24px}
+.prj-fork+.prj-fork .col{border-top:1px solid var(--border-subtle)}
+.prj-fork .fk{position:absolute;left:0;top:4px;overflow:visible}
+.prj-fork .col{flex:1;min-width:0;padding:11px 0 12px;display:flex;gap:12px;align-items:flex-start}
+.prj-fork .info{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
+.prj-fork .n1{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.prj-fork .n2{font-size:12px;color:var(--text-dimmer)}
+.prj-fork .wt-br{font-family:ui-monospace,'SF Mono','JetBrains Mono',Menlo,Consolas,monospace;
+  font-size:13.5px;font-weight:600;color:#39c5cf}
+.prj-fork .wt-br::before{content:'⎇ ';opacity:.7}
+.prj-fork .wt-ab{font-family:ui-monospace,monospace;font-size:12px}
+.prj-fork .wt-ab.up{color:#3fb950} .prj-fork .wt-ab.dn{color:#d29922}
+.prj-fork .wt-acts{flex:0 0 auto;display:flex;gap:6px;align-items:center;opacity:.55;transition:opacity .15s}
+.prj-fork:hover .wt-acts,.prj-fork .wt-acts:focus-within{opacity:1}
+.prj-fork.merged .col,.prj-fork.ext .col{opacity:.75}
 `
+
+// 分叉图（11 §8.2）：主干蓝取提交树 lane 0 同色，支线按状态着色——
+// 绿=有会话在跑 / 琥珀=孤儿待收尾 / 灰虚线=已合入待清理 / 灰菱形=外部。
+const FORK_TRUNK = 'hsl(212, 78%, 58%)'
+const FORK_COLOR: Record<string, string> = {
+  live: '#3fb950', orphan: '#d29922', merged: 'rgba(139,148,158,.55)', ext: 'rgba(139,148,158,.7)',
+}
+const CLI_KINDS = ['shell', 'claude', 'codex'] as const
 
 export const dot = (on: boolean, color?: string) => (
   <span style={{
@@ -469,6 +499,8 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
   const fileRef = useRef<HTMLInputElement>(null)
   const [wtOpen, setWtOpen] = useState(false)
   const [gitOpen, setGitOpen] = useState(false)
+  const [gitAt, setGitAt] = useState<{ dir: string; tab: 'changes' | 'base' } | null>(null) // Git 面板落点（分叉图「对比 base」用）
+  const [mergingWt, setMergingWt] = useState('')
   const [fullForm, setFullForm] = useState(false)
   const [forking, setForking] = useState<string | null>(null)
   const [closing, setClosing] = useState<{ name: string; st: any } | null>(null)
@@ -504,6 +536,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
     return () => clearInterval(i)
   }, [dir, isGit])
   const wts = useMemo(() => wtsAll.filter((w: any) => !w.isMain && !w.prunable), [wtsAll])
+  const mainWt = useMemo(() => wtsAll.find((w: any) => w.isMain), [wtsAll])
   const mainHead = useMemo(() => (wtsAll.find((w: any) => w.isMain)?.head || '').slice(0, 7), [wtsAll])
   useEffect(() => {
     setWtPath((prev) => (prev && wts.some((w: any) => w.path === prev) ? prev : (wts[0]?.path || '')))
@@ -804,6 +837,79 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
       <b>{label}</b><span className="n">{count}</span><span className="ln" />
     </div>
   )
+  // ── Worktree 分叉图的就地操作（设计 11 §8.3：三个动作都在行内做完，不再跳面板）──
+  // 对比 base：把 Git 面板开到这条 worktree 上并直接落在「对比 base」tab
+  const compareWt = (w: any) => setGitAt({ dir: w.path, tab: 'base' })
+  const mergeWt = async (w: any, strategy: 'merge' | 'squash' | 'rebase') => {
+    if (mergingWt) return
+    setMergingWt(w.path)
+    try {
+      await api('POST', '/git/worktree/merge', { path: w.path, strategy, expectedHead: w.head })
+      message.success(t('git.wt.mergeDone', { base: w.base }))
+      refresh()
+    } catch (e: any) {
+      const ae = e.apiError
+      if (ae?.code === 'MERGE_CONFLICT') {
+        Modal.error({
+          title: t('worktree.mergeConflictTitle'),
+          content: (
+            <div style={{ fontSize: 13 }}>
+              <div style={{ marginBottom: 6 }}>{t('worktree.mergeConflictDesc', { stage: ae.stage || '?' })}</div>
+              <ul style={{ paddingLeft: 18, margin: 0, fontFamily: 'ui-monospace, monospace', fontSize: 12 }}>
+                {(ae.conflictFiles || []).map((cf: string) => <li key={cf}>{cf}</li>)}
+              </ul>
+            </div>
+          ),
+        })
+      } else message.error(e.message)
+    } finally { setMergingWt('') }
+  }
+  // 删除：先把「会丢什么」摆出来再确认。分支一律留着——真要连分支删走「一键清理」那条零损失路径。
+  const removeWt = (w: any) => {
+    const dirty = (w.dirty || 0) + (w.untracked || 0)
+    Modal.confirm({
+      title: t('project.wt.deleteConfirm', { branch: w.branch || w.path }),
+      content: (
+        <div style={{ fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.8 }}>
+          <div>{t('project.wt.deleteKeepsBranch', { branch: w.branch || '?' })}</div>
+          {dirty > 0 && <div style={{ color: '#d29922' }}>{t('project.wt.deleteLosesDirty', { count: dirty })}</div>}
+          {w.committedAhead > 0 && !w.pushed && <div style={{ color: '#d29922' }}>{t('project.wt.deleteUnpushed', { count: w.committedAhead })}</div>}
+        </div>
+      ),
+      okText: t('project.wt.delete'), cancelText: t('common.cancel'), okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          await api('POST', '/git/worktree/remove', { path: w.path, forceWorktree: dirty > 0 })
+          message.success(t('project.wt.deleted')); refresh()
+        } catch (e: any) { message.error(e.message) }
+      },
+    })
+  }
+  const pruneWts = async () => {
+    try {
+      const r = await api('POST', '/git/worktree/prune', { dir })
+      message.success(r?.data?.output?.trim?.() || t('project.wt.pruned')); refresh()
+    } catch (e: any) { message.error(e.message) }
+  }
+  const wtRowMenu = (w: any, cat: string, live: number): MenuProps => ({
+    items: [
+      { key: 'open', label: t('project.wt.openFolder') },
+      { key: 'copy', label: t('project.wt.copyPath') },
+      { key: 'manage', label: t('project.wtManage') },
+      { type: 'divider' },
+      {
+        key: 'delete', label: t('project.wt.delete'), danger: true,
+        disabled: live > 0 || cat === 'ext',
+      },
+    ],
+    onClick: ({ key }) => {
+      if (key === 'open') setGitAt({ dir: w.path, tab: 'changes' })
+      else if (key === 'copy') navigator.clipboard?.writeText(w.path).then(() => message.success(t('common.copied')), () => {})
+      else if (key === 'manage') setWtOpen(true)
+      else if (key === 'delete') removeWt(w)
+    },
+  })
+
   // 已合入·待清理的一键清（10 §5）：零损失确认后删 worktree + 本地分支（留痕 cleaned）
   const cleanupMerged = (w: any) => {
     Modal.confirm({
@@ -1105,64 +1211,144 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
           </>)}
         </>)}
 
-        {/* ── Worktree tab（P4：行可展开 → 命令行 + 尾行预览 + 新开命令行）── */}
+        {/* ── Worktree tab：分叉图（设计 11 §8/G5）──
+            主干一条竖线贯穿全表，每条 worktree 从主干分叉出去；状态编码在节点形状上。
+            主干必须是整行高的绝对定位元素——行高随内容变，画进每行的 SVG 里必断。 */}
         {tab === 'wt' && (
           <div className="prj-panel prj-in">
-            {wts.length === 0 && <div className="prj-empty">{t('project.noTasks')}</div>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)', flexWrap: 'wrap' }}>
+              <Button size="small" onClick={() => setWtOpen(true)}>＋ {t('project.wt.newWorktree')}</Button>
+              <Button size="small" onClick={pruneWts}>{t('project.wt.prune')}</Button>
+              <span style={{ flex: 1 }} />
+              <a style={{ fontSize: 12.5 }} onClick={() => setWtOpen(true)}>{t('project.wt.allRepos')} ›</a>
+            </div>
+
+            {mainWt && (
+              <div className="prj-fork head">
+                <svg width="38" height="44" className="fk">
+                  <circle cx="15" cy="22" r="7.4" fill="none" stroke={FORK_TRUNK} strokeWidth="1.4" opacity=".45" />
+                  <circle cx="15" cy="22" r="4.2" fill={FORK_TRUNK} />
+                </svg>
+                <div className="col">
+                  <div className="info">
+                    <div className="n1">
+                      <span className="wt-br" style={{ color: FORK_TRUNK }}>{mainWt.branch || 'HEAD'}</span>
+                      <Tag style={{ margin: 0 }}>{t('project.wt.mainTag')}</Tag>
+                      <span className="prj-mono" style={{ fontSize: 11, color: 'var(--text-dimmer)' }}>{(mainWt.head || '').slice(0, 7)}</span>
+                    </div>
+                    <div className="n2">
+                      <span className="prj-mono">{mainWt.path}</span>
+                      {wts.length > 0 && <> · {t('project.wt.forkCount', { count: wts.length })}</>}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {wts.length === 0 && <div className="prj-empty">{t('project.wt.none')}</div>}
+
             {wts.map((w: any) => {
               const open = !!expanded[w.path]
               const live = (w.sessions || []).length
+              const dirty = (w.dirty || 0) + (w.untracked || 0)
+              const cleanable = !!w.mergedInto && dirty === 0
+              const cat = w.external ? 'ext' : live > 0 ? 'live' : cleanable ? 'merged' : 'orphan'
+              const color = FORK_COLOR[cat]
               return (
-                <div key={w.path} className="prj-wtrow">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
-                    onClick={() => setExpanded((m) => ({ ...m, [w.path]: !open }))}>
-                    <span style={{ fontSize: 10, color: 'var(--text-dimmer)', width: 12, display: 'inline-block', transform: open ? 'rotate(90deg)' : undefined, transition: 'transform .15s' }}>▸</span>
-                    <span className="prj-mono" style={{ fontSize: 13.5, fontWeight: 600, color: '#39c5cf' }}>⎇ {w.branch}</span>
-                    {w.external
-                      ? <Tag style={{ margin: 0 }}>{t('project.wt.externalTag')}</Tag>
-                      : live > 0
-                        ? <Tag style={{ margin: 0 }}>{t('project.wt.cli', { count: live })}</Tag>
-                        : <Tag color="warning" style={{ margin: 0 }}>{t('project.wt.orphanTag')}</Tag>}
-                  </div>
-                  <div className="prj-mono" style={{ marginLeft: 20, marginTop: 5, fontSize: 11.5, color: 'var(--text-dimmer)', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    <span>{t('project.basedOn', { base: w.base || '?' })}</span>·
-                    <span style={{ color: w.committedAhead > 0 ? '#58a6ff' : undefined }}>↑{w.committedAhead}</span>·
-                    <span style={{ color: (w.dirty + w.untracked) > 0 ? '#d29922' : undefined }}>{t('project.wt.changes', { count: w.dirty + w.untracked })}</span>·
-                    <span>{relTime(w.lastCommitAt, t)}</span>
-                  </div>
-                  {open && (
-                    <div style={{ margin: '8px 0 2px 5px', paddingLeft: 12, borderLeft: '2px solid rgba(57,197,207,.25)', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      {(w.sessions || []).map((ref: any) => (
-                        <div key={ref.session} className="prj-subrow" onClick={() => openTerm(ref.session)}>
-                          {dot(false, cc[ref.session] || cx[ref.session] ? '#3fb950' : undefined)}
-                          <span style={{ fontWeight: 600, fontSize: 13 }}>{ref.session}</span>
-                          {cc[ref.session] && <Tag color="blue" style={{ margin: 0, fontSize: 10.5, lineHeight: '16px' }}>Claude</Tag>}
-                          {cx[ref.session] && <Tag color="green" style={{ margin: 0, fontSize: 10.5, lineHeight: '16px' }}>Codex</Tag>}
-                          <span className="prj-peek">{peeks[ref.session] || '…'}</span>
-                          <a style={{ fontSize: 12 }} onClick={(e) => { e.stopPropagation(); openTerm(ref.session) }}>{t('project.enter')}</a>
-                        </div>
-                      ))}
-                      {live === 0 && <div style={{ fontSize: 12, color: 'var(--text-dimmer)', padding: '4px 8px' }}>{t('project.wt.noCli')}</div>}
-                      <div className="prj-addline">
-                        {t('project.wt.newCli')}
-                        <a onClick={() => newCli(w, 'shell')}>shell</a>·<a onClick={() => newCli(w, 'claude')}>Claude</a>·<a onClick={() => newCli(w, 'codex')}>Codex</a>
-                      </div>
+                <div key={w.path} className={`prj-fork ${cat}`}>
+                  <svg width="38" height="44" className="fk">
+                    <path d="M15 2C15 16,23 12,29 22" stroke={color} strokeWidth="1.6" fill="none"
+                      strokeDasharray={cat === 'merged' ? '3 3' : undefined} />
+                    {cat === 'ext'
+                      ? <rect x="25.5" y="18.5" width="7" height="7" transform="rotate(45 29 22)" fill="none" stroke={color} strokeWidth="1.5" />
+                      : cat === 'merged'
+                        ? <circle cx="29" cy="22" r="4.4" fill="var(--bg-container)" stroke={color} strokeWidth="1.6" />
+                        : <>
+                            {cat === 'live' && <circle cx="29" cy="22" r="8" fill="none" stroke={color} strokeWidth="1.2" opacity=".35" />}
+                            <circle cx="29" cy="22" r="4.6" fill={color} />
+                          </>}
+                  </svg>
+                  {/* 动作区是 .col 的第二列，不能塞进会换行的 .n1——否则名字一长按钮就掉行 */}
+                  <div className="col">
+                    <div className="info">
+                    <div className="n1">
+                      <span className="wt-br" onClick={() => setExpanded((m) => ({ ...m, [w.path]: !open }))}
+                        style={{ cursor: 'pointer', color: cat === 'merged' || cat === 'ext' ? 'var(--text-dim)' : undefined }}>
+                        {w.branch || '(detached)'}
+                      </span>
+                      {w.committedAhead > 0 && <span className="wt-ab up">↑{w.committedAhead}</span>}
+                      {w.behind > 0 && <span className="wt-ab dn">↓{w.behind}</span>}
+                      {cat === 'live' && <Tag color="green" style={{ margin: 0 }}>{t('project.wt.cli', { count: live })}</Tag>}
+                      {cat === 'orphan' && <Tag color="warning" style={{ margin: 0 }}>{t('project.wt.orphanPending')}</Tag>}
+                      {cat === 'merged' && <Tag color="success" style={{ margin: 0 }}>✓ {t('project.wt.mergedInto', { target: w.mergedInto })}</Tag>}
+                      {cat === 'ext' && <Tag style={{ margin: 0 }}>{t('project.wt.externalTag')}</Tag>}
                     </div>
-                  )}
-                  <div style={{ marginTop: 9, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <Button size="small" onClick={() => setGitOpen(true)}>{t('project.wt.compareBase')}</Button>
-                    {!w.external && <Button size="small" onClick={() => setWtOpen(true)}>{t('worktree.mergeInto', { base: w.base || '?' })} ▾</Button>}
-                    <Tooltip title={live > 0 ? t('project.wt.busyDelete', { count: live }) : undefined}>
-                      <Button size="small" danger disabled={live > 0} onClick={() => setWtOpen(true)}>{t('project.wt.delete')}</Button>
-                    </Tooltip>
+                    <div className="n2 prj-mono">
+                      {w.external
+                        ? <>{w.path} · {t('project.wt.externalNote')}</>
+                        : <>
+                            <span style={{ color: dirty > 0 ? '#d29922' : undefined }}>{t('project.wt.uncommitted', { count: dirty })}</span>
+                            {' · '}
+                            {cleanable
+                              ? <>{t('project.wt.mergedKind', { kind: w.mergedKind || '?' })} · {t('project.wt.zeroLoss')}</>
+                              : w.committedAhead > 0
+                                ? <span style={{ color: w.pushed ? undefined : '#d29922' }}>
+                                    {w.pushed ? t('project.wt.pushed') : t('project.wt.notPushed', { count: w.committedAhead })}
+                                  </span>
+                                : t('project.wt.noCommits')}
+                            {' · '}{relTime(w.lastCommitAt, t)}
+                            {live === 0 && <> · {t('project.wt.noSession')}</>}
+                          </>}
+                    </div>
+
+                    {open && (
+                      <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {(w.sessions || []).map((ref: any) => (
+                          <div key={ref.session} className="prj-subrow" onClick={() => openTerm(ref.session)}>
+                            {dot(false, cc[ref.session] || cx[ref.session] ? '#3fb950' : undefined)}
+                            <span style={{ fontWeight: 600, fontSize: 13 }}>{ref.session}</span>
+                            {cc[ref.session] && <Tag color="blue" style={{ margin: 0, fontSize: 10.5, lineHeight: '16px' }}>Claude</Tag>}
+                            {cx[ref.session] && <Tag color="green" style={{ margin: 0, fontSize: 10.5, lineHeight: '16px' }}>Codex</Tag>}
+                            <span className="prj-peek">{peeks[ref.session] || '…'}</span>
+                            <a style={{ fontSize: 12 }} onClick={(e) => { e.stopPropagation(); openTerm(ref.session) }}>{t('project.enter')}</a>
+                          </div>
+                        ))}
+                        {live === 0 && <div style={{ fontSize: 12, color: 'var(--text-dimmer)', padding: '4px 8px' }}>{t('project.wt.noCli')}</div>}
+                        <div className="prj-addline">
+                          {t('project.wt.newCli')}
+                          <a onClick={() => newCli(w, 'shell')}>shell</a>·<a onClick={() => newCli(w, 'claude')}>Claude</a>·<a onClick={() => newCli(w, 'codex')}>Codex</a>
+                        </div>
+                      </div>
+                    )}
+                    </div>
+
+                    <span className="wt-acts">
+                      {!!w.base && (
+                        <Button size="small" onClick={() => compareWt(w)}>
+                          {cleanable ? t('project.wt.viewMerged') : t('project.wt.compareWith', { base: w.base })}
+                        </Button>
+                      )}
+                      {cleanable && <Button size="small" onClick={() => cleanupMerged(w)}>{t('project.cleanup')}</Button>}
+                      {!cleanable && !w.external && !!w.base && (
+                        live === 0 && w.committedAhead === 0 && dirty === 0
+                          ? <Dropdown menu={{ items: CLI_KINDS.map((k) => ({ key: k, label: k })), onClick: ({ key }) => newCli(w, key as any) }}>
+                              <Button size="small">{t('project.wt.resume')} ▾</Button>
+                            </Dropdown>
+                          : <Dropdown.Button size="small" type="primary" disabled={mergingWt === w.path}
+                              icon={<span style={{ fontSize: 10 }}>▾</span>}
+                              onClick={() => mergeWt(w, 'squash')}
+                              menu={{ items: [{ key: 'merge', label: 'merge' }, { key: 'rebase', label: 'rebase' }], onClick: ({ key }) => mergeWt(w, key as any) }}>
+                              {mergingWt === w.path ? <Spin size="small" /> : t('worktree.mergeInto', { base: w.base })}
+                            </Dropdown.Button>
+                      )}
+                      <Dropdown menu={wtRowMenu(w, cat, live)} trigger={['click']} placement="bottomRight">
+                        <Button size="small">⋯</Button>
+                      </Dropdown>
+                    </span>
                   </div>
                 </div>
               )
             })}
-            {/* 管理入口收进本 tab：新建/清理残留/跨仓库总览都在抽屉里 */}
-            <div style={{ padding: '10px 16px', borderTop: wts.length ? '1px solid var(--border-subtle)' : undefined }}>
-              <a style={{ fontSize: 12.5 }} onClick={() => setWtOpen(true)}>{t('project.wtManage')} ›</a>
-            </div>
           </div>
         )}
 
@@ -1289,11 +1475,12 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
 
         <Suspense fallback={<Spin />}>
           {wtOpen && <WorktreePanel open={wtOpen} onClose={() => { setWtOpen(false); refresh() }} openTerm={openTerm} initialDir={dir} />}
-          {gitOpen && (
-            <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(1,4,9,.6)' }} onClick={() => setGitOpen(false)}>
+          {(gitOpen || gitAt) && (
+            <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(1,4,9,.6)' }} onClick={() => { setGitOpen(false); setGitAt(null) }}>
               <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 'min(520px, 94vw)', background: 'var(--bg-container)', borderLeft: '1px solid var(--border)' }}
                 onClick={(e) => e.stopPropagation()}>
-                <GitPanel dir={dir} onClose={() => setGitOpen(false)} />
+                <GitPanel dir={gitAt?.dir || dir} initialTab={gitAt?.tab} openTerm={openTerm}
+                  onClose={() => { setGitOpen(false); setGitAt(null) }} />
               </div>
             </div>
           )}
