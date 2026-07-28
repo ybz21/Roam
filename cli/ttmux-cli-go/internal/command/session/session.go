@@ -13,7 +13,9 @@ import (
 )
 
 type sessionInfo struct {
-	Name         string `json:"name"`
+	Name string `json:"name"`
+	// ID tmux #{session_id}（$3）：会话的稳定身份，改名不变、server 内唯一。
+	ID           string `json:"id,omitempty"`
 	Windows      int    `json:"windows"`
 	Created      string `json:"created"`
 	Attached     int    `json:"attached"`
@@ -32,7 +34,7 @@ func ListJSON(rt runtime.Runtime, exclude map[string]bool, w io.Writer) error {
 	// window_activity 补上 session_activity 的盲区：tmux 只在 attach/输入/焦点变化时
 	// 刷新 session_activity,后台无人 attach 的会话即便一直有输出(agent 干活)也不动;
 	// window_activity 会随前台窗口的 pane 输出走。取两者较大值 = 真正的「最近活跃」。
-	out, err := rt.TmuxOutput("list-sessions", "-F", "#{session_name}\t#{session_windows}\t#{session_created}\t#{session_attached}\t#{session_activity}\t#{window_activity}")
+	out, err := rt.TmuxOutput("list-sessions", "-F", "#{session_name}\t#{session_windows}\t#{session_created}\t#{session_attached}\t#{session_activity}\t#{window_activity}\t#{session_id}")
 	if err != nil {
 		// tmux server 未启动时输出的是 stderr 错误文本（out 非空），只看 err
 		_, _ = io.WriteString(w, "[]\n")
@@ -59,8 +61,13 @@ func ListJSON(rt runtime.Runtime, exclude map[string]bool, w io.Writer) error {
 		if len(parts) > 5 {
 			lastActivity = maxNumeric(lastActivity, parts[5]) // max(session_activity, window_activity)
 		}
+		id := ""
+		if len(parts) > 6 {
+			id = parts[6]
+		}
 		sessions = append(sessions, sessionInfo{
 			Name:         parts[0],
+			ID:           id,
 			Windows:      windows,
 			Created:      parts[2],
 			Attached:     attached,

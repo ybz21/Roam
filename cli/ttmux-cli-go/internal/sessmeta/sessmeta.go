@@ -21,6 +21,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -150,7 +151,11 @@ func (s *Store) ensureSchema(db *sql.DB) error {
 	if legacy {
 		s.backup() // 迁移前整库备份一次，出岔子还能捞回来
 		if _, err := db.Exec(`ALTER TABLE sessions RENAME TO sessions_legacy`); err != nil {
-			return err
+			// 并发的另一个 ttmux 进程可能刚好抢先改完名（web 每 5s 拉一次 ls --tree，
+			// 撞车是可能的）：确认已经不是 v1 了就继续，别把这次调用整挂。
+			if again, cerr := isLegacySchema(db); cerr != nil || again {
+				return err
+			}
 		}
 	}
 	if _, err := db.Exec(createV2); err != nil {
@@ -348,7 +353,7 @@ func (s *Store) Children(parent string) []string {
 			}
 		}
 	}
-	sortStrings(out)
+	sort.Strings(out)
 	return out
 }
 
@@ -483,14 +488,6 @@ func (s *Store) Reconcile(alive map[string]bool) {
 	for _, id := range dead {
 		_, _ = db.Exec(`UPDATE sessions SET parent_id=NULL WHERE parent_id=?`, id)
 		_, _ = db.Exec(`DELETE FROM sessions WHERE id=?`, id)
-	}
-}
-
-func sortStrings(a []string) {
-	for i := 1; i < len(a); i++ { // 规模是「一个会话的直接子会话数」，插入排序足够
-		for j := i; j > 0 && a[j] < a[j-1]; j-- {
-			a[j], a[j-1] = a[j-1], a[j]
-		}
 	}
 }
 

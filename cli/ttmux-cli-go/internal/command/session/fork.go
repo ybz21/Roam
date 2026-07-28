@@ -171,7 +171,9 @@ func ParentCmd(rt runtime.Runtime, meta *sessmeta.Store, args []string, w io.Wri
 }
 
 type treeNode struct {
-	Name         string      `json:"name"`
+	Name string `json:"name"`
+	// ID tmux #{session_id}：会话稳定身份（meta.db 的主键就是它）。
+	ID           string      `json:"id,omitempty"`
 	Windows      int         `json:"windows"`
 	Created      string      `json:"created"`
 	Attached     int         `json:"attached"`
@@ -206,7 +208,11 @@ func Tree(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool, w i
 		if prefix == "" {
 			branch, next = "", "   "
 		}
-		fmt.Fprintf(w, "%s%s%s  %s\n", prefix, branch, ui.Bold(n.Name), ui.Dim(n.Cwd))
+		label := ui.Bold(n.Name)
+		if n.ID != "" {
+			label += ui.Dim("(" + n.ID + ")")
+		}
+		fmt.Fprintf(w, "%s%s%s  %s\n", prefix, branch, label, ui.Dim(n.Cwd))
 		for i, c := range n.Children {
 			walk(c, next, i == len(n.Children)-1)
 		}
@@ -224,7 +230,7 @@ func buildTree(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool
 
 	// 会话基础信息（一次 list-sessions）
 	// window_activity 补 session_activity 盲区（后台有输出但无人 attach 时不动),取较大值。
-	out, _ := rt.TmuxOutput("list-sessions", "-F", "#{session_name}\t#{session_windows}\t#{session_created}\t#{session_attached}\t#{session_activity}\t#{window_activity}")
+	out, _ := rt.TmuxOutput("list-sessions", "-F", "#{session_name}\t#{session_windows}\t#{session_created}\t#{session_attached}\t#{session_activity}\t#{window_activity}\t#{session_id}")
 	nodes := map[string]*treeNode{}
 	var order []string
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
@@ -240,6 +246,9 @@ func buildTree(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool
 		}
 		if len(parts) > 5 {
 			n.LastActivity = maxNumeric(n.LastActivity, parts[5])
+		}
+		if len(parts) > 6 {
+			n.ID = parts[6]
 		}
 		nodes[n.Name] = n
 		order = append(order, n.Name)

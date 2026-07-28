@@ -165,7 +165,9 @@ func (a *API) KillSession(c *gin.Context) {
 	if c.Query("cascade") == "1" {
 		args = append(args, "--cascade")
 	}
-	a.WT.ForgetSessionHome(name) // 同名会话重建不继承旧归属（级联杀掉的子会话由 reconcile 收敛）
+	// 不用手动清归属：键是 tmux session_id，同名重建拿到的是新 id，天然不继承旧归属；
+	// 死会话的残行由下一轮 sessionHomes 的 reconcile 收敛。这里主动删反而有风险——
+	// kill 万一失败，活会话丢了绑定，下次采样会按当时的 cwd 重钉（可能已 cd 走）。
 	a.text(c, args...)
 }
 func (a *API) Capture(c *gin.Context) {

@@ -92,21 +92,6 @@ func TestPendingBindAdoptedOnFirstSighting(t *testing.T) {
 	}
 }
 
-func TestForget(t *testing.T) {
-	h := newHomeStore("")
-	h.bind("$1", "old", "/repo/a")
-	h.forget("$1", "old")
-	if h.get("$1") != "" {
-		t.Fatalf("forget 后仍有归属: %q", h.get("$1"))
-	}
-	// 只知道名字也能清（id 问不出来时的兜底）
-	h.bind("$2", "byname", "/repo/b")
-	h.forget("", "byname")
-	if h.get("$2") != "" {
-		t.Fatal("按名字兜底清理失败")
-	}
-}
-
 // reconcile 只清死会话；tmux 读失败(alive 空)时一行都不能动。
 func TestReconcileKeepsAliveAndSkipsEmpty(t *testing.T) {
 	h := newHomeStore("")
@@ -207,11 +192,16 @@ func TestAnnotationsStickToHomeAfterCd(t *testing.T) {
 		t.Fatalf("改名后归属漂了: %+v", ann)
 	}
 
-	// 会话没了 → 归属收敛，不留残行；同名新会话（新 id）不继承
+	// 会话没了 → 下一轮采样即收敛，不留残行（不靠 kill 时手动清）
 	setPanes(t, panesFile, "$9\tother\t1\t"+away+"\n")
 	_ = s.Annotations(ctx)
 	if h := s.SessionHome("work2"); h != "" {
 		t.Fatalf("死会话残行未清: %q", h)
+	}
+	// 同名新会话（新 id）不继承旧归属
+	setPanes(t, panesFile, "$9\twork2\t1\t"+away+"\n")
+	if ann := s.Annotations(ctx)["work2"]; ann == nil || ann.Home != canonical(away) {
+		t.Fatalf("同名新会话应按自己的 cwd 钉: %+v", ann)
 	}
 }
 

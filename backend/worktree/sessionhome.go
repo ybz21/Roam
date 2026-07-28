@@ -166,27 +166,6 @@ func (h *homeStore) byName(name string) (string, string) {
 	return "", h.legacy[name]
 }
 
-func (h *homeStore) forget(sessID, name string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	changed := false
-	if _, ok := h.m[sessID]; ok {
-		delete(h.m, sessID)
-		changed = true
-	}
-	for k, row := range h.m {
-		if name != "" && row.Name == name {
-			delete(h.m, k)
-			changed = true
-		}
-	}
-	delete(h.pending, name)
-	delete(h.legacy, name)
-	if changed {
-		h.save()
-	}
-}
-
 // reconcile 收敛残行：alive 之外的会话删除（裸 tmux kill-session 绕过 API 也能清干净）。
 // alive 为空（tmux 读失败）时不动——宁可留残行，也不能把活会话的归属抹掉。
 func (h *homeStore) reconcile(alive map[string]bool) {
@@ -266,11 +245,6 @@ func (s *Service) SessionHome(session string) string {
 	}
 	_, home := s.homes.byName(session)
 	return home
-}
-
-// ForgetSessionHome 会话被杀时清掉钉死关系（同名重建不继承旧归属）。
-func (s *Service) ForgetSessionHome(session string) {
-	s.homes.forget(resolveSessionID(session), session)
 }
 
 // sessionHomes 返回全部活会话的归属：已钉死的照旧，没钉过的按当前 pane（活动 pane

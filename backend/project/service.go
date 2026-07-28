@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -81,7 +82,13 @@ func (s *Store) load(f fileShape) {
 		s.aliases[k] = v
 	}
 	migrated := false
-	for key, e := range f.Repos {
+	keys := make([]string, 0, len(f.Repos))
+	for k := range f.Repos {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys) // 定序：同目录重复条目谁留下、谁并进去，不随 map 迭代序漂
+	for _, key := range keys {
+		e := f.Repos[key]
 		if e == nil || e.Dir == "" {
 			continue
 		}
@@ -162,6 +169,9 @@ func (s *Store) resolve(key string) string {
 
 // Touch 发现记账：不在册则记入（FirstSeen），在册则刷新 LastSeen。返回项目 id。
 func (s *Store) Touch(dir string) string {
+	if dir == "" {
+		return ""
+	}
 	now := time.Now().Unix()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -183,6 +193,9 @@ func (s *Store) Touch(dir string) string {
 // Add 显式创建（POST /projects）：origin=user 的一等对象。目录已在册则升级为 user
 // （发现来的条目被用户「转正」，id 不变），并可顺带设显示名。返回项目 id。
 func (s *Store) Add(dir, displayName string) string {
+	if dir == "" {
+		return ""
+	}
 	now := time.Now().Unix()
 	s.mu.Lock()
 	defer s.mu.Unlock()
