@@ -5,7 +5,6 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"ttmux-web/internal/id"
 	"ttmux-web/ttmux"
 	"ttmux-web/worktree"
 )
@@ -30,7 +30,10 @@ type RaceContestant struct {
 }
 
 type Race struct {
-	ID          string           `json:"id"`
+	ID string `json:"id"`
+	// LegacyID 老格式 id（race-<纳秒>）：启动时统一重写成可读 id，这条留着让
+	// 已经打开的页面/链接仍能按老 id 找到本场竞赛。
+	LegacyID    string           `json:"legacyId,omitempty"`
 	Name        string           `json:"name"`
 	Dir         string           `json:"dir"` // 仓库目录
 	Base        string           `json:"base"`
@@ -55,6 +58,7 @@ func NewRaceStore(dataDir string) *RaceStore {
 		if b, err := os.ReadFile(s.path); err == nil {
 			_ = json.Unmarshal(b, &s.races)
 		}
+		s.normalizeIDs()
 	}
 	return s
 }
@@ -76,11 +80,27 @@ func (s *RaceStore) save() {
 
 func (s *RaceStore) get(id string) *Race {
 	for _, r := range s.races {
-		if r.ID == id {
+		if r.ID == id || (r.LegacyID != "" && r.LegacyID == id) {
 			return r
 		}
 	}
 	return nil
+}
+
+// normalizeIDs 把历史的 race-<纳秒> 统一成可读 id（YYYY-MMDD-HHMM-rand4，与蜂群/
+// 项目同款），老 id 落进 legacyId 继续可解析。只在加载时跑一次。
+func (s *RaceStore) normalizeIDs() {
+	changed := false
+	for _, r := range s.races {
+		if r.ID == "" || id.Valid(r.ID) {
+			continue
+		}
+		r.LegacyID, r.ID = r.ID, id.New()
+		changed = true
+	}
+	if changed {
+		s.save()
+	}
 }
 
 // killContestant 杀掉选手会话：优先用 tmux session_id 反查它**现在**叫什么（用户
@@ -125,7 +145,7 @@ func (a *API) RaceCreate(c *gin.Context) {
 	defer cancel()
 
 	race := &Race{
-		ID:        fmt.Sprintf("race-%d", time.Now().UnixNano()),
+		ID:        id.New(),
 		Name:      b.Name,
 		Dir:       b.Dir,
 		Base:      b.Base,

@@ -259,7 +259,9 @@ func (s *Store) Remove(key string) {
 // 不是任务真相源——丢弃删除后的提交不可达，留痕只保住「任务→动作→统计」的摘要。
 
 // TraceEntry 一条收尾留痕。Action: merged | discarded | cleaned。
+// ID 由 Trace 写入时生成（与项目/竞赛/蜂群同款可读 id），老行没有这个字段。
 type TraceEntry struct {
+	ID       string `json:"id,omitempty"`
 	Repo     string `json:"repo"`
 	Branch   string `json:"branch"`
 	HeadOid  string `json:"headOid,omitempty"`
@@ -290,6 +292,9 @@ func (s *Store) Trace(e TraceEntry) {
 		_ = os.Rename(p, p+".1")
 	}
 	e.At = time.Now().Unix()
+	if e.ID == "" {
+		e.ID = id.New()
+	}
 	b, err := json.Marshal(e)
 	if err != nil {
 		return
