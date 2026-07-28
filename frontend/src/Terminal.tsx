@@ -2,6 +2,9 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 're
 import type { CSSProperties, TouchEvent as RTouchEvent } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+// 版本必须与 @xterm/xterm 主版本配对（本仓库 xterm 5.5 → addon-webgl 0.18.x，peerDeps 写的 ^5）。
+// 0.19+ 是给 xterm 6 内核的：卸载时读 `_core._store._isDisposed` 判断内核有没有拆，
+// 5.5 内核根本没有 `_store` → 每次拆终端必抛 TypeError（升级前先确认这个字段还在）。
 import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
 // 终端符号补字集（约 46KB，仅覆盖框线/箭头/技术符号等区段）：见 FONT_FAMILY 的说明
@@ -355,10 +358,12 @@ const Term = forwardRef<TermHandle, {
     // WebGL 渲染器：默认的 DOM 渲染器每格一个 span，单元格宽是分数像素，手机 dpr 常为 2.625/3
     // 这类非整数，亚像素误差累积会裁字/叠字，整屏重绘也更容易看到闪烁。WebGL 按纹理网格绘制，
     // 顺带让 rescaleOverlappingGlyphs 生效。上下文丢失（后台切回/GPU 回收）时 dispose 退回 DOM。
+    let webglAddon: WebglAddon | undefined
     try {
       const webgl = new WebglAddon()
       webgl.onContextLoss(() => { try { webgl.dispose() } catch {} })
       term.loadAddon(webgl)
+      webglAddon = webgl
     } catch { /* 不支持 WebGL 的浏览器继续用 DOM 渲染器 */ }
 
     setTimeout(() => { try { fit.fit() } catch {} }, 0)
@@ -679,7 +684,12 @@ const Term = forwardRef<TermHandle, {
       }
       dataDisp.dispose()
       try { wsRef.current?.close() } catch {}
-      term.dispose()
+      // 拆终端务必吞异常：这里是 React 的 effect cleanup，抛出去会顺着卸载流程把整棵树炸掉
+      // （整页黑屏，而不只是这一个标签坏掉）。xterm 的 WebGL addon 就踩过——它按新版内核的
+      // 私有字段做卸载判断，配到旧内核上必抛 TypeError，于是「关一个会话/改一次名」就黑屏。
+      // 先单独拆 WebGL addon，再拆终端本体，各自兜住，任一步失败都不影响另一步和其他标签。
+      try { webglAddon?.dispose() } catch {}
+      try { term.dispose() } catch {}
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name])

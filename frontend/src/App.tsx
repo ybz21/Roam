@@ -86,6 +86,18 @@ function setHashParams(params: Record<string, string>) {
   if (h !== next) history.replaceState(null, '', next)
 }
 
+// URL 上的终端标签参数（terms=打开的标签、active=当前标签）。
+// 现在写进去的是会话 id；老链接里存的是会话名，两者都能读——还原时按 id 表判别（见 resolveToken）。
+function readTermTokens(): { terms: string[]; active: string } {
+  const p = getHashParams()
+  const t = p.get('terms')
+  const a = p.get('active')
+  return {
+    terms: t ? t.split(',').map(decodeURIComponent).filter(Boolean) : [],
+    active: a ? decodeURIComponent(a) : '',
+  }
+}
+
 // 线性图标（无 emoji，currentColor 描边）
 const svg = (paths: any) => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -266,15 +278,14 @@ export default function App() {
     }
   }, [])
 
-  // 多终端状态（从 URL 恢复）
-  const [terms, setTerms] = useState<string[]>(() => {
-    const t = getHashParams().get('terms')
-    return t ? t.split(',').map(decodeURIComponent).filter(Boolean) : []
-  })
-  const [active, setActive] = useState<string | null>(() => {
-    const a = getHashParams().get('active')
-    return a ? decodeURIComponent(a) : null
-  })
+  // 多终端状态（从 URL 恢复）。URL 里放的是**会话 id**（见下方 sessIds 注释），
+  // 组件内部一律用会话名——后端 API / WebSocket 收发的都是名字。
+  const [terms, setTerms] = useState<string[]>([])
+  const [active, setActive] = useState<string | null>(null)
+  // URL 上待还原的 id/名字（还没拿到 id 映射前先原样存着）
+  const urlTerms = useRef<string[]>(readTermTokens().terms)
+  const urlActive = useRef<string>(readTermTokens().active)
+  const restored = useRef(false) // 还原完成前不许回写 URL，否则会把待还原的参数抹掉
   const [overlay, setOverlay] = useState(false) // 手机/平板全屏终端
   const [dockOpen, setDockOpen] = useState(true) // 桌面：右侧终端停靠栏是否展开
   const [dockMax, setDockMax] = useState(false)  // 桌面：终端栏向左扩展（遮住会话列表）
@@ -297,13 +308,52 @@ export default function App() {
     }).catch(() => setAuthed(false))
   }, [])
 
-  // 终端状态同步到 URL，刷新后可恢复
+  // ── 会话身份映射（id ↔ 名字）──
+  // 会话名可以随时改，用它当 URL 里的 handle 会让分享/收藏的链接一改名就指空。id 由后端按
+  // tmux session_id 派生、改名不变，所以 URL 只写 id。名字仍是 API/WS 的 handle，只在这里换算。
+  const [sessIds, setSessIds] = useState<{ byId: Record<string, string>; byName: Record<string, string> } | null>(null)
   useEffect(() => {
-    setHashParams({
-      terms: terms.map(encodeURIComponent).join(','),
-      active: active ? encodeURIComponent(active) : '',
+    if (!authed) return
+    let stop = false
+    const load = () => api('GET', '/sessions').then((list) => {
+      if (stop) return
+      const byId: Record<string, string> = {}
+      const byName: Record<string, string> = {}
+      for (const s of Array.isArray(list) ? list : []) {
+        if (s?.id && s?.name) { byId[s.id] = s.name; byName[s.name] = s.id }
+      }
+      setSessIds({ byId, byName })
+    }).catch(() => { if (!stop) setSessIds((m) => m || { byId: {}, byName: {} }) }) // 拉不到也要放行还原，别把标签卡在空白
+    load()
+    const t = setInterval(load, 5000)
+    return () => { stop = true; clearInterval(t) }
+  }, [authed])
+
+  // 从 URL 还原标签：拿到 id 表后做一次。老链接里存的是名字，id 表里查不到就按名字用。
+  useEffect(() => {
+    if (!sessIds || restored.current) return
+    restored.current = true
+    const toName = (tok: string) => sessIds.byId[tok] || tok
+    const names = Array.from(new Set(urlTerms.current.map(toName)))
+    if (!names.length) return
+    // 用户在 id 表回来之前就点开了标签 → 以他的操作为准，别被 URL 还原顶掉
+    setTerms((cur) => (cur.length ? cur : names))
+    setActive((cur) => {
+      if (cur) return cur
+      const a = urlActive.current ? toName(urlActive.current) : ''
+      return a && names.includes(a) ? a : names[names.length - 1]
     })
-  }, [terms, active])
+  }, [sessIds])
+
+  // 终端状态同步到 URL，刷新后可恢复。写 id；还没有 id 的（刚建、列表未刷新）先退回写名字。
+  useEffect(() => {
+    if (!restored.current) return
+    const toTok = (n: string) => sessIds?.byName[n] || n
+    setHashParams({
+      terms: terms.map((n) => encodeURIComponent(toTok(n))).join(','),
+      active: active ? encodeURIComponent(toTok(active)) : '',
+    })
+  }, [terms, active, sessIds])
 
   // hash 路由：URL #/xxx 与当前页同步（支持前进/后退、刷新保持、收藏分享）
   useEffect(() => {
@@ -382,6 +432,13 @@ export default function App() {
       termRefs.current[newName] = termRefs.current[oldName]
       delete termRefs.current[oldName]
     }
+    // id 表 5 秒才轮询一次，这里先就地改名，免得 URL 上的 id 短暂退化成名字再跳回来
+    setSessIds((m) => {
+      const id = m?.byName[oldName]
+      if (!m || !id) return m
+      const { [oldName]: _drop, ...rest } = m.byName
+      return { byId: { ...m.byId, [id]: newName }, byName: { ...rest, [newName]: id } }
+    })
   }
   const closeTerm = (name: string) => {
     setTerms((ts) => {
