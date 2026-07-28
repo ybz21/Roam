@@ -649,6 +649,7 @@ func (s *Service) Sync(ctx context.Context, dir string) (SyncResult, error) {
 // ── session ↔ worktree join（cwd 现算，不写台账）──────────
 
 type pane struct {
+	ID      string // tmux #{session_id}（$3）：改名不变、server 内唯一，会话归属的内部键
 	Session string
 	Active  bool
 	Cwd     string
@@ -662,16 +663,16 @@ func tmuxBin() string {
 }
 
 func tmuxPanes(ctx context.Context) []pane {
-	cmd := exec.CommandContext(ctx, tmuxBin(), "list-panes", "-a", "-F", "#{session_name}\t#{pane_active}\t#{pane_current_path}")
+	cmd := exec.CommandContext(ctx, tmuxBin(), "list-panes", "-a", "-F", "#{session_id}\t#{session_name}\t#{pane_active}\t#{pane_current_path}")
 	out, err := cmd.Output()
 	if err != nil {
 		return nil
 	}
 	var panes []pane
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		parts := strings.SplitN(line, "\t", 3)
-		if len(parts) == 3 {
-			panes = append(panes, pane{Session: parts[0], Active: parts[1] == "1", Cwd: canonical(parts[2])})
+		parts := strings.SplitN(line, "\t", 4)
+		if len(parts) == 4 {
+			panes = append(panes, pane{ID: parts[0], Session: parts[1], Active: parts[2] == "1", Cwd: canonical(parts[3])})
 		}
 	}
 	return panes
@@ -718,7 +719,8 @@ func (s *Service) joinSessions(ctx context.Context, list []Worktree) []Worktree 
 // ── Annotations（跨仓库：session → worktree 归属）─────────
 
 type Annotation struct {
-	Home      string          `json:"home"` // 会话钉死的归属目录（非 git 项目按它做前缀归属）
+	SessionID string          `json:"sessionId,omitempty"` // tmux #{session_id}：改名不变的会话身份
+	Home      string          `json:"home"`                // 会话钉死的归属目录（非 git 项目按它做前缀归属）
 	Primary   *AnnotationHit  `json:"primary,omitempty"`
 	Matches   []AnnotationHit `json:"matches"`
 	Ambiguous bool            `json:"ambiguous"` // 保留字段：归属已钉死为单一 home，恒 false
@@ -813,8 +815,8 @@ func (s *Service) ListAll(ctx context.Context) []RepoWorktrees {
 // 这里刻意不给实时 pane cwd：会话 cd 出去不该换项目（见 sessionhome.go）。
 func (s *Service) SessionCwds(ctx context.Context) map[string][]string {
 	out := map[string][]string{}
-	for sess, home := range s.sessionHomes(ctx) {
-		out[sess] = []string{home}
+	for _, h := range s.sessionHomes(ctx) {
+		out[h.Name] = []string{h.Home}
 	}
 	return out
 }
@@ -823,16 +825,17 @@ func (s *Service) SessionCwds(ctx context.Context) map[string][]string {
 // 归属按会话钉死的 home 目录现算：分支/worktree 状态实时（home 里切分支照样变），
 // 但「属于哪个仓库/worktree」不随 pane cwd 漂移。非 git 的 home 也会给出条目
 // （只有 home 字段），让非 git 项目也能按前缀认领会话。
+// 响应仍以**会话名**为 map key：名字是 UI/CLI 的 handle，内部键 sessionId 随行附上。
 func (s *Service) Annotations(ctx context.Context) map[string]*Annotation {
 	res := map[string]*Annotation{}
-	for sess, home := range s.sessionHomes(ctx) {
-		a := &Annotation{Home: home, Matches: []AnnotationHit{}}
-		if hit := resolveCwd(ctx, home); hit != nil {
+	for _, sh := range s.sessionHomes(ctx) {
+		a := &Annotation{SessionID: sh.ID, Home: sh.Home, Matches: []AnnotationHit{}}
+		if hit := resolveCwd(ctx, sh.Home); hit != nil {
 			h := *hit
 			a.Primary = &h
 			a.Matches = append(a.Matches, h)
 		}
-		res[sess] = a
+		res[sh.Name] = a
 	}
 	return res
 }

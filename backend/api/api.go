@@ -154,7 +154,7 @@ func (a *API) RenameSession(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "TTMUX_ERROR", "message": ttmux.StripANSI(out)}})
 		return
 	}
-	a.WT.RenameSessionHome(oldName, newName) // 归属跟着新名字走，改名不掉出项目
+	// 归属钉在 tmux session_id 上，改名天然不影响，无需搬家。
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"name": newName}})
 }
 

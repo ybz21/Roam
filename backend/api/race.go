@@ -20,11 +20,13 @@ import (
 
 type RaceContestant struct {
 	Session string `json:"session"`
-	Agent   string `json:"agent"` // claude | codex
-	Branch  string `json:"branch"`
-	Path    string `json:"path"`
-	Status  string `json:"status"` // running | failed
-	Error   string `json:"error,omitempty"`
+	// SessionID tmux #{session_id}：会话被改名后仍能找回同一个会话（名字只是 handle）。
+	SessionID string `json:"sessionId,omitempty"`
+	Agent     string `json:"agent"` // claude | codex
+	Branch    string `json:"branch"`
+	Path      string `json:"path"`
+	Status    string `json:"status"` // running | failed
+	Error     string `json:"error,omitempty"`
 }
 
 type Race struct {
@@ -81,6 +83,21 @@ func (s *RaceStore) get(id string) *Race {
 	return nil
 }
 
+// killContestant 杀掉选手会话：优先用 tmux session_id 反查它**现在**叫什么（用户
+// 可能改过名），拿不到再退回建赛时记下的名字。走 ttmux kill 以便清 meta。
+func (a *API) killContestant(ct *RaceContestant) {
+	name := ct.Session
+	if ct.SessionID != "" {
+		if live := a.WT.SessionNameByID(ct.SessionID); live != "" {
+			name = live
+		}
+	}
+	if name == "" {
+		return
+	}
+	_, _ = a.TT.Run("kill", name, "--yes")
+}
+
 // ── handlers ─────────────────────────────────────────────
 
 // RaceCreate POST /races {name, dir, base?, prompt, contestants: [{agent, cmd}]}
@@ -133,6 +150,7 @@ func (a *API) RaceCreate(c *gin.Context) {
 			continue
 		}
 		a.WT.BindSessionHome(ct.Session, b.Dir) // 选手会话归属本仓库；cdInto 之后改钉到各自 worktree
+		ct.SessionID = a.WT.SessionID(ct.Session)
 		wt, err := a.WT.Create(ctx, worktree.CreateReq{Dir: b.Dir, Branch: autoBranch(b.Name) + "-" + letter, Base: b.Base})
 		if err != nil {
 			_, _ = a.TT.Run("kill", ct.Session, "--yes")
@@ -276,7 +294,7 @@ func (a *API) RaceCrown(c *gin.Context) {
 			if ct.Session == b.Winner {
 				continue
 			}
-			_, _ = a.TT.Run("kill", ct.Session, "--yes")
+			a.killContestant(ct)
 			if ct.Path != "" {
 				if err := a.WT.Remove(ctx, worktree.RemoveReq{Path: ct.Path, ForceWorktree: true, DeleteBranch: true, ForceDeleteBranch: true, IgnoreSessions: true}); err != nil {
 					errs = append(errs, ct.Session+": "+err.Error())
@@ -313,7 +331,7 @@ func (a *API) RaceCleanup(c *gin.Context) {
 	var errs []string
 	for i := range race.Contestants {
 		ct := &race.Contestants[i]
-		_, _ = a.TT.Run("kill", ct.Session, "--yes")
+		a.killContestant(ct)
 		if ct.Path != "" {
 			if _, err := os.Stat(ct.Path); err != nil {
 				continue // worktree 已不在（外部删过），幂等跳过
