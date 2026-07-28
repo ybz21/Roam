@@ -97,6 +97,69 @@ body {
 .tt-session-toolbar { scrollbar-width: none; }
 .tt-session-toolbar::-webkit-scrollbar { height: 0; width: 0; }
 
+/* ── 会话导航栏（标签条 + 工具条）──
+   目标：两行都是"应用外壳"而非一堆按钮。统一线性图标（无 emoji）、统一 27~28px 控件高度、
+   分组之间用 1px 竖线断句、右侧工具收进浅色分段组。强调色由行内 style 传（会话蓝 / Codex 绿），
+   这里只管布局与 hover，主题黑白都靠 CSS 变量。 */
+.tt-tabs,
+.tt-tbar {
+  display: flex; align-items: center; overflow-x: auto; overflow-y: hidden;
+  scrollbar-width: none; -webkit-overflow-scrolling: touch;
+}
+.tt-tabs::-webkit-scrollbar, .tt-tbar::-webkit-scrollbar { height: 0; width: 0; }
+.tt-tabs > *, .tt-tbar > * { flex: 0 0 auto; }
+.tt-tabs { gap: 2px; padding: 6px 8px; background: var(--bg-container); border-bottom: 1px solid var(--border-subtle); }
+.tt-tbar { gap: 3px; padding: 5px 8px; background: var(--bg-base); border-bottom: 1px solid var(--border-subtle); }
+
+/* 竖线断句：把「状态 / 会话动作 / 面板开关」隔开 */
+.tt-sep { width: 1px; height: 16px; background: var(--border-subtle); margin: 0 5px; }
+.tt-spacer { flex: 1 1 auto; min-width: 8px; }
+
+/* 会话标签：未选中不描边（原来每个都有框，很吵），选中才上强调色底 + 细框 */
+.tt-tab {
+  display: inline-flex; align-items: center; gap: 7px; max-width: 230px;
+  height: 28px; padding: 0 5px 0 10px; border: 1px solid transparent; border-radius: 8px;
+  color: var(--text-dim); font-size: 12.5px; line-height: 1; white-space: nowrap; cursor: pointer;
+}
+.tt-tab:hover { background: var(--list-hover); color: var(--text-bright); }
+.tt-tab.on { color: var(--text-bright); font-weight: 600; }
+.tt-tab .tt-name { overflow: hidden; text-overflow: ellipsis; }
+.tt-tab .tt-x {
+  display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px;
+  border-radius: 5px; color: var(--text-dimmer); opacity: 0; transition: opacity .12s ease;
+}
+.tt-tab:hover .tt-x, .tt-tab.on .tt-x { opacity: 1; }
+.tt-tab .tt-x:hover { background: rgba(248, 81, 73, .16); color: #f85149; }
+/* 触屏没有 hover，关闭按钮常显 */
+@media (pointer: coarse) { .tt-tab .tt-x { opacity: 1; } }
+
+/* 工具条按钮：默认无框、hover 才浮起；开启态由行内 style 上强调色 */
+.tt-tbtn {
+  display: inline-flex; align-items: center; gap: 6px; height: 27px; padding: 0 9px;
+  border: 1px solid transparent; border-radius: 7px; background: transparent;
+  color: var(--text-dim); font-size: 12.5px; font-family: inherit; line-height: 1;
+  cursor: pointer; white-space: nowrap; -webkit-tap-highlight-color: transparent;
+}
+.tt-tbtn.tt-ico { padding: 0 6px; }
+.tt-tbtn:hover { background: var(--list-hover); color: var(--text-bright); }
+.tt-tbtn.on:hover { filter: brightness(1.12); }
+.tt-tbtn:active { transform: translateY(.5px); }
+.tt-tbtn:focus-visible { outline: 2px solid rgba(88, 166, 255, .55); outline-offset: 1px; }
+
+/* 右侧只读工具（翻页 / 字号 / 重绘重连）收进分段组，视觉上跟左侧动作区分开 */
+.tt-tgroup {
+  display: inline-flex; align-items: center; gap: 2px; padding: 2px;
+  background: var(--bg-container); border: 1px solid var(--border-subtle); border-radius: 9px;
+}
+.tt-tgroup .tt-tbtn { height: 23px; border-radius: 6px; }
+
+/* 连接状态：小圆点带一圈光晕，文字保持克制的次级灰 */
+.tt-status {
+  display: inline-flex; align-items: center; gap: 7px; height: 27px; padding: 0 10px 0 8px;
+  color: var(--text-dim); font-size: 12.5px; line-height: 1; white-space: nowrap;
+}
+.tt-status i { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 7px; }
+
 /* 选区色：主色低透明，克制 */
 ::selection { background: rgba(88, 166, 255, 0.26); }
 
