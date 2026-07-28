@@ -26,7 +26,9 @@ import (
 )
 
 type projectSession struct {
+	// Name 会话名(= 会话 id)：打开终端的 handle；Label 展示名(@roam_name)，给人看的。
 	Name         string `json:"name"`
+	Label        string `json:"label,omitempty"`
 	Attached     bool   `json:"attached"`
 	Running      bool   `json:"running"` // 会话里跑着 claude/codex 进程——绿点语义（设计 W2）
 	Waiting      bool   `json:"waiting"` // 屏上有等待输入的交互框——黄点（设计 W2，优先于绿）
@@ -57,6 +59,7 @@ type projectSummary struct {
 // sessListItem 兼容解析 ttmux ls --json（数值字段 CLI 可能给字符串）。
 type sessListItem struct {
 	Name         string          `json:"name"`
+	Label        string          `json:"label"`
 	Attached     json.RawMessage `json:"attached"`
 	LastActivity json.RawMessage `json:"last_activity"`
 }
@@ -130,10 +133,10 @@ func (a *API) ProjectsList(c *gin.Context) {
 
 	agentRunning := runningAgentSessions() // 一次进程树扫描，供绿点判活跃（设计 W2）
 
-	addSession := func(p *projectSummary, top *[]projectSession, name string, attached bool, last int64, branch string, linked bool) {
+	addSession := func(p *projectSummary, top *[]projectSession, name, label string, attached bool, last int64, branch string, linked bool) {
 		claimed[name] = true
 		p.Sessions++
-		ps := projectSession{Name: name, Attached: attached, Running: agentRunning[name], LastActivity: last, Linked: linked, Branch: branch}
+		ps := projectSession{Name: name, Label: label, Attached: attached, Running: agentRunning[name], LastActivity: last, Linked: linked, Branch: branch}
 		if ps.Running { // 只对在跑的会话抓屏判待输入，省掉给 idle 会话的 capture-pane
 			ps.Waiting = sessionWaiting(sessionCapture(name, 50))
 		}
@@ -227,7 +230,7 @@ func (a *API) ProjectsList(c *gin.Context) {
 			if an.Primary.Linked {
 				branch = an.Primary.Branch
 			}
-			addSession(&p, &top, s.Name, rawInt(s.Attached) > 0, rawInt(s.LastActivity), branch, an.Primary.Linked)
+			addSession(&p, &top, s.Name, s.Label, rawInt(s.Attached) > 0, rawInt(s.LastActivity), branch, an.Primary.Linked)
 		}
 		// 退场 (b) 只收敛「发现」通道：不存在任何 roam worktree（clean 也算存在）
 		// ∧ 无会话 ∧ 未置顶。用户显式创建（origin=user）的是一等对象，永不自动退场。
@@ -262,7 +265,7 @@ func (a *API) ProjectsList(c *gin.Context) {
 			}
 			if best >= 0 {
 				ng := nonGit[best]
-				addSession(ng.p, &tops[best], s.Name, rawInt(s.Attached) > 0, rawInt(s.LastActivity), "", false)
+				addSession(ng.p, &tops[best], s.Name, s.Label, rawInt(s.Attached) > 0, rawInt(s.LastActivity), "", false)
 			}
 		}
 		for i, ng := range nonGit {
@@ -272,7 +275,7 @@ func (a *API) ProjectsList(c *gin.Context) {
 
 	for _, s := range sessions {
 		if !claimed[s.Name] {
-			ls := projectSession{Name: s.Name, Attached: rawInt(s.Attached) > 0, Running: agentRunning[s.Name], LastActivity: rawInt(s.LastActivity)}
+			ls := projectSession{Name: s.Name, Label: s.Label, Attached: rawInt(s.Attached) > 0, Running: agentRunning[s.Name], LastActivity: rawInt(s.LastActivity)}
 			if ls.Running {
 				ls.Waiting = sessionWaiting(sessionCapture(s.Name, 50))
 			}
