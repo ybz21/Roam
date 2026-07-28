@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"ttmux-cli-go/internal/id"
 )
 
 // fakeTmux 造一个只认 list-sessions -F 的假 tmux：把 state 文件里的
@@ -35,9 +37,15 @@ done < "` + state + `"
 	return Runtime{TmuxBin: bin, DataDir: dir, HomeDir: dir}
 }
 
+const sampleCreated = 1785233330
+
 const sampleRows = "$0\t1785233330\t2026-0728-1808-0000\t我的会话\n" +
 	"$1\t1785233330\t2026-0728-1808-0001\t研究-a\n" +
 	"$2\t1785233330\t老会话\t\n" // 迁移前的老会话：名字不是 id、没有展示名
+
+// legacyID 老会话现算出来的派生 id。不能写死——它的日期段按**本地时区**格式化，
+// 写死会让 CI（UTC）与开发机（+08）对不上。
+var legacyID = id.ForSession(sampleCreated, "$2")
 
 func TestSessionRowsParsesLabels(t *testing.T) {
 	rows := fakeTmux(t, sampleRows).SessionRows()
@@ -52,8 +60,8 @@ func TestSessionRowsParsesLabels(t *testing.T) {
 		t.Fatalf("无 label 时 DisplayLabel = %q, want 老会话", got)
 	}
 	// 老会话的 id 现算派生（与 `ls` 一直以来展示的 id 同一个值）
-	if got := rows[2].ID(); got != "2026-0728-1808-0002" {
-		t.Fatalf("派生 id = %q", got)
+	if got := rows[2].ID(); got != legacyID || !id.Valid(got) {
+		t.Fatalf("派生 id = %q, want %q", got, legacyID)
 	}
 	if got := rows[0].Display(); got != "我的会话(2026-0728-1808-0000)" {
 		t.Fatalf("Display = %q", got)
@@ -69,7 +77,7 @@ func TestResolveAcceptsEveryHandle(t *testing.T) {
 		"研究-a":                "2026-0728-1808-0001", // 展示名
 		"$0":                  "2026-0728-1808-0000", // tmux session_id
 		"老会话":                 "老会话",                 // 迁移前的老会话：名字即会话名
-		"2026-0728-1808-0002": "老会话",                 // 老会话的派生 id（老书签/URL）
+		legacyID:              "老会话",                 // 老会话的派生 id（老书签/URL）
 	}
 	for token, want := range cases {
 		if got := rt.Resolve(token); got != want {
