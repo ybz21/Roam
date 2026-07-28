@@ -2,7 +2,10 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 're
 import type { CSSProperties, TouchEvent as RTouchEvent } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
+// 终端符号补字集（约 46KB，仅覆盖框线/箭头/技术符号等区段）：见 FONT_FAMILY 的说明
+import './assets/fonts/roam-symbols.css'
 
 export type TermStatus = 'connecting' | 'connected' | 'closed'
 export interface TermHandle {
@@ -21,6 +24,14 @@ export interface TermHandle {
   // 窄屏(手机)下 Claude Code 等 ink TUI 折行重绘错位会满屏堆叠垃圾行，等价于「拖一下窗口就好了」。
   redraw: () => void
 }
+
+// 终端字体栈：正文一律用各平台的系统默认等宽字体（mac→SF Mono/Menlo、Windows→Consolas、
+// Linux/Android→系统 monospace），不自带正文字体。
+// 唯一自带的是 "Roam Symbols"——只覆盖框线/箭头/技术符号等区段的补字集（见 assets/fonts）。
+// 它排在通用 monospace 之前，是为了兜住系统等宽字体缺的那些符号：缺字会回退到彩色 emoji 一类
+// 非等宽字体，字形宽度 ≠ 单元格宽度，误差沿行累积就是「同一行后半段错位、字形互相压盖」。
+// 剩下确实超宽的字形（emoji 等）由 rescaleOverlappingGlyphs 压回单元格（需 WebGL 渲染器）。
+const FONT_FAMILY = 'ui-monospace, SFMono-Regular, Menlo, Consolas, "Roam Symbols", monospace'
 
 // xterm 不认 CSS var()，需具体色值：读 <html> 上的同名变量，随黑/白主题切换。
 function xtermTheme() {
@@ -96,7 +107,12 @@ const Term = forwardRef<TermHandle, {
   const unmounted = useRef(false)
   const retry = useRef<any>()
 
-  const sendResize = () => {
+  // 已上报给后端的尺寸。相同尺寸重复上报没有意义，却会让后端 Setsize → SIGWINCH →
+  // tmux 整屏重排 → 肉眼一闪，所以这里做去重闸门。新连接时清零以强制重报（新 tmux 客户端要知道尺寸）。
+  const lastSent = useRef({ cols: 0, rows: 0 })
+  const resizeTimer = useRef<any>()
+
+  const applyResize = () => {
     const t = termRef.current, ws = wsRef.current, fit = fitRef.current, el = elRef.current
     if (!t || !fit || !el) return
     // 未激活的标签是 display:none、尺寸为 0：此时 fit 拿不到真实宽度，会让终端停在默认 80 列，
@@ -106,8 +122,18 @@ const Term = forwardRef<TermHandle, {
       const dims = fit.proposeDimensions()
       if (!dims || !isFinite(dims.cols) || !isFinite(dims.rows) || dims.cols < 2 || dims.rows < 2) return
       fit.fit()
-      if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'resize', cols: t.cols, rows: t.rows }))
+      if (!ws || ws.readyState !== 1) return
+      if (t.cols === lastSent.current.cols && t.rows === lastSent.current.rows) return
+      lastSent.current = { cols: t.cols, rows: t.rows }
+      ws.send(JSON.stringify({ type: 'resize', cols: t.cols, rows: t.rows }))
     } catch {}
+  }
+
+  // 高频尺寸变化合并成一次。手机上触发源极密集：软键盘弹出/收起的动画每帧一次、地址栏随页面
+  // 滚动收缩展开、横竖屏旋转，逐帧上报会让 tmux 连续整屏重排（就是用户看到的持续闪烁）。
+  const scheduleResize = (delay = 150) => {
+    clearTimeout(resizeTimer.current)
+    resizeTimer.current = setTimeout(applyResize, delay)
   }
 
   // 滚动会话历史：attach 是全屏、xterm 本地缓冲为空，统一交后端处理——
@@ -138,6 +164,9 @@ const Term = forwardRef<TermHandle, {
       row: Math.max(0, Math.min(t.rows - 1, Math.floor((clientY - m.rect.top) / m.ch))),
     }
   }
+
+  // 上次 attach 成功时的尺寸，用于判断重连后是否真需要抖动重绘（见 ws.onopen）
+  const lastAttach = useRef<{ cols: number; rows: number } | null>(null)
 
   // 尺寸抖动重绘：cols−1 再复原，两次 SIGWINCH 让 TUI(ink) 整屏重排、清掉错位堆积的垃圾行。
   // 后端 resize 有 cols<20 保护，抖动后一定复原到真实尺寸。
@@ -251,14 +280,28 @@ const Term = forwardRef<TermHandle, {
     if (unmounted.current) return
     onStatus?.('connecting')
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-    const ws = new WebSocket(`${proto}://${location.host}/api/term/${encodeURIComponent(name)}`)
+    // 带上当前尺寸：后端据此建 pty，tmux attach 首帧就按真实尺寸画，省掉「先按 80x24 画完再跳一次」
+    const t0 = termRef.current
+    const q = t0 && t0.cols > 1 && t0.rows > 1 ? `?cols=${t0.cols}&rows=${t0.rows}` : ''
+    const ws = new WebSocket(`${proto}://${location.host}/api/term/${encodeURIComponent(name)}${q}`)
     ws.binaryType = 'arraybuffer'
     wsRef.current = ws
     ws.onopen = () => {
-      onStatus?.('connected'); termRef.current?.focus(); sendResize()
+      onStatus?.('connected'); termRef.current?.focus()
+      lastSent.current = { cols: 0, rows: 0 } // 新 tmux 客户端要重新告知尺寸，绕过去重闸门
+      applyResize()
       // attach 尺寸常与上个客户端不同(桌面↔手机)，宽行重折行会在 TUI 屏上留错位垃圾；
       // 等首次 resize 生效后自动抖动重绘一次，进来就是干净画面。
-      setTimeout(jiggleResize, 600)
+      // 但尺寸与上次 attach 相同时不抖：手机切后台/锁屏/网络抖动会频繁断线重连，
+      // 每次都抖两下 SIGWINCH 就成了周期性闪烁，而同尺寸重连本来就没有折行垃圾要清。
+      setTimeout(() => {
+        const t = termRef.current
+        if (!t) return
+        const prev = lastAttach.current
+        lastAttach.current = { cols: t.cols, rows: t.rows }
+        if (prev && prev.cols === t.cols && prev.rows === t.rows) return
+        jiggleResize()
+      }, 600)
     }
     ws.onmessage = (e) => {
       const t = termRef.current
@@ -275,7 +318,7 @@ const Term = forwardRef<TermHandle, {
 
   useImperativeHandle(ref, () => ({
     send: (s, keepFocus) => { const ws = wsRef.current; if (ws && ws.readyState === 1) ws.send(s); if (!keepFocus) termRef.current?.focus() },
-    fit: () => sendResize(),
+    fit: () => applyResize(),
     copy: () => {
       const sel = termRef.current?.getSelection() || ''
       if (sel) copyText(sel)
@@ -296,7 +339,11 @@ const Term = forwardRef<TermHandle, {
       fontSize,
       cursorBlink: true,
       scrollback: 5000,
-      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+      fontFamily: FONT_FAMILY,
+      // emoji / powerline / nerd 字形常比单元格宽，会压到右邻格上（手机上尤其明显，因为很多
+      // 字形来自非等宽的回退字体）。开启后 xterm 把超宽字形横向压回单元格。仅对 WebGL/Canvas
+      // 渲染器生效，DOM 渲染器下无效——所以下面必须把 WebGL 渲染器挂上。
+      rescaleOverlappingGlyphs: true,
       theme: xtermTheme(),
     })
     const fit = new FitAddon()
@@ -304,7 +351,35 @@ const Term = forwardRef<TermHandle, {
     term.open(elRef.current!)
     termRef.current = term
     fitRef.current = fit
+
+    // WebGL 渲染器：默认的 DOM 渲染器每格一个 span，单元格宽是分数像素，手机 dpr 常为 2.625/3
+    // 这类非整数，亚像素误差累积会裁字/叠字，整屏重绘也更容易看到闪烁。WebGL 按纹理网格绘制，
+    // 顺带让 rescaleOverlappingGlyphs 生效。上下文丢失（后台切回/GPU 回收）时 dispose 退回 DOM。
+    try {
+      const webgl = new WebglAddon()
+      webgl.onContextLoss(() => { try { webgl.dispose() } catch {} })
+      term.loadAddon(webgl)
+    } catch { /* 不支持 WebGL 的浏览器继续用 DOM 渲染器 */ }
+
     setTimeout(() => { try { fit.fit() } catch {} }, 0)
+
+    // 预热符号补字集。两点必须注意：
+    //   1. 带 unicode-range 的 webfont 是「按需加载」的，而 WebGL/Canvas 渲染器是把字形画进
+    //      纹理图集，canvas 绘制**不会**触发这种按需下载——不显式 load 的话符号永远是 tofu，
+    //      document.fonts.ready 也会立刻 resolve（它只等已经在下载的字体）。
+    //   2. 每个 @font-face 各自按 unicode-range 匹配，所以要给出覆盖两个面的字符。
+    const warmFonts = document.fonts
+      ? Promise.all([
+        document.fonts.load(`${fontSize}px "Roam Symbols"`, '─'),  // 框线/箭头/几何 那一面
+        document.fonts.load(`${fontSize}px "Roam Symbols"`, '⏵'),  // 技术/杂项/装饰符号 那一面
+      ]).then(() => document.fonts.ready)
+      : Promise.resolve()
+    warmFonts.then(() => {
+      if (unmounted.current) return
+      // 字体到位后清纹理图集重画，否则之前用回退字体量出的字形会一直错到下次刷新
+      try { term.clearTextureAtlas() } catch {}
+      applyResize()
+    }).catch(() => {})
 
     // Ctrl/Cmd+C 智能复制：有选区 → 复制并清除选区（交上层弹「已复制」），无选区 → 放行发 ^C 中断。
     // Ctrl/Cmd+Shift+C 始终复制（与浏览器习惯一致）。返回 false 表示该按键不再发给终端。
@@ -380,9 +455,13 @@ const Term = forwardRef<TermHandle, {
       }
       ws.send(d)
     })
-    const ro = new ResizeObserver(() => sendResize())
+    const onViewportChange = () => scheduleResize()
+    const ro = new ResizeObserver(onViewportChange)
     if (elRef.current) ro.observe(elRef.current)
-    window.addEventListener('resize', sendResize)
+    window.addEventListener('resize', onViewportChange)
+    // 手机软键盘弹收 / 地址栏收缩只改 visualViewport，不一定触发上面两个；统一走同一个防抖入口，
+    // 保证一次手势最终只上报一次尺寸。
+    window.visualViewport?.addEventListener('resize', onViewportChange)
 
     // 滚动会话历史：触摸滑动 + 鼠标滚轮 → 发 scroll 控制（后端按普通屏/备用屏分流，见 sendScroll）
     const el = elRef.current!
@@ -579,7 +658,9 @@ const Term = forwardRef<TermHandle, {
       clearTimeout(retry.current)
       ro.disconnect()
       themeObs.disconnect()
-      window.removeEventListener('resize', sendResize)
+      window.removeEventListener('resize', onViewportChange)
+      window.visualViewport?.removeEventListener('resize', onViewportChange)
+      clearTimeout(resizeTimer.current)
       el.removeEventListener('touchstart', onTS, { capture: true } as any)
       el.removeEventListener('touchmove', onTM, { capture: true } as any)
       el.removeEventListener('wheel', onWheel, { capture: true } as any)
@@ -605,7 +686,7 @@ const Term = forwardRef<TermHandle, {
 
   useEffect(() => {
     const t = termRef.current
-    if (t) { t.options.fontSize = fontSize; setTimeout(sendResize, 0) }
+    if (t) { t.options.fontSize = fontSize; setTimeout(applyResize, 0) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fontSize])
 
@@ -614,7 +695,8 @@ const Term = forwardRef<TermHandle, {
   useEffect(() => {
     if (!active) return
     let raf = 0, n = 0
-    const tick = () => { sendResize(); if (n === 0) termRef.current?.focus(); if (++n < 4) raf = requestAnimationFrame(tick) }
+    // applyResize 自带尺寸去重，连打几帧只会真发一次
+    const tick = () => { applyResize(); if (n === 0) termRef.current?.focus(); if (++n < 4) raf = requestAnimationFrame(tick) }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
     // eslint-disable-next-line react-hooks/exhaustive-deps

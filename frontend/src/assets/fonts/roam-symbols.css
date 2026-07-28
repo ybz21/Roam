@@ -1,0 +1,30 @@
+/* Roam Symbols —— 终端符号补字集
+ *
+ * 终端字体走 VS Code 默认那套系统等宽字体（Consolas / Menlo / Droid Sans Mono），
+ * 但它们对 TUI 常用符号覆盖不全：Android 的 Droid Sans Mono 没有框线、⏵⏺、✻✔✘ 等，
+ * 缺字要么显示成 tofu 方块，要么回退到彩色 emoji 等非等宽字体（宽度不受控 → 行内错位）。
+ * 这里只补这些符号区段（unicode-range 限定，不影响正文字形），共约 46KB。
+ *
+ * 字体来源（均为 SIL Open Font License 1.1，可自由分发；见同目录 NOTICE）：
+ *   - Noto Sans Mono        → 箭头 / 框线 / 方块 / 几何图形（等宽，宽度天然对齐单元格）
+ *   - Noto Sans Symbols 2   → 技术符号(⏵⏺⏱) / 杂项符号(⚡) / 装饰符号(✻✔✘)
+ * 子集用 fontTools 生成，已改名，不再叫原字体名。
+ */
+
+@font-face {
+  font-family: 'Roam Symbols';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./roam-symbols-box.woff2') format('woff2');
+  unicode-range: U+2190-21FF, U+2500-257F, U+2580-259F, U+25A0-25FF;
+}
+
+@font-face {
+  font-family: 'Roam Symbols';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./roam-symbols-misc.woff2') format('woff2');
+  unicode-range: U+2300-23FF, U+2600-26FF, U+2700-27BF, U+2B00-2BFF;
+}

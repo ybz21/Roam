@@ -44,31 +44,51 @@ func utf8Env(env []string) []string {
 	return append(env, "LC_ALL=C.UTF-8")
 }
 
+// 有效窗口尺寸下限：前端布局未就绪 / 面板折叠 / 离屏挂载时会算出极窄的 cols(如 2)，
+// 因 window-size=latest 会把共享会话挤成窄条，且客户端断开后仍卡住。
+const (
+	minCols = 20
+	minRows = 6
+)
+
 // SanitizeSessionName 替换 tmux 会话名中的 '.' 和 ':'，避免 -t 解析出错。
 func SanitizeSessionName(name string) string {
 	return strings.NewReplacer(".", "_", ":", "_").Replace(name)
 }
 
-// paneAltSize 读活动 pane 是否处于备用屏(alternate screen)及其尺寸。
-// alternate_on=1 表示当前跑的是全屏 TUI（Claude Code / Codex / vim / less 等）。
-func paneAltSize(name string) (alt bool, w, h int) {
-	out, err := exec.Command("tmux", "display-message", "-p", "-t", name, "-F", "#{alternate_on} #{pane_width} #{pane_height}").Output()
+// paneState 读活动 pane 的备用屏状态、鼠标上报模式与尺寸。
+//   - alt=1：当前跑的是全屏 TUI（Claude Code / Codex / vim / less 等）。
+//   - mouseOn：应用**真的**开了鼠标上报（任一模式）。这是能否给它合成滚轮的唯一可靠判据：
+//     只看 alternate_on 是不够的，全屏但没开鼠标上报的应用（以及查询与发送之间刚退出备用屏的
+//     shell）拿到裸序列不会消费，readline/输入框会把 ESC[< 之后的数字当普通字符吃进去，
+//     表现就是命令行被 "65;137;33M65;137;33M…" 灌满、整屏花掉。
+//   - sgr：应用用 SGR(1006) 扩展坐标编码；否则回退 X10 编码。
+func paneState(name string) (alt, mouseOn, sgr bool, w, h int) {
+	out, err := exec.Command("tmux", "display-message", "-p", "-t", name, "-F",
+		"#{alternate_on} #{pane_width} #{pane_height} #{mouse_any_flag} #{mouse_standard_flag} #{mouse_button_flag} #{mouse_all_flag} #{mouse_sgr_flag}").Output()
 	if err != nil {
-		return false, 0, 0
+		return false, false, false, 0, 0
 	}
 	parts := strings.Fields(strings.TrimSpace(string(out)))
-	if len(parts) != 3 {
-		return false, 0, 0
+	if len(parts) != 8 {
+		return false, false, false, 0, 0
 	}
 	w, _ = strconv.Atoi(parts[1])
 	h, _ = strconv.Atoi(parts[2])
-	return parts[0] == "1", w, h
+	mouseOn = parts[3] == "1" || parts[4] == "1" || parts[5] == "1" || parts[6] == "1"
+	return parts[0] == "1", mouseOn, parts[7] == "1", w, h
 }
 
-// altScreenWheel 给备用屏 TUI 合成 SGR 滚轮序列并作为输入发给应用，让它滚自己的缓冲。
-// 备用屏没有 tmux scrollback，copy-mode 滚不动；而全屏 TUI（Claude/Codex）普遍开了
-// SGR 鼠标上报(1006)，直接喂滚轮字节即可。坐标取 pane 中心；wheel 只有按下(M)无释放。
-func altScreenWheel(name, dir string, notches, w, h int) {
+// maxWheelNotches 单条用户滚动消息最多合成多少格滚轮。一次快速滑动会连发几十条 touchmove，
+// 不设上限时应用要连续重绘几十屏；万一它中途退出鼠标模式，残余字节还会成片打进输入行。
+// 「回到底部」是显式动作，不受此限。
+const maxWheelNotches = 10
+
+// altScreenWheel 给备用屏 TUI 合成滚轮序列并作为输入发给应用，让它滚自己的缓冲。
+// 备用屏没有 tmux scrollback，copy-mode 滚不动；全屏 TUI（Claude/Codex）普遍开了鼠标上报，
+// 直接喂滚轮字节即可。坐标取 pane 中心；wheel 只有按下(M)无释放。
+// 调用前必须确认 mouseOn（见 paneState）——没开鼠标上报的应用会把这些字节当普通输入吃掉。
+func altScreenWheel(name, dir string, notches, w, h int, sgr bool) {
 	btn := 64 // wheel up
 	if dir != "up" {
 		btn = 65 // wheel down
@@ -80,7 +100,19 @@ func altScreenWheel(name, dir string, notches, w, h int) {
 	if row < 1 {
 		row = 1
 	}
-	seq := fmt.Sprintf("\x1b[<%d;%d;%dM", btn, col, row)
+	var seq string
+	if sgr {
+		seq = fmt.Sprintf("\x1b[<%d;%d;%dM", btn, col, row)
+	} else {
+		// X10 编码：ESC [ M 后跟三个 32 偏移的字节，坐标上限 223
+		if col > 223 {
+			col = 223
+		}
+		if row > 223 {
+			row = 223
+		}
+		seq = fmt.Sprintf("\x1b[M%c%c%c", rune(32+btn), rune(32+col), rune(32+row))
+	}
 	_ = exec.Command("tmux", "send-keys", "-t", name, "-l", "--", strings.Repeat(seq, notches)).Run()
 }
 
@@ -91,13 +123,21 @@ func tmuxScroll(name, dir string, lines int) (inCopyMode bool) {
 	if lines <= 0 {
 		lines = 1
 	}
-	if alt, w, h := paneAltSize(name); alt {
+	if alt, mouseOn, sgr, w, h := paneState(name); alt {
+		// 全屏但没开鼠标上报：合成的滚轮字节不会被消费，会当普通输入打进应用的输入行
+		// （命令行被 "65;137;33M…" 灌满、整屏花掉）。这种情况宁可不滚。
+		if !mouseOn {
+			return false
+		}
 		switch dir {
 		case "up", "down":
-			altScreenWheel(name, dir, lines, w, h)
+			if lines > maxWheelNotches {
+				lines = maxWheelNotches
+			}
+			altScreenWheel(name, dir, lines, w, h, sgr)
 		case "bottom":
 			// 全屏 TUI 无统一「到底」键；连发若干次向下滚轮，应用会在底部自然钳住。
-			altScreenWheel(name, "down", 200, w, h)
+			altScreenWheel(name, "down", 200, w, h, sgr)
 		}
 		return false // 没进 tmux copy-mode
 	}
@@ -274,7 +314,17 @@ func Handler(c *gin.Context) {
 
 	cmd := exec.Command("tmux", "attach", "-t", name)
 	cmd.Env = utf8Env(append(os.Environ(), "TERM=xterm-256color"))
-	ptmx, err := creackpty.Start(cmd)
+	// 用客户端带来的尺寸建 pty（StartWithSize 在 c.Start 前就把窗口大小设好）：
+	// 先 Start 再 Setsize 会让 tmux attach 按默认 80x24 画完首帧、随即因 SIGWINCH 整屏重画一次，
+	// 表现为进会话时闪一下 + 窄屏 TUI 留折行垃圾。
+	sz := &creackpty.Winsize{Rows: 30, Cols: 100}
+	if r, err := strconv.Atoi(c.Query("rows")); err == nil && r >= minRows && r <= 500 {
+		sz.Rows = uint16(r)
+	}
+	if cl, err := strconv.Atoi(c.Query("cols")); err == nil && cl >= minCols && cl <= 1000 {
+		sz.Cols = uint16(cl)
+	}
+	ptmx, err := creackpty.StartWithSize(cmd, sz)
 	if err != nil {
 		conn.WriteMessage(websocket.TextMessage, []byte("\r\n[无法连接会话: "+name+"]\r\n"))
 		return
@@ -284,7 +334,7 @@ func Handler(c *gin.Context) {
 		_ = cmd.Process.Kill()
 		_, _ = cmd.Process.Wait()
 	}()
-	_ = creackpty.Setsize(ptmx, &creackpty.Winsize{Rows: 30, Cols: 100})
+	lastSize := *sz
 
 	// pty → ws
 	go func() {
@@ -332,10 +382,16 @@ func Handler(c *gin.Context) {
 					// 因 window-size=latest，这会把共享会话挤成「窄条」，且客户端断开后仍卡住——
 					// swarm 的 leader/成员会话(claude/codex TUI)会因此渲染崩坏，连 @leader 的消息都进不了输入框。
 					// 低于阈值视为无效，忽略本次 resize（保持原尺寸，不被挤窄）。
-					if ctrl.Cols < 20 || ctrl.Rows < 6 {
+					if ctrl.Cols < minCols || ctrl.Rows < minRows {
 						continue
 					}
-					_ = creackpty.Setsize(ptmx, &creackpty.Winsize{Rows: ctrl.Rows, Cols: ctrl.Cols})
+					// 尺寸没变就不动：Setsize 会发 SIGWINCH，tmux 收到即整屏重排重绘。手机上
+					// 软键盘/地址栏/旋转会连发同一尺寸，逐条照做就是用户看到的持续闪烁。
+					if ctrl.Cols == lastSize.Cols && ctrl.Rows == lastSize.Rows {
+						continue
+					}
+					lastSize = creackpty.Winsize{Rows: ctrl.Rows, Cols: ctrl.Cols}
+					_ = creackpty.Setsize(ptmx, &lastSize)
 					continue
 				case "scroll":
 					// 普通屏走 copy-mode 才需在真实键入前退出；备用屏 TUI 喂的是滚轮，inCopyMode=false。
