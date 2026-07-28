@@ -234,7 +234,7 @@ func (a *API) SessionAnnotations(c *gin.Context) {
 
 // SessionWorktreeStatus GET /sessions/:name/worktree-status —— W7 关闭前预检。
 func (a *API) SessionWorktreeStatus(c *gin.Context) {
-	name := sessionParam(c)
+	name := a.sessionTarget(c)
 	ctx, cancel := wtCtx(c)
 	defer cancel()
 	ann := a.WT.Annotations(ctx)[name]
@@ -318,32 +318,34 @@ func (a *API) WorktreeSessionCreate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
 		return
 	}
-	b.Name = SanitizeSessionName(b.Name)
+	label := strings.TrimSpace(b.Name)
 	ctx, cancel := wtCtx(c)
 	defer cancel()
-	if out, err := a.TT.Run("new-session", "-d", "-s", b.Name, "-c", b.Dir); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "SESSION_FAILED", "message": ttmux.StripANSI(out)}})
+	// 会话叫 id，b.Name 只是展示名；分支占位名仍按展示名派生（否则分支会变成一串 id）
+	sess, err := a.newSession(label, b.Dir)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "SESSION_FAILED", "message": err.Error()}})
 		return
 	}
-	a.WT.BindSessionHome(b.Name, b.Dir) // 先钉在仓库上；worktree 建成后 cdInto 会改钉到 worktree
+	a.WT.BindSessionHome(sess, b.Dir) // 先钉在仓库上；worktree 建成后 cdInto 会改钉到 worktree
 	branch := strings.TrimSpace(b.Branch)
 	if branch == "" {
-		branch = autoBranch(b.Name)
+		branch = autoBranch(label)
 	}
 	wt, err := a.WT.Create(ctx, worktree.CreateReq{Dir: b.Dir, Branch: branch, Base: b.Base, Remote: b.Remote})
 	if err != nil {
-		_, _ = a.TT.Run("kill", b.Name, "--yes")
+		_, _ = a.TT.Run("kill", sess, "--yes")
 		wtErr(c, err)
 		return
 	}
-	_ = a.cdInto(b.Name, wt.Path)
-	c.JSON(http.StatusOK, gin.H{"data": gin.H{"session": b.Name, "path": wt.Path, "branch": wt.Branch, "base": wt.Base}, "name": b.Name})
+	_ = a.cdInto(sess, wt.Path)
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"session": sess, "label": label, "path": wt.Path, "branch": wt.Branch, "base": wt.Base}, "name": sess})
 }
 
 // SessionFork POST /sessions/:name/fork {child, dir?}
 // 纯 subSession 派生（无 worktree）：ttmux fork（meta 记 parent，缺省继承父 cwd）。
 func (a *API) SessionFork(c *gin.Context) {
-	parent := sessionParam(c)
+	parent := a.sessionTarget(c)
 	var b struct {
 		Child string `json:"child"`
 		Dir   string `json:"dir"`
@@ -352,8 +354,9 @@ func (a *API) SessionFork(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
 		return
 	}
-	b.Child = SanitizeSessionName(b.Child)
-	args := []string{"fork", parent, b.Child, "--detach", "--json"}
+	// child 是展示名：子会话本身叫 id，由 CLI 生成后随 --json 回传。
+	label := strings.TrimSpace(b.Child)
+	args := []string{"fork", parent, label, "--detach", "--json"}
 	if d := strings.TrimSpace(b.Dir); d != "" {
 		args = append(args, "--dir", d)
 	}
@@ -362,20 +365,21 @@ func (a *API) SessionFork(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "FORK_FAILED", "message": ttmux.StripANSI(out)}})
 		return
 	}
+	child := forkedSession(out, label)
 	// 子会话继承父的归属（fork 缺省就是继承父 cwd）：显式 dir 优先，否则跟父同项目。
 	if d := strings.TrimSpace(b.Dir); d != "" {
-		a.WT.BindSessionHome(b.Child, d)
+		a.WT.BindSessionHome(child, d)
 	} else if home := a.WT.SessionHome(parent); home != "" {
-		a.WT.BindSessionHome(b.Child, home)
+		a.WT.BindSessionHome(child, home)
 	}
-	c.JSON(http.StatusOK, gin.H{"data": gin.H{"session": b.Child, "parent": parent}, "name": b.Child})
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"session": child, "label": label, "parent": parent}, "name": child})
 }
 
 // SessionForkWorktree POST /sessions/:name/fork-worktree {child, branch?, base?, remote?, dir?}
 // 编排（先 subSession 后 worktree）：ttmux fork（cwd=父仓库目录，meta 记 parent）→
 // 建 worktree（分支缺省自动占位）→ 子会话内注入 cd；失败反向补偿 kill 子会话。
 func (a *API) SessionForkWorktree(c *gin.Context) {
-	parent := sessionParam(c)
+	parent := a.sessionTarget(c)
 	var b struct {
 		Child  string `json:"child"`
 		Branch string `json:"branch"`
@@ -387,7 +391,7 @@ func (a *API) SessionForkWorktree(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
 		return
 	}
-	b.Child = SanitizeSessionName(b.Child)
+	label := strings.TrimSpace(b.Child)
 	ctx, cancel := wtCtx(c)
 	defer cancel()
 	dir := strings.TrimSpace(b.Dir)
@@ -405,33 +409,44 @@ func (a *API) SessionForkWorktree(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "NO_DIR", "message": "cannot resolve parent cwd; pass dir explicitly"}})
 		return
 	}
-	out, err := a.TT.Run("fork", parent, b.Child, "--dir", dir, "--detach", "--json")
+	out, err := a.TT.Run("fork", parent, label, "--dir", dir, "--detach", "--json")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "FORK_FAILED", "message": ttmux.StripANSI(out)}})
 		return
 	}
-	a.WT.BindSessionHome(b.Child, dir) // 先钉父仓库，下面 cdInto 改钉到新 worktree
-	var forked map[string]string
-	_ = json.Unmarshal([]byte(out), &forked)
+	child := forkedSession(out, label)
+	a.WT.BindSessionHome(child, dir) // 先钉父仓库，下面 cdInto 改钉到新 worktree
 	branch := strings.TrimSpace(b.Branch)
 	if branch == "" {
-		branch = autoBranch(b.Child)
+		branch = autoBranch(label) // 分支占位名按展示名派生，别派生出一串 id
 	}
 	wt, err := a.WT.Create(ctx, worktree.CreateReq{Dir: dir, Branch: branch, Base: b.Base, Remote: b.Remote})
 	if err != nil {
-		_, _ = a.TT.Run("kill", b.Child, "--yes")
+		_, _ = a.TT.Run("kill", child, "--yes")
 		wtErr(c, err)
 		return
 	}
-	_ = a.cdInto(b.Child, wt.Path)
-	c.JSON(http.StatusOK, gin.H{"data": gin.H{"session": b.Child, "parent": parent, "path": wt.Path, "branch": wt.Branch, "base": wt.Base}, "name": b.Child})
+	_ = a.cdInto(child, wt.Path)
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"session": child, "label": label, "parent": parent, "path": wt.Path, "branch": wt.Branch, "base": wt.Base}, "name": child})
+}
+
+// forkedSession 从 `ttmux fork --json` 的输出里取子会话名(= 会话 id)；
+// 解析不出来（老版本 CLI / 输出异常）退回展示名，让调用方至少还能按名字操作。
+func forkedSession(out, fallback string) string {
+	var res struct {
+		Session string `json:"session"`
+	}
+	if json.Unmarshal([]byte(out), &res) == nil && res.Session != "" {
+		return res.Session
+	}
+	return fallback
 }
 
 // SessionCloseWithWorktree POST /sessions/:name/close-with-worktree
 // {mode: keep|merge|discard, path?, strategy?, expectedHead?}
 // W7 三选一状态机：每步失败即停、返回已完成阶段（可恢复）。
 func (a *API) SessionCloseWithWorktree(c *gin.Context) {
-	name := sessionParam(c)
+	name := a.sessionTarget(c)
 	var b struct {
 		Mode         string `json:"mode"`
 		Path         string `json:"path"`

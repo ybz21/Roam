@@ -37,6 +37,7 @@ import { usePwaInstall } from './install'
 import { usePreferences, savePreferences, loadPreferences } from './preferences'
 import { PromptDialog, detectPrompt } from './prompt'
 import { copyText } from './chat/blocks'
+import { SessionTitle, setSessionLabels, updateSessionLabel, useSessionLabel, sessionLabel, sessionDisplay } from './session-label'
 import { VoiceInput } from './chat/VoiceInput'
 import LinkStatus from './p2p/LinkStatus'
 import { startControlLink, stopControlLink } from './p2p/transport'
@@ -319,10 +320,13 @@ export default function App() {
       if (stop) return
       const byId: Record<string, string> = {}
       const byName: Record<string, string> = {}
+      const labels: Record<string, string> = {}
       for (const s of Array.isArray(list) ? list : []) {
         if (s?.id && s?.name) { byId[s.id] = s.name; byName[s.name] = s.id }
+        if (s?.name && s?.label) labels[s.name] = s.label
       }
       setSessIds({ byId, byName })
+      setSessionLabels(labels) // 展示名（@roam_name）：界面显示「名字（id）」，handle 仍是会话名
     }).catch(() => { if (!stop) setSessIds((m) => m || { byId: {}, byName: {} }) }) // 拉不到也要放行还原，别把标签卡在空白
     load()
     const t = setInterval(load, 5000)
@@ -716,8 +720,15 @@ function SoloTerminal({ name }: { name: string }) {
   const [codexMap, setCodexMap] = useState<Record<string, ClaudeInfo>>({})
   const [codexView, setCodexView] = useState<Record<string, boolean>>({})
   const termRefs = useRef<Record<string, TermHandle | null>>({})
+  const label = useSessionLabel(name)
 
-  useEffect(() => { document.title = `Roam · ${name}` }, [name])
+  // 独立页没有会话列表轮询，自己拉一次拿展示名（标题要显示「名字（id）」）
+  useEffect(() => {
+    api('GET', '/sessions').then((list) => {
+      setSessionLabels(Object.fromEntries((Array.isArray(list) ? list : []).filter((s: any) => s?.name && s?.label).map((s: any) => [s.name, s.label])))
+    }).catch(() => {})
+  }, [])
+  useEffect(() => { document.title = `Roam · ${sessionDisplay(name) || name}` }, [name, label])
   useEffect(() => {
     let stop = false
     const check = async () => {
@@ -1026,7 +1037,7 @@ function TerminalPane(props: {
   const sessionTab = (
     <>
       <i style={{ width: 7, height: 7, borderRadius: '50%', background: active && statusMap[active] === 'connected' ? '#3fb950' : '#d29922' }} />
-      {active}
+      {active && <SessionTitle name={active} />}
     </>
   )
   const tabStrip = (
@@ -1042,7 +1053,7 @@ function TerminalPane(props: {
           {termNeedsInput[termName] && <span title={t('prompt.confirmRequired')} style={{ color: '#d29922', fontSize: 12, fontWeight: 600 }}>{t('session.waiting')}</span>}
           {claudeMap[termName]?.running && <span title={t('session.runningClaude')} style={{ color: '#58a6ff' }}>✳</span>}
           {codexMap[termName]?.running && <span title={t('session.runningCodex')} style={{ color: '#10a37f' }}>✸</span>}
-          {termName}
+          <SessionTitle name={termName} />
           <a onClick={(e) => { e.stopPropagation(); closeTerm(termName) }} style={{ color: 'var(--text-dim)' }}>×</a>
         </span>
       ))}
@@ -1410,7 +1421,7 @@ function Tasks({ openTerm }: { openTerm: (n: string) => void }) {
                     <a key="t" onClick={() => openTerm(t.name)}>{t('common.terminal')}</a>,
                   ]}>
                     <List.Item.Meta
-                      title={<Space><span>{t.name}</span><TypeTag type={t.type} /><StatusTag status={t.status} code={t.exit_code} /></Space>}
+                      title={<Space><span>{t.label || t.name}</span><TypeTag type={t.type} /><StatusTag status={t.status} code={t.exit_code} /></Space>}
                       description={t.task ? <Text type="secondary" style={{ fontSize: 12 }}>{t.task}</Text> : null}
                     />
                   </List.Item>
@@ -1704,7 +1715,7 @@ export function NewSessionModal({ open, parent, onClose, onDone }: { open: boole
                       <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                         <span style={{ fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis' }}>⎇ {w.branch || '?'}</span>
                         {occupied
-                          ? <Tag color="green" style={{ margin: 0, fontSize: 11, lineHeight: '16px' }}>{w.sessions[0].session}</Tag>
+                          ? <Tag color="green" style={{ margin: 0, fontSize: 11, lineHeight: '16px' }}>{sessionLabel(w.sessions[0].session)}</Tag>
                           : w.external
                             ? <Tag style={{ margin: 0, fontSize: 11, lineHeight: '16px' }}>⧉ {t('worktree.external')}</Tag>
                             : <Tag color="warning" style={{ margin: 0, fontSize: 11, lineHeight: '16px' }}>{t('worktree.orphan')}</Tag>}
@@ -1769,21 +1780,24 @@ export function NewSessionModal({ open, parent, onClose, onDone }: { open: boole
 }
 
 
+// 改名 = 只改**展示名**：会话本身叫 id，改名不动 handle，
+// 所以终端标签、URL、归属、正在跑的东西全都不受影响，重名也随便。
 function RenameSessionModal({ session, onClose, onDone }: { session: string | null; onClose: () => void; onDone: (oldName: string, newName: string) => void }) {
   const [name, setName] = useState('')
   const { message } = AntApp.useApp()
   const { t } = useI18n()
-  useEffect(() => { if (session) setName(session) }, [session])
+  useEffect(() => { if (session) setName(sessionLabel(session)) }, [session])
   const ok = async () => {
     if (!session) return
     const next = name.trim()
     if (!next) return message.error(t('session.nameRequired'))
     try {
       const res = await api('PATCH', `/sessions/${encodeURIComponent(session)}`, { name: next })
-      const actual = res.data?.name || next
+      const label = res.data?.label || next
+      updateSessionLabel(session, label)
       message.success(t('session.renamed'))
       onClose()
-      onDone(session, actual)
+      onDone(session, session)
     } catch (e: any) {
       message.error(e.message)
     }
@@ -1792,6 +1806,8 @@ function RenameSessionModal({ session, onClose, onDone }: { session: string | nu
     <Modal open={!!session} onCancel={onClose} onOk={ok} okText={t('session.rename')} title={t('session.renameTitle')} destroyOnClose>
       <Space direction="vertical" style={{ width: '100%' }}>
         <Input placeholder={t('session.namePlaceholder')} value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+        <div style={{ color: 'var(--text-dimmer)', fontSize: 12 }}>{t('session.renameHint')}</div>
+        {session && <div style={{ color: 'var(--text-dimmer)', fontSize: 12, fontFamily: 'ui-monospace, monospace' }}>id: {session}</div>}
       </Space>
     </Modal>
   )
@@ -1900,6 +1916,7 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
     const walk = (nodes: any[]) => { for (const n of nodes || []) { flat.push(n); walk(n.children) } }
     walk(Array.isArray(roots) ? roots : [])
     setList(flat)
+    setSessionLabels(Object.fromEntries(flat.filter((s) => s?.name && s?.label).map((s) => [s.name, s.label])))
   }).catch(() => {})
   useEffect(() => { load(); const t = setInterval(load, 3000); return () => clearInterval(t) }, [])
   useEffect(() => {
@@ -2000,7 +2017,7 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
     // 干净 worktree：默认勾选随会话删除（显式可见，不静默）
     const removeToo = { current: true }
     modal.confirm({
-      title: t('session.closeConfirm', { name: n }),
+      title: t('session.closeConfirm', { name: sessionDisplay(n) }),
       content: (
         <Checkbox defaultChecked onChange={(e) => { removeToo.current = e.target.checked }}>
           {t('worktree.close.removeWithSession')}
@@ -2028,7 +2045,7 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
       default: return true
     }
   }
-  const filtered = list.filter((s: any) => (!ql || s.name.toLowerCase().includes(ql)) && match(s, filter))
+  const filtered = list.filter((s: any) => (!ql || `${s.label || ''} ${s.name}`.toLowerCase().includes(ql)) && match(s, filter))
   const cnt = (f: typeof filter) => list.filter((s: any) => match(s, f)).length
 
   // ── 排序：名称 / 创建时间 / 最后响应时间，可切升降序 ──
@@ -2259,7 +2276,10 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
                       <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' }}>
                           {en.fam && <Tooltip title={t('session.fork.childOf', { parent: s.parent })}><span style={{ color: '#a371f7', flex: '0 0 auto', fontSize: 13 }}>⑂</span></Tooltip>}
-                          <span style={{ fontWeight: 700, color: activeRow ? '#fff' : 'var(--text-bright)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.name}>{s.name}</span>
+                          <span style={{ fontWeight: 700, color: activeRow ? '#fff' : 'var(--text-bright)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${s.label || s.name}（${s.id || s.name}）`}>
+                            {s.label || s.name}
+                            {(s.id || s.name) !== (s.label || s.name) && <span style={{ opacity: .5, fontSize: '.85em', marginLeft: 4, fontWeight: 400 }}>({s.id || s.name})</span>}
+                          </span>
                           {(() => { // worktree 归属：⎇ 分支紧跟会话名(设计 W2)；外部 worktree 加 ⧉ 标识；手机端只显图标
                             const ann = wtAnn[s.name]
                             if (!ann?.primary?.linked) return null
@@ -2302,7 +2322,7 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
                         </Popconfirm>
                       ) : (
                         // 受控 Popconfirm：点「关闭」先查 worktree 状态，非 worktree 会话才打开本确认
-                        <Popconfirm title={t('session.closeConfirm', { name: s.name })} open={confirmKill === s.name}
+                        <Popconfirm title={t('session.closeConfirm', { name: s.label || s.name })} open={confirmKill === s.name}
                           onConfirm={() => { setConfirmKill(null); kill(s.name) }}
                           onCancel={() => setConfirmKill(null)}
                           onOpenChange={(o) => { if (!o && confirmKill === s.name) setConfirmKill(null) }}>
@@ -3189,7 +3209,7 @@ function SendModal({ tasks, onClose }: { tasks: any[] | null; onClose: () => voi
   return (
     <Modal open={!!tasks} onCancel={onClose} onOk={go} okText={t('common.send')} title={t('task.appendInstruction')} destroyOnClose>
       <Select style={{ width: '100%', marginBottom: 10 }} value={sess} onChange={setSess}
-        options={(tasks || []).map((t: any) => ({ value: t.name, label: `${t.name} [${t.type}]` }))} />
+        options={(tasks || []).map((t: any) => ({ value: t.name, label: `${t.label || t.name} [${t.type}]` }))} />
       <Input.TextArea rows={3} value={msg} onChange={(e) => setMsg(e.target.value)} placeholder={t('task.instructionPlaceholder')} />
     </Modal>
   )

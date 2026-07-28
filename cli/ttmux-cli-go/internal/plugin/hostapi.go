@@ -13,6 +13,7 @@ import (
 
 	"ttmux-cli-go/internal/command/spawn"
 	"ttmux-cli-go/internal/plugin/rpc"
+	"ttmux-cli-go/internal/runtime"
 )
 
 // HostAPI serves roam/* platform calls for one hosted plugin. 它是"平台 API →
@@ -177,7 +178,9 @@ func (h *HostAPI) agentSpawn(params json.RawMessage) (any, error) {
 		return nil, fmt.Errorf("agent.spawn: sessionName and prompt are required")
 	}
 	rt := h.Env.RT
-	if rt.HasSession(req.SessionName) {
+	// req.SessionName 现在是**展示名**：会话本身叫 id，名字写进 @roam_name。
+	// 同名判定因此按展示名来（插件的幂等约定不变）。
+	if target := rt.Resolve(req.SessionName); rt.HasSession(target) {
 		return nil, fmt.Errorf("session already exists: %s", req.SessionName)
 	}
 	if err := rt.EnsureDirs(); err != nil {
@@ -188,19 +191,21 @@ func (h *HostAPI) agentSpawn(params json.RawMessage) (any, error) {
 	if req.Provider != "" {
 		ac.Kind = req.Provider
 	}
+	sess, err := rt.CreateSession(runtime.CreateOpts{Label: req.SessionName, Width: "220", Height: "50"})
+	if err != nil {
+		return nil, err
+	}
 	// prompt(含整段 diff)落盘走 stdin —— 内联进 send-keys 会超 tmux 命令
 	// 长度上限("command too long"),而且失败后半途的会话就地泄漏
-	promptFile := filepath.Join(h.Env.RT.LogsDir, req.SessionName+".prompt")
+	promptFile := filepath.Join(h.Env.RT.LogsDir, sess+".prompt")
 	if err := os.WriteFile(promptFile, []byte(req.Prompt), 0o600); err != nil {
+		_ = rt.Tmux("kill-session", "-t", "="+sess)
 		return nil, err
 	}
-	if err := rt.Tmux("new-session", "-d", "-s", req.SessionName, "-x", "220", "-y", "50"); err != nil {
-		return nil, err
-	}
-	rt.InjectEnv(req.SessionName)
-	_ = os.WriteFile(rt.LogFile(req.SessionName), nil, 0o644)
-	_ = rt.Tmux("pipe-pane", "-t", req.SessionName, "-o", "cat >> '"+rt.LogFile(req.SessionName)+"'")
-	_ = rt.WriteTaskMeta(req.SessionName, "agent", "plugin:"+h.Plugin.Manifest.ID, workdir)
+	rt.InjectEnv(sess)
+	_ = os.WriteFile(rt.LogFile(sess), nil, 0o644)
+	_ = rt.Tmux("pipe-pane", "-t", sess, "-o", "cat >> '"+rt.LogFile(sess)+"'")
+	_ = rt.WriteTaskMeta(sess, "agent", "plugin:"+h.Plugin.Manifest.ID, workdir, req.SessionName)
 	// `; exit` 与命令同行提交:Agent 进程退出(一次性跑完 / 交互 TUI 被 /exit)
 	// 后 shell 立即退出,会话消亡就是完成信号(WaitSession 与 plugind watcher
 	// 都以此判定;单独排队一个 exit 按键会被置 raw 模式的程序冲掉,不可靠)。
@@ -208,18 +213,18 @@ func (h *HostAPI) agentSpawn(params json.RawMessage) (any, error) {
 	if req.Interactive {
 		launch = ac.InteractiveFromPromptFile(promptFile)
 		// 交互 TUI 首启会卡 trust-folder / bypass 确认,后台点掉
-		spawn.LaunchAutoconfirm(rt, req.SessionName)
+		spawn.LaunchAutoconfirm(rt, sess)
 	}
-	if err := rt.Tmux("send-keys", "-t", req.SessionName, launch+"; exit", "C-m"); err != nil {
+	if err := rt.Tmux("send-keys", "-t", sess, launch+"; exit", "C-m"); err != nil {
 		// 半成品会话必须就地回收,否则留下一个永不退出的空 shell 会话
-		_ = rt.Tmux("kill-session", "-t", req.SessionName)
-		rt.CleanTaskMeta(req.SessionName)
+		_ = rt.Tmux("kill-session", "-t", "="+sess)
+		rt.CleanTaskMeta(sess)
 		_ = os.Remove(promptFile)
 		return nil, err
 	}
-	_ = h.Store.AddSession(SessionRow{Session: req.SessionName, Plugin: h.Plugin.Manifest.ID, Job: req.Job, Labels: req.Labels})
-	h.audit("agent.spawn", req.SessionName, "allowed", "provider="+ac.Kind)
-	return map[string]string{"session": req.SessionName, "provider": ac.Kind}, nil
+	_ = h.Store.AddSession(SessionRow{Session: sess, Plugin: h.Plugin.Manifest.ID, Job: req.Job, Labels: req.Labels})
+	h.audit("agent.spawn", sess, "allowed", "provider="+ac.Kind)
+	return map[string]string{"session": sess, "label": runtime.SanitizeLabel(req.SessionName), "provider": ac.Kind}, nil
 }
 
 // agentRun executes a one-shot agent (claude -p / codex exec) as a blocking
@@ -297,11 +302,13 @@ func (h *HostAPI) sessionWait(params json.RawMessage) (any, error) {
 	if timeout <= 0 || timeout > 3600 {
 		timeout = 1800
 	}
-	done := h.Env.RT.WaitSession(req.Name, timeout)
+	// 插件给的可能是展示名（agent.spawn 时它自己起的那个），换算成会话名(=id)
+	name := h.Env.RT.ResolveAlive(req.Name)
+	done := h.Env.RT.WaitSession(name, timeout)
 	if done {
-		_ = h.Store.UpdateSessionStatus(req.Name, "exited")
+		_ = h.Store.UpdateSessionStatus(name, "exited")
 	}
-	h.audit("session.wait", req.Name, "allowed", fmt.Sprintf("done=%v", done))
+	h.audit("session.wait", name, "allowed", fmt.Sprintf("done=%v", done))
 	return map[string]bool{"done": done}, nil
 }
 
@@ -315,7 +322,7 @@ func (h *HostAPI) sessionAlive(params json.RawMessage) (any, error) {
 	if err := h.requirePerm("sessions:read", "session.alive", req.Name); err != nil {
 		return nil, err
 	}
-	return map[string]bool{"alive": h.Env.RT.HasSession(req.Name)}, nil
+	return map[string]bool{"alive": h.Env.RT.HasSession(h.Env.RT.ResolveAlive(req.Name))}, nil
 }
 
 // sessionKill 终止一个会话。只允许杀本插件登记过的会话(spawn/track 的产物)
@@ -332,21 +339,22 @@ func (h *HostAPI) sessionKill(params json.RawMessage) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	name := h.Env.RT.ResolveAlive(req.Name)
 	owned := false
 	for _, r := range rows {
-		if r.Session == req.Name {
+		if r.Session == name {
 			owned = true
 			break
 		}
 	}
 	if !owned {
-		h.audit("session.kill", req.Name, "denied", "not owned by plugin")
+		h.audit("session.kill", name, "denied", "not owned by plugin")
 		return nil, fmt.Errorf("session.kill: %s is not owned by plugin %s", req.Name, h.Plugin.Manifest.ID)
 	}
-	if err := h.Env.RT.Tmux("kill-session", "-t", "="+req.Name); err != nil {
+	if err := h.Env.RT.Tmux("kill-session", "-t", "="+name); err != nil {
 		return nil, err
 	}
-	h.audit("session.kill", req.Name, "allowed", "")
+	h.audit("session.kill", name, "allowed", "")
 	return map[string]bool{"killed": true}, nil
 }
 
@@ -362,7 +370,7 @@ func (h *HostAPI) sessionCapture(params json.RawMessage) (any, error) {
 	if req.TailLines > 0 {
 		lines = fmt.Sprintf("%d", req.TailLines)
 	}
-	out, err := h.Env.RT.ReadCapture(req.Name, lines)
+	out, err := h.Env.RT.ReadCapture(h.Env.RT.ResolveAlive(req.Name), lines)
 	if err != nil {
 		return nil, err
 	}
@@ -378,7 +386,7 @@ func (h *HostAPI) sessionLog(params json.RawMessage) (any, error) {
 	if err := h.requirePerm("sessions:read", "session.log", req.Name); err != nil {
 		return nil, err
 	}
-	b, err := os.ReadFile(h.Env.RT.LogFile(req.Name))
+	b, err := os.ReadFile(h.Env.RT.LogFile(h.Env.RT.ResolveAlive(req.Name)))
 	if err != nil {
 		return nil, err
 	}
@@ -427,7 +435,8 @@ func (h *HostAPI) sessionSend(params json.RawMessage) (any, error) {
 	if err := h.requirePerm("sessions:write", "session.send", req.Name); err != nil {
 		return nil, err
 	}
-	if !h.Env.RT.HasSession(req.Name) {
+	name := h.Env.RT.ResolveAlive(req.Name)
+	if !h.Env.RT.HasSession(name) {
 		return nil, fmt.Errorf("session not found: %s", req.Name)
 	}
 	// 单行化:交互 TUI 中换行即提交,多行文本会被拆成多次输入
@@ -436,17 +445,17 @@ func (h *HostAPI) sessionSend(params json.RawMessage) (any, error) {
 	// Claude/Codex TUI 把快速字符流当粘贴,紧跟的回车偶尔被吞,50ms 后补一发
 	// (消息已提交时第二个回车是空操作,shell 里则是空命令,均无害)
 	if h.Env.RT.Tmux("set-buffer", "-b", "roam-send", text) != nil ||
-		h.Env.RT.Tmux("paste-buffer", "-d", "-b", "roam-send", "-t", req.Name) != nil {
-		if err := h.Env.RT.Tmux("send-keys", "-t", req.Name, "-l", text); err != nil {
+		h.Env.RT.Tmux("paste-buffer", "-d", "-b", "roam-send", "-t", name) != nil {
+		if err := h.Env.RT.Tmux("send-keys", "-t", name, "-l", text); err != nil {
 			return nil, err
 		}
 	}
-	if err := h.Env.RT.Tmux("send-keys", "-t", req.Name, "Enter"); err != nil {
+	if err := h.Env.RT.Tmux("send-keys", "-t", name, "Enter"); err != nil {
 		return nil, err
 	}
 	time.Sleep(50 * time.Millisecond)
-	_ = h.Env.RT.Tmux("send-keys", "-t", req.Name, "Enter")
-	h.audit("session.send", req.Name, "allowed", fmt.Sprintf("%d chars", len(text)))
+	_ = h.Env.RT.Tmux("send-keys", "-t", name, "Enter")
+	h.audit("session.send", name, "allowed", fmt.Sprintf("%d chars", len(text)))
 	return map[string]bool{"sent": true}, nil
 }
 

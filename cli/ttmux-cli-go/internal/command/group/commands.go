@@ -34,7 +34,7 @@ func List(rt runtime.Runtime, excludeGroups map[string]bool, w io.Writer) error 
 		sessions, _ := rt.GroupSessions(g)
 		total, alive := len(sessions), 0
 		for _, s := range sessions {
-			if rt.HasSession(s) {
+			if rt.HasSession(rt.ResolveAlive(s)) {
 				alive++
 			}
 		}
@@ -66,33 +66,35 @@ func Status(rt runtime.Runtime, group string, w io.Writer) error {
 	sessions, _ := rt.GroupSessions(group)
 	running, done, failed := 0, 0, 0
 	for _, sess := range sessions {
+		sess = rt.ResolveAlive(sess) // 台账存会话 id；迁移前的老台账存名字，兜一下
 		typ := rt.TaskType(sess)
 		desc := firstLine(rt.TaskDesc(sess), 50)
+		name := ui.Bold(rt.TaskLabel(sess)) // 展示语义名，不是 id
 		tag := p.Dim + "[cmd]" + p.Reset
 		if typ == "agent" {
 			tag = p.Magenta + "[agent]" + p.Reset
 		}
 		if rt.HasSession(sess) {
-			proc := strings.TrimSpace(out(rt.TmuxOutput("display-message", "-t", sess, "-p", "#{pane_current_command}")))
-			dead := strings.TrimSpace(out(rt.TmuxOutput("display-message", "-t", sess, "-p", "#{pane_dead}")))
+			proc := strings.TrimSpace(out(rt.TmuxOutput("display-message", "-t", "="+sess+":", "-p", "#{pane_current_command}")))
+			dead := strings.TrimSpace(out(rt.TmuxOutput("display-message", "-t", "="+sess+":", "-p", "#{pane_dead}")))
 			if dead == "1" {
-				code := strings.TrimSpace(out(rt.TmuxOutput("display-message", "-t", sess, "-p", "#{pane_dead_status}")))
+				code := strings.TrimSpace(out(rt.TmuxOutput("display-message", "-t", "="+sess+":", "-p", "#{pane_dead_status}")))
 				if code == "0" {
-					fmt.Fprintf(w, "  %s%s%s %s %s %s完成%s (exit 0)\n", p.Green, ui.IconOK, p.Reset, ui.Bold(sess), tag, p.Green, p.Reset)
+					fmt.Fprintf(w, "  %s%s%s %s %s %s完成%s (exit 0)\n", p.Green, ui.IconOK, p.Reset, name, tag, p.Green, p.Reset)
 					done++
 				} else {
-					fmt.Fprintf(w, "  %s%s%s %s %s %s失败%s (exit %s)\n", p.Red, ui.IconErr, p.Reset, ui.Bold(sess), tag, p.Red, p.Reset, code)
+					fmt.Fprintf(w, "  %s%s%s %s %s %s失败%s (exit %s)\n", p.Red, ui.IconErr, p.Reset, name, tag, p.Red, p.Reset, code)
 					failed++
 				}
 			} else {
-				fmt.Fprintf(w, "  %s%s%s %s %s %s运行中%s  %s[%s]%s\n", p.Yellow, ui.IconRun, p.Reset, ui.Bold(sess), tag, p.Yellow, p.Reset, p.Dim, proc, p.Reset)
+				fmt.Fprintf(w, "  %s%s%s %s %s %s运行中%s  %s[%s]%s\n", p.Yellow, ui.IconRun, p.Reset, name, tag, p.Yellow, p.Reset, p.Dim, proc, p.Reset)
 				running++
 			}
 		} else {
 			if _, err := readLog(rt, sess); err == nil {
-				fmt.Fprintf(w, "  %s%s%s %s %s %s已结束 (日志可用)%s\n", p.Green, ui.IconDone, p.Reset, ui.Bold(sess), tag, p.Dim, p.Reset)
+				fmt.Fprintf(w, "  %s%s%s %s %s %s已结束 (日志可用)%s\n", p.Green, ui.IconDone, p.Reset, name, tag, p.Dim, p.Reset)
 			} else {
-				fmt.Fprintf(w, "  %s%s%s %s %s %s已结束%s\n", p.Dim, ui.IconDone, p.Reset, ui.Bold(sess), tag, p.Dim, p.Reset)
+				fmt.Fprintf(w, "  %s%s%s %s %s %s已结束%s\n", p.Dim, ui.IconDone, p.Reset, name, tag, p.Dim, p.Reset)
 			}
 			done++
 		}
@@ -115,13 +117,14 @@ func Kill(rt runtime.Runtime, group string, w io.Writer) error {
 	}
 	sessions, _ := rt.GroupSessions(group)
 	for _, sess := range sessions {
+		sess = rt.ResolveAlive(sess)
 		if rt.HasSession(sess) {
 			if rt.TaskType(sess) == "agent" {
-				_ = rt.Tmux("send-keys", "-t", sess, "/exit", "C-m")
+				_ = rt.Tmux("send-keys", "-t", "="+sess+":", "/exit", "C-m")
 				time.Sleep(500 * time.Millisecond)
 			}
 			if rt.HasSession(sess) {
-				_ = rt.Tmux("kill-session", "-t", sess)
+				_ = rt.Tmux("kill-session", "-t", "="+sess)
 			}
 		}
 		rt.CleanTaskMeta(sess)
@@ -140,9 +143,10 @@ func CollectText(rt runtime.Runtime, group string, w io.Writer) error {
 	p := ui.P()
 	sessions, _ := rt.GroupSessions(group)
 	for _, sess := range sessions {
+		sess = rt.ResolveAlive(sess)
 		desc := rt.TaskDesc(sess)
 		fmt.Fprintln(w)
-		fmt.Fprintf(w, "  %s━━━ %s ━━━%s\n", p.Bold, sess, p.Reset)
+		fmt.Fprintf(w, "  %s━━━ %s ━━━%s\n", p.Bold, rt.TaskLabel(sess), p.Reset)
 		if desc != "" {
 			fmt.Fprintf(w, "  %s任务: %s%s\n", p.Dim, desc, p.Reset)
 		}

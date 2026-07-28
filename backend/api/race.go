@@ -14,12 +14,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"ttmux-web/internal/id"
-	"ttmux-web/ttmux"
 	"ttmux-web/worktree"
 )
 
 type RaceContestant struct {
+	// Session 会话名(= 会话 id)：打开终端/发消息的 handle。
+	// Label 展示名 `<竞赛>-<字母>`：给人看的。
 	Session string `json:"session"`
+	Label   string `json:"label,omitempty"`
 	// SessionID tmux #{session_id}：会话被改名后仍能找回同一个会话（名字只是 handle）。
 	SessionID string `json:"sessionId,omitempty"`
 	Agent     string `json:"agent"` // claude | codex
@@ -157,18 +159,21 @@ func (a *API) RaceCreate(c *gin.Context) {
 	for i, in := range b.Contestants {
 		letter := string(rune('a' + i))
 		ct := RaceContestant{
-			Session: SanitizeSessionName(b.Name + "-" + letter),
-			Agent:   in.Agent,
-			Status:  "running",
+			Label:  b.Name + "-" + letter,
+			Agent:  in.Agent,
+			Status: "running",
 		}
 		fail := func(msg string) {
 			ct.Status, ct.Error = "failed", msg
 			race.Contestants = append(race.Contestants, ct)
 		}
-		if out, err := a.TT.Run("new-session", "-d", "-s", ct.Session, "-c", b.Dir); err != nil {
-			fail("session: " + ttmux.StripANSI(out))
+		// 选手会话叫 id，`<竞赛>-<字母>` 只是展示名
+		sess, err := a.newSession(ct.Label, b.Dir)
+		if err != nil {
+			fail("session: " + err.Error())
 			continue
 		}
+		ct.Session = sess
 		a.WT.BindSessionHome(ct.Session, b.Dir) // 选手会话归属本仓库；cdInto 之后改钉到各自 worktree
 		ct.SessionID = a.WT.SessionID(ct.Session)
 		wt, err := a.WT.Create(ctx, worktree.CreateReq{Dir: b.Dir, Branch: autoBranch(b.Name) + "-" + letter, Base: b.Base})

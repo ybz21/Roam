@@ -237,7 +237,7 @@ func cmdAdd(rt runtime.Runtime, st *swarmcore.Store, args []string, w io.Writer)
 			return err
 		}
 	}
-	ok, err := launchMember(rt, swarm, spec, w)
+	ok, err := launchMember(rt, st, swarm, spec, w)
 	if err != nil {
 		return err
 	}
@@ -267,7 +267,7 @@ func cmdDone(rt runtime.Runtime, st *swarmcore.Store, args []string, w io.Writer
 			return err
 		}
 		ui.Ok(w, "成员 %s 已标记完成 %s", ui.Bold(name+"-"+member), ui.Dim("(会话不动)"))
-		_, _ = st.Activate(name, "", false, spawnCallback(rt, w))
+		_, _ = st.Activate(name, "", false, spawnCallback(rt, st, w))
 		return nil
 	}
 	if err := st.MetaSet(name, "status", "done"); err != nil {
@@ -297,7 +297,7 @@ func cmdActivate(rt runtime.Runtime, st *swarmcore.Store, args []string, w io.Wr
 		ui.Err(w, "蜂群不存在: %s", swarm)
 		return fmt.Errorf("not found")
 	}
-	n, err := st.Activate(swarm, only, force, spawnCallback(rt, w))
+	n, err := st.Activate(swarm, only, force, spawnCallback(rt, st, w))
 	if err != nil {
 		return err
 	}

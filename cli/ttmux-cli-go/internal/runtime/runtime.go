@@ -248,6 +248,20 @@ func (r Runtime) TaskDescRaw(name string) string {
 	return ""
 }
 
+// TaskLabel 任务会话的展示名：先读落盘的 label.txt（会话死了也还在），
+// 再问 tmux 的 @roam_name，都没有就退回会话名本身。
+func (r Runtime) TaskLabel(sess string) string {
+	if b, err := os.ReadFile(filepath.Join(r.TaskMetaDir(sess), "label.txt")); err == nil {
+		if s := strings.TrimSpace(string(b)); s != "" {
+			return s
+		}
+	}
+	if row := r.SessionRow(sess); row.Name != "" {
+		return row.DisplayLabel()
+	}
+	return sess
+}
+
 func (r Runtime) GroupExists(group string) bool {
 	_, err := os.Stat(r.GroupFile(group))
 	return err == nil
@@ -267,9 +281,11 @@ func (r Runtime) LogFile(sess string) string {
 	return filepath.Join(r.LogsDir, sess+".log")
 }
 
-// WriteTaskMeta records type/desc/workdir/started for a task session,
+// WriteTaskMeta records type/desc/workdir/started/label for a task session,
 // mirroring _task_write_meta so status/collect/kill share one path.
-func (r Runtime) WriteTaskMeta(sess, taskType, desc, workdir string) error {
+// label 是任务的语义名（`<组>-<成员>`）：会话本身叫 id，而 tmux 的 @roam_name
+// 随会话一起消失——任务跑完 status/collect 还要显示名字，所以另存一份。
+func (r Runtime) WriteTaskMeta(sess, taskType, desc, workdir, label string) error {
 	dir := r.TaskMetaDir(sess)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
@@ -278,6 +294,7 @@ func (r Runtime) WriteTaskMeta(sess, taskType, desc, workdir string) error {
 		"type.txt":    taskType + "\n",
 		"desc.txt":    desc + "\n",
 		"workdir.txt": workdir + "\n",
+		"label.txt":   label + "\n",
 		"started.txt": r.Now().Format("2006-01-02 15:04:05") + "\n",
 	}
 	for name, content := range writes {

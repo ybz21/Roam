@@ -3,6 +3,8 @@
 package api
 
 import (
+	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -11,10 +13,16 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"ttmux-web/internal/id"
 	"ttmux-web/project"
 	"ttmux-web/ttmux"
 	"ttmux-web/worktree"
 )
+
+// labelOption 会话展示名所在的 tmux 用户选项（与 CLI 侧 runtime.LabelOption 同名，
+// 两个 module 各留一份常量——跨模块 import 要把一串 replace 抄进 backend/go.mod，
+// 为一个字符串不值当；e2e 与 CLI 单测各有断言防漂）。
+const labelOption = "@roam_name"
 
 type API struct {
 	TT          *ttmux.Client
@@ -94,6 +102,38 @@ func sessionParam(c *gin.Context) string {
 	return SanitizeSessionName(c.Param("name"))
 }
 
+// sessionTarget 路由 :name → tmux 会话名（= 会话 id）。
+//
+// 前端一律传会话名，此时是 id 格式，直接返回、零开销；只有老页面/外部脚本/老书签
+// 传来「展示名」时才问一次 tmux 换算（会话名与 @roam_name 各比一遍）。
+func (a *API) sessionTarget(c *gin.Context) string {
+	return a.resolveSession(sessionParam(c))
+}
+
+func (a *API) resolveSession(token string) string {
+	if token == "" || id.Valid(token) {
+		return token
+	}
+	out, err := a.TT.Run("list-sessions", "-F", "#{session_name}\t#{"+labelOption+"}")
+	if err != nil {
+		return token
+	}
+	byLabel := ""
+	for _, line := range strings.Split(strings.TrimSpace(ttmux.StripANSI(out)), "\n") {
+		name, label, _ := strings.Cut(strings.TrimRight(line, "\r"), "\t")
+		switch {
+		case name == token:
+			return name
+		case strings.TrimSpace(label) == token && byLabel == "":
+			byLabel = name
+		}
+	}
+	if byLabel != "" {
+		return byLabel
+	}
+	return token
+}
+
 // Sessions GET /sessions[?tree=1] —— tree=1 返回 parent 投影树（ls --tree --json，
 // 节点带 parent/children，供 W2 父子分组）；缺省平铺（兼容旧调用方）。
 func (a *API) Sessions(c *gin.Context) {
@@ -112,55 +152,68 @@ func (a *API) NewSession(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
 		return
 	}
-	b.Name = SanitizeSessionName(b.Name)
-	// 创建 detached 会话（转发给 tmux），可指定工作目录 -c
-	args := []string{"new-session", "-d", "-s", b.Name}
-	if strings.TrimSpace(b.Dir) != "" {
-		args = append(args, "-c", b.Dir)
-	}
-	out, err := a.TT.Run(args...)
+	// name 是**展示名**：会话本身叫 id（由 CLI 生成，那里是唯一的 id 出处），
+	// 名字只写进 tmux 的 @roam_name。重名、空格、中文都随便。
+	sess, err := a.newSession(b.Name, b.Dir)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "TTMUX_ERROR", "message": ttmux.StripANSI(out)}})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "TTMUX_ERROR", "message": err.Error()}})
 		return
 	}
 	// 在哪个目录建的，就永远属于那个项目——之后终端里 cd 去哪都不改归属。
 	// （不等轮询采样才钉：新会话头几秒就 cd 走的话会钉错。）
-	a.WT.BindSessionHome(b.Name, strings.TrimSpace(b.Dir))
-	c.JSON(http.StatusOK, gin.H{"data": ttmux.StripANSI(out), "name": b.Name})
+	a.WT.BindSessionHome(sess, strings.TrimSpace(b.Dir))
+	c.JSON(http.StatusOK, gin.H{"data": sess, "name": sess, "label": strings.TrimSpace(b.Name)})
 }
 
+// newSession 建一个 detached 会话，返回会话名(= 会话 id)。
+// 走 CLI 的 `ttmux new --json` 而不是自己拼 tmux new-session：会话 id 的生成、
+// @roam_name 的落地只有一份实现（CLI 侧），后端不再复制一遍。
+func (a *API) newSession(label, dir string) (string, error) {
+	args := []string{"new", "--json", "--no-reuse", label}
+	if d := strings.TrimSpace(dir); d != "" {
+		args = append(args, "--dir", d)
+	}
+	out, err := a.TT.Run(args...)
+	if err != nil {
+		return "", errors.New(ttmux.StripANSI(out))
+	}
+	var res struct {
+		Session string `json:"session"`
+	}
+	if json.Unmarshal([]byte(out), &res) != nil || res.Session == "" {
+		return "", errors.New(ttmux.StripANSI(out))
+	}
+	return res.Session, nil
+}
+
+// RenameSession PATCH /sessions/:name {name} —— 改会话的**展示名**。
+// tmux 会话名是 id、永远不动：终端标签、URL、归属、meta 外键、logs/meta 路径
+// 一个都不用跟着搬，重名也无所谓。
 func (a *API) RenameSession(c *gin.Context) {
 	var b struct {
 		Name string `json:"name"`
 	}
-	oldName := sessionParam(c)
+	sess := a.sessionTarget(c)
 	if err := c.ShouldBindJSON(&b); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
 		return
 	}
-	newName := SanitizeSessionName(strings.TrimSpace(b.Name))
-	if oldName == "" || newName == "" {
+	label := strings.TrimSpace(b.Name)
+	if sess == "" || label == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
 		return
 	}
-	if oldName == newName {
-		c.JSON(http.StatusOK, gin.H{"data": gin.H{"name": newName}})
-		return
-	}
-	// 走 ttmux rename（而非裸 rename-session 透传到 tmux）：改名后 CLI 内
-	// 会同步 meta parent 外键，子会话才不会被 Reconcile 当孤儿收养。
-	out, err := a.TT.Run("rename", oldName, newName)
+	out, err := a.TT.Run("rename", sess, label)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "TTMUX_ERROR", "message": ttmux.StripANSI(out)}})
 		return
 	}
-	// 归属钉在 tmux session_id 上，改名天然不影响，无需搬家。
-	c.JSON(http.StatusOK, gin.H{"data": gin.H{"name": newName}})
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"name": sess, "label": label}})
 }
 
 // 走 ttmux kill --yes（非交互）：孤儿收养/meta 清理在 CLI 内完成；?cascade=1 级联杀子树。
 func (a *API) KillSession(c *gin.Context) {
-	name := sessionParam(c)
+	name := a.sessionTarget(c)
 	args := []string{"kill", name, "--yes"}
 	if c.Query("cascade") == "1" {
 		args = append(args, "--cascade")
@@ -171,7 +224,7 @@ func (a *API) KillSession(c *gin.Context) {
 	a.text(c, args...)
 }
 func (a *API) Capture(c *gin.Context) {
-	a.text(c, "capture", sessionParam(c), "--lines", c.DefaultQuery("lines", "200"))
+	a.text(c, "capture", a.sessionTarget(c), "--lines", c.DefaultQuery("lines", "200"))
 }
 
 // 允许注入的具名按键（其余只允许单个字母/数字）。用于在专业渲染模式下响应 TUI 选择框。
@@ -185,7 +238,7 @@ var allowedKeys = map[string]bool{
 // 之所以单列一个端点：/tasks/_/send 只能发「文本+回车」，无法发方向键/裸数字/Esc，
 // 而 Claude/Codex 的权限确认/选项菜单需要这些键来选择。
 func (a *API) Keys(c *gin.Context) {
-	name := sessionParam(c)
+	name := a.sessionTarget(c)
 	var b struct {
 		Keys []string `json:"keys"`
 	}
@@ -219,7 +272,7 @@ func (a *API) Keys(c *gin.Context) {
 // 所以用 list-panes 取 active pane（与 fork 的父 cwd 解析同款）。
 func (a *API) SessionCwd(c *gin.Context) {
 	dir := ""
-	if out, err := a.TT.Run("list-panes", "-t", "="+sessionParam(c), "-F", "#{pane_active}\t#{pane_current_path}"); err == nil {
+	if out, err := a.TT.Run("list-panes", "-t", "="+a.sessionTarget(c), "-F", "#{pane_active}\t#{pane_current_path}"); err == nil {
 		for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
 			active, cwd, ok := strings.Cut(line, "\t")
 			if ok && (dir == "" || active == "1") {
@@ -233,7 +286,7 @@ func (a *API) SessionCwd(c *gin.Context) {
 // SessionType POST /sessions/:name/type —— 把文本字面量打进当前 pane（不追加回车）。
 // 供终端页语音识别后回填用：内容停在输入行，用户复查/编辑后自行按 Enter 发送。
 func (a *API) SessionType(c *gin.Context) {
-	name := sessionParam(c)
+	name := a.sessionTarget(c)
 	var b struct {
 		Text string `json:"text"`
 	}

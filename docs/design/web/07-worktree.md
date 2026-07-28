@@ -124,7 +124,7 @@ ttmux 的能力止步于「平坦 tmux session + parent 关系」，**不理解 
 ### 2.4 session ↔ worktree：home join 读模型（归属钉死，状态现算）
 
 - **归属目录（home）钉死**：会话创建时就记下它属于哪个目录（Web 建会话/建 worktree 会话/竞赛/fork 都显式绑定；CLI 直建的会话第一次被看见时按 active pane cwd 钉），落 `<dataDir>/session-homes.json`，会话消失即收敛。
-- **键是 tmux `#{session_id}`（`$3`），不是会话名**：它改名不变、server 内唯一，生命周期天然等于会话（server 没了会话也没了），于是「改名要搬家」「同名复用继承旧归属」两类坑从根上消失；名字只作快照存着供排障。`annotations` 随行返回 `sessionId`，但**响应仍以会话名为 map key**——名字是 UI/CLI 的 handle。记录类数据（竞赛选手）同样存 `sessionId`，改过名也能找回同一个会话。
+- **键是 tmux `#{session_id}`（`$3`），不是会话名**：它改名不变、server 内唯一，生命周期天然等于会话（server 没了会话也没了），于是「改名要搬家」「同名复用继承旧归属」两类坑从根上消失；名字只作快照存着供排障。`annotations` 随行返回 `sessionId`，但**响应仍以会话名为 map key**——会话名现在就是不可变的会话 id（见 [session-identity.md](../session-identity.md)：用户起的名字降级为展示属性 `@roam_name`），所以这个 key 本身也已经不会变了。记录类数据（竞赛选手）同样存 `sessionId`，改过名也能找回同一个会话。
   > 修订（原设计按**实时** pane cwd 现算归属）：cd 是终端里的日常动作，不是「换项目」。实时归属会让会话在用户 `cd /tmp` 看眼日志时就掉出项目——项目会话数掉 0、详情页任务流空、甚至被别的项目抢走。归属改为钉死，**只有编排层的移动（cdInto）才改归属**。
 - join 本身不变：home 路径 canonical（`EvalSymlinks`+clean）后与 `git worktree list` 按**路径段边界**做「最长 worktree root 前缀」匹配。
 - `annotations` 返回 `home` + `primary`（home 命中的 worktree/repo）+ `matches[]`（现为单元素）；`ambiguous` 保留为兼容字段，恒 false。

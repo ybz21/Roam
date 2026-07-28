@@ -16,7 +16,9 @@ import (
 )
 
 // launchMember spawns a member session, building the agent config from its spec.
-func launchMember(rt runtime.Runtime, swarm string, m swarmcore.MemberSpec, w io.Writer) (bool, error) {
+// 会话名是 id，语义名 `<群>-<成员>` 只是展示名 → 会话名必须回写进 members.session，
+// 否则会话一死（展示名随之消失）就再也找不到它的日志/pane 了。
+func launchMember(rt runtime.Runtime, st *swarmcore.Store, swarm string, m swarmcore.MemberSpec, w io.Writer) (bool, error) {
 	ac := spawn.DefaultAgentConfig(m.Workdir)
 	if m.Type == "agent" {
 		ac.Kind = m.Kind
@@ -28,13 +30,17 @@ func launchMember(rt runtime.Runtime, swarm string, m swarmcore.MemberSpec, w io
 			ac.Permission = m.Perm
 		}
 	}
-	return spawn.One(rt, swarm, m.Name, m.Type, m.Task, ac, w)
+	created, sess, err := spawn.One(rt, swarm, m.Name, m.Type, m.Task, ac, w)
+	if sess != "" {
+		_ = st.SetMemberSession(swarm, m.Name, sess)
+	}
+	return created, err
 }
 
 // spawnCallback adapts launchMember to the core's SpawnFunc signature.
-func spawnCallback(rt runtime.Runtime, w io.Writer) swarmcore.SpawnFunc {
+func spawnCallback(rt runtime.Runtime, st *swarmcore.Store, w io.Writer) swarmcore.SpawnFunc {
 	return func(swarm string, m swarmcore.MemberSpec) (bool, error) {
-		return launchMember(rt, swarm, m, w)
+		return launchMember(rt, st, swarm, m, w)
 	}
 }
 
@@ -63,6 +69,8 @@ func adopt(rt runtime.Runtime, st *swarmcore.Store, swarm, cc, dir, prompt strin
 		ui.Err(w, "蜂群不存在: %s", swarm)
 		return fmt.Errorf("not found")
 	}
+	// cc 是指挥会话的**展示名**（默认 cc-<群>）；会话本身叫 id，
+	// meta.supervisor 存的是会话名(= id)，这样会话列表/exclude 才对得上。
 	if cc == "" {
 		cc = "cc-" + st.Name(swarm)
 	}
@@ -77,7 +85,6 @@ func adopt(rt runtime.Runtime, st *swarmcore.Store, swarm, cc, dir, prompt strin
 	if dir != "." {
 		_ = os.MkdirAll(dir, 0o755)
 	}
-	_ = st.MetaSet(swarm, "supervisor", cc)
 	_ = st.MetaSet(swarm, "status", "running")
 	goal := st.MetaGet(swarm, "goal")
 	kickoff := strings.TrimSpace(prompt)
@@ -87,23 +94,28 @@ func adopt(rt runtime.Runtime, st *swarmcore.Store, swarm, cc, dir, prompt strin
 			kickoff += " " + goal
 		}
 	}
-	if rt.HasSession(cc) {
+	if target := rt.Resolve(cc); rt.HasSession(target) {
+		_ = st.MetaSet(swarm, "supervisor", target)
 		// 已有会话：用粘贴缓冲提交（send-keys 会把多行 prompt 的换行当回车提前执行）
-		sendPromptSubmit(rt, cc, kickoff)
+		sendPromptSubmit(rt, target, kickoff)
 		ui.Ok(w, "已让现有会话 %s 接管蜂群 %s", ui.Bold(cc), ui.Bold(swarm))
 		return nil
 	}
-	_ = rt.Tmux("new-session", "-d", "-s", cc, "-x", "220", "-y", "50")
-	rt.InjectEnv(cc)
-	_ = rt.Tmux("pipe-pane", "-t", cc, "-o", "cat >> '"+rt.LogFile(cc)+"'")
-	_ = writeEmpty(rt.LogFile(cc))
+	sess, err := rt.CreateSession(runtime.CreateOpts{Label: cc, Width: "220", Height: "50"})
+	if err != nil {
+		return err
+	}
+	_ = st.MetaSet(swarm, "supervisor", sess)
+	rt.InjectEnv(sess)
+	_ = rt.Tmux("pipe-pane", "-t", sess, "-o", "cat >> '"+rt.LogFile(sess)+"'")
+	_ = writeEmpty(rt.LogFile(sess))
 	// 把（可能多行的）kickoff 落盘再用 "$(cat …)" 注入，避免换行被 send-keys 当成回车提前执行
-	bf := filepath.Join(rt.DataDir, "cc-swarm", cc+".brief.md")
+	bf := filepath.Join(rt.DataDir, "cc-swarm", sess+".brief.md")
 	_ = os.MkdirAll(filepath.Dir(bf), 0o755)
 	_ = os.WriteFile(bf, []byte(kickoff), 0o644)
 	runCmd := "cd " + shellQuote(dir) + " && " + claudeBin() + " \"$(cat " + shellQuote(bf) + ")\""
-	_ = rt.Tmux("send-keys", "-t", cc, runCmd, "C-m")
-	ui.Ok(w, "已拉起指挥会话 %s 接管蜂群 %s", ui.Bold(cc), ui.Bold(swarm))
+	_ = rt.Tmux("send-keys", "-t", sess, runCmd, "C-m")
+	ui.Ok(w, "已拉起指挥会话 %s%s 接管蜂群 %s", ui.Bold(cc), ui.Dim("("+sess+")"), ui.Bold(swarm))
 	if goal != "" {
 		fmt.Fprintf(w, "   %s目标已交给指挥: %s%s\n", ui.P().Dim, goal, ui.P().Reset)
 	}

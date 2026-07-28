@@ -105,8 +105,9 @@ func (m *menu) pause() {
 	_, _ = ui.ReadLine("\n  按回车继续...")
 }
 
+// runningLabel 吃的可能是展示名（蜂群成员的 `<群>-<成员>`），先解析成会话名。
 func (m *menu) runningLabel(sess string) string {
-	if m.rt.HasSession(sess) {
+	if m.rt.HasSession(m.rt.ResolveAlive(sess)) {
 		return " " + ui.P().Yellow + "运行中" + ui.P().Reset
 	}
 	return " " + ui.Dim("已结束")

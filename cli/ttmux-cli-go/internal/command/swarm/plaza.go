@@ -25,11 +25,13 @@ func plazaAuthor(rt runtime.Runtime, st *swarmcore.Store, swarm string) string {
 	if sup := st.MetaGet(swarm, "supervisor"); sup != "" && sess == sup {
 		return "leader"
 	}
-	if sess == "cc-"+sname {
+	// 会话名是 id，身份要从展示名(@roam_name)认：指挥叫 cc-<群>，成员叫 <群>-<成员>。
+	label := rt.SessionLabel(sess)
+	if sess == "cc-"+sname || label == "cc-"+sname {
 		return "leader"
 	}
-	if sname != "" && strings.HasPrefix(sess, sname+"-") {
-		return strings.TrimPrefix(sess, sname+"-")
+	if sname != "" && strings.HasPrefix(label, sname+"-") {
+		return strings.TrimPrefix(label, sname+"-")
 	}
 	return "human"
 }
@@ -136,17 +138,24 @@ func notifyMaster(rt runtime.Runtime, st *swarmcore.Store, swarm string, postID 
 	ui.Info(w, "已通知 Leader 会话 %s 处理 #%d", ui.Bold(target), postID)
 }
 
+// masterSession 找蜂群的指挥会话名(= 会话 id)。meta.supervisor 存的就是会话名
+// （老库里可能还是 cc-<群> 这样的名字，ResolveAlive 一并兜住）；再不行按展示名
+// cc-<群> 现查，最后退到 leader 角色的成员会话。
 func masterSession(rt runtime.Runtime, st *swarmcore.Store, swarm string) string {
 	sname := st.Name(swarm)
-	if sup := st.MetaGet(swarm, "supervisor"); sup != "" && rt.HasSession(sup) {
-		return sup
+	if sup := st.MetaGet(swarm, "supervisor"); sup != "" {
+		if s := rt.ResolveAlive(sup); rt.HasSession(s) {
+			return s
+		}
 	}
-	if sname != "" && rt.HasSession("cc-"+sname) {
-		return "cc-" + sname
+	if sname != "" {
+		if s := rt.Resolve("cc-" + sname); rt.HasSession(s) {
+			return s
+		}
 	}
 	for _, m := range st.LeaderMembers(swarm) {
-		if rt.HasSession(sname + "-" + m) {
-			return sname + "-" + m
+		if s := st.MemberSession(swarm, m); rt.HasSession(s) {
+			return s
 		}
 	}
 	return ""

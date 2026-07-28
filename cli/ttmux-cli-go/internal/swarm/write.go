@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"ttmux-cli-go/internal/runtime"
 )
 
 // MemberSpec is the full row spec for a swarm member.
@@ -222,7 +224,7 @@ func (s *Store) MemberDone(swarm, member string) bool {
 	if s.isMarkedDone(swarm, member) {
 		return true
 	}
-	sess := swarm + "-" + member
+	sess := s.MemberSession(swarm, member)
 	if tmuxHasSession(s.opt.TmuxBin, sess) {
 		dead := strings.TrimSpace(runTmux(s.opt.TmuxBin, "display-message", "-t", "="+sess, "-p", "#{pane_dead}"))
 		return dead == "1"
@@ -346,6 +348,50 @@ func (s *Store) migrateOne(name, created, goal, status, supervisor string) error
 	return err
 }
 
+// MigrateSessionNames 会话改名成 id 后，把蜂群台账里记的会话名一起换掉：
+// swarms.supervisor（指挥会话）与各群 members.session（成员会话）。
+// mapping 是 {老会话名: 新会话名}，由 runtime.MigrateSessionsToID 产出。
+func (s *Store) MigrateSessionNames(mapping map[string]string) {
+	if len(mapping) == 0 {
+		return
+	}
+	swarms, err := s.ListSwarms()
+	if err != nil {
+		return
+	}
+	for _, sw := range swarms {
+		if neu, ok := mapping[sw.Supervisor]; ok {
+			_ = s.MetaSet(sw.Name, "supervisor", neu)
+		}
+		db, err := s.openSwarmDB(sw.Name)
+		if err != nil {
+			continue
+		}
+		// 成员会话名以前是 `<群>-<成员>`（没落过 session 列），改名后要按新名字补上
+		rows, _ := db.Query(`SELECT name, IFNULL(session,'') FROM members`)
+		type pair struct{ member, sess string }
+		var todo []pair
+		if rows != nil {
+			for rows.Next() {
+				var m, sess string
+				if rows.Scan(&m, &sess) == nil {
+					if sess == "" {
+						sess = MemberLabel(sw.Name, m)
+					}
+					if neu, ok := mapping[sess]; ok {
+						todo = append(todo, pair{m, neu})
+					}
+				}
+			}
+			rows.Close()
+		}
+		for _, p := range todo {
+			_, _ = db.Exec(`UPDATE members SET session=? WHERE name=?`, p.sess, p.member)
+		}
+		db.Close()
+	}
+}
+
 func (s *Store) migrateMembers(name string, groupSessions func(string) []string, taskType, taskDesc func(string) string) {
 	db, err := s.openSwarmDB(name)
 	if err != nil {
@@ -353,17 +399,25 @@ func (s *Store) migrateMembers(name string, groupSessions func(string) []string,
 	}
 	defer db.Close()
 	supervisor := s.MetaGet(name, "supervisor")
+	rt := runtime.Runtime{TmuxBin: s.opt.TmuxBin}
 	for _, sess := range groupSessions(name) {
-		member := strings.TrimPrefix(sess, name+"-")
+		// 台账存的是会话名(= id)，成员名要从展示名 `<群>-<成员>` 反推；
+		// 老 bash 蜂群的台账里存的本来就是语义名，取不到展示名时原样用。
+		label := sess
+		if row := rt.SessionRow(sess); row.Name != "" {
+			label = row.DisplayLabel()
+		}
+		member := strings.TrimPrefix(label, name+"-")
 		role := "member"
 		if supervisor != "" && sess == supervisor {
 			role = "leader"
 		}
-		_, _ = db.Exec(`INSERT INTO members(name,type,task,role,pending,done) VALUES(?,?,?,?,0,0)
+		_, _ = db.Exec(`INSERT INTO members(name,type,task,role,session,pending,done) VALUES(?,?,?,?,?,0,0)
 			ON CONFLICT(name) DO UPDATE SET
 				type=COALESCE(NULLIF(members.type,''), excluded.type),
-				task=COALESCE(NULLIF(members.task,''), excluded.task)`,
-			member, taskType(sess), taskDesc(sess), role)
+				task=COALESCE(NULLIF(members.task,''), excluded.task),
+				session=COALESCE(NULLIF(members.session,''), excluded.session)`,
+			member, taskType(sess), taskDesc(sess), role, sess)
 	}
 }
 

@@ -143,7 +143,11 @@ func TestWorktreeSessionLifecycle(t *testing.T) {
 	if data["branch"] != "e2e-main" || !strings.Contains(wtPath, ".worktrees") {
 		t.Fatalf("bad data: %v", data)
 	}
-	if !strings.Contains(tmuxOut("list-sessions", "-F", "#{session_name}"), "e2e-main") {
+	// 会话名是不可变的会话 id，用户起的名字是展示名（tmux 用户选项 @roam_name）：
+	// 断言「叫什么名字的会话在不在」一律看展示名，定位会话一律用返回的 session。
+	labels := func() string { return tmuxOut("list-sessions", "-F", "#{@roam_name}") }
+	mainSess := data["session"].(string)
+	if !strings.Contains(labels(), "e2e-main") {
 		t.Fatal("session not created")
 	}
 	// cd 是注入 shell 的异步键入，轮询等 pane cwd 落进 worktree
@@ -158,7 +162,7 @@ func TestWorktreeSessionLifecycle(t *testing.T) {
 		t.Fatalf("session %s cwd never reached %q (now %q)", sess, want,
 			tmuxOut("list-panes", "-t", "="+sess, "-F", "#{pane_current_path}"))
 	}
-	waitCwd("e2e-main", wtPath)
+	waitCwd(mainSess, wtPath)
 
 	// ② fork 子会话进新 worktree（仓库自动取父 cwd）
 	code, resp = post(t, r, "/sessions/e2e-main/fork-worktree", map[string]any{
@@ -169,17 +173,19 @@ func TestWorktreeSessionLifecycle(t *testing.T) {
 	}
 	kid := resp["data"].(map[string]any)
 	kidPath := kid["path"].(string)
-	if kid["parent"] != "e2e-main" {
+	kidSess := kid["session"].(string)
+	if kid["parent"] != mainSess {
 		t.Fatalf("bad fork data: %v", kid)
 	}
-	waitCwd("e2e-kid", kidPath)
+	waitCwd(kidSess, kidPath)
 
 	// ②b 纯 fork（无 worktree）：显式 dir，parent 记入 meta，tree=1 投影可见
 	code, resp = post(t, r, "/sessions/e2e-main/fork", map[string]any{"child": "e2e-flat", "dir": repo})
 	if code != 200 {
 		t.Fatalf("fork: %d %v", code, resp)
 	}
-	waitCwd("e2e-flat", repo)
+	flatSess := resp["data"].(map[string]any)["session"].(string)
+	waitCwd(flatSess, repo)
 	{
 		req := httptest.NewRequest(http.MethodGet, "/sessions?tree=1", nil)
 		w := httptest.NewRecorder()
@@ -192,7 +198,7 @@ func TestWorktreeSessionLifecycle(t *testing.T) {
 		var walk func(nodes []map[string]any)
 		walk = func(nodes []map[string]any) {
 			for _, n := range nodes {
-				if n["name"] == "e2e-flat" && n["parent"] == "e2e-main" {
+				if n["label"] == "e2e-flat" && n["parent"] == mainSess {
 					found = true
 				}
 				if kids, ok := n["children"].([]any); ok {
@@ -212,7 +218,7 @@ func TestWorktreeSessionLifecycle(t *testing.T) {
 		}
 	}
 	// 收尾：清掉 flat 子会话，别影响后面 merge close 的占用语义
-	tmuxOut("kill-session", "-t", "=e2e-flat")
+	tmuxOut("kill-session", "-t", "="+flatSess)
 
 	// ③ discard 关闭子会话：会话/worktree/分支全清
 	code, resp = post(t, r, "/sessions/e2e-kid/close-with-worktree", map[string]any{
@@ -221,7 +227,7 @@ func TestWorktreeSessionLifecycle(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("discard close: %d %v", code, resp)
 	}
-	if strings.Contains(tmuxOut("list-sessions", "-F", "#{session_name}"), "e2e-kid") {
+	if strings.Contains(labels(), "e2e-kid") {
 		t.Fatal("kid session survived discard")
 	}
 	if _, err := os.Stat(kidPath); err == nil {
@@ -249,7 +255,7 @@ func TestWorktreeSessionLifecycle(t *testing.T) {
 	if _, err := os.Stat(wtPath); err == nil {
 		t.Fatal("worktree survived merge close")
 	}
-	if strings.Contains(tmuxOut("list-sessions", "-F", "#{session_name}"), "e2e-main") {
+	if strings.Contains(labels(), "e2e-main") {
 		t.Fatal("session survived merge close")
 	}
 }
@@ -278,9 +284,10 @@ func TestRaceLifecycle(t *testing.T) {
 	if a["branch"] != "race-x-a" || loser["branch"] != "race-x-b" {
 		t.Fatalf("bad lane branches: %v / %v", a["branch"], loser["branch"])
 	}
-	sessions := tmuxOut("list-sessions", "-F", "#{session_name}")
-	if !strings.Contains(sessions, "race-x-a") || !strings.Contains(sessions, "race-x-b") {
-		t.Fatalf("contestant sessions missing: %s", sessions)
+	// 选手会话也叫 id，`race-x-a/b` 是展示名
+	labels := func() string { return tmuxOut("list-sessions", "-F", "#{@roam_name}") }
+	if l := labels(); !strings.Contains(l, "race-x-a") || !strings.Contains(l, "race-x-b") {
+		t.Fatalf("contestant sessions missing: %s", l)
 	}
 
 	// ② 赢家 worktree 里留未提交改动（crown 应先 wip-commit 再合并）
@@ -305,11 +312,11 @@ func TestRaceLifecycle(t *testing.T) {
 	if _, err := os.Stat(loser["path"].(string)); err == nil {
 		t.Fatal("loser worktree survived cleanup")
 	}
-	if strings.Contains(tmuxOut("list-sessions", "-F", "#{session_name}"), "race-x-b") {
+	if strings.Contains(labels(), "race-x-b") {
 		t.Fatal("loser session survived cleanup")
 	}
 	// 赢家会话/worktree 保留（收尾走 W7/W4）
-	if !strings.Contains(tmuxOut("list-sessions", "-F", "#{session_name}"), "race-x-a") {
+	if !strings.Contains(labels(), "race-x-a") {
 		t.Fatal("winner session should survive crown")
 	}
 

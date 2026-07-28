@@ -4,6 +4,7 @@
 // 删除（先列损失再确认 + 占用检查兜底）与显式清理残留。
 import { useCallback, useEffect, useState } from 'react'
 import { App as AntApp, AutoComplete, Button, Drawer, Dropdown, Empty, Grid, Input, Modal, Popover, Select, Skeleton, Tag, Tooltip } from 'antd'
+import { sessionLabel } from './session-label'
 import { api } from './api'
 import { useI18n } from './i18n'
 import { recentDirs } from './App'
@@ -284,7 +285,7 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
       out.push(
         <Tag key="s" color="green" style={{ margin: 0, cursor: openTerm ? 'pointer' : 'default' }} title={wt.sessions.map((x) => x.session).join(', ')}
           onClick={openTerm ? () => { openTerm(wt.sessions[0].session); onClose() } : undefined}>
-          {wt.sessions[0].session}{wt.sessions.length > 1 ? ` +${wt.sessions.length - 1}` : ''}
+          {sessionLabel(wt.sessions[0].session)}{wt.sessions.length > 1 ? ` +${wt.sessions.length - 1}` : ''}
         </Tag>,
       )
     } else if (!wt.external) {
@@ -386,7 +387,7 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
   const ql = q.trim().toLowerCase()
   const match = (wt: Worktree) => {
     if (ql && !(wt.branch.toLowerCase().includes(ql) || wt.path.toLowerCase().includes(ql)
-      || (wt.sessions || []).some((s) => s.session.toLowerCase().includes(ql)))) return false
+      || (wt.sessions || []).some((s) => `${sessionLabel(s.session)} ${s.session}`.toLowerCase().includes(ql)))) return false
     if (cat === 'all') return true
     if (wt.isMain) return false
     return catOf(wt) === cat

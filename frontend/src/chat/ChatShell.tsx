@@ -2,6 +2,7 @@
 // Claude、Codex 共用，差异只在 title、accent、占位文案与消息渲染(renderMessage)。
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button, Grid, Input, App as AntApp } from 'antd'
+import { sessionLabel } from '../session-label'
 import { api, upload, makeClipboardImageFile } from '../api'
 import FileBrowser from '../FileBrowser'
 import FloatingFileDrawer from '../FloatingFileDrawer'
@@ -161,7 +162,7 @@ export function ChatShell({ name, dir, accent, title, placeholder, onBack, onRef
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
           {title}
-          <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{name}</span>
+          <span style={{ color: 'var(--text-dim)', fontSize: 12 }} title={name}>{sessionLabel(name)}</span>
           <span style={{ flex: 1 }} />
           {onRefresh && <Button size="small" title={t('chat.refreshTranscript')} onClick={() => { atBottom.current = true; onRefresh() }}>{t('common.refresh')}</Button>}
           <Button size="small" type={showFiles ? 'primary' : 'default'} style={showFiles ? { background: accent, borderColor: accent } : {}} onClick={() => setShowFiles((s) => !s)}>📁 {t('chat.files')}</Button>

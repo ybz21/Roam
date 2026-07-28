@@ -10,6 +10,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { App as AntApp, AutoComplete, Button, Dropdown, Input, Modal, Popconfirm, Segmented, Select, Space, Spin, Tag, Tooltip, Typography } from 'antd'
 import type { MenuProps } from 'antd'
+import { sessionLabel } from './session-label'
 import { api, upload, makeClipboardImageFile } from './api'
 import { useI18n } from './i18n'
 import { usePreferences } from './preferences'
@@ -23,7 +24,8 @@ const RaceCreateModal = lazy(() => import('./Race').then((m) => ({ default: m.Ra
 const RaceComparePanel = lazy(() => import('./Race').then((m) => ({ default: m.RaceComparePanel })))
 const NewSwarmModal = lazy(() => import('./Swarm').then((m) => ({ default: m.NewSwarmModal })))
 
-type ProjSession = { name: string; attached: boolean; running?: boolean; waiting?: boolean; lastActivity: number; branch?: string; linked?: boolean }
+// name 是会话名(= 会话 id，打开终端的 handle)，label 是展示名(@roam_name)
+type ProjSession = { name: string; label?: string; attached: boolean; running?: boolean; waiting?: boolean; lastActivity: number; branch?: string; linked?: boolean }
 type Proj = {
   key: string; name: string; dir: string; git: boolean; pinned: boolean
   sessions: number; attached: number; worktrees: number; unfinished: number; cleanable: number; races: number
@@ -327,7 +329,7 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
             {data.loose.map((s) => (
               <div key={s.name} className="prj-row" onClick={() => openTerm(s.name)}>
                 <span style={{ marginTop: 5, display: 'inline-flex' }}>{dot(false, s.waiting ? '#d29922' : s.running ? '#3fb950' : undefined)}</span>
-                <span style={{ fontWeight: 600 }}>{s.name}</span>
+                <span style={{ fontWeight: 600 }} title={s.name}>{s.label || sessionLabel(s.name)}</span>
                 <span style={{ color: 'var(--text-dimmer)', fontSize: 12, marginTop: 2 }}>{relTime(s.lastActivity, t)}</span>
                 <span style={{ flex: 1 }} />
                 <span className="acts"><a>{t('project.enter')}</a></span>
@@ -952,7 +954,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
         {isChild && <span style={{ color: '#a371f7', fontSize: 12, marginTop: 3 }}>⑂</span>}
         <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 700 }}>{s.name}</span>
+            <span style={{ fontWeight: 700 }} title={s.name}>{s.label || sessionLabel(s.name)}</span>
             {hit.linked && hit.branch && <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 11 }}>⎇ {hit.branch}</Tag>}
             {hit.external && hit.linked && <Tag style={{ margin: 0 }}>⧉</Tag>}
             {swarmMap[s.name]?.role === 'leader' && <Tag color="purple" style={{ margin: 0 }}>{t('project.swarm.leaderTag')}</Tag>}
@@ -1306,7 +1308,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
                         {(w.sessions || []).map((ref: any) => (
                           <div key={ref.session} className="prj-subrow" onClick={() => openTerm(ref.session)}>
                             {dot(false, cc[ref.session] || cx[ref.session] ? '#3fb950' : undefined)}
-                            <span style={{ fontWeight: 600, fontSize: 13 }}>{ref.session}</span>
+                            <span style={{ fontWeight: 600, fontSize: 13 }} title={ref.session}>{sessionLabel(ref.session)}</span>
                             {cc[ref.session] && <Tag color="blue" style={{ margin: 0, fontSize: 10.5, lineHeight: '16px' }}>Claude</Tag>}
                             {cx[ref.session] && <Tag color="green" style={{ margin: 0, fontSize: 10.5, lineHeight: '16px' }}>Codex</Tag>}
                             <span className="prj-peek">{peeks[ref.session] || '…'}</span>
@@ -1369,7 +1371,9 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
           {swarms.map((sw: any) => {
             const ex = swarmExtras[sw.name]
             const mineNames = new Set(mine.map((x) => x.name))
-            const memberRow = (session: string, role: string, subrole?: string, done?: boolean, status?: string) => {
+            // label：蜂群成员的语义名 `<群>-<成员>` / 指挥 cc-<群>。蜂群会话被会话列表
+            // 过滤掉（不在全局展示名表里），所以名字要由蜂群接口随行带来。
+            const memberRow = (session: string, role: string, subrole?: string, done?: boolean, status?: string, label?: string) => {
               // 按 dir 认领的群：成员会话不在 ls 清单里（被蜂群过滤挡掉），但确实属于本项目
               const inProj = mineNames.has(session) || !!sw.byDir
               const running = cc[session] || cx[session] || status === 'running'
@@ -1377,7 +1381,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
                 <div key={session} className="prj-subrow" style={{ opacity: inProj ? 1 : 0.45 }}
                   onClick={() => { if (inProj) openTerm(session) }}>
                   {dot(false, status === 'waiting' ? '#d29922' : running ? '#3fb950' : undefined)}
-                  <span style={{ fontWeight: 600, fontSize: 13 }}>{session}</span>
+                  <span style={{ fontWeight: 600, fontSize: 13 }} title={session}>{label || sessionLabel(session)}</span>
                   {role === 'leader' && <Tag color="purple" style={{ margin: 0, fontSize: 10.5, lineHeight: '16px' }}>{t('project.swarm.leaderTag')}</Tag>}
                   {subrole && <Tag style={{ margin: 0, fontSize: 10.5, lineHeight: '16px' }}>{t(('swarm.subrole.' + subrole) as any) || subrole}</Tag>}
                   {done && <Tag color="purple" style={{ margin: 0, fontSize: 10.5, lineHeight: '16px' }}>{t('project.swarm.integrate')}</Tag>}
@@ -1415,9 +1419,9 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
                   <Button size="small" type="primary" onClick={() => { location.hash = '#/swarm/' + encodeURIComponent(sw.name) }}>{t('project.swarm.board')} →</Button>
                 </div>
                 <div style={{ margin: '9px 0 0 5px', paddingLeft: 12, borderLeft: '2px solid rgba(163,113,247,.3)', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  {sw.supervisor && memberRow(sw.supervisor, 'leader')}
+                  {sw.supervisor && memberRow(sw.supervisor, 'leader', undefined, false, undefined, 'cc-' + sw.name)}
                   {(sw.members || []).filter((m: any) => m.session && m.session !== sw.supervisor)
-                    .map((m: any) => memberRow(m.session, m.role, m.subrole, !!m.done, m.status))}
+                    .map((m: any) => memberRow(m.session, m.role, m.subrole, !!m.done, m.status, m.label))}
                 </div>
                 {ex?.last && (
                   <div className="prj-mono" style={{ display: 'flex', gap: 8, marginTop: 9, padding: '6px 10px', borderRadius: 8, background: 'var(--bg-term)', border: '1px solid var(--border-subtle)', fontSize: 11.5, color: 'var(--text-dim)' }}>

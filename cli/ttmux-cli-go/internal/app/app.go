@@ -14,6 +14,7 @@ import (
 	"ttmux-cli-go/internal/command/session"
 	"ttmux-cli-go/internal/command/spawn"
 	swarmcommand "ttmux-cli-go/internal/command/swarm"
+	"ttmux-cli-go/internal/plugin"
 	"ttmux-cli-go/internal/runtime"
 	"ttmux-cli-go/internal/sessmeta"
 	swarmcore "ttmux-cli-go/internal/swarm"
@@ -32,6 +33,7 @@ func New() App {
 
 func (a App) Run(args []string) error {
 	args = stripQuiet(args)
+	a.migrateSessionsToID()
 	if len(args) == 0 {
 		return interactive.Run(a.rt, version, a.Run)
 	}
@@ -91,14 +93,11 @@ func (a App) Run(args []string) error {
 	case "killall":
 		return session.KillAll(a.rt, a.swarmSessions(), out)
 	case "rename":
-		old, neu, err := session.Rename(a.rt, a.swarmSessions(), rest, out)
-		if err != nil {
-			return err
-		}
-		if old != "" && neu != "" { // 改名成功后同步 meta 外键（含交互式选名）
-			_ = a.meta().OnRename(old, neu)
-		}
-		return nil
+		// 改名 = 改展示名(@roam_name)，tmux 会话名(id)不动 → meta/台账/路径全都不用跟着搬
+		_, _, err := session.Rename(a.rt, a.swarmSessions(), rest, out)
+		return err
+	case "resolve": // 把展示名/id/老名字解析成 tmux 会话名（后端与脚本用）
+		return session.Resolve(a.rt, rest, out)
 	case "send":
 		return session.Send(a.rt, a.swarmSessions(), rest, out)
 	case "source":
@@ -154,6 +153,27 @@ func (a App) runStatus(args []string) error {
 		return group.StatusJSON(a.rt, args[0], os.Stdout)
 	}
 	return group.Status(a.rt, args[0], os.Stdout)
+}
+
+// migrateSessionsToID 一次性把存量会话改名成会话 id（原名转存为展示名），
+// 并把各处按会话名记的台账跟着改：任务组文件与 logs/meta 在 runtime 里搬，
+// 蜂群（supervisor / members.session）与插件会话表在这里串起来——那两个包
+// import 了 runtime，反过来不能，所以汇合点只能在 app 层。
+//
+// 幂等：做完落一个标记文件，之后每条命令只多一次 os.Stat。tmux 盲态不迁移。
+func (a App) migrateSessionsToID() {
+	if a.rt.SessionIDMigrationDone() {
+		return
+	}
+	mapping := a.rt.MigrateSessionsToID()
+	if len(mapping) == 0 {
+		return
+	}
+	swarmcore.NewStore(a.swarmOptions()).MigrateSessionNames(mapping)
+	if st, err := plugin.Open(plugin.NewEnv(a.rt)); err == nil {
+		st.MigrateSessionNames(mapping)
+		st.Close()
+	}
 }
 
 // swarmSessions returns the set of tmux sessions hidden from native session

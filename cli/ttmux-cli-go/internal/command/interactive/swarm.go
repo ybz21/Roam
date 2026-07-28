@@ -187,7 +187,8 @@ func (m *menu) memberNames(swarm string) []string {
 	sessions, _ := m.rt.GroupSessions(swarm)
 	var out []string
 	for _, s := range sessions {
-		out = append(out, strings.TrimPrefix(s, swarm+"-"))
+		// 台账存会话名(= id)，成员名从展示名 `<群>-<成员>` 反推（TaskLabel 会话死了也读得到）
+		out = append(out, strings.TrimPrefix(m.rt.TaskLabel(m.rt.ResolveAlive(s)), swarm+"-"))
 	}
 	return out
 }

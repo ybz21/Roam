@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"ttmux-cli-go/internal/id"
+	"ttmux-cli-go/internal/runtime"
 )
 
 // Store is the swarm data layer: meta.db registry + per-swarm swarm.db.
@@ -151,13 +152,45 @@ func initSwarmDB(db *sql.DB) error {
 			status TEXT, deps TEXT, done INT DEFAULT 0, pending INT DEFAULT 0,
 			model TEXT, perm TEXT,
 			kind TEXT DEFAULT 'claude', role TEXT DEFAULT 'member',
-			subrole TEXT DEFAULT '', duty TEXT DEFAULT '');
+			subrole TEXT DEFAULT '', duty TEXT DEFAULT '',
+			session TEXT DEFAULT '');
 		CREATE TABLE IF NOT EXISTS posts(
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			ts TEXT, author TEXT, kind TEXT, re INTEGER, text TEXT);
 		CREATE TABLE IF NOT EXISTS cards(
 			id TEXT PRIMARY KEY, title TEXT, descr TEXT, assignee TEXT,
 			col TEXT DEFAULT 'backlog', deps TEXT, created TEXT, updated TEXT);`)
+	return err
+}
+
+// MemberLabel 成员会话的展示名：`<群>-<成员>`。它是 @roam_name 里存的那个名字，
+// 也是 `ttmux send <群>-<成员>` 这类老用法能继续命中的依据。
+func MemberLabel(swarm, member string) string { return swarm + "-" + member }
+
+// MemberSession 成员的 tmux 会话名（= 会话 id）。
+// 顺序：members.session 落的值 > 按展示名现查 > 退回展示名本身（迁移前的老会话
+// 就是以 `<群>-<成员>` 为会话名的）。
+func (s *Store) MemberSession(swarm, member string) string {
+	label := MemberLabel(s.Name(swarm), member)
+	if db, err := s.openSwarmDB(swarm); err == nil {
+		var sess string
+		_ = db.QueryRow(`SELECT IFNULL(session,'') FROM members WHERE name=?`, member).Scan(&sess)
+		db.Close()
+		if sess != "" {
+			return sess
+		}
+	}
+	return runtime.Runtime{TmuxBin: s.opt.TmuxBin}.ResolveAlive(label)
+}
+
+// SetMemberSession 记住成员会话名（拉起成员时调用）。
+func (s *Store) SetMemberSession(swarm, member, sess string) error {
+	db, err := s.openSwarmDB(swarm)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	_, err = db.Exec(`UPDATE members SET session=? WHERE name=?`, sess, member)
 	return err
 }
 

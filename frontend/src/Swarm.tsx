@@ -8,6 +8,7 @@ import {
   App as AntApp, Popconfirm, Modal, Space, Spin, AutoComplete,
 } from 'antd'
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
+import { sessionLabel } from './session-label'
 import { api, upload } from './api'
 import { DirPicker, recentDirs, pushRecentDir } from './App'
 import { useI18n } from './i18n'
@@ -612,7 +613,7 @@ function Topology({ detail, swarm, cards, posts, focus, onNode }: {
                         <div className="swarm-node-meta">
                           {subroleKey(n) ? <span style={{ color: memberHatColor(n) }}>{(SUBROLE_MAP[subroleKey(n)!]?.icon || '👤')} {subroleText(t, subroleKey(n))}</span> : <span>{nodeRole(n, t)}</span>}
                           {n.mkind && <span>{n.mkind}</span>}
-                          {n.session && <span>{n.session}</span>}
+                          {n.session && <span title={n.session}>{sessionLabel(n.session)}</span>}
                         </div>
                         {n.mduty && <div className="swarm-node-task" style={{ color: C.fg2 }}>{n.mduty}</div>}
                         {n.task && <div className="swarm-node-task">{n.task}</div>}
@@ -1062,7 +1063,7 @@ function NodeDrawer({ swarm, member, detail, cards, posts, openTerm, onClose, on
         <Space direction="vertical" size="large" style={{ width: '100%' }}>
           <div>
             <div style={{ color: C.fg2, fontSize: 12, marginBottom: 4 }}>{t('swarm.identity')}</div>
-            <div style={{ fontSize: 13 }}>{isMaster ? t('swarm.master') : `${m?.type || 'agent'} · ${t('swarm.member')}`}{srKey && <> · {srIcon} {subroleText(t, srKey)}</>} · {t('common.terminal')} <b>{session}</b></div>
+            <div style={{ fontSize: 13 }}>{isMaster ? t('swarm.master') : `${m?.type || 'agent'} · ${t('swarm.member')}`}{srKey && <> · {srIcon} {subroleText(t, srKey)}</>} · {t('common.terminal')} <b title={session}>{sessionLabel(session)}</b></div>
             {(m?.deps || pend?.deps) && <div style={{ fontSize: 12, color: C.fg3, marginTop: 4 }}>{t('swarm.depsArrow')} {m?.deps || pend?.deps}</div>}
             <Space wrap style={{ marginTop: 10 }}>
               <Button size="small" type="primary" onClick={() => { openTerm(session); onClose() }}>{t('swarm.openTerminal')} ↗</Button>

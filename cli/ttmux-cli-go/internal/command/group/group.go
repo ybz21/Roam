@@ -24,7 +24,10 @@ type groupStatus struct {
 }
 
 type taskInfo struct {
+	// Name 是会话名(= 会话 id)，也是打开终端/发消息的 handle；
+	// Label 是语义名 `<组>-<成员>`，只用于展示。
 	Name     string `json:"name"`
+	Label    string `json:"label,omitempty"`
 	Type     string `json:"type"`
 	Status   string `json:"status"`
 	Process  string `json:"process"`
@@ -38,7 +41,8 @@ type collectResult struct {
 }
 
 type collectEntry struct {
-	Task   string `json:"task"`
+	Task   string `json:"task"`            // 会话名(= id)
+	Label  string `json:"label,omitempty"` // 语义名，展示用
 	Type   string `json:"type"`
 	Prompt string `json:"prompt"`
 	Output string `json:"output"`
@@ -55,7 +59,7 @@ func ListJSON(rt runtime.Runtime, w io.Writer) error {
 		}
 		alive := 0
 		for _, s := range sessions {
-			if rt.HasSession(s) {
+			if rt.HasSession(rt.ResolveAlive(s)) {
 				alive++
 			}
 		}
@@ -78,13 +82,14 @@ func StatusJSON(rt runtime.Runtime, group string, w io.Writer) error {
 	}
 	res := groupStatus{Group: group, Tasks: []taskInfo{}}
 	for _, sess := range sessions {
-		item := taskInfo{Name: sess, Type: rt.TaskType(sess), Status: "exited", Task: rt.TaskDesc(sess)}
+		sess = rt.ResolveAlive(sess) // 台账存 id；迁移前的老台账存名字
+		item := taskInfo{Name: sess, Label: rt.TaskLabel(sess), Type: rt.TaskType(sess), Status: "exited", Task: rt.TaskDesc(sess)}
 		if rt.HasSession(sess) {
-			item.Process = strings.TrimSpace(must(rt.TmuxOutput("display-message", "-t", sess, "-p", "#{pane_current_command}")))
-			dead := strings.TrimSpace(must(rt.TmuxOutput("display-message", "-t", sess, "-p", "#{pane_dead}")))
+			item.Process = strings.TrimSpace(must(rt.TmuxOutput("display-message", "-t", "="+sess+":", "-p", "#{pane_current_command}")))
+			dead := strings.TrimSpace(must(rt.TmuxOutput("display-message", "-t", "="+sess+":", "-p", "#{pane_dead}")))
 			if dead == "1" {
 				item.Status = "done"
-				item.ExitCode = strings.TrimSpace(must(rt.TmuxOutput("display-message", "-t", sess, "-p", "#{pane_dead_status}")))
+				item.ExitCode = strings.TrimSpace(must(rt.TmuxOutput("display-message", "-t", "="+sess+":", "-p", "#{pane_dead_status}")))
 			} else {
 				item.Status = "running"
 			}
@@ -101,6 +106,7 @@ func CollectJSON(rt runtime.Runtime, group string, w io.Writer) error {
 	}
 	res := collectResult{Group: group, Results: []collectEntry{}}
 	for _, sess := range sessions {
+		sess = rt.ResolveAlive(sess)
 		output := ""
 		logPath := filepath.Join(rt.LogsDir, sess+".log")
 		if b, err := os.ReadFile(logPath); err == nil {
@@ -110,6 +116,7 @@ func CollectJSON(rt runtime.Runtime, group string, w io.Writer) error {
 		}
 		res.Results = append(res.Results, collectEntry{
 			Task:   sess,
+			Label:  rt.TaskLabel(sess),
 			Type:   rt.TaskType(sess),
 			Prompt: rt.TaskDescRaw(sess),
 			Output: output,

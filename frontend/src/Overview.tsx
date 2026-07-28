@@ -181,7 +181,7 @@ export default function Overview({ openTerm, renderSessions }: { openTerm: (n: s
     const items: { key: string; proj: Proj; label: string; tag: string; onGo: () => void }[] = []
     for (const p of projects) {
       for (const s of (sessByProj.get(p.key) || [])) {
-        if (waiting[s.name]) items.push({ key: 'w' + s.name, proj: p, label: s.name, tag: t('overview.waiting'), onGo: () => openTerm(s.name) })
+        if (waiting[s.name]) items.push({ key: 'w' + s.name, proj: p, label: s.label || s.name, tag: t('overview.waiting'), onGo: () => openTerm(s.name) })
       }
       if (p.unfinished > 0) items.push({ key: 'u' + p.key, proj: p, label: t('overview.unfinishedN', { count: p.unfinished }), tag: t('project.section.unfinished'), onGo: () => { location.hash = '#/projects/' + encodeURIComponent(p.key) } })
     }
@@ -293,7 +293,7 @@ export default function Overview({ openTerm, renderSessions }: { openTerm: (n: s
                   return (
                     <div key={s.name} className="p6-trow" onClick={() => openTerm(s.name)}>
                       {dot(false, w ? '#d29922' : r ? '#3fb950' : undefined)}
-                      <span className="nm">{s.name}</span>
+                      <span className="nm" title={`${s.label || s.name}（${s.id || s.name}）`}>{s.label || s.name}</span>
                       {ann[s.name]?.primary?.linked && <Tag color="cyan" style={{ margin: 0, fontSize: 10.5, lineHeight: '16px', padding: '0 5px' }}>⎇</Tag>}
                       <Lifec done={r ? 1 : 2} cur={r && !w ? 2 : w ? 3 : undefined} />
                       <span className="tm">{relTime(s.last_activity, t)}</span>
@@ -332,7 +332,7 @@ export default function Overview({ openTerm, renderSessions }: { openTerm: (n: s
               {loose.slice(0, 5).map((s: any) => (
                 <div key={s.name} className="row" style={{ cursor: 'pointer' }} onClick={() => openTerm(s.name)}>
                   {dot(s.attached)}
-                  <b style={{ color: 'var(--text-bright)' }}>{s.name}</b>
+                  <b style={{ color: 'var(--text-bright)' }} title={`${s.label || s.name}（${s.id || s.name}）`}>{s.label || s.name}</b>
                   <span className="tm">{relTime(s.lastActivity, t)}</span>
                 </div>
               ))}

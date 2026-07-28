@@ -12,28 +12,32 @@ import (
 )
 
 // spawnOne creates a single task session (cmd or agent), mirroring _spawn_one.
-// Returns true when a session was created, false when it already existed.
-func spawnOne(rt runtime.Runtime, group, name, taskType, payload string, ac AgentConfig, w io.Writer) (bool, error) {
+// 返回 (是否新建, 会话名(= 会话 id))：调用方要拿会话名去登记台账（蜂群成员表）。
+func spawnOne(rt runtime.Runtime, group, name, taskType, payload string, ac AgentConfig, w io.Writer) (bool, string, error) {
 	if err := rt.EnsureDirs(); err != nil {
-		return false, err
+		return false, "", err
 	}
-	sess := group + "-" + name
-	if rt.HasSession(sess) {
-		ui.Warn(w, "会话 %s 已存在，跳过", ui.Bold(sess))
-		return false, nil
+	// 任务的语义名 `<组>-<成员>` 现在是**展示名**：会话本身叫 id（改名/重名都不怕，
+	// logs/meta/台账全按 id 存）。语义名写进 @roam_name + meta 的 label.txt，
+	// 于是 `ttmux send <组>-<成员>` 这类老用法照旧能命中（Resolve 反查展示名）。
+	label := group + "-" + name
+	if target := rt.Resolve(label); rt.HasSession(target) {
+		ui.Warn(w, "会话 %s 已存在，跳过", ui.Bold(label))
+		return false, target, nil
 	}
 	width := "200"
 	if taskType == "agent" {
 		width = "220"
 	}
-	if err := rt.Tmux("new-session", "-d", "-s", sess, "-x", width, "-y", "50"); err != nil {
-		return false, err
+	sess, err := rt.CreateSession(runtime.CreateOpts{Label: label, Width: width, Height: "50"})
+	if err != nil {
+		return false, "", err
 	}
 	rt.InjectEnv(sess)
 	_ = rt.Tmux("pipe-pane", "-t", sess, "-o", "cat >> '"+rt.LogFile(sess)+"'")
 	_ = os.WriteFile(rt.LogFile(sess), nil, 0o644)
-	if err := rt.WriteTaskMeta(sess, taskType, payload, ac.Workdir); err != nil {
-		return false, err
+	if err := rt.WriteTaskMeta(sess, taskType, payload, ac.Workdir, label); err != nil {
+		return false, sess, err
 	}
 
 	runCmd := payload
@@ -41,21 +45,21 @@ func spawnOne(rt runtime.Runtime, group, name, taskType, payload string, ac Agen
 		runCmd = ac.Command(payload)
 	}
 	if err := rt.Tmux("send-keys", "-t", sess, runCmd, "C-m"); err != nil {
-		return false, err
+		return false, sess, err
 	}
 	if taskType == "agent" && ac.Interactive {
 		LaunchAutoconfirm(rt, sess)
 	}
 	if err := rt.GroupAddSession(group, sess); err != nil {
-		return false, err
+		return false, sess, err
 	}
-	return true, nil
+	return true, sess, nil
 }
 
 // One launches a single task/agent session (exported for the swarm command
 // layer, which composes spawn with the swarm data core). Returns true when a
 // session was created.
-func One(rt runtime.Runtime, group, name, taskType, payload string, ac AgentConfig, w io.Writer) (bool, error) {
+func One(rt runtime.Runtime, group, name, taskType, payload string, ac AgentConfig, w io.Writer) (bool, string, error) {
 	return spawnOne(rt, group, name, taskType, payload, ac, w)
 }
 
@@ -80,7 +84,7 @@ func Spawn(rt runtime.Runtime, args []string, w io.Writer) error {
 	for i+1 < len(rest) {
 		name, cmd := rest[i], rest[i+1]
 		i += 2
-		ok, err := spawnOne(rt, group, name, "cmd", cmd, ac, w)
+		ok, _, err := spawnOne(rt, group, name, "cmd", cmd, ac, w)
 		if err != nil {
 			return err
 		}
@@ -148,7 +152,7 @@ func SpawnAgents(rt runtime.Runtime, args []string, w io.Writer) error {
 	count := 0
 	for i := 0; i+1 < len(pairs); i += 2 {
 		name, task := pairs[i], pairs[i+1]
-		ok, err := spawnOne(rt, group, name, "agent", task, ac, w)
+		ok, _, err := spawnOne(rt, group, name, "agent", task, ac, w)
 		if err != nil {
 			return err
 		}
@@ -228,9 +232,10 @@ func Wait(rt runtime.Runtime, args []string, w io.Writer) error {
 	sessions, _ := rt.GroupSessions(group)
 	allDone := true
 	for _, sess := range sessions {
+		sess = rt.ResolveAlive(sess) // 台账存 id；迁移前的老台账存名字，兜一下
 		if !rt.WaitSession(sess, timeout) {
 			allDone = false
-			ui.Warn(w, "等待超时 (%ds): %s", timeout, sess)
+			ui.Warn(w, "等待超时 (%ds): %s", timeout, rt.TaskLabel(sess))
 		}
 	}
 	if allDone {

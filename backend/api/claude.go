@@ -190,7 +190,7 @@ func newestJSONL(dir string) string {
 
 // ClaudeStatus GET /sessions/:name/claude —— 检测会话是否在跑 claude，并定位其 JSONL。
 func (a *API) ClaudeStatus(c *gin.Context) {
-	name := sessionParam(c)
+	name := a.sessionTarget(c)
 	dir := paneClaudeDir(name)
 	if dir == "" {
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"running": false}})
@@ -335,7 +335,7 @@ func parseLine(line string) *cMsg {
 func (a *API) ClaudeTranscript(c *gin.Context) {
 	file := c.Query("file")
 	if file == "" { // 未传则按会话现场定位
-		if dir := paneClaudeDir(sessionParam(c)); dir != "" {
+		if dir := paneClaudeDir(a.sessionTarget(c)); dir != "" {
 			home, _ := os.UserHomeDir()
 			file = newestJSONL(filepath.Join(home, ".claude", "projects", encodeProject(dir)))
 		}

@@ -109,7 +109,7 @@ func newestCodexRollout(cwd string) string {
 // CodexStatus GET /sessions/:name/codex —— 检测会话是否在跑 codex，并定位其 rollout。
 // 如果某个 pane 的进程树同时命中 claude，说明 codex 是 Claude Code 的子进程，不算独立运行。
 func (a *API) CodexStatus(c *gin.Context) {
-	name := sessionParam(c)
+	name := a.sessionTarget(c)
 	out, err := exec.Command("tmux", "list-panes", "-t", name, "-F", "#{pane_pid}\t#{pane_current_path}").Output()
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"running": false}})
@@ -276,7 +276,7 @@ func parseCodexLine(line string) *cMsg {
 func (a *API) CodexTranscript(c *gin.Context) {
 	file := c.Query("file")
 	if file == "" {
-		if dir := paneToolDir(sessionParam(c), cmdlineHasCodex); dir != "" {
+		if dir := paneToolDir(a.sessionTarget(c), cmdlineHasCodex); dir != "" {
 			file = newestCodexRollout(dir)
 		}
 	}

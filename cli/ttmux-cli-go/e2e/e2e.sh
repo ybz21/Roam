@@ -120,6 +120,26 @@ rc0 "group kill removed file" bash -c "[ ! -f '$TTMUX_DATA/groups/build.group' ]
 rc0 "group kill removed session" bash -c "! tmux -L '$SOCKET' has-session -t build-lint 2>/dev/null"
 
 # ════════════════════════════════════════════
+# 会话身份：tmux 会话名 = 会话 id（2026-0728-1808-0000），用户起的名字降级为
+# 展示名，存 tmux 用户选项 @roam_name。ttmux 一律显示「名字(id)」。
+sec "session identity: id as tmux name, label for display"
+$GO new "我的 会话" --detach >/dev/null
+SID="$($GO resolve "我的 会话")"
+rc0 "new session name is an id" bash -c "printf '%s' '$SID' | grep -Eq '^[0-9]{4}-[0-9]{4}-[0-9]{4}-[a-z0-9]{4}$'"
+eq "label lives in @roam_name" "我的 会话" "$(tmux -L "$SOCKET" display-message -t "$SID" -p '#{@roam_name}')"
+has "ls shows 名字(id)" "$($GO ls)" "我的 会话($SID)"
+eq "ls --json label" "我的 会话" "$($GO ls --json | jget '[s["label"] for s in d if s["name"]=="'"$SID"'"][0]')"
+# 改名 = 只改展示名：会话名（= handle）纹丝不动，所以标签/URL/归属/台账都不用搬
+$GO rename "我的 会话" "改过的名字" >/dev/null
+eq "rename keeps session name" "$SID" "$($GO resolve 改过的名字)"
+eq "rename changes label only" "改过的名字" "$(tmux -L "$SOCKET" display-message -t "$SID" -p '#{@roam_name}')"
+# 展示名可以重名（它不是身份了）——两个会话同名互不影响
+$GO new "改过的名字" --detach --no-reuse >/dev/null
+eq "duplicate labels allowed" "2" "$($GO ls --json | jget 'len([s for s in d if s["label"]=="改过的名字"])')"
+$GO kill "$SID" --yes >/dev/null
+eq "kill by id" "1" "$($GO ls --json | jget 'len([s for s in d if s["label"]=="改过的名字"])')"
+
+# ════════════════════════════════════════════
 sec "env"
 $GO env set FOO=bar >/dev/null; $GO env set BAZ=qux >/dev/null
 eq "env --json count" "2" "$($GO env --json | jget 'len(d)')"
@@ -148,19 +168,21 @@ has "swarm status pretty" "$($GO swarm status feat)" "蜂群: feat"
 sec "swarm: agent member launches fake claude"
 $GO swarm add feat lead --type agent "带队" >/dev/null; sleep 1
 eq "first agent => leader role" "leader" "$($GO swarm sql feat --json "SELECT role FROM members WHERE name='lead'" | jget 'd[0]["role"]')"
-has "agent member pane" "$(tmux -L "$SOCKET" capture-pane -t feat-lead -p)" "[fake claude]"
+# 会话名是会话 id，`feat-lead` 只是展示名(@roam_name)：先 resolve 再定位
+# pane 目标的精确匹配要写成 "=名:"（tmux 3.4 对裸 "=名" 报 can't find pane）
+has "agent member pane" "$(tmux -L "$SOCKET" capture-pane -t "=$($GO resolve feat-lead):" -p)" "[fake claude]"
 
 sec "swarm: done => cascade unlock"
 $GO swarm done feat api >/dev/null; sleep 1
 eq "api done_marked" "api" "$($GO swarm status feat --json | jget 'd["done_marked"][0]')"
 eq "qa unlocked (no pending)" "0" "$($GO swarm status feat --json | jget 'len(d["pending"])')"
-rc0 "qa session launched" tmux -L "$SOCKET" has-session -t feat-qa
+rc0 "qa session launched" $GO resolve feat-qa   # resolve 成功 = 该成员的会话在
 
 sec "swarm: activate (explicit)"
 $GO swarm add feat extra --type task --depends-on web "echo X; sleep 300" >/dev/null
 $GO swarm done feat web >/dev/null
 $GO swarm activate feat >/dev/null; sleep 1
-rc0 "extra unlocked via activate" tmux -L "$SOCKET" has-session -t feat-extra
+rc0 "extra unlocked via activate" $GO resolve feat-extra
 
 sec "swarm: plaza say / feed"
 $GO swarm say feat --as api --kind ask "接口规范? @leader" >/dev/null

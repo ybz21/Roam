@@ -324,6 +324,14 @@ func (s *Store) AddSession(row SessionRow) error {
 	return err
 }
 
+// MigrateSessionNames 会话改名成 id 后，把插件会话表里记的老会话名换掉
+// （mapping = {老会话名: 新会话名}，来自 runtime.MigrateSessionsToID）。
+func (s *Store) MigrateSessionNames(mapping map[string]string) {
+	for old, neu := range mapping {
+		_, _ = s.db.Exec(`UPDATE plugin_sessions SET session=?, updated=? WHERE session=?`, neu, s.now(), old)
+	}
+}
+
 func (s *Store) UpdateSessionStatus(session, status string) error {
 	_, err := s.db.Exec(`UPDATE plugin_sessions SET status=?, updated=? WHERE session=?`, status, s.now(), session)
 	return err

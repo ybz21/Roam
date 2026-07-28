@@ -13,6 +13,8 @@ import (
 	"time"
 
 	_ "modernc.org/sqlite"
+
+	"ttmux-cli-go/internal/runtime"
 )
 
 type Options struct {
@@ -46,7 +48,10 @@ type SwarmMember struct {
 	Subrole string `json:"subrole"`
 	Duty    string `json:"duty"`
 	Status  string `json:"status"`
+	// Session 会话名(= 会话 id)：打开终端/发消息的 handle。
+	// Label 会话展示名 `<群>-<成员>`：给人看的，也是老用法 `ttmux send <群>-<成员>` 的入口。
 	Session string `json:"session"`
+	Label   string `json:"label,omitempty"`
 }
 
 type SwarmPending struct {
@@ -249,7 +254,7 @@ func Status(name string, opt Options) (*SwarmStatus, error) {
 
 	rows, err := db.Query(`SELECT name, IFNULL(type,'agent'), IFNULL(task,''), IFNULL(deps,''), IFNULL(done,0), IFNULL(kind,'claude'),
 		CASE IFNULL(role,'member') WHEN 'master' THEN 'leader' WHEN 'worker' THEN 'member' ELSE IFNULL(role,'member') END,
-		IFNULL(subrole,''), IFNULL(duty,'')
+		IFNULL(subrole,''), IFNULL(duty,''), IFNULL(session,'')
 		FROM members WHERE IFNULL(pending,0)=0 ORDER BY name`)
 	if err != nil {
 		return nil, err
@@ -257,10 +262,15 @@ func Status(name string, opt Options) (*SwarmStatus, error) {
 	defer rows.Close()
 	for rows.Next() {
 		var m SwarmMember
-		if err := rows.Scan(&m.Name, &m.Type, &m.Task, &m.Deps, &m.Done, &m.Kind, &m.Role, &m.Subrole, &m.Duty); err != nil {
+		if err := rows.Scan(&m.Name, &m.Type, &m.Task, &m.Deps, &m.Done, &m.Kind, &m.Role, &m.Subrole, &m.Duty, &m.Session); err != nil {
 			return nil, err
 		}
-		m.Session = meta.Name + "-" + m.Name
+		// Session 是会话名(= 会话 id)；Label 是展示名 `<群>-<成员>`。没落过 session
+		// 的（迁移前建的成员）按展示名现查一次，查不到就退回展示名本身。
+		m.Label = MemberLabel(meta.Name, m.Name)
+		if m.Session == "" {
+			m.Session = runtime.Runtime{TmuxBin: opt.TmuxBin}.ResolveAlive(m.Label)
+		}
 		if m.Done == 1 {
 			m.Status = "done"
 		} else {
@@ -369,6 +379,14 @@ func migrateSwarmDB(db *sql.DB) error {
 	}
 	if !cols["duty"] {
 		if _, err := db.Exec(`ALTER TABLE members ADD COLUMN duty TEXT DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	// session：成员的 tmux 会话名(= 会话 id)。会话名不再能从 `<群>-<成员>` 推导
+	// （那只是展示名），而会话死后展示名也随之消失——必须落一列，否则「会话没了
+	// 但有日志 = 已完成」这类判定会找不到日志文件（日志按 id 命名）。
+	if !cols["session"] {
+		if _, err := db.Exec(`ALTER TABLE members ADD COLUMN session TEXT DEFAULT ''`); err != nil {
 			return err
 		}
 	}

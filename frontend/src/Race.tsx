@@ -10,7 +10,8 @@ import { recentDirs } from './App'
 import DiffView from './DiffView'
 
 export type RaceContestant = {
-  session: string; agent: string; branch: string; path: string
+  // session 会话名(= 会话 id)：打开终端的 handle；label 展示名 `<竞赛>-<字母>`
+  session: string; label?: string; agent: string; branch: string; path: string
   status: string; error?: string
 }
 export type Race = {
@@ -332,7 +333,7 @@ export function RaceComparePanel({ race, onClose, openTerm, onChanged }: {
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700 }}>
                   <span style={{ color: AGENT_COLOR[l.ct.agent] || 'var(--text-bright)' }}>{l.ct.agent === 'codex' ? 'Codex' : 'Claude'}</span>
-                  <span style={{ fontFamily: 'ui-monospace, monospace', color: 'var(--text-dim)', fontWeight: 400, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.ct.session}</span>
+                  <span style={{ fontFamily: 'ui-monospace, monospace', color: 'var(--text-dim)', fontWeight: 400, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.ct.label || l.ct.session}</span>
                   <span style={{ marginLeft: 'auto', flex: '0 0 auto' }}>{laneStatus(l)}</span>
                 </div>
                 <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: 11.5, color: '#39c5cf' }}>⎇ {l.ct.branch}</div>
@@ -370,7 +371,7 @@ export function RaceComparePanel({ race, onClose, openTerm, onChanged }: {
         {/* 下半屏 diff：文件横条切换 + 单文件补丁 */}
         <div style={{ flex: 1, minHeight: 0, border: '1px solid var(--border-subtle, #30363d)', borderRadius: 12, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 12px', background: 'var(--bg-container)', borderBottom: '1px solid var(--border-subtle, #30363d)', fontSize: 12.5, overflowX: 'auto' }}>
-            {selLane && <span style={{ fontFamily: 'ui-monospace, monospace', color: AGENT_COLOR[selLane.ct.agent], flex: '0 0 auto' }}>{selLane.ct.session}</span>}
+            {selLane && <span style={{ fontFamily: 'ui-monospace, monospace', color: AGENT_COLOR[selLane.ct.agent], flex: '0 0 auto' }}>{selLane.ct.label || selLane.ct.session}</span>}
             <span style={{ flex: 1 }} />
             {files.map((f) => (
               <span key={f.path} onClick={() => setFile(f.path)} style={{
@@ -391,7 +392,7 @@ export function RaceComparePanel({ race, onClose, openTerm, onChanged }: {
         {/* 赢家确认框（crown 状态机入口，可只合并不清理） */}
         <Modal open={!!crowning} onCancel={() => setCrowning(null)} onOk={doCrown} confirmLoading={busy}
           okText={t('race.crownOk')} okButtonProps={{ style: { background: 'linear-gradient(135deg,#b8860b,#d4a017)', border: 0 } }}
-          title={crowning ? t('race.crownTitle', { name: crowning.ct.session }) : ''} width={420} destroyOnClose>
+          title={crowning ? t('race.crownTitle', { name: crowning.ct.label || crowning.ct.session }) : ''} width={420} destroyOnClose>
           {crowning && (
             <Space direction="vertical" style={{ width: '100%' }} size={10}>
               <div style={{ fontSize: 13, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>

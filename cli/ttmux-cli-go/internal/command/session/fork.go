@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 
-	"ttmux-cli-go/internal/id"
 	"ttmux-cli-go/internal/runtime"
 	"ttmux-cli-go/internal/sessmeta"
 	"ttmux-cli-go/internal/ui"
@@ -74,33 +73,28 @@ func Fork(rt runtime.Runtime, meta *sessmeta.Store, args []string, w io.Writer) 
 			pos = append(pos, args[i])
 		}
 	}
-	var parent, child string
+	// child 是**展示名**：子会话本身叫 id，名字只写进 @roam_name（可与别人重名）。
+	var parent, childLabel string
 	switch len(pos) {
 	case 1:
-		parent, child = CurrentSession(rt), pos[0]
+		parent, childLabel = CurrentSession(rt), pos[0]
 		if parent == "" {
 			return fmt.Errorf("not inside tmux: specify parent explicitly (ttmux fork <parent> <child>)")
 		}
 	case 2:
-		parent, child = pos[0], pos[1]
+		parent, childLabel = rt.Resolve(pos[0]), pos[1]
 	default:
 		return fmt.Errorf("usage: ttmux fork [<parent>] <child> [--dir <path>] [--detach] [--json]")
 	}
 	if !rt.HasSession(parent) {
 		return fmt.Errorf("parent session not found: %s", parent)
 	}
-	if rt.HasSession(child) {
-		return fmt.Errorf("session already exists: %s", child)
-	}
 	if dir == "" {
 		dir = paneCwd(rt, parent)
 	}
 	rt.SetGlobalEnv()
-	tmuxArgs := []string{"new-session", "-d", "-s", child}
-	if dir != "" {
-		tmuxArgs = append(tmuxArgs, "-c", dir)
-	}
-	if err := rt.Tmux(tmuxArgs...); err != nil {
+	child, err := rt.CreateSession(runtime.CreateOpts{Label: childLabel, Dir: dir})
+	if err != nil {
 		return err
 	}
 	rt.InjectEnv(child)
@@ -109,9 +103,9 @@ func Fork(rt runtime.Runtime, meta *sessmeta.Store, args []string, w io.Writer) 
 		ui.Warn(w, "会话已创建但写入 parent 元数据失败: %v", err)
 	}
 	if asJSON {
-		return json.NewEncoder(w).Encode(map[string]string{"session": child, "parent": parent, "cwd": dir})
+		return json.NewEncoder(w).Encode(map[string]string{"session": child, "label": runtime.SanitizeLabel(childLabel), "parent": parent, "cwd": dir})
 	}
-	ui.Ok(w, "fork %s → %s (cwd %s)", ui.Bold(parent), ui.Bold(child), dir)
+	ui.Ok(w, "fork %s → %s (cwd %s)", ui.Bold(Display(rt, parent)), ui.Bold(Display(rt, child)), dir)
 	if !detach && IsTerminal() {
 		return rt.Tmux("attach-session", "-t", "="+child)
 	}
@@ -124,7 +118,7 @@ func Children(rt runtime.Runtime, meta *sessmeta.Store, args []string, w io.Writ
 		return fmt.Errorf("usage: ttmux children <session> [--json]")
 	}
 	meta.Reconcile(aliveSet(rt))
-	kids := meta.Children(args[0])
+	kids := meta.Children(rt.Resolve(args[0]))
 	if has(args, "--json") {
 		if kids == nil {
 			kids = []string{}
@@ -142,13 +136,13 @@ func ParentCmd(rt runtime.Runtime, meta *sessmeta.Store, args []string, w io.Wri
 	if len(args) < 2 {
 		return fmt.Errorf("usage: ttmux parent set <child> <parent> | clear <child> | get <child>")
 	}
-	op, child := args[0], args[1]
+	op, child := args[0], rt.Resolve(args[1])
 	switch op {
 	case "set":
 		if len(args) < 3 {
 			return fmt.Errorf("usage: ttmux parent set <child> <parent>")
 		}
-		parent := args[2]
+		parent := rt.Resolve(args[2])
 		if !rt.HasSession(parent) {
 			return fmt.Errorf("parent session not found: %s", parent)
 		}
@@ -174,8 +168,9 @@ func ParentCmd(rt runtime.Runtime, meta *sessmeta.Store, args []string, w io.Wri
 
 type treeNode struct {
 	Name string `json:"name"`
-	// ID 可读会话 id（派生自 session_created + session_id，展示口径）；
+	// Label 展示名（@roam_name）；ID 会话 id（会话名本身，老会话现算派生）；
 	// TmuxID 是原始 $142（内部键：meta.db 主键、session-homes 的键）。
+	Label        string      `json:"label,omitempty"`
 	ID           string      `json:"id,omitempty"`
 	TmuxID       string      `json:"tmux_id,omitempty"`
 	Windows      int         `json:"windows"`
@@ -212,8 +207,8 @@ func Tree(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool, w i
 		if prefix == "" {
 			branch, next = "", "   "
 		}
-		label := ui.Bold(n.Name)
-		if n.ID != "" {
+		label := ui.Bold(n.Label)
+		if n.ID != "" && n.ID != n.Label {
 			label += ui.Dim("(" + n.ID + ")")
 		}
 		fmt.Fprintf(w, "%s%s%s  %s\n", prefix, branch, label, ui.Dim(n.Cwd))
@@ -234,7 +229,7 @@ func buildTree(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool
 
 	// 会话基础信息（一次 list-sessions）
 	// window_activity 补 session_activity 盲区（后台有输出但无人 attach 时不动),取较大值。
-	out, _ := rt.TmuxOutput("list-sessions", "-F", "#{session_name}\t#{session_windows}\t#{session_created}\t#{session_attached}\t#{session_activity}\t#{window_activity}\t#{session_id}")
+	out, _ := rt.TmuxOutput("list-sessions", "-F", "#{session_name}\t#{session_windows}\t#{session_created}\t#{session_attached}\t#{session_activity}\t#{window_activity}\t#{session_id}\t#{"+runtime.LabelOption+"}")
 	nodes := map[string]*treeNode{}
 	var order []string
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
@@ -251,11 +246,17 @@ func buildTree(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool
 		if len(parts) > 5 {
 			n.LastActivity = maxNumeric(n.LastActivity, parts[5])
 		}
+		created, _ := strconv.ParseInt(parts[2], 10, 64)
+		row := runtime.SessionRow{Name: parts[0], Created: created}
 		if len(parts) > 6 {
-			created, _ := strconv.ParseInt(parts[2], 10, 64)
+			row.TmuxID = parts[6]
 			n.TmuxID = parts[6]
-			n.ID = id.ForSession(created, parts[6])
 		}
+		if len(parts) > 7 {
+			row.Label = strings.TrimSpace(parts[7])
+		}
+		n.ID = row.ID()
+		n.Label = row.DisplayLabel()
 		nodes[n.Name] = n
 		order = append(order, n.Name)
 	}
@@ -307,7 +308,7 @@ func KillTree(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool,
 	}
 	var target string
 	if len(pos) >= 1 {
-		target = pos[0]
+		target = rt.Resolve(pos[0])
 	} else {
 		t, err := PickSession(rt, exclude, "关闭会话", w)
 		if err != nil {
@@ -324,10 +325,11 @@ func KillTree(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool,
 		meta.Reconcile(aliveSet(rt))
 		victims = append(victims, descendants(meta, target)...)
 	}
+	shown := Display(rt, target)
 	if !yes {
-		label := ui.Bold(target)
+		label := ui.Bold(shown)
 		if len(victims) > 1 {
-			label = fmt.Sprintf("%s 及其 %d 个子会话", ui.Bold(target), len(victims)-1)
+			label = fmt.Sprintf("%s 及其 %d 个子会话", ui.Bold(shown), len(victims)-1)
 		}
 		if !ui.Confirm("确定关闭会话 " + label + "?") {
 			ui.Info(w, "已取消")
@@ -345,9 +347,9 @@ func KillTree(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool,
 		_ = meta.OnKill(v) // 非级联时：OnKill 内部把直接孩子 parent 置 NULL = 孤儿收养
 	}
 	if len(victims) > 1 {
-		ui.Ok(w, "会话 %s 及 %d 个子会话已关闭", ui.Bold(target), len(victims)-1)
+		ui.Ok(w, "会话 %s 及 %d 个子会话已关闭", ui.Bold(shown), len(victims)-1)
 	} else {
-		ui.Ok(w, "会话 %s 已关闭", ui.Bold(target))
+		ui.Ok(w, "会话 %s 已关闭", ui.Bold(shown))
 	}
 	return nil
 }
