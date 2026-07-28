@@ -1,19 +1,23 @@
-// Package project 实现「项目 = git 仓库」的弱台账（knownRepos）与 UI 偏好持久化
+// Package project 实现项目的弱台账（knownRepos）与 UI 偏好持久化
 // （<dataDir>/projects.json，08 设计 §2.1/§5.2）。项目本身是读模型：发现 = 会话
-// cwd join 的副作用（api 层聚合时 Touch），退场 = 读时收敛；git/session 真相源
+// 归属目录 join 的副作用（api 层聚合时 Touch），退场 = 读时收敛；git/session 真相源
 // 不在此——文件丢失只损失「零会话仓库的可发现性」与置顶等偏好，活跃仓库下次
 // 开会话即重建。
+//
+// 身份 = 入册时生成的不可变 id（internal/id，与蜂群同款可读格式），目录只是可变
+// 属性。历史版本用「目录名 slug + 路径 hash」当 key，`mv` 一下目录身份就变、偏好
+// 得靠合并搬家；现在换 id 后目录随便挪，老 key 落进 aliases 继续解析老链接。
 package project
 
 import (
-	"crypto/sha1"
-	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"ttmux-web/internal/id"
 )
 
 // Prefs 是项目的 UI 偏好（PATCH /projects/:key/prefs 可改）。
@@ -24,12 +28,15 @@ type Prefs struct {
 	DefaultBase  string `json:"defaultBase,omitempty"`
 }
 
-// Entry 是台账里的一个仓库：dir 为 canonical 主仓库根（来自 cwd join 的
-// AnnotationHit.Repo 或显式创建时的 ResolveRepo，均已 canonical 化）。
+// Entry 是台账里的一个项目。**身份是 ID，不是目录**：ID 入册时生成、永不变，
+// Dir 只是可变属性（`mv` 项目目录、worktree 子目录归位主仓库根都只改 Dir，
+// 置顶/显示名/默认 agent 等偏好一个不丢）。Dir 为 canonical 目录（git 项目 =
+// 主仓库根，来自 annotation 的 Repo 或显式创建时的 ResolveRepo）。
 // Origin 区分两条入册通道：
 //   - "user"：用户显式创建（POST /projects）——一等对象，永不自动退场，只能显式 DELETE；
-//   - ""（discovered）：会话 cwd join 自动发现——按退场规则读时收敛。
+//   - ""（discovered）：会话归属目录 join 自动发现——按退场规则读时收敛。
 type Entry struct {
+	ID     string `json:"id"`
 	Dir    string `json:"dir"`
 	Origin string `json:"origin,omitempty"`
 	Prefs
@@ -39,27 +46,90 @@ type Entry struct {
 
 type fileShape struct {
 	Repos map[string]*Entry `json:"repos"`
+	// Aliases 老 key → id：v1 文件的 key 是「目录名 slug + 路径 hash」，迁移后
+	// 老书签 `#/projects/<老key>` 和外部链接仍要能打开；合并掉的 id 也记在这。
+	Aliases map[string]string `json:"aliases,omitempty"`
 }
 
 // Store 单写者：所有变更持内存互斥锁，落盘 tmp+rename 原子替换（同 RaceStore 体例）。
 type Store struct {
-	mu    sync.Mutex
-	path  string
-	repos map[string]*Entry
+	mu      sync.Mutex
+	path    string
+	repos   map[string]*Entry // id → 条目
+	aliases map[string]string // 老 key / 被合并的 id → 现行 id
+	byDir   map[string]string // dir → id（查重索引，替代原先的路径 hash key）
 }
 
 func NewStore(dataDir string) *Store {
-	s := &Store{repos: map[string]*Entry{}}
+	s := &Store{repos: map[string]*Entry{}, aliases: map[string]string{}, byDir: map[string]string{}}
 	if dataDir != "" {
 		s.path = filepath.Join(dataDir, "projects.json")
 		if b, err := os.ReadFile(s.path); err == nil {
 			var f fileShape
-			if json.Unmarshal(b, &f) == nil && f.Repos != nil {
-				s.repos = f.Repos
+			if json.Unmarshal(b, &f) == nil {
+				s.load(f)
 			}
 		}
 	}
 	return s
+}
+
+// load 读入文件并就地迁移 v1（key = 路径派生 hash）→ v2（key = 不可变 id）。
+// 迁移只发生一次：老 key 记进 aliases，之后照常按 id 读写。
+func (s *Store) load(f fileShape) {
+	for k, v := range f.Aliases {
+		s.aliases[k] = v
+	}
+	migrated := false
+	for key, e := range f.Repos {
+		if e == nil || e.Dir == "" {
+			continue
+		}
+		if cur, dup := s.byDir[e.Dir]; dup { // 同目录重复条目（历史脏数据）→ 合并，别留两份
+			mergeInto(s.repos[cur], e)
+			s.aliases[key] = cur
+			migrated = true
+			continue
+		}
+		newKey := key
+		if !id.Valid(key) || e.ID != key { // v1 条目：发 id，老 key 留作别名
+			newKey = id.New()
+			s.aliases[key] = newKey
+			migrated = true
+		}
+		e.ID = newKey
+		s.repos[newKey] = e
+		s.byDir[e.Dir] = newKey
+	}
+	if migrated {
+		s.save()
+	}
+}
+
+// mergeInto 把 src 的「用户意志」并进 dst（or 语义：置顶/显式创建/显示名/最早 firstSeen）。
+func mergeInto(dst, src *Entry) {
+	if dst == nil || src == nil {
+		return
+	}
+	dst.Pinned = dst.Pinned || src.Pinned
+	if dst.Origin == "" {
+		dst.Origin = src.Origin
+	}
+	if dst.DisplayName == "" {
+		dst.DisplayName = src.DisplayName
+	}
+	if dst.DefaultAgent == "" {
+		dst.DefaultAgent = src.DefaultAgent
+	}
+	if dst.DefaultBase == "" {
+		dst.DefaultBase = src.DefaultBase
+	}
+	if src.FirstSeen > 0 && (dst.FirstSeen == 0 || src.FirstSeen < dst.FirstSeen) {
+		dst.FirstSeen = src.FirstSeen
+	}
+	if src.LastSeen > dst.LastSeen {
+		dst.LastSeen = src.LastSeen
+	}
 }
 
 // save 持久化全量（调用方须持锁）。
@@ -67,7 +137,7 @@ func (s *Store) save() {
 	if s.path == "" {
 		return
 	}
-	b, err := json.MarshalIndent(fileShape{Repos: s.repos}, "", "  ")
+	b, err := json.MarshalIndent(fileShape{Repos: s.repos, Aliases: s.aliases}, "", "  ")
 	if err != nil {
 		return
 	}
@@ -77,53 +147,52 @@ func (s *Store) save() {
 	}
 }
 
-// KeyFor 生成 repoKey：目录名 slug + 全路径短 hash（可读、稳定、路径不进 URL）。
-func KeyFor(dir string) string {
-	base := strings.ToLower(filepath.Base(dir))
-	slug := strings.Map(func(r rune) rune {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '.' || r == '_' || r == '-' {
-			return r
-		}
-		return '-'
-	}, base)
-	slug = strings.Trim(slug, "-.")
-	if slug == "" {
-		slug = "repo"
+// resolve 把「id 或老 key」解析成现行 id（调用方须持锁）；解析不到返回 ""。
+func (s *Store) resolve(key string) string {
+	if _, ok := s.repos[key]; ok {
+		return key
 	}
-	h := sha1.Sum([]byte(dir))
-	return slug + "-" + hex.EncodeToString(h[:])[:4]
+	if to, ok := s.aliases[key]; ok {
+		if _, live := s.repos[to]; live {
+			return to
+		}
+	}
+	return ""
 }
 
-// Touch 发现记账：不在册则记入（FirstSeen），在册则刷新 LastSeen。返回 repoKey。
+// Touch 发现记账：不在册则记入（FirstSeen），在册则刷新 LastSeen。返回项目 id。
 func (s *Store) Touch(dir string) string {
-	key := KeyFor(dir)
 	now := time.Now().Unix()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if e, ok := s.repos[key]; ok {
+	if key, ok := s.byDir[dir]; ok {
+		e := s.repos[key]
 		if now-e.LastSeen >= 60 { // LastSeen 只按分钟粒度刷新，避免每次轮询都写盘
 			e.LastSeen = now
 			s.save()
 		}
 		return key
 	}
-	s.repos[key] = &Entry{Dir: dir, FirstSeen: now, LastSeen: now}
+	key := id.New()
+	s.repos[key] = &Entry{ID: key, Dir: dir, FirstSeen: now, LastSeen: now}
+	s.byDir[dir] = key
 	s.save()
 	return key
 }
 
-// Add 显式创建（POST /projects）：origin=user 的一等对象。已在册则升级为 user
-// （发现来的条目被用户「转正」），并可顺带设显示名。返回 repoKey。
+// Add 显式创建（POST /projects）：origin=user 的一等对象。目录已在册则升级为 user
+// （发现来的条目被用户「转正」，id 不变），并可顺带设显示名。返回项目 id。
 func (s *Store) Add(dir, displayName string) string {
-	key := KeyFor(dir)
 	now := time.Now().Unix()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	e, ok := s.repos[key]
+	key, ok := s.byDir[dir]
 	if !ok {
-		e = &Entry{Dir: dir, FirstSeen: now}
-		s.repos[key] = e
+		key = id.New()
+		s.repos[key] = &Entry{ID: key, Dir: dir, FirstSeen: now}
+		s.byDir[dir] = key
 	}
+	e := s.repos[key]
 	e.Origin = "user"
 	e.LastSeen = now
 	if displayName != "" {
@@ -133,7 +202,7 @@ func (s *Store) Add(dir, displayName string) string {
 	return key
 }
 
-// Entries 返回台账快照（copy，供只读聚合遍历）。
+// Entries 返回台账快照（copy，key = 项目 id，供只读聚合遍历）。
 func (s *Store) Entries() map[string]Entry {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -144,26 +213,26 @@ func (s *Store) Entries() map[string]Entry {
 	return out
 }
 
-// Dir 反查 repoKey → 目录。API 只接受在册 key，顺带杜绝任意路径探测。
+// Dir 反查 id（或老 key）→ 目录。API 只接受在册 key，顺带杜绝任意路径探测。
 func (s *Store) Dir(key string) (string, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	e, ok := s.repos[key]
-	if !ok {
+	k := s.resolve(key)
+	if k == "" {
 		return "", false
 	}
-	return e.Dir, true
+	return s.repos[k].Dir, true
 }
 
 // SetPrefs 原子改偏好；key 不在册返回 false。
 func (s *Store) SetPrefs(key string, patch func(*Prefs)) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	e, ok := s.repos[key]
-	if !ok {
+	k := s.resolve(key)
+	if k == "" {
 		return false
 	}
-	patch(&e.Prefs)
+	patch(&s.repos[k].Prefs)
 	s.save()
 	return true
 }
@@ -172,10 +241,18 @@ func (s *Store) SetPrefs(key string, patch func(*Prefs)) bool {
 func (s *Store) Remove(key string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.repos[key]; ok {
-		delete(s.repos, key)
-		s.save()
+	k := s.resolve(key)
+	if k == "" {
+		return
 	}
+	delete(s.byDir, s.repos[k].Dir)
+	delete(s.repos, k)
+	for alias, to := range s.aliases { // 指向已删条目的别名一并清掉，别留悬空
+		if to == k {
+			delete(s.aliases, alias)
+		}
+	}
+	s.save()
 }
 
 // ── 收尾留痕（08 §5.2）：<dataDir>/activity.log JSONL，只增不改 ──
@@ -257,31 +334,36 @@ func (s *Store) ReadTrace(repoDir string, limit int) []TraceEntry {
 	return out
 }
 
-// Rekey 把条目迁移到新目录（typically 仓库子目录归位到根）。目标 key 已存在则
-// 合并：置顶/origin=user/显示名等「用户意志」按或语义保留，不丢。
-func (s *Store) Rekey(oldKey, newDir string) {
+// SetDir 把条目挪到新目录（仓库子目录归位到根、用户 mv 了项目目录）。**id 不变**，
+// 所以偏好/置顶/留痕指向都跟着走。新目录已被另一个条目占用才合并：用户意志按或
+// 语义保留，被合并掉的 id 记成别名，老链接照样能打开。返回现行 id。
+func (s *Store) SetDir(key, newDir string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	e, ok := s.repos[oldKey]
-	if !ok {
-		return
+	k := s.resolve(key)
+	if k == "" || newDir == "" {
+		return ""
 	}
-	delete(s.repos, oldKey)
-	newKey := KeyFor(newDir)
-	if dst, exists := s.repos[newKey]; exists {
-		dst.Pinned = dst.Pinned || e.Pinned
-		if dst.Origin == "" {
-			dst.Origin = e.Origin
-		}
-		if dst.DisplayName == "" {
-			dst.DisplayName = e.DisplayName
-		}
-		if e.FirstSeen > 0 && (dst.FirstSeen == 0 || e.FirstSeen < dst.FirstSeen) {
-			dst.FirstSeen = e.FirstSeen
-		}
-	} else {
-		e.Dir = newDir
-		s.repos[newKey] = e
+	e := s.repos[k]
+	if e.Dir == newDir {
+		return k
 	}
+	if dstKey, exists := s.byDir[newDir]; exists && dstKey != k {
+		mergeInto(s.repos[dstKey], e)
+		delete(s.byDir, e.Dir)
+		delete(s.repos, k)
+		s.aliases[k] = dstKey
+		for alias, to := range s.aliases {
+			if to == k {
+				s.aliases[alias] = dstKey
+			}
+		}
+		s.save()
+		return dstKey
+	}
+	delete(s.byDir, e.Dir)
+	e.Dir = newDir
+	s.byDir[newDir] = k
 	s.save()
+	return k
 }

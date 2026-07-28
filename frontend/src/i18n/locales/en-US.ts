@@ -1238,6 +1238,8 @@ const enUS = {
   'project.act.empty': 'No commits in the last 30 days',
   'project.act.hint': 'Commits across all branches in the last 30 days (incl. closed-session branches)',
   'project.rename': 'Rename',
+  'project.copyId': 'Copy project id',
+  'project.idCopied': 'Project id copied',
   'project.renamed': 'Renamed',
   'project.shell': '+ Shell',
   'swarm.rosterLabel': 'Roster suggestion (goes into leader kickoff; leader finalizes per dev-roles)',

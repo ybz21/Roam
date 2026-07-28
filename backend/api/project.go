@@ -181,10 +181,18 @@ func (a *API) ProjectsList(c *gin.Context) {
 			}
 			continue // 一时读不出（锁竞争/超时）：保留台账，本轮跳过
 		}
-		// 自愈：条目 dir 指向仓库子目录（历史脏数据/瞬时误判）→ 归位到仓库根
+		// 自愈：条目 dir 指向仓库子目录（历史脏数据/瞬时误判）→ 归位到仓库根。
+		// id 不变，所以偏好/置顶/老链接都不动，本轮直接按新 dir 继续算。
 		if repo, rerr := a.WT.ResolveRepo(ctx, e.Dir); rerr == nil && repo.Root != e.Dir {
-			a.Projects.Rekey(key, repo.Root)
-			continue // 本轮跳过，下轮以根条目出现（或并入已有根条目）
+			if now := a.Projects.SetDir(key, repo.Root); now != key {
+				continue // 并进了已在册的根条目：本轮跳过，那条自己会出现
+			}
+			e.Dir = repo.Root
+			p.Dir = repo.Root
+			p.Races = races[filepath.Clean(repo.Root)]
+			if e.DisplayName == "" {
+				p.Name = filepath.Base(repo.Root)
+			}
 		}
 		p.Git = true
 		roamWts := 0

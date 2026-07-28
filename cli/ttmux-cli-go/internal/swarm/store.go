@@ -1,13 +1,13 @@
 package swarm
 
 import (
-	"crypto/rand"
 	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
+
+	"ttmux-cli-go/internal/id"
 )
 
 // Store is the swarm data layer: meta.db registry + per-swarm swarm.db.
@@ -30,21 +30,11 @@ func (s *Store) swarmDBPath(id string) string {
 	return filepath.Join(s.swarmHome(id), "swarm.db")
 }
 
-var idRe = regexp.MustCompile(`^[0-9]{4}-[0-9]{4}-[0-9]{4}-[a-z0-9]{4}$`)
+func isID(s string) bool { return id.Valid(s) }
 
-func isID(s string) bool { return idRe.MatchString(s) }
-
-// NewID generates an instance id YYYY-MMDD-HHMM-<rand4> (mirrors _id_new).
-func (s *Store) NewID() string {
-	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
-	b := make([]byte, 4)
-	if _, err := rand.Read(b); err == nil {
-		for i := range b {
-			b[i] = charset[int(b[i])%len(charset)]
-		}
-	}
-	return s.opt.Now().Format("2006-0102-1504") + "-" + string(b)
-}
+// NewID generates an instance id YYYY-MMDD-HHMM-<rand4> (mirrors _id_new)。
+// 格式与后端记录 id 共用同一套（见 internal/id）。
+func (s *Store) NewID() string { return id.NewAt(s.opt.Now()) }
 
 // MetaInit ensures meta.db and the swarms table exist.
 func (s *Store) MetaInit() error {

@@ -760,7 +760,15 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
       message.success(t('session.created')); openTerm(res.name || name); refresh()
     } catch (e: any) { message.error(e.message) }
   }
-  // 重命名 = 改 displayName 偏好（空值回退目录名，key/目录不变）
+  // 复制项目 id（不可变身份，日志/台账/接口都按它对齐）
+  const copyId = async () => {
+    if (!proj) return
+    try {
+      await navigator.clipboard.writeText(proj.key)
+      message.success(t('project.idCopied'))
+    } catch { message.error(t('common.copyFailed')) }
+  }
+  // 重命名 = 改 displayName 偏好（空值回退目录名，id/目录不变）
   const rename = async (v: string) => {
     if (!proj || v.trim() === proj.name) return
     try {
@@ -906,9 +914,15 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
               ellipsis editable={{ onChange: rename, tooltip: t('project.rename'), triggerType: ['icon'] }}>
               {proj.name}
             </Typography.Text>
-            <div className="prj-mono" style={{ fontSize: 11.5, color: 'var(--text-dimmer)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={proj.dir}>
-              {proj.dir}
-              {isGit && defBranch && <span style={{ color: '#39c5cf' }}> · ⎇ {defBranch}{mainHead ? ` @ ${mainHead}` : ''}</span>}
+            <div className="prj-mono" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--text-dimmer)' }}>
+              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={proj.dir}>
+                {proj.dir}
+                {isGit && defBranch && <span style={{ color: '#39c5cf' }}> · ⎇ {defBranch}{mainHead ? ` @ ${mainHead}` : ''}</span>}
+              </span>
+              {/* 项目 id（不可变，目录搬家也不变）：排障时对着日志/台账查同一个项目 */}
+              <Tooltip title={t('project.copyId')}>
+                <span onClick={copyId} style={{ flex: '0 0 auto', cursor: 'pointer', opacity: .7 }}>#{proj.key}</span>
+              </Tooltip>
             </div>
           </div>
           <Button size="small" onClick={newShell}>{t('project.shell')}</Button>

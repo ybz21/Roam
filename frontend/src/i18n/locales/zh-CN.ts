@@ -1238,6 +1238,8 @@ const zhCN = {
   'project.act.empty': '近 30 天无提交',
   'project.act.hint': '全部分支近 30 天提交汇总（含已关会话的分支）',
   'project.rename': '重命名',
+  'project.copyId': '复制项目 id',
+  'project.idCopied': '已复制项目 id',
   'project.renamed': '已重命名',
   'project.shell': '＋ 命令行',
   'swarm.rosterLabel': '班子建议（写进指挥开场白，最终由指挥按 dev-roles 拆定）',
