@@ -761,6 +761,7 @@ const enUS = {
   'install.desktopStep2': 'Or open the browser menu and choose “Install Roam…”',
   'install.desktopNote': 'Tip: use Chrome / Edge over HTTPS.',
 
+  'voice.input': 'Voice input',
   'voice.showButton': 'Show voice button',
   'voice.hideButton': 'Hide voice button',
   'voice.holdToTalk': 'Hold to talk',

@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>12 · 会话导航栏重做：标签条 / 工具条</title>
+<!-- 展台样式内联：这份图纸要能被单文件打开 / 文件预览 / 分享出去时照样渲染，
+     所以不 link ../07-worktree/mock.css，而是把它原样嵌进来。改动请回源文件改后重新内联。 -->
+<style>
+/* ══ 以下取自 docs/design/web/07-worktree/mock.css ══ */
+/* ═══════════════════════════════════════════════════════════════════
+   07-worktree 设计图纸 · 共享样式  v3
+   原则：产品像素 100% 忠于应用真实 token（frontend/src/index.css /
+   theme.tsx 的 GitHub-dark + Antd 语言）；展示台按「设计交付图纸」
+   体例呈现——深色展台 + 点阵网格 + 图版编号 + 脚注。
+   类名与 v2 完全兼容，页面无需改结构即获得升级。
+   ═══════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── 产品 token（与应用一致，勿改）── */
+  --bg-base: #0d1117;
+  --bg-container: #161b22;
+  --bg-elevated: #1b222b;
+  --bg-term: #06090d;
+  --border: #30363d;
+  --border-subtle: #21262d;
+  --text-bright: #e6edf3;
+  --text-dim: #8b949e;
+  --text-dimmer: #6e7681;
+  --brand-grad: linear-gradient(180deg, #f5f7fa 0%, #c3c9d1 46%, #9aa1ab 56%, #e7ebef 100%);
+  --blue: #58a6ff;
+  --blue-deep: #1f6feb;
+  --green: #3fb950;
+  --yellow: #d29922;
+  --red: #f85149;
+  --cyan: #39c5cf;                 /* worktree 语义色 */
+  --mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+  /* ── 展台（非产品）── */
+  --stage-bg: #07080b;
+  --stage-ink: #9aa4b2;
+  --stage-faint: #566070;
+  --stage-line: rgba(148, 163, 184, .14);
+  --plate: #c9d4e3;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { height: 100%; }
+body {
+  min-height: 100%;
+  background: var(--stage-bg);
+  color: var(--text-bright);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', Roboto, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  position: relative;
+}
+/* 展台氛围：点阵网格 + 顶部冷光 */
+body::before {
+  content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image: radial-gradient(rgba(148, 163, 184, .10) 1px, transparent 1.2px);
+  background-size: 26px 26px;
+  mask-image: radial-gradient(120% 90% at 50% 0%, #000 30%, transparent 85%);
+}
+body::after {
+  content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background: radial-gradient(70% 42% at 50% -6%, rgba(88, 166, 255, .07), transparent 60%);
+}
+body > * { position: relative; z-index: 1; }
+a { color: var(--blue); text-decoration: none; cursor: pointer; }
+a:hover { color: #79b8ff; }
+
+/* ── 图纸页头（展示 chrome，非产品 UI）────────────────────── */
+.spec-bar {
+  position: sticky; top: 0; z-index: 90;
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 22px;
+  background: color-mix(in srgb, var(--stage-bg) 86%, transparent);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--stage-line);
+  font-size: 12.5px; color: var(--stage-ink);
+}
+.spec-bar b {
+  color: var(--plate); font-size: 13.5px; font-weight: 700; letter-spacing: .02em;
+  display: inline-flex; align-items: center; gap: 10px;
+}
+/* 图版编号：b 内首个「Wn」用 .spec-tag 呈现即可；通用编号章 */
+.spec-bar .spec-tag {
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em;
+  padding: 3px 10px; border-radius: 999px;
+  color: var(--stage-ink);
+  border: 1px solid var(--stage-line);
+  background: rgba(148, 163, 184, .05);
+}
+.spec-bar .spacer { flex: 1; }
+.spec-bar a {
+  color: var(--stage-faint); font-size: 12px; letter-spacing: .02em;
+  padding: 4px 10px; border-radius: 7px; transition: color .15s, background .15s;
+}
+.spec-bar a:hover { color: var(--plate); background: rgba(148, 163, 184, .08); }
+
+/* 脚注（页首说明 / 页尾规格）：图纸注记体例 */
+.spec-note {
+  max-width: 1320px; margin: 0 auto;
+  padding: 12px 24px 0; font-size: 12.5px; line-height: 1.9; color: var(--stage-ink);
+}
+.spec-note::before {
+  content: 'NOTES'; display: inline-block; margin-right: 10px;
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: .22em;
+  color: var(--stage-faint); vertical-align: 1px;
+}
+.spec-note em { color: #e3b341; font-style: normal; }
+.spec-note .mono, .spec-note code { font-family: var(--mono); font-size: 11.5px; color: var(--plate); }
+/* 页尾规格注记（与页首同类，视觉更淡） */
+.spec-note[style*="border-top"] { border-top: 1px dashed var(--stage-line) !important; margin-top: 26px; padding-top: 14px; padding-bottom: 40px; color: var(--stage-faint); }
+
+/* ── 展台 ─────────────────────────────────────────────────── */
+.stage {
+  padding: 40px 28px 56px;
+  display: flex; gap: 44px; align-items: flex-start; justify-content: center; flex-wrap: wrap;
+}
+.stage-label {
+  width: 100%; text-align: center; margin: -14px 0 -22px;
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: .24em; color: var(--stage-faint);
+}
+
+/* ── 设备外框 ─────────────────────────────────────────────── */
+.app-frame {
+  width: 1180px; max-width: 96vw; height: 720px;
+  position: relative; overflow: hidden; display: flex;
+  background: var(--bg-base);
+  border: 1px solid #2a3038;
+  border-radius: 14px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, .06) inset,
+    0 0 0 1px rgba(0, 0, 0, .5),
+    0 24px 48px -12px rgba(0, 0, 0, .7),
+    0 60px 120px -30px rgba(0, 0, 0, .55);
+}
+.phone-frame {
+  width: 375px; flex: 0 0 375px; height: 720px;
+  position: relative; overflow: hidden; display: flex; flex-direction: column;
+  background: var(--bg-base);
+  border: 1px solid #2a3038;
+  border-radius: 30px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, .07) inset,
+    0 0 0 5px #101318, 0 0 0 6px #2a3038,
+    0 24px 48px -12px rgba(0, 0, 0, .7),
+    0 60px 120px -30px rgba(0, 0, 0, .55);
+}
+.phone-frame .notch { height: 24px; flex: 0 0 24px; display: grid; place-items: center; }
+.phone-frame .notch i { width: 76px; height: 5px; border-radius: 99px; background: #262c34; }
+.tabbar {
+  flex: 0 0 54px;
+  border-top: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-container) 92%, black);
+  display: flex; align-items: center; justify-content: space-around; font-size: 19px;
+}
+.tabbar span { opacity: .4; transition: opacity .2s; }
+.tabbar span.on { opacity: 1; text-shadow: 0 0 14px rgba(88, 166, 255, .55); }
+
+/* ── 导航 Sider（产品）─────────────────────────────────────── */
+.sider {
+  width: 176px; flex: 0 0 176px;
+  background: linear-gradient(180deg, var(--bg-container), color-mix(in srgb, var(--bg-container) 88%, black));
+  border-right: 1px solid var(--border-subtle);
+  display: flex; flex-direction: column; padding: 16px 10px; gap: 2px;
+}
+.sider .brand {
+  font-size: 19px; font-weight: 800; letter-spacing: .04em; padding: 2px 12px 18px;
+  background: var(--brand-grad);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+.sider .nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border-radius: 8px;
+  color: var(--text-dim); font-size: 13.5px; cursor: pointer;
+  transition: color .15s, background .15s;
+}
+.sider .nav-item:hover { color: var(--text-bright); background: rgba(177, 186, 196, .06); }
+.sider .nav-item.on {
+  color: #fff;
+  background: linear-gradient(90deg, rgba(31, 111, 235, .38), rgba(31, 111, 235, .14));
+  box-shadow: 0 0 0 1px rgba(88, 166, 255, .16) inset;
+}
+.main-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+/* ── Antd 风组件（产品）───────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 30px; padding: 0 13px;
+  border: 1px solid var(--border); border-radius: 7px;
+  background: rgba(177, 186, 196, .03);
+  color: var(--text-bright); font-size: 13px; cursor: pointer; white-space: nowrap;
+  transition: border-color .15s, background .15s, color .15s, transform .12s;
+}
+.btn:hover { border-color: #8b949e; background: rgba(177, 186, 196, .08); }
+.btn:active { transform: translateY(.5px); }
+.btn.primary {
+  background: linear-gradient(180deg, #2a7aef, var(--blue-deep));
+  border-color: transparent; color: #fff;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .18) inset, 0 2px 8px rgba(31, 111, 235, .35);
+}
+.btn.primary:hover { background: linear-gradient(180deg, #3585f7, #2a76ee); color: #fff; }
+.btn.danger { color: var(--red); }
+.btn.danger:hover { border-color: rgba(248, 81, 73, .55); background: rgba(248, 81, 73, .08); }
+.btn.sm { height: 24px; padding: 0 9px; font-size: 12px; border-radius: 6px; }
+.btn.win { background: linear-gradient(135deg, #c9982a, #a87b16); border-color: transparent; color: #fff; box-shadow: 0 1px 0 rgba(255,255,255,.2) inset; }
+.btn.win:hover { filter: brightness(1.08); color: #fff; }
+.btn .caret { font-size: 10px; opacity: .7; }
+
+.tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 20px; padding: 0 8px; border-radius: 999px;
+  font-size: 11.5px; line-height: 1; white-space: nowrap;
+  border: 1px solid transparent;
+}
+.tag.blue   { color: #79b8ff; background: rgba(56, 139, 253, .13); border-color: rgba(56, 139, 253, .35); }
+.tag.green  { color: #56d364; background: rgba(63, 185, 80, .13);  border-color: rgba(63, 185, 80, .35); }
+.tag.yellow { color: #e3b341; background: rgba(210, 153, 34, .13); border-color: rgba(210, 153, 34, .38); }
+.tag.red    { color: #ff7b72; background: rgba(248, 81, 73, .12);  border-color: rgba(248, 81, 73, .38); }
+.tag.cyan   { color: var(--cyan); background: rgba(57, 197, 207, .10); border-color: rgba(57, 197, 207, .35); font-family: var(--mono); font-size: 11px; }
+.tag.ghost  { color: var(--text-dim); border-color: var(--border); background: rgba(177, 186, 196, .04); }
+
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 8px; display: inline-block; }
+.dot.g { background: var(--green); box-shadow: 0 0 0 3px rgba(63, 185, 80, .14); }
+.dot.y { background: var(--yellow); box-shadow: 0 0 0 3px rgba(210, 153, 34, .14); }
+.dot.idle { background: var(--text-dimmer); }
+
+.input, .select, textarea.input {
+  width: 100%; height: 34px; padding: 0 11px; border-radius: 7px;
+  border: 1px solid var(--border); background: var(--bg-base); color: var(--text-bright);
+  font-size: 13.5px; font-family: inherit; outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.input:focus, .input[style*="--blue"] { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(31, 111, 235, .22); }
+.select { display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+.select .caret { color: var(--text-dimmer); font-size: 10px; }
+textarea.input { height: auto; padding: 8px 11px; line-height: 1.65; resize: none; }
+.mono { font-family: var(--mono); }
+
+.segmented {
+  display: inline-flex; background: var(--bg-base);
+  border-radius: 9px; padding: 2px; border: 1px solid var(--border-subtle);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .35) inset;
+}
+.segmented button {
+  border: 0; background: transparent; color: var(--text-dim);
+  font-size: 12.5px; font-family: inherit;
+  padding: 5px 14px; border-radius: 7px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: color .15s, background .15s;
+}
+.segmented button:hover { color: var(--text-bright); }
+.segmented button.on {
+  background: linear-gradient(180deg, #222a35, var(--bg-elevated));
+  color: var(--text-bright);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .05) inset, 0 1px 4px rgba(0, 0, 0, .45);
+}
+.badge-n {
+  min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px;
+  font-size: 10.5px; font-family: var(--mono);
+  background: var(--blue-deep); color: #fff;
+  display: inline-grid; place-items: center;
+}
+
+/* ── 浮层（产品）─────────────────────────────────────────── */
+.dim { position: absolute; inset: 0; background: rgba(1, 4, 9, .62); backdrop-filter: blur(2px); z-index: 5; }
+.modal {
+  position: absolute; left: 50%; top: 84px; transform: translateX(-50%); z-index: 6;
+  width: 460px; max-width: 92%;
+  background: linear-gradient(180deg, #1a212b, var(--bg-container));
+  border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .05) inset, 0 24px 64px rgba(0, 0, 0, .6);
+}
+.modal .m-head { padding: 16px 18px 0; font-size: 15px; font-weight: 700; display: flex; align-items: center; letter-spacing: .01em; }
+.modal .m-head .x { margin-left: auto; color: var(--text-dimmer); cursor: pointer; font-size: 13px; }
+.modal .m-body { padding: 14px 18px; display: flex; flex-direction: column; gap: 12px; }
+.modal .m-foot { padding: 4px 18px 16px; display: flex; justify-content: flex-end; gap: 10px; }
+.drawer {
+  position: absolute; top: 0; right: 0; bottom: 0; width: 480px; max-width: 94%; z-index: 6;
+  background: var(--bg-container); border-left: 1px solid var(--border);
+  box-shadow: -24px 0 64px rgba(0, 0, 0, .55);
+  display: flex; flex-direction: column;
+}
+.drawer .d-head {
+  padding: 14px 16px; border-bottom: 1px solid var(--border-subtle);
+  display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14.5px;
+}
+.drawer .d-head .x { margin-left: auto; color: var(--text-dimmer); cursor: pointer; }
+
+/* ── 终端（产品）─────────────────────────────────────────── */
+.term-bg {
+  flex: 1; background: var(--bg-term);
+  padding: 14px 16px; overflow: hidden; position: relative;
+  font-family: var(--mono); font-size: 12.5px; line-height: 1.75;
+}
+.term-bg::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(130% 100% at 50% 0%, transparent 62%, rgba(0, 0, 0, .32));
+}
+.term-bg .p { color: #7ee787; } .term-bg .c { color: #79c0ff; }
+.term-bg .d { color: #484f58; } .term-bg .t { color: #b1bac4; }
+.term-tabs {
+  display: flex; gap: 2px; padding: 6px 8px 0;
+  background: var(--bg-container); border-bottom: 1px solid var(--border-subtle);
+}
+.term-tabs .tt {
+  padding: 6px 15px; font-size: 12.5px; color: var(--text-dim);
+  border: 1px solid transparent; border-bottom: 0; border-radius: 8px 8px 0 0;
+  position: relative;
+}
+.term-tabs .tt.on { background: var(--bg-term); color: var(--text-bright); border-color: var(--border-subtle); }
+.term-tabs .tt.on::after {
+  content: ''; position: absolute; top: -1px; left: 9px; right: 9px; height: 2px; border-radius: 2px;
+  background: linear-gradient(90deg, var(--blue), rgba(88, 166, 255, .35));
+}
+.term-toolbar {
+  display: flex; gap: 14px; align-items: center;
+  padding: 7px 12px; font-size: 12px; color: var(--text-dim);
+  background: var(--bg-container); border-bottom: 1px solid var(--border-subtle);
+}
+
+/* ── 列表页（产品）───────────────────────────────────────── */
+.page-pad { padding: 16px; flex: 1; overflow: auto; min-height: 0; }
+.card {
+  background: var(--bg-container);
+  border: 1px solid var(--border-subtle); border-radius: 12px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .03) inset;
+}
+.card .c-head {
+  display: flex; align-items: center; padding: 13px 16px;
+  border-bottom: 1px solid var(--border-subtle); font-weight: 700;
+}
+.sess-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 10px 10px 12px; border-radius: 9px;
+  cursor: pointer; border: 1px solid transparent; position: relative;
+  transition: background .14s, border-color .14s;
+}
+.sess-row:hover { background: rgba(177, 186, 196, .045); }
+.sess-row.active {
+  background: linear-gradient(90deg, rgba(31, 111, 235, .34), rgba(31, 111, 235, .12));
+  border-color: rgba(88, 166, 255, .75);
+  box-shadow: 0 0 0 1px rgba(88, 166, 255, .16), 0 4px 18px rgba(31, 111, 235, .16);
+}
+.sess-row.active::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--blue); border-radius: 9px 0 0 9px;
+}
+.sess-row .col { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.sess-row .line1 { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.sess-row .name { font-weight: 700; letter-spacing: .01em; }
+.sess-row .meta { color: var(--text-dimmer); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sess-row .acts { margin-left: auto; display: flex; gap: 14px; font-size: 13px; flex: 0 0 auto; }
+.sess-row .acts a.close { color: var(--red); opacity: .85; }
+.sess-row .acts a.close:hover { opacity: 1; }
+
+/* 仓库分组（W2）：组头 + 从属导线 */
+.group-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 10px 6px 6px; user-select: none;
+  color: var(--text-dim); font-size: 12.5px;
+}
+.group-head .tri { font-size: 10px; color: var(--text-dimmer); width: 12px; }
+.group-head .repo { color: var(--text-bright); font-weight: 700; font-size: 13px; letter-spacing: .01em; }
+.group-head .path { color: var(--text-dimmer); font-family: var(--mono); font-size: 11px; }
+.group-head a { margin-left: auto; font-size: 12.5px; }
+.group-body {
+  margin-left: 12px; padding-left: 10px;
+  border-left: 2px solid rgba(57, 197, 207, .28);
+}
+
+/* ── Worktree 行（W4 抽屉）──────────────────────────────── */
+.wt-row { padding: 13px 16px; border-bottom: 1px solid var(--border-subtle); transition: background .14s; }
+.wt-row:hover { background: rgba(177, 186, 196, .035); }
+.wt-row .r1 { display: flex; align-items: center; gap: 8px; }
+.wt-row .branch { font-family: var(--mono); font-size: 13.5px; font-weight: 600; color: var(--cyan); }
+.wt-row .branch::before { content: '⎇ '; opacity: .75; }
+.wt-row .r2 { color: var(--text-dimmer); font-size: 12px; margin: 6px 0 9px; display: flex; gap: 6px; flex-wrap: wrap; }
+.wt-row .r2 b { font-weight: 600; }
+.wt-row .r2 .hot-y { color: var(--yellow); } .wt-row .r2 .hot-b { color: var(--blue); }
+.wt-row .r3 { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ── Diff（产品）─────────────────────────────────────────── */
+.diff {
+  font-family: var(--mono); font-size: 12.5px; line-height: 1.55;
+  background: var(--bg-base);
+}
+.diff .hunk { color: #79c0ff; background: rgba(56, 139, 253, .07); }
+.diff .add { color: #7ee787; background: rgba(63, 185, 80, .09); }
+.diff .del { color: #ffa198; background: rgba(248, 81, 73, .09); }
+.diff .ctx { color: var(--text-dim); }
+.diff div { padding: 0 12px; min-height: 1.55em; white-space: pre; }
+
+.fstat {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 12px; font-size: 12.5px; border-radius: 6px; cursor: pointer;
+  transition: background .14s;
+}
+.fstat:hover { background: rgba(177, 186, 196, .05); }
+.fstat .st { font-family: var(--mono); font-weight: 700; width: 14px; }
+.fstat .st.M { color: var(--yellow); } .fstat .st.A { color: var(--green); } .fstat .st.D { color: var(--red); }
+.fstat .fp { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fstat .pm { font-family: var(--mono); font-size: 11.5px; }
+.fstat .pm .p { color: #56d364; } .fstat .pm .m { color: #ff7b72; margin-left: 5px; }
+
+/* ── 单选卡（W7）─────────────────────────────────────────── */
+.radio {
+  display: flex; align-items: flex-start; gap: 9px;
+  padding: 11px 13px; border: 1px solid var(--border); border-radius: 10px; cursor: pointer;
+  transition: border-color .15s, background .15s, box-shadow .15s;
+}
+.radio:hover { border-color: #444c56; }
+.radio.on {
+  border-color: rgba(88, 166, 255, .65);
+  background: rgba(31, 111, 235, .09);
+  box-shadow: 0 0 0 3px rgba(31, 111, 235, .12);
+}
+.radio .r {
+  width: 15px; height: 15px; border-radius: 50%;
+  border: 1.5px solid var(--text-dimmer);
+  flex: 0 0 15px; margin-top: 1.5px; position: relative; transition: border-color .15s;
+}
+.radio.on .r { border-color: var(--blue); }
+.radio.on .r::after {
+  content: ''; position: absolute; inset: 3px; border-radius: 50%;
+  background: var(--blue); box-shadow: 0 0 8px rgba(88, 166, 255, .7);
+}
+.radio .rt b { display: block; font-size: 13.5px; margin-bottom: 2px; }
+.radio .rt span { font-size: 12px; color: var(--text-dim); }
+
+/* ── 杂项 ─────────────────────────────────────────────────── */
+.hr { border: 0; border-top: 1px solid var(--border-subtle); margin: 2px 0; }
+.field-label { font-size: 12px; color: var(--text-dim); margin-bottom: 5px; display: block; letter-spacing: .02em; }
+.hint { font-size: 12px; color: var(--text-dimmer); }
+.hint.warn { color: #e3b341; }
+.kbd {
+  font-family: var(--mono); font-size: 11px;
+  border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px;
+  padding: 0 5px; color: var(--text-dim); background: var(--bg-base);
+}
+/* ══ 以上取自 mock.css ══ */
+
+/* ═══ 本篇专用：会话导航栏（标签条 + 工具条）的产品像素 ═══
+   数值与 frontend/src/index.css 的 .tt-tabs / .tt-tbar 段一一对应，改一处要同步另一处。 */
+
+.nb-frame {
+  width: 1180px; max-width: 96vw;
+  background: var(--bg-base);
+  border: 1px solid #2a3038; border-radius: 12px; overflow: hidden;
+  box-shadow: 0 1px 0 rgba(255,255,255,.06) inset, 0 0 0 1px rgba(0,0,0,.5),
+    0 24px 48px -12px rgba(0,0,0,.7), 0 60px 120px -30px rgba(0,0,0,.55);
+}
+.nb-frame.narrow { width: 560px; }
+.nb-frame.phone { width: 375px; border-radius: 20px; }
+
+/* 标签条 */
+.tabs {
+  display: flex; align-items: center; gap: 2px; padding: 6px 8px;
+  background: var(--bg-container); border-bottom: 1px solid var(--border-subtle);
+  overflow: hidden;
+}
+.tab {
+  display: inline-flex; align-items: center; gap: 7px; max-width: 230px;
+  height: 28px; padding: 0 5px 0 10px; border: 1px solid transparent; border-radius: 8px;
+  color: var(--text-dim); font-size: 12.5px; line-height: 1; white-space: nowrap; cursor: pointer;
+}
+.tab .nm { overflow: hidden; text-overflow: ellipsis; }
+.tab:hover { background: rgba(255,255,255,.025); color: var(--text-bright); }
+.tab.hover { background: rgba(255,255,255,.025); color: var(--text-bright); }
+.tab.on {
+  color: var(--text-bright); font-weight: 600;
+  background: rgba(88,166,255,.14); border-color: rgba(88,166,255,.5);
+}
+.tab .x {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 5px; color: var(--text-dimmer); opacity: 0;
+}
+.tab:hover .x, .tab.on .x, .tab.hover .x { opacity: 1; }
+.tab .x.hot { background: rgba(248,81,73,.16); color: var(--red); opacity: 1; }
+.wait { color: var(--yellow); font-weight: 600; }
+
+/* 工具条 */
+.tbar {
+  display: flex; align-items: center; gap: 3px; padding: 5px 8px;
+  background: var(--bg-base); border-bottom: 1px solid var(--border-subtle);
+  overflow: hidden;
+}
+.sep { width: 1px; height: 16px; background: var(--border-subtle); margin: 0 5px; flex: 0 0 1px; }
+.spacer { flex: 1 1 auto; min-width: 8px; }
+.tbtn {
+  display: inline-flex; align-items: center; gap: 6px; height: 27px; padding: 0 9px;
+  border: 1px solid transparent; border-radius: 7px; background: transparent;
+  color: var(--text-dim); font-size: 12.5px; font-family: inherit; line-height: 1;
+  cursor: pointer; white-space: nowrap; flex: 0 0 auto;
+}
+.tbtn.ico { padding: 0 6px; }
+.tbtn:hover, .tbtn.hover { background: rgba(255,255,255,.025); color: var(--text-bright); }
+.tbtn.on { color: var(--blue); background: rgba(88,166,255,.12); border-color: rgba(88,166,255,.35); }
+.tbtn.on.codex { color: #10a37f; background: rgba(16,163,127,.12); border-color: rgba(16,163,127,.35); }
+.tbtn .caret { font-size: 9px; color: var(--text-dimmer); }
+.tgroup {
+  display: inline-flex; align-items: center; gap: 2px; padding: 2px; flex: 0 0 auto;
+  background: var(--bg-container); border: 1px solid var(--border-subtle); border-radius: 9px;
+}
+.tgroup .tbtn { height: 23px; border-radius: 6px; }
+.status {
+  display: inline-flex; align-items: center; gap: 7px; height: 27px; padding: 0 10px 0 8px;
+  color: var(--text-dim); font-size: 12.5px; line-height: 1; white-space: nowrap; flex: 0 0 auto;
+}
+.status i, .tab i.d { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 7px; display: inline-block; }
+.d.g { background: var(--green); box-shadow: 0 0 0 3px rgba(63,185,80,.15); }
+.d.y { background: var(--yellow); box-shadow: 0 0 0 3px rgba(210,153,34,.15); }
+.d.r { background: var(--red); box-shadow: 0 0 0 3px rgba(248,81,73,.15); }
+.mk-claude { color: var(--blue); display: inline-flex; }
+.mk-codex { color: #10a37f; display: inline-flex; }
+
+/* 终端底：只露一小截，说明三层由浅到深的纵深关系 */
+.term-peek {
+  background: var(--bg-term); font-family: var(--mono); font-size: 12.5px; line-height: 1.75;
+  color: #b1bac4; padding: 12px 16px 18px;
+}
+.term-peek .p { color: #7ee787; } .term-peek .c { color: #79c0ff; } .term-peek .d2 { color: #484f58; }
+
+/* 旧版复刻（S0）：只在这里出现，用来对照 */
+.old-tabs { display: flex; align-items: center; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--border); background: var(--bg-term); }
+.old-tab {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 8px;
+  border: 1px solid var(--border); color: var(--text-bright); font-size: 13px; white-space: nowrap;
+}
+.old-tab.on { background: #1f6feb33; border-color: #1f6feb; }
+.old-bar {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: var(--bg-term);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.old-btn {
+  display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 7px;
+  border: 1px solid var(--border); border-radius: 6px; background: rgba(177,186,196,.03);
+  color: var(--text-bright); font-size: 12px; white-space: nowrap;
+}
+.old-btn.pri { background: transparent; border-color: var(--blue); color: var(--blue); }
+.old-btn.emoji { font-size: 12px; }
+
+/* 批注 */
+.callout {
+  position: relative; margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px 18px;
+  font-size: 12px; color: var(--stage-ink); max-width: 1180px;
+}
+.callout b { color: #ff9d95; font-weight: 600; }
+.callout .ok b { color: #56d364; }
+.plate-cap {
+  width: 100%; max-width: 1180px; margin: 0 auto 12px;
+  display: flex; align-items: baseline; gap: 12px;
+}
+.plate-cap .no {
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: .18em; color: var(--stage-faint);
+  border: 1px solid var(--stage-line); border-radius: 999px; padding: 3px 10px; flex: 0 0 auto;
+}
+.plate-cap h2 { font-size: 15px; font-weight: 700; color: var(--plate); letter-spacing: .01em; }
+.plate-cap p { font-size: 12.5px; color: var(--stage-ink); margin-left: auto; text-align: right; max-width: 620px; line-height: 1.7; }
+.stage-col { flex-direction: column; align-items: center; }
+
+/* 解剖表格 */
+.spec-table { width: 100%; max-width: 1180px; border-collapse: collapse; font-size: 12.5px; }
+.spec-table th, .spec-table td {
+  text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--stage-line); color: var(--stage-ink);
+}
+.spec-table th { color: var(--plate); font-weight: 600; font-size: 12px; letter-spacing: .04em; }
+.spec-table td.k { color: var(--plate); font-family: var(--mono); font-size: 11.5px; white-space: nowrap; }
+.spec-table td.v { font-family: var(--mono); font-size: 11.5px; color: #79c0ff; white-space: nowrap; }
+
+/* 图标总表 */
+.ic-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 10px;
+  width: 100%; max-width: 1180px;
+}
+.ic-cell {
+  display: flex; align-items: center; gap: 10px; padding: 11px 12px;
+  background: var(--bg-container); border: 1px solid var(--border-subtle); border-radius: 10px;
+  color: var(--text-dim); font-size: 12px;
+}
+.ic-cell .nm { color: var(--text-bright); font-size: 12.5px; display: block; }
+.ic-cell .sub { font-family: var(--mono); font-size: 10.5px; color: var(--text-dimmer); }
+
+/* 状态矩阵 */
+.matrix { display: flex; flex-wrap: wrap; gap: 26px; }
+.matrix .cell { display: flex; flex-direction: column; gap: 9px; align-items: flex-start; }
+.matrix .cell .lb { font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; color: var(--stage-faint); }
+.matrix .box { background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 10px 12px; }
+.matrix .box.container { background: var(--bg-container); }
+
+/* 明亮主题样片：在容器上翻转 token */
+.light {
+  --bg-base: #f6f8fa; --bg-container: #ffffff; --bg-term: #ffffff;
+  --border: #d0d7de; --border-subtle: #e6e9ec;
+  --text-bright: #1f2328; --text-dim: #57606a; --text-dimmer: #8c959f;
+}
+.light .tab:hover, .light .tab.hover, .light .tbtn:hover, .light .tbtn.hover { background: rgba(27,31,36,.04); }
+.light .term-peek { color: #4b535c; }
+.light .term-peek .p { color: #116329; } .light .term-peek .c { color: #0550ae; } .light .term-peek .d2 { color: #8c959f; }
+</style>
+</head>
+<body>
+
+<div class="spec-bar">
+  <b><span class="spec-tag">SPEC 12</span>会话导航栏重做 · 标签条 / 工具条</b>
+  <span class="spacer"></span>
+  <a href="../12-session-navbar.md">说明书</a>
+  <a href="../11-git-panel/index.html">11 · Git 面板</a>
+  <a href="../07-worktree/overall-desktop.html">07 · 总览</a>
+</div>
+
+<div class="spec-note">
+  会话页顶部两行是<em>整个产品里出现频率最高的一块 chrome</em>：开着终端就一直在眼前。
+  现状是「一排 antd 默认按钮 + emoji」，各控件高度、圆角、图标语言都不统一，
+  也没有主次分组 —— 看上去像调试面板而不是产品。本篇只重做这两行的<em>视觉与排布</em>，
+  <span class="mono">不改任何交互语义</span>：按钮该做什么还做什么，位置也尽量保持肌肉记忆。
+</div>
+
+<!-- ══════════ S0 现状 ══════════ -->
+<div class="stage stage-col">
+  <div class="plate-cap">
+    <span class="no">S0</span>
+    <h2>现状（对照）</h2>
+    <p>问题不在功能，在观感：14 个控件平铺一行、无分组；emoji 与线性图标混用；标签每个都描边，选中态被淹没。</p>
+  </div>
+  <div class="nb-frame">
+    <div class="old-tabs">
+      <span class="old-btn" style="border-color:transparent;background:transparent;color:var(--text-dim)">✕ 收起</span>
+      <span class="old-tab"><i class="d g"></i>oauth-新增组织<a style="color:var(--text-dim)">×</a></span>
+      <span class="old-tab"><i class="d g"></i>roam-sh<a style="color:var(--text-dim)">×</a></span>
+      <span class="old-tab on"><i class="d g"></i><span style="color:var(--blue)">✳</span>现在的会话的导航栏重新设计下<a style="color:var(--text-dim)">×</a></span>
+    </div>
+    <div class="old-bar">
+      <span style="display:inline-flex;align-items:center;gap:6px;color:var(--text-dim);font-size:12px"><i class="d g"></i>已连接</span>
+      <span class="old-btn">✳ Claude</span>
+      <span class="old-btn pri">tmux ▾</span>
+      <span class="old-btn">↗ 新标签</span>
+      <span class="old-btn">重命名</span>
+      <span class="old-btn emoji">🔔 弹框提醒</span>
+      <span class="old-btn emoji">📁 文件</span>
+      <span class="old-btn">Git</span>
+      <span class="old-btn emoji">🎤</span>
+      <span class="spacer"></span>
+      <span class="old-btn">▲</span><span class="old-btn">▼底</span>
+      <span class="old-btn">A-</span><span class="old-btn">A+</span>
+      <span class="old-btn">重绘</span><span class="old-btn">重连</span>
+    </div>
+    <div class="term-peek"><span class="d2">$</span> <span class="p">~/codes/ttmux</span> <span class="c">git status</span></div>
+  </div>
+  <div class="callout">
+    <span><b>①</b> 两行底色与终端同为纯黑，外壳没有层次</span>
+    <span><b>②</b> emoji 图标（🔔📁🎤）跟 Git 的线性图标不是一套语言</span>
+    <span><b>③</b> 每个标签都有 1px 框，选中态只靠蓝底，扫视时抓不住</span>
+    <span><b>④</b> 左右两簇功能性质完全不同（改状态 vs 看画面），却一样重</span>
+    <span><b>⑤</b> antd 默认按钮 24px 高、6px 圆角，与标签 8px 圆角不咬合</span>
+  </div>
+</div>
+
+<!-- ══════════ S1 新设计 ══════════ -->
+<div class="stage stage-col">
+  <div class="plate-cap">
+    <span class="no">S1</span>
+    <h2>新设计 · 桌面</h2>
+    <p>三层纵深：标签条 <span class="mono">--bg-container</span> → 工具条 <span class="mono">--bg-base</span> → 终端 <span class="mono">--bg-term</span>，越往下越暗，视线自然落到内容。</p>
+  </div>
+  <div class="nb-frame">
+    <div class="tabs">
+      <span class="tbtn" data-ic="collapse">收起</span>
+      <span class="sep"></span>
+      <span class="tab"><i class="d g"></i><span class="nm">oauth-新增组织</span><a class="x" data-ic="close"></a></span>
+      <span class="tab"><i class="d y"></i><span class="wait">待确认</span><span class="nm">roam-sh</span><a class="x" data-ic="close"></a></span>
+      <span class="tab on"><i class="d g"></i><span class="mk-claude" data-ic="claude"></span><span class="nm">session-navbar-redesign</span><a class="x" data-ic="close"></a></span>
+      <span class="tab"><i class="d g"></i><span class="mk-codex" data-ic="codex"></span><span class="nm">codex-review</span><a class="x" data-ic="close"></a></span>
+    </div>
+    <div class="tbar">
+      <span class="status"><i class="d g"></i>已连接</span>
+      <span class="tbtn on"><span data-ic="claude" style="display:inline-flex"></span>Claude</span>
+      <span class="sep"></span>
+      <span class="tbtn" data-ic="tmux">tmux<i class="caret">▼</i></span>
+      <span class="tbtn" data-ic="newTab">新标签</span>
+      <span class="tbtn" data-ic="rename">重命名</span>
+      <span class="sep"></span>
+      <span class="tbtn on" data-ic="bellOn">弹框提醒</span>
+      <span class="tbtn" data-ic="folder">文件</span>
+      <span class="tbtn" data-ic="git">Git</span>
+      <span class="tbtn" data-ic="mic">语音输入</span>
+      <span class="spacer"></span>
+      <span class="tgroup">
+        <span class="tbtn ico" data-ic="scrollUp"></span>
+        <span class="tbtn ico" data-ic="toBottom"></span>
+      </span>
+      <span class="tgroup" style="margin-left:6px">
+        <span class="tbtn ico" style="font-weight:600">A−</span>
+        <span class="tbtn ico" style="font-weight:600">A+</span>
+      </span>
+      <span class="tgroup" style="margin-left:6px">
+        <span class="tbtn ico" data-ic="redraw"></span>
+        <span class="tbtn ico" data-ic="reconnect"></span>
+      </span>
+    </div>
+    <div class="term-peek">
+      <div><span class="d2">$</span> <span class="p">~/codes/ttmux</span> <span class="c">git status</span></div>
+      <div><span class="d2">On branch feat/session-navbar-redesign</span></div>
+    </div>
+  </div>
+  <div class="callout">
+    <span class="ok"><b>①</b> 未选中标签不描边，选中态=蓝底+蓝框+加粗，一眼可辨</span>
+    <span class="ok"><b>②</b> 全线性图标，15px / 描边 1.8 / 圆头，与左侧主导航同一套</span>
+    <span class="ok"><b>③</b> 三段断句：状态 · 会话动作 · 面板开关</span>
+    <span class="ok"><b>④</b> 右侧只读工具收进浅色分段组，语义上「不改状态」</span>
+    <span class="ok"><b>⑤</b> 控件统一 27/28px 高、7/8px 圆角，栅格咬合</span>
+  </div>
+</div>
+
+<!-- ══════════ S2 解剖 ══════════ -->
+<div class="stage stage-col">
+  <div class="plate-cap">
+    <span class="no">S2</span>
+    <h2>控件状态矩阵</h2>
+    <p>默认态一律安静（无框无底），只有 hover / 选中 / 开启才上色 —— 一行十几个控件时，安静是唯一能让重点冒头的办法。</p>
+  </div>
+  <div class="matrix">
+    <div class="cell">
+      <span class="lb">TAB · 默认</span>
+      <div class="box container"><span class="tab"><i class="d g"></i><span class="nm">build-web</span><a class="x" data-ic="close"></a></span></div>
+    </div>
+    <div class="cell">
+      <span class="lb">TAB · 悬停</span>
+      <div class="box container"><span class="tab hover"><i class="d g"></i><span class="nm">build-web</span><a class="x" data-ic="close"></a></span></div>
+    </div>
+    <div class="cell">
+      <span class="lb">TAB · 选中</span>
+      <div class="box container"><span class="tab on"><i class="d g"></i><span class="nm">build-web</span><a class="x" data-ic="close"></a></span></div>
+    </div>
+    <div class="cell">
+      <span class="lb">TAB · 关闭悬停</span>
+      <div class="box container"><span class="tab on"><i class="d g"></i><span class="nm">build-web</span><a class="x hot" data-ic="close"></a></span></div>
+    </div>
+    <div class="cell">
+      <span class="lb">TAB · 待确认</span>
+      <div class="box container"><span class="tab"><i class="d y"></i><span class="wait">待确认</span><span class="nm">deploy</span><a class="x" data-ic="close"></a></span></div>
+    </div>
+    <div class="cell">
+      <span class="lb">TAB · 断开</span>
+      <div class="box container"><span class="tab"><i class="d r"></i><span class="nm">old-session</span><a class="x" data-ic="close"></a></span></div>
+    </div>
+  </div>
+  <div class="matrix" style="margin-top:8px">
+    <div class="cell">
+      <span class="lb">BTN · 默认</span>
+      <div class="box"><span class="tbtn" data-ic="folder">文件</span></div>
+    </div>
+    <div class="cell">
+      <span class="lb">BTN · 悬停</span>
+      <div class="box"><span class="tbtn hover" data-ic="folder">文件</span></div>
+    </div>
+    <div class="cell">
+      <span class="lb">BTN · 开启</span>
+      <div class="box"><span class="tbtn on" data-ic="folder">文件</span></div>
+    </div>
+    <div class="cell">
+      <span class="lb">BTN · 开启 / Codex 绿</span>
+      <div class="box"><span class="tbtn on codex"><span data-ic="codex" style="display:inline-flex"></span>Codex</span></div>
+    </div>
+    <div class="cell">
+      <span class="lb">BTN · 纯图标</span>
+      <div class="box"><span class="tbtn ico" data-ic="toBottom"></span></div>
+    </div>
+    <div class="cell">
+      <span class="lb">GROUP · 分段组</span>
+      <div class="box"><span class="tgroup"><span class="tbtn ico" data-ic="redraw"></span><span class="tbtn ico" data-ic="reconnect"></span></span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ S3 图标 ══════════ -->
+<div class="stage stage-col">
+  <div class="plate-cap">
+    <span class="no">S3</span>
+    <h2>图标与会话标记</h2>
+    <p>全部内联 SVG：24 viewBox / 15px 呈现 / <span class="mono">stroke 1.8</span> / 圆头圆角 / <span class="mono">currentColor</span>。emoji 全部退场——它跟不了强调色，各平台字形也不一致。</p>
+  </div>
+  <div class="ic-grid">
+    <div class="ic-cell"><span class="mk-claude" data-ic="claude"></span><span><span class="nm">Claude 标记</span><span class="sub">替代 ✳ · #58a6ff</span></span></div>
+    <div class="ic-cell"><span class="mk-codex" data-ic="codex"></span><span><span class="nm">Codex 标记</span><span class="sub">替代 ✸ · #10a37f</span></span></div>
+    <div class="ic-cell"><span data-ic="collapse"></span><span><span class="nm">收起</span><span class="sub">替代 ✕</span></span></div>
+    <div class="ic-cell"><span data-ic="close"></span><span><span class="nm">关闭标签</span><span class="sub">替代 ×</span></span></div>
+    <div class="ic-cell"><span data-ic="tmux"></span><span><span class="nm">tmux</span><span class="sub">终端 + 提示符</span></span></div>
+    <div class="ic-cell"><span data-ic="newTab"></span><span><span class="nm">新标签</span><span class="sub">替代 ↗</span></span></div>
+    <div class="ic-cell"><span data-ic="rename"></span><span><span class="nm">重命名</span><span class="sub">铅笔</span></span></div>
+    <div class="ic-cell"><span data-ic="bellOn"></span><span><span class="nm">弹框提醒 · 开</span><span class="sub">替代 🔔</span></span></div>
+    <div class="ic-cell"><span data-ic="bellOff"></span><span><span class="nm">弹框提醒 · 关</span><span class="sub">替代 🔕</span></span></div>
+    <div class="ic-cell"><span data-ic="folder"></span><span><span class="nm">文件</span><span class="sub">替代 📁</span></span></div>
+    <div class="ic-cell"><span data-ic="git"></span><span><span class="nm">Git</span><span class="sub">沿用原线性图标</span></span></div>
+    <div class="ic-cell"><span data-ic="mic"></span><span><span class="nm">语音输入</span><span class="sub">替代 🎤</span></span></div>
+    <div class="ic-cell"><span data-ic="scrollUp"></span><span><span class="nm">上翻历史</span><span class="sub">替代 ▲</span></span></div>
+    <div class="ic-cell"><span data-ic="toBottom"></span><span><span class="nm">回到最新</span><span class="sub">替代 ▼底</span></span></div>
+    <div class="ic-cell"><span data-ic="redraw"></span><span><span class="nm">重绘</span><span class="sub">文字 → 图标</span></span></div>
+    <div class="ic-cell"><span data-ic="reconnect"></span><span><span class="nm">重连</span><span class="sub">文字 → 图标</span></span></div>
+  </div>
+  <div class="spec-note" style="max-width:1180px;padding-left:0">
+    右侧 6 个只读工具改为<em>纯图标 + Tooltip</em>：它们是「看画面」的辅助，不该跟「改会话状态」的动作抢注意力；
+    腾出的横向空间正好留给窄栏和手机。文案没有丢——<span class="mono">terminal.scrollHistory / toBottom / redraw / reconnect</span>
+    这些原有 i18n key 继续作为 Tooltip 标题。
+  </div>
+</div>
+
+<!-- ══════════ S4 窄栏 / 手机 ══════════ -->
+<div class="stage">
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <div class="plate-cap" style="max-width:560px">
+      <span class="no">S4</span><h2>窄栏（右侧停靠 560）</h2>
+    </div>
+    <div class="nb-frame narrow">
+      <div class="tabs">
+        <span class="tbtn" data-ic="collapse">收起</span>
+        <span class="sep"></span>
+        <span class="tab on"><i class="d g"></i><span class="mk-claude" data-ic="claude"></span><span class="nm">session-navbar-redesign</span><a class="x" data-ic="close"></a></span>
+        <span class="tab"><i class="d g"></i><span class="nm">roam-sh</span><a class="x" data-ic="close"></a></span>
+      </div>
+      <div class="tbar">
+        <span class="status"><i class="d g"></i>已连接</span>
+        <span class="tbtn on"><span data-ic="claude" style="display:inline-flex"></span>Claude</span>
+        <span class="sep"></span>
+        <span class="tbtn" data-ic="tmux">tmux<i class="caret">▼</i></span>
+        <span class="tbtn" data-ic="newTab">新标签</span>
+        <span class="tbtn" data-ic="rename">重命名</span>
+        <span style="color:var(--text-dimmer);font-size:12px;padding-left:4px">→</span>
+      </div>
+      <div class="term-peek"><span class="d2">$</span> <span class="p">~/codes/ttmux</span> <span class="c">npm run build</span></div>
+    </div>
+    <div class="spec-note" style="max-width:560px;padding-left:0">
+      两行都是<em>单行横向滑动</em>（不换行、隐藏滚动条），右侧分段组滑出视口外仍可滑到；
+      这条规则本来就在 <span class="mono">.tt-session-toolbar</span> 上，这次一并给标签条。
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <div class="plate-cap" style="max-width:375px">
+      <span class="no">S5</span><h2>手机 375</h2>
+    </div>
+    <div class="nb-frame phone">
+      <div class="tabs">
+        <span class="tab on"><i class="d g"></i><span class="mk-claude" data-ic="claude"></span><span class="nm">session-navbar…</span><a class="x" data-ic="close"></a></span>
+        <span class="tab"><i class="d y"></i><span class="nm">roam-sh</span><a class="x" data-ic="close"></a></span>
+      </div>
+      <div class="tbar">
+        <span class="status"><i class="d g"></i>已连接</span>
+        <span class="tbtn on"><span data-ic="claude" style="display:inline-flex"></span>Claude</span>
+        <span class="sep"></span>
+        <span class="tbtn" data-ic="tmux">tmux<i class="caret">▼</i></span>
+        <span style="color:var(--text-dimmer);font-size:12px">→</span>
+      </div>
+      <div class="term-peek" style="min-height:120px"><span class="d2">$</span> <span class="p">~/codes</span> <span class="c">ttmux ls</span></div>
+    </div>
+    <div class="spec-note" style="max-width:375px;padding-left:0">
+      触屏没有 hover，标签的关闭按钮<em>常显</em>（<span class="mono">@media (pointer: coarse)</span>）；
+      手机覆盖层里的「收起」就是返回入口，保留；切换标签后当前标签自动滚回可视区。
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ S6 明亮主题 ══════════ -->
+<div class="stage stage-col">
+  <div class="plate-cap">
+    <span class="no">S6</span>
+    <h2>明亮主题</h2>
+    <p>颜色全部走 CSS 变量，只有强调色（会话蓝 / Codex 绿）与状态点是硬编码——它们在黑白两套底色上都验证过对比度。</p>
+  </div>
+  <div class="nb-frame light" style="border-color:#d0d7de">
+    <div class="tabs">
+      <span class="tbtn" data-ic="collapse">收起</span>
+      <span class="sep"></span>
+      <span class="tab"><i class="d g"></i><span class="nm">oauth-新增组织</span><a class="x" data-ic="close"></a></span>
+      <span class="tab on"><i class="d g"></i><span class="mk-claude" data-ic="claude"></span><span class="nm">session-navbar-redesign</span><a class="x" data-ic="close"></a></span>
+    </div>
+    <div class="tbar">
+      <span class="status"><i class="d g"></i>已连接</span>
+      <span class="tbtn on"><span data-ic="claude" style="display:inline-flex"></span>Claude</span>
+      <span class="sep"></span>
+      <span class="tbtn" data-ic="tmux">tmux<i class="caret">▼</i></span>
+      <span class="tbtn" data-ic="newTab">新标签</span>
+      <span class="tbtn" data-ic="rename">重命名</span>
+      <span class="sep"></span>
+      <span class="tbtn on" data-ic="bellOn">弹框提醒</span>
+      <span class="tbtn" data-ic="folder">文件</span>
+      <span class="tbtn" data-ic="git">Git</span>
+      <span class="tbtn" data-ic="mic">语音输入</span>
+      <span class="spacer"></span>
+      <span class="tgroup"><span class="tbtn ico" data-ic="scrollUp"></span><span class="tbtn ico" data-ic="toBottom"></span></span>
+      <span class="tgroup" style="margin-left:6px"><span class="tbtn ico" style="font-weight:600">A−</span><span class="tbtn ico" style="font-weight:600">A+</span></span>
+      <span class="tgroup" style="margin-left:6px"><span class="tbtn ico" data-ic="redraw"></span><span class="tbtn ico" data-ic="reconnect"></span></span>
+    </div>
+    <div class="term-peek"><span class="d2">$</span> <span class="p">~/codes/ttmux</span> <span class="c">git status</span></div>
+  </div>
+</div>
+
+<!-- ══════════ 规格表 ══════════ -->
+<div class="stage stage-col">
+  <div class="plate-cap">
+    <span class="no">SPEC</span>
+    <h2>尺寸 / 色值规格</h2>
+    <p>实现落在 <span class="mono">frontend/src/index.css</span>（.tt-tabs / .tt-tbar 段）与 <span class="mono">App.tsx</span> 的 TI / AgentMark / TBtn。</p>
+  </div>
+  <table class="spec-table">
+    <tr><th style="width:170px">部件</th><th style="width:230px">尺寸</th><th style="width:300px">色</th><th>说明</th></tr>
+    <tr><td class="k">标签条</td><td class="v">padding 6/8 · 行高 40</td><td class="v">bg --bg-container</td><td>底 1px --border-subtle</td></tr>
+    <tr><td class="k">工具条</td><td class="v">padding 5/8 · 行高 37</td><td class="v">bg --bg-base</td><td>比标签条深一档，形成纵深</td></tr>
+    <tr><td class="k">标签 chip</td><td class="v">h28 · r8 · pad 0/5/0/10 · gap7</td><td class="v">on: #58a6ff24 底 / #58a6ff80 框</td><td>未选中透明；max-width 230 溢出省略</td></tr>
+    <tr><td class="k">关闭按钮</td><td class="v">18×18 · r5</td><td class="v">hover #f8514929 底 / #f85149 字</td><td>hover / 选中 / 触屏 才显形</td></tr>
+    <tr><td class="k">工具按钮</td><td class="v">h27 · r7 · pad 0/9（纯图标 0/6）</td><td class="v">on: tone+1f 底 / tone+59 框 / tone 字</td><td>tone = 会话蓝 #58a6ff 或 Codex 绿 #10a37f</td></tr>
+    <tr><td class="k">分段组</td><td class="v">pad 2 · r9 · 内按钮 h23 r6</td><td class="v">bg --bg-container · 框 --border-subtle</td><td>右侧只读工具专用</td></tr>
+    <tr><td class="k">断句竖线</td><td class="v">1×16 · margin 0 5</td><td class="v">--border-subtle</td><td>三段：状态 / 动作 / 开关</td></tr>
+    <tr><td class="k">状态点</td><td class="v">7px 圆 + 3px 光晕</td><td class="v">绿 #3fb950 · 琥珀 #d29922 · 红 #f85149</td><td>光晕 = 同色 15% 透明</td></tr>
+    <tr><td class="k">图标</td><td class="v">15px · viewBox 24 · stroke 1.8</td><td class="v">currentColor</td><td>圆头圆角；Agent 标记 13~14px</td></tr>
+    <tr><td class="k">文字</td><td class="v">12.5px · 选中标签 600</td><td class="v">--text-dim → hover --text-bright</td><td>不用全大写、不加字间距</td></tr>
+  </table>
+</div>
+
+<div class="spec-note" style="border-top:1px dashed var(--stage-line)">
+  交互语义零变更：收起 / 切换标签 / 关闭 / Claude·Codex 视图切换 / tmux 菜单 / 新标签 / 重命名 /
+  弹框提醒 / 文件 / Git / 语音 / 上翻 / 回底 / 字号 / 重绘 / 重连，行为与位置顺序全部沿用。
+  <span class="mono">terminal.bottomShort / redrawShort / reconnectShort</span> 三个「短标签」key 因改纯图标而不再使用，
+  保留在词表里备用（i18n 审计只查缺失，不查冗余）。
+</div>
+
+<script>
+// 图标注入：与 frontend/src/App.tsx 的 TI / AgentMark 一一对应，改一处要同步另一处。
+const P = {
+  collapse: '<path d="M20 4.5v15"/><path d="M4.5 12h10"/><path d="m10 7 5 5-5 5"/>',
+  close: '<path d="m7 7 10 10"/><path d="M17 7 7 17"/>',
+  tmux: '<rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="m7.5 10 2.5 2-2.5 2"/><path d="M13 14.5h3.5"/>',
+  newTab: '<path d="M13.5 4h6.5v6.5"/><path d="M20 4 12 12"/><path d="M18.5 14.5V18a2.5 2.5 0 0 1-2.5 2.5H6A2.5 2.5 0 0 1 3.5 18V8A2.5 2.5 0 0 1 6 5.5h3.5"/>',
+  rename: '<path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17z"/><path d="m14.5 6.5 3 3"/>',
+  bellOn: '<path d="M18 9.5a6 6 0 1 0-12 0c0 4.5-2 6-2 6h16s-2-1.5-2-6"/><path d="M10.2 19.5a2.2 2.2 0 0 0 3.6 0"/>',
+  bellOff: '<path d="M18 9.5a6 6 0 0 0-9.1-5.1"/><path d="M6 9.5c0 4.5-2 6-2 6h12.5"/><path d="M10.2 19.5a2.2 2.2 0 0 0 3.6 0"/><path d="m3.5 3.5 17 17"/>',
+  folder: '<path d="M3 7.5A2 2 0 0 1 5 5.5h4l2 2h8a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  git: '<circle cx="6" cy="6" r="2.3"/><circle cx="6" cy="18" r="2.3"/><circle cx="18" cy="8" r="2.3"/><path d="M6 8.3v7.4"/><path d="M18 10.3a6 6 0 0 1-6 6H8.3"/>',
+  mic: '<rect x="9.2" y="3" width="5.6" height="11" rx="2.8"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0"/><path d="M12 18v3"/>',
+  scrollUp: '<path d="M4.5 4.5h15"/><path d="M12 20V9"/><path d="m7.5 13.5 4.5-4.5 4.5 4.5"/>',
+  toBottom: '<path d="M4.5 19.5h15"/><path d="M12 4v11"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/>',
+  redraw: '<path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20.5 4v5h-5"/>',
+  reconnect: '<path d="M10.4 13.6a4.2 4.2 0 0 0 6 0l2.4-2.4a4.2 4.2 0 0 0-6-6l-1.4 1.4"/><path d="M13.6 10.4a4.2 4.2 0 0 0-6 0l-2.4 2.4a4.2 4.2 0 0 0 6 6l1.4-1.4"/>',
+}
+const MARK = {
+  claude: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M12 3.2v17.6"/><path d="m4.4 7.6 15.2 8.8"/><path d="M19.6 7.6 4.4 16.4"/></svg>',
+  codex: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1"><circle cx="12" cy="12" r="7.6"/><circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none"/></svg>',
+}
+const svg = (d, s) => '<svg width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + d + '</svg>'
+document.querySelectorAll('[data-ic]').forEach((el) => {
+  const k = el.dataset.ic
+  const html = MARK[k] || svg(P[k], k === 'close' ? 12 : 15)
+  el.insertAdjacentHTML('afterbegin', html)
+})
+</script>
+</body>
+</html>

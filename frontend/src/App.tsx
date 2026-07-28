@@ -756,6 +756,59 @@ function SoloTerminal({ name }: { name: string }) {
   )
 }
 
+// ── 会话导航栏（标签条 + 工具条）的图标与控件 ──
+// 与左侧主导航同一套线性语言：24 viewBox、currentColor 描边、无 emoji（emoji 各平台字形不一，
+// 在深色栏里显得廉价且无法跟随强调色）。样式在 index.css 的 .tt-tabs / .tt-tbar 段。
+const tIcon = (paths: any, size = 15) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>{paths}</svg>
+)
+const TI = {
+  collapse: tIcon(<><path d="M20 4.5v15" /><path d="M4.5 12h10" /><path d="m10 7 5 5-5 5" /></>),
+  close: tIcon(<><path d="m7 7 10 10" /><path d="M17 7 7 17" /></>, 12),
+  tmux: tIcon(<><rect x="3" y="4.5" width="18" height="15" rx="2.5" /><path d="m7.5 10 2.5 2-2.5 2" /><path d="M13 14.5h3.5" /></>),
+  newTab: tIcon(<><path d="M13.5 4h6.5v6.5" /><path d="M20 4 12 12" /><path d="M18.5 14.5V18a2.5 2.5 0 0 1-2.5 2.5H6A2.5 2.5 0 0 1 3.5 18V8A2.5 2.5 0 0 1 6 5.5h3.5" /></>),
+  rename: tIcon(<><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17z" /><path d="m14.5 6.5 3 3" /></>),
+  bellOn: tIcon(<><path d="M18 9.5a6 6 0 1 0-12 0c0 4.5-2 6-2 6h16s-2-1.5-2-6" /><path d="M10.2 19.5a2.2 2.2 0 0 0 3.6 0" /></>),
+  bellOff: tIcon(<><path d="M18 9.5a6 6 0 0 0-9.1-5.1" /><path d="M6 9.5c0 4.5-2 6-2 6h12.5" /><path d="M10.2 19.5a2.2 2.2 0 0 0 3.6 0" /><path d="m3.5 3.5 17 17" /></>),
+  folder: tIcon(<><path d="M3 7.5A2 2 0 0 1 5 5.5h4l2 2h8a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></>),
+  git: tIcon(<><circle cx="6" cy="6" r="2.3" /><circle cx="6" cy="18" r="2.3" /><circle cx="18" cy="8" r="2.3" /><path d="M6 8.3v7.4" /><path d="M18 10.3a6 6 0 0 1-6 6H8.3" /></>),
+  mic: tIcon(<><rect x="9.2" y="3" width="5.6" height="11" rx="2.8" /><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0" /><path d="M12 18v3" /></>),
+  scrollUp: tIcon(<><path d="M4.5 4.5h15" /><path d="M12 20V9" /><path d="m7.5 13.5 4.5-4.5 4.5 4.5" /></>),
+  toBottom: tIcon(<><path d="M4.5 19.5h15" /><path d="M12 4v11" /><path d="m7.5 10.5 4.5 4.5 4.5-4.5" /></>),
+  redraw: tIcon(<><path d="M20 12a8 8 0 1 1-2.6-5.9" /><path d="M20.5 4v5h-5" /></>),
+  reconnect: tIcon(<><path d="M10.4 13.6a4.2 4.2 0 0 0 6 0l2.4-2.4a4.2 4.2 0 0 0-6-6l-1.4 1.4" /><path d="M13.6 10.4a4.2 4.2 0 0 0-6 0l-2.4 2.4a4.2 4.2 0 0 0 6 6l1.4-1.4" /></>),
+}
+// Claude / Codex 的会话标记：原来用 ✳ ✸ 两个字符，字重与基线都对不齐；改成同尺寸的品牌感 mark。
+function AgentMark({ kind, size = 13 }: { kind: 'claude' | 'codex'; size?: number }) {
+  return kind === 'claude'
+    ? (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" aria-hidden>
+        <path d="M12 3.2v17.6" /><path d="m4.4 7.6 15.2 8.8" /><path d="M19.6 7.6 4.4 16.4" />
+      </svg>
+    )
+    : (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" aria-hidden>
+        <circle cx="12" cy="12" r="7.6" /><circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none" />
+      </svg>
+    )
+}
+// 工具条按钮：默认安静（无框），开启态才由 tone 上强调色（会话蓝 / Codex 绿）。
+// tone 是 6 位十六进制，追加 alpha 后缀直接拿来做底色/描边，避免 color-mix 的兼容性问题。
+function TBtn({ icon, label, on, tone = '#58a6ff', title, onClick, onMouseDown }: {
+  icon?: ReactNode; label?: ReactNode; on?: boolean; tone?: string; title?: ReactNode
+  onClick?: () => void; onMouseDown?: (e: React.MouseEvent) => void
+}) {
+  const btn = (
+    <button type="button" className={`tt-tbtn${on ? ' on' : ''}${label ? '' : ' tt-ico'}`}
+      onClick={onClick} onMouseDown={onMouseDown}
+      style={on ? { color: tone, background: `${tone}1f`, borderColor: `${tone}59` } : undefined}>
+      {icon}{label != null && <span>{label}</span>}
+    </button>
+  )
+  return title ? <Tooltip title={title} mouseEnterDelay={0.35}>{btn}</Tooltip> : btn
+}
+
 // ── 终端面板（多标签 + 工具栏 + 快捷键栏），桌面右栏与手机覆盖层共用 ──
 function TerminalPane(props: {
   terms: string[]; active: string | null; setActive: (n: string) => void; closeTerm: (n: string) => void
@@ -814,6 +867,11 @@ function TerminalPane(props: {
   // 右侧停靠时两者都是右抽屉，Git 抽屉在文件也开着时向左让位（见下方 right 偏移），并排显示而非互相覆盖。
   const toggleFiles = () => setShowFiles((s) => !s)
   const toggleGit = () => setShowGit((s) => !s)
+
+  // 标签条是单行横向滑动（见 index.css .tt-tabs）：窄栏/手机上会话一多，当前标签会滑出视口，
+  // 切换后把它带回可视区（block:'nearest' → 只横向滚标签条，不牵动整页）。
+  const activeTabRef = useRef<HTMLSpanElement | null>(null)
+  useEffect(() => { activeTabRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' }) }, [active])
 
   // 从文件/Git 面板把文件拖到终端 → 插入为 @绝对路径。
   const [dragOver, setDragOver] = useState(false)
@@ -1034,81 +1092,95 @@ function TerminalPane(props: {
   }
 
   // ── 会话（终端）各部件抽成局部 JSX：左侧停靠走 <FileWorkspace> 的槽位，右侧抽屉走原地布局，二者共用同一份 ──
+  // 标签条是单行横向滑动：窄栏/手机上开的会话一多，当前标签就滑出视口了 → 切换后把它带回来。
+  // 会话状态点：等待确认=琥珀，已连接=绿，连接中=琥珀，断开=红（与列表页同一套色）
+  const dotOf = (name: string) => termNeedsInput[name] ? '#d29922'
+    : statusMap[name] === 'connected' ? '#3fb950' : statusMap[name] === 'connecting' ? '#d29922' : '#f85149'
+  const statusDot = (color: string, size = 7) => (
+    <i style={{ width: size, height: size, borderRadius: '50%', flex: `0 0 ${size}px`, background: color, boxShadow: `0 0 0 3px ${color}26` }} />
+  )
+  // 标签内的会话标记：Claude 蓝 / Codex 绿，跟状态点同一行且同一光学尺寸
+  const agentMarks = (name: string) => (
+    <>
+      {claudeMap[name]?.running && <span title={t('session.runningClaude')} style={{ display: 'inline-flex', color: '#58a6ff' }}><AgentMark kind="claude" /></span>}
+      {codexMap[name]?.running && <span title={t('session.runningCodex')} style={{ display: 'inline-flex', color: '#10a37f' }}><AgentMark kind="codex" /></span>}
+    </>
+  )
   const sessionTab = (
     <>
-      <i style={{ width: 7, height: 7, borderRadius: '50%', background: active && statusMap[active] === 'connected' ? '#3fb950' : '#d29922' }} />
+      {statusDot(active ? dotOf(active) : '#f85149')}
+      {active && agentMarks(active)}
       {active && <SessionTitle name={active} />}
     </>
   )
   const tabStrip = (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 8px', borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
-      {onCollapse && <Button size="small" type="text" style={{ color: 'var(--text-dim)' }} onClick={onCollapse}>✕ {t('common.collapse')}</Button>}
-      {terms.map((termName) => (
-        <span key={termName} onClick={() => setActive(termName)}
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap',
-            background: termName === active ? '#1f6feb33' : 'transparent', border: termName === active ? '1px solid #1f6feb' : '1px solid var(--border)', color: 'var(--text-bright)',
-          }}>
-          <i style={{ width: 7, height: 7, borderRadius: '50%', background: termNeedsInput[termName] ? '#d29922' : (statusMap[termName] === 'connected' ? '#3fb950' : statusMap[termName] === 'connecting' ? '#d29922' : '#f85149') }} />
-          {termNeedsInput[termName] && <span title={t('prompt.confirmRequired')} style={{ color: '#d29922', fontSize: 12, fontWeight: 600 }}>{t('session.waiting')}</span>}
-          {claudeMap[termName]?.running && <span title={t('session.runningClaude')} style={{ color: '#58a6ff' }}>✳</span>}
-          {codexMap[termName]?.running && <span title={t('session.runningCodex')} style={{ color: '#10a37f' }}>✸</span>}
-          <SessionTitle name={termName} />
-          <a onClick={(e) => { e.stopPropagation(); closeTerm(termName) }} style={{ color: 'var(--text-dim)' }}>×</a>
-        </span>
-      ))}
+    <div className="tt-tabs">
+      {onCollapse && (
+        <>
+          <TBtn icon={TI.collapse} label={t('common.collapse')} onClick={onCollapse} />
+          <span className="tt-sep" />
+        </>
+      )}
+      {terms.map((termName) => {
+        const on = termName === active
+        const waiting = termNeedsInput[termName]
+        return (
+          <span key={termName} ref={on ? activeTabRef : undefined}
+            className={`tt-tab${on ? ' on' : ''}`} title={termName} onClick={() => setActive(termName)}
+            style={on ? { background: 'rgba(88,166,255,.14)', borderColor: 'rgba(88,166,255,.5)' } : undefined}>
+            {statusDot(dotOf(termName))}
+            {waiting && <span title={t('prompt.confirmRequired')} style={{ color: '#d29922', fontWeight: 600 }}>{t('session.waiting')}</span>}
+            {agentMarks(termName)}
+            <span className="tt-name"><SessionTitle name={termName} /></span>
+            <a className="tt-x" title={t('common.close')} onClick={(e) => { e.stopPropagation(); closeTerm(termName) }}>{TI.close}</a>
+          </span>
+        )
+      })}
     </div>
   )
+  // 工具条分三段：左=会话身份与动作，中=面板开关，右（分段组）=只读的画面控制
   const sessionToolbar = (
-    <div className="tt-session-toolbar" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)', flexWrap: 'nowrap', overflowX: 'auto', overflowY: 'hidden', WebkitOverflowScrolling: 'touch' }}>
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-dim)', fontSize: 12 }}>
-        <i style={{ width: 8, height: 8, borderRadius: '50%', background: dot }} />
+    <div className="tt-tbar tt-session-toolbar">
+      <span className="tt-status">
+        {statusDot(dot, 7)}
         {activeNeedsInput ? t('session.waiting') : st === 'connected' ? t('terminal.status.connected') : st === 'connecting' ? t('terminal.status.connecting') : t('terminal.status.disconnected')}
       </span>
       {active && claudeMap[active]?.running && (
-        <Tooltip title={t('chat.switchToClaude')}>
-          <Button size="small" type={claudeView[active] ? 'primary' : 'default'}
-            onClick={() => setClaudeView((v) => ({ ...v, [active!]: !v[active!] }))}>✳ Claude</Button>
-        </Tooltip>
+        <TBtn icon={<AgentMark kind="claude" size={14} />} label="Claude" tone="#58a6ff" on={!!claudeView[active]}
+          title={t('chat.switchToClaude')} onClick={() => setClaudeView((v) => ({ ...v, [active!]: !v[active!] }))} />
       )}
       {active && codexMap[active]?.running && (
-        <Tooltip title={t('chat.switchToCodex')}>
-          <Button size="small" type={codexView[active] ? 'primary' : 'default'}
-            style={codexView[active] ? { background: '#10a37f', borderColor: '#10a37f' } : {}}
-            onClick={() => setCodexView((v) => ({ ...v, [active!]: !v[active!] }))}>✸ Codex</Button>
-        </Tooltip>
+        <TBtn icon={<AgentMark kind="codex" size={14} />} label="Codex" tone="#10a37f" on={!!codexView[active]}
+          title={t('chat.switchToCodex')} onClick={() => setCodexView((v) => ({ ...v, [active!]: !v[active!] }))} />
       )}
+      <span className="tt-sep" />
       <Dropdown trigger={['click']} menu={{ items: tmuxMenu(t) as any, onClick: ({ key }) => sendKey(key) }} placement="bottomLeft">
-        <Button size="small" type="primary" ghost>tmux ▾</Button>
+        <button type="button" className="tt-tbtn">{TI.tmux}<span>tmux</span><span style={{ color: 'var(--text-dimmer)', fontSize: 9 }}>▼</span></button>
       </Dropdown>
       {active && (
-        <Tooltip title={t('terminal.openInNewTabTitle')}>
-          <Button size="small" onClick={() => window.open(`/#/term/${encodeURIComponent(active)}`, '_blank')}>↗ {t('terminal.newTab')}</Button>
-        </Tooltip>
+        <TBtn icon={TI.newTab} label={t('terminal.newTab')} title={t('terminal.openInNewTabTitle')}
+          onClick={() => window.open(`/#/term/${encodeURIComponent(active)}`, '_blank')} />
       )}
-      {active && <Button size="small" onClick={() => setRenameSession(active)}>{t('session.rename')}</Button>}
-      <Tooltip title={promptOff ? t('prompt.popupOff') : t('prompt.popupOn')}>
-        <Button size="small" type={promptOff ? 'default' : 'primary'} ghost={!promptOff} onClick={togglePromptOff}>{promptOff ? '🔕' : '🔔'} {t('prompt.popup')}</Button>
-      </Tooltip>
-      <Tooltip title={t('terminal.fileBrowserTitle')}>
-        <Button size="small" type={showFiles ? 'primary' : 'default'} onClick={toggleFiles}>📁 {t('chat.files')}</Button>
-      </Tooltip>
-      <Tooltip title={t('terminal.gitPanelTitle')}>
-        <Button size="small" type={showGit ? 'primary' : 'default'} onClick={toggleGit}
-          icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: '-2px' }}><circle cx="6" cy="6" r="2.3" /><circle cx="6" cy="18" r="2.3" /><circle cx="18" cy="8" r="2.3" /><path d="M6 8.3v7.4" /><path d="M18 10.3a6 6 0 0 1-6 6H8.3" /></svg>}>
-          {t('git.title')}
-        </Button>
-      </Tooltip>
-      <Tooltip title={showVoice ? t('voice.hideButton') : t('voice.showButton')}>
-        <Button size="small" type={showVoice ? 'primary' : 'default'} onClick={() => setShowVoice((v) => !v)}>🎤</Button>
-      </Tooltip>
-      <span style={{ flex: 1 }} />
-      <Tooltip title={t('terminal.scrollHistory')}><Button size="small" onClick={() => active && termRefs.current[active]?.scroll(-12)}>▲</Button></Tooltip>
-      <Tooltip title={t('terminal.toBottom')}><Button size="small" onClick={() => active && termRefs.current[active]?.toBottom()}>{t('terminal.bottomShort')}</Button></Tooltip>
-      <Tooltip title={t('terminal.decreaseFont')}><Button size="small" onClick={() => setFontSize(Math.max(10, fontSize - 1))}>A-</Button></Tooltip>
-      <Tooltip title={t('terminal.increaseFont')}><Button size="small" onClick={() => setFontSize(Math.min(22, fontSize + 1))}>A+</Button></Tooltip>
-      <Tooltip title={t('terminal.redraw')}><Button size="small" onClick={() => active && termRefs.current[active]?.redraw()}>{t('terminal.redrawShort')}</Button></Tooltip>
-      <Tooltip title={t('terminal.reconnect')}><Button size="small" onClick={() => active && termRefs.current[active]?.reconnect()}>{t('terminal.reconnectShort')}</Button></Tooltip>
+      {active && <TBtn icon={TI.rename} label={t('session.rename')} title={t('session.renameTitle')} onClick={() => setRenameSession(active)} />}
+      <span className="tt-sep" />
+      <TBtn icon={promptOff ? TI.bellOff : TI.bellOn} label={t('prompt.popup')} on={!promptOff}
+        title={promptOff ? t('prompt.popupOff') : t('prompt.popupOn')} onClick={togglePromptOff} />
+      <TBtn icon={TI.folder} label={t('chat.files')} on={showFiles} title={t('terminal.fileBrowserTitle')} onClick={toggleFiles} />
+      <TBtn icon={TI.git} label={t('git.title')} on={showGit} title={t('terminal.gitPanelTitle')} onClick={toggleGit} />
+      <TBtn icon={TI.mic} label={t('voice.input')} on={showVoice} title={showVoice ? t('voice.hideButton') : t('voice.showButton')} onClick={() => setShowVoice((v) => !v)} />
+      <span className="tt-spacer" />
+      <span className="tt-tgroup">
+        <TBtn icon={TI.scrollUp} title={t('terminal.scrollHistory')} onClick={() => active && termRefs.current[active]?.scroll(-12)} />
+        <TBtn icon={TI.toBottom} title={t('terminal.toBottom')} onClick={() => active && termRefs.current[active]?.toBottom()} />
+      </span>
+      <span className="tt-tgroup" style={{ marginLeft: 6 }}>
+        <TBtn label={<span style={{ fontWeight: 600 }}>A−</span>} title={t('terminal.decreaseFont')} onClick={() => setFontSize(Math.max(10, fontSize - 1))} />
+        <TBtn label={<span style={{ fontWeight: 600 }}>A+</span>} title={t('terminal.increaseFont')} onClick={() => setFontSize(Math.min(22, fontSize + 1))} />
+      </span>
+      <span className="tt-tgroup" style={{ marginLeft: 6 }}>
+        <TBtn icon={TI.redraw} title={t('terminal.redraw')} onClick={() => active && termRefs.current[active]?.redraw()} />
+        <TBtn icon={TI.reconnect} title={t('terminal.reconnect')} onClick={() => active && termRefs.current[active]?.reconnect()} />
+      </span>
     </div>
   )
   const terminalArea = (

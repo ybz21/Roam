@@ -761,6 +761,7 @@ const zhCN = {
   'install.desktopStep2': '或打开浏览器菜单选择「安装 Roam…」',
   'install.desktopNote': '提示：需使用 Chrome / Edge 等并通过 HTTPS 访问。',
 
+  'voice.input': '语音输入',
   'voice.showButton': '显示语音按钮',
   'voice.hideButton': '隐藏语音按钮',
   'voice.holdToTalk': '长按说话',
