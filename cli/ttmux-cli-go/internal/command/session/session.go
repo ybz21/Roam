@@ -9,13 +9,17 @@ import (
 	"strconv"
 	"strings"
 
+	"ttmux-cli-go/internal/id"
 	"ttmux-cli-go/internal/runtime"
 )
 
 type sessionInfo struct {
 	Name string `json:"name"`
-	// ID tmux #{session_id}（$3）：会话的稳定身份，改名不变、server 内唯一。
-	ID           string `json:"id,omitempty"`
+	// ID 可读会话 id（2026-0728-1150-0142）：由 session_created + session_id 派生，
+	// 与 TmuxID 一一对应、改名不变，是对外展示口径。
+	ID string `json:"id,omitempty"`
+	// TmuxID 原始 #{session_id}（$142）：内部键（meta.db 主键、session-homes 的键）。
+	TmuxID       string `json:"tmux_id,omitempty"`
 	Windows      int    `json:"windows"`
 	Created      string `json:"created"`
 	Attached     int    `json:"attached"`
@@ -61,13 +65,15 @@ func ListJSON(rt runtime.Runtime, exclude map[string]bool, w io.Writer) error {
 		if len(parts) > 5 {
 			lastActivity = maxNumeric(lastActivity, parts[5]) // max(session_activity, window_activity)
 		}
-		id := ""
+		tmuxID := ""
 		if len(parts) > 6 {
-			id = parts[6]
+			tmuxID = parts[6]
 		}
+		created, _ := strconv.ParseInt(parts[2], 10, 64)
 		sessions = append(sessions, sessionInfo{
 			Name:         parts[0],
-			ID:           id,
+			ID:           id.ForSession(created, tmuxID),
+			TmuxID:       tmuxID,
 			Windows:      windows,
 			Created:      parts[2],
 			Attached:     attached,

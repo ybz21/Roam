@@ -10,8 +10,10 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 
+	"ttmux-cli-go/internal/id"
 	"ttmux-cli-go/internal/runtime"
 	"ttmux-cli-go/internal/sessmeta"
 	"ttmux-cli-go/internal/ui"
@@ -172,8 +174,10 @@ func ParentCmd(rt runtime.Runtime, meta *sessmeta.Store, args []string, w io.Wri
 
 type treeNode struct {
 	Name string `json:"name"`
-	// ID tmux #{session_id}：会话稳定身份（meta.db 的主键就是它）。
+	// ID 可读会话 id（派生自 session_created + session_id，展示口径）；
+	// TmuxID 是原始 $142（内部键：meta.db 主键、session-homes 的键）。
 	ID           string      `json:"id,omitempty"`
+	TmuxID       string      `json:"tmux_id,omitempty"`
 	Windows      int         `json:"windows"`
 	Created      string      `json:"created"`
 	Attached     int         `json:"attached"`
@@ -248,7 +252,9 @@ func buildTree(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool
 			n.LastActivity = maxNumeric(n.LastActivity, parts[5])
 		}
 		if len(parts) > 6 {
-			n.ID = parts[6]
+			created, _ := strconv.ParseInt(parts[2], 10, 64)
+			n.TmuxID = parts[6]
+			n.ID = id.ForSession(created, parts[6])
 		}
 		nodes[n.Name] = n
 		order = append(order, n.Name)
