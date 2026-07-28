@@ -29,7 +29,9 @@ func TestPluginRunE2E(t *testing.T) {
 
 	bin := filepath.Join(tmp, "ttmux-e2e")
 	root, _ := filepath.Abs("../..")
-	build := exec.Command("go", "build", "-o", bin, "./cmd/ttmux-cli-go")
+	// -buildvcs=false：从 git 钩子里跑测试时会继承 GIT_DIR，go 的 VCS 标记
+	// 会因此认错仓库直接失败；这里只是造个临时二进制，版本戳没意义。
+	build := exec.Command("go", "build", "-buildvcs=false", "-o", bin, "./cmd/ttmux-cli-go")
 	build.Dir = filepath.Join(root, "cli", "ttmux-cli-go")
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build cli: %v\n%s", err, out)

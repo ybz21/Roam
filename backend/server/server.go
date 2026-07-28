@@ -170,6 +170,10 @@ func New(cfg Config) *gin.Engine {
 		g.POST("/git/commit", h.GitCommit)   // 提交（可选 push）
 		g.POST("/git/op", h.GitOp)           // push / pull / fetch / sync
 		g.GET("/git/is-repo", h.GitIsRepo)   // 检查是否 git 仓库
+		g.GET("/git/graph", h.GitGraph)      // 提交树：DAG（parents + refs），泳道前端算
+		g.GET("/git/refs", h.GitRefs)        // 分支页：本地/远端分支 + 标签 + 储藏
+		g.GET("/git/show", h.GitShow)        // 单提交详情：元信息 + 文件清单
+		g.POST("/git/action", h.GitAction)   // 本地引用操作：checkout/分支/合并/变基/reset/revert/stash
 		// ── Worktree API（worktree.Service 独占 git 操作，设计 07 §4）──
 		g.POST("/git/worktree", h.WorktreeCreate)        // 新建（锁内命名 + roam.* 身份）
 		g.GET("/git/worktrees", h.WorktreeList)          // 清单 + 状态 + 会话 join（无写副作用）

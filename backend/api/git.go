@@ -18,10 +18,22 @@ import (
 
 // runGit 在 dir 下执行 git；core.quotepath=false 让非 ASCII 路径原样返回（不转义码）。
 // GIT_TERMINAL_PROMPT=0：push/pull 需要凭据时直接报错而非挂起等待输入。
+// 继承来的 GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE 一律剔掉：我们永远靠 -C 指定仓库，
+// 若进程是从 git 钩子一类环境里起来的，这些变量会让 git 认错仓库甚至直接报错。
 func runGit(ctx context.Context, dir string, args ...string) (string, error) {
 	full := append([]string{"-C", dir, "-c", "core.quotepath=false"}, args...)
 	cmd := exec.CommandContext(ctx, "git", full...)
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	env := make([]string, 0, len(os.Environ())+1)
+	for _, kv := range os.Environ() {
+		switch {
+		case strings.HasPrefix(kv, "GIT_DIR="),
+			strings.HasPrefix(kv, "GIT_WORK_TREE="),
+			strings.HasPrefix(kv, "GIT_INDEX_FILE="):
+			continue
+		}
+		env = append(env, kv)
+	}
+	cmd.Env = append(env, "GIT_TERMINAL_PROMPT=0")
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }
@@ -147,13 +159,25 @@ func (a *API) GitStatus(c *gin.Context) {
 		}
 	}
 
+	upstream := strings.TrimSpace(mustGit(ctx, root, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"))
+	if strings.Contains(upstream, "fatal") {
+		upstream = ""
+	}
+	state := gitRepoState(ctx, root)
+	conflicts := []string{}
+	if state != "" {
+		conflicts = gitConflictFiles(ctx, root)
+	}
+
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{
 		"repo": true, "root": root, "branch": branch, "ahead": ahead, "behind": behind,
+		"upstream": upstream, "state": state, "conflicts": conflicts,
 		"files": files, "commits": commits,
 	}})
 }
 
-// GitDiff GET /git/diff?root=<repo>&file=<rel>&staged=<0|1>&untracked=<0|1> —— 单文件差异文本。
+// GitDiff GET /git/diff?root=<repo>&file=<rel>&staged=<0|1>&untracked=<0|1>&rev=<hash> —— 单文件差异文本。
+// 带 rev 时看的是「该提交相对第一父」的差异（提交树里点文件走这条）。
 func (a *API) GitDiff(c *gin.Context) {
 	root := filepath.Clean(c.Query("root"))
 	file := c.Query("file")
@@ -166,6 +190,8 @@ func (a *API) GitDiff(c *gin.Context) {
 
 	var out string
 	switch {
+	case safeRev(c.Query("rev")):
+		out, _ = runGit(ctx, root, "show", "--format=", "-m", "--first-parent", c.Query("rev"), "--", file)
 	case c.Query("untracked") == "1":
 		// 未跟踪文件：与空文件比对得到「全新增」差异（有差异时 git 退出码 1，输出仍有效，忽略 err）。
 		out, _ = runGit(ctx, root, "diff", "--no-index", "--", "/dev/null", filepath.Join(root, file))
@@ -281,6 +307,8 @@ func (a *API) GitCommit(c *gin.Context) {
 		Root    string `json:"root"`
 		Message string `json:"message"`
 		Push    bool   `json:"push"`
+		Amend   bool   `json:"amend"` // 修订上次提交（重写 HEAD）
+		All     bool   `json:"all"`   // -a：提交前自动暂存已跟踪文件的改动
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_FORM", "message": err.Error()}})
@@ -296,7 +324,14 @@ func (a *API) GitCommit(c *gin.Context) {
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
 	defer cancel()
-	out, err := runGit(ctx, root, "commit", "-m", req.Message)
+	cargs := []string{"commit"}
+	if req.Amend {
+		cargs = append(cargs, "--amend")
+	}
+	if req.All {
+		cargs = append(cargs, "-a")
+	}
+	out, err := runGit(ctx, root, append(cargs, "-m", req.Message)...)
 	if err != nil {
 		gitFail(c, "GIT_COMMIT_FAILED", out, err)
 		return
