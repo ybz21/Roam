@@ -173,9 +173,16 @@ export function PromptDialog({ name, accent, enabled = true }: { name: string; a
       closable
       onCancel={() => setDismissedKey(promptKey)}
       mask={false}
+      // 这是「浮在终端上的提示」，不是模态框：
+      //   maskClosable=false —— 点别处不再算「取消」。默认 true 时 rc-dialog 见点击落在 wrap 上就
+      //     onCancel，于是随手点一下终端这条提问就被 dismissedKey 记死、再也不弹（用户报的「点鼠标就没了」）。
+      //   wrapper 透传 —— antd 的 .ant-modal-wrap 不论 mask 真假都是 fixed+inset:0 且可点，会把整页点击
+      //     全吃掉（点不到底下的终端）。置 pointerEvents:none 让它透传；弹框本体 .ant-modal-content
+      //     自带 pointer-events:auto，照常可点。关闭只走右上角 × 或答完题。
+      maskClosable={false}
       width={520}
       centered
-      styles={{ header: { textAlign: 'center' }, body: { paddingTop: 12 } }}
+      styles={{ wrapper: { pointerEvents: 'none' }, header: { textAlign: 'center' }, body: { paddingTop: 12 } }}
     >
       <PromptActions p={p} accent={accent} busy={busy} choose={choose} press={press} />
     </Modal>
