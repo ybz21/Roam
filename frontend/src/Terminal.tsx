@@ -190,6 +190,8 @@ const Term = forwardRef<TermHandle, {
 
   // 上次 attach 成功时的尺寸，用于判断重连后是否真需要抖动重绘（见 ws.onopen）
   const lastAttach = useRef<{ cols: number; rows: number } | null>(null)
+  // 置位后，下一次 attach 无条件抖动重绘（久置回前台的整链路重同步，见 onVisibility）
+  const forceRepaint = useRef(false)
 
   // 尺寸抖动重绘：cols−1 再复原，两次 SIGWINCH 让 TUI(ink) 整屏重排、清掉错位堆积的垃圾行。
   // 后端 resize 有 cols<20 保护，抖动后一定复原到真实尺寸。
@@ -321,8 +323,10 @@ const Term = forwardRef<TermHandle, {
         const t = termRef.current
         if (!t) return
         const prev = lastAttach.current
+        const forced = forceRepaint.current
+        forceRepaint.current = false
         lastAttach.current = { cols: t.cols, rows: t.rows }
-        if (prev && prev.cols === t.cols && prev.rows === t.rows) return
+        if (!forced && prev && prev.cols === t.cols && prev.rows === t.rows) return
         jiggleResize()
       }, 600)
     }
@@ -434,22 +438,33 @@ const Term = forwardRef<TermHandle, {
     }
     armDprWatch()
 
-    // 切后台再回来（手机上最常见：用一会 → 回桌面/切 App → 过一阵再回来 → 整屏花）。
-    // 后台标签的 GPU 资源会被系统回收，纹理图集/画布随之作废；回到前台时 xterm 不一定收得到
-    // contextlost（安卓上常常是「画布还在、内容是坏的」），于是没人来修，用户只能刷新整页。
-    // 这里在回前台时主动重建一次渲染器再整屏重画。只在真的离开过一会儿才做：短暂切窗口
-    // （<1.5s）画面还好好的，重建纯属浪费还会闪一下。
+    // 切后台再回来（手机上最常见：用一会 → 切出去 → 过一阵回来 → 整屏花）。分两级自愈，
+    // 因为「花屏」其实有两种，修法完全不同（用 __roamTermDiag(true) 把缓冲跟 tmux capture 一比就能分）：
+    //   ① 画布/纹理图集坏了：缓冲内容是对的，只是画错了 → 重建渲染器即可；
+    //   ② 内容本身就是坏的：安卓会把后台页整个冻住，WebSocket 常常「半死」——readyState 还是 1，
+    //      数据其实早就断了；tmux 那头也不会主动重画，于是回来看到的是「旧内容 + 半截新内容」。
+    //      这种只重建渲染器没用（把错的东西再画一遍），必须整条链路重来。
+    // 所以：离开 >1.5s 重建渲染器；离开 >10s 再叠一层——关掉 socket 触发重连（新 tmux 客户端 =
+    // 整屏重画），并置 forceRepaint 让这次 attach 无条件抖一次尺寸，把 TUI 重排的垃圾也清掉。
+    const RESYNC_AFTER_MS = 10000
     let hiddenAt = 0
+    const healAfterAway = (away: number) => {
+      if (away <= 1500) return
+      setTimeout(rebuildRenderer, 60)
+      if (away <= RESYNC_AFTER_MS) return
+      forceRepaint.current = true
+      try { wsRef.current?.close() } catch {} // onclose → 1.2s 后自动重连，走完整 attach 重画
+    }
     const onVisibility = () => {
       if (document.visibilityState === 'hidden') { hiddenAt = performance.now(); return }
       if (!hiddenAt) return
       const away = performance.now() - hiddenAt
       hiddenAt = 0
-      if (away > 1500) setTimeout(rebuildRenderer, 60)
+      healAfterAway(away)
     }
     document.addEventListener('visibilitychange', onVisibility)
-    // 从 bfcache 恢复（安卓返回键、iOS 侧滑返回）不一定走 visibilitychange，单独兜一次
-    const onPageShow = (e: PageTransitionEvent) => { if (e.persisted) setTimeout(rebuildRenderer, 60) }
+    // 从 bfcache 恢复（安卓返回键、iOS 侧滑返回）不一定走 visibilitychange：一律按「久置」处理
+    const onPageShow = (e: PageTransitionEvent) => { if (e.persisted) healAfterAway(RESYNC_AFTER_MS + 1) }
     window.addEventListener('pageshow', onPageShow)
 
     setTimeout(() => { try { fit.fit() } catch {} }, 0)
@@ -838,7 +853,16 @@ const Term = forwardRef<TermHandle, {
 
 // 渲染故障排查用：终端画糊/画空时在浏览器控制台执行 __roamTermDiag()，把每个终端的渲染状态
 // （渲染器类型、dpr、单元格与画布尺寸、行列数、字形是否还在图集里）打出来。纯调试接口，无 UI 文案。
-;(window as any).__roamTermDiag = () => [...liveTerms].map(({ name, term, el, webgl }) => {
+// 传 true 额外 dump 可视区的缓冲文本：拿它跟 `tmux capture-pane -p` 一比，就能分清「花屏」是
+// **本地画错了**（缓冲和 tmux 一致、只有像素不对 → 渲染器问题）还是**内容本来就是坏的**
+// （缓冲里就有错位/残行 → 重绘/数据流问题）。这两类的修法完全不同，别靠肉眼猜。
+;(window as any).__roamTermDiag = (dumpText = false) => [...liveTerms].map(({ name, term, el, webgl }) => {
+  const bufferText = () => {
+    const b = term.buffer.active
+    const out: string[] = []
+    for (let i = 0; i < term.rows; i++) out.push(b.getLine(b.viewportY + i)?.translateToString(true) ?? '')
+    return out
+  }
   const core: any = (term as any)._core
   const dims = core?._renderService?.dimensions
   const canvases = el ? [...el.querySelectorAll('canvas')].map((c) => `${c.width}x${c.height} css ${c.style.width}x${c.style.height}`) : []
@@ -856,6 +880,7 @@ const Term = forwardRef<TermHandle, {
     clientSize: el ? `${el.clientWidth}x${el.clientHeight}` : '',
     viewportY: term.buffer.active.viewportY,
     baseY: term.buffer.active.baseY,
+    ...(dumpText ? { lines: bufferText() } : {}),
   }
 })
 

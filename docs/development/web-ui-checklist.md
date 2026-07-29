@@ -50,6 +50,20 @@ chrome goto https://127.0.0.1:13579/ && chrome eval "document.title"
 | 弹层是否被误关 | 触发后等 1.5s 再查节点是否还在 |
 | 布局是否溢出 | `document.documentElement.scrollWidth <= innerWidth` |
 
+## 1.5 「花屏」先分类，再动手
+
+终端花屏有两类，长得一样但修法相反。**别靠截图猜**，用 `__roamTermDiag(true)` 把 xterm 的可视区
+缓冲 dump 出来，跟 `tmux capture-pane -p -t <会话>` 一比：
+
+| 缓冲 vs tmux | 说明 | 修法 |
+|---|---|---|
+| **一致**，但屏幕看着不对 | 本地画错了：WebGL 纹理图集/画布坏了（切后台被回收 GPU、dpr 变化） | 重建渲染器（`rebuildRenderer`）；实在不行整机重建（工具条「重连」） |
+| **不一致** | 内容本身就是坏的：socket 半死、tmux 没重画、TUI 重排留垃圾 | 整链路重同步：关 socket 重连（新 tmux 客户端＝整屏重画）+ 抖尺寸双 SIGWINCH（工具条「重绘」） |
+
+对应的自愈已内置在 `Terminal.tsx`：回前台离开 >1.5s 重建渲染器，>10s 再叠一层关 socket 重连 +
+强制抖动。验证方法：记下 `pgrep -f 'tmux attach -t <会话>'` 的 PID，切后台 30s 再回来，PID 变了
+就说明重新 attach 过。
+
 ## 2. 清单
 
 ### A. 终端页（手机 + 桌面）
