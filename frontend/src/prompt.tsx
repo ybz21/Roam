@@ -30,11 +30,13 @@ export function detectPrompt(capture: string): Prompt | null {
     const m = clean(raw).match(OPT)
     if (m) opts.push({ num: Number(m[1]), label: m[2].trim(), selected: CURSOR.test(raw), idx })
   })
-  // 取最后一组相邻选项（允许 ≤3 行间隔，兼容 Codex 长选项换行）
+  // 取最后一组选项。绑定条件是「编号正好接上」而不是单纯挨得近：手机 attach 后 tmux 窗格常只有
+  // 40 多列，Claude 的选项被折成五六行，按行距卡 ≤3 会把每个选项都拆成孤岛 → 一条都识别不出来
+  // （表现为手机上根本不弹提问框）。编号连续性本身就足够防误判，行距只留一个宽松上限兜底。
   const g: P[] = []
   for (let i = opts.length - 1; i >= 0; i--) {
-    if (!g.length) g.unshift(opts[i])
-    else if (g[0].idx - opts[i].idx <= 3) g.unshift(opts[i])
+    if (!g.length) { g.unshift(opts[i]); continue }
+    if (opts[i].num === g[0].num - 1 && g[0].idx - opts[i].idx <= 12) g.unshift(opts[i])
     else break
   }
   // 必须是从 1 起的连续编号、至少两项 —— 否则当普通编号列表，不误判
@@ -173,9 +175,16 @@ export function PromptDialog({ name, accent, enabled = true }: { name: string; a
       closable
       onCancel={() => setDismissedKey(promptKey)}
       mask={false}
+      // 这是「浮在终端上的提示」，不是模态框：
+      //   maskClosable=false —— 点别处不再算「取消」。默认 true 时 rc-dialog 见点击落在 wrap 上就
+      //     onCancel，于是随手点一下终端这条提问就被 dismissedKey 记死、再也不弹（用户报的「点鼠标就没了」）。
+      //   wrapper 透传 —— antd 的 .ant-modal-wrap 不论 mask 真假都是 fixed+inset:0 且可点，会把整页点击
+      //     全吃掉（点不到底下的终端）。置 pointerEvents:none 让它透传；弹框本体 .ant-modal-content
+      //     自带 pointer-events:auto，照常可点。关闭只走右上角 × 或答完题。
+      maskClosable={false}
       width={520}
       centered
-      styles={{ header: { textAlign: 'center' }, body: { paddingTop: 12 } }}
+      styles={{ wrapper: { pointerEvents: 'none' }, header: { textAlign: 'center' }, body: { paddingTop: 12 } }}
     >
       <PromptActions p={p} accent={accent} busy={busy} choose={choose} press={press} />
     </Modal>

@@ -28,6 +28,23 @@ export interface TermHandle {
   redraw: () => void
 }
 
+// ── 渲染器坏掉时的自救 ─────────────────────────────────────────────────────
+// 终端「字糊成小点 / 几乎全没了、只剩残影」这类故障出在**本地渲染器**：WebGL 渲染器把字形
+// 烤进纹理图集(texture atlas)，图集或画布状态一旦坏掉，后端再画一遍也没用——tmux 送来的还是
+// 同样的字符，只是本地把它们画丢了。所以「重绘(SIGWINCH)」「重连(WebSocket)」都救不回来，
+// 用户只能刷新整页。下面两处专治这个：
+//   1. dpr 变化（桌面浏览器缩放/换显示器、手机页面缩放）后重建渲染器——xterm 在这条路径上
+//      要按新 dpr 重建图集和画布，是已知的易碎点；
+//   2. 「重连」升级成整机重建（拆掉 xterm 实例重新 open + 重新 attach），等价于刷新整页，
+//      但只重建这一个标签、不动其它会话。
+// 出问题时可在控制台执行 __roamTermDiag() 把渲染状态打出来（见文件末尾）。
+const liveTerms = new Set<{ name: string; term: Terminal; el: HTMLDivElement | null; webgl: () => boolean }>()
+
+// 符号补字集整页只预热一次：纹理图集是**所有终端共用**的（xterm 按字体/字号/dpr/配色做 key），
+// 每开一个标签就 clearTextureAtlas() 一次，等于把其它终端已缓存的字形反复作废，纯属白干。
+let fontsWarmed: Promise<void> | undefined
+let atlasClearedForFonts = false
+
 // 终端字体栈：正文一律用各平台的系统默认等宽字体（mac→SF Mono/Menlo、Windows→Consolas、
 // Linux/Android→系统 monospace），不自带正文字体。
 // 唯一自带的是 "Roam Symbols"——只覆盖框线/箭头/技术符号等区段的补字集（见 assets/fonts）。
@@ -109,6 +126,9 @@ const Term = forwardRef<TermHandle, {
   const wsRef = useRef<WebSocket>()
   const unmounted = useRef(false)
   const retry = useRef<any>()
+  const webglRef = useRef<WebglAddon>()
+  // 自增一次 = 拆掉 xterm 实例重建（渲染器/纹理图集/WebSocket 全新），效果等同刷新整页
+  const [gen, setGen] = useState(0)
 
   // 已上报给后端的尺寸。相同尺寸重复上报没有意义，却会让后端 Setsize → SIGWINCH →
   // tmux 整屏重排 → 肉眼一闪，所以这里做去重闸门。新连接时清零以强制重报（新 tmux 客户端要知道尺寸）。
@@ -329,7 +349,10 @@ const Term = forwardRef<TermHandle, {
     },
     selection: () => termRef.current?.getSelection() || '',
     clearSelection: () => termRef.current?.clearSelection(),
-    reconnect: () => { try { wsRef.current?.close() } catch {} }, // onclose 触发自动重连
+    // 「重连」= 把这个标签整个重建：拆掉 xterm 实例（渲染器/纹理图集一并丢弃）再重新 open +
+    // 重新 attach。等价于刷新整页，但只重建这一个会话。渲染器坏掉导致的「字糊/字没了」
+    // 只有这一招能救——重绘(SIGWINCH)和单纯重连 WebSocket 都改不了本地图集。
+    reconnect: () => setGen((g) => g + 1),
     scroll: (lines) => sendScroll(lines < 0 ? 'up' : 'down', Math.abs(lines)),
     toBottom: () => sendScroll('bottom', 0),
     selectPaneAt: (clientX, clientY) => selectPaneAtClient(clientX, clientY),
@@ -354,17 +377,80 @@ const Term = forwardRef<TermHandle, {
     term.open(elRef.current!)
     termRef.current = term
     fitRef.current = fit
+    const diagEntry = { name, term, el: elRef.current, webgl: () => !!webglRef.current }
+    liveTerms.add(diagEntry)
 
     // WebGL 渲染器：默认的 DOM 渲染器每格一个 span，单元格宽是分数像素，手机 dpr 常为 2.625/3
     // 这类非整数，亚像素误差累积会裁字/叠字，整屏重绘也更容易看到闪烁。WebGL 按纹理网格绘制，
-    // 顺带让 rescaleOverlappingGlyphs 生效。上下文丢失（后台切回/GPU 回收）时 dispose 退回 DOM。
-    let webglAddon: WebglAddon | undefined
-    try {
-      const webgl = new WebglAddon()
-      webgl.onContextLoss(() => { try { webgl.dispose() } catch {} })
-      term.loadAddon(webgl)
-      webglAddon = webgl
-    } catch { /* 不支持 WebGL 的浏览器继续用 DOM 渲染器 */ }
+    // 顺带让 rescaleOverlappingGlyphs 生效。
+    // 上下文丢失（后台切回/GPU 回收/同页 WebGL 上下文超上限被回收最老的那个）时**先试着重建**，
+    // 连着重建都失败才退回 DOM 渲染器——旧写法一丢就永久 dispose，此后这个标签一直是降级渲染。
+    let lostAt = 0
+    const mountWebgl = () => {
+      if (unmounted.current) return
+      try {
+        const webgl = new WebglAddon()
+        webgl.onContextLoss(() => {
+          try { webgl.dispose() } catch {}
+          webglRef.current = undefined
+          const now = performance.now()
+          // 10s 内又丢一次 = 这台机器/这个页面的 WebGL 不稳，别再来回折腾，就用 DOM 渲染器
+          if (now - lostAt < 10000) return
+          lostAt = now
+          setTimeout(() => { if (!unmounted.current && termRef.current === term) mountWebgl() }, 500)
+        })
+        term.loadAddon(webgl)
+        webglRef.current = webgl
+      } catch { /* 不支持 WebGL 的浏览器继续用 DOM 渲染器 */ }
+    }
+    mountWebgl()
+
+    // 渲染器就地重建：拆掉 WebGL addon 再挂一个新的，纹理图集/画布随之重建，然后整屏重画。
+    // 不重连、不动后端，只修「本地画丢了」这一类故障。
+    const rebuildRenderer = () => {
+      if (unmounted.current || termRef.current !== term) return
+      try { webglRef.current?.dispose() } catch {}
+      webglRef.current = undefined
+      mountWebgl()
+      applyResize()
+      try { term.refresh(0, term.rows - 1) } catch {}
+    }
+
+    // dpr 变化（桌面浏览器缩放 Ctrl+± / 拖到另一块缩放比不同的屏、手机页面缩放/横竖屏）：
+    // xterm 要按新 dpr 重建纹理图集与画布，这条路径上偶发整屏画空，且后端重绘救不回来。
+    // matchMedia 的 resolution 查询只对「当前这个 dpr」成立，所以每次变化后要重新挂一条。
+    let dprMq: MediaQueryList | undefined
+    const armDprWatch = () => {
+      try {
+        dprMq?.removeEventListener('change', onDpr)
+        dprMq = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`)
+        dprMq.addEventListener('change', onDpr)
+      } catch {}
+    }
+    const onDpr = () => {
+      armDprWatch()
+      // 等 xterm 自己那套 dpr 处理跑完再重建，避免和它抢同一帧
+      setTimeout(rebuildRenderer, 120)
+    }
+    armDprWatch()
+
+    // 切后台再回来（手机上最常见：用一会 → 回桌面/切 App → 过一阵再回来 → 整屏花）。
+    // 后台标签的 GPU 资源会被系统回收，纹理图集/画布随之作废；回到前台时 xterm 不一定收得到
+    // contextlost（安卓上常常是「画布还在、内容是坏的」），于是没人来修，用户只能刷新整页。
+    // 这里在回前台时主动重建一次渲染器再整屏重画。只在真的离开过一会儿才做：短暂切窗口
+    // （<1.5s）画面还好好的，重建纯属浪费还会闪一下。
+    let hiddenAt = 0
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') { hiddenAt = performance.now(); return }
+      if (!hiddenAt) return
+      const away = performance.now() - hiddenAt
+      hiddenAt = 0
+      if (away > 1500) setTimeout(rebuildRenderer, 60)
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    // 从 bfcache 恢复（安卓返回键、iOS 侧滑返回）不一定走 visibilitychange，单独兜一次
+    const onPageShow = (e: PageTransitionEvent) => { if (e.persisted) setTimeout(rebuildRenderer, 60) }
+    window.addEventListener('pageshow', onPageShow)
 
     setTimeout(() => { try { fit.fit() } catch {} }, 0)
 
@@ -373,16 +459,22 @@ const Term = forwardRef<TermHandle, {
     //      纹理图集，canvas 绘制**不会**触发这种按需下载——不显式 load 的话符号永远是 tofu，
     //      document.fonts.ready 也会立刻 resolve（它只等已经在下载的字体）。
     //   2. 每个 @font-face 各自按 unicode-range 匹配，所以要给出覆盖两个面的字符。
-    const warmFonts = document.fonts
-      ? Promise.all([
-        document.fonts.load(`${fontSize}px "Roam Symbols"`, '─'),  // 框线/箭头/几何 那一面
-        document.fonts.load(`${fontSize}px "Roam Symbols"`, '⏵'),  // 技术/杂项/装饰符号 那一面
-      ]).then(() => document.fonts.ready)
-      : Promise.resolve()
-    warmFonts.then(() => {
+    if (!fontsWarmed) {
+      fontsWarmed = document.fonts
+        ? Promise.all([
+          document.fonts.load(`${fontSize}px "Roam Symbols"`, '─'),  // 框线/箭头/几何 那一面
+          document.fonts.load(`${fontSize}px "Roam Symbols"`, '⏵'),  // 技术/杂项/装饰符号 那一面
+        ]).then(() => document.fonts.ready).then(() => {})
+        : Promise.resolve()
+    }
+    fontsWarmed.then(() => {
       if (unmounted.current) return
-      // 字体到位后清纹理图集重画，否则之前用回退字体量出的字形会一直错到下次刷新
-      try { term.clearTextureAtlas() } catch {}
+      // 字体到位后清一次纹理图集重画，否则之前用回退字体量出的字形会一直错到下次刷新。
+      // 只清这一次：图集是全页共用的，后开的标签再清就是把别人已缓存的字形白白作废。
+      if (!atlasClearedForFonts) {
+        atlasClearedForFonts = true
+        try { term.clearTextureAtlas() } catch {}
+      }
       applyResize()
     }).catch(() => {})
 
@@ -683,16 +775,22 @@ const Term = forwardRef<TermHandle, {
         textarea.removeEventListener('compositionend', onCompEnd)
       }
       dataDisp.dispose()
+      try { dprMq?.removeEventListener('change', onDpr) } catch {}
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('pageshow', onPageShow)
+      liveTerms.delete(diagEntry)
       try { wsRef.current?.close() } catch {}
       // 拆终端务必吞异常：这里是 React 的 effect cleanup，抛出去会顺着卸载流程把整棵树炸掉
       // （整页黑屏，而不只是这一个标签坏掉）。xterm 的 WebGL addon 就踩过——它按新版内核的
       // 私有字段做卸载判断，配到旧内核上必抛 TypeError，于是「关一个会话/改一次名」就黑屏。
       // 先单独拆 WebGL addon，再拆终端本体，各自兜住，任一步失败都不影响另一步和其他标签。
-      try { webglAddon?.dispose() } catch {}
+      try { webglRef.current?.dispose() } catch {}
+      webglRef.current = undefined
       try { term.dispose() } catch {}
     }
+    // gen 变化 = 整机重建（见 TermHandle.reconnect）
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name])
+  }, [name, gen])
 
   useEffect(() => {
     const t = termRef.current
@@ -724,13 +822,41 @@ const Term = forwardRef<TermHandle, {
     borderRadius: which === 'start' ? '50% 0 50% 50%' : '0 50% 50% 50%',
   })
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%', WebkitTouchCallout: 'none' } as CSSProperties}>
+    // isolation:isolate —— 必须有。xterm 内部的画布层(.xterm-link-layer 等)带正 z-index，而本容器
+    // 只是 position:relative（z-index:auto 不成层叠上下文），那些画布就会「逃」到外层去，压在同级
+    // 后面的兄弟节点之上：Claude/Codex 对话面板正是这样被一层**透明**画布盖住的——看得见、点不着，
+    // 表现为对话区滑不动历史、发送/停止按不动（画布吃掉了所有 pointer/touch）。isolate 把这些
+    // z-index 关回终端自己这一层，覆盖层就能正常接事件。
+    <div style={{ position: 'relative', width: '100%', height: '100%', isolation: 'isolate', WebkitTouchCallout: 'none' } as CSSProperties}>
       <div ref={elRef} style={{ width: '100%', height: '100%' }} />
       {handles && (['start', 'end'] as const).map((which) => (
         <div key={which} onTouchStart={dragHandle(which)} style={handleStyle(which)} />
       ))}
     </div>
   )
+})
+
+// 渲染故障排查用：终端画糊/画空时在浏览器控制台执行 __roamTermDiag()，把每个终端的渲染状态
+// （渲染器类型、dpr、单元格与画布尺寸、行列数、字形是否还在图集里）打出来。纯调试接口，无 UI 文案。
+;(window as any).__roamTermDiag = () => [...liveTerms].map(({ name, term, el, webgl }) => {
+  const core: any = (term as any)._core
+  const dims = core?._renderService?.dimensions
+  const canvases = el ? [...el.querySelectorAll('canvas')].map((c) => `${c.width}x${c.height} css ${c.style.width}x${c.style.height}`) : []
+  return {
+    name,
+    renderer: webgl() ? 'webgl' : (el?.querySelector('.xterm-rows') ? 'dom' : 'unknown'),
+    dpr: window.devicePixelRatio,
+    cols: term.cols,
+    rows: term.rows,
+    fontSize: term.options.fontSize,
+    cssCell: dims?.css?.cell,
+    deviceCell: dims?.device?.cell,
+    deviceCanvas: dims?.device?.canvas,
+    canvases,
+    clientSize: el ? `${el.clientWidth}x${el.clientHeight}` : '',
+    viewportY: term.buffer.active.viewportY,
+    baseY: term.buffer.active.baseY,
+  }
 })
 
 export default Term

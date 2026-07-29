@@ -104,7 +104,7 @@ const enUS = {
   'terminal.toBottom': 'Jump to latest',
   'terminal.redraw': 'Redraw screen (fix garbled output)',
   'terminal.redrawShort': 'Redraw',
-  'terminal.reconnect': 'Reconnect',
+  'terminal.reconnect': 'Reconnect & rebuild terminal (fixes blurred/missing glyphs)',
   'terminal.tmuxCopyMode': 'tmux copy mode',
   'terminal.tmuxWindowList': 'tmux window list',
   'terminal.tmuxSplitVertical': 'tmux vertical split',

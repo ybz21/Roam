@@ -104,7 +104,7 @@ const zhCN = {
   'terminal.toBottom': '回到最新',
   'terminal.redraw': '重绘画面（修复花屏错位）',
   'terminal.redrawShort': '重绘',
-  'terminal.reconnect': '重新连接',
+  'terminal.reconnect': '重连并重建终端（修复字糊/字丢失）',
   'terminal.tmuxCopyMode': 'tmux 复制模式',
   'terminal.tmuxWindowList': 'tmux 窗口列表',
   'terminal.tmuxSplitVertical': 'tmux 竖分屏',
