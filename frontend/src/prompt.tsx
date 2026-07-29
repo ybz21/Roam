@@ -30,11 +30,13 @@ export function detectPrompt(capture: string): Prompt | null {
     const m = clean(raw).match(OPT)
     if (m) opts.push({ num: Number(m[1]), label: m[2].trim(), selected: CURSOR.test(raw), idx })
   })
-  // 取最后一组相邻选项（允许 ≤3 行间隔，兼容 Codex 长选项换行）
+  // 取最后一组选项。绑定条件是「编号正好接上」而不是单纯挨得近：手机 attach 后 tmux 窗格常只有
+  // 40 多列，Claude 的选项被折成五六行，按行距卡 ≤3 会把每个选项都拆成孤岛 → 一条都识别不出来
+  // （表现为手机上根本不弹提问框）。编号连续性本身就足够防误判，行距只留一个宽松上限兜底。
   const g: P[] = []
   for (let i = opts.length - 1; i >= 0; i--) {
-    if (!g.length) g.unshift(opts[i])
-    else if (g[0].idx - opts[i].idx <= 3) g.unshift(opts[i])
+    if (!g.length) { g.unshift(opts[i]); continue }
+    if (opts[i].num === g[0].num - 1 && g[0].idx - opts[i].idx <= 12) g.unshift(opts[i])
     else break
   }
   // 必须是从 1 起的连续编号、至少两项 —— 否则当普通编号列表，不误判
