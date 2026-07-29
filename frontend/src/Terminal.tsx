@@ -826,7 +826,7 @@ const Term = forwardRef<TermHandle, {
     // 只是 position:relative（z-index:auto 不成层叠上下文），那些画布就会「逃」到外层去，压在同级
     // 后面的兄弟节点之上：Claude/Codex 对话面板正是这样被一层**透明**画布盖住的——看得见、点不着，
     // 表现为对话区滑不动历史、发送/停止按不动（画布吃掉了所有 pointer/touch）。isolate 把这些
-    // z-index 关回终端自己这一层，覆盖层就能正常接事件。
+    // z-index 关回终端自己这一层，覆盖层就能正常接事件。真机 CDP 命中测试可复现/回归。
     <div style={{ position: 'relative', width: '100%', height: '100%', isolation: 'isolate', WebkitTouchCallout: 'none' } as CSSProperties}>
       <div ref={elRef} style={{ width: '100%', height: '100%' }} />
       {handles && (['start', 'end'] as const).map((which) => (
