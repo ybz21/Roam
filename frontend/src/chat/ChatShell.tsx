@@ -1,25 +1,19 @@
-// 对话页外壳：头部 / 滚动区 / 交互选择框 / 输入发送 / 文件侧栏。
-// Claude、Codex 共用，差异只在 title、accent、占位文案与消息渲染(renderMessage)。
+// 对话页外壳：滚动区 / 交互选择框 / 输入发送。
+// 会话名、切回终端、文件面板都在上方的会话工具条里，这里不再重复一行头部。
+// Claude、Codex 共用，差异只在 accent、占位文案与消息渲染(renderMessage)。
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button, Grid, Input, App as AntApp } from 'antd'
-import { sessionLabel } from '../session-label'
 import { api, upload, makeClipboardImageFile } from '../api'
-import FileBrowser from '../FileBrowser'
-import FloatingFileDrawer from '../FloatingFileDrawer'
 import { PromptPanel, detectPrompt } from '../prompt'
 import { usePreferences } from '../preferences'
 import { useI18n } from '../i18n'
 import { VoiceInput } from './VoiceInput'
 import type { Msg } from './types'
 
-export function ChatShell({ name, dir, accent, title, placeholder, onBack, onRefresh, messages, renderMessage, pending, busy, error }: {
+export function ChatShell({ name, accent, placeholder, messages, renderMessage, pending, busy, error }: {
   name: string
-  dir?: string
   accent: string
-  title: ReactNode
   placeholder: string
-  onBack: () => void
-  onRefresh?: () => void
   messages: Msg[]
   renderMessage: (m: Msg, i: number) => ReactNode
   pending?: ReactNode
@@ -29,7 +23,6 @@ export function ChatShell({ name, dir, accent, title, placeholder, onBack, onRef
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [sendErr, setSendErr] = useState('')
-  const [showFiles, setShowFiles] = useState(false)
   const [showJump, setShowJump] = useState(false)
   const [limit, setLimit] = useState(200) // 只渲染最近 N 条，超长转录不卡
   const [dragOver, setDragOver] = useState(false)
@@ -166,14 +159,6 @@ export function ChatShell({ name, dir, accent, title, placeholder, onBack, onRef
             {dropMode === 'path' ? t('chat.dropInsertPath') : t('chat.dropUpload')}
           </div>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
-          {title}
-          <span style={{ color: 'var(--text-dim)', fontSize: 12 }} title={name}>{sessionLabel(name)}</span>
-          <span style={{ flex: 1 }} />
-          {onRefresh && <Button size="small" title={t('chat.refreshTranscript')} onClick={() => { atBottom.current = true; onRefresh() }}>{t('common.refresh')}</Button>}
-          <Button size="small" type={showFiles ? 'primary' : 'default'} style={showFiles ? { background: accent, borderColor: accent } : {}} onClick={() => setShowFiles((s) => !s)}>📁 {t('chat.files')}</Button>
-          <Button size="small" onClick={onBack}>{t('chat.backToTerminal')}</Button>
-        </div>
         <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex' }}>
           <div ref={boxRef} onScroll={onScroll} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', padding: '8px 12px' }}>
             {messages.length === 0 && !pending && <div style={{ color: 'var(--text-dim)', textAlign: 'center', marginTop: 30 }}>{t('chat.loadingTranscript')}</div>}
@@ -236,9 +221,6 @@ export function ChatShell({ name, dir, accent, title, placeholder, onBack, onRef
           )}
         </div>
       </div>
-      <FloatingFileDrawer open={showFiles}>
-        <FileBrowser dir={dir} accent={accent} onClose={() => setShowFiles(false)} onInsertPath={insertPath} />
-      </FloatingFileDrawer>
     </div>
   )
 }

@@ -1210,12 +1210,12 @@ function TerminalPane(props: {
               onImagePaste={(files) => { setActive(termName); pasteImage(termName, files) }} />
             {claudeView[termName] && claudeMap[termName]?.running && (
               <div style={{ position: 'absolute', inset: 0 }}>
-                <ClaudeChat name={termName} file={claudeMap[termName].file} dir={claudeMap[termName].dir} onBack={() => setClaudeView((v) => ({ ...v, [termName]: false }))} />
+                <ClaudeChat name={termName} file={claudeMap[termName].file} />
               </div>
             )}
             {codexView[termName] && codexMap[termName]?.running && (
               <div style={{ position: 'absolute', inset: 0 }}>
-                <CodexChat name={termName} file={codexMap[termName].file} dir={codexMap[termName].dir} onBack={() => setCodexView((v) => ({ ...v, [termName]: false }))} />
+                <CodexChat name={termName} file={codexMap[termName].file} />
               </div>
             )}
             {showVoice && !claudeView[termName] && !codexView[termName] && (
