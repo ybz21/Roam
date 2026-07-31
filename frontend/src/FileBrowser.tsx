@@ -1,6 +1,6 @@
 // 文件侧栏 —— 在 Claude / Codex 对话页右侧浏览工作目录、查看文件内容（类似 codex 右侧边栏）。
 // 单层可导航列表：目录在前可进入、↑ 回上级、点文件在弹层里查看正文。
-import { type ReactNode, Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { type ReactNode, Fragment, createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { AutoComplete, Button, ConfigProvider, Dropdown, Input, Modal, Spin, App as AntApp, Tooltip, type MenuProps } from 'antd'
 import { api, upload } from './api'
 import { useI18n } from './i18n'
@@ -86,8 +86,6 @@ function startPathDrag(ev: React.DragEvent, full: string) {
 
 // 右键菜单的全部动作，收拢成一个对象在 FileBrowser → FileTree → FileContextMenu 间传递。
 interface FileMenuActions {
-  onContextFocus: (target: FileTarget) => void
-  onContextBlur: (target: FileTarget) => void
   onOpen: (target: FileTarget) => void
   onRename: (target: FileTarget) => void
   onCopyTo: (target: FileTarget) => void
@@ -102,12 +100,38 @@ interface FileMenuActions {
   onInsertPath?: (path: string) => void
 }
 
+// 文件名 Tooltip 与右键 Dropdown 都基于浮层触发器。右键菜单打开时暂停 Tooltip，
+// 避免鼠标从文件行移向菜单的过程中，两个浮层竞争 hover 状态而把菜单关闭。
+const FileContextMenuOpen = createContext(false)
+
 function FileContextMenu({ target, children, actions }: {
   target: FileTarget
   children: ReactNode
   actions: FileMenuActions
 }) {
   const { t } = useI18n()
+  const [open, setOpen] = useState(false)
+  const triggerRef = useRef<HTMLDivElement>(null)
+  // rc-trigger 的 contextMenu 模式在右侧 fixed 抽屉里会把鼠标移入浮层误判成离开触发区，
+  // 菜单刚出现就关闭。这里由文件行显式打开，并自行处理点外部/Escape 关闭。
+  useEffect(() => {
+    if (!open) return
+    const closeOutside = (ev: PointerEvent) => {
+      const node = ev.target as Node | null
+      if (node && triggerRef.current?.contains(node)) return
+      if (node instanceof Element && node.closest('.ant-dropdown')) return
+      setOpen(false)
+    }
+    const closeOnEscape = (ev: KeyboardEvent) => {
+      if (ev.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('pointerdown', closeOutside, true)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside, true)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [open])
   const items: MenuProps['items'] = [
     { key: 'open', label: target.dir ? t('file.openFolder') : t('file.open') },
     { type: 'divider' as const },
@@ -130,6 +154,7 @@ function FileContextMenu({ target, children, actions }: {
   ]
   const onClick: MenuProps['onClick'] = ({ key, domEvent }) => {
     domEvent.stopPropagation()
+    setOpen(false)
     if (key === 'open') actions.onOpen(target)
     else if (key === 'newFile') actions.onNewFile(target)
     else if (key === 'newFolder') actions.onNewFolder(target)
@@ -144,9 +169,26 @@ function FileContextMenu({ target, children, actions }: {
     else if (key === 'delete') actions.onDelete(target)
   }
   return (
-    <Dropdown trigger={['contextMenu']} menu={{ items, onClick }} onOpenChange={(open) => { open ? actions.onContextFocus(target) : actions.onContextBlur(target) }}>
-      <div onContextMenu={(ev) => { ev.stopPropagation(); actions.onContextFocus(target) }}>{children}</div>
-    </Dropdown>
+    <FileContextMenuOpen.Provider value={open}>
+      <Dropdown
+        trigger={[]}
+        menu={{ items, onClick }}
+        open={open}
+        onOpenChange={setOpen}
+        transitionName=""
+        overlayClassName="tt-file-context-menu"
+      >
+        <div
+          ref={triggerRef}
+          className={open ? 'tt-file-context-open' : undefined}
+          onContextMenu={(ev) => {
+            ev.preventDefault()
+            ev.stopPropagation()
+            setOpen(true)
+          }}
+        >{children}</div>
+      </Dropdown>
+    </FileContextMenuOpen.Provider>
   )
 }
 
@@ -156,11 +198,12 @@ function FileRowBody({ full, name, isDir, size, accent, onInsertPath, onDownload
   onDownload?: (t: FileTarget) => void
 }) {
   const { t } = useI18n()
+  const contextMenuOpen = useContext(FileContextMenuOpen)
   return (
     <>
       <span style={{ color: isDir ? accent : 'var(--text-dimmer)', flex: '0 0 auto', display: 'inline-flex', width: 22, justifyContent: 'center' }}>{isDir ? <FolderIcon /> : <FileTypeIcon name={name} />}</span>
       {/* 面板窄时名字被省略号截断 → 悬浮显示完整名字（长名换行显示，不再被裁掉） */}
-      <Tooltip title={name} placement="topLeft" mouseEnterDelay={0.4} styles={{ root: { maxWidth: 420, wordBreak: 'break-all' } }}>
+      <Tooltip title={name} placement="topLeft" mouseEnterDelay={0.4} open={contextMenuOpen ? false : undefined} styles={{ root: { maxWidth: 420, wordBreak: 'break-all' } }}>
         <span style={{ color: 'var(--text-bright)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
       </Tooltip>
       {!isDir && <span style={{ color: 'var(--text-dimmer)', fontSize: 11, flex: '0 0 auto' }}>{fmtSize(size)}</span>}
@@ -335,7 +378,6 @@ export default function FileBrowser({
   const [propertiesTarget, setPropertiesTarget] = useState<FileTarget | null>(null)
   const [properties, setProperties] = useState<FileStat | null>(null)
   const [propertiesLoading, setPropertiesLoading] = useState(false)
-  const [contextPath, setContextPath] = useState<string | null>(null)
   const [showHidden, setShowHidden] = useState(false) // 隐藏文件（点号开头）默认不显示，眼睛开关切换
   const [sortKey, setSortKey] = useState<SortKey>('name')
   // P2P 传输可见状态：按 transferId 维护进行中的下载，展示角标/进度/详情（§5.7）。
@@ -490,8 +532,6 @@ export default function FileBrowser({
     })
   }
   const confirmDeleteTarget = (target: FileTarget) => confirmDelete(target.path, target.dir)
-  const markContextTarget = (target: FileTarget) => setContextPath(target.path)
-  const clearContextTarget = (target: FileTarget) => setContextPath((path) => (path === target.path ? null : path))
   const openEntry = (target: FileTarget) => { target.dir ? navigate(target.path) : openFile(target.path) }
   const startRename = (target: FileTarget) => {
     setRenameTarget(target)
@@ -635,12 +675,10 @@ export default function FileBrowser({
   // 打开一个文件：dock 布局把打开交给外层（开编辑器 tab），否则用内置预览。
   const openFile = (target: string) => { if (onOpenFile) onOpenFile(target); else setView(target) }
   // 浏览器里高亮的选中项：外层受控（selectedPath）优先，否则用内部 view。
-  const sel = contextPath || (selectedPath !== undefined ? selectedPath : view)
+  const sel = selectedPath !== undefined ? selectedPath : view
 
   // 右键菜单全部动作，平铺列表与树共用一份。
   const menuActions: FileMenuActions = {
-    onContextFocus: markContextTarget,
-    onContextBlur: clearContextTarget,
     onOpen: openEntry,
     onRename: startRename,
     onCopyTo: startCopy,

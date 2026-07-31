@@ -229,6 +229,10 @@ body {
 @media (pointer: coarse) { .cc-dl { opacity: .6; } }
 .cc-filerow { border-radius: 6px; margin: 1px 4px; }
 .cc-filerow:hover { background: rgba(88, 166, 255, .08); }
+/* 右键菜单打开期间保持目标行高亮；状态留在菜单组件内，避免重渲染整棵文件列表。 */
+.tt-file-context-open > .cc-filerow { background: #1f6feb22; }
+/* 手动控制的右键菜单不要被整行触发器拉伸到文件抽屉宽度。 */
+.tt-file-context-menu { width: max-content !important; min-width: 130px !important; }
 /* Git 分组标题上的操作按钮：平时半透明，hover 分组时变实 */
 .cc-git-section-act .cc-dl { opacity: .5; }
 .cc-git-section:hover .cc-git-section-act .cc-dl { opacity: 1; }

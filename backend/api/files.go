@@ -276,7 +276,18 @@ func (a *API) FileServe(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "NOT_FILE"}})
 		return
 	}
-	c.File(p) // Content-Type 按扩展名嗅探：.css→text/css .js→text/javascript .html→text/html
+	f, err := os.Open(p)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "FS_ERROR", "message": err.Error()}})
+		return
+	}
+	defer f.Close()
+
+	// gin.Context.File 最终调用 http.ServeFile；当请求 URL 以 /index.html 结尾时，
+	// ServeFile 会自动重定向到 ./。本接口的 ./ 是目录，而目录会被上面的校验拒绝，
+	// 于是文件面板打开 index.html 时只能看到 NOT_FILE JSON。ServeContent 不做该重定向，
+	// 同时仍保留按扩展名判断 Content-Type、Last-Modified 与 Range 请求支持。
+	http.ServeContent(c.Writer, c.Request, filepath.Base(p), info.ModTime(), f)
 }
 
 var officePreviewExt = map[string]bool{
