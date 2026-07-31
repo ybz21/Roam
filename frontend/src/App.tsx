@@ -35,7 +35,8 @@ import { useThemeMode } from './theme'
 import { useI18n } from './i18n'
 import { usePwaInstall } from './install'
 import { usePreferences, savePreferences, loadPreferences } from './preferences'
-import { PromptDialog, detectPrompt } from './prompt'
+import { PromptDialog, advancePromptSignal, detectPrompt } from './prompt'
+import type { PromptSignal } from './prompt'
 import { copyText } from './chat/blocks'
 import { SessionTitle, setSessionLabels, updateSessionLabel, useSessionLabel, sessionLabel, sessionDisplay } from './session-label'
 import { VoiceInput } from './chat/VoiceInput'
@@ -458,9 +459,12 @@ export default function App() {
   }
   const anyClaude = terms.some((t) => claudeMap[t]?.running || codexMap[t]?.running)
   const docked = hasSider && terms.length > 0 && dockOpen // 桌面停靠栏已展开
-  const dockResizesPage = docked && tab !== 'browser'
+  // 停靠终端的几何必须跨页面稳定。旧逻辑给 browser 单独走 flex 布局、其它页面又按各自的
+  // 默认宽度布局，切一次导航就会改变终端列数 → tmux 收到 SIGWINCH 后整屏重排，肉眼就是闪屏。
+  // IDE 的停靠面板应独立于主页面类型，因此所有桌面页面统一保留同一块主内容宽度。
+  const dockResizesPage = docked
   const filesDefaultWidth = typeof window === 'undefined' ? 640 : Math.round((window.innerWidth - (collapsed ? 64 : 208) - 18) * 0.5)
-  const defaultDockWidth = tab === 'files' ? Math.max(520, Math.min(900, filesDefaultWidth)) : tab === 'sessions' || tab === 'overview' || tab === 'swarm' || tab === 'settings' || tab === 'phone' ? 420 : 300
+  const defaultDockWidth = Math.max(520, Math.min(900, filesDefaultWidth))
   const dockPageWidth = customDockWidth ?? defaultDockWidth
   const setStatus = (name: string, s: TermStatus) => setStatusMap((m) => ({ ...m, [name]: s }))
   const sendKey = (seq: string) => active && termRefs.current[active]?.send(seq)
@@ -533,7 +537,8 @@ export default function App() {
   return (
     <Layout style={{ height: '100dvh', overflow: 'hidden', background: 'var(--bg-base)' }}>
       <UpdateBanner />
-      {/* 拖动时只移动引导线，松手才提交布局，避免 HTML iframe 在每个指针事件上完整重排。 */}
+      {/* 拖动停靠分隔栏时只移动引导线，松手才提交一次布局。若持续改变页面/终端宽度，
+          HTML iframe 会高频重排，ResizeObserver 也会反复 fit → SIGWINCH → tmux 整屏重排。 */}
       <div ref={dockGuideRef} data-dock-resize-guide style={{
         display: 'none', position: 'fixed', top: 0, bottom: 0, width: 2, zIndex: 1000,
         pointerEvents: 'none', background: '#58a6ff', boxShadow: '0 0 0 1px rgba(88,166,255,.18)',
@@ -647,7 +652,11 @@ export default function App() {
                       if (guide) guide.style.display = 'none'
                       const next = pendingDockWidth.current
                       pendingDockWidth.current = null
-                      if (next != null && next !== startW) setCustomDockWidth(next)
+                      if (next != null && next !== startW) {
+                        // 在 React 提交新几何之前冻结当前帧；Terminal 会等新尺寸内容画好后自行交接。
+                        if (active) termRefs.current[active]?.beginVisualHandoff()
+                        setCustomDockWidth(next)
+                      }
                     },
                   })
                 }}
@@ -846,6 +855,7 @@ function TerminalPane(props: {
   const { t } = useI18n()
   const st = active ? statusMap[active] : undefined
   const [termNeedsInput, setTermNeedsInput] = useState<Record<string, boolean>>({})
+  const promptSignals = useRef<Record<string, PromptSignal>>({})
   const activeNeedsInput = !!(active && termNeedsInput[active])
   const dot = activeNeedsInput ? '#d29922' : st === 'connected' ? '#3fb950' : st === 'connecting' ? '#d29922' : '#f85149'
   // 当前标签是否在 Claude/Codex 对话视图：此时聊天 UI 自带输入框，
@@ -981,7 +991,11 @@ function TerminalPane(props: {
   }, [active, claudeMap, codexMap])
 
   useEffect(() => {
-    if (!terms.length) { setTermNeedsInput({}); return }
+    if (!terms.length) {
+      promptSignals.current = {}
+      setTermNeedsInput((previous) => Object.keys(previous).length ? {} : previous)
+      return
+    }
     let stop = false
     const checkPrompts = async () => {
       const entries = await Promise.all(terms.map(async (name) => {
@@ -992,7 +1006,21 @@ function TerminalPane(props: {
           return [name, false] as const
         }
       }))
-      if (!stop) setTermNeedsInput(Object.fromEntries(entries))
+      if (stop) return
+      const nextSignals: Record<string, PromptSignal> = {}
+      const nextState: Record<string, boolean> = {}
+      entries.forEach(([name, candidate]) => {
+        const signal = advancePromptSignal(promptSignals.current[name], candidate)
+        nextSignals[name] = signal
+        nextState[name] = signal.stable
+      })
+      promptSignals.current = nextSignals
+      // 未发生语义变化时复用旧对象，避免后台抓屏每 4 秒让整个终端区无意义重渲染。
+      setTermNeedsInput((previous) => {
+        const keys = Object.keys(nextState)
+        const unchanged = keys.length === Object.keys(previous).length && keys.every((name) => previous[name] === nextState[name])
+        return unchanged ? previous : nextState
+      })
     }
     checkPrompts()
     const t = setInterval(checkPrompts, 4000)
@@ -1221,7 +1249,15 @@ function TerminalPane(props: {
       )}
       <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
         {terms.map((termName) => (
-          <div key={termName} style={{ position: 'absolute', inset: 0, display: termName === active ? 'block' : 'none', padding: 6 }}>
+          // 非当前终端不能用 display:none：xterm 会暂停渲染且容器尺寸归零，切换或关闭当前标签时
+          // 下一张 WebGL 画布要经过“重新量尺寸 → 清画布 → 重画”，中间会露出 1~2 帧黑屏。
+          // visibility:hidden 保留真实尺寸并让后台画布保持就绪；pointerEvents/zIndex 隔离交互与层叠。
+          <div key={termName} style={{
+            position: 'absolute', inset: 0, padding: 6,
+            visibility: termName === active ? 'visible' : 'hidden',
+            pointerEvents: termName === active ? 'auto' : 'none',
+            zIndex: termName === active ? 1 : 0,
+          }}>
             <Term ref={(h) => { termRefs.current[termName] = h }} name={termName} fontSize={fontSize} active={termName === active} onStatus={(s) => setStatus(termName, s)}
               onContextMenu={({ x, y, selection }) => { setActive(termName); setCtx({ x, y, session: termName, selection }) }}
               onSelectionMenu={({ selection }) => { setActive(termName); setCtx(null); if (selection.trim()) { copyText(selection); message.success(t('common.copied')) } }}
