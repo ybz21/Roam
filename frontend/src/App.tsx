@@ -41,6 +41,7 @@ import { SessionTitle, setSessionLabels, updateSessionLabel, useSessionLabel, se
 import { VoiceInput } from './chat/VoiceInput'
 import LinkStatus from './p2p/LinkStatus'
 import { startControlLink, stopControlLink } from './p2p/transport'
+import { PointerResizeShield, usePointerResize } from './PointerResize'
 
 interface ClaudeInfo { running: boolean; file?: string; dir?: string }
 
@@ -291,7 +292,9 @@ export default function App() {
   const [dockOpen, setDockOpen] = useState(true) // 桌面：右侧终端停靠栏是否展开
   const [dockMax, setDockMax] = useState(false)  // 桌面：终端栏向左扩展（遮住会话列表）
   const [customDockWidth, setCustomDockWidth] = useState<number | null>(null)
-  const resizing = useRef(false)
+  const dockResize = usePointerResize()
+  const pendingDockWidth = useRef<number | null>(null)
+  const dockGuideRef = useRef<HTMLDivElement>(null)
   const [fontSize, setFontSize] = useState(13)
   const [statusMap, setStatusMap] = useState<Record<string, TermStatus>>({})
   const termRefs = useRef<Record<string, TermHandle | null>>({})
@@ -530,6 +533,12 @@ export default function App() {
   return (
     <Layout style={{ height: '100dvh', overflow: 'hidden', background: 'var(--bg-base)' }}>
       <UpdateBanner />
+      {/* 拖动时只移动引导线，松手才提交布局，避免 HTML iframe 在每个指针事件上完整重排。 */}
+      <div ref={dockGuideRef} data-dock-resize-guide style={{
+        display: 'none', position: 'fixed', top: 0, bottom: 0, width: 2, zIndex: 1000,
+        pointerEvents: 'none', background: '#58a6ff', boxShadow: '0 0 0 1px rgba(88,166,255,.18)',
+      }} />
+      <PointerResizeShield active={dockResize.active} />
       {hasSider && !dockMax && (
         <Sider collapsible trigger={null} collapsed={collapsed} collapsedWidth={64}
           breakpoint="lg" onBreakpoint={(b) => setCollapsed(b)} width={208} theme={mode}
@@ -614,23 +623,33 @@ export default function App() {
               </div>
               {/* 中间：拖拽调整宽度（占中间 1/3，三等分） */}
               <div
-                style={{ flex: 1, cursor: 'col-resize', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid var(--border)' }}
+                data-dock-resize-handle
+                style={{ flex: 1, cursor: 'col-resize', touchAction: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid var(--border)' }}
                 title={t('common.dragToResize') || 'Drag to resize'}
-                onMouseDown={(e) => {
-                  e.preventDefault()
-                  resizing.current = true
+                onPointerDown={(e) => {
                   const siderWidth = collapsed ? 64 : 208
                   const startX = e.clientX
                   const startW = dockPageWidth
-                  const onMove = (ev: MouseEvent) => {
-                    if (!resizing.current) return
-                    const delta = ev.clientX - startX
-                    const next = Math.max(280, Math.min(window.innerWidth - siderWidth - 200, startW + delta))
-                    setCustomDockWidth(next)
+                  pendingDockWidth.current = startW
+                  const guide = dockGuideRef.current
+                  if (guide) {
+                    guide.style.display = 'block'
+                    guide.style.left = `${siderWidth + startW}px`
                   }
-                  const onUp = () => { resizing.current = false; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
-                  window.addEventListener('mousemove', onMove)
-                  window.addEventListener('mouseup', onUp)
+                  dockResize.start(e, {
+                    onMove: (ev) => {
+                      const delta = ev.clientX - startX
+                      const next = Math.max(280, Math.min(window.innerWidth - siderWidth - 200, startW + delta))
+                      pendingDockWidth.current = next
+                      if (guide) guide.style.left = `${siderWidth + next}px`
+                    },
+                    onEnd: () => {
+                      if (guide) guide.style.display = 'none'
+                      const next = pendingDockWidth.current
+                      pendingDockWidth.current = null
+                      if (next != null && next !== startW) setCustomDockWidth(next)
+                    },
+                  })
                 }}
               >
                 <svg width="6" height="48" viewBox="0 0 6 48" fill="currentColor" opacity="0.5">

@@ -7,6 +7,7 @@ import FileBrowser from './FileBrowser'
 import { FileView } from './fileview'
 import { FileTypeIcon } from './file-icons'
 import { useI18n } from './i18n'
+import { PointerResizeShield, usePointerResize } from './PointerResize'
 
 type Group = 'A' | 'B'
 const TAB_MIME = 'application/x-ttmux-tab'
@@ -63,6 +64,7 @@ export default function FileWorkspace({
   const [dragging, setDragging] = useState(false) // 原生拖拽进行中 → 每栏内容盖一层透明接盘层，压过终端/Monaco
   // 拖的是 tab/会话(需接盘层压过终端才能移栏) 还是文件路径(要落回终端/对话做 @引用注入,不能被接盘层截走)
   const [dragKind, setDragKind] = useState<'tab' | 'lead' | 'path' | null>(null)
+  const resize = usePointerResize()
   useEffect(() => {
     // drop 用「冒泡阶段」清理：React 事件委托挂在 document 内层根节点，冒泡到 document 时
     // onDrop 已派发完，此时卸接盘层安全。若用捕获阶段则会赶在 onDrop 前卸掉接盘层 →
@@ -160,36 +162,29 @@ export default function FileWorkspace({
   const [splitFrac, setSplitFrac] = useState(0.5)
   const [swapped, setSwapped] = useState(false)
   const leftGroup: Group = swapped ? 'B' : 'A'
-  const startSplitResize = (e: React.PointerEvent) => {
-    e.preventDefault()
-    document.body.style.userSelect = 'none'; document.body.style.cursor = 'col-resize'
-    const move = (ev: PointerEvent) => {
-      const el = panesRef.current; if (!el) return
-      const r = el.getBoundingClientRect(); if (r.width <= 0) return
-      setSplitFrac(Math.min(0.85, Math.max(0.15, (ev.clientX - r.left) / r.width)))
-    }
-    const up = () => {
-      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up)
-      document.body.style.userSelect = ''; document.body.style.cursor = ''
-    }
-    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up)
+
+  const startSplitResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    resize.start(e, {
+      onMove: (ev) => {
+        const el = panesRef.current; if (!el) return
+        const r = el.getBoundingClientRect(); if (r.width <= 0) return
+        setSplitFrac(Math.min(0.85, Math.max(0.15, (ev.clientX - r.left) / r.width)))
+      },
+    })
   }
 
   // 左侧文件栏宽度：可拖拽调整，记 localStorage
   const [dockW, setDockW] = useState(() => { const s = Number(localStorage.getItem('ttmux.fileDockW')); return s >= 160 && s <= 640 ? s : 280 })
   const dockWRef = useRef(dockW)
   dockWRef.current = dockW
-  const startResize = (e: React.PointerEvent) => {
-    e.preventDefault()
+  const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
     const startX = e.clientX, startW = dockW
-    document.body.style.userSelect = 'none'; document.body.style.cursor = 'col-resize'
-    const move = (ev: PointerEvent) => setDockW(Math.min(640, Math.max(160, startW + ev.clientX - startX)))
-    const up = () => {
-      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up)
-      document.body.style.userSelect = ''; document.body.style.cursor = ''
-      localStorage.setItem('ttmux.fileDockW', String(dockWRef.current))
-    }
-    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up)
+    resize.start(e, {
+      onMove: (ev) => setDockW(Math.min(640, Math.max(160, startW + ev.clientX - startX))),
+      onEnd: () => {
+        localStorage.setItem('ttmux.fileDockW', String(dockWRef.current))
+      },
+    })
   }
 
   const dragHasPayload = (e: React.DragEvent) => e.dataTransfer.types.includes(TAB_MIME) || e.dataTransfer.types.includes(PATH_MIME) || e.dataTransfer.types.includes(LEAD_MIME)
@@ -400,7 +395,7 @@ export default function FileWorkspace({
           <div style={{ flex: `0 0 ${dockW}px`, minWidth: 0, minHeight: 0, display: 'flex' }}>
             <FileBrowser dir={dir} accent={accent} layout="dock" onClose={onExplorerClose} onOpenFile={openFileTab} selectedPath={activeA ? realPath(activeA) : null} onOpenAgent={onOpenAgent} />
           </div>
-          <div onPointerDown={startResize} title={t('file.dragResize')} style={{ flex: '0 0 5px', cursor: 'col-resize', background: 'var(--border)', touchAction: 'none' }} />
+          <div data-resize-handle="dock" onPointerDown={startResize} title={t('file.dragResize')} style={{ flex: '0 0 5px', cursor: 'col-resize', background: 'var(--border)', touchAction: 'none' }} />
         </>
       )}
       <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
@@ -408,7 +403,7 @@ export default function FileWorkspace({
           {(split ? (swapped ? ['B', 'A'] : ['A', 'B']) : ['A'] as Group[]).map((g, i) => (
             // key 按组固定 → 易位/分栏时 React 不重挂终端(会话)，PTY/xterm 不断
             <Fragment key={g}>
-              {i > 0 && <div onPointerDown={startSplitResize} title={t('file.dragResize')} style={{ flex: '0 0 5px', cursor: 'col-resize', background: 'var(--border)', touchAction: 'none' }} />}
+              {i > 0 && <div data-resize-handle="split" onPointerDown={startSplitResize} title={t('file.dragResize')} style={{ flex: '0 0 5px', cursor: 'col-resize', background: 'var(--border)', touchAction: 'none' }} />}
               {pane(g as Group)}
             </Fragment>
           ))}
@@ -417,6 +412,7 @@ export default function FileWorkspace({
       {touchDrag && (
         <div style={{ position: 'fixed', left: touchDrag.x + 12, top: touchDrag.y + 12, zIndex: 9999, pointerEvents: 'none', padding: '4px 10px', fontSize: 12, borderRadius: 6, background: 'var(--bg-container)', border: '1px solid #58a6ff', color: 'var(--text-bright)', boxShadow: '0 4px 16px rgba(0,0,0,.4)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{touchDrag.label}</div>
       )}
+      <PointerResizeShield active={resize.active} />
     </div>
   )
 }
