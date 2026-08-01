@@ -46,7 +46,13 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': { target: 'http://127.0.0.1:13579', changeOrigin: true, ws: true },
+      // 后端默认开自签 HTTPS（start.sh 里 TLS 默认 on，手机用麦克风/剪贴板需要安全上下文），
+      // 所以这里也得走 https + secure:false 收自签证书；写死 http 会让 dev 模式下
+      // /api 一律 400/502。要指到别的实例就设 ROAM_DEV_API。
+      '/api': {
+        target: process.env.ROAM_DEV_API || 'https://127.0.0.1:13579',
+        changeOrigin: true, ws: true, secure: false,
+      },
     },
   },
 })
