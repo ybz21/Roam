@@ -46,6 +46,8 @@ const enUS = {
   'workspace.resizeDock': 'Resize terminal',
   'workspace.focusDock': 'Focus terminal',
   'workspace.exitFocus': 'Back to split',
+  'mobile.groupTools': 'Tools',
+  'mobile.groupAccount': 'Account',
   'nav.sessions': 'Sessions',
   'nav.swarm': 'Swarm',
   'nav.files': 'Files',

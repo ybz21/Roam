@@ -40,6 +40,7 @@ import type { PromptSignal } from './prompt'
 import { useLayout } from './layout'
 import { useWorkspaceLayout } from './shell/useWorkspaceLayout'
 import { SplitWorkspace } from './shell/SplitWorkspace'
+import { MobileSheet, SheetRow, SheetSection } from './shell/MobileSheet'
 import { copyText } from './chat/blocks'
 import { SessionTitle, setSessionLabels, updateSessionLabel, useSessionLabel, sessionLabel, sessionDisplay } from './session-label'
 import { VoiceInput } from './chat/VoiceInput'
@@ -66,7 +67,8 @@ const NAV = [
 ]
 
 // 手机底栏只放高频页，plugins/settings 折进「更多」，避免底栏拥挤（桌面侧栏仍展示全部）
-const MOBILE_MORE_KEYS = ['plugins', 'settings']
+const MOBILE_NAV_KEYS = ['projects', 'overview', 'files']
+const MOBILE_MORE_KEYS = ['browser', 'phone', 'plugins', 'settings']
 
 // 旧链接兼容：/#/env 重定向到 /#/settings
 function normalizeRoute(raw: string): string {
@@ -288,6 +290,7 @@ export default function App() {
   const urlActive = useRef<string>(readTermTokens().active)
   const restored = useRef(false) // 还原完成前不许回写 URL，否则会把待还原的参数抹掉
   const [overlay, setOverlay] = useState(false) // 手机/平板全屏终端
+  const [moreOpen, setMoreOpen] = useState(false) // 手机「更多」sheet
   // 空间状态（Page / Split / Focus）与 Dock 宽度：唯一的尺寸契约来源
   const space = useWorkspaceLayout(terms.length > 0)
   const modKeyLabel = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || '') ? '⌘' : 'Ctrl+'
@@ -647,30 +650,52 @@ export default function App() {
         )}
       </Layout>
 
+      {/* 底栏 4 格 + 会话坞（13 §4.1/§4.2）：浏览器/手机镜像这类"用手机看手机"的低频页
+          进「更多」sheet，不占底栏。sheet 内部分「工具 / 账户」两段——退出登录和浏览器
+          并排时误触代价差了几个数量级，所以它收在账户行的二级里。*/}
       {isMobile && (
-        <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, display: 'flex', background: 'var(--bg-container)', borderTop: '1px solid var(--border)', zIndex: 50, paddingBottom: 'env(safe-area-inset-bottom)' }}>
-          {NAV.filter((n) => !MOBILE_MORE_KEYS.includes(n.key)).map((n) => (
-            <button key={n.key} onClick={() => go(n.key)}
-              style={{ flex: 1, border: 0, background: 'none', color: tab === n.key ? '#58a6ff' : 'var(--text-dim)', padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11 }}>
-              {ICONS[n.key]}{t(n.labelKey)}
-            </button>
-          ))}
-          {/* plugins/settings + 主题/全屏/退出折叠进「更多」，省出底栏空间 */}
-          <Dropdown placement="top" trigger={['click']} menu={{ items: [
-            ...NAV.filter((n) => MOBILE_MORE_KEYS.includes(n.key)).map((n) => ({ key: n.key, icon: ICONS[n.key], label: t(n.labelKey), onClick: () => go(n.key) })),
-            { type: 'divider' as const },
-            { key: 'theme', icon: themeIcon, label: mode === 'dark' ? t('common.lightTheme') : t('common.darkTheme'), onClick: toggleTheme },
-            ...(fsSupported ? [{ key: 'fs', icon: fsIcon, label: isFs ? t('common.exitFullscreen') : t('common.fullscreen'), onClick: toggleFs }] : []),
-            { key: 'about', icon: ICONS.github, label: t('nav.about'), onClick: () => go('about') },
-            { type: 'divider' as const },
-            { key: 'logout', danger: true, label: t('common.logout'), onClick: () => Modal.confirm({ title: t('common.logoutConfirm'), okText: t('common.logout'), cancelText: t('common.cancel'), okButtonProps: { danger: true }, onOk: logout }) },
-          ] }}>
-            <button
-              style={{ flex: 1, border: 0, background: 'none', color: MOBILE_MORE_KEYS.includes(tab) ? '#58a6ff' : 'var(--text-dim)', padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11 }}>
-              {svg(<><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></>)}{t('common.more')}
-            </button>
-          </Dropdown>
+        <nav style={{
+          position: 'fixed', bottom: 0, left: 0, right: 0, display: 'flex',
+          background: 'var(--bg-container)', borderTop: '1px solid var(--border)',
+          zIndex: 'var(--z-nav)' as unknown as number, paddingBottom: 'var(--safe-b)',
+        }}>
+          {MOBILE_NAV_KEYS.map((key) => {
+            const n = NAV.find((x) => x.key === key)!
+            return (
+              <button key={n.key} onClick={() => go(n.key)}
+                style={{ flex: 1, minHeight: 'var(--tap)', border: 0, background: 'none', color: tab === n.key ? '#58a6ff' : 'var(--text-dim)', padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11 }}>
+                {ICONS[n.key]}{t(n.labelKey)}
+              </button>
+            )
+          })}
+          <button onClick={() => setMoreOpen(true)}
+            style={{ flex: 1, minHeight: 'var(--tap)', border: 0, background: 'none', color: MOBILE_MORE_KEYS.includes(tab) ? '#58a6ff' : 'var(--text-dim)', padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11 }}>
+            {svg(<><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></>)}{t('common.more')}
+          </button>
         </nav>
+      )}
+
+      {isMobile && (
+        <MobileSheet open={moreOpen} title={t('common.more')} onClose={() => setMoreOpen(false)}>
+          <SheetSection>{t('mobile.groupTools')}</SheetSection>
+          {MOBILE_MORE_KEYS.map((key) => {
+            const n = NAV.find((x) => x.key === key)!
+            return <SheetRow key={n.key} icon={ICONS[n.key]} title={t(n.labelKey)}
+              onClick={() => { setMoreOpen(false); go(n.key) }} />
+          })}
+          <SheetSection>{t('mobile.groupAccount')}</SheetSection>
+          <SheetRow icon={themeIcon} title={mode === 'dark' ? t('common.lightTheme') : t('common.darkTheme')}
+            onClick={() => { toggleTheme() }} />
+          {fsSupported && (
+            <SheetRow icon={fsIcon} title={isFs ? t('common.exitFullscreen') : t('common.fullscreen')}
+              onClick={() => { toggleFs() }} />
+          )}
+          <SheetRow icon={ICONS.github} title={t('nav.about')} onClick={() => { setMoreOpen(false); go('about') }} />
+          <SheetRow
+            icon={svg(<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></>)}
+            title={t('common.logout')} desc={t('common.logoutConfirm')} danger
+            onClick={() => { setMoreOpen(false); Modal.confirm({ title: t('common.logoutConfirm'), okText: t('common.logout'), cancelText: t('common.cancel'), okButtonProps: { danger: true }, onOk: logout }) }} />
+        </MobileSheet>
       )}
 
       {/* 手机/平板：全屏会话覆盖层（桌面用右侧停靠栏，不走这里）*/}

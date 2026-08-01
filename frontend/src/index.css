@@ -121,6 +121,10 @@ body {
   transition: background-color .2s ease;
 }
 
+/* 底部 sheet 入场（prefers-reduced-motion 下由上面那条全局规则压成 0） */
+@keyframes tt-sheet-up { from { transform: translateY(100%); } }
+@keyframes tt-sheet-fade { from { opacity: 0; } }
+
 /* ── 分栏把手（14 设计 §4.3）：视觉 8px，命中区左右各扩 6px ──
    只做一件事——拖。开合走 Command Center 的按钮或 ⌘J，不在这条上叠语义。 */
 .tt-split-rail {
