@@ -8,6 +8,7 @@ import { FileView } from './fileview'
 import { FileTypeIcon } from './file-icons'
 import { useI18n } from './i18n'
 import { PointerResizeShield, usePointerResize } from './PointerResize'
+import { useLayout } from './layout'
 
 type Group = 'A' | 'B'
 const TAB_MIME = 'application/x-ttmux-tab'
@@ -200,7 +201,7 @@ export default function FileWorkspace({
   // HTML5 原生拖拽在触屏不触发；且拖到另一栏时，那栏的终端/Monaco 会吞掉 drag 事件，
   // 导致「拖不进另一个分栏」。这里改用 PointerEvent + elementFromPoint 命中落点栏（爬到
   // 带 data-drop-group 的祖先），绕开内层控件，落点栏一定能识别。
-  const coarse = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches
+  const { coarse } = useLayout()
   type Payload = { kind: 'tab'; path: string; from: Group } | { kind: 'lead' }
   const [touchDrag, setTouchDrag] = useState<{ label: string; x: number; y: number } | null>(null)
   const draggedRef = useRef(false)

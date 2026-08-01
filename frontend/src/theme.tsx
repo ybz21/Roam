@@ -7,6 +7,7 @@ import zhCN from 'antd/locale/zh_CN'
 import enUS from 'antd/locale/en_US'
 import { useI18n } from './i18n'
 import { usePreferences, savePreferences } from './preferences'
+import { applyDensity } from './layout'
 
 export type ThemeMode = 'dark' | 'light'
 const KEY = 'ttmux-theme'
@@ -169,6 +170,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     if (prefs.theme && (prefs.theme === 'dark' || prefs.theme === 'light')) setModeLocal(prefs.theme)
   }, [prefs.theme])
   useLayoutEffect(() => { applyCssVars(mode) }, [mode])
+  // 密度是用户偏好，写到 <html data-density> 上；档位由 layout.ts 写 data-size，两者正交
+  useLayoutEffect(() => { applyDensity(prefs.workspace.density) }, [prefs.workspace.density])
   const setMode = (m: ThemeMode) => {
     setModeLocal(m)
     savePreferences({ theme: m })

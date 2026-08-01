@@ -34,6 +34,79 @@
   --hl-built: #ffa657;
 }
 
+/* ── 布局令牌（13 设计 §3.3 / §3.5 / §8，14 设计 §8.2）─────────────────────
+   断点与档位由 layout.ts 的 useLayout() 写到 <html data-size> 上，这里只放尺寸。
+   密度、层级、安全区、软键盘四组变量全站共用，浮层不再各自硬编码数字。 */
+:root {
+  /* 密度：留白是给眼睛的，触控区是给手指的，两者独立 */
+  --tap: 44px;                    /* 最小命中边长 */
+  --ctl-h: 32px;                  /* 控件高（桌面档） */
+  --pad-page: 16px;               /* 页面四周留白 */
+  --gap: 10px;
+  --fs-body: 14px;
+  --fs-meta: 12px;
+  --fs-chip: 12.5px;
+  --r-card: 12px;
+  --r-sheet: 16px;
+  --row-cozy: 42px;
+  --row-compact: 34px;
+
+  /* 桌面壳层：Navigation ｜ Canvas ｜ rail ｜ Dock 的尺寸契约 */
+  --nav-w: 224px;
+  --nav-rail: 64px;
+  --topbar-h: 40px;
+  --canvas-min: 560px;
+  --dock-min: 480px;
+  --dock-max: 880px;
+  --split-rail: 8px;
+  --split-hit: 20px;
+  --activity-rail: 320px;
+  --content-overview: 1680px;
+  --content-form: 920px;
+
+  /* 层级：九个具名层，取代 50/90/100/1000/1199/1200/1201/1300/9999 那堆魔数。
+     同层不叠——并排显示的两个 sheet 由栈管理器决定谁在上，不靠差 1 硬顶。 */
+  --z-sticky: 10;                 /* 页面内粘性头 */
+  --z-fab: 30;                    /* 悬浮按钮 / 方向键簇 */
+  --z-nav: 50;                    /* 底栏 / 导航轨 */
+  --z-subpage: 90;                /* 全屏二级页 */
+  --z-session: 100;               /* 会话全屏 */
+  --z-scrim: 900;                 /* 遮罩 */
+  --z-sheet: 1000;                /* 底部 sheet / 抽屉 */
+  --z-popup: 1300;                /* antd 弹层基座 */
+  --z-toast: 1500;
+  --z-drag: 9999;                 /* 拖拽幽灵 */
+
+  /* 边界：所有 position:fixed 的层必须显式吃安全区；--kb 由 layout.ts 回填 */
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  --kb: 0px;
+}
+
+/* 手机档：控件长高、留白收紧、正文反而放大（阅读距离更近但屏更小） */
+html[data-size="compact"] {
+  --ctl-h: 40px;
+  --pad-page: 12px;
+  --gap: 8px;
+  --fs-body: 15px;
+  --fs-meta: 12.5px;
+}
+
+/* 密度是用户偏好，与档位正交；粗指针下只收留白，不收命中区 */
+html[data-density="compact"] { --row-cozy: var(--row-compact); --gap: 8px; }
+html[data-pointer="coarse"] { --ctl-h: max(var(--ctl-h), 40px); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 html, body, #root { height: 100%; margin: 0; }
 /* 禁掉移动端「下拉刷新」与滚动链/边缘回弹：轻微下拉不再误触整页刷新 */
 html, body { overscroll-behavior: none; }

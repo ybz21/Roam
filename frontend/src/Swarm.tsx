@@ -13,6 +13,7 @@ import { api, upload } from './api'
 import { DirPicker, recentDirs, pushRecentDir } from './App'
 import { useI18n } from './i18n'
 import Markdown from './Markdown'
+import { useLayout } from './layout'
 
 // ── 配色（与 App.tsx 一致） ──
 const C = {
@@ -1034,8 +1035,8 @@ function NodeDrawer({ swarm, member, detail, cards, posts, openTerm, onClose, on
   const pend = detail?.pending.find((x) => x.name === member)
   const session = isMaster ? (detail?.supervisor || `cc-${swarm}`) : m?.session || `${swarm}-${member}`
   // 抽屉至少占屏宽一半（窄屏则占满）
-  const winW = typeof window !== 'undefined' ? window.innerWidth : 800
-  const drawerW = Math.min(winW, Math.max(520, Math.round(winW * 0.5)))
+  const { phone } = useLayout()
+  const drawerW = phone ? '100%' : 'min(100vw, max(520px, 50vw))'
   // 初始化指令（成员收到的提示词 / master 的目标），按 markdown 渲染
   const initCmd = isMaster ? (detail?.goal ? `**${t('swarm.goal')}**\n\n${detail.goal}` : '') : (m?.task || '')
 

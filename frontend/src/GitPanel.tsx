@@ -19,6 +19,7 @@ import {
   PlusIcon, RefreshIcon, RowAct, Section, SyncIcon,
 } from './git/parts'
 import type { RawCommit } from './git/graph'
+import { useLayout } from './layout'
 
 const WorktreePanel = lazy(() => import('./WorktreePanel'))
 
@@ -132,11 +133,10 @@ export default function GitPanel({ dir, accent = '#58a6ff', onClose, openTerm, i
   // 详情列在宽屏贴面板左侧，窄屏整屏推入（92vw 抽屉上再叠浮层会两侧各露一条缝）。
   // 面板宽度各处不同（会话 420 / 项目 520），所以量自己的左边缘，别写死。
   const panelRef = useRef<HTMLDivElement>(null)
-  const [wide, setWide] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 900)
+  const { desktop: wide } = useLayout()
   const [panelLeft, setPanelLeft] = useState(0)
   useEffect(() => {
     const on = () => {
-      setWide(window.innerWidth >= 900)
       const r = panelRef.current?.getBoundingClientRect()
       if (r) setPanelLeft(r.left)
     }

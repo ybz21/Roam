@@ -2,13 +2,14 @@
 // 会话名、切回终端、文件面板都在上方的会话工具条里，这里不再重复一行头部。
 // Claude、Codex 共用，差异只在 accent、占位文案与消息渲染(renderMessage)。
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Button, Grid, Input, App as AntApp } from 'antd'
+import { Button, Input, App as AntApp } from 'antd'
 import { api, upload, makeClipboardImageFile } from '../api'
 import { PromptPanel, detectPrompt } from '../prompt'
 import { usePreferences } from '../preferences'
 import { useI18n } from '../i18n'
 import { VoiceInput } from './VoiceInput'
 import type { Msg } from './types'
+import { useLayout } from '../layout'
 
 export function ChatShell({ name, accent, placeholder, messages, renderMessage, pending, busy, error }: {
   name: string
@@ -33,8 +34,8 @@ export function ChatShell({ name, accent, placeholder, messages, renderMessage, 
   const atBottom = useRef(true)
   const { message } = AntApp.useApp()
   const { t } = useI18n()
-  const screens = Grid.useBreakpoint()
-  const isMobile = !screens.md // 手机窄屏：输入区换成「文本框独占一行 + 按钮行」竖排，避免挤成一坨
+  // 手机窄屏：输入区换成「文本框独占一行 + 按钮行」竖排，避免挤成一坨
+  const { phone: isMobile } = useLayout()
   // 语音按钮的显隐跟终端工具条那颗「语音输入」开关是同一个偏好：关了就整个页面都不出现麦克风。
   const [prefs] = usePreferences()
   const showVoice = prefs.showVoiceButton !== false

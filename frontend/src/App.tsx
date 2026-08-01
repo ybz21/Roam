@@ -6,7 +6,7 @@
 import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import {
   Layout, Menu, Button, Card, List, Tag, Form, Input, Select, Segmented, Tabs, Descriptions,
-  Statistic, Row, Col, Space, Popconfirm, Empty, Modal, Grid, App as AntApp, Typography, Spin, Tooltip, Dropdown, Checkbox, Progress, AutoComplete, Radio, Switch, Collapse, InputNumber,
+  Statistic, Row, Col, Space, Popconfirm, Empty, Modal, App as AntApp, Typography, Spin, Tooltip, Dropdown, Checkbox, Progress, AutoComplete, Radio, Switch, Collapse, InputNumber,
 } from 'antd'
 import { QRCodeSVG } from 'qrcode.react'
 import { api, upload, makeClipboardImageFile, setUnauthorizedHandler } from './api'
@@ -37,6 +37,8 @@ import { usePwaInstall } from './install'
 import { usePreferences, savePreferences, loadPreferences } from './preferences'
 import { PromptDialog, advancePromptSignal, detectPrompt } from './prompt'
 import type { PromptSignal } from './prompt'
+import { useLayout } from './layout'
+import { PromptDialog, detectPrompt } from './prompt'
 import { copyText } from './chat/blocks'
 import { SessionTitle, setSessionLabels, updateSessionLabel, useSessionLabel, sessionLabel, sessionDisplay } from './session-label'
 import { VoiceInput } from './chat/VoiceInput'
@@ -47,7 +49,6 @@ import { PointerResizeShield, usePointerResize } from './PointerResize'
 interface ClaudeInfo { running: boolean; file?: string; dir?: string }
 
 const { Sider, Content } = Layout
-const { useBreakpoint } = Grid
 const { Text } = Typography
 
 // 「会话」「蜂群」不再进导航：项目页是唯一主入口（任务驱动，08 设计）——
@@ -208,8 +209,7 @@ function FilesPage({ openTerm }: { openTerm: (name: string) => void }) {
   const [prefs] = usePreferences()
   // 手机(窄屏)两级导航：一级整页文件列表，点文件后详情以全屏二级页(MobileSubPage)展开；
   // 桌面仍是 FileWorkspace(文件树 dock + 多 tab 编辑)。
-  const screens = useBreakpoint()
-  const isMobile = !screens.md
+  const { phone: isMobile } = useLayout()
   const [mobileFile, setMobileFile] = useState<string | null>(null)
   const openAgent = async (kind: 'claude' | 'codex', file: string) => {
     const base = pathBasename(file).replace(/[^a-zA-Z0-9_.-]+/g, '-').slice(0, 28) || 'file'
@@ -266,9 +266,7 @@ export default function App() {
     ? svg(<><circle cx="12" cy="12" r="4.2" /><path d="M12 2v2.2M12 19.8V22M4.2 4.2l1.6 1.6M18.2 18.2l1.6 1.6M2 12h2.2M19.8 12H22M4.2 19.8l1.6-1.6M18.2 5.8l1.6-1.6" /></>)
     : svg(<><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z" /></>)
   const [collapsed, setCollapsed] = useState(false)
-  const screens = useBreakpoint()
-  const hasSider = !!screens.md
-  const isMobile = !screens.md
+  const { phone: isMobile, desktop: hasSider } = useLayout()
   // 全屏（平板更易用：隐藏浏览器栏，等价 F11）。监听变化以同步按钮图标
   const [isFs, setIsFs] = useState(false)
   useEffect(() => {
@@ -864,7 +862,7 @@ function TerminalPane(props: {
 
   // 移动端可靠输入：xterm 隐藏 textarea 在软键盘/输入法「合成/预测词」下会把字留在
   // 合成缓冲里不提交，onData 不触发 → 打完字发不出去。触摸设备改用独立输入框：整行送 PTY。
-  const isTouch = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches
+  const { coarse: isTouch } = useLayout()
   const [line, setLine] = useState('')
   const mobileInputRef = useRef<import('antd').InputRef>(null)
   const sendRaw = (s: string) => { if (active) termRefs.current[active]?.send(s, true) } // keepFocus：不抢 xterm 焦点 → 软键盘不收起
@@ -2187,7 +2185,7 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
   })
 
   // ── W2 仓库分组：同仓库 ≥2 个 worktree 会话聚组，组头可折叠(记 localStorage) ──
-  const screens = useBreakpoint()
+  const { desktop: wide } = useLayout()
   const [wtCollapsed, setWtCollapsed] = useState<Record<string, boolean>>(() => {
     try { return JSON.parse(localStorage.getItem('ttmux_wt_groups') || '{}') } catch { return {} }
   })
@@ -2416,10 +2414,10 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
                               <Tooltip title={tip}>
                                 <Tag color="cyan" style={{ margin: 0, flex: '0 0 auto', cursor: 'pointer', fontFamily: 'ui-monospace, monospace' }}
                                   onClick={(e) => { e.stopPropagation(); setWtDir(ann.primary.repo); setWtOpen(true) }}>
-                                  {screens.md ? `⎇ ${ann.primary.branch}` : '⎇'}{ann.ambiguous ? ' +' : ''}
+                                  {wide ? `⎇ ${ann.primary.branch}` : '⎇'}{ann.ambiguous ? ' +' : ''}
                                 </Tag>
                               </Tooltip>
-                              {ann.primary.external && <Tag style={{ margin: 0, flex: '0 0 auto' }}>⧉ {screens.md ? t('worktree.external') : ''}</Tag>}
+                              {ann.primary.external && <Tag style={{ margin: 0, flex: '0 0 auto' }}>⧉ {wide ? t('worktree.external') : ''}</Tag>}
                             </>)
                           })()}
                           {sw && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>{t('nav.swarm')}:{sw.swarm}{sw.role === 'leader' ? `·${t('swarm.master')}` : ''}</Tag>}
@@ -2437,7 +2435,7 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
                       </div>
                     </div>
                     <div onClick={(e) => e.stopPropagation()} style={{ marginLeft: 'auto', display: 'flex', gap: 14, alignItems: 'center', flex: '0 0 auto', whiteSpace: 'nowrap' }}>
-                      {!sw && screens.md && <a onClick={() => setForking(s.name)}>{t('session.fork.entry')}</a>}
+                      {!sw && wide && <a onClick={() => setForking(s.name)}>{t('session.fork.entry')}</a>}
                       {sw && <a onClick={() => goSwarm(sw.swarm)}>{t('session.swarmPage')}</a>}
                       {sw ? (
                         <Popconfirm
