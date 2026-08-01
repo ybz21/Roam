@@ -20,6 +20,12 @@
 | 8 | [08-project.md](./08-project.md) | **项目概念** — 仓库即项目、composer 开干、任务=会话∪孤儿 worktree、待收尾一等 |
 | 9 | [09-swarm-in-project.md](./09-swarm-in-project.md) | **蜂群×项目创建动线** — 表单产出上下文不产出结构、开场白注入班子建议与 worktree 约定 |
 | 10 | [10-merge-detect-finish.md](./10-merge-detect-finish.md) | **已合入检测与收尾** — 周期 fetch 远端主干、ancestry/cherry 双信号识别 merge/squash、「待收尾」拆成 未合并·待决策 / 已合入·待清理 |
+| 11 | [11-git-panel.md](./11-git-panel.md) | **Git 面板重做** — 提交树 / 分支页 / worktree 分叉图 |
+| 12 | [12-session-navbar.md](./12-session-navbar.md) | **会话导航栏重做** — 标签条 / 工具条统一为一套线性语言 |
+| 13 | [13-mobile-responsive.md](./13-mobile-responsive.md) | **移动端响应式布局重做** — 四档断点与密度令牌、底栏＋会话坞、会话页 chrome 压缩、逐页塌陷规则（**取代 04 §2 的三档方案**） |
+| 14 | [14-desktop-workspace.md](./14-desktop-workspace.md) | **桌面工作区优化** — Workspace Shell、Page / Split / Focus、概览优先级、超宽屏与键盘调度 |
+
+> 13 与 14 是同一套壳的两端：**断点、密度与全局令牌以 13 为准，`large ≥ 1280` 之内的桌面形态以 14 为准**。
 
 ## 实现状态
 

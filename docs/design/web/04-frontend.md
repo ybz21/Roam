@@ -33,6 +33,11 @@ web/                        Vite 项目根
 
 ## 2. 响应式布局系统
 
+> **本节已被 [13-mobile-responsive](./13-mobile-responsive.md) 取代。**
+> 下面的三档方案是设计初稿，实现出来的是「散在 6 处的一个 `!screens.md` 布尔量」。
+> 断点划分、令牌、导航形态与会话页布局一律以 13 为准；`large ≥ 1280` 的桌面形态见
+> [14-desktop-workspace](./14-desktop-workspace.md)。
+
 **断点**对齐 Antd `Grid.useBreakpoint()`：`xs<576 / sm / md768 / lg992 / xl1200 / xxl1600`。
 实践三档：`mobile < md`、`tablet md–xl`、`desktop ≥ xl`。
 
