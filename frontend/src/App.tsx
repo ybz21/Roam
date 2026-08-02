@@ -43,6 +43,7 @@ import LinkStatus from './p2p/LinkStatus'
 import { startControlLink, stopControlLink } from './p2p/transport'
 import { PointerResizeShield, usePointerResize } from './PointerResize'
 import { PaneCloseConfirm, type PaneCloseTarget } from './PaneCloseConfirm'
+import { CommandPalette } from './CommandPalette'
 
 interface ClaudeInfo { running: boolean; file?: string; dir?: string }
 
@@ -130,36 +131,45 @@ const KEYS: [string, string][] = [
 ]
 
 // tmux 基操菜单：前缀键 C-b(\x02) + 命令键，直接发给 tmux attach
-// （key 即要发送的字节序列，onClick 时原样发出）
+// （key 即要发送的字节序列，onClick 时原样发出）。hint 是人类可读的按键提示，
+// 手写字面量，不做转义序列反解析——命令面板用它展示"快捷键"这一列。
 const PFX = '\x02'
 const tmuxMenu = (t: (key: string) => string) => [
   { type: 'group', label: t('tmux.split'), children: [
-    { key: PFX + '%', label: t('tmux.splitVertical') },
-    { key: PFX + '"', label: t('tmux.splitHorizontal') },
+    { key: PFX + '%', label: t('tmux.splitVertical'), hint: 'Ctrl-b %' },
+    { key: PFX + '"', label: t('tmux.splitHorizontal'), hint: 'Ctrl-b "' },
   ]},
   { type: 'group', label: t('tmux.pane'), children: [
-    { key: PFX + 'o', label: t('tmux.nextPane') },
-    { key: PFX + '\x1b[A', label: t('tmux.selectPaneUp') },
-    { key: PFX + '\x1b[B', label: t('tmux.selectPaneDown') },
-    { key: PFX + '\x1b[D', label: t('tmux.selectPaneLeft') },
-    { key: PFX + '\x1b[C', label: t('tmux.selectPaneRight') },
-    { key: PFX + 'z', label: t('tmux.zoomPane') },
-    { key: PFX + ' ', label: t('tmux.switchLayout') },
-    { key: PFX + 'x', label: t('tmux.closePane'), danger: true },
+    { key: PFX + 'o', label: t('tmux.nextPane'), hint: 'Ctrl-b o' },
+    { key: PFX + '\x1b[A', label: t('tmux.selectPaneUp'), hint: 'Ctrl-b ↑' },
+    { key: PFX + '\x1b[B', label: t('tmux.selectPaneDown'), hint: 'Ctrl-b ↓' },
+    { key: PFX + '\x1b[D', label: t('tmux.selectPaneLeft'), hint: 'Ctrl-b ←' },
+    { key: PFX + '\x1b[C', label: t('tmux.selectPaneRight'), hint: 'Ctrl-b →' },
+    { key: PFX + 'z', label: t('tmux.zoomPane'), hint: 'Ctrl-b z' },
+    { key: PFX + ' ', label: t('tmux.switchLayout'), hint: 'Ctrl-b Space' },
+    { key: PFX + 'x', label: t('tmux.closePane'), hint: 'Ctrl-b x', danger: true },
   ]},
   { type: 'group', label: t('tmux.window'), children: [
-    { key: PFX + 'c', label: t('tmux.newWindow') },
-    { key: PFX + 'n', label: t('tmux.nextWindow') },
-    { key: PFX + 'p', label: t('tmux.prevWindow') },
-    { key: PFX + 'w', label: t('tmux.windowList') },
-    { key: PFX + ',', label: t('tmux.renameWindow') },
+    { key: PFX + 'c', label: t('tmux.newWindow'), hint: 'Ctrl-b c' },
+    { key: PFX + 'n', label: t('tmux.nextWindow'), hint: 'Ctrl-b n' },
+    { key: PFX + 'p', label: t('tmux.prevWindow'), hint: 'Ctrl-b p' },
+    { key: PFX + 'w', label: t('tmux.windowList'), hint: 'Ctrl-b w' },
+    { key: PFX + ',', label: t('tmux.renameWindow'), hint: 'Ctrl-b ,' },
   ]},
   { type: 'group', label: t('tmux.other'), children: [
-    { key: PFX + '[', label: t('tmux.copyMode') },
-    { key: PFX + 'd', label: t('tmux.detach') },
-    { key: PFX + 't', label: t('tmux.clock') },
+    { key: PFX + '[', label: t('tmux.copyMode'), hint: 'Ctrl-b [' },
+    { key: PFX + 'd', label: t('tmux.detach'), hint: 'Ctrl-b d' },
+    { key: PFX + 't', label: t('tmux.clock'), hint: 'Ctrl-b t' },
   ]},
 ] as const
+
+export interface TmuxAction { key: string; label: string; hint: string; danger?: boolean; group: string }
+
+// flattenTmuxMenu：命令面板的数据源，把分组结构摊平成一份可搜索列表，group 字段
+// 保留分组名供面板当"作用域"展示——tmuxMenu(t) 本身仍是唯一真相源，不建第二份清单。
+export function flattenTmuxMenu(groups: ReturnType<typeof tmuxMenu>): TmuxAction[] {
+  return groups.flatMap((g) => g.children.map((c) => ({ ...c, group: g.label })))
+}
 
 function StatusTag({ status, code }: { status?: string; code?: string }) {
   const { t } = useI18n()
@@ -798,6 +808,10 @@ const TI = {
   toBottom: tIcon(<><path d="M4.5 19.5h15" /><path d="M12 4v11" /><path d="m7.5 10.5 4.5 4.5 4.5-4.5" /></>),
   redraw: tIcon(<><path d="M20 12a8 8 0 1 1-2.6-5.9" /><path d="M20.5 4v5h-5" /></>),
   reconnect: tIcon(<><path d="M10.4 13.6a4.2 4.2 0 0 0 6 0l2.4-2.4a4.2 4.2 0 0 0-6-6l-1.4 1.4" /><path d="M13.6 10.4a4.2 4.2 0 0 0-6 0l-2.4 2.4a4.2 4.2 0 0 0 6 6l1.4-1.4" /></>),
+  splitV: tIcon(<><rect x="3.5" y="4.5" width="17" height="15" rx="2" /><path d="M12 4.5v15" /></>),
+  splitH: tIcon(<><rect x="3.5" y="4.5" width="17" height="15" rx="2" /><path d="M3.5 12h17" /></>),
+  zoomPane: tIcon(<><path d="M9 4.5H5.5A1.5 1.5 0 0 0 4 6v3.5" /><path d="M15 4.5h3.5A1.5 1.5 0 0 1 20 6v3.5" /><path d="M9 19.5H5.5A1.5 1.5 0 0 1 4 18v-3.5" /><path d="M15 19.5h3.5a1.5 1.5 0 0 0 1.5-1.5v-3.5" /></>),
+  palette: tIcon(<><circle cx="11" cy="11" r="7.5" /><path d="m16.3 16.3 4.2 4.2" /></>),
 }
 // Claude / Codex 的会话标记：原来用 ✳ ✸ 两个字符，字重与基线都对不齐；改成同尺寸的品牌感 mark。
 function AgentMark({ kind, size = 13 }: { kind: 'claude' | 'codex'; size?: number }) {
@@ -877,6 +891,23 @@ function TerminalPane(props: {
       setPaneCloseBusy(false)
     }
   }
+  // 命令面板 + 工具栏常驻按钮共用的唯一执行出口：危险项（目前只有关闭当前窗格）
+  // 走结构化确认流程，其余原样 sendKey——跟原来 Dropdown onClick 的判断逻辑一致，只是抽出来复用。
+  const runTmuxAction = (key: string) => { if (key === PFX + 'x') openPaneCloseConfirm(); else sendKey(key) }
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  // 捕获阶段拦截：终端聚焦时 xterm 自己的按键处理会把 Ctrl/Cmd+K 当原始 ^K 发进 shell，
+  // 必须在事件到达 xterm 的隐藏 textarea 之前（capture:true 在冒泡阶段更早触发）拦下并 preventDefault。
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!active) return
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteOpen(true)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown, { capture: true })
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true })
+  }, [active])
   const activeNeedsInput = !!(active && termNeedsInput[active])
   const dot = activeNeedsInput ? '#d29922' : st === 'connected' ? '#3fb950' : st === 'connecting' ? '#d29922' : '#f85149'
   // 当前标签是否在 Claude/Codex 对话视图：此时聊天 UI 自带输入框，
@@ -1204,9 +1235,12 @@ function TerminalPane(props: {
           title={t('chat.switchToCodex')} onClick={() => setCodexView((v) => ({ ...v, [active!]: !v[active!] }))} />
       )}
       <span className="tt-sep" />
-      <Dropdown trigger={['click']} menu={{ items: tmuxMenu(t) as any, onClick: ({ key }) => { if (key === PFX + 'x') openPaneCloseConfirm(); else sendKey(key) } }} placement="bottomLeft">
-        <button type="button" className="tt-tbtn">{TI.tmux}<span>tmux</span><span style={{ color: 'var(--text-dimmer)', fontSize: 9 }}>▼</span></button>
-      </Dropdown>
+      {/* 常驻高频动作（P1「Command Palette」三层里的第一层）：只留分屏×2 + 最大化-还原，
+          其余 15 项全部收进下面的命令面板，不再堆一个 18 项的长下拉。 */}
+      <TBtn icon={TI.splitV} title={t('tmux.splitVertical')} onClick={() => sendKey(PFX + '%')} />
+      <TBtn icon={TI.splitH} title={t('tmux.splitHorizontal')} onClick={() => sendKey(PFX + '"')} />
+      <TBtn icon={TI.zoomPane} title={t('tmux.zoomPane')} onClick={() => sendKey(PFX + 'z')} />
+      <TBtn icon={TI.palette} label={t('palette.trigger')} title={t('palette.triggerTitle')} onClick={() => setPaletteOpen(true)} />
       {active && (
         <TBtn icon={TI.newTab} label={t('terminal.newTab')} title={t('terminal.openInNewTabTitle')}
           onClick={() => window.open(`/#/term/${encodeURIComponent(active)}`, '_blank')} />
@@ -1398,6 +1432,10 @@ function TerminalPane(props: {
           onConfirm={confirmPaneClose} onCancel={() => setPaneCloseTarget(null)}
         />
       )}
+      <CommandPalette
+        open={paletteOpen} actions={flattenTmuxMenu(tmuxMenu(t))}
+        onSelect={runTmuxAction} onClose={() => setPaletteOpen(false)}
+      />
     </div>
   )
 }
