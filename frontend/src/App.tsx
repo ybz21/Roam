@@ -42,6 +42,7 @@ import { VoiceInput } from './chat/VoiceInput'
 import LinkStatus from './p2p/LinkStatus'
 import { startControlLink, stopControlLink } from './p2p/transport'
 import { PointerResizeShield, usePointerResize } from './PointerResize'
+import { PaneCloseConfirm, type PaneCloseTarget } from './PaneCloseConfirm'
 
 interface ClaudeInfo { running: boolean; file?: string; dir?: string }
 
@@ -846,6 +847,36 @@ function TerminalPane(props: {
   const { t } = useI18n()
   const st = active ? statusMap[active] : undefined
   const [termNeedsInput, setTermNeedsInput] = useState<Record<string, boolean>>({})
+  // 危险操作目标可视化 / 就地确认：关闭 pane 前先定位目标（几何+cwd+前台进程），
+  // confirm 走结构化后端接口，不再盲发 Ctrl-b x 字节（那样只会撞上 tmux 底部原生 y/n 提示）。
+  const [paneCloseTarget, setPaneCloseTarget] = useState<PaneCloseTarget | null>(null)
+  const [paneCloseBusy, setPaneCloseBusy] = useState(false)
+  const [paneCloseError, setPaneCloseError] = useState<string>()
+  const openPaneCloseConfirm = async () => {
+    if (!active) return
+    try {
+      const r = await api('GET', `/sessions/${encodeURIComponent(active)}/panes/active`)
+      const p = r.data
+      const rect = termRefs.current[active]?.paneScreenRect(p)
+      if (!rect) { message.error(t('pane.close.locateFailed')); return }
+      setPaneCloseError(undefined)
+      setPaneCloseTarget({ session: active, paneId: p.paneId, cwd: p.cwd, cmd: p.cmd, panesInWindow: p.panesInWindow, rect })
+    } catch {
+      message.error(t('pane.close.locateFailed'))
+    }
+  }
+  const confirmPaneClose = async () => {
+    if (!paneCloseTarget) return
+    setPaneCloseBusy(true)
+    try {
+      await api('POST', `/sessions/${encodeURIComponent(paneCloseTarget.session)}/panes/${encodeURIComponent(paneCloseTarget.paneId)}/close`, {})
+      setPaneCloseTarget(null)
+    } catch (e: any) {
+      setPaneCloseError(e?.message || t('pane.close.failed'))
+    } finally {
+      setPaneCloseBusy(false)
+    }
+  }
   const activeNeedsInput = !!(active && termNeedsInput[active])
   const dot = activeNeedsInput ? '#d29922' : st === 'connected' ? '#3fb950' : st === 'connecting' ? '#d29922' : '#f85149'
   // 当前标签是否在 Claude/Codex 对话视图：此时聊天 UI 自带输入框，
@@ -1173,7 +1204,7 @@ function TerminalPane(props: {
           title={t('chat.switchToCodex')} onClick={() => setCodexView((v) => ({ ...v, [active!]: !v[active!] }))} />
       )}
       <span className="tt-sep" />
-      <Dropdown trigger={['click']} menu={{ items: tmuxMenu(t) as any, onClick: ({ key }) => sendKey(key) }} placement="bottomLeft">
+      <Dropdown trigger={['click']} menu={{ items: tmuxMenu(t) as any, onClick: ({ key }) => { if (key === PFX + 'x') openPaneCloseConfirm(); else sendKey(key) } }} placement="bottomLeft">
         <button type="button" className="tt-tbtn">{TI.tmux}<span>tmux</span><span style={{ color: 'var(--text-dimmer)', fontSize: 9 }}>▼</span></button>
       </Dropdown>
       {active && (
@@ -1361,6 +1392,12 @@ function TerminalPane(props: {
           <GitPanel dir={cwd} accent="#58a6ff" onClose={() => setShowGit(false)} />
         </Suspense>
       </FloatingFileDrawer>
+      {paneCloseTarget && (
+        <PaneCloseConfirm
+          target={paneCloseTarget} busy={paneCloseBusy} error={paneCloseError}
+          onConfirm={confirmPaneClose} onCancel={() => setPaneCloseTarget(null)}
+        />
+      )}
     </div>
   )
 }

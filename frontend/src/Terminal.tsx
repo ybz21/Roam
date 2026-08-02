@@ -9,6 +9,7 @@ import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
 // 终端符号补字集（约 46KB，仅覆盖框线/箭头/技术符号等区段）：见 FONT_FAMILY 的说明
 import './assets/fonts/roam-symbols.css'
+import { paneCellsToPixelRect } from './terminal-geometry'
 
 export type TermStatus = 'connecting' | 'connected' | 'closed'
 export interface TermHandle {
@@ -23,6 +24,8 @@ export interface TermHandle {
   toBottom: () => void
   // 按视口坐标激活该处的 tmux pane（分窗时拖放/点击定位到正确窗格）
   selectPaneAt: (clientX: number, clientY: number) => void
+  // 把后端返回的 pane 几何（tmux cell 坐标）换算成视口像素矩形，供目标高亮/就地确认卡定位
+  paneScreenRect: (pane: { left: number; top: number; width: number; height: number }) => { x: number; y: number; width: number; height: number } | null
   // 尺寸抖动(cols−1→cols)触发两次 SIGWINCH，逼全屏 TUI 整屏重排重绘。
   // 窄屏(手机)下 Claude Code 等 ink TUI 折行重绘错位会满屏堆叠垃圾行，等价于「拖一下窗口就好了」。
   redraw: () => void
@@ -206,6 +209,15 @@ const Term = forwardRef<TermHandle, {
     }, 150)
   }
 
+  // 后端 pane 几何是 tmux cell 坐标(#{pane_left}/#{pane_top}/#{pane_width}/#{pane_height})，
+  // 换算成视口像素矩形用来套高亮框/锚定确认卡。复用 cellSize() 而不是重新量一遍，
+  // 避免高亮框和 select-pane 用了两套不一致的换算。
+  const paneScreenRect = (pane: { left: number; top: number; width: number; height: number }) => {
+    const m = cellSize()
+    if (!m) return null
+    return paneCellsToPixelRect({ left: m.rect.left, top: m.rect.top, cellWidth: m.cw, cellHeight: m.ch }, pane)
+  }
+
   const selectPaneAtClient = (clientX: number, clientY: number) => {
     const ws = wsRef.current, cell = cellAt(clientX, clientY)
     if (!cell || !ws || ws.readyState !== 1) return
@@ -360,6 +372,7 @@ const Term = forwardRef<TermHandle, {
     scroll: (lines) => sendScroll(lines < 0 ? 'up' : 'down', Math.abs(lines)),
     toBottom: () => sendScroll('bottom', 0),
     selectPaneAt: (clientX, clientY) => selectPaneAtClient(clientX, clientY),
+    paneScreenRect: (pane) => paneScreenRect(pane),
     redraw: () => jiggleResize(),
   }))
 
