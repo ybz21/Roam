@@ -157,6 +157,51 @@ body {
 .tt-split-rail:focus-visible::after { height: 78px; opacity: 1; background: #58a6ff; }
 .tt-split-rail:focus-visible { outline: 2px solid #58a6ff; outline-offset: -1px; }
 
+/* ── expanded 档（905–1279）的覆盖式终端面板（13 §13.1）──
+   这一档并排最多只能挤出 561–735 的 Canvas，正是要消灭的「页面被压成预览条」。
+   所以终端改成从右侧覆盖：Canvas 布局在开合前后完全不变，概览不会跳列。
+   遮罩只盖工作区（导航轨和顶栏留着）——「上下文不消失」在覆盖态同样成立。 */
+.tt-dock-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: calc(var(--z-sheet) - 1);
+  background: rgba(1, 4, 9, .5);
+  animation: ttScrimIn .18s ease;
+}
+@keyframes ttScrimIn { from { opacity: 0; } }
+@keyframes ttDockIn { from { transform: translateX(24px); opacity: .4; } }
+
+/* 会话胶囊：面板收起后右下角的入口，等价于手机上的会话坞。50 高是设计定的，
+   刚好一行「项目 · 会话」，比 FAB 多一个"当前在哪个会话"的信息量。 */
+.tt-session-capsule {
+  position: absolute;
+  right: 16px;
+  bottom: calc(16px + var(--safe-b));
+  z-index: var(--z-fab);
+  height: 50px;
+  max-width: min(320px, 60%);
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 25px;
+  background: var(--bg-container);
+  color: var(--text-bright);
+  font-size: var(--fs-meta);
+  box-shadow: 0 6px 20px rgba(1, 4, 9, .45);
+  cursor: pointer;
+  transition: border-color .15s, transform .15s;
+}
+.tt-session-capsule:hover { border-color: rgba(88, 166, 255, .5); transform: translateY(-1px); }
+.tt-session-capsule .d { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: #3fb950; }
+.tt-session-capsule .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-session-capsule .n {
+  flex: 0 0 auto; min-width: 18px; height: 18px; padding: 0 5px;
+  display: grid; place-items: center; border-radius: 9px;
+  background: #1f6feb; color: #fff; font-size: 10.5px;
+}
+
 /* ── Canvas 容器查询（14 §5.3 / §5.4）──
    概览的列数、活动侧轨要跟「Canvas 实际有多宽」走，不跟 viewport 走：终端开合只
    改 Canvas，1920 开着 768 的 Dock 时可用宽只有 920，此时还按 viewport 排三列必挤。

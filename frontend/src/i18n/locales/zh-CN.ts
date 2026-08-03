@@ -45,6 +45,7 @@ const zhCN = {
   'nav.terminal': '终端',
   'workspace.resizeDock': '调整终端宽度',
   'workspace.focusDock': '终端聚焦',
+  'workspace.terminalPanel': '终端面板',
   'workspace.exitFocus': '返回分栏',
   'mobile.groupTools': '工具',
   'mobile.groupAccount': '账户',

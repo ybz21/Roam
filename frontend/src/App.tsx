@@ -39,7 +39,7 @@ import { PromptDialog, advancePromptSignal, detectPrompt } from './prompt'
 import type { PromptSignal } from './prompt'
 import { useLayout } from './layout'
 import { useWorkspaceLayout } from './shell/useWorkspaceLayout'
-import { SplitWorkspace } from './shell/SplitWorkspace'
+import { Workspace, SessionCapsule } from './shell/Workspace'
 import { MobileSheet, SheetRow, SheetSection } from './shell/MobileSheet'
 import { WorkspaceTopbar, type PaletteItem } from './shell/WorkspaceTopbar'
 import { copyText } from './chat/blocks'
@@ -327,8 +327,15 @@ export default function App() {
         else { space.setFocus('none'); space.toggleDock() }
         return
       }
-      // Esc 只退出聚焦：不关终端、不离开页面
-      if (e.key === 'Escape' && space.focus !== 'none') space.setFocus('none')
+      // Esc 收一层：覆盖态先收面板，聚焦态退回分栏。两者都不关终端、不离开页面。
+      //
+      // 注意这里**不需要**判断焦点在不在终端里：xterm 在捕获阶段就 stopPropagation
+      // 了 Escape，事件根本冒泡不到 window。于是天然是对的——在 vim/Claude 里按 Esc
+      // 进 TUI，焦点在页面上按 Esc 才收面板。改这段前先确认这条前提还成立。
+      if (e.key === 'Escape') {
+        if (space.mode === 'overlay') space.setDockOpen(false)
+        else if (space.focus !== 'none') space.setFocus('none')
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -659,26 +666,25 @@ export default function App() {
           />
         )}
         {hasSider && terms.length > 0 ? (
-          space.mode === 'split' ? (
-            <SplitWorkspace
-              canvas={canvasNode} dock={dockNode}
-              dockWidth={space.dockWidth} bounds={space.bounds}
-              onResize={space.setDockWidth} onReset={space.resetDockWidth}
-            />
-          ) : (
-            // Page（Dock 收起）与 Focus（Dock 铺满）共用一套 flex，只是两边的 basis 互换
-            <div style={{ display: 'flex', height: '100dvh', minHeight: 0 }}>
-              <div style={{
-                flex: space.mode === 'focus' ? '0 0 0px' : '1 1 auto', width: space.mode === 'focus' ? 0 : undefined,
-                minWidth: 0, height: '100dvh', overflow: 'hidden', display: 'flex', flexDirection: 'column',
-              }}>{canvasNode}</div>
-              <div style={{
-                flex: space.mode === 'focus' ? '1 1 auto' : '0 0 0px', width: space.mode === 'focus' ? undefined : 0,
-                minWidth: 0, height: '100dvh', overflow: 'hidden', display: 'flex', flexDirection: 'column',
-                background: 'var(--bg-term)',
-              }}>{dockNode}</div>
-            </div>
-          )
+          // 四态（page / split / overlay / focus）都走同一个 Workspace：换的是几何，
+          // 不是组件树，终端因此不会在开合时被卸载重建。
+          <Workspace
+            mode={space.mode} canvas={canvasNode} dock={dockNode}
+            dockWidth={space.dockWidth} bounds={space.bounds}
+            onResize={space.setDockWidth} onReset={space.resetDockWidth}
+            onDismiss={() => space.setDockOpen(false)}
+            capsule={space.overlayCapable && space.mode === 'page' ? (
+              // 胶囊只有 320px，显示 sessionLabel 而不是 sessionDisplay——后者带
+              // 「（会话 id）」后缀，在这个宽度下正好被截在 id 中间，什么也没说清。
+              // 完整名留给 title。（前缀成 `项目 · 会话` 是 14 §7 的统一命名，
+              // 要连 Dock 标签和切换 sheet 一起改，不在这里单独做半套。）
+              <SessionCapsule
+                label={sessionLabel(active) || active} count={terms.length}
+                onOpen={() => { space.setFocus('none'); space.setDockOpen(true) }}
+                title={`${sessionDisplay(active)} · ${t('terminal.expandTitle')} (${modKeyLabel}J)`}
+              />
+            ) : null}
+          />
         ) : (
           <div style={{ display: 'flex', height: '100dvh', minHeight: 0 }}>{canvasNode}</div>
         )}

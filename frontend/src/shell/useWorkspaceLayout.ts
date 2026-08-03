@@ -7,7 +7,7 @@
 // 就被压成 300px。新契约反过来：Canvas 最小 560、Dock 最小 480，谁也不能把对方
 // 挤破；空间不够就整体切 Focus，绝不横向溢出。
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useLayout } from '../layout'
+import { useLayout, type WindowSize } from '../layout'
 import { usePreferences, saveWorkspace } from '../preferences'
 
 /** 尺寸契约，与 index.css 的 --canvas-min / --dock-* 同源（14 §8.2）。 */
@@ -17,8 +17,10 @@ export const DOCK_MAX = 880
 export const SPLIT_RAIL = 8
 export const NAV_WIDTH = 224
 export const NAV_RAIL = 64
+/** expanded 档覆盖式终端面板的宽度（13 §13.1）。 */
+export const OVERLAY_DOCK = 480
 
-export type SpaceMode = 'page' | 'split' | 'focus'
+export type SpaceMode = 'page' | 'split' | 'focus' | 'overlay'
 export type FocusTarget = 'none' | 'page' | 'dock'
 
 /**
@@ -45,6 +47,27 @@ export function canSplit(workspaceWidth: number): boolean {
   return workspaceWidth >= CANVAS_MIN + SPLIT_RAIL + DOCK_MIN
 }
 
+/**
+ * 四态判定（14 §4.1 + 13 §13.1）。抽成纯函数是因为它已经不止两个分支了，
+ * 而「哪一档进哪一态」正是这次最容易改错的地方。
+ *
+ * expanded（905–1279）走 **overlay**：这一档并排最多只能挤出 561–735 的 Canvas，
+ * 正是 14 §2.2 要消灭的「页面被压成预览条」。覆盖式面板换来的是 Canvas 布局在
+ * 终端开合前后完全不变——概览的项目卡不会因为开个终端就跳列。
+ *
+ * Focus 仍然优先于一切：它是用户显式按 ⌘⇧J 要的，不该被档位悄悄改掉。
+ */
+export function resolveMode(o: {
+  hasTerms: boolean; dockOpen: boolean; focus: FocusTarget
+  size: WindowSize; workspaceWidth: number
+}): SpaceMode {
+  if (!o.hasTerms || !o.dockOpen) return 'page'
+  if (o.focus !== 'none') return 'focus'
+  if (o.size === 'large' && canSplit(o.workspaceWidth)) return 'split'
+  if (o.size === 'expanded') return 'overlay'
+  return 'focus'
+}
+
 export type WorkspaceLayout = {
   /** 当前空间状态 */
   mode: SpaceMode
@@ -56,6 +79,8 @@ export type WorkspaceLayout = {
   navCollapsed: boolean
   /** 这一档是否允许并排（expanded 及以下一律覆盖式，见 13 §13.1） */
   splitCapable: boolean
+  /** 这一档的终端是覆盖式面板：收起时右下角留会话胶囊（13 §13.1） */
+  overlayCapable: boolean
   toggleDock: () => void
   setDockOpen: (open: boolean) => void
   setDockWidth: (width: number) => void
@@ -110,12 +135,7 @@ export function useWorkspaceLayout(hasTerms: boolean): WorkspaceLayout {
     return Math.max(bounds.min, Math.min(bounds.max, wish))
   }, [width, viewport, workspaceWidth, bounds])
 
-  const roomForSplit = splitCapable && canSplit(workspaceWidth)
-  const mode: SpaceMode = !hasTerms || !dockOpen
-    ? 'page'
-    : focus !== 'none'
-      ? 'focus'
-      : roomForSplit ? 'split' : 'focus'
+  const mode = resolveMode({ hasTerms, dockOpen, focus, size: layout.size, workspaceWidth })
 
   const setDockOpen = useCallback((open: boolean) => {
     setDockOpenLocal(open)
@@ -146,6 +166,7 @@ export function useWorkspaceLayout(hasTerms: boolean): WorkspaceLayout {
     focus,
     navCollapsed: splitCapable ? navCollapsed : true,
     splitCapable,
+    overlayCapable: layout.size === 'expanded',
     bounds,
     toggleDock: () => setDockOpen(!dockOpen),
     setDockOpen,

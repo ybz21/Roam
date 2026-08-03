@@ -2,8 +2,8 @@
 // 这几条断言直接对应 14 设计 §11 验收清单里的前两行。
 import { describe, it, expect } from 'vitest'
 import {
-  dockBounds, defaultDockWidth, canSplit,
-  CANVAS_MIN, DOCK_MIN, DOCK_MAX, SPLIT_RAIL, NAV_WIDTH, NAV_RAIL,
+  dockBounds, defaultDockWidth, canSplit, resolveMode,
+  CANVAS_MIN, DOCK_MIN, DOCK_MAX, SPLIT_RAIL, NAV_WIDTH, NAV_RAIL, OVERLAY_DOCK,
 } from './useWorkspaceLayout'
 
 /** 工作区宽 = 视口 - 导航（导航展开与否影响很大，1280 档尤其） */
@@ -66,5 +66,40 @@ describe('并排是否成立', () => {
     expect(canSplit(workspace(1279, false))).toBe(true)
     const canvas = workspace(1279, false) - SPLIT_RAIL - DOCK_MIN
     expect(canvas).toBeLessThan(CANVAS_MIN + 200)
+  })
+})
+
+describe('四态判定', () => {
+  const at = (size: 'medium' | 'expanded' | 'large', o: Partial<Parameters<typeof resolveMode>[0]> = {}) =>
+    resolveMode({
+      hasTerms: true, dockOpen: true, focus: 'none', size,
+      workspaceWidth: size === 'large' ? workspace(1440) : workspace(1024, false),
+      ...o,
+    })
+
+  it('没有终端、或 Dock 收起，一律是 Page', () => {
+    expect(at('large', { hasTerms: false })).toBe('page')
+    expect(at('large', { dockOpen: false })).toBe('page')
+    expect(at('expanded', { dockOpen: false })).toBe('page')
+  })
+
+  it('large 并排、expanded 覆盖——同样是"开着终端"，形态不同', () => {
+    expect(at('large')).toBe('split')
+    expect(at('expanded')).toBe('overlay')
+  })
+
+  it('Focus 是用户显式要的，优先于档位', () => {
+    expect(at('large', { focus: 'dock' })).toBe('focus')
+    expect(at('expanded', { focus: 'dock' })).toBe('focus')
+  })
+
+  it('large 但空间不够（导航展开的 1280 以下）退回 Focus，绝不横向溢出', () => {
+    expect(at('large', { workspaceWidth: 1047 })).toBe('focus')
+  })
+
+  it('覆盖式面板 480，与 Dock 下界同宽', () => {
+    // 这一档 Canvas 最窄是 905-64=841，扣掉 480 还剩 361 的可见页面 —— 遮罩下仍看得见上下文
+    expect(OVERLAY_DOCK).toBe(DOCK_MIN)
+    expect(905 - NAV_RAIL - OVERLAY_DOCK).toBeGreaterThan(0)
   })
 })
