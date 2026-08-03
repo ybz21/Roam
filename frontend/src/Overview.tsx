@@ -60,7 +60,7 @@ const OV_CSS = `
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ov-card p{margin:0;height:34px;overflow:hidden;font-size:11.5px;line-height:1.5;color:var(--text-dim);
   font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace}
-.ov-card .go{position:absolute;left:13px;bottom:10px;font-size:11.5px;color:#58a6ff}
+.ov-card .go{position:absolute;left:13px;bottom:10px;font-size:11.5px;color:var(--accent)}
 
 /* 项目卡栅格：阈值看 Canvas，不看 viewport */
 .ov-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}

@@ -93,8 +93,8 @@ const PRJ_CSS = `
 .prj-row:hover{background:var(--list-hover)}
 .prj-row:hover::before{background:rgba(88,166,255,.5)}
 /* 选中行：细蓝边 + 淡底，和 hover 区分得开（14 §6.3.1） */
-.prj-row.on{background:rgba(31,111,235,.10);box-shadow:inset 0 0 0 1px rgba(88,166,255,.45)}
-.prj-row.on::before{background:#58a6ff}
+.prj-row.on{background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent-border)}
+.prj-row.on::before{background:var(--accent)}
 .prj-row .acts{opacity:.55;transition:opacity .15s;display:flex;gap:12px;font-size:12.5px;flex:0 0 auto;margin-top:3px}
 .prj-row:hover .acts{opacity:1}
 .prj-row.warn{background:rgba(210,153,34,.05);border:1px solid rgba(210,153,34,.18);margin-bottom:4px}
@@ -108,7 +108,7 @@ const PRJ_CSS = `
   border:1px solid var(--border);background:transparent;color:var(--text-dim);font-size:12px;
   cursor:pointer;white-space:nowrap;transition:color .15s,border-color .15s,background .15s}
 .prj-chip:hover{color:var(--text-bright);border-color:#8b949e}
-.prj-chip.on{color:#79b8ff;border-color:rgba(56,139,253,.55);background:rgba(31,111,235,.14)}
+.prj-chip.on{color:var(--accent);border-color:var(--accent-border);background:var(--accent-soft)}
 .prj-chip .n{font-family:ui-monospace,monospace;font-size:10.5px;color:var(--text-dimmer)}
 .prj-chip.on .n{color:#79b8ff}
 
@@ -119,7 +119,7 @@ const PRJ_CSS = `
   padding:13px 14px 11px;cursor:pointer;display:flex;flex-direction:column;gap:8px;
   transition:border-color .18s,transform .18s,box-shadow .18s}
 .prj-card:hover{border-color:rgba(88,166,255,.45);transform:translateY(-1px);box-shadow:var(--card-hover-shadow)}
-.prj-card:focus-visible{outline:none;border-color:#58a6ff;box-shadow:0 0 0 3px rgba(31,111,235,.22)}
+.prj-card:focus-visible{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .prj-card .prj-acts{opacity:.25;transition:opacity .15s;display:inline-flex;gap:10px;align-items:center}
 /* 次要操作 hover 才出现，但键盘走到时同样要看得见——否则纯键盘用户够不着（14 §6.1） */
 .prj-card:focus-within .prj-acts,.prj-card:focus-visible .prj-acts{opacity:1}

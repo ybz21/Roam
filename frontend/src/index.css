@@ -17,6 +17,11 @@
   --text-dim: #8b949e;
   --text-dimmer: #6e7681;
   --brand-grad: linear-gradient(180deg, #f5f7fa 0%, #c3c9d1 46%, #9aa1ab 56%, #e7ebef 100%);
+  /* 强调色：全站只有这一组，实心块用 --accent-solid，线/文字用 --accent（见 theme.tsx） */
+  --accent: #58a6ff;
+  --accent-solid: #1f6feb;
+  --accent-soft: rgba(31, 111, 235, .14);
+  --accent-border: rgba(88, 166, 255, .45);
   --list-hover: rgba(255, 255, 255, .025);
   --scroll-thumb: #2a313a;
   --scroll-thumb-hover: #3d444d;
@@ -154,8 +159,8 @@ body {
   transition: height .15s, opacity .15s, background .15s;
 }
 .tt-split-rail:hover::after,
-.tt-split-rail:focus-visible::after { height: 78px; opacity: 1; background: #58a6ff; }
-.tt-split-rail:focus-visible { outline: 2px solid #58a6ff; outline-offset: -1px; }
+.tt-split-rail:focus-visible::after { height: 78px; opacity: 1; background: var(--accent); }
+.tt-split-rail:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
 
 /* ── expanded 档（905–1279）的覆盖式终端面板（13 §13.1）──
    这一档并排最多只能挤出 561–735 的 Canvas，正是要消灭的「页面被压成预览条」。
@@ -193,13 +198,13 @@ body {
   cursor: pointer;
   transition: border-color .15s, transform .15s;
 }
-.tt-session-capsule:hover { border-color: rgba(88, 166, 255, .5); transform: translateY(-1px); }
+.tt-session-capsule:hover { border-color: var(--accent-border); transform: translateY(-1px); }
 .tt-session-capsule .d { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: #3fb950; }
 .tt-session-capsule .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tt-session-capsule .n {
   flex: 0 0 auto; min-width: 18px; height: 18px; padding: 0 5px;
   display: grid; place-items: center; border-radius: 9px;
-  background: #1f6feb; color: #fff; font-size: 10.5px;
+  background: var(--accent-solid); color: #fff; font-size: 10.5px;
 }
 
 /* ── 侧边导航 / Activity Bar（14 §4.4）──
@@ -226,7 +231,7 @@ body {
   background: var(--bg-container); color: var(--text-dim); font-size: var(--fs-meta);
   cursor: pointer; transition: border-color .15s, color .15s;
 }
-.tt-nav-search:hover { border-color: rgba(88, 166, 255, .45); color: var(--text-bright); }
+.tt-nav-search:hover { border-color: var(--accent-border); color: var(--text-bright); }
 .tt-nav-search .ic { display: flex; flex: 0 0 auto; }
 .tt-nav-search .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tt-nav-search kbd {
@@ -258,10 +263,10 @@ body {
 .tt-nav-item .ic { display: flex; flex: 0 0 auto; }
 .tt-nav-item .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 选中态：3px 左强调线 + 低饱和蓝底。整块高亮会把注意力从内容上夺走（14 §4.4） */
-.tt-nav-item.on { background: rgba(31, 111, 235, .13); color: var(--text-bright); }
+.tt-nav-item.on { background: var(--accent-soft); color: var(--text-bright); }
 .tt-nav-item.on::before {
   content: ""; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
-  width: 3px; height: 20px; border-radius: 0 3px 3px 0; background: #58a6ff;
+  width: 3px; height: 20px; border-radius: 0 3px 3px 0; background: var(--accent);
 }
 /* 终端是开关不是页面：给底色，但不给「当前在哪一页」的那条强调线 */
 .tt-nav-item.toggle.on::before { display: none; }
@@ -271,7 +276,7 @@ body {
   background: rgba(210, 153, 34, .18); color: #e3b341;
   font: 700 10.5px/1 ui-monospace, monospace;
 }
-.tt-nav-item .bd.blue { background: #1f6feb; color: #fff; }
+.tt-nav-item .bd.blue { background: var(--accent-solid); color: #fff; }
 /* 轨态 badge 缩成右上角一枚点大小的角标，不挤图标 */
 .tt-nav.rail .tt-nav-item .bd {
   position: absolute; top: 3px; right: 6px; margin: 0; min-width: 15px; height: 15px;
@@ -281,11 +286,13 @@ body {
 .tt-nav-foot { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; border-top: 1px solid var(--border-subtle); }
 .tt-nav-account .av {
   flex: 0 0 auto; width: 26px; height: 26px; display: grid; place-items: center;
-  border-radius: 8px; background: rgba(31, 111, 235, .16); color: #9ccaff;
+  border-radius: 8px; background: var(--accent-soft); color: var(--accent);
   font-size: 12px; font-weight: 800;
 }
 .tt-nav-account .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tt-nav-account .dots { margin-left: auto; flex: 0 0 auto; color: var(--text-dimmer); font-size: 11px; }
+
+.tt-top-create:hover { border-color: var(--accent-border); color: var(--accent); }
 
 /* ── Canvas 容器查询（14 §5.3 / §5.4）──
    概览的列数、活动侧轨要跟「Canvas 实际有多宽」走，不跟 viewport 走：终端开合只
@@ -397,7 +404,7 @@ body {
 /* 插入位提示线：拖到哪个标签左边，线就画在哪 */
 .tt-tab.dropL::before {
   content: ""; position: absolute; left: -2px; top: 3px; bottom: 3px;
-  width: 2px; border-radius: 2px; background: #58a6ff;
+  width: 2px; border-radius: 2px; background: var(--accent);
 }
 .tt-tab-tail { flex: 1 0 24px; align-self: stretch; }
 .tt-tab .tt-x {

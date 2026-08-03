@@ -74,9 +74,13 @@ export function WorkspaceTopbar({ items, online, dockCount, dockOpen, onToggleDo
           }}>{modKey}K</kbd>
         </button>
 
-        <button onClick={onCreate} style={{
-          marginLeft: 'auto', height: 28, padding: '0 11px', border: 0, borderRadius: 6,
-          color: '#fff', background: '#1f6feb', fontSize: 12, cursor: 'pointer',
+        {/* 次级样式，不是实心主按钮：页面自己的 sticky 工具条里几乎总有一枚主按钮
+            （＋新项目 / ＋开始），两者上下相邻时同色同权重会打架，而顶栏这枚只是
+            "去新建的地方"，层级本来就低一档。 */}
+        <button onClick={onCreate} className="tt-top-create" style={{
+          marginLeft: 'auto', height: 28, padding: '0 11px', borderRadius: 6,
+          border: '1px solid var(--border)', color: 'var(--text-bright)',
+          background: 'var(--bg-container)', fontSize: 12, cursor: 'pointer',
         }}>＋ {t('common.create')}</button>
 
         <span title={online ? t('workspace.online') : t('workspace.offline')} style={{
