@@ -127,6 +127,12 @@ function start() {
   }
   window.addEventListener('resize', publish)
   window.addEventListener('orientationchange', publish)
+  // VirtualKeyboard API 自己的事件。少了它，--kb 只能靠 resize/visualViewport 顺带刷新——
+  // 真机上抓到过 `env(keyboard-inset-height)` 已经是 314、而 --kb 还停在 0 的状态：
+  // 布局按 314 让了位，吃 --kb 的浮层（sheet、会话坞）却以为键盘没弹。
+  try {
+    (navigator as any).virtualKeyboard?.addEventListener?.('geometrychange', publish)
+  } catch { /* 不支持就靠上面两条兜底 */ }
   const vv = window.visualViewport
   vv?.addEventListener('resize', publish)
   vv?.addEventListener('scroll', publish)

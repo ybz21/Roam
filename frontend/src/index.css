@@ -371,6 +371,39 @@ body {
 }
 .tt-sheet-grid button:active { background: var(--list-hover); }
 
+/* 方向簇在场时，同角的悬浮按钮（语音）整体上移，避开 148 高的十字 + 间距 */
+.tt-has-dpad { --fab-bottom: 214px; }
+
+/* ── 方向键簇（13 §5.3）：右下角十字，键 48×48 ──
+   贴在终端画布之上而不是占一条工具栏：它要常驻，又不该再吃走终端的高度。 */
+.tt-dpad {
+  position: absolute;
+  bottom: calc(12px + var(--safe-b));
+  z-index: var(--z-fab);
+  display: grid;
+  grid-template-columns: repeat(3, 48px);
+  grid-template-rows: repeat(3, 48px);
+  gap: 2px;
+  touch-action: none;
+}
+.tt-dpad[data-side='right'] { right: 10px; }
+.tt-dpad[data-side='left'] { left: 10px; }
+.tt-dpad .k {
+  display: grid; place-items: center;
+  border: 1px solid var(--border-subtle); border-radius: 12px;
+  /* 半透明：簇压在终端上，全不透明会挡住一整块输出 */
+  background: color-mix(in srgb, var(--bg-container) 82%, transparent);
+  color: var(--text-dim); font-size: 17px; line-height: 1;
+  -webkit-tap-highlight-color: transparent; user-select: none; cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+.tt-dpad .k:active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-border); }
+.tt-dpad .u { grid-area: 1 / 2; }
+.tt-dpad .l { grid-area: 2 / 1; }
+.tt-dpad .c { grid-area: 2 / 2; font-size: 15px; color: var(--text-bright); }
+.tt-dpad .r { grid-area: 2 / 3; }
+.tt-dpad .d { grid-area: 3 / 2; }
+
 /* ── 会话坞（13 §4.2）：底栏之上一条 50px 常驻条 ──
    手机上会话此前只有「全屏」和「看不见」两态，退回项目页就不知道还有几个在跑。 */
 .tt-sessdock {

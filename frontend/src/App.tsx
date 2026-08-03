@@ -35,7 +35,7 @@ import UpdateBanner from './UpdateBanner'
 import { useThemeMode } from './theme'
 import { useI18n } from './i18n'
 import { usePwaInstall } from './install'
-import { usePreferences, savePreferences, loadPreferences } from './preferences'
+import { usePreferences, savePreferences, saveWorkspace, loadPreferences } from './preferences'
 import { PromptDialog, advancePromptSignal, detectPrompt } from './prompt'
 import type { PromptSignal } from './prompt'
 import { useLayout } from './layout'
@@ -45,6 +45,7 @@ import { Navigation } from './shell/Navigation'
 import { reorderTabs } from './shell/tabs'
 import { requestIntent } from './intents'
 import { SessionDock, SessionSwitchSheet } from './shell/SessionDock'
+import { DPad } from './shell/DPad'
 import { sessionProject, setSessionProjects, buildSessionProjects } from './session-project'
 import { MobileSheet, SheetRow, SheetSection } from './shell/MobileSheet'
 import { WorkspaceTopbar, type PaletteItem } from './shell/WorkspaceTopbar'
@@ -891,6 +892,7 @@ const TI = {
   // Focus = 四角向外扩，返回分栏 = 四角向内收
   focus: tIcon(<><path d="M4 9V4h5" /><path d="M20 9V4h-5" /><path d="M4 15v5h5" /><path d="M20 15v5h-5" /></>),
   unfocus: tIcon(<><path d="M9 4v5H4" /><path d="M15 4v5h5" /><path d="M9 20v-5H4" /><path d="M15 20v-5h5" /></>),
+  dpad: tIcon(<><polyline points="12 5 12 19" /><polyline points="5 12 19 12" /></>),
   back: tIcon(<><line x1="20" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></>),
   caret: tIcon(<polyline points="6 9 12 15 18 9" />),
   dots: tIcon(<><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></>),
@@ -1021,6 +1023,7 @@ function TerminalPane(props: {
   // 标签拖拽排序（14 §7.1）：dragTab / dropAt 只用来画反馈（半透明 + 插入线），
   // 落点判定全部走事件本身，见下面两个 helper。
   const { phone: isPhone } = useLayout()
+  const ws = prefsData.workspace
   const [typing, setTyping] = useState(false)
   const [switchOpen, setSwitchOpen] = useState(false)
   const [moreSheet, setMoreSheet] = useState(false)
@@ -1401,7 +1404,7 @@ function TerminalPane(props: {
         </button>
         <button type="button" className="pill" onClick={() => setSwitchOpen(true)}>
           <i className="d" style={{ background: activeNeedsInput ? '#d29922' : dot }} />
-          {active && <TabName name={active} />}
+          {active && <TabName name={active} project={false} />}
           {TI.caret}
           {terms.length > 1 && <span className="n">{terms.length}</span>}
         </button>
@@ -1436,6 +1439,12 @@ function TerminalPane(props: {
         <SheetRow icon={TI.mic} title={t('voice.input')} onClick={() => { setMoreSheet(false); setShowVoice((v) => !v) }} />
         <SheetRow icon={promptOff ? TI.bellOff : TI.bellOn} title={t('prompt.popup')}
           desc={promptOff ? t('prompt.popupOff') : t('prompt.popupOn')} onClick={togglePromptOff} />
+        <SheetRow icon={TI.dpad} title={t('mobile.dpadOn')} desc={ws.dpadOn ? t('common.on') : t('common.off')}
+          onClick={() => saveWorkspace({ dpadOn: !ws.dpadOn })} />
+        {ws.dpadOn && (
+          <SheetRow icon={TI.dpad} title={t('mobile.dpadSide')} desc={ws.dpadSide === 'left' ? t('common.on') : t('common.off')}
+            onClick={() => saveWorkspace({ dpadSide: ws.dpadSide === 'left' ? 'right' : 'left' })} />
+        )}
         <SheetSection>{t('mobile.groupScreen')}</SheetSection>
         <div className="tt-sheet-grid">
           <button type="button" onClick={() => setFontSize(Math.max(10, fontSize - 1))}>A−</button>
@@ -1501,8 +1510,14 @@ function TerminalPane(props: {
       )}
     </div>
   )
+  // 方向簇贴在终端画布上（13 §5.3）：常驻但不吃终端高度。对话视图有自己的输入框，不挂。
+  const dpad = isPhone && !inChat && ws.dpadOn ? (
+    <DPad side={ws.dpadSide} onSend={(seq) => tapKey(seq)} onHide={() => saveWorkspace({ dpadOn: false })} />
+  ) : null
+
   const terminalArea = (
-    <div style={{ flex: 1, minHeight: 0, display: 'flex', position: 'relative' }}
+    <div className={dpad ? 'tt-has-dpad' : undefined}
+      style={{ flex: 1, minHeight: 0, display: 'flex', position: 'relative' }}
       onDragOver={(e) => {
         if (isFileDrag(e)) { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; setDragOver(true); return } // 系统文件：允许放下并上传
         if (!isPathDrag(e)) return
@@ -1511,6 +1526,7 @@ function TerminalPane(props: {
       }}
       onDragLeave={(e) => { if (e.currentTarget === e.target) setDragOver(false) }}
       onDrop={onTermDrop}>
+      {dpad}
       {dragOver && (
         <div style={{
           position: 'absolute', inset: 0, zIndex: 5, pointerEvents: 'none',
