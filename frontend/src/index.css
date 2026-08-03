@@ -361,15 +361,40 @@ body {
 .tt-sep { width: 1px; height: 16px; background: var(--border-subtle); margin: 0 5px; }
 .tt-spacer { flex: 1 1 auto; min-width: 8px; }
 
-/* 会话标签：未选中不描边（原来每个都有框，很吵），选中才上强调色底 + 细框 */
+/* 标签条外壳：左侧「收起」固定，标签区独立横滚，两侧溢出给渐隐（14 §7.1） */
+.tt-tabs-wrap {
+  position: relative; display: flex; align-items: center; min-width: 0;
+  background: var(--bg-container); border-bottom: 1px solid var(--border-subtle);
+}
+.tt-tabs-wrap > .tt-tabs { flex: 1 1 auto; min-width: 0; border-bottom: 0; }
+.tt-tabs-lead { flex: 0 0 auto; display: flex; align-items: center; padding-left: 8px; }
+/* 渐隐用 mask 而不是叠一层渐变色块：底色是变量，叠色块在浅色主题下会露出接缝 */
+.tt-tabs[data-l][data-r] { mask-image: linear-gradient(90deg, transparent 0, #000 22px, #000 calc(100% - 22px), transparent 100%); }
+.tt-tabs[data-l]:not([data-r]) { mask-image: linear-gradient(90deg, transparent 0, #000 22px); }
+.tt-tabs[data-r]:not([data-l]) { mask-image: linear-gradient(90deg, #000 calc(100% - 22px), transparent 100%); }
+
+/* 会话标签：未选中不描边（原来每个都有框，很吵），选中才上强调色底 + 细框。
+   宽度 132–220（14 §7.1）：给下限是为了让标签宽度稳定，切换时不会因为名字长短乱跳。 */
 .tt-tab {
-  display: inline-flex; align-items: center; gap: 7px; max-width: 230px;
+  position: relative;
+  display: inline-flex; align-items: center; gap: 7px; min-width: 132px; max-width: 220px;
   height: 28px; padding: 0 5px 0 10px; border: 1px solid transparent; border-radius: 8px;
   color: var(--text-dim); font-size: 12.5px; line-height: 1; white-space: nowrap; cursor: pointer;
 }
 .tt-tab:hover { background: var(--list-hover); color: var(--text-bright); }
 .tt-tab.on { color: var(--text-bright); font-weight: 600; }
-.tt-tab .tt-name { overflow: hidden; text-overflow: ellipsis; }
+.tt-tab .tt-wait { flex: 0 0 auto; color: #d29922; font-weight: 600; }
+/* 名字中间省略：头段收缩 + 尾段不收缩，省略号自然落在中间（见 session-label.tsx TabName） */
+.tt-tab .tt-name { display: flex; min-width: 0; overflow: hidden; }
+.tt-tab .tt-name .h { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-tab .tt-name .tl { flex: 0 0 auto; }
+.tt-tab.dragging { opacity: .45; }
+/* 插入位提示线：拖到哪个标签左边，线就画在哪 */
+.tt-tab.dropL::before {
+  content: ""; position: absolute; left: -2px; top: 3px; bottom: 3px;
+  width: 2px; border-radius: 2px; background: #58a6ff;
+}
+.tt-tab-tail { flex: 1 0 24px; align-self: stretch; }
 .tt-tab .tt-x {
   display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px;
   border-radius: 5px; color: var(--text-dimmer); opacity: 0; transition: opacity .12s ease;

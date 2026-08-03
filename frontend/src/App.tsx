@@ -3,7 +3,7 @@
 //   电脑 ≥1200 → 三栏：导航 Sider | 列表(页面) | 终端面板(常驻, 多标签)
 //   平板/手机   → 终端为全屏覆盖层；手机底部 Tab 导航
 // 终端：多标签 / 字号调节 / 复制 / 更多快捷键 / 断线自动重连。
-import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   Layout, Button, Card, List, Tag, Form, Input, Select, Segmented, Tabs, Descriptions,
   Statistic, Row, Col, Space, Popconfirm, Empty, Modal, App as AntApp, Typography, Spin, Tooltip, Dropdown, Checkbox, Progress, AutoComplete, Radio, Switch, Collapse, InputNumber,
@@ -42,10 +42,11 @@ import { useLayout } from './layout'
 import { useWorkspaceLayout, NAV_WIDTH, NAV_RAIL } from './shell/useWorkspaceLayout'
 import { Workspace, SessionCapsule } from './shell/Workspace'
 import { Navigation } from './shell/Navigation'
+import { reorderTabs } from './shell/tabs'
 import { MobileSheet, SheetRow, SheetSection } from './shell/MobileSheet'
 import { WorkspaceTopbar, type PaletteItem } from './shell/WorkspaceTopbar'
 import { copyText } from './chat/blocks'
-import { SessionTitle, setSessionLabels, updateSessionLabel, useSessionLabel, sessionLabel, sessionDisplay } from './session-label'
+import { SessionTitle, TabName, setSessionLabels, updateSessionLabel, useSessionLabel, sessionLabel, sessionDisplay } from './session-label'
 import { VoiceInput } from './chat/VoiceInput'
 import LinkStatus from './p2p/LinkStatus'
 import { startControlLink, stopControlLink } from './p2p/transport'
@@ -518,6 +519,9 @@ export default function App() {
   const setStatus = (name: string, s: TermStatus) => setStatusMap((m) => ({ ...m, [name]: s }))
   const sendKey = (seq: string) => active && termRefs.current[active]?.send(seq)
 
+  // 标签拖拽排序（14 §7.1）。顺序本来就写进 URL 的 terms=，所以持久化是白拿的。
+  const reorderTerm = (name: string, to: number) => setTerms((ts) => reorderTabs(ts, name, to))
+
 
   // 全屏切换（标准 API + webkit 兜底）。不支持的浏览器（如 iOS Safari）隐藏按钮，改走「添加到主屏幕」
   const docEl: any = document.documentElement
@@ -543,6 +547,9 @@ export default function App() {
       codexMap={codexMap} codexView={codexView} setCodexView={setCodexView}
       onRename={renameOpenTerm}
       onCollapse={() => { setOverlay(false); space.setDockOpen(false) }}
+      onReorder={reorderTerm}
+      // Focus 只在桌面有意义：手机上终端本来就是全屏覆盖层
+      focus={hasSider ? { on: space.focus !== 'none', toggle: space.toggleFocus, hint: `${modKeyLabel}⇧J` } : undefined}
     />
   )
 
@@ -820,6 +827,9 @@ const TI = {
   mic: tIcon(<><rect x="9.2" y="3" width="5.6" height="11" rx="2.8" /><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0" /><path d="M12 18v3" /></>),
   scrollUp: tIcon(<><path d="M4.5 4.5h15" /><path d="M12 20V9" /><path d="m7.5 13.5 4.5-4.5 4.5 4.5" /></>),
   toBottom: tIcon(<><path d="M4.5 19.5h15" /><path d="M12 4v11" /><path d="m7.5 10.5 4.5 4.5 4.5-4.5" /></>),
+  // Focus = 四角向外扩，返回分栏 = 四角向内收
+  focus: tIcon(<><path d="M4 9V4h5" /><path d="M20 9V4h-5" /><path d="M4 15v5h5" /><path d="M20 15v5h-5" /></>),
+  unfocus: tIcon(<><path d="M9 4v5H4" /><path d="M15 4v5h5" /><path d="M9 20v-5H4" /><path d="M15 20v-5h5" /></>),
   redraw: tIcon(<><path d="M20 12a8 8 0 1 1-2.6-5.9" /><path d="M20.5 4v5h-5" /></>),
   reconnect: tIcon(<><path d="M10.4 13.6a4.2 4.2 0 0 0 6 0l2.4-2.4a4.2 4.2 0 0 0-6-6l-1.4 1.4" /><path d="M13.6 10.4a4.2 4.2 0 0 0-6 0l-2.4 2.4a4.2 4.2 0 0 0 6 6l1.4-1.4" /></>),
 }
@@ -863,9 +873,13 @@ function TerminalPane(props: {
   claudeMap: Record<string, ClaudeInfo>; claudeView: Record<string, boolean>; setClaudeView: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
   codexMap: Record<string, ClaudeInfo>; codexView: Record<string, boolean>; setCodexView: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
   onRename: (oldName: string, newName: string) => void
+  /** 标签拖拽排序；不传就不可拖（独立单终端页没有多标签） */
+  onReorder?: (name: string, to: number) => void
+  /** 终端 Focus：传了才渲染工具条右侧那枚按钮（手机没有这个概念） */
+  focus?: { on: boolean; toggle: () => void; hint: string }
   fileDock?: 'right' | 'left'   // 文件面板停靠：'right'=右侧浮动抽屉（默认），'left'=左侧 VSCode 栏（新标签全屏页）
 }) {
-  const { terms, active, setActive, closeTerm, fontSize, setFontSize, statusMap, setStatus, termRefs, sendKey, onCollapse, claudeMap, claudeView, setClaudeView, codexMap, codexView, setCodexView, onRename } = props
+  const { terms, active, setActive, closeTerm, fontSize, setFontSize, statusMap, setStatus, termRefs, sendKey, onCollapse, claudeMap, claudeView, setClaudeView, codexMap, codexView, setCodexView, onRename, onReorder, focus } = props
   const fileDock = props.fileDock || 'right'
   const { message, modal } = AntApp.useApp()
   const { t } = useI18n()
@@ -917,6 +931,38 @@ function TerminalPane(props: {
   // 切换后把它带回可视区（block:'nearest' → 只横向滚标签条，不牵动整页）。
   const activeTabRef = useRef<HTMLSpanElement | null>(null)
   useEffect(() => { activeTabRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' }) }, [active])
+
+  // 标签溢出时两侧给渐隐，提示"这边还有"（14 §7.1）。滚动条本身是隐藏的，
+  // 没有这个提示，窄栏下多出来的标签等于不存在。
+  const tabScrollRef = useRef<HTMLDivElement | null>(null)
+  const [fadeL, setFadeL] = useState(false)
+  const [fadeR, setFadeR] = useState(false)
+  const syncFade = useCallback(() => {
+    const el = tabScrollRef.current
+    if (!el) return
+    setFadeL(el.scrollLeft > 2)
+    setFadeR(el.scrollLeft + el.clientWidth < el.scrollWidth - 2)
+  }, [])
+  useEffect(() => {
+    syncFade()
+    const el = tabScrollRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(syncFade)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [syncFade, terms.length])
+
+  // 标签拖拽排序（14 §7.1）：dragTab / dropAt 只用来画反馈（半透明 + 插入线），
+  // 落点判定全部走事件本身，见下面两个 helper。
+  const [dragTab, setDragTab] = useState<string | null>(null)
+  const [dropAt, setDropAt] = useState<number | null>(null)
+  // 自定义 MIME：文件区/终端的拖放判定按 type 分流，共用 text/plain 会被它们当路径接走
+  const isTabDrag = (e: React.DragEvent) => e.dataTransfer.types.includes('application/x-tt-tab')
+  /** 落在标签右半边 = 插到它后面 */
+  const dropIndexAt = (e: React.DragEvent, i: number) => {
+    const b = e.currentTarget.getBoundingClientRect()
+    return e.clientX > b.left + b.width / 2 ? i + 1 : i
+  }
 
   // 从文件/Git 面板把文件拖到终端 → 插入为 @绝对路径。
   const [dragOver, setDragOver] = useState(false)
@@ -1176,29 +1222,77 @@ function TerminalPane(props: {
       {active && <SessionTitle name={active} />}
     </>
   )
+  // 标签条：左侧「收起」固定不滚，标签区独立横滚（14 §7.1）。
+  // 收起按钮原来跟着标签一起滚，会话一多它就滑出视口——那是常驻动作，不该跟着内容跑。
   const tabStrip = (
-    <div className="tt-tabs">
+    <div className="tt-tabs-wrap">
       {onCollapse && (
-        <>
+        <div className="tt-tabs-lead">
           <TBtn icon={TI.collapse} label={t('common.collapse')} onClick={onCollapse} />
           <span className="tt-sep" />
-        </>
+        </div>
       )}
-      {terms.map((termName) => {
-        const on = termName === active
-        const waiting = termNeedsInput[termName]
-        return (
-          <span key={termName} ref={on ? activeTabRef : undefined}
-            className={`tt-tab${on ? ' on' : ''}`} title={termName} onClick={() => setActive(termName)}
-            style={on ? { background: 'rgba(88,166,255,.14)', borderColor: 'rgba(88,166,255,.5)' } : undefined}>
-            {statusDot(dotOf(termName))}
-            {waiting && <span title={t('prompt.confirmRequired')} style={{ color: '#d29922', fontWeight: 600 }}>{t('session.waiting')}</span>}
-            {agentMarks(termName)}
-            <span className="tt-name"><SessionTitle name={termName} /></span>
-            <a className="tt-x" title={t('common.close')} onClick={(e) => { e.stopPropagation(); closeTerm(termName) }}>{TI.close}</a>
-          </span>
-        )
-      })}
+      <div className="tt-tabs" ref={tabScrollRef} data-l={fadeL ? '1' : undefined} data-r={fadeR ? '1' : undefined}
+        onScroll={syncFade}
+        // 竖滚轮横移：标签条只有一行，鼠标滚轮在它上面本来什么也不做
+        onWheel={(e) => {
+          const el = tabScrollRef.current
+          if (!el || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return
+          el.scrollLeft += e.deltaY
+        }}>
+        {terms.map((termName, i) => {
+          const on = termName === active
+          const waiting = termNeedsInput[termName]
+          return (
+            <span key={termName} ref={on ? activeTabRef : undefined}
+              className={`tt-tab${on ? ' on' : ''}${dragTab === termName ? ' dragging' : ''}${dropAt === i ? ' dropL' : ''}`}
+              title={sessionDisplay(termName)} onClick={() => setActive(termName)}
+              draggable={!!onReorder}
+              onDragStart={(e) => {
+                // 自定义 MIME：文件区/终端的拖放判定按 type 分流，用通用 text/plain
+                // 会被它们当成路径拖拽接走（见 isPathDrag）
+                e.dataTransfer.setData('application/x-tt-tab', String(i))
+                e.dataTransfer.effectAllowed = 'move'
+                setDragTab(termName)
+              }}
+              onDragOver={(e) => {
+                if (!isTabDrag(e)) return
+                e.preventDefault(); e.stopPropagation()
+                e.dataTransfer.dropEffect = 'move'
+                setDropAt(dropIndexAt(e, i))
+              }}
+              onDrop={(e) => {
+                if (!isTabDrag(e)) return
+                e.preventDefault(); e.stopPropagation()
+                // 源标签从 dataTransfer 读，不从 dragTab 状态读：状态只用来画拖拽反馈，
+                // 落点判定必须只依赖事件本身，否则 setState 还没刷新时这一拖就静默丢了
+                const from = Number(e.dataTransfer.getData('application/x-tt-tab'))
+                const name = terms[from]
+                if (name) onReorder?.(name, dropIndexAt(e, i))
+                setDragTab(null); setDropAt(null)
+              }}
+              onDragEnd={() => { setDragTab(null); setDropAt(null) }}>
+              {statusDot(dotOf(termName))}
+              {waiting && <span className="tt-wait" title={t('prompt.confirmRequired')}>{t('session.waiting')}</span>}
+              {agentMarks(termName)}
+              <TabName name={termName} />
+              <a className="tt-x" title={t('common.close')} onClick={(e) => { e.stopPropagation(); closeTerm(termName) }}>{TI.close}</a>
+            </span>
+          )
+        })}
+        {/* 拖到最右侧：最后一个标签的右半边已经给出 i+1，这里只补"空白区也能落" */}
+        {dragTab && (
+          <span className="tt-tab-tail"
+            onDragOver={(e) => { if (!isTabDrag(e)) return; e.preventDefault(); setDropAt(terms.length) }}
+            onDrop={(e) => {
+              if (!isTabDrag(e)) return
+              e.preventDefault()
+              const name = terms[Number(e.dataTransfer.getData('application/x-tt-tab'))]
+              if (name) onReorder?.(name, terms.length)
+              setDragTab(null); setDropAt(null)
+            }} />
+        )}
+      </div>
     </div>
   )
   // 工具条分三段：左=会话身份与动作，中=面板开关，右（分段组）=只读的画面控制
@@ -1244,6 +1338,13 @@ function TerminalPane(props: {
         <TBtn icon={TI.redraw} title={t('terminal.redraw')} onClick={() => active && termRefs.current[active]?.redraw()} />
         <TBtn icon={TI.reconnect} title={t('terminal.reconnect')} onClick={() => active && termRefs.current[active]?.reconnect()} />
       </span>
+      {/* Focus 与「返回分栏」是同一枚按钮的两态（14 §7.2）：不额外插一条只在
+          Focus 时出现的横条——那种横条会让 Focus 前后的工具条高度跳一下。 */}
+      {focus && (
+        <TBtn icon={focus.on ? TI.unfocus : TI.focus} label={focus.on ? t('workspace.exitFocus') : t('workspace.focusDock')}
+          on={focus.on} title={`${focus.on ? t('workspace.exitFocus') : t('workspace.focusDock')} (${focus.hint})`}
+          onClick={focus.toggle} />
+      )}
     </div>
   )
   const terminalArea = (
