@@ -36,6 +36,7 @@ export interface WorkspacePreference {
   density: 'cozy' | 'compact' // 信息密度，与窗口档正交
   dpadOn: boolean // 手机方向簇
   dpadSide: 'left' | 'right' // 方向簇落在哪只手
+  dpadHintSeen: boolean // 方向簇的一次性说明看过没
 }
 
 const WORKSPACE_DEFAULTS: WorkspacePreference = {
@@ -46,6 +47,7 @@ const WORKSPACE_DEFAULTS: WorkspacePreference = {
   density: 'cozy',
   dpadOn: true,
   dpadSide: 'right',
+  dpadHintSeen: false,
 }
 
 const DEFAULTS: Preferences = {

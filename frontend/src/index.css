@@ -435,6 +435,24 @@ html[data-size="compact"] .tt-pagehead { gap: var(--sp-2); }
 .tt-keyrow[data-l]:not([data-r]) { mask-image: linear-gradient(90deg, transparent 0, #000 24px); }
 .tt-keyrow[data-r]:not([data-l]) { mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent 100%); }
 
+/* 方向簇的一次性说明：压在簇上方，点「知道了」后再不出现 */
+.tt-dpad-hint {
+  position: absolute; left: 12px; right: 12px; bottom: calc(178px + var(--safe-b));
+  z-index: var(--z-fab);
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-subtle); border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--bg-container) 92%, transparent);
+  backdrop-filter: blur(6px);
+  color: var(--text-dim); font-size: var(--fs-meta); line-height: 1.5;
+}
+.tt-dpad-hint .tx { min-width: 0; flex: 1 1 auto; }
+.tt-dpad-hint b { display: block; color: var(--text-bright); font-weight: 600; }
+.tt-dpad-hint button {
+  flex: 0 0 auto; min-height: 44px; padding: 0 var(--sp-2);
+  border: 0; background: none; color: var(--accent); font: inherit; cursor: pointer;
+}
+
 /* ── 会话坞（13 §4.2）：底栏之上一条 50px 常驻条 ──
    手机上会话此前只有「全屏」和「看不见」两态，退回项目页就不知道还有几个在跑。 */
 .tt-sessdock {

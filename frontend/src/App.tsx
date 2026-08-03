@@ -1532,9 +1532,26 @@ function TerminalPane(props: {
       )}
     </div>
   )
-  // 方向簇贴在终端画布上（13 §5.3）：常驻但不吃终端高度。对话视图有自己的输入框，不挂。
-  const dpad = isPhone && !inChat && ws.dpadOn ? (
-    <DPad side={ws.dpadSide} onSend={(seq) => tapKey(seq)} onHide={() => saveWorkspace({ dpadOn: false })} />
+  // 方向簇（13 §5.3）：贴在终端画布上，不吃终端高度。
+  //
+  // **只在 TUI 里出现**——Claude/Codex 在跑的时候。它存在的全部理由是「在选项列表里选一项
+  // 时不必弹软键盘」；普通 shell 下你本来就要打字，键盘总要弹，一个没有标签的十字浮在那儿
+  // 只会让人问「这是干嘛的」（用户原话）。对话视图有自己的输入框，同样不挂。
+  const agentRunning = !!(active && (claudeMap[active]?.running || codexMap[active]?.running))
+  const dpad = isPhone && !inChat && agentRunning && ws.dpadOn ? (
+    <>
+      <DPad side={ws.dpadSide} onSend={(seq) => tapKey(seq)} onHide={() => saveWorkspace({ dpadOn: false })} />
+      {/* 一次性说明：一个没有标签的十字自己解释不了自己 */}
+      {!ws.dpadHintSeen && (
+        <div className="tt-dpad-hint">
+          <span className="tx">
+            <b>{t('mobile.dpadHintTitle')}</b>
+            {t('mobile.dpadHintBody')}
+          </span>
+          <button type="button" onClick={() => saveWorkspace({ dpadHintSeen: true })}>{t('mobile.dpadHintOk')}</button>
+        </div>
+      )}
+    </>
   ) : null
 
   const terminalArea = (
