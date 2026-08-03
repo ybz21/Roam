@@ -202,6 +202,91 @@ body {
   background: #1f6feb; color: #fff; font-size: 10.5px;
 }
 
+/* ── 侧边导航 / Activity Bar（14 §4.4）──
+   两态一套样式：展开 224、轨 64。轨态只是把文字和分组标题去掉，间距结构不变，
+   所以图标在两态之间不会左右跳。 */
+.tt-nav { display: flex; flex-direction: column; height: 100%; padding: 0 8px 8px; }
+.tt-nav-brand {
+  display: flex; align-items: center; gap: 11px;
+  padding: 18px 10px 14px;
+}
+.tt-nav.rail .tt-nav-brand { justify-content: center; padding: 18px 0 14px; }
+.tt-nav-brand img { flex: 0 0 auto; border-radius: 10px; box-shadow: 0 1px 3px rgba(0, 0, 0, .5); }
+.tt-nav-brand .wd { min-width: 0; line-height: 1.15; }
+.tt-nav-brand .wd strong {
+  display: block; font-size: 19px; font-weight: 800; letter-spacing: .5px;
+  background: var(--brand-grad); -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.tt-nav-brand .wd span { display: block; font-size: 10px; letter-spacing: 1.5px; color: var(--text-dimmer); }
+
+.tt-nav-search {
+  display: flex; align-items: center; gap: 9px; width: 100%; height: 34px; margin-bottom: 6px;
+  padding: 0 10px; border: 1px solid var(--border-subtle); border-radius: 9px;
+  background: var(--bg-container); color: var(--text-dim); font-size: var(--fs-meta);
+  cursor: pointer; transition: border-color .15s, color .15s;
+}
+.tt-nav-search:hover { border-color: rgba(88, 166, 255, .45); color: var(--text-bright); }
+.tt-nav-search .ic { display: flex; flex: 0 0 auto; }
+.tt-nav-search .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-nav-search kbd {
+  margin-left: auto; flex: 0 0 auto; padding: 1px 5px; border: 1px solid var(--border-subtle);
+  border-radius: 5px; color: var(--text-dimmer); font: 10.5px/1.5 ui-monospace, monospace;
+}
+.tt-nav.rail .tt-nav-search { justify-content: center; padding: 0; }
+
+.tt-nav-list { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+.tt-nav-group + .tt-nav-group { margin-top: 14px; }
+.tt-nav.rail .tt-nav-group + .tt-nav-group {
+  margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-subtle);
+}
+.tt-nav-group .gl {
+  padding: 0 10px; margin-bottom: 4px;
+  color: var(--text-dimmer); font-size: 10.5px; font-weight: 800; letter-spacing: .1em;
+}
+
+.tt-nav-item, .tt-nav-account, .tt-nav-collapse {
+  position: relative; display: flex; align-items: center; gap: 11px; width: 100%;
+  min-height: 38px; padding: 0 10px; border: 0; border-radius: 8px;
+  background: none; color: var(--text-dim); font-size: var(--fs-body); text-align: left;
+  cursor: pointer; transition: background .14s, color .14s;
+}
+.tt-nav.rail .tt-nav-item,
+.tt-nav.rail .tt-nav-account,
+.tt-nav.rail .tt-nav-collapse { justify-content: center; padding: 0; }
+.tt-nav-item:hover, .tt-nav-account:hover, .tt-nav-collapse:hover { background: var(--list-hover); color: var(--text-bright); }
+.tt-nav-item .ic { display: flex; flex: 0 0 auto; }
+.tt-nav-item .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 选中态：3px 左强调线 + 低饱和蓝底。整块高亮会把注意力从内容上夺走（14 §4.4） */
+.tt-nav-item.on { background: rgba(31, 111, 235, .13); color: var(--text-bright); }
+.tt-nav-item.on::before {
+  content: ""; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  width: 3px; height: 20px; border-radius: 0 3px 3px 0; background: #58a6ff;
+}
+/* 终端是开关不是页面：给底色，但不给「当前在哪一页」的那条强调线 */
+.tt-nav-item.toggle.on::before { display: none; }
+.tt-nav-item .bd {
+  margin-left: auto; flex: 0 0 auto; min-width: 18px; height: 18px; padding: 0 5px;
+  display: grid; place-items: center; border-radius: 9px;
+  background: rgba(210, 153, 34, .18); color: #e3b341;
+  font: 700 10.5px/1 ui-monospace, monospace;
+}
+.tt-nav-item .bd.blue { background: #1f6feb; color: #fff; }
+/* 轨态 badge 缩成右上角一枚点大小的角标，不挤图标 */
+.tt-nav.rail .tt-nav-item .bd {
+  position: absolute; top: 3px; right: 6px; margin: 0; min-width: 15px; height: 15px;
+  padding: 0 3px; font-size: 9.5px;
+}
+
+.tt-nav-foot { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; border-top: 1px solid var(--border-subtle); }
+.tt-nav-account .av {
+  flex: 0 0 auto; width: 26px; height: 26px; display: grid; place-items: center;
+  border-radius: 8px; background: rgba(31, 111, 235, .16); color: #9ccaff;
+  font-size: 12px; font-weight: 800;
+}
+.tt-nav-account .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-nav-account .dots { margin-left: auto; flex: 0 0 auto; color: var(--text-dimmer); font-size: 11px; }
+
 /* ── Canvas 容器查询（14 §5.3 / §5.4）──
    概览的列数、活动侧轨要跟「Canvas 实际有多宽」走，不跟 viewport 走：终端开合只
    改 Canvas，1920 开着 768 的 Dock 时可用宽只有 920，此时还按 viewport 排三列必挤。

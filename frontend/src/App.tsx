@@ -3,11 +3,12 @@
 //   电脑 ≥1200 → 三栏：导航 Sider | 列表(页面) | 终端面板(常驻, 多标签)
 //   平板/手机   → 终端为全屏覆盖层；手机底部 Tab 导航
 // 终端：多标签 / 字号调节 / 复制 / 更多快捷键 / 断线自动重连。
-import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
-  Layout, Menu, Button, Card, List, Tag, Form, Input, Select, Segmented, Tabs, Descriptions,
+  Layout, Button, Card, List, Tag, Form, Input, Select, Segmented, Tabs, Descriptions,
   Statistic, Row, Col, Space, Popconfirm, Empty, Modal, App as AntApp, Typography, Spin, Tooltip, Dropdown, Checkbox, Progress, AutoComplete, Radio, Switch, Collapse, InputNumber,
 } from 'antd'
+import type { MenuProps } from 'antd'
 import { QRCodeSVG } from 'qrcode.react'
 import { api, upload, makeClipboardImageFile, setUnauthorizedHandler } from './api'
 import Term, { TermHandle, TermStatus } from './Terminal'
@@ -38,8 +39,9 @@ import { usePreferences, savePreferences, loadPreferences } from './preferences'
 import { PromptDialog, advancePromptSignal, detectPrompt } from './prompt'
 import type { PromptSignal } from './prompt'
 import { useLayout } from './layout'
-import { useWorkspaceLayout } from './shell/useWorkspaceLayout'
+import { useWorkspaceLayout, NAV_WIDTH, NAV_RAIL } from './shell/useWorkspaceLayout'
 import { Workspace, SessionCapsule } from './shell/Workspace'
+import { Navigation } from './shell/Navigation'
 import { MobileSheet, SheetRow, SheetSection } from './shell/MobileSheet'
 import { WorkspaceTopbar, type PaletteItem } from './shell/WorkspaceTopbar'
 import { copyText } from './chat/blocks'
@@ -66,6 +68,11 @@ const NAV = [
   { key: 'plugins', labelKey: 'nav.plugins' },
   { key: 'settings', labelKey: 'nav.env' },
 ]
+
+// 桌面导航的两组（14 §4.4）。NAV 仍是全量注册表——命令面板和手机「更多」都从它取，
+// 所以 settings/about 留在 NAV 里，只是不进这两组，改由账户菜单收口。
+const NAV_WORKSPACE = ['overview', 'projects', 'files']
+const NAV_TOOLS = ['browser', 'phone', 'plugins']
 
 // 手机底栏只放高频页，plugins/settings 折进「更多」，避免底栏拥挤（桌面侧栏仍展示全部）
 const MOBILE_NAV_KEYS = ['projects', 'overview', 'files']
@@ -313,6 +320,21 @@ export default function App() {
   const [claudeView, setClaudeView] = useState<Record<string, boolean>>({})
   const [codexMap, setCodexMap] = useState<Record<string, ClaudeInfo>>({})
   const [codexView, setCodexView] = useState<Record<string, boolean>>({})
+
+  // 导航 badge 的数据源（14 §4.4）：跨项目待收尾数。一条 /projects 就够，15s 一次；
+  // 概览页也在轮同一条接口，两处显示的是同一个数，不会互相打架。
+  const [unfinished, setUnfinished] = useState(0)
+  useEffect(() => {
+    if (!hasSider) return
+    let stop = false
+    const load = () => api('GET', '/projects').then((r) => {
+      if (stop) return
+      setUnfinished((r?.data?.projects || []).reduce((n: number, p: any) => n + (p.unfinished || 0), 0))
+    }).catch(() => {})
+    load()
+    const i = setInterval(load, 15000)
+    return () => { stop = true; clearInterval(i) }
+  }, [hasSider])
 
   // ── 工作区快捷键（14 §9.1）：⌘J 开合终端、⌘⇧J 终端聚焦、Esc 退出聚焦 ──
   // 只挂带修饰键的这几个；字母单键快捷键要等命令面板一起做，且必须在输入框/终端
@@ -568,25 +590,45 @@ export default function App() {
       style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>{termPane}</div>
   )
 
-  const menu = (
-    <Menu
-      theme={mode} mode="inline" selectedKeys={[tab]} onClick={(e) => go(e.key)}
-      items={NAV.map((n) => ({ key: n.key, icon: ICONS[n.key], label: t(n.labelKey) }))}
-      style={{ borderInlineEnd: 0, background: 'transparent' }}
-    />
-  )
+  // 导航分两组（14 §4.4）：工作区 = 干活的地方，工具 = 看别的东西的地方。
+  // 设置 / 关于 不在任何一组里——它们进底部账户菜单，见下面的 accountMenu。
+  const navGroups = [
+    { label: t('nav.groupWorkspace'), items: NAV_WORKSPACE },
+    { label: t('nav.groupTools'), items: NAV_TOOLS },
+  ].map((g) => ({
+    label: g.label,
+    items: g.items.map((key) => {
+      const n = NAV.find((x) => x.key === key)!
+      return {
+        key: n.key, label: t(n.labelKey), icon: ICONS[n.key],
+        // badge 只报「需要行动」的数量，不报普通总数（14 §4.4）。这里取跨项目待收尾
+        // 数：它来自 /projects 一条请求，全局常新；「等待输入」要逐会话抓屏才知道，
+        // 为一个角标常驻轮询十几个会话不划算，那个数留在概览页。
+        badge: n.key === 'projects' ? unfinished : undefined,
+        badgeTitle: n.key === 'projects' ? t('overview.unfinishedN', { count: unfinished }) : undefined,
+      }
+    }),
+  }))
 
-  // 底部按钮：antd v5 Button 是 flex+居中，textAlign 无效，须用 justifyContent。
-  // 展开时左对齐并让图标与上方 inline Menu 项的图标严格对齐：二者左边缘都在 8px
-  // (菜单项 margin / 底部容器 padding 各 8)，菜单项 paddingLeft=24px 使图标落在 32px，
-  // 故底部按钮同样取 paddingLeft 24px。折叠时居中只显图标。
+  const accountMenu: MenuProps['items'] = [
+    { key: 'settings', icon: ICONS.settings, label: t('nav.env'), onClick: () => go('settings') },
+    { key: 'about', icon: ICONS.github, label: t('nav.about'), onClick: () => go('about') },
+    { type: 'divider' },
+    { key: 'theme', icon: themeIcon, label: mode === 'dark' ? t('common.lightTheme') : t('common.darkTheme'), onClick: () => toggleTheme() },
+    ...(fsSupported ? [{ key: 'fs', icon: fsIcon, label: isFs ? t('common.exitFullscreen') : t('common.fullscreen'), onClick: () => toggleFs() }] : []),
+    { type: 'divider' },
+    {
+      key: 'logout', danger: true, label: t('common.logout'),
+      icon: svg(<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></>),
+      onClick: () => Modal.confirm({
+        title: t('common.logoutConfirm'), okText: t('common.logout'), cancelText: t('common.cancel'),
+        okButtonProps: { danger: true }, onOk: logout,
+      }),
+    },
+  ]
+
   // 侧栏是否是 64px 轨：用户手动收起 / Focus 聚焦 / 非 large 档（expanded 一律用轨）
   const navRail = space.navCollapsed || space.mode === 'focus'
-  const bottomBtnStyle: CSSProperties = {
-    color: 'var(--text-dim)',
-    justifyContent: navRail ? 'center' : 'flex-start',
-    paddingInline: navRail ? undefined : '24px 15px',
-  }
 
   return (
     <Layout style={{ height: '100dvh', overflow: 'hidden', background: 'var(--bg-base)' }}>
@@ -594,62 +636,23 @@ export default function App() {
       {/* Focus 时导航收成 64px 轨而不是消失——上下文始终可找回（14 §4.1，老 dockMax 的病根）。
           expanded 档也一律用轨：905–1279 展开 224 侧栏会把 Canvas 挤破契约。*/}
       {hasSider && (
-        <Sider collapsible trigger={null} collapsedWidth={64} width={208} theme={mode}
+        <Sider collapsible trigger={null} collapsedWidth={NAV_RAIL} width={NAV_WIDTH} theme={mode}
           collapsed={navRail}
           style={{ position: 'sticky', top: 0, height: '100dvh', background: 'var(--bg-base)', borderRight: '1px solid var(--border-subtle)' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: navRail ? '18px 0 16px' : '18px 18px 16px', justifyContent: navRail ? 'center' : 'flex-start' }}>
-              <img src="/logo-mark.svg" width={34} height={34} alt="Roam"
-                style={{ flex: '0 0 auto', borderRadius: 10, boxShadow: '0 1px 3px rgba(0,0,0,.5)' }} />
-              {!navRail && (
-                <div style={{ lineHeight: 1.15 }}>
-                  <div style={{
-                    fontWeight: 800, fontSize: 19, letterSpacing: 0.5,
-                    background: 'var(--brand-grad)',
-                    WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent',
-                  }}>Roam</div>
-                  <div style={{ color: 'var(--text-dimmer)', fontSize: 10, letterSpacing: 1.5 }}>{t('app.tagline')}</div>
-                </div>
-              )}
-            </div>
-            <div style={{ flex: 1, overflowY: 'auto' }}>{menu}</div>
-            {/* 底部：全局 P2P 链路状态在最上（未启用时自隐藏），其次 关于/收起/全屏/退出，竖向堆叠。*/}
-            <div style={{ borderTop: '1px solid var(--border-subtle)', padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <LinkStatus collapsed={navRail} />
-              {terms.length > 0 && (
-                <Button type="text" block onClick={space.toggleDock} style={bottomBtnStyle}
-                  title={`${space.dockVisible ? t('terminal.collapseRightTitle') : t('terminal.expandTitle')} (${modKeyLabel}J)`}>
-                  {(() => {
-                    const icon = svg(<><rect x="3" y="4" width="18" height="16" rx="2" /><line x1="14" y1="4" x2="14" y2="20" /></>)
-                    const label = <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{icon}{t('nav.terminal')}
-                      <span style={{ fontSize: 10, background: '#1f6feb', color: '#fff', borderRadius: 8, padding: '0 5px', lineHeight: 1.5 }}>{terms.length}</span></span>
-                    return navRail ? icon : label
-                  })()}
-                </Button>
-              )}
-              <Button type="text" block onClick={() => go('about')} title={t('nav.about')}
-                style={{ ...bottomBtnStyle, color: tab === 'about' ? '#58a6ff' : 'var(--text-dim)' }}>
-                {navRail ? ICONS.github : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{ICONS.github}{t('nav.about')}</span>}
-              </Button>
-              <Button type="text" block onClick={() => space.setNavCollapsed(!space.navCollapsed)} style={bottomBtnStyle}
-                title={navRail ? t('common.expand') : t('common.collapse')}>
-                {(() => { const icon = svg(navRail ? <><polyline points="9 6 15 12 9 18" /></> : <><polyline points="15 6 9 12 15 18" /></>)
-                  return navRail ? icon : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{icon}{t('common.collapse')}</span> })()}
-              </Button>
-              {fsSupported && (
-                <Button type="text" block onClick={toggleFs} style={bottomBtnStyle}
-                  title={isFs ? t('common.exitFullscreen') : t('common.fullscreen')}>
-                  {navRail ? fsIcon : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{fsIcon}{isFs ? t('common.exitFullscreen') : t('common.fullscreen')}</span>}
-                </Button>
-              )}
-              <Popconfirm title={t('common.logoutConfirm')} okText={t('common.logout')} cancelText={t('common.cancel')} onConfirm={logout} placement="topRight">
-                <Button type="text" block style={bottomBtnStyle} title={t('common.exit')}>
-                  {(() => { const icon = svg(<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></>)
-                    return navRail ? icon : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{icon}{t('common.exit')}</span> })()}
-                </Button>
-              </Popconfirm>
-            </div>
-          </div>
+          <Navigation
+            rail={navRail} active={tab} groups={navGroups} onGo={go}
+            onSearch={() => window.dispatchEvent(new Event('tt-open-palette'))}
+            searchHint={`${modKeyLabel}K`}
+            linkStatus={<LinkStatus collapsed={navRail} />}
+            dock={terms.length > 0 ? {
+              count: terms.length, open: space.dockVisible,
+              onToggle: () => { space.setFocus('none'); space.toggleDock() },
+              title: `${space.dockVisible ? t('terminal.collapseRightTitle') : t('terminal.expandTitle')} (${modKeyLabel}J)`,
+            } : null}
+            accountName={t('nav.thisDevice')}
+            account={accountMenu}
+            onToggleRail={() => space.setNavCollapsed(!space.navCollapsed)}
+          />
         </Sider>
       )}
 
@@ -717,7 +720,7 @@ export default function App() {
 
       {isMobile && (
         <MobileSheet open={moreOpen} title={t('common.more')} onClose={() => setMoreOpen(false)}>
-          <SheetSection>{t('mobile.groupTools')}</SheetSection>
+          <SheetSection>{t('nav.groupTools')}</SheetSection>
           {MOBILE_MORE_KEYS.map((key) => {
             const n = NAV.find((x) => x.key === key)!
             return <SheetRow key={n.key} icon={ICONS[n.key]} title={t(n.labelKey)}
