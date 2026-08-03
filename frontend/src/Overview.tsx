@@ -17,7 +17,7 @@ import { Lifec, dot } from './Projects'
 import { usePreferences, savePreferences } from './preferences'
 
 const OV_CSS = `
-.ov{display:flex;flex-direction:column;gap:14px;padding-bottom:32px;max-width:var(--content-overview)}
+.ov{display:flex;flex-direction:column;gap:var(--sp-4);padding-bottom:32px;max-width:var(--content-overview)}
 
 .ov-sum{display:flex;align-items:center;gap:var(--sp-2) var(--sp-5);flex-wrap:wrap;min-height:40px;
   padding:var(--sp-2) var(--sp-3);border-radius:var(--r-sm);background:var(--bg-container);font-size:var(--fs-meta)}
@@ -39,8 +39,8 @@ const OV_CSS = `
 html[data-pointer="coarse"] .ov-tab{min-height:44px}
 html[data-pointer="coarse"] .ov-tab-go{min-height:44px}
 
-.ov-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;align-items:start}
-.ov-feed{min-width:0;display:flex;flex-direction:column;gap:12px}
+.ov-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--sp-4);align-items:start}
+.ov-feed{min-width:0;display:flex;flex-direction:column;gap:var(--sp-3)}
 .ov-sect{display:flex;align-items:center;gap:var(--sp-2);font-size:var(--fs-sm);font-weight:600;color:var(--text-bright)}
 .ov-sect .n{min-width:20px;height:20px;padding:0 6px;display:grid;place-items:center;border-radius:var(--r-pill);
   background:var(--bg-container);color:var(--text-dim);font:600 var(--fs-micro)/1 ui-monospace,monospace}
@@ -48,7 +48,7 @@ html[data-pointer="coarse"] .ov-tab-go{min-height:44px}
 .ov-sect a{font-size:var(--fs-meta);font-weight:400}
 
 /* 行动卡：一屏最多三张，超出走「查看全部」，不让黄框把项目卡挤到首屏以下 */
-.ov-cards{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
+.ov-cards{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--sp-3)}
 .ov-card{position:relative;min-width:0;min-height:118px;padding:12px 13px 34px;cursor:pointer;
   border:1px solid rgba(210,153,34,.28);border-radius:var(--r-card);
   background:radial-gradient(circle at 100% 0,rgba(210,153,34,.13),transparent 38%),
@@ -68,12 +68,12 @@ html[data-pointer="coarse"] .ov-tab-go{min-height:44px}
 .ov-card .go{position:absolute;left:var(--sp-3);bottom:var(--sp-3);font-size:var(--fs-meta);color:var(--accent)}
 
 /* 项目卡栅格：阈值看 Canvas，不看 viewport */
-.ov-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+.ov-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--sp-3)}
 .ov-proj{min-width:0;background:var(--bg-container);border:1px solid var(--border-subtle);border-radius:var(--r-card);
   padding:var(--sp-3) var(--sp-3) var(--sp-2);display:flex;flex-direction:column;gap:var(--sp-1);transition:border-color .15s}
 .ov-proj:hover{border-color:rgba(88,166,255,.35)}
 .ov-proj .hd{display:flex;align-items:center;gap:8px}
-.ov-ico{width:28px;height:28px;flex:0 0 auto;display:grid;place-items:center;border-radius:8px;
+.ov-ico{width:28px;height:28px;flex:0 0 auto;display:grid;place-items:center;border-radius:var(--r-sm);
   font-size:12px;font-weight:800}
 .ov-proj .nm{min-width:0;flex:1 1 auto}
 .ov-proj .nm b{display:block;font-size:var(--fs-body);color:var(--text-bright);

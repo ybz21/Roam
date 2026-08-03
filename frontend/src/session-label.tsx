@@ -80,7 +80,7 @@ export function SessionTitle({ name, showId = true, style }: { name: string; sho
     <span style={style}>
       {label}
       {showId && label !== name && (
-        <span style={{ opacity: 0.5, fontSize: '.85em', marginLeft: 4, fontWeight: 400 }}>({name})</span>
+        <span style={{ opacity: 0.5, fontSize: 'var(--fs-meta)', marginLeft: 4, fontWeight: 400 }}>({name})</span>
       )}
     </span>
   )

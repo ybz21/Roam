@@ -137,7 +137,7 @@ export default function PluginsPanel() {
             <List.Item
               onClick={() => { setSelected(p.manifest.id); if (isMobile) setMobileDetail(true) }}
               style={{
-                cursor: 'pointer', borderRadius: 8, padding: '8px 10px',
+                cursor: 'pointer', borderRadius: 'var(--r-sm)', padding: '8px 10px',
                 background: !isMobile && p.manifest.id === selected ? 'var(--bg-elevated, rgba(88,166,255,.12))' : undefined,
               }}
               actions={[<Switch key="sw" size="small" checked={p.enabled}

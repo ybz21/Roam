@@ -273,7 +273,7 @@ export default function PhoneView() {
         {ripples.map((p) => (<span key={p.id} className="pv-ripple" style={{ left: p.x, top: p.y }} />))}
         {!connected && healthMsg && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, pointerEvents: 'none' }}>
-            <div style={{ maxWidth: 520, padding: '12px 16px', borderRadius: 8, background: 'rgba(0,0,0,.72)', border: '1px solid #f8514955', color: '#ffb4a8', fontSize: 13, lineHeight: 1.6, textAlign: 'center' }}>
+            <div style={{ maxWidth: 520, padding: '12px 16px', borderRadius: 'var(--r-sm)', background: 'rgba(0,0,0,.72)', border: '1px solid #f8514955', color: '#ffb4a8', fontSize: 13, lineHeight: 1.6, textAlign: 'center' }}>
               {t('phone.unavailable')}<br />{healthMsg}
             </div>
           </div>

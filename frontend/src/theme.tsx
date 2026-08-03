@@ -141,7 +141,9 @@ function buildTheme(mode: ThemeMode) {
     algorithm: dark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
     token: {
       colorPrimary: ACCENT_SEED,
-      borderRadius: 8, borderRadiusLG: 12, borderRadiusSM: 6,
+      // 圆角跟 CSS 的 --r-* 同一套刻度：控件 10 / 卡片 14 / 小件 6。
+      // 这三个数一改，所有 antd 控件一起对齐，不必逐个组件覆盖。
+      borderRadius: 10, borderRadiusLG: 14, borderRadiusSM: 6,
       fontFamily: FONT_FAMILY,
       fontSize: 14, lineHeight: 1.6,
       colorBgBase: t.bgBase,
@@ -166,12 +168,12 @@ function buildTheme(mode: ThemeMode) {
         itemSelectedColor: '#1f6feb', itemHoverBg: 'rgba(31,111,235,0.06)',
         itemBorderRadius: 8, itemHeight: 42, itemMarginInline: 8,
       },
-      Card: { borderRadiusLG: 12, paddingLG: 18, headerFontSize: 15 },
+      Card: { borderRadiusLG: 14, paddingLG: 18, headerFontSize: 15 },
       Button: { fontWeight: 500, primaryShadow: 'none', defaultShadow: 'none', dangerShadow: 'none' },
       Modal: { borderRadiusLG: 14, contentBg: t.bgContainer, headerBg: 'transparent' },
-      Segmented: { borderRadius: 8, itemSelectedBg: solidAccent(mode), itemSelectedColor: '#fff' },
+      Segmented: { borderRadius: 10, itemSelectedBg: solidAccent(mode), itemSelectedColor: '#fff' },
       Tag: { borderRadiusSM: 6 },
-      Tooltip: { borderRadius: 8 },
+      Tooltip: { borderRadius: 10 },
     },
   }
 }

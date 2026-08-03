@@ -322,7 +322,7 @@ body {
 
 /* ── 页头（14 §5.1 / §6.1）：一级页面共用一套——眉标 + 标题 + 一句话说明 ──
    概览先做出来的这套，项目页照它对齐；再有新页面也照抄这三行，不要各写各的标题行。 */
-.tt-pagehead { display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
+.tt-pagehead { display: flex; align-items: flex-start; gap: var(--sp-4); flex-wrap: wrap; }
 .tt-pagehead .ttl { min-width: 0; flex: 1 1 320px; }
 .tt-pagehead .kicker {
   font-size: var(--fs-micro); font-weight: 700; letter-spacing: .12em;
@@ -531,6 +531,13 @@ html[data-size="compact"] .ant-form-item-control-input-content > .ant-picker { w
   color: var(--text-dimmer); font-size: var(--fs-meta);
 }
 .tt-cron-card .ops { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* antd 自带的几处不在刻度上：List 行 8、内联 code 3 且字号 .85em。一条收掉，
+   不必逐个组件传 style（设计系统文档 §1）。 */
+.ant-list-item.ant-list-item { border-radius: var(--r-sm); }
+.ant-typography code, code.ant-typography {
+  border-radius: var(--r-xs); font-size: var(--fs-meta);
+}
 
 /* ── 细滚动条：更窄，hover 才稍亮 ── */
 * { scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }

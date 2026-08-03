@@ -103,7 +103,7 @@ const PRJ_CSS = `
 .prj-row.warn::before{display:none}
 
 /* sticky subheader（14 §6.1）：筛选与排序不该跟着列表滚走 */
-.prj-subbar{position:sticky;top:0;z-index:var(--z-sticky);display:flex;align-items:center;gap:10px;
+.prj-subbar{position:sticky;top:0;z-index:var(--z-sticky);display:flex;align-items:center;gap:var(--sp-3);
   flex-wrap:wrap;margin-bottom:12px;padding:8px 0;background:var(--bg-base)}
 .prj-chip{display:inline-flex;align-items:center;gap:var(--sp-2);height:28px;padding:0 var(--sp-3);border-radius:var(--r-pill);
   border:1px solid var(--border);background:transparent;color:var(--text-dim);font-size:12px;
@@ -114,14 +114,14 @@ const PRJ_CSS = `
 .prj-chip.on .n{color:#79b8ff}
 
 /* 卡片列固定在 ≥320：原来是 minmax(270,1fr)，右侧一开终端就塌成一条极窄列表（14 §6.1） */
-.prj-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
+.prj-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:var(--sp-4)}
 
 .prj-card{background:var(--bg-container);border:1px solid var(--border-subtle);border-radius:var(--r-card);
   padding:var(--sp-3) var(--sp-4);cursor:pointer;display:flex;flex-direction:column;gap:8px;
   transition:border-color .18s,transform .18s,box-shadow .18s}
 .prj-card:hover{border-color:rgba(88,166,255,.45);transform:translateY(-1px);box-shadow:var(--card-hover-shadow)}
 .prj-card:focus-visible{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
-.prj-card .prj-acts{opacity:.25;transition:opacity .15s;display:inline-flex;gap:10px;align-items:center}
+.prj-card .prj-acts{opacity:.25;transition:opacity .15s;display:inline-flex;gap:var(--sp-3);align-items:center}
 /* 次要操作 hover 才出现，但键盘走到时同样要看得见——否则纯键盘用户够不着（14 §6.1） */
 .prj-card:focus-within .prj-acts,.prj-card:focus-visible .prj-acts{opacity:1}
 .prj-card:hover .prj-acts{opacity:1}
@@ -250,7 +250,7 @@ function NewProjectModal({ open, onClose }: { open: boolean; onClose: () => void
             <Button onClick={() => setPick(true)}>{t('common.browse')}</Button>
           </Space.Compact>
           <Input placeholder={t('project.displayName')} value={name} onChange={(e) => setName(e.target.value)} />
-          <div style={{ fontSize: 12, color: 'var(--text-dimmer)' }}>{t('project.newHint')}</div>
+          <div style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)' }}>{t('project.newHint')}</div>
         </Space>
       </Modal>
       <DirPicker open={pick} start={dir} onPick={(p) => { setDir(p); setPick(false) }} onClose={() => setPick(false)} />
@@ -337,7 +337,7 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); open(p) } }}
       style={{ animationDelay: `${Math.min(i, 8) * 45}ms` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontWeight: 700, fontSize: 14.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                <span style={{ fontWeight: 700, fontSize: 'var(--fs-body)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
                 {p.races > 0 && <Tag color="gold" style={{ margin: 0 }}>{t('project.race', { count: p.races })}</Tag>}
                 <span style={{ flex: 1 }} />
                 <span className="prj-acts">
@@ -347,12 +347,12 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
                   </Tooltip>
                   <Popconfirm title={t('project.removeConfirm')} onConfirm={() => remove(p)}
                     onPopupClick={(e) => e.stopPropagation()}>
-                    <a onClick={(e) => e.stopPropagation()} style={{ color: 'var(--text-dimmer)', fontSize: 12 }}>✕</a>
+                    <a onClick={(e) => e.stopPropagation()} style={{ color: 'var(--text-dimmer)', fontSize: 'var(--fs-meta)' }}>✕</a>
                   </Popconfirm>
                 </span>
               </div>
-              <div className="prj-mono" style={{ fontSize: 11, color: 'var(--text-dimmer)', marginTop: -4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.dir}>{p.dir}</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 12, color: 'var(--text-dim)' }}>
+              <div className="prj-mono" style={{ fontSize: 'var(--fs-micro)', color: 'var(--text-dimmer)', marginTop: -4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.dir}>{p.dir}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap', fontSize: 'var(--fs-meta)', color: 'var(--text-dim)' }}>
                 <span><b style={{ color: 'var(--text-bright)' }}>{p.sessions}</b> {t('project.tasks')}</span>
                 {p.git && <>·<span><b style={{ color: 'var(--text-bright)' }}>{p.worktrees}</b> worktree</span></>}
                 {p.unfinished > 0 && <Tag color="warning" style={{ margin: 0 }}>{t('project.unfinished', { count: p.unfinished })}</Tag>}
@@ -360,15 +360,15 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
               </div>
               {(p.top?.length || 0) > 0 && (
                 <div style={{
-                  display: 'flex', flexDirection: 'column', gap: 5, padding: '7px 9px',
-                  borderRadius: 8, background: 'var(--bg-term)', border: '1px solid var(--border-subtle)', fontSize: 12.5,
+                  display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)', padding: '7px 9px',
+                  borderRadius: 'var(--r-sm)', background: 'var(--bg-term)', border: '1px solid var(--border-subtle)', fontSize: 'var(--fs-sm)',
                 }}>
                   {p.top!.map((s) => (
-                    <div key={s.name} style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+                    <div key={s.name} style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', minWidth: 0 }}>
                       {dot(false, s.waiting ? '#d29922' : s.running ? '#3fb950' : undefined)}
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.name}>{s.label || sessionLabel(s.name)}</span>
-                      {s.branch && <Tag color="cyan" style={{ margin: 0, fontSize: 10.5, lineHeight: '16px', padding: '0 5px' }}>⎇</Tag>}
-                      <span style={{ marginLeft: 'auto', color: 'var(--text-dimmer)', fontSize: 11.5, flex: '0 0 auto' }}>{relTime(s.lastActivity, t)}</span>
+                      {s.branch && <Tag color="cyan" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px', padding: '0 5px' }}>⎇</Tag>}
+                      <span style={{ marginLeft: 'auto', color: 'var(--text-dimmer)', fontSize: 'var(--fs-meta)', flex: '0 0 auto' }}>{relTime(s.lastActivity, t)}</span>
                     </div>
                   ))}
                 </div>
@@ -438,7 +438,7 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
               <div key={s.name} className="prj-row" onClick={() => openTerm(s.name)}>
                 <span style={{ marginTop: 5, display: 'inline-flex' }}>{dot(false, s.waiting ? '#d29922' : s.running ? '#3fb950' : undefined)}</span>
                 <span style={{ fontWeight: 600 }} title={s.name}>{s.label || sessionLabel(s.name)}</span>
-                <span style={{ color: 'var(--text-dimmer)', fontSize: 12, marginTop: 2 }}>{relTime(s.lastActivity, t)}</span>
+                <span style={{ color: 'var(--text-dimmer)', fontSize: 'var(--fs-meta)', marginTop: 2 }}>{relTime(s.lastActivity, t)}</span>
                 <span style={{ flex: 1 }} />
                 <span className="acts"><a>{t('project.enter')}</a></span>
               </div>
@@ -495,7 +495,7 @@ function FinishModal({ w, base, onClose, onDone, onRevive }: {
   }
   const radio = (k: typeof mode, title: any, desc: string, danger?: boolean) => (
     <div onClick={() => setMode(k)} style={{
-      display: 'flex', gap: 9, padding: '10px 12px', borderRadius: 10, cursor: 'pointer',
+      display: 'flex', gap: 'var(--sp-2)', padding: '10px 12px', borderRadius: 10, cursor: 'pointer',
       border: `1px solid ${mode === k ? 'rgba(88,166,255,.6)' : 'var(--border)'}`,
       background: mode === k ? 'rgba(31,111,235,.09)' : 'transparent',
     }}>
@@ -506,7 +506,7 @@ function FinishModal({ w, base, onClose, onDone, onRevive }: {
       }} />
       <span style={{ minWidth: 0 }}>
         <b style={{ display: 'block', fontSize: 13.5, color: danger ? '#f85149' : undefined }}>{title}</b>
-        <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>{desc}</span>
+        <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-dim)' }}>{desc}</span>
       </span>
     </div>
   )
@@ -515,7 +515,7 @@ function FinishModal({ w, base, onClose, onDone, onRevive }: {
       okButtonProps={mode === 'discard' && !merged ? { danger: true } : undefined}
       title={<span>{t('project.finish.title')} <Tag color="cyan" className="prj-mono" style={{ marginLeft: 4 }}>⎇ {w.branch}</Tag></span>} destroyOnClose>
       <Space direction="vertical" style={{ width: '100%' }} size={12}>
-        <div className="prj-mono" style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.8, padding: '9px 12px', border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-term)' }}>
+        <div className="prj-mono" style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-dim)', lineHeight: 1.8, padding: '9px 12px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-sm)', background: 'var(--bg-term)' }}>
           <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t('project.finish.kept', { path: w.path })}</div>
           {/* 已合入：损失清单换成绿色定心丸（10 §5），未提交改动仍如实提示 */}
           {merged
@@ -527,10 +527,10 @@ function FinishModal({ w, base, onClose, onDone, onRevive }: {
         </div>
         {(diff?.committed?.files?.length || 0) > 0 && (
           <div>
-            <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 5 }}>{t('project.finish.take', { base: wtBase })}</div>
-            <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '4px 2px', maxHeight: 160, overflow: 'auto' }}>
+            <div style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-dim)', marginBottom: 5 }}>{t('project.finish.take', { base: wtBase })}</div>
+            <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-sm)', padding: '4px 2px', maxHeight: 160, overflow: 'auto' }}>
               {diff.committed.files.slice(0, 20).map((f: any) => (
-                <div key={f.path} className="prj-mono" style={{ display: 'flex', gap: 8, padding: '3px 10px', fontSize: 12 }}>
+                <div key={f.path} className="prj-mono" style={{ display: 'flex', gap: 8, padding: '3px 10px', fontSize: 'var(--fs-meta)' }}>
                   <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.path}</span>
                   {f.binary ? <span style={{ color: 'var(--text-dimmer)' }}>bin</span> : (<span style={{ flex: '0 0 auto' }}>
                     <span style={{ color: '#3fb950' }}>+{f.adds}</span> <span style={{ color: '#f85149' }}>-{f.dels}</span>
@@ -538,7 +538,7 @@ function FinishModal({ w, base, onClose, onDone, onRevive }: {
                 </div>
               ))}
             </div>
-            {uncommitted > 0 && <div style={{ fontSize: 12, color: '#d29922', marginTop: 5 }}>{t('project.finish.uncommitted', { count: uncommitted })}</div>}
+            {uncommitted > 0 && <div style={{ fontSize: 'var(--fs-meta)', color: '#d29922', marginTop: 5 }}>{t('project.finish.uncommitted', { count: uncommitted })}</div>}
           </div>
         )}
         {radio('merge', <>
@@ -552,7 +552,7 @@ function FinishModal({ w, base, onClose, onDone, onRevive }: {
           ? radio('discard', t('project.finish.optDiscard'), t('project.finish.optDiscardMergedDesc', { target: w.mergedInto }))
           : radio('discard', t('project.finish.optDiscard'), t('project.finish.optDiscardDesc', { ahead: w.committedAhead }), true)}
         {mode !== 'revive' && (
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--text-dim)' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--fs-sm)', color: 'var(--text-dim)' }}>
             <input type="checkbox" checked={delBranch} onChange={(e) => setDelBranch(e.target.checked)} style={{ accentColor: '#1f6feb' }} />
             {t('project.finish.delBranch', { branch: w.branch })}
           </label>
@@ -973,7 +973,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
           content: (
             <div style={{ fontSize: 13 }}>
               <div style={{ marginBottom: 6 }}>{t('worktree.mergeConflictDesc', { stage: ae.stage || '?' })}</div>
-              <ul style={{ paddingLeft: 18, margin: 0, fontFamily: 'ui-monospace, monospace', fontSize: 12 }}>
+              <ul style={{ paddingLeft: 18, margin: 0, fontFamily: 'ui-monospace, monospace', fontSize: 'var(--fs-meta)' }}>
                 {(ae.conflictFiles || []).map((cf: string) => <li key={cf}>{cf}</li>)}
               </ul>
             </div>
@@ -988,7 +988,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
     Modal.confirm({
       title: t('project.wt.deleteConfirm', { branch: w.branch || w.path }),
       content: (
-        <div style={{ fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.8 }}>
+        <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-dim)', lineHeight: 1.8 }}>
           <div>{t('project.wt.deleteKeepsBranch', { branch: w.branch || '?' })}</div>
           {dirty > 0 && <div style={{ color: '#d29922' }}>{t('project.wt.deleteLosesDirty', { count: dirty })}</div>}
           {w.committedAhead > 0 && !w.pushed && <div style={{ color: '#d29922' }}>{t('project.wt.deleteUnpushed', { count: w.committedAhead })}</div>}
@@ -1070,11 +1070,11 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
         style={{ marginLeft: isChild ? 22 : 0, animationDelay: `${Math.min(i, 8) * 40}ms` }}
         onClick={() => openTerm(s.name)}>
         <span style={{ marginTop: 7, display: 'inline-flex' }}>{dot(false, waiting ? '#d29922' : running ? '#3fb950' : undefined)}</span>
-        {isChild && <span style={{ color: '#a371f7', fontSize: 12, marginTop: 3 }}>⑂</span>}
+        {isChild && <span style={{ color: '#a371f7', fontSize: 'var(--fs-meta)', marginTop: 3 }}>⑂</span>}
         <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
             <span style={{ fontWeight: 700 }} title={s.name}>{s.label || sessionLabel(s.name)}</span>
-            {hit.linked && hit.branch && <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 11 }}>⎇ {hit.branch}</Tag>}
+            {hit.linked && hit.branch && <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 'var(--fs-micro)' }}>⎇ {hit.branch}</Tag>}
             {hit.external && hit.linked && <Tag style={{ margin: 0 }}>⧉</Tag>}
             {swarmMap[s.name]?.role === 'leader' && <Tag color="purple" style={{ margin: 0 }}>{t('project.swarm.leaderTag')}</Tag>}
             {swarmMap[s.name]?.subrole && <Tag style={{ margin: 0 }}>{t(('swarm.subrole.' + swarmMap[s.name]!.subrole) as any) || swarmMap[s.name]!.subrole}</Tag>}
@@ -1088,21 +1088,21 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
               </Tooltip>
             )}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12, color: 'var(--text-dimmer)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)' }}>
             <Lifec done={done} cur={cur} /><span>{stage}</span>
             {/* 已合入后 ↑n 不再展示（对比远端已零领先，只会误导）；未提交改动照常提示 */}
             {merged && (
               <Tooltip title={`${w.mergedInto} · ${w.mergedKind}`}>
-                <span style={{ color: '#3fb950', fontSize: 11.5 }}>✓ {t('project.mergedTag')}</span>
+                <span style={{ color: '#3fb950', fontSize: 'var(--fs-meta)' }}>✓ {t('project.mergedTag')}</span>
               </Tooltip>
             )}
             {gs === 'pushed' && (
               <Tooltip title={hit.branch ? `origin/${hit.branch}` : undefined}>
-                <span style={{ color: '#58a6ff', fontSize: 11.5 }}>⇡ {t('project.pushedTag')}</span>
+                <span style={{ color: '#58a6ff', fontSize: 'var(--fs-meta)' }}>⇡ {t('project.pushedTag')}</span>
               </Tooltip>
             )}
             {(!merged && ahead > 0 || changes > 0) && (
-              <span className="prj-mono" style={{ fontSize: 11.5 }}>
+              <span className="prj-mono" style={{ fontSize: 'var(--fs-meta)' }}>
                 {!merged && ahead > 0 && <span style={{ color: '#58a6ff' }}>↑{ahead}</span>}
                 {!merged && ahead > 0 && changes > 0 && ' · '}
                 {changes > 0 && <span style={{ color: '#d29922' }}>{t('project.wt.changes', { count: changes })}</span>}
@@ -1134,7 +1134,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
       <div className="prj-wrap">
         {/* 项目头：面包屑 | 名称 / 路径 · ⎇主干@HEAD | 主操作。sticky（14 §6.2）——
             往下翻任务流时"我在哪个项目、要新建什么"不该跟着滚走。 */}
-        <div className="prj-in prj-head" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div className="prj-in prj-head" style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)' }}>
           <Button type="text" size="small" onClick={() => { location.hash = '#/projects' }}
             style={{ color: 'var(--text-dim)', paddingInline: 6, flex: '0 0 auto' }}>‹ {t('project.title')}</Button>
           <span style={{ width: 1, height: 18, background: 'var(--border-subtle)', flex: '0 0 auto' }} />
@@ -1144,7 +1144,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
               ellipsis editable={{ onChange: rename, tooltip: t('project.rename'), triggerType: ['icon'] }}>
               {proj.name}
             </Typography.Text>
-            <div className="prj-mono" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--text-dimmer)' }}>
+            <div className="prj-mono" style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)' }}>
               <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={proj.dir}>
                 {proj.dir}
                 {isGit && defBranch && <span style={{ color: '#39c5cf' }}> · ⎇ {defBranch}{mainHead ? ` @ ${mainHead}` : ''}</span>}
@@ -1195,15 +1195,15 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
                 <Select size="small" style={{ minWidth: 160 }} value={wtPath} onChange={setWtPath}
                   options={wts.map((w: any) => ({ value: w.path, label: '⎇ ' + (w.branch || w.path.split('/').pop()) }))} />
               )}
-              {wtMode === 'new' && <span className="prj-mono" style={{ fontSize: 11, color: 'var(--text-dimmer)' }}>{defBranch ? t('project.basedOn', { base: defBranch }) : t('project.baseDefault')}</span>}
+              {wtMode === 'new' && <span className="prj-mono" style={{ fontSize: 'var(--fs-micro)', color: 'var(--text-dimmer)' }}>{defBranch ? t('project.basedOn', { base: defBranch }) : t('project.baseDefault')}</span>}
               <span style={{ width: 1, height: 16, background: 'var(--border)' }} />
             </>)}
             <span className={`prj-pill${agent === 'claude' ? ' on' : ''}`} onClick={() => setAgent('claude')}>Claude</span>
             <span className={`prj-pill${agent === 'codex' ? ' on' : ''}`} onClick={() => setAgent('codex')}>Codex</span>
             <span className={`prj-pill${agent === 'none' ? ' on' : ''}`} onClick={() => setAgent('none')}>{t('project.agent.none')}</span>
             {/* 尾组 marginLeft:auto：换行后整组靠右成独立一行，窄屏不散架 */}
-            <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 11.5, color: 'var(--text-dimmer)', whiteSpace: 'nowrap' }}>{t('project.autoName')} · <a style={{ fontSize: 11.5 }} onClick={() => setFullForm(true)}>{t('project.fullForm')} ›</a></span>
+            <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 'var(--sp-3)' }}>
+              <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)', whiteSpace: 'nowrap' }}>{t('project.autoName')} · <a style={{ fontSize: 'var(--fs-meta)' }} onClick={() => setFullForm(true)}>{t('project.fullForm')} ›</a></span>
               <Button type="primary" size="small" loading={creating} onClick={goCreate}>{t('project.go')}</Button>
             </span>
           </div>
@@ -1237,12 +1237,12 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
                 const sw = swarms.find((x: any) => x.name === swName)
                 return (
                   <div key={'g' + swName}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 6px 2px', fontSize: 12.5, color: 'var(--text-dim)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 6px 2px', fontSize: 'var(--fs-sm)', color: 'var(--text-dim)' }}>
                       <span style={{ color: '#a371f7' }}>⬡</span>
                       <b style={{ color: 'var(--text-bright)' }}>{swName}</b>
-                      {sw && <span style={{ fontSize: 11.5, color: 'var(--text-dimmer)' }}>{t('project.swarm.members', { mine: sw.inProj, total: sw.roster })}</span>}
+                      {sw && <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)' }}>{t('project.swarm.members', { mine: sw.inProj, total: sw.roster })}</span>}
                       <span style={{ flex: 1 }} />
-                      <a style={{ fontSize: 12 }} onClick={() => { location.hash = '#/swarm/' + encodeURIComponent(swName) }}>{t('project.swarm.board')}</a>
+                      <a style={{ fontSize: 'var(--fs-meta)' }} onClick={() => { location.hash = '#/swarm/' + encodeURIComponent(swName) }}>{t('project.swarm.board')}</a>
                     </div>
                     <div style={{ marginLeft: 6, paddingLeft: 10, borderLeft: '2px solid rgba(163,113,247,.3)' }}>
                       {rows.map(row)}
@@ -1261,15 +1261,15 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
               <div key={w.path} className="prj-row">
                 <span style={{ marginTop: 7, display: 'inline-flex' }}>{dot(false, '#3fb950')}</span>
                 <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-                    <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 11 }}>⎇ {w.branch}</Tag>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+                    <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 'var(--fs-micro)' }}>⎇ {w.branch}</Tag>
                     <Tooltip title={`${w.mergedInto} · ${w.mergedKind}`}>
                       <Tag color="success" style={{ margin: 0 }}>✓ {t('project.mergedTag')}</Tag>
                     </Tooltip>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-dimmer)', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)', flexWrap: 'wrap' }}>
                     <Lifec done={4} /><span>{t('project.stage.merged')}</span>
-                    <span className="prj-mono" style={{ fontSize: 11.5, color: '#3fb950' }}>{t('project.mergedInto', { target: w.mergedInto })}</span>
+                    <span className="prj-mono" style={{ fontSize: 'var(--fs-meta)', color: '#3fb950' }}>{t('project.mergedInto', { target: w.mergedInto })}</span>
                     <span>{relTime(w.lastCommitAt, t)}</span>
                   </div>
                 </div>
@@ -1288,8 +1288,8 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
               <div key={w.path} className="prj-row warn">
                 <span style={{ marginTop: 7, display: 'inline-flex' }}>{dot(false, '#d29922')}</span>
                 <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-                    <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 11 }}>⎇ {w.branch}</Tag>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+                    <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 'var(--fs-micro)' }}>⎇ {w.branch}</Tag>
                     <Tag color="warning" style={{ margin: 0 }}>{t('project.sessionClosed')}</Tag>
                     {/* 已合入但还有未提交改动：绿标缓解焦虑，损失只剩 working tree */}
                     {w.mergedInto && (
@@ -1304,19 +1304,19 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
                       </Tooltip>
                     )}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-dimmer)', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)', flexWrap: 'wrap' }}>
                     {w.mergedInto
                       ? <><Lifec done={2} cur={3} /><span>{t('project.stage.unfinished')}</span></>
                       : w.pushed
                         ? <><Lifec done={3} cur={4} /><span>{t('project.stage.pushed')}</span></>
                         : <><Lifec done={2} cur={3} /><span>{t('project.stage.committed')}</span></>}
-                    <span className="prj-mono" style={{ fontSize: 11.5 }}>
+                    <span className="prj-mono" style={{ fontSize: 'var(--fs-meta)' }}>
                       {w.mergedInto
                         ? <span style={{ color: '#d29922' }}>{t('project.wt.changes', { count: w.dirty + w.untracked })}</span>
                         : t('project.aheadDirty', { ahead: w.committedAhead, dirty: w.dirty + w.untracked })}
                     </span>
                     {/* S3 佐证（10 §4）：远端分支已删只给线索，不替人拍板 */}
-                    {!w.mergedInto && w.remoteGone && <span style={{ color: '#d29922', fontSize: 11.5 }}>{t('project.remoteGoneHint')}</span>}
+                    {!w.mergedInto && w.remoteGone && <span style={{ color: '#d29922', fontSize: 'var(--fs-meta)' }}>{t('project.remoteGoneHint')}</span>}
                     <span>{relTime(w.lastCommitAt, t)}</span>
                   </div>
                 </div>
@@ -1335,11 +1335,11 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
               <div key={w.path} className="prj-row">
                 <span style={{ marginTop: 7, display: 'inline-flex' }}>{dot(false, '#a371f7')}</span>
                 <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-                    <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 11 }}>⎇ {w.branch}</Tag>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+                    <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 'var(--fs-micro)' }}>⎇ {w.branch}</Tag>
                     <Tag color="purple" style={{ margin: 0 }}>⇥ {t('project.mergedClean')}</Tag>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-dimmer)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)' }}>
                     <Lifec done={4} /><span>{t('project.stage.done')}</span>
                   </div>
                 </div>
@@ -1361,7 +1361,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
               <Button size="small" onClick={() => setWtOpen(true)}>＋ {t('project.wt.newWorktree')}</Button>
               <Button size="small" onClick={pruneWts}>{t('project.wt.prune')}</Button>
               <span style={{ flex: 1 }} />
-              <a style={{ fontSize: 12.5 }} onClick={() => setWtOpen(true)}>{t('project.wt.allRepos')} ›</a>
+              <a style={{ fontSize: 'var(--fs-sm)' }} onClick={() => setWtOpen(true)}>{t('project.wt.allRepos')} ›</a>
             </div>
 
             {mainWt && (
@@ -1375,7 +1375,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
                     <div className="n1">
                       <span className="wt-br" style={{ color: FORK_TRUNK }}>{mainWt.branch || 'HEAD'}</span>
                       <Tag style={{ margin: 0 }}>{t('project.wt.mainTag')}</Tag>
-                      <span className="prj-mono" style={{ fontSize: 11, color: 'var(--text-dimmer)' }}>{(mainWt.head || '').slice(0, 7)}</span>
+                      <span className="prj-mono" style={{ fontSize: 'var(--fs-micro)', color: 'var(--text-dimmer)' }}>{(mainWt.head || '').slice(0, 7)}</span>
                     </div>
                     <div className="n2">
                       <span className="prj-mono">{mainWt.path}</span>
@@ -1448,13 +1448,13 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
                           <div key={ref.session} className="prj-subrow" onClick={() => openTerm(ref.session)}>
                             {dot(false, cc[ref.session] || cx[ref.session] ? '#3fb950' : undefined)}
                             <span style={{ fontWeight: 600, fontSize: 13 }} title={ref.session}>{sessionLabel(ref.session)}</span>
-                            {cc[ref.session] && <Tag color="blue" style={{ margin: 0, fontSize: 10.5, lineHeight: '16px' }}>Claude</Tag>}
-                            {cx[ref.session] && <Tag color="green" style={{ margin: 0, fontSize: 10.5, lineHeight: '16px' }}>Codex</Tag>}
+                            {cc[ref.session] && <Tag color="blue" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px' }}>Claude</Tag>}
+                            {cx[ref.session] && <Tag color="green" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px' }}>Codex</Tag>}
                             <span className="prj-peek">{peeks[ref.session] || '…'}</span>
-                            <a style={{ fontSize: 12 }} onClick={(e) => { e.stopPropagation(); openTerm(ref.session) }}>{t('project.enter')}</a>
+                            <a style={{ fontSize: 'var(--fs-meta)' }} onClick={(e) => { e.stopPropagation(); openTerm(ref.session) }}>{t('project.enter')}</a>
                           </div>
                         ))}
-                        {live === 0 && <div style={{ fontSize: 12, color: 'var(--text-dimmer)', padding: '4px 8px' }}>{t('project.wt.noCli')}</div>}
+                        {live === 0 && <div style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)', padding: '4px 8px' }}>{t('project.wt.noCli')}</div>}
                         <div className="prj-addline">
                           {t('project.wt.newCli')}
                           <a onClick={() => newCli(w, 'shell')}>shell</a>·<a onClick={() => newCli(w, 'claude')}>Claude</a>·<a onClick={() => newCli(w, 'codex')}>Codex</a>
@@ -1500,7 +1500,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <Tag color="gold" style={{ margin: 0 }}>RACE</Tag>
                 <b>{r.name}</b>
-                <span style={{ fontSize: 12, color: 'var(--text-dimmer)' }}>{t('project.race.meta', { count: (r.contestants || []).length, base: r.base })}</span>
+                <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)' }}>{t('project.race.meta', { count: (r.contestants || []).length, base: r.base })}</span>
                 <span style={{ flex: 1 }} />
                 <Button size="small" type="primary" onClick={() => setCompareRace(r)}>{t('project.race.compare')} →</Button>
               </div>
@@ -1521,14 +1521,14 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
                   onClick={() => { if (inProj) openTerm(session) }}>
                   {dot(false, status === 'waiting' ? '#d29922' : running ? '#3fb950' : undefined)}
                   <span style={{ fontWeight: 600, fontSize: 13 }} title={session}>{label || sessionLabel(session)}</span>
-                  {role === 'leader' && <Tag color="purple" style={{ margin: 0, fontSize: 10.5, lineHeight: '16px' }}>{t('project.swarm.leaderTag')}</Tag>}
-                  {subrole && <Tag style={{ margin: 0, fontSize: 10.5, lineHeight: '16px' }}>{t(('swarm.subrole.' + subrole) as any) || subrole}</Tag>}
-                  {done && <Tag color="purple" style={{ margin: 0, fontSize: 10.5, lineHeight: '16px' }}>{t('project.swarm.integrate')}</Tag>}
-                  {ann[session]?.primary?.linked && <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 10.5, lineHeight: '16px' }}>⎇ {ann[session].primary.branch}</Tag>}
+                  {role === 'leader' && <Tag color="purple" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px' }}>{t('project.swarm.leaderTag')}</Tag>}
+                  {subrole && <Tag style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px' }}>{t(('swarm.subrole.' + subrole) as any) || subrole}</Tag>}
+                  {done && <Tag color="purple" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px' }}>{t('project.swarm.integrate')}</Tag>}
+                  {ann[session]?.primary?.linked && <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px' }}>⎇ {ann[session].primary.branch}</Tag>}
                   <span style={{ flex: 1 }} />
                   {inProj
-                    ? <a style={{ fontSize: 12 }} onClick={(e) => { e.stopPropagation(); openTerm(session) }}>{t('project.enter')}</a>
-                    : <span style={{ fontSize: 11.5, color: 'var(--text-dimmer)' }}>{t('project.swarm.crossProj')}</span>}
+                    ? <a style={{ fontSize: 'var(--fs-meta)' }} onClick={(e) => { e.stopPropagation(); openTerm(session) }}>{t('project.enter')}</a>
+                    : <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)' }}>{t('project.swarm.crossProj')}</span>}
                 </div>
               )
             }
@@ -1537,11 +1537,11 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <Tag color="purple" style={{ margin: 0 }}>⬡ {t('nav.swarm')}</Tag>
                   <b>{sw.name}</b>
-                  {sw.goal && <span style={{ fontSize: 12, color: 'var(--text-dimmer)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 280 }}>{sw.goal}</span>}
+                  {sw.goal && <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 280 }}>{sw.goal}</span>}
                   {!sw.supervisor && <Tag color="warning" style={{ margin: 0 }}>{t('project.swarm.noLeader')}</Tag>}
                   <span style={{ flex: 1 }} />
                   {ex && Object.keys(ex.cols).length > 0 && (
-                    <span className="prj-mono" style={{ fontSize: 11, color: 'var(--text-dimmer)' }}>
+                    <span className="prj-mono" style={{ fontSize: 'var(--fs-micro)', color: 'var(--text-dimmer)' }}>
                       {['backlog', 'assigned', 'doing', 'review', 'done'].filter((c) => ex.cols[c]).map((c) => `${t(('swarm.board.col.' + c) as any)} ${ex.cols[c]}`).join(' · ')}
                     </span>
                   )}
@@ -1563,7 +1563,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
                     .map((m: any) => memberRow(m.session, m.role, m.subrole, !!m.done, m.status, m.label))}
                 </div>
                 {ex?.last && (
-                  <div className="prj-mono" style={{ display: 'flex', gap: 8, marginTop: 9, padding: '6px 10px', borderRadius: 8, background: 'var(--bg-term)', border: '1px solid var(--border-subtle)', fontSize: 11.5, color: 'var(--text-dim)' }}>
+                  <div className="prj-mono" style={{ display: 'flex', gap: 8, marginTop: 9, padding: '6px 10px', borderRadius: 'var(--r-sm)', background: 'var(--bg-term)', border: '1px solid var(--border-subtle)', fontSize: 'var(--fs-meta)', color: 'var(--text-dim)' }}>
                     <span style={{ color: '#c4a5f9', flex: '0 0 auto' }}>{ex.last.author}</span>
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ex.last.text}</span>
                   </div>
@@ -1581,26 +1581,26 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
         {tab === 'act' && (
           <div className="prj-panel prj-in" style={{ padding: '6px 4px' }}>
             {activity.map((e: any) => e.kind === 'trace' ? (
-              <div key={'t' + e.at + e.branch} className="prj-mono" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', fontSize: 12.5 }}>
+              <div key={'t' + e.at + e.branch} className="prj-mono" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', fontSize: 'var(--fs-sm)' }}>
                 <span style={{ color: '#a371f7' }}>⇥</span>
                 <span style={{ color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {e.action === 'merged'
                     ? t('project.act.traceMerged', { branch: e.branch, base: e.base || '?', strategy: e.strategy || 'squash' })
                     : t('project.act.traceDiscarded', { branch: e.branch })}
                 </span>
-                <span style={{ marginLeft: 'auto', color: 'var(--text-dimmer)', fontSize: 11.5, flex: '0 0 auto' }}>{relTime(e.at, t)}</span>
+                <span style={{ marginLeft: 'auto', color: 'var(--text-dimmer)', fontSize: 'var(--fs-meta)', flex: '0 0 auto' }}>{relTime(e.at, t)}</span>
               </div>
             ) : (
-              <div key={e.oid + e.at} className="prj-mono" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', fontSize: 12.5 }}>
+              <div key={e.oid + e.at} className="prj-mono" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', fontSize: 'var(--fs-sm)' }}>
                 <span style={{ color: '#39c5cf', opacity: 0.8 }}>{e.oid}</span>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.subject}</span>
-                <span style={{ marginLeft: 'auto', color: 'var(--text-dimmer)', fontSize: 11.5, flex: '0 0 auto' }}>
+                <span style={{ marginLeft: 'auto', color: 'var(--text-dimmer)', fontSize: 'var(--fs-meta)', flex: '0 0 auto' }}>
                   {e.refs ? `${String(e.refs).split(',')[0]} · ` : ''}{relTime(e.at, t)}
                 </span>
               </div>
             ))}
             {activity.length === 0 && <div className="prj-empty">{t('project.act.empty')}</div>}
-            <div style={{ fontSize: 11.5, color: 'var(--text-dimmer)', padding: '8px 12px', borderTop: '1px dashed var(--border-subtle)' }}>{t('project.act.hint')}</div>
+            <div style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)', padding: '8px 12px', borderTop: '1px dashed var(--border-subtle)' }}>{t('project.act.hint')}</div>
           </div>
         )}
 

@@ -1530,7 +1530,7 @@ function TerminalPane(props: {
       {dragOver && (
         <div style={{
           position: 'absolute', inset: 0, zIndex: 5, pointerEvents: 'none',
-          border: '2px dashed #58a6ff', borderRadius: 8, background: 'rgba(88,166,255,.08)',
+          border: '2px dashed #58a6ff', borderRadius: 'var(--r-sm)', background: 'rgba(88,166,255,.08)',
           display: 'grid', placeItems: 'center', color: '#58a6ff', fontSize: 14, fontWeight: 600,
         }}>{t('terminal.dropToMention')}</div>
       )}
@@ -1571,7 +1571,7 @@ function TerminalPane(props: {
   const sessionBottom = (
     <>
       {isTouch && !inChat && (
-        <div style={{ display: 'flex', gap: 6, padding: '8px 8px 0' }} onDragOver={allowPathDrop} onDrop={onInputDrop}>
+        <div style={{ display: 'flex', gap: 'var(--sp-2)', padding: '8px 8px 0' }} onDragOver={allowPathDrop} onDrop={onInputDrop}>
           <Input ref={mobileInputRef} value={line}
             onFocus={() => { exitCopyMode(); setTyping(true) }}
             // 延后收起：点快捷键条上的键会先让输入框失焦，立刻收就把那一条抽走了
@@ -1585,7 +1585,7 @@ function TerminalPane(props: {
       {/* 快捷键条只在输入态出现（13 §5.2）：它常驻 49px，而不打字时一个键也用不上——
           手机上这 49px 直接等于终端少 3 行。桌面不受影响。 */}
       {!inChat && (!isPhone || typing) && (
-        <div style={{ display: 'flex', gap: 6, padding: 8, borderTop: '1px solid var(--border)', overflowX: 'auto' }}>
+        <div style={{ display: 'flex', gap: 'var(--sp-2)', padding: 8, borderTop: '1px solid var(--border)', overflowX: 'auto' }}>
           <Button type="primary" onMouseDown={noBlur} onClick={() => (isTouch ? submitLine() : sendKey('\r'))}>Enter</Button>
           {/* 触屏没有 Ctrl+Shift+V / 右键菜单在长按选词后也不再弹出，丝带上补一个直达粘贴 */}
           {isTouch && <Button onMouseDown={noBlur} onClick={() => active && pasteClipboard(active)} style={{ flex: '0 0 auto' }}>{t('terminal.pasteAction')}</Button>}
@@ -1889,7 +1889,7 @@ export function DirPicker({ open, start, onPick, onClose }: { open: boolean; sta
     <Modal open={open} onCancel={onClose} title={t('dirPicker.title')} zIndex={1100}
       footer={[<Button key="c" onClick={onClose}>{t('common.cancel')}</Button>, <Button key="o" type="primary" onClick={() => choose(data.path)}>{t('dirPicker.chooseCurrent')}</Button>]}>
       {/* 快捷候选：家目录 + 最近用过的目录 */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)', marginBottom: 10 }}>
         <Tag style={{ cursor: 'pointer', margin: 0 }} onClick={() => load(undefined)}>🏠 {t('dirPicker.home')}</Tag>
         {recent.map((d) => (
           <Tooltip key={d} title={d}>
@@ -2106,7 +2106,7 @@ export function NewSessionModal({ open, parent, onClose, onDone }: { open: boole
             )}
           </>)}
           {/* 工作区三选一（W1 交互修订）：常驻不隐藏(cc96123 教训)——非 git 目录整组置灰+tooltip */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <span style={{ color: 'var(--text-dim)', fontSize: 13, flex: '0 0 auto' }}>{t('session.wt.where')}</span>
               <Tooltip title={isGitRepo ? '' : parent ? t('session.fork.parentNotRepo') : t('session.worktreeNeedsRepo')}>
@@ -2131,7 +2131,7 @@ export function NewSessionModal({ open, parent, onClose, onDone }: { open: boole
                     value: w.path,
                     title: `⎇ ${w.branch || w.path.split('/').pop()}`,
                     label: (
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', minWidth: 0 }}>
                         <span style={{ fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis' }}>⎇ {w.branch || '?'}</span>
                         {occupied
                           ? <Tag color="green" style={{ margin: 0, fontSize: 11, lineHeight: '16px' }}>{sessionLabel(w.sessions[0].session)}</Tag>
@@ -2147,7 +2147,7 @@ export function NewSessionModal({ open, parent, onClose, onDone }: { open: boole
             {/* 新建 worktree 展开态（W1 交互修订 4）：只选「基于」（缺省本地主干）。
                 分支不提前指定——占位按会话名派生，Agent 开工后按任务命名 */}
             {wtMode === 'new' && isGitRepo && (
-              <div style={{ background: 'var(--bg-elevated)', borderRadius: 8, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ background: 'var(--bg-elevated)', borderRadius: 'var(--r-sm)', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ flex: '0 0 52px', color: 'var(--text-dim)', fontSize: 13 }}>{t('session.wt.base')}</span>
                   <Select size="small" showSearch optionFilterProp="label" style={{ flex: 1, minWidth: 0 }}
@@ -2282,7 +2282,7 @@ export function CloseWorktreeModal({ info, onClose, onDone }: {
           })}
       </div>
       <Radio.Group value={mode} onChange={(e) => setMode(e.target.value)}
-        style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
         <Radio value="keep">{t('worktree.close.keep')}</Radio>
         {/* 已合入后本地再合并只会空转/添乱：禁用并提示走清理 */}
         <Radio value="merge" disabled={!st.base || merged}>
@@ -2622,7 +2622,7 @@ function Sessions({ openTerm, closeTerm, activeTerm, embedded }: {
         <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>{sessionActions}</div>
       )}
       {/* 工具条：搜索 + 排序同一行，类型筛选另起一行 */}
-      <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Input allowClear value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('session.searchPlaceholder')}
             style={{ flex: 1, minWidth: 0 }}
@@ -2639,10 +2639,11 @@ function Sessions({ openTerm, closeTerm, activeTerm, embedded }: {
           </Button>
           {embedded && !isPhone && sessionActions}
         </div>
-        {/* block 会把 6 项等分：392 的屏宽上每格只剩 ~60px，标签全被截成「全部…」，
-            六个筛选器长得一模一样。手机改成按内容宽 + 整条横滑。 */}
+        {/* 一律按内容宽：block 在手机上把 6 项等分成 ~60px、标签全截成「全部…」；
+            在桌面上又把 6 个标签摊到 1200px，中间空出大片，读起来是散的。
+            筛选条本来就该贴左、只占它需要的宽度。 */}
         <div style={{ overflowX: 'auto' }} className="tt-seg-scroll">
-          <Segmented block={!isPhone} value={filter} onChange={(v) => setFilter(v as any)} size="small" options={[
+          <Segmented value={filter} onChange={(v) => setFilter(v as any)} size="small" options={[
             { label: `${t('common.all')} ${cnt('all')}`, value: 'all' },
             { label: `${t('session.waiting')} ${cnt('waiting')}`, value: 'waiting' },
             { label: `Claude ${cnt('claude')}`, value: 'claude' },
@@ -2715,21 +2716,22 @@ function Sessions({ openTerm, closeTerm, activeTerm, embedded }: {
                   position: 'relative', overflow: 'hidden',
                   marginLeft: indent ? 14 * (en.depth || 1) : 0,
                   borderLeft: indent ? (en.race ? '2px solid rgba(212,160,23,.35)' : en.fam ? '2px solid rgba(163,113,247,.4)' : '2px solid rgba(57,197,207,.3)') : undefined,
-                  padding: '10px 8px 10px 12px', cursor: 'pointer', borderRadius: indent ? '0 8px 8px 0' : 8,
+                  padding: '10px 8px 10px 12px', cursor: 'pointer',
+                  borderRadius: indent ? '0 var(--r-sm) var(--r-sm) 0' : 'var(--r-sm)',
                   background: activeRow ? 'linear-gradient(90deg, rgba(31,111,235,.38), rgba(31,111,235,.16))' : undefined,
                   border: activeRow ? '1px solid #58a6ff' : '1px solid transparent',
                   boxShadow: activeRow ? '0 0 0 1px rgba(88,166,255,.18), 0 0 18px rgba(31,111,235,.14)' : undefined,
                 }} onClick={() => openTerm(s.name)}>
                   {activeRow && <span aria-hidden style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: '#58a6ff' }} />}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', width: '100%', minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', minWidth: 0, flex: 1 }}>
                       <i title={waiting ? t('prompt.confirmRequired') : connected ? t('terminal.status.connected') : t('terminal.status.idle')} style={{ width: 8, height: 8, borderRadius: '50%', flex: '0 0 8px', background: waiting ? '#d29922' : connected ? '#3fb950' : 'var(--text-dimmer)' }} />
                       <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' }}>
                           {en.fam && <Tooltip title={t('session.fork.childOf', { parent: s.parent })}><span style={{ color: '#a371f7', flex: '0 0 auto', fontSize: 13 }}>⑂</span></Tooltip>}
                           <span style={{ fontWeight: 700, color: activeRow ? '#fff' : 'var(--text-bright)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${s.label || s.name}（${s.id || s.name}）`}>
                             {s.label || s.name}
-                            {(s.id || s.name) !== (s.label || s.name) && <span style={{ opacity: .5, fontSize: '.85em', marginLeft: 4, fontWeight: 400 }}>({s.id || s.name})</span>}
+                            {(s.id || s.name) !== (s.label || s.name) && <span style={{ opacity: .5, fontSize: 'var(--fs-meta)', marginLeft: 4, fontWeight: 400 }}>({s.id || s.name})</span>}
                           </span>
                           {(() => { // worktree 归属：⎇ 分支紧跟会话名(设计 W2)；外部 worktree 加 ⧉ 标识；手机端只显图标
                             const ann = wtAnn[s.name]
@@ -2760,7 +2762,7 @@ function Sessions({ openTerm, closeTerm, activeTerm, embedded }: {
                         </div>
                       </div>
                     </div>
-                    <div onClick={(e) => e.stopPropagation()} style={{ marginLeft: 'auto', display: 'flex', gap: 14, alignItems: 'center', flex: '0 0 auto', whiteSpace: 'nowrap' }}>
+                    <div onClick={(e) => e.stopPropagation()} style={{ marginLeft: 'auto', display: 'flex', gap: 'var(--sp-4)', alignItems: 'center', flex: '0 0 auto', whiteSpace: 'nowrap' }}>
                       {!sw && wide && <a onClick={() => setForking(s.name)}>{t('session.fork.entry')}</a>}
                       {sw && <a onClick={() => goSwarm(sw.swarm)}>{t('session.swarmPage')}</a>}
                       {sw ? (
@@ -2869,7 +2871,7 @@ function P2PCard() {
           <span style={dim}>{t('settings.p2pHelp')}</span>
         </Space>
         {/* STUN 服务器（留空用服务端默认）。仅影响本浏览器的打洞。 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, opacity: on ? 1 : 0.5 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)', opacity: on ? 1 : 0.5 }}>
           <span style={dim}>{t('settings.p2pStun')}</span>
           <Input
             disabled={!on} allowClear value={stunValue}
@@ -2880,7 +2882,7 @@ function P2PCard() {
           <span style={hint}>{t('settings.p2pStunHelp')}</span>
         </div>
         {/* 连接超时（秒）：打洞建链超时后回退 frp。 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, opacity: on ? 1 : 0.5 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)', opacity: on ? 1 : 0.5 }}>
           <span style={dim}>{t('settings.p2pTimeout')}</span>
           <Space align="center" wrap>
             <InputNumber
@@ -2892,7 +2894,7 @@ function P2PCard() {
           </Space>
         </div>
         {/* 候选收集(gather)上限（秒）：慢网(手机蜂窝 srflx 迟到)可调大。 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, opacity: on ? 1 : 0.5 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)', opacity: on ? 1 : 0.5 }}>
           <span style={dim}>{t('settings.p2pGather')}</span>
           <Space align="center" wrap>
             <InputNumber
@@ -2904,7 +2906,7 @@ function P2PCard() {
           </Space>
         </div>
         {/* P2P 最低速率(KB/s)：直连平均落盘速率长期低于此值就回退中转；0=不回退，永远坚持 P2P。 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, opacity: on ? 1 : 0.5 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)', opacity: on ? 1 : 0.5 }}>
           <span style={dim}>{t('settings.p2pMinSpeed')}</span>
           <Space align="center" wrap>
             <InputNumber
@@ -2933,7 +2935,7 @@ function QuickCommandsCard() {
   return (
     <Card title={t('settings.quickCommands')}>
       <Space direction="vertical" size="small" style={{ width: '100%', maxWidth: 520 }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)' }}>
           {cmds.map((cmd, i) => (
             <Tag key={i} closable onClose={() => remove(i)} color="blue" style={{ margin: 0 }}>{cmd}</Tag>
           ))}
@@ -3552,9 +3554,9 @@ function TwoFactorCard() {
 
         {/* 开启流程：扫码 → 输码确认 */}
         {setup && (
-          <div style={{ padding: 16, background: 'var(--bg-base)', borderRadius: 8 }}>
+          <div style={{ padding: 16, background: 'var(--bg-base)', borderRadius: 'var(--r-sm)' }}>
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-              <div style={{ background: '#fff', padding: 10, borderRadius: 8 }}><QRCodeSVG value={setup.uri} size={168} /></div>
+              <div style={{ background: '#fff', padding: 10, borderRadius: 'var(--r-sm)' }}><QRCodeSVG value={setup.uri} size={168} /></div>
               <div style={{ flex: 1, minWidth: 240 }}>
                 <div style={{ color: 'var(--text-dim)', fontSize: 12, marginBottom: 4 }}>{t('twoFactor.scanStep')}</div>
                 <Space.Compact style={{ width: '100%', marginBottom: 10 }}>
@@ -3574,8 +3576,8 @@ function TwoFactorCard() {
 
         {/* 查看当前二维码（已开启时给新设备加） */}
         {qr && (
-          <div style={{ padding: 16, background: 'var(--bg-base)', borderRadius: 8, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-            <div style={{ background: '#fff', padding: 10, borderRadius: 8 }}><QRCodeSVG value={qr.uri} size={168} /></div>
+          <div style={{ padding: 16, background: 'var(--bg-base)', borderRadius: 'var(--r-sm)', display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div style={{ background: '#fff', padding: 10, borderRadius: 'var(--r-sm)' }}><QRCodeSVG value={qr.uri} size={168} /></div>
             <div style={{ flex: 1, minWidth: 240 }}>
               <div style={{ color: 'var(--text-dim)', fontSize: 12, marginBottom: 4 }}>{t('twoFactor.addDevice')}</div>
               <Space.Compact style={{ width: '100%' }}><Input readOnly value={qr.secret} /><Button onClick={() => copy(qr.secret)}>{t('common.copy')}</Button></Space.Compact>
@@ -3678,7 +3680,7 @@ function CollectModal({ group, onClose }: { group: string | null; onClose: () =>
   }, [group, t])
   return (
     <Modal open={!!group} onCancel={onClose} footer={null} title={t('task.collectTitle', { group: group || '' })} width="min(720px,94vw)">
-      <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '60vh', overflow: 'auto', background: 'var(--bg-term)', padding: 12, borderRadius: 8, fontSize: 12.5 }}>{text}</pre>
+      <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '60vh', overflow: 'auto', background: 'var(--bg-term)', padding: 12, borderRadius: 'var(--r-sm)', fontSize: 12.5 }}>{text}</pre>
     </Modal>
   )
 }
