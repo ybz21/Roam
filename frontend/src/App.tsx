@@ -44,7 +44,7 @@ import { Workspace, SessionCapsule } from './shell/Workspace'
 import { Navigation } from './shell/Navigation'
 import { reorderTabs } from './shell/tabs'
 import { requestIntent } from './intents'
-import { SessionDock } from './shell/SessionDock'
+import { SessionDock, SessionSwitchSheet } from './shell/SessionDock'
 import { sessionProject, setSessionProjects, buildSessionProjects } from './session-project'
 import { MobileSheet, SheetRow, SheetSection } from './shell/MobileSheet'
 import { WorkspaceTopbar, type PaletteItem } from './shell/WorkspaceTopbar'
@@ -891,6 +891,9 @@ const TI = {
   // Focus = 四角向外扩，返回分栏 = 四角向内收
   focus: tIcon(<><path d="M4 9V4h5" /><path d="M20 9V4h-5" /><path d="M4 15v5h5" /><path d="M20 15v5h-5" /></>),
   unfocus: tIcon(<><path d="M9 4v5H4" /><path d="M15 4v5h5" /><path d="M9 20v-5H4" /><path d="M15 20v-5h5" /></>),
+  back: tIcon(<><line x1="20" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></>),
+  caret: tIcon(<polyline points="6 9 12 15 18 9" />),
+  dots: tIcon(<><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></>),
   redraw: tIcon(<><path d="M20 12a8 8 0 1 1-2.6-5.9" /><path d="M20.5 4v5h-5" /></>),
   reconnect: tIcon(<><path d="M10.4 13.6a4.2 4.2 0 0 0 6 0l2.4-2.4a4.2 4.2 0 0 0-6-6l-1.4 1.4" /><path d="M13.6 10.4a4.2 4.2 0 0 0-6 0l-2.4 2.4a4.2 4.2 0 0 0 6 6l1.4-1.4" /></>),
 }
@@ -1017,6 +1020,10 @@ function TerminalPane(props: {
 
   // 标签拖拽排序（14 §7.1）：dragTab / dropAt 只用来画反馈（半透明 + 插入线），
   // 落点判定全部走事件本身，见下面两个 helper。
+  const { phone: isPhone } = useLayout()
+  const [typing, setTyping] = useState(false)
+  const [switchOpen, setSwitchOpen] = useState(false)
+  const [moreSheet, setMoreSheet] = useState(false)
   const [dragTab, setDragTab] = useState<string | null>(null)
   const [dropAt, setDropAt] = useState<number | null>(null)
   // 自定义 MIME：文件区/终端的拖放判定按 type 分流，共用 text/plain 会被它们当路径接走
@@ -1153,6 +1160,15 @@ function TerminalPane(props: {
   }, [terms])
 
   useEffect(() => { onNeedsInput?.(termNeedsInput) }, [termNeedsInput, onNeedsInput])
+
+  // 软键盘开合会改可视高度，但 xterm 不会自己重算行数——不重新 fit 就会出现
+  // 「PTY 以为还有 25 行、实际只画得下 7 行」的错位，表现为花屏。等一帧让布局落定再量。
+  const kb = useLayout().keyboard
+  useEffect(() => {
+    if (!active) return
+    const id = requestAnimationFrame(() => termRefs.current[active]?.fit())
+    return () => cancelAnimationFrame(id)
+  }, [kb, active, typing])
 
   const sendPaste = (session: string, text: string) => {
     if (!text) return
@@ -1375,6 +1391,64 @@ function TerminalPane(props: {
       </div>
     </div>
   )
+  // ── 手机会话页顶栏（13 §5.1）：一行 50，取代「标签条 + 工具条」两行 79 ──
+  // 中间胶囊点开 = 会话切换 sheet（取代横滑标签条）；除 Agent 视图切换外，其余控件全进「⋯」。
+  const phoneChrome = isPhone && !inChat ? (
+    <>
+      <div className="tt-sesshead">
+        <button type="button" className="ic" aria-label={t('common.collapse')} onClick={onCollapse}>
+          {TI.back}
+        </button>
+        <button type="button" className="pill" onClick={() => setSwitchOpen(true)}>
+          <i className="d" style={{ background: activeNeedsInput ? '#d29922' : dot }} />
+          {active && <TabName name={active} />}
+          {TI.caret}
+          {terms.length > 1 && <span className="n">{terms.length}</span>}
+        </button>
+        {active && claudeMap[active]?.running && (
+          <button type="button" className={`ic${claudeView[active] ? ' on' : ''}`} aria-label="Claude"
+            onClick={() => setClaudeView((v) => ({ ...v, [active!]: !v[active!] }))}>
+            <AgentMark kind="claude" size={16} />
+          </button>
+        )}
+        {active && codexMap[active]?.running && (
+          <button type="button" className={`ic${codexView[active] ? ' on' : ''}`} aria-label="Codex"
+            onClick={() => setCodexView((v) => ({ ...v, [active!]: !v[active!] }))}>
+            <AgentMark kind="codex" size={16} />
+          </button>
+        )}
+        <button type="button" className="ic" aria-label={t('common.more')} onClick={() => setMoreSheet(true)}>
+          {TI.dots}
+        </button>
+      </div>
+      <SessionSwitchSheet open={switchOpen} onClose={() => setSwitchOpen(false)}
+        sessions={terms} active={active} needsInput={termNeedsInput}
+        running={(n) => !!(claudeMap[n]?.running || codexMap[n]?.running)}
+        onPick={setActive} onCloseSession={closeTerm} />
+      <MobileSheet open={moreSheet} title={t('common.more')} onClose={() => setMoreSheet(false)}>
+        <SheetSection>{t('mobile.groupSession')}</SheetSection>
+        <SheetRow icon={TI.rename} title={t('session.rename')} onClick={() => { setMoreSheet(false); active && setRenameSession(active) }} />
+        <SheetRow icon={TI.newTab} title={t('terminal.newTab')}
+          onClick={() => { setMoreSheet(false); active && window.open(`/#/term/${encodeURIComponent(active)}`, '_blank') }} />
+        <SheetSection>{t('mobile.groupPanels')}</SheetSection>
+        <SheetRow icon={TI.folder} title={t('chat.files')} onClick={() => { setMoreSheet(false); toggleFiles() }} />
+        <SheetRow icon={TI.git} title={t('git.title')} onClick={() => { setMoreSheet(false); toggleGit() }} />
+        <SheetRow icon={TI.mic} title={t('voice.input')} onClick={() => { setMoreSheet(false); setShowVoice((v) => !v) }} />
+        <SheetRow icon={promptOff ? TI.bellOff : TI.bellOn} title={t('prompt.popup')}
+          desc={promptOff ? t('prompt.popupOff') : t('prompt.popupOn')} onClick={togglePromptOff} />
+        <SheetSection>{t('mobile.groupScreen')}</SheetSection>
+        <div className="tt-sheet-grid">
+          <button type="button" onClick={() => setFontSize(Math.max(10, fontSize - 1))}>A−</button>
+          <button type="button" onClick={() => setFontSize(Math.min(22, fontSize + 1))}>A+</button>
+          <button type="button" onClick={() => active && termRefs.current[active]?.scroll(-12)}>{TI.scrollUp}</button>
+          <button type="button" onClick={() => active && termRefs.current[active]?.toBottom()}>{TI.toBottom}</button>
+          <button type="button" onClick={() => active && termRefs.current[active]?.redraw()}>{TI.redraw}</button>
+          <button type="button" onClick={() => active && termRefs.current[active]?.reconnect()}>{TI.reconnect}</button>
+        </div>
+      </MobileSheet>
+    </>
+  ) : null
+
   // 工具条分三段：左=会话身份与动作，中=面板开关，右（分段组）=只读的画面控制
   const sessionToolbar = (
     <div className="tt-tbar tt-session-toolbar">
@@ -1482,13 +1556,19 @@ function TerminalPane(props: {
     <>
       {isTouch && !inChat && (
         <div style={{ display: 'flex', gap: 6, padding: '8px 8px 0' }} onDragOver={allowPathDrop} onDrop={onInputDrop}>
-          <Input ref={mobileInputRef} value={line} onFocus={exitCopyMode} onChange={(e) => setLine(e.target.value)}
+          <Input ref={mobileInputRef} value={line}
+            onFocus={() => { exitCopyMode(); setTyping(true) }}
+            // 延后收起：点快捷键条上的键会先让输入框失焦，立刻收就把那一条抽走了
+            onBlur={() => setTimeout(() => setTyping(false), 180)}
+            onChange={(e) => setLine(e.target.value)}
             onPressEnter={(e) => { if ((e.nativeEvent as any).isComposing) return; submitLine() }}
             placeholder={t('terminal.mobileInputPlaceholder')} allowClear autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} />
           <Button type="primary" onMouseDown={noBlur} onClick={submitLine}>{t('common.send')}</Button>
         </div>
       )}
-      {!inChat && (
+      {/* 快捷键条只在输入态出现（13 §5.2）：它常驻 49px，而不打字时一个键也用不上——
+          手机上这 49px 直接等于终端少 3 行。桌面不受影响。 */}
+      {!inChat && (!isPhone || typing) && (
         <div style={{ display: 'flex', gap: 6, padding: 8, borderTop: '1px solid var(--border)', overflowX: 'auto' }}>
           <Button type="primary" onMouseDown={noBlur} onClick={() => (isTouch ? submitLine() : sendKey('\r'))}>Enter</Button>
           {/* 触屏没有 Ctrl+Shift+V / 右键菜单在长按选词后也不再弹出，丝带上补一个直达粘贴 */}
@@ -1577,8 +1657,7 @@ function TerminalPane(props: {
       ) : (
         <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
           <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-            {tabStrip}
-            {sessionToolbar}
+            {phoneChrome || <>{tabStrip}{sessionToolbar}</>}
             {terminalArea}
             {sessionBottom}
           </div>

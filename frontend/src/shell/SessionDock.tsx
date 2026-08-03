@@ -15,7 +15,7 @@ import { useSessionProject } from '../session-project'
 import { MobileSheet, SheetRow } from './MobileSheet'
 
 /** `项目 · 会话`：空间不足时先截项目名，会话名不省略——会话名才是你要找的那个 */
-function DockTitle({ name }: { name: string }) {
+export function DockTitle({ name }: { name: string }) {
   const proj = useSessionProject(name)
   return (
     <span className="ttl">
@@ -70,23 +70,48 @@ export function SessionDock({ sessions, active, needsInput, running, onOpen, onP
           onClick={(e) => { e.stopPropagation(); setSheet(true) }}>{sessions.length}</button>
       </div>
 
-      {/* 切换 sheet：一屏能看到 8 个，比坞里横滑 2–3 个强得多 */}
-      <MobileSheet open={sheet} title={t('mobile.switchSession')} onClose={() => setSheet(false)}>
-        {sessions.map((n) => (
-          <SheetRow key={n}
-            icon={<i style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor(n), display: 'block' }} />}
-            title={<DockTitle name={n} />}
-            desc={needsInput[n] ? t('session.waiting') : undefined}
-            active={n === cur}
-            minHeight={56}
-            onClick={() => { setSheet(false); onPick(n) }}
-            extra={(
-              <button type="button" className="tt-sessdock-x" aria-label={t('common.close')}
-                onClick={(e) => { e.stopPropagation(); onClose(n) }}>✕</button>
-            )}
-          />
-        ))}
-      </MobileSheet>
+      <SessionSwitchSheet open={sheet} onClose={() => setSheet(false)}
+        sessions={sessions} active={cur} needsInput={needsInput} running={running}
+        onPick={onPick} onCloseSession={onClose} />
     </>
+  )
+}
+
+/**
+ * 会话切换 sheet（13 §4.2 / §5.1）。会话坞和手机会话页顶栏共用同一个：
+ * 两处问的是同一个问题「切到哪个会话」，长两套就会慢慢长歪。
+ *
+ * 一屏 8 行 × 56，比横滑标签条能看到的 2–3 个多一个数量级——这正是标签条在手机上
+ * 被换掉的原因（App.tsx 里那句 scrollIntoView 就是标签条滑出视口的补丁）。
+ */
+export function SessionSwitchSheet({ open, sessions, active, needsInput, running, onPick, onCloseSession, onClose }: {
+  open: boolean
+  sessions: string[]
+  active: string | null
+  needsInput: Record<string, boolean>
+  running: (name: string) => boolean
+  onPick: (name: string) => void
+  onCloseSession: (name: string) => void
+  onClose: () => void
+}) {
+  const { t } = useI18n()
+  const dotColor = (n: string) => (needsInput[n] ? '#d29922' : running(n) ? '#3fb950' : 'var(--text-dimmer)')
+  return (
+    <MobileSheet open={open} title={t('mobile.switchSession')} onClose={onClose}>
+      {sessions.map((n) => (
+        <SheetRow key={n}
+          icon={<i style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor(n), display: 'block' }} />}
+          title={<DockTitle name={n} />}
+          desc={needsInput[n] ? t('session.waiting') : undefined}
+          active={n === active}
+          minHeight={56}
+          onClick={() => { onClose(); onPick(n) }}
+          extra={(
+            <button type="button" className="tt-sessdock-x" aria-label={t('common.close')}
+              onClick={(e) => { e.stopPropagation(); onCloseSession(n) }}>✕</button>
+          )}
+        />
+      ))}
+    </MobileSheet>
   )
 }

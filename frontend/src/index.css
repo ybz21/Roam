@@ -324,6 +324,39 @@ body {
 .tt-seg-scroll::-webkit-scrollbar { height: 0; }
 .tt-seg-scroll > .ant-segmented { min-width: max-content; }
 
+/* ── 手机会话页顶栏（13 §5.1）：一行 50，取代原来「标签条 + 工具条」两行 79 ──
+   省下的 29px 直接给终端画布；标签条换成中间胶囊点开的切换 sheet。 */
+.tt-sesshead {
+  flex: 0 0 50px; height: 50px; padding: 0 4px;
+  display: flex; align-items: center; gap: 4px;
+  background: var(--bg-container); border-bottom: 1px solid var(--border-subtle);
+}
+.tt-sesshead .ic {
+  flex: 0 0 auto; width: 44px; height: 44px; display: grid; place-items: center;
+  border: 0; border-radius: 10px; background: transparent; color: var(--text-dim); cursor: pointer;
+}
+.tt-sesshead .ic.on { color: var(--accent); background: var(--accent-soft); }
+.tt-sesshead .pill {
+  flex: 1 1 auto; min-width: 0; height: 36px; padding: 0 10px;
+  display: flex; align-items: center; gap: 7px;
+  border: 1px solid var(--border-subtle); border-radius: 18px;
+  background: var(--bg-base); color: var(--text-bright); font-size: var(--fs-meta); cursor: pointer;
+}
+.tt-sesshead .pill .d { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; }
+.tt-sesshead .pill .n {
+  flex: 0 0 auto; min-width: 18px; height: 18px; padding: 0 5px;
+  display: grid; place-items: center; border-radius: 9px;
+  background: var(--accent-solid); color: #fff; font: 600 10.5px/1 ui-monospace, monospace;
+}
+/* 溢出 sheet 里的「画面」一行四格图标 */
+.tt-sheet-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 4px 2px 8px; }
+.tt-sheet-grid button {
+  min-height: 48px; display: grid; place-items: center;
+  border: 1px solid var(--border-subtle); border-radius: 10px;
+  background: var(--bg-container); color: var(--text-dim); font-size: 14px; cursor: pointer;
+}
+.tt-sheet-grid button:active { background: var(--list-hover); }
+
 /* ── 会话坞（13 §4.2）：底栏之上一条 50px 常驻条 ──
    手机上会话此前只有「全屏」和「看不见」两态，退回项目页就不知道还有几个在跑。 */
 .tt-sessdock {
@@ -454,12 +487,20 @@ html[data-size="compact"] .ant-card + .ant-card { margin-top: var(--gap); }
 .tt-tab.on { color: var(--text-bright); font-weight: 600; }
 .tt-tab .tt-wait { flex: 0 0 auto; color: #d29922; font-weight: 600; }
 /* 名字中间省略：头段收缩 + 尾段不收缩，省略号自然落在中间（见 session-label.tsx TabName） */
-.tt-tab .tt-name { display: flex; gap: 4px; min-width: 0; overflow: hidden; }
-.tt-tab .tt-name .h { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tt-tab .tt-name .tl { flex: 0 0 auto; }
-/* 项目前缀弱化并优先被压缩：窄标签下「哪个会话」比「哪个项目」更要紧 */
-.tt-tab .tt-name .pj {
-  flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: clip; white-space: nowrap;
+/* 这几条对 .tt-name 通用——标签条和手机会话页胶囊共用同一个 TabName。
+   之前只挂在 .tt-tab 下，胶囊里的标题就换行了，把 50px 的顶栏撑成两行。 */
+.tt-name { display: flex; min-width: 0; overflow: hidden; white-space: nowrap; }
+.tt-name .h { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-name .tl { flex: 0 0 auto; }
+/* 项目前缀弱化并优先被压缩：窄处「哪个会话」比「哪个项目」更要紧 */
+/* 头尾之间**不留 gap**：它俩是同一个名字被中间省略切开的两半，留空隙就读成了两个词
+   （真机上「桌面版… 一版优化设计」看着像两个会话名）。间距只加在项目前缀之后。 */
+.tt-name .pj {
+  /* shrink 因子给到 100：空间不足时项目名几乎吸收全部压缩，会话名尽量留全
+     （13 §4.2「先截项目名，会话名不省略」）。默认的 1 会让两边等比例挨截，
+     真机上就成了「ro… 桌面版…」——两个都没说清。 */
+  flex: 0 100 auto; min-width: 0; margin-right: 5px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   color: var(--text-dimmer); font-weight: 400;
 }
 .tt-tab.dragging { opacity: .45; }
