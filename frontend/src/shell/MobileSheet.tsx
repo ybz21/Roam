@@ -68,18 +68,25 @@ export function MobileSheet({ open, title, onClose, children }: {
 }
 
 /** sheet 里的一行：48px 高、整行可点，图标 + 主副文案（13 §4.1）。 */
-export function SheetRow({ icon, title, desc, danger, onClick }: {
+export function SheetRow({ icon, title, desc, danger, active, extra, minHeight = 48, onClick }: {
   icon?: ReactNode
   title: ReactNode
   desc?: ReactNode
   danger?: boolean
+  /** 当前项：淡强调底，与 hover 区分 */
+  active?: boolean
+  /** 行尾附加操作（如关闭）——自己 stopPropagation */
+  extra?: ReactNode
+  /** 会话切换这类"一屏看尽"的列表要 56（13 §4.2），默认 48 */
+  minHeight?: number
   onClick: () => void
 }) {
   return (
     <button onClick={onClick} style={{
-      width: '100%', minHeight: 48, padding: '8px 10px',
+      width: '100%', minHeight, padding: '8px 10px',
       display: 'flex', alignItems: 'center', gap: 12,
-      border: 0, borderRadius: 12, background: 'transparent', cursor: 'pointer',
+      border: 0, borderRadius: 12, cursor: 'pointer',
+      background: active ? 'var(--accent-soft)' : 'transparent',
       color: danger ? '#f85149' : 'var(--text-bright)', textAlign: 'left',
     }}>
       {icon && <span style={{ flex: '0 0 20px', display: 'grid', placeItems: 'center', color: danger ? '#f85149' : 'var(--text-dim)' }}>{icon}</span>}
@@ -87,6 +94,7 @@ export function SheetRow({ icon, title, desc, danger, onClick }: {
         <span style={{ display: 'block', fontSize: 'var(--fs-body)' }}>{title}</span>
         {desc && <span style={{ display: 'block', marginTop: 2, color: 'var(--text-dim)', fontSize: 'var(--fs-meta)' }}>{desc}</span>}
       </span>
+      {extra && <span style={{ marginLeft: 'auto', flex: '0 0 auto' }}>{extra}</span>}
     </button>
   )
 }

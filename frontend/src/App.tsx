@@ -44,6 +44,7 @@ import { Workspace, SessionCapsule } from './shell/Workspace'
 import { Navigation } from './shell/Navigation'
 import { reorderTabs } from './shell/tabs'
 import { requestIntent } from './intents'
+import { SessionDock } from './shell/SessionDock'
 import { sessionProject, setSessionProjects, buildSessionProjects } from './session-project'
 import { MobileSheet, SheetRow, SheetSection } from './shell/MobileSheet'
 import { WorkspaceTopbar, type PaletteItem } from './shell/WorkspaceTopbar'
@@ -328,9 +329,12 @@ export default function App() {
   //   ① 导航 badge 的跨项目待收尾数（14 §4.4）
   //   ② 会话 → 项目 归属表，给终端标签写 `项目 · 会话`（14 §6.3）
   // 概览页轮的是同两条接口，所以两处显示的数字同源，不会互相打架。
+  // 会话坞要显示「几个在等你」，而这个信号是 TerminalPane 抓屏算出来的（detectPrompt）。
+  // 它已经在为每个已开会话轮询，别再开第二份——让它把结果递上来即可。
+  const [mobileWaiting, setMobileWaiting] = useState<Record<string, boolean>>({})
   const [unfinished, setUnfinished] = useState(0)
+  // 不能按 hasSider 收窄：手机没有侧栏，但会话坞同样要写「项目 · 会话」
   useEffect(() => {
-    if (!hasSider) return
     let stop = false
     const load = async () => {
       try {
@@ -347,7 +351,7 @@ export default function App() {
     load()
     const i = setInterval(load, 15000)
     return () => { stop = true; clearInterval(i) }
-  }, [hasSider])
+  }, [])
 
   // Canvas 滚动位置（14 §6.3.5）：终端一开，Canvas 变窄、卡片重排，scrollHeight
   // 从 1108 掉到 781，浏览器顺手把 scrollTop 归零——"你看到哪儿了"就这么没了。
@@ -591,6 +595,7 @@ export default function App() {
       onRename={renameOpenTerm}
       onCollapse={() => { setOverlay(false); space.setDockOpen(false) }}
       onReorder={reorderTerm}
+      onNeedsInput={setMobileWaiting}
       // Focus 只在桌面有意义：手机上终端本来就是全屏覆盖层
       focus={hasSider ? { on: space.focus !== 'none', toggle: space.toggleFocus, hint: `${modKeyLabel}⇧J` } : undefined}
     />
@@ -613,7 +618,7 @@ export default function App() {
   const page = <Suspense fallback={lazyFallback}>{pages[tab] || pages.projects}</Suspense>
   // browser 全幅(自带工具栏铺满)；phone 与概览/会话一致走 tt-page（同 16px 留白 + 满高，见 tt-page-phone）。
   // 浏览器页不再全幅特例：与 文件/手机 同走 tt-page 满高容器，五页左上角起点统一 (16,16)
-  const pageNode = <div className={`tt-page tt-page-${tab}${isMobile ? ' tt-page-mobile' : ''}`}>{page}</div>
+  const pageNode = <div className={`tt-page tt-page-${tab}${isMobile ? ' tt-page-mobile' : ''}${isMobile && terms.length ? ' has-dock' : ''}`}>{page}</div>
   // Canvas 与 Dock 各包一层：两者在 Page / Split / Focus 三态间只改宽度，不改挂载
   // ⌘K 面板的条目：页面导航 + 已打开的会话。项目/文件两段要等页面把数据提上来，
   // 没有就不放——面板里出现点了没反应的条目比没有这一段更糟。
@@ -749,11 +754,21 @@ export default function App() {
           进「更多」sheet，不占底栏。sheet 内部分「工具 / 账户」两段——退出登录和浏览器
           并排时误触代价差了几个数量级，所以它收在账户行的二级里。*/}
       {isMobile && (
-        <nav style={{
-          position: 'fixed', bottom: 0, left: 0, right: 0, display: 'flex',
-          background: 'var(--bg-container)', borderTop: '1px solid var(--border)',
+        <div style={{
+          position: 'fixed', bottom: 0, left: 0, right: 0,
           zIndex: 'var(--z-nav)' as unknown as number, paddingBottom: 'var(--safe-b)',
+          background: 'var(--bg-container)', borderTop: '1px solid var(--border)',
         }}>
+        {/* 会话坞叠在底栏之上，两者共用同一个 fixed 容器与安全区内边距——
+            分开两个 fixed 就得手算彼此的高度，底栏一改高度就错位 */}
+        <SessionDock
+          sessions={terms} active={active} needsInput={mobileWaiting}
+          running={(n) => !!(claudeMap[n]?.running || codexMap[n]?.running)}
+          onOpen={() => setOverlay(true)}
+          onPick={(n) => { setActive(n); setOverlay(true) }}
+          onClose={closeTerm}
+        />
+        <nav style={{ display: 'flex' }}>
           {MOBILE_NAV_KEYS.map((key) => {
             const n = NAV.find((x) => x.key === key)!
             return (
@@ -768,6 +783,7 @@ export default function App() {
             {svg(<><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></>)}{t('common.more')}
           </button>
         </nav>
+        </div>
       )}
 
       {isMobile && (
@@ -920,11 +936,13 @@ function TerminalPane(props: {
   onRename: (oldName: string, newName: string) => void
   /** 标签拖拽排序；不传就不可拖（独立单终端页没有多标签） */
   onReorder?: (name: string, to: number) => void
+  /** 把「哪些会话在等输入」递给外层（手机会话坞要用），避免第二份抓屏轮询 */
+  onNeedsInput?: (map: Record<string, boolean>) => void
   /** 终端 Focus：传了才渲染工具条右侧那枚按钮（手机没有这个概念） */
   focus?: { on: boolean; toggle: () => void; hint: string }
   fileDock?: 'right' | 'left'   // 文件面板停靠：'right'=右侧浮动抽屉（默认），'left'=左侧 VSCode 栏（新标签全屏页）
 }) {
-  const { terms, active, setActive, closeTerm, fontSize, setFontSize, statusMap, setStatus, termRefs, sendKey, onCollapse, claudeMap, claudeView, setClaudeView, codexMap, codexView, setCodexView, onRename, onReorder, focus } = props
+  const { terms, active, setActive, closeTerm, fontSize, setFontSize, statusMap, setStatus, termRefs, sendKey, onCollapse, claudeMap, claudeView, setClaudeView, codexMap, codexView, setCodexView, onRename, onReorder, onNeedsInput, focus } = props
   const fileDock = props.fileDock || 'right'
   const { message, modal } = AntApp.useApp()
   const { t } = useI18n()
@@ -1133,6 +1151,8 @@ function TerminalPane(props: {
     const t = setInterval(checkPrompts, 4000)
     return () => { stop = true; clearInterval(t) }
   }, [terms])
+
+  useEffect(() => { onNeedsInput?.(termNeedsInput) }, [termNeedsInput, onNeedsInput])
 
   const sendPaste = (session: string, text: string) => {
     if (!text) return

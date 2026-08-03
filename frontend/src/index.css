@@ -313,6 +313,44 @@ body {
 .tt-page-mobile {
   padding-bottom: calc(76px + env(safe-area-inset-bottom));
 }
+/* 有会话坞时底部再让出 50——否则页面最后一行永远压在坞底下 */
+.tt-page-mobile.has-dock {
+  padding-bottom: calc(126px + env(safe-area-inset-bottom));
+}
+
+/* ── 会话坞（13 §4.2）：底栏之上一条 50px 常驻条 ──
+   手机上会话此前只有「全屏」和「看不见」两态，退回项目页就不知道还有几个在跑。 */
+.tt-sessdock {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 50px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-bright);
+  font-size: var(--fs-meta);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.tt-sessdock .d { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; }
+/* `项目 · 会话`：项目名先被压缩，会话名不省略——会话名才是你要找的那个 */
+.tt-sessdock .ttl, .tt-sessdock-sheet .ttl { display: flex; align-items: baseline; gap: 4px; min-width: 0; }
+.tt-sessdock .ttl .pj, .ttl .pj { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; color: var(--text-dimmer); }
+.tt-sessdock .ttl .nm, .ttl .nm { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.tt-sessdock .wait { flex: 0 0 auto; color: #e3b341; font-size: 11.5px; }
+.tt-sessdock .up { flex: 0 0 auto; margin-left: auto; color: var(--text-dimmer); font-size: 13px; }
+.tt-sessdock .cnt {
+  flex: 0 0 auto; min-width: 30px; height: 30px; padding: 0 8px;
+  display: grid; place-items: center; border: 1px solid var(--border); border-radius: 15px;
+  background: var(--bg-base); color: var(--text-dim); font: 600 12px/1 ui-monospace, monospace;
+  cursor: pointer;
+}
+.tt-sessdock-x {
+  width: 32px; height: 32px; display: grid; place-items: center;
+  border: 0; border-radius: 8px; background: transparent; color: var(--text-dimmer);
+  font-size: 13px; cursor: pointer;
+}
+.tt-sessdock-x:hover { background: rgba(248, 81, 73, .16); color: #f85149; }
 .tt-page > * {
   width: 100%;
   min-width: 0;
