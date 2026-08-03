@@ -20,6 +20,7 @@ import {
 } from './git/parts'
 import type { RawCommit } from './git/graph'
 import { useLayout } from './layout'
+import { useBackDismiss } from './shell/useBackDismiss'
 
 const WorktreePanel = lazy(() => import('./WorktreePanel'))
 
@@ -134,6 +135,8 @@ export default function GitPanel({ dir, accent = '#58a6ff', onClose, openTerm, i
   // 面板宽度各处不同（会话 420 / 项目 520），所以量自己的左边缘，别写死。
   const panelRef = useRef<HTMLDivElement>(null)
   const { desktop: wide } = useLayout()
+  // 窄档：返回键先关 diff 详情（面板本身由外面的二级页接管，一次返回退一层）
+  useBackDismiss(!wide && !!detail, () => setDetail(null))
   const [panelLeft, setPanelLeft] = useState(0)
   useEffect(() => {
     const on = () => {
@@ -555,25 +558,33 @@ export default function GitPanel({ dir, accent = '#58a6ff', onClose, openTerm, i
     </div>
   )
 
+  // ⋯ 与 ↻：桌面在标题行右端；窄档标题行整行不渲染（页头已经是「← Git」），
+  // 这两枚挪到分支行右端——否则会留下一条只有两个图标的空带。
+  const headerActs = (<>
+    {status?.repo && (
+      <Dropdown trigger={['click']} menu={{ items: moreItems, onClick: onMore }} placement="bottomRight" disabled={busy}>
+        <Button type="text" size="small" style={{ width: 24, height: 24, minWidth: 24, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flex: '0 0 auto' }}><MoreIcon /></Button>
+      </Dropdown>
+    )}
+    <Tooltip title={t('git.refresh')}>
+      <Button type="text" size="small" onClick={refresh} style={{ width: 24, height: 24, minWidth: 24, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flex: '0 0 auto' }}><RefreshIcon /></Button>
+    </Tooltip>
+  </>)
+
   const header = (
     <div style={{ padding: '6px 8px 8px', borderBottom: '1px solid var(--border-subtle)', flex: '0 0 auto' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ color: accent, display: 'inline-flex' }}><BranchIcon /></span>
-        <span style={{ color: 'var(--text-bright)', fontWeight: 600, fontSize: 13 }}>{t('git.panelTitle')}</span>
-        <span style={{ flex: 1 }} />
-        {status?.repo && (
-          <Dropdown trigger={['click']} menu={{ items: moreItems, onClick: onMore }} placement="bottomRight" disabled={busy}>
-            <Button type="text" size="small" style={{ width: 24, height: 24, minWidth: 24, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><MoreIcon /></Button>
-          </Dropdown>
-        )}
-        <Tooltip title={t('git.refresh')}>
-          <Button type="text" size="small" onClick={refresh} style={{ width: 24, height: 24, minWidth: 24, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><RefreshIcon /></Button>
-        </Tooltip>
-        {onClose && <button type="button" title={t('git.closePanel')} aria-label={t('git.closePanel')} className="tt-file-close" onClick={onClose}><CloseIcon /></button>}
-      </div>
+      {wide && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ color: accent, display: 'inline-flex' }}><BranchIcon /></span>
+          <span style={{ color: 'var(--text-bright)', fontWeight: 600, fontSize: 13 }}>{t('git.panelTitle')}</span>
+          <span style={{ flex: 1 }} />
+          {headerActs}
+          {onClose && <button type="button" title={t('git.closePanel')} aria-label={t('git.closePanel')} className="tt-file-close" onClick={onClose}><CloseIcon /></button>}
+        </div>
+      )}
 
       {status?.repo && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 7, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: wide ? 7 : 0, minWidth: 0 }}>
           <Popover trigger="click" placement="bottomLeft" content={switcher} arrow={false}>
             <button type="button" title={t('git.refs.switchBranch')}
               style={{
@@ -601,6 +612,8 @@ export default function GitPanel({ dir, accent = '#58a6ff', onClose, openTerm, i
             <span style={{ fontSize: 11, color: 'var(--text-dimmer)', fontFamily: MONO, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}
               title={status.upstream}>{status.upstream}</span>
           )}
+          {!wide && <span style={{ flex: 1 }} />}
+          {!wide && headerActs}
         </div>
       )}
 
@@ -850,7 +863,9 @@ export default function GitPanel({ dir, accent = '#58a6ff', onClose, openTerm, i
       {wide && detail && (
         <div className="tt-file-detail"
           style={{
-            position: 'fixed', top: 0, bottom: 0, height: '100dvh', zIndex: 1199,
+            // 紧贴在右侧浮动面板之下：详情从面板里划出来，视觉上是面板的左邻
+            position: 'fixed', top: 0, bottom: 0, height: '100dvh',
+            zIndex: 'calc(var(--z-panel) - 1)' as unknown as number,
             right: `calc(100vw - ${Math.max(0, panelLeft)}px)`,
             width: `min(560px, ${Math.max(240, panelLeft - 40)}px)`,
             background: 'var(--bg-base)', borderLeft: '1px solid var(--border)', boxShadow: 'var(--elevated-shadow)',

@@ -8,6 +8,9 @@
 > [手机](./13-mobile-responsive/phone.html) · [插件](./13-mobile-responsive/plugins.html) ·
 > [设置](./13-mobile-responsive/settings.html) · **[expanded 档（平板/小笔电）](./13-mobile-responsive/expanded.html)**
 >
+> 后补两稿：[三页分工（概览/项目/会话）](./13-mobile-responsive/ia.html) ·
+> **[二级页：Git / Worktree / 返回键](./13-mobile-responsive/panels.html)**（§6 剩下那两行的落地图纸，含自审）
+>
 > 状态：**设计草案，未实现**。落地范围见 §10 分期。
 
 ---
@@ -317,7 +320,7 @@ sheet 内部按 14 §4.4 的同一条分层拆成两段，**不把功能页和�
 
 | 基元 | 用途 | 行为 |
 |---|---|---|
-| `<MobileSubPage>` | 详情页、Git 面板、Worktree 管理、插件详情、文件预览 | 全屏、右滑边缘返回、`history.pushState` 让**安卓物理返回键=返回**、四边吃安全区 |
+| `<MobileSubPage>` | 详情页、Git 面板、Worktree 管理、插件详情、文件预览 | 全屏、`history.pushState` 让**安卓物理返回键=返回** ✓、四边吃安全区 ✓、portal 到 body ✓；右滑边缘返回未做 |
 | `<MobileSheet>` | 溢出菜单、会话切换、筛选排序、设备/策略选择、快捷命令 | 底部升起，高度 `auto / 50% / 88%` 三档，下拉关闭，`--kb` 抬起，圆角 16 |
 
 compact/medium 档下，**所有 antd `Drawer` 自动降级为底部 sheet**（`placement="bottom"`），
@@ -437,10 +440,10 @@ compact/medium 档下，**所有 antd `Drawer` 自动降级为底部 sheet**（`
 | **项目列表** | 卡片网格 `minmax(270px,1fr)` 单列尚可；排序 Segmented + 新建按钮换行 | ① 卡片改行卡（高度 −30%）；④ 排序/筛选收进顶栏 sheet |
 | **项目主页** | `.prj-tabs` 五 tab 溢出无提示；composer 的 pill 组换行成三行 | tab 条横滑 + 两侧渐隐；composer 折叠为「一行输入 + 展开更多」；worktree 分叉图左缩进 40→24 |
 | **概览** | `.p6-stats` 六格 `flex:1 1 120px` 排成三行 | 走 14 稿 §5 的同一条信息序列：六格统计压成**一条状态概况**（不是 2×3 网格），「需要你」升为最多三张行动卡的单列队列，活跃项目单列、任务限 3 条，最近活动落到页尾。见 §13.2 |
-| **会话平铺** | 行内动作按钮 hover 才显 | 动作常显 + 长按出菜单 |
+| **会话平铺** | 行内动作按钮 hover 才显 | 动作常显 ✓（`html[data-pointer="coarse"]` 兜底已覆盖项目行/项目卡/分叉图/Git 段落四处）+ 长按出菜单（未做） |
 | **文件** | 已走 `MobileSubPage` ✓ | 保留；`FileWorkspace`（多 tab 编辑器）不进 compact，compact 用 FileBrowser + 二级页 |
-| **Git 面板** | fixed 抽屉 `width: min(420px, 92vw)`，压在底栏上、不吃安全区 | ③ compact 走全屏二级页；提交树横向滚动区独立 |
-| **Worktree** | `Drawer width='100%'`，像页又像抽屉 | ③ 改二级页，吃物理返回键 |
+| **Git 面板** | ~~fixed 抽屉 `width: min(420px, 92vw)`，压在底栏上、不吃安全区~~ ✓ | ③ compact 走全屏二级页；提交树横向滚动区独立。**已实现**（`shell/AdaptivePanel`，两个调用点合一） |
+| **Worktree** | ~~`Drawer width='100%'`，像页又像抽屉~~ ✓ | ③ 改二级页，吃物理返回键。**已实现**（返回键走 `shell/useBackDismiss`） |
 | **蜂群** | `Swarm.tsx:378` 写死两列；拓扑图在 360px 上不可读 | ① 单列；拓扑图 compact 下换成**成员列表**（拓扑是桌面增强，不是必需） |
 | **浏览器镜像** | 地址栏固定 150px；工具按钮溢出 | ④ 地址栏 `flex:1`，工具进 `⋯`；镜像画面按容器宽等比缩放 |
 | **手机镜像** | 设备选择器固定 240px | ③ 设备选择改 sheet |

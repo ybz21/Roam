@@ -10,10 +10,13 @@ import { useI18n } from './i18n'
 import { recentDirs } from './App'
 import DiffView from './DiffView'
 import { useLayout } from './layout'
+import AdaptivePanel from './shell/AdaptivePanel'
+import { useBackDismiss } from './shell/useBackDismiss'
 
-// 会话视图的 Git 面板挂在 FloatingFileDrawer(z=1200)里，本抽屉从那里打开时必须压过它，
+// 会话视图的 Git 面板挂在右侧浮动面板(--z-panel)里，本抽屉从那里打开时必须压过它，
 // 否则整个抽屉被 Git 面板盖住（antd Drawer 默认 z=1000）。抽屉内嵌套弹层 antd 会自动抬升，
 // 但 modal.confirm 走 App 级 holder 不在抽屉上下文里，须显式再高一级。
+// 手机档不走 Drawer——AdaptivePanel 会换成全屏二级页，这两个常量只对桌面生效。
 const DRAWER_Z = 1300
 const MODAL_Z = 1400
 
@@ -73,6 +76,8 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
   const [creatingWt, setCreatingWt] = useState(false)
   // 对比 base：committed 与 workingTree 分开呈现 + 逐文件补丁
   const [cmp, setCmp] = useState<Worktree | null>(null)
+  // 窄档：返回键先关对比视图，再关面板本身（一次返回退一层）
+  useBackDismiss(!wide && !!cmp, () => setCmp(null))
   const [cmpData, setCmpData] = useState<any>(null)
   const [cmpFile, setCmpFile] = useState('')
   const [cmpText, setCmpText] = useState('')
@@ -415,8 +420,11 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
   })()
 
   return (
-    <Drawer open={open} onClose={onClose} title={t('worktree.title')} width={wide ? 520 : '100%'} zIndex={DRAWER_Z}
-      styles={{ body: { display: 'flex', flexDirection: 'column', gap: 0, paddingTop: 14 } }}>
+    // 手机走全屏二级页（13 §6）：全宽的 antd Drawer「既不是页也不是 sheet」——
+    // 从右横切进场、右上角一个 ×、返回键不认它。桌面维持 520 抽屉不变。
+    <AdaptivePanel open={open} onClose={onClose} title={t('worktree.title')}
+      desktop="drawer" width={520} zIndex={DRAWER_Z}
+      drawerStyles={{ body: { display: 'flex', flexDirection: 'column', gap: 0, paddingTop: 14 } }}>
       {/* 头部：仓库目录（留空 = 跨仓库总览）+ 新建 + 刷新 */}
       <div style={{ display: 'flex', gap: 8 }}>
         <AutoComplete style={{ flex: 1, minWidth: 0 }} value={dir} onChange={setDir} allowClear
@@ -563,6 +571,6 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
           </div>
         )}
       </Modal>
-    </Drawer>
+    </AdaptivePanel>
   )
 }

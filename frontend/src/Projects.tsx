@@ -16,6 +16,7 @@ import { useI18n } from './i18n'
 import { usePreferences } from './preferences'
 import { INTENT_EVENT, takeIntent } from './intents'
 import { MobileSheet, SheetRow } from './shell/MobileSheet'
+import AdaptivePanel from './shell/AdaptivePanel'
 import { useLayout } from './layout'
 import { detectPrompt } from './prompt'
 import { relTime, taskNameFromPrompt, shq, NewSessionModal, DirPicker, recentDirs, pushRecentDir, CloseWorktreeModal } from './App'
@@ -108,7 +109,12 @@ const PRJ_CSS = `
 .prj-row.on{background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent-border)}
 .prj-row.on::before{background:var(--accent)}
 .prj-row .acts{opacity:.55;transition:opacity .15s;display:flex;gap:12px;font-size:12.5px;flex:0 0 auto;margin-top:3px}
-.prj-row:hover .acts{opacity:1}
+.prj-row:hover .acts,.prj-row .acts:focus-within{opacity:1}
+/* 手指档没有 hover：半透明的操作等于不存在（13 §7） */
+html[data-pointer="coarse"] .prj-row .acts{opacity:1}
+html[data-pointer="coarse"] .prj-row .acts a{position:relative}
+html[data-pointer="coarse"] .prj-row .acts a::after{content:'';position:absolute;left:-6px;right:-6px;
+  top:50%;height:var(--tap);transform:translateY(-50%)}
 .prj-row.warn{background:rgba(210,153,34,.05);border:1px solid rgba(210,153,34,.18);margin-bottom:4px}
 .prj-row.warn:hover{background:rgba(210,153,34,.09)}
 .prj-row.warn::before{display:none}
@@ -159,6 +165,7 @@ html[data-size="compact"] .prj-subbar.searching .prj-iconbtn.find{display:none}
 /* 次要操作 hover 才出现，但键盘走到时同样要看得见——否则纯键盘用户够不着（14 §6.1） */
 .prj-card:focus-within .prj-acts,.prj-card:focus-visible .prj-acts{opacity:1}
 .prj-card:hover .prj-acts{opacity:1}
+html[data-pointer="coarse"] .prj-card .prj-acts{opacity:1}
 .prj-card .prj-acts .pinned{opacity:1}
 
 .prj-panel{background:var(--bg-container);border:1px solid var(--border-subtle);border-radius:12px;margin-top:8px}
@@ -195,6 +202,7 @@ html[data-size="compact"] .prj-subbar.searching .prj-iconbtn.find{display:none}
 .prj-fork .wt-ab.up{color:#3fb950} .prj-fork .wt-ab.dn{color:#d29922}
 .prj-fork .wt-acts{flex:0 0 auto;display:flex;gap:6px;align-items:center;opacity:.55;transition:opacity .15s}
 .prj-fork:hover .wt-acts,.prj-fork .wt-acts:focus-within{opacity:1}
+html[data-pointer="coarse"] .prj-fork .wt-acts{opacity:1}
 .prj-fork.merged .col,.prj-fork.ext .col{opacity:.75}
 `
 
@@ -1680,15 +1688,15 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
 
         <Suspense fallback={<Spin />}>
           {wtOpen && <WorktreePanel open={wtOpen} onClose={() => { setWtOpen(false); refresh() }} openTerm={openTerm} initialDir={dir} />}
-          {(gitOpen || gitAt) && (
-            <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(1,4,9,.6)' }} onClick={() => { setGitOpen(false); setGitAt(null) }}>
-              <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 'min(520px, 94vw)', background: 'var(--bg-container)', borderLeft: '1px solid var(--border)' }}
-                onClick={(e) => e.stopPropagation()}>
-                <GitPanel dir={gitAt?.dir || dir} initialTab={gitAt?.tab} openTerm={openTerm}
-                  onClose={() => { setGitOpen(false); setGitAt(null) }} />
-              </div>
-            </div>
-          )}
+          {/* 手机走全屏二级页；桌面仍是右缘面板 + 遮罩。原来这里是一套手搓的
+              zIndex:1000 遮罩 + 面板，和会话页那套 FloatingFileDrawer 宽度/层级/阴影全不一样——
+              同一个 GitPanel 不该有两套壳（13 §6）。 */}
+          <AdaptivePanel open={!!(gitOpen || gitAt)} desktop="floating" scrim
+            title={t('git.title')} width="min(520px, 94vw)"
+            onClose={() => { setGitOpen(false); setGitAt(null) }}>
+            <GitPanel dir={gitAt?.dir || dir} initialTab={gitAt?.tab} openTerm={openTerm}
+              onClose={() => { setGitOpen(false); setGitAt(null) }} />
+          </AdaptivePanel>
           {raceOpen && <RaceCreateModal open={raceOpen} onClose={() => setRaceOpen(false)} onDone={() => { setRaceOpen(false); refresh() }} />}
           {swarmOpen && (
             <NewSwarmModal open={swarmOpen} initialDir={dir} lockDir

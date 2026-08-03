@@ -95,8 +95,10 @@
   --z-nav: 50;                    /* 底栏 / 导航轨 */
   --z-subpage: 90;                /* 全屏二级页 */
   --z-session: 100;               /* 会话全屏 */
+  --z-session-sub: 110;           /* 会话全屏里再开的二级页（Git/文件从终端里唤起） */
   --z-scrim: 900;                 /* 遮罩 */
   --z-sheet: 1000;                /* 底部 sheet / 抽屉 */
+  --z-panel: 1200;                /* 桌面右侧浮动面板：压过 sheet(1000)，低于 antd 弹层基座(1300) */
   --z-popup: 1300;                /* antd 弹层基座 */
   --z-toast: 1500;
   --z-drag: 9999;                 /* 拖拽幽灵 */
@@ -760,7 +762,10 @@ html[data-size="compact"] .ant-form-item-control-input-content > .ant-picker { w
 .tt-file-context-menu { width: max-content !important; min-width: 130px !important; }
 /* Git 分组标题上的操作按钮：平时半透明，hover 分组时变实 */
 .cc-git-section-act .cc-dl { opacity: .5; }
-.cc-git-section:hover .cc-git-section-act .cc-dl { opacity: 1; }
+.cc-git-section:hover .cc-git-section-act .cc-dl,
+.cc-git-section-act .cc-dl:focus-visible { opacity: 1; }
+/* 手指档没有 hover（13 §7） */
+html[data-pointer="coarse"] .cc-git-section-act .cc-dl { opacity: 1; }
 .cc-dl:hover { background: rgba(255, 255, 255, .08); color: var(--text-bright) !important; }
 .cc-filerow .ant-btn { color: var(--text-dim); }
 .cc-filerow .ant-btn:hover { color: var(--text-bright) !important; background: rgba(255, 255, 255, .06) !important; }

@@ -5,8 +5,9 @@
 //
 // 吃 --kb：键盘弹起时整块抬到键盘之上；吃安全区：底部不压在手势条下面。
 // 层级用 --z-sheet / --z-scrim 两个令牌，不再手算 1199/1200/1201。
-import { useEffect, type ReactNode } from 'react'
+import { type ReactNode } from 'react'
 import { useI18n } from '../i18n'
+import { useBackDismiss } from './useBackDismiss'
 
 export function MobileSheet({ open, title, onClose, children }: {
   open: boolean
@@ -15,13 +16,9 @@ export function MobileSheet({ open, title, onClose, children }: {
   children: ReactNode
 }) {
   const { t } = useI18n()
-  // 打开时接管返回：安卓物理返回键应该收 sheet，而不是退出整个页面
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+  // 打开时接管返回：安卓物理返回键应该收 sheet，而不是退出整个页面。
+  // （Escape 也由它一并处理——此前这里只监听了 Escape，而手机上没有 Escape 键。）
+  useBackDismiss(open, onClose)
 
   if (!open) return null
   return (

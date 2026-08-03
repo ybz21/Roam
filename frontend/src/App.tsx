@@ -17,6 +17,7 @@ import CodexChat from './CodexChat'
 import FileBrowser from './FileBrowser'
 import FileWorkspace from './FileWorkspace'
 import FloatingFileDrawer from './FloatingFileDrawer'
+import AdaptivePanel from './shell/AdaptivePanel'
 import MobileSubPage from './MobileSubPage'
 import { FileView } from './fileview'
 // 非首屏的重页面（蜂群/Git 面板/浏览器/手机镜像/插件）按路由懒加载：切到对应 tab 才拉 chunk，
@@ -61,12 +62,15 @@ interface ClaudeInfo { running: boolean; file?: string; dir?: string }
 const { Sider, Content } = Layout
 const { Text } = Typography
 
-// 「会话」「蜂群」不再进导航：项目页是唯一主入口（任务驱动，08 设计）——
-// 蜂群从项目编队 tab 进（蜂群台深链 #/swarm/<名>），会话平铺页留 #/sessions 直达；
-// 两页组件与路由都保留，概览页统计仍可跳转。
+// 「蜂群」不进导航：项目页是唯一主入口（任务驱动，08 设计），蜂群从项目编队 tab 进
+// （蜂群台深链 #/swarm/<名>）。
+// 「会话」在 NAV 里但不进桌面侧栏两组：桌面从项目页/概览进，命令面板能搜到；
+// 手机则**必须**有个导航入口——此前它只能从概览的「全部会话」链接进，而搜索、筛选、
+// Worktree 管理、新建竞赛全在那一页（13 §6）。
 const NAV = [
   { key: 'overview', labelKey: 'nav.overview' },
   { key: 'projects', labelKey: 'nav.projects' },
+  { key: 'sessions', labelKey: 'nav.sessions' },
   { key: 'files', labelKey: 'nav.files' },
   { key: 'browser', labelKey: 'nav.browser' },
   { key: 'phone', labelKey: 'nav.phone' },
@@ -81,7 +85,10 @@ const NAV_TOOLS = ['browser', 'phone', 'plugins']
 
 // 手机底栏只放高频页，plugins/settings 折进「更多」，避免底栏拥挤（桌面侧栏仍展示全部）
 const MOBILE_NAV_KEYS = ['overview', 'projects', 'files']
-const MOBILE_MORE_KEYS = ['browser', 'phone', 'plugins', 'settings']
+// 「更多」sheet 里的两段：会话属于工作区主线，不归到工具下面
+const MOBILE_MORE_WORKSPACE = ['sessions']
+const MOBILE_MORE_TOOLS = ['browser', 'phone', 'plugins', 'settings']
+const MOBILE_MORE_KEYS = [...MOBILE_MORE_WORKSPACE, ...MOBILE_MORE_TOOLS]
 
 // 用 Canvas 容器查询排版的页面（见 index.css 的 .tt-canvas[data-cq]）。逐页开，
 // 不是全局开：container-type 会改变 fixed 后代的包含块。
@@ -107,7 +114,7 @@ function setHashParams(params: Record<string, string>) {
   for (const [k, v] of Object.entries(params)) { if (v) sp.set(k, v) }
   const qs = sp.toString()
   const next = qs ? base + '?' + qs : base
-  if (h !== next) history.replaceState(null, '', next)
+  if (h !== next) history.replaceState(history.state, '', next)
 }
 
 // URL 上的终端标签参数（terms=打开的标签、active=当前标签）。
@@ -788,8 +795,14 @@ export default function App() {
 
       {isMobile && (
         <MobileSheet open={moreOpen} title={t('common.more')} onClose={() => setMoreOpen(false)}>
+          <SheetSection>{t('nav.groupWorkspace')}</SheetSection>
+          {MOBILE_MORE_WORKSPACE.map((key) => {
+            const n = NAV.find((x) => x.key === key)!
+            return <SheetRow key={n.key} icon={ICONS[n.key]} title={t(n.labelKey)}
+              onClick={() => { setMoreOpen(false); go(n.key) }} />
+          })}
           <SheetSection>{t('nav.groupTools')}</SheetSection>
-          {MOBILE_MORE_KEYS.map((key) => {
+          {MOBILE_MORE_TOOLS.map((key) => {
             const n = NAV.find((x) => x.key === key)!
             return <SheetRow key={n.key} icon={ICONS[n.key]} title={t(n.labelKey)}
               onClick={() => { setMoreOpen(false); go(n.key) }} />
@@ -811,7 +824,7 @@ export default function App() {
 
       {/* 手机/平板：全屏会话覆盖层（桌面用右侧停靠栏，不走这里）*/}
       {isMobile && overlay && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'var(--bg-term)', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 'var(--z-session)' as unknown as number, background: 'var(--bg-term)', display: 'flex', flexDirection: 'column' }}>
           {termPane}
         </div>
       )}
@@ -1734,11 +1747,15 @@ function TerminalPane(props: {
           <FileBrowser dir={cwd} accent="#58a6ff" layout="dock" onClose={() => setShowFiles(false)} />
         </FloatingFileDrawer>
       )}
-      <FloatingFileDrawer open={showGit} right={fileDock === 'right' && showFiles ? 'min(420px, 92vw)' : 0}>
+      {/* 手机走全屏二级页（13 §6）：420 的浮层在 360 屏上盖到 92vw，还压着底栏、不吃安全区。
+          桌面维持右缘浮动面板不变。layer="session" —— 这一层是从会话全屏(100)里唤起的。 */}
+      <AdaptivePanel open={showGit} desktop="floating" layer="session" title={t('git.title')}
+        width="min(420px, 92vw)" right={fileDock === 'right' && showFiles ? 'min(420px, 92vw)' : 0}
+        onClose={() => setShowGit(false)}>
         <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}><Spin /></div>}>
           <GitPanel dir={cwd} accent="#58a6ff" onClose={() => setShowGit(false)} />
         </Suspense>
-      </FloatingFileDrawer>
+      </AdaptivePanel>
     </div>
   )
 }
