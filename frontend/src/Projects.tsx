@@ -80,10 +80,10 @@ const PRJ_CSS = `
 .prj-tab .n{font-size:10.5px;font-family:ui-monospace,monospace;color:var(--text-dimmer);
   background:rgba(177,186,196,.08);border-radius:999px;padding:1px 6px}
 
-.prj-sect{display:flex;align-items:center;gap:8px;margin:16px 2px 4px;
-  font-size:11px;letter-spacing:.08em;color:var(--text-dim);font-weight:700}
-.prj-sect .n{font-family:ui-monospace,monospace;font-size:10.5px;color:var(--text-dimmer);font-weight:400}
-.prj-sect .ln{flex:1;border-top:1px dashed var(--border-subtle)}
+.prj-sect{display:flex;align-items:center;gap:var(--sp-2);margin:var(--sp-4) 0 var(--sp-2);
+  font-size:var(--fs-sm);color:var(--text-bright);font-weight:600}
+.prj-sect .n{font-family:ui-monospace,monospace;font-size:var(--fs-micro);color:var(--text-dim);font-weight:400}
+.prj-sect .ln{flex:1}
 .prj-sect.warn{color:#d29922}
 .prj-sect.ok{color:#3fb950}
 
@@ -105,19 +105,19 @@ const PRJ_CSS = `
 /* sticky subheader（14 §6.1）：筛选与排序不该跟着列表滚走 */
 .prj-subbar{position:sticky;top:0;z-index:var(--z-sticky);display:flex;align-items:center;gap:10px;
   flex-wrap:wrap;margin-bottom:12px;padding:8px 0;background:var(--bg-base)}
-.prj-chip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:999px;
+.prj-chip{display:inline-flex;align-items:center;gap:var(--sp-2);height:28px;padding:0 var(--sp-3);border-radius:var(--r-pill);
   border:1px solid var(--border);background:transparent;color:var(--text-dim);font-size:12px;
   cursor:pointer;white-space:nowrap;transition:color .15s,border-color .15s,background .15s}
 .prj-chip:hover{color:var(--text-bright);border-color:#8b949e}
 .prj-chip.on{color:var(--accent);border-color:var(--accent-border);background:var(--accent-soft)}
-.prj-chip .n{font-family:ui-monospace,monospace;font-size:10.5px;color:var(--text-dimmer)}
+.prj-chip .n{font-family:ui-monospace,monospace;font-size:var(--fs-micro);color:var(--text-dimmer)}
 .prj-chip.on .n{color:#79b8ff}
 
 /* 卡片列固定在 ≥320：原来是 minmax(270,1fr)，右侧一开终端就塌成一条极窄列表（14 §6.1） */
 .prj-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
 
-.prj-card{background:var(--bg-container);border:1px solid var(--border-subtle);border-radius:12px;
-  padding:13px 14px 11px;cursor:pointer;display:flex;flex-direction:column;gap:8px;
+.prj-card{background:var(--bg-container);border:1px solid var(--border-subtle);border-radius:var(--r-card);
+  padding:var(--sp-3) var(--sp-4);cursor:pointer;display:flex;flex-direction:column;gap:8px;
   transition:border-color .18s,transform .18s,box-shadow .18s}
 .prj-card:hover{border-color:rgba(88,166,255,.45);transform:translateY(-1px);box-shadow:var(--card-hover-shadow)}
 .prj-card:focus-visible{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}

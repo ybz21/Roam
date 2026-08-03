@@ -19,38 +19,38 @@ import { usePreferences, savePreferences } from './preferences'
 const OV_CSS = `
 .ov{display:flex;flex-direction:column;gap:14px;padding-bottom:32px;max-width:var(--content-overview)}
 
-.ov-sum{display:flex;align-items:center;gap:8px 18px;flex-wrap:wrap;min-height:38px;padding:8px 12px;
-  border:1px solid var(--border-subtle);border-radius:10px;background:var(--bg-container);font-size:var(--fs-meta)}
-.ov-sum button{display:inline-flex;align-items:center;gap:7px;padding:2px 4px;margin:-2px -4px;border:0;border-radius:6px;
+.ov-sum{display:flex;align-items:center;gap:var(--sp-2) var(--sp-5);flex-wrap:wrap;min-height:40px;
+  padding:var(--sp-2) var(--sp-3);border-radius:var(--r-sm);background:var(--bg-container);font-size:var(--fs-meta)}
+.ov-sum button{display:inline-flex;align-items:center;gap:var(--sp-2);padding:var(--sp-1);margin:calc(var(--sp-1) * -1);border:0;border-radius:var(--r-xs);
   background:none;color:var(--text-dim);font:inherit;cursor:pointer}
 .ov-sum button:hover{color:var(--text-bright);background:var(--list-hover)}
-.ov-sum b{font-family:ui-monospace,monospace;font-weight:800;font-size:13px;color:var(--text-bright)}
+.ov-sum b{font-family:ui-monospace,monospace;font-weight:700;font-size:var(--fs-sm);color:var(--text-bright)}
 .ov-sum .d{width:6px;height:6px;border-radius:50%;background:#3fb950;flex:0 0 auto}
 .ov-sum .d.a{background:#d29922}.ov-sum .d.p{background:#a371f7}.ov-sum .d.z{background:var(--border-subtle)}
 
 .ov-tabs{display:flex;align-items:center;gap:2px;margin-top:2px;
   border-bottom:1px solid var(--border-subtle)}
-.ov-tab{padding:8px 13px 9px;border:0;background:none;font:inherit;font-size:13px;color:var(--text-dim);
+.ov-tab{padding:var(--sp-2) var(--sp-3);border:0;background:none;font:inherit;font-size:var(--fs-body);color:var(--text-dim);
   cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .15s}
 .ov-tab:hover{color:var(--text-bright)}
 .ov-tab.on{color:var(--text-bright);border-bottom-color:var(--accent);font-weight:600}
-.ov-tab-go{margin-left:auto;display:inline-flex;align-items:center;font-size:12px}
+.ov-tab-go{margin-left:auto;display:inline-flex;align-items:center;font-size:var(--fs-meta)}
 /* 手指档把 tab 撑到 44：真机上默认高度只有 40（13 §7.1 的命中区下限） */
 html[data-pointer="coarse"] .ov-tab{min-height:44px}
 html[data-pointer="coarse"] .ov-tab-go{min-height:44px}
 
 .ov-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;align-items:start}
 .ov-feed{min-width:0;display:flex;flex-direction:column;gap:12px}
-.ov-sect{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:800;letter-spacing:.1em;color:var(--text-dim)}
-.ov-sect .n{min-width:18px;height:18px;padding:0 5px;display:grid;place-items:center;border-radius:999px;
-  background:var(--bg-container);color:var(--text-dimmer);font:700 10px/1 ui-monospace,monospace;letter-spacing:0}
-.ov-sect .ln{flex:1;border-top:1px dashed var(--border-subtle)}
-.ov-sect a{font-size:11px;font-weight:400;letter-spacing:0}
+.ov-sect{display:flex;align-items:center;gap:var(--sp-2);font-size:var(--fs-sm);font-weight:600;color:var(--text-bright)}
+.ov-sect .n{min-width:20px;height:20px;padding:0 6px;display:grid;place-items:center;border-radius:var(--r-pill);
+  background:var(--bg-container);color:var(--text-dim);font:600 var(--fs-micro)/1 ui-monospace,monospace}
+.ov-sect .ln{flex:1}
+.ov-sect a{font-size:var(--fs-meta);font-weight:400}
 
 /* 行动卡：一屏最多三张，超出走「查看全部」，不让黄框把项目卡挤到首屏以下 */
 .ov-cards{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
 .ov-card{position:relative;min-width:0;min-height:118px;padding:12px 13px 34px;cursor:pointer;
-  border:1px solid rgba(210,153,34,.28);border-radius:12px;
+  border:1px solid rgba(210,153,34,.28);border-radius:var(--r-card);
   background:radial-gradient(circle at 100% 0,rgba(210,153,34,.13),transparent 38%),
     linear-gradient(145deg,rgba(210,153,34,.09),rgba(210,153,34,.025));
   transition:border-color .15s,transform .15s}
@@ -58,64 +58,64 @@ html[data-pointer="coarse"] .ov-tab-go{min-height:44px}
 .ov-card.p{border-color:rgba(163,113,247,.28);
   background:radial-gradient(circle at 100% 0,rgba(163,113,247,.13),transparent 38%),rgba(163,113,247,.04)}
 .ov-card.p:hover{border-color:rgba(163,113,247,.55)}
-.ov-card .ty{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:800;color:#e3b341}
+.ov-card .ty{display:flex;align-items:center;gap:var(--sp-2);font-size:var(--fs-meta);font-weight:600;color:#e3b341}
 .ov-card.p .ty{color:#a371f7}
 .ov-card .ty .pj{color:var(--text-dimmer);font-weight:400}
-.ov-card h4{margin:9px 0 4px;font-size:13.5px;color:var(--text-bright);
+.ov-card h4{margin:var(--sp-2) 0 var(--sp-1);font-size:var(--fs-body);color:var(--text-bright);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ov-card p{margin:0;height:34px;overflow:hidden;font-size:11.5px;line-height:1.5;color:var(--text-dim);
+.ov-card p{margin:0;height:36px;overflow:hidden;font-size:var(--fs-meta);line-height:1.5;color:var(--text-dim);
   font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace}
-.ov-card .go{position:absolute;left:13px;bottom:10px;font-size:11.5px;color:var(--accent)}
+.ov-card .go{position:absolute;left:var(--sp-3);bottom:var(--sp-3);font-size:var(--fs-meta);color:var(--accent)}
 
 /* 项目卡栅格：阈值看 Canvas，不看 viewport */
 .ov-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
-.ov-proj{min-width:0;background:var(--bg-container);border:1px solid var(--border-subtle);border-radius:12px;
-  padding:12px 13px 10px;display:flex;flex-direction:column;gap:5px;transition:border-color .15s}
+.ov-proj{min-width:0;background:var(--bg-container);border:1px solid var(--border-subtle);border-radius:var(--r-card);
+  padding:var(--sp-3) var(--sp-3) var(--sp-2);display:flex;flex-direction:column;gap:var(--sp-1);transition:border-color .15s}
 .ov-proj:hover{border-color:rgba(88,166,255,.35)}
 .ov-proj .hd{display:flex;align-items:center;gap:8px}
 .ov-ico{width:28px;height:28px;flex:0 0 auto;display:grid;place-items:center;border-radius:8px;
   font-size:12px;font-weight:800}
 .ov-proj .nm{min-width:0;flex:1 1 auto}
-.ov-proj .nm b{display:block;font-size:13px;color:var(--text-bright);
+.ov-proj .nm b{display:block;font-size:var(--fs-body);color:var(--text-bright);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ov-proj .nm span{display:block;margin-top:1px;font:10.5px/1.25 ui-monospace,monospace;color:var(--text-dimmer);
+.ov-proj .nm span{display:block;margin-top:2px;font:var(--fs-micro)/1.3 ui-monospace,monospace;color:var(--text-dimmer);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ov-proj .hd a{flex:0 0 auto;font-size:11.5px}
-.ov-trow{display:flex;align-items:center;gap:8px;min-height:30px;padding:4px 6px;border-radius:7px;
-  font-size:12.5px;cursor:pointer;transition:background .14s}
+.ov-proj .hd a{flex:0 0 auto;font-size:var(--fs-meta)}
+.ov-trow{display:flex;align-items:center;gap:var(--sp-2);min-height:32px;padding:var(--sp-1) var(--sp-2);
+  border-radius:var(--r-xs);font-size:var(--fs-sm);cursor:pointer;transition:background .14s}
 .ov-trow:first-of-type{margin-top:6px}
 .ov-trow:hover{background:var(--list-hover)}
 .ov-trow .t{min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ov-trow .tm{margin-left:auto;flex:0 0 auto;font-size:11px;color:var(--text-dimmer);white-space:nowrap}
-.ov-foot{display:flex;align-items:center;gap:7px;min-height:26px;margin-top:4px;padding:5px 8px;border-radius:8px;
-  font-size:11.5px;border:1px solid rgba(163,113,247,.22);background:rgba(163,113,247,.05);color:#a371f7}
+.ov-trow .tm{margin-left:auto;flex:0 0 auto;font-size:var(--fs-meta);color:var(--text-dimmer);white-space:nowrap}
+.ov-foot{display:flex;align-items:center;gap:var(--sp-2);min-height:28px;margin-top:var(--sp-1);
+  padding:var(--sp-1) var(--sp-2);border-radius:var(--r-xs);font-size:var(--fs-meta);border:1px solid rgba(163,113,247,.22);background:rgba(163,113,247,.05);color:#a371f7}
 .ov-foot.w{border-color:rgba(210,153,34,.24);background:rgba(210,153,34,.05);color:#e3b341}
-.ov-foot a{margin-left:auto;flex:0 0 auto;font-size:11.5px}
-.ov-more{padding-left:6px;font-size:11.5px;color:var(--text-dimmer)}
-.ov-rest{display:grid;place-items:center;min-height:96px;padding:12px;cursor:pointer;
-  border:1px dashed var(--border-subtle);border-radius:12px;font-size:12.5px;color:var(--text-dimmer)}
+.ov-foot a{margin-left:auto;flex:0 0 auto;font-size:var(--fs-meta)}
+.ov-more{padding-left:var(--sp-2);font-size:var(--fs-meta);color:var(--text-dimmer)}
+.ov-rest{display:grid;place-items:center;min-height:96px;padding:var(--sp-3);cursor:pointer;
+  border:1px dashed var(--border-subtle);border-radius:var(--r-card);font-size:var(--fs-sm);color:var(--text-dimmer)}
 .ov-rest:hover{color:var(--text-dim);border-color:rgba(88,166,255,.35)}
 
 /* 最近活动：≥1180 时是右侧 sticky 侧轨；窄于此它只是网格的第二行，自然落回页尾 */
-.ov-rail{min-width:0;padding:12px 13px;border:1px solid var(--border-subtle);border-radius:12px;background:var(--bg-container)}
-.ov-rail h3{margin:0 0 12px;font-size:11px;font-weight:800;letter-spacing:.1em;color:var(--text-dim)}
-.ov-tl{position:relative;display:flex;flex-direction:column;gap:13px}
+.ov-rail{min-width:0;padding:var(--sp-3);border-radius:var(--r-card);background:var(--bg-container)}
+.ov-rail h3{margin:0 0 var(--sp-3);font-size:var(--fs-sm);font-weight:600;color:var(--text-bright)}
+.ov-tl{position:relative;display:flex;flex-direction:column;gap:var(--sp-4)}
 .ov-tl::before{content:"";position:absolute;left:4px;top:6px;bottom:6px;border-left:1px solid var(--border-subtle)}
 .ov-ev{position:relative;padding-left:18px}
 .ov-ev::before{content:"";position:absolute;left:1px;top:4px;width:7px;height:7px;border-radius:50%;
   border:2px solid var(--bg-container);background:#39c5cf}
 .ov-ev.g::before{background:#3fb950}.ov-ev.p::before{background:#a371f7}
-.ov-ev b{display:block;font-size:11.5px;color:var(--text-bright);
+.ov-ev b{display:block;font-size:var(--fs-meta);color:var(--text-bright);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ov-ev p{margin:3px 0 0;font-size:11px;line-height:1.5;color:var(--text-dim);
+.ov-ev p{margin:var(--sp-1) 0 0;font-size:var(--fs-meta);line-height:1.55;color:var(--text-dim);
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.ov-ev time{display:block;margin-top:3px;font-size:10.5px;color:var(--text-dimmer)}
+.ov-ev time{display:block;margin-top:var(--sp-1);font-size:var(--fs-micro);color:var(--text-dimmer)}
 
-.ov-loose{padding:10px 12px;border:1px solid var(--border-subtle);border-radius:12px;background:var(--bg-container)}
-.ov-loose .row{display:flex;align-items:center;gap:8px;min-height:28px;padding:3px 2px;font-size:12px;
+.ov-loose{padding:var(--sp-3);border-radius:var(--r-card);background:var(--bg-container)}
+.ov-loose .row{display:flex;align-items:center;gap:var(--sp-2);min-height:32px;padding:var(--sp-1) 0;font-size:var(--fs-sm);
   color:var(--text-dim);cursor:pointer}
 .ov-loose .row:hover{color:var(--text-bright)}
-.ov-loose .tm{margin-left:auto;flex:0 0 auto;font-size:11px;color:var(--text-dimmer)}
+.ov-loose .tm{margin-left:auto;flex:0 0 auto;font-size:var(--fs-meta);color:var(--text-dimmer)}
 .ov-go-i{margin-left:3px;vertical-align:-1px;opacity:.75}
 a:hover>.ov-go-i,button:hover>.ov-go-i,.ov-card:hover .ov-go-i{opacity:1}
 .ov-mono{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace}
@@ -488,7 +488,7 @@ export default function Overview({ openTerm, renderSessions }: { openTerm: (n: s
                           <div key={s.name} className="ov-trow" onClick={() => openTerm(s.name)}>
                             {dot(false, w ? '#d29922' : r ? '#3fb950' : undefined)}
                             <span className="t" title={`${s.label || s.name}（${s.id || s.name}）`}>{s.label || s.name}</span>
-                            {ann[s.name]?.primary?.linked && <Tag color="cyan" style={{ margin: 0, fontSize: 10.5, lineHeight: '16px', padding: '0 5px' }}>⎇</Tag>}
+                            {ann[s.name]?.primary?.linked && <Tag color="cyan" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px', padding: '0 5px' }}>⎇</Tag>}
                             <Lifec done={r ? 1 : 2} cur={r && !w ? 2 : w ? 3 : undefined} />
                             <span className="tm">{relTime(s.last_activity, t)}</span>
                           </div>

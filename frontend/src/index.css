@@ -48,11 +48,30 @@
   --ctl-h: 32px;                  /* 控件高（桌面档） */
   --pad-page: 16px;               /* 页面四周留白 */
   --gap: 10px;
-  --fs-body: 14px;
-  --fs-meta: 12px;
-  --fs-chip: 12.5px;
-  --r-card: 12px;
+  /* 字号刻度（只有这六档）。此前一个页面上能数出 10 种字号，最常用的三种是
+     11.5 / 11 / 10.5——半像素级的差别没人看得出是刻意的，只会读成"随手写的"。
+     除眉标/角标外不许低于 12。 */
+  --fs-micro: 11px;               /* 眉标、角标，唯一允许 <12 的一档 */
+  --fs-meta: 12px;                /* 次要信息：时间、路径、计数 */
+  --fs-sm: 13px;                  /* 密集列表行 */
+  --fs-body: 14px;                /* 正文 */
+  --fs-lg: 16px;                  /* 区块标题 */
+  --fs-title: 22px;               /* 页面标题 */
+  --fs-chip: 12px;
+
+  /* 圆角刻度（四档）：控件 / 行 / 卡片 / 胶囊 */
+  --r-xs: 6px;
+  --r-sm: 10px;
+  --r-card: 14px;
+  --r-pill: 999px;
   --r-sheet: 16px;
+
+  /* 间距刻度（五档）：4 的倍数，不再出现 3/5/7/9/11/13 */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
   --row-cozy: 42px;
   --row-compact: 34px;
 
@@ -95,8 +114,8 @@ html[data-size="compact"] {
   --ctl-h: 40px;
   --pad-page: 12px;
   --gap: 8px;
+  /* 正文放大一档：手机阅读距离更近但屏更小。其余刻度不动——档位不该顺手改整套刻度 */
   --fs-body: 15px;
-  --fs-meta: 12.5px;
 }
 
 /* 密度是用户偏好，与档位正交；粗指针下只收留白，不收命中区 */
@@ -246,13 +265,13 @@ body {
   margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-subtle);
 }
 .tt-nav-group .gl {
-  padding: 0 10px; margin-bottom: 4px;
-  color: var(--text-dimmer); font-size: 10.5px; font-weight: 800; letter-spacing: .1em;
+  padding: 0 10px; margin-bottom: var(--sp-1);
+  color: var(--text-dimmer); font-size: var(--fs-micro); font-weight: 700; letter-spacing: .1em;
 }
 
 .tt-nav-item, .tt-nav-account, .tt-nav-collapse {
   position: relative; display: flex; align-items: center; gap: 11px; width: 100%;
-  min-height: 38px; padding: 0 10px; border: 0; border-radius: 8px;
+  min-height: 38px; padding: 0 10px; border: 0; border-radius: var(--r-sm);
   background: none; color: var(--text-dim); font-size: var(--fs-body); text-align: left;
   cursor: pointer; transition: background .14s, color .14s;
 }
@@ -271,10 +290,10 @@ body {
 /* 终端是开关不是页面：给底色，但不给「当前在哪一页」的那条强调线 */
 .tt-nav-item.toggle.on::before { display: none; }
 .tt-nav-item .bd {
-  margin-left: auto; flex: 0 0 auto; min-width: 18px; height: 18px; padding: 0 5px;
-  display: grid; place-items: center; border-radius: 9px;
+  margin-left: auto; flex: 0 0 auto; min-width: 20px; height: 20px; padding: 0 6px;
+  display: grid; place-items: center; border-radius: var(--r-pill);
   background: rgba(210, 153, 34, .18); color: #e3b341;
-  font: 700 10.5px/1 ui-monospace, monospace;
+  font: 600 var(--fs-micro)/1 ui-monospace, monospace;
 }
 .tt-nav-item .bd.blue { background: var(--accent-solid); color: #fff; }
 /* 轨态 badge 缩成右上角一枚点大小的角标，不挤图标 */
@@ -306,13 +325,14 @@ body {
 .tt-pagehead { display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
 .tt-pagehead .ttl { min-width: 0; flex: 1 1 320px; }
 .tt-pagehead .kicker {
-  font-size: 10.5px; font-weight: 800; letter-spacing: .14em;
+  font-size: var(--fs-micro); font-weight: 700; letter-spacing: .12em;
   color: var(--text-dimmer); text-transform: uppercase;
 }
 .tt-pagehead h2 {
-  margin: 5px 0 0; font-size: 22px; line-height: 1.18; letter-spacing: -.02em; color: var(--text-bright);
+  margin: var(--sp-1) 0 0; font-size: var(--fs-title); line-height: 1.2;
+  letter-spacing: -.02em; color: var(--text-bright);
 }
-.tt-pagehead p { margin: 6px 0 0; font-size: var(--fs-meta); color: var(--text-dim); }
+.tt-pagehead p { margin: var(--sp-2) 0 0; font-size: var(--fs-sm); color: var(--text-dim); }
 .tt-pagehead .acts { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
 /* ── 页面骨架：所有一级页面从同一个左上角起笔，卡片和工具区间距一致 ── */
