@@ -46,7 +46,7 @@ import { reorderTabs } from './shell/tabs'
 import { requestIntent } from './intents'
 import { SessionDock, SessionSwitchSheet } from './shell/SessionDock'
 import { DPad } from './shell/DPad'
-import { sessionProject, setSessionProjects, buildSessionProjects } from './session-project'
+import { sessionProject, setSessionProjects, buildSessionProjects, useSessionProjects, sessionLocation } from './session-project'
 import { MobileSheet, SheetRow, SheetSection } from './shell/MobileSheet'
 import { WorkspaceTopbar, type PaletteItem } from './shell/WorkspaceTopbar'
 import { copyText } from './chat/blocks'
@@ -85,7 +85,7 @@ const MOBILE_MORE_KEYS = ['browser', 'phone', 'plugins', 'settings']
 
 // 用 Canvas 容器查询排版的页面（见 index.css 的 .tt-canvas[data-cq]）。逐页开，
 // 不是全局开：container-type 会改变 fixed 后代的包含块。
-const CQ_PAGES = new Set(['overview'])
+const CQ_PAGES = new Set(['overview', 'sessions'])
 
 // 旧链接兼容：/#/env 重定向到 /#/settings
 function normalizeRoute(raw: string): string {
@@ -2374,6 +2374,8 @@ function Sessions({ openTerm, closeTerm, activeTerm, embedded }: {
   const [wtDir, setWtDir] = useState<string | undefined>(undefined)
   // session→worktree 归属注解（cwd 现算的弱关联）：会话行 ⎇ Tag 的数据源
   const [wtAnn, setWtAnn] = useState<Record<string, any>>({})
+  // 会话→项目：桌面「项目」列的数据源。表是 App 那份轮询建的，这里只读（14 §6.3）
+  const sessProj = useSessionProjects()
   // 竞赛（W5/W6）：Race Service 业务数据，会话按竞赛聚组、组头进对比台
   const [races, setRaces] = useState<any[]>([])
   const [raceOpen, setRaceOpen] = useState(false)
@@ -2774,46 +2776,53 @@ function Sessions({ openTerm, closeTerm, activeTerm, embedded }: {
                   boxShadow: activeRow ? '0 0 0 1px rgba(88,166,255,.18), 0 0 18px rgba(31,111,235,.14)' : undefined,
                 }} onClick={() => openTerm(s.name)}>
                   {activeRow && <span aria-hidden style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: '#58a6ff' }} />}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', width: '100%', minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', minWidth: 0, flex: 1 }}>
-                      <i title={waiting ? t('prompt.confirmRequired') : connected ? t('terminal.status.connected') : t('terminal.status.idle')} style={{ width: 8, height: 8, borderRadius: '50%', flex: '0 0 8px', background: waiting ? '#d29922' : connected ? '#3fb950' : 'var(--text-dimmer)' }} />
-                      <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' }}>
-                          {en.fam && <Tooltip title={t('session.fork.childOf', { parent: s.parent })}><span style={{ color: '#a371f7', flex: '0 0 auto', fontSize: 13 }}>⑂</span></Tooltip>}
-                          <span style={{ fontWeight: 700, color: activeRow ? '#fff' : 'var(--text-bright)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${s.label || s.name}（${s.id || s.name}）`}>
-                            {s.label || s.name}
-                            {(s.id || s.name) !== (s.label || s.name) && <span style={{ opacity: .5, fontSize: 'var(--fs-meta)', marginLeft: 4, fontWeight: 400 }}>({s.id || s.name})</span>}
-                          </span>
-                          {(() => { // worktree 归属：⎇ 分支紧跟会话名(设计 W2)；外部 worktree 加 ⧉ 标识；手机端只显图标
-                            const ann = wtAnn[s.name]
-                            if (!ann?.primary?.linked) return null
-                            const tip = t('worktree.sessionTagTip', { path: ann.primary.worktree })
-                              + (ann.ambiguous ? ' · ' + t('worktree.sessionTagAmbiguous', { count: ann.matches?.length || 0 }) : '')
-                            return (<>
-                              <Tooltip title={tip}>
-                                <Tag color="cyan" style={{ margin: 0, flex: '0 0 auto', cursor: 'pointer', fontFamily: 'ui-monospace, monospace' }}
-                                  onClick={(e) => { e.stopPropagation(); setWtDir(ann.primary.repo); setWtOpen(true) }}>
-                                  {wide ? `⎇ ${ann.primary.branch}` : '⎇'}{ann.ambiguous ? ' +' : ''}
-                                </Tag>
-                              </Tooltip>
-                              {ann.primary.external && <Tag style={{ margin: 0, flex: '0 0 auto' }}>⧉ {wide ? t('worktree.external') : ''}</Tag>}
-                            </>)
-                          })()}
-                          {sw && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>{t('nav.swarm')}:{sw.swarm}{sw.role === 'leader' ? `·${t('swarm.master')}` : ''}</Tag>}
-                          {waiting && <Tag color="warning" style={{ margin: 0, flex: '0 0 auto' }}>{t('session.waiting')}</Tag>}
-                          {cc[s.name] && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>✳ Claude</Tag>}
-                          {cx[s.name] && <Tag color="green" style={{ margin: 0, flex: '0 0 auto' }}>✸ Codex</Tag>}
-                          {!sw && !agent && <Tag style={{ margin: 0, flex: '0 0 auto' }}>{connected ? t('terminal.status.connected') : t('terminal.status.idle')}</Tag>}
-                          <span style={{ color: 'var(--text-dim)', fontSize: 12, flex: '0 0 auto', whiteSpace: 'nowrap' }}>{t('session.windows', { count: s.windows })}</span>
-                        </div>
-                        <div style={{ color: 'var(--text-dimmer)', fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          <span title={absTime(s.created)}>{t('session.createdAt')} {relTime(s.created, t)}</span>
-                          <span style={{ margin: '0 6px' }}>·</span>
-                          <span title={absTime(s.last_activity)}>{t('session.lastActivity')} {relTime(s.last_activity, t)}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div onClick={(e) => e.stopPropagation()} style={{ marginLeft: 'auto', display: 'flex', gap: 'var(--sp-4)', alignItems: 'center', flex: '0 0 auto', whiteSpace: 'nowrap' }}>
+                  {/* 七个格子恒定：缺一个桌面上就整行错列，所以空的项目/位置格照样渲染（见 .tt-srow） */}
+                  <div className="tt-srow">
+                    <i title={waiting ? t('prompt.confirmRequired') : connected ? t('terminal.status.connected') : t('terminal.status.idle')} style={{ width: 8, height: 8, borderRadius: '50%', flex: '0 0 8px', background: waiting ? '#d29922' : connected ? '#3fb950' : 'var(--text-dimmer)' }} />
+                    <span className="nm" style={{ color: activeRow ? '#fff' : undefined }}
+                      title={`${s.label || s.name}（${s.id || s.name}）· ${t('session.createdAt')} ${absTime(s.created)}`}>
+                      {en.fam && <Tooltip title={t('session.fork.childOf', { parent: s.parent })}><span style={{ color: '#a371f7', fontSize: 13, marginRight: 6 }}>⑂</span></Tooltip>}
+                      {s.label || s.name}
+                      {/* 会话 ID 只留尾 4 位：全名与名字同权并排时，每行前半截都在念一串日期 */}
+                      {(s.id || s.name) !== (s.label || s.name) && <span className="id">{(s.id || s.name).slice(-4)}</span>}
+                    </span>
+                    <span className="pj">{sessProj[s.name]?.name}</span>
+                    {(() => { // 位置列：有 worktree 就是 ⎇ 分支（点开进 worktree 管理），否则是工作目录
+                      const ann = wtAnn[s.name]
+                      const loc = sessionLocation(ann, s.cwd, sessProj[s.name]?.dir)
+                      if (!loc.branch && !loc.path) return <span className="loc" />
+                      const tip = loc.branch
+                        ? t('worktree.sessionTagTip', { path: ann?.primary?.worktree || '' })
+                          + (ann?.ambiguous ? ' · ' + t('worktree.sessionTagAmbiguous', { count: ann.matches?.length || 0 }) : '')
+                        : loc.title
+                      return (
+                        <span className="loc" title={tip}
+                          onClick={ann?.primary?.linked ? (e) => { e.stopPropagation(); setWtDir(ann.primary.repo); setWtOpen(true) } : undefined}
+                          style={ann?.primary?.linked ? { cursor: 'pointer' } : undefined}>
+                          {loc.branch ? <span className="br">⎇ {loc.branch}{ann?.ambiguous ? ' +' : ''}</span> : loc.path}
+                        </span>
+                      )
+                    })()}
+                    <span className="tags">
+                      {(() => { // 窄档只留一枚 ⎇ 图标（桌面由位置列接管）；外部 worktree 加 ⧉
+                        const ann = wtAnn[s.name]
+                        if (!ann?.primary?.linked) return null
+                        return (<>
+                          <Tag className="wt" color="cyan" style={{ margin: 0, flex: '0 0 auto', cursor: 'pointer', fontFamily: 'ui-monospace, monospace' }}
+                            onClick={(e) => { e.stopPropagation(); setWtDir(ann.primary.repo); setWtOpen(true) }}>⎇</Tag>
+                          {ann.primary.external && <Tag className="wt" style={{ margin: 0, flex: '0 0 auto' }}>⧉</Tag>}
+                        </>)
+                      })()}
+                      {sw && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>{t('nav.swarm')}:{sw.swarm}{sw.role === 'leader' ? `·${t('swarm.master')}` : ''}</Tag>}
+                      {waiting && <Tag color="warning" style={{ margin: 0, flex: '0 0 auto' }}>{t('session.waiting')}</Tag>}
+                      {cc[s.name] && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>✳ Claude</Tag>}
+                      {cx[s.name] && <Tag color="green" style={{ margin: 0, flex: '0 0 auto' }}>✸ Codex</Tag>}
+                      {!sw && !agent && <Tag style={{ margin: 0, flex: '0 0 auto' }}>{connected ? t('terminal.status.connected') : t('terminal.status.idle')}</Tag>}
+                      {/* 窗口数 99% 的会话都是 1，常驻就是一列噪声——只在 >1 时说 */}
+                      {s.windows > 1 && <span style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap' }}>{t('session.windows', { count: s.windows })}</span>}
+                    </span>
+                    <span className="tm" title={absTime(s.last_activity)}>{relTime(s.last_activity, t)}</span>
+                    <span className="acts" onClick={(e) => e.stopPropagation()}>
                       {!sw && wide && <a onClick={() => setForking(s.name)}>{t('session.fork.entry')}</a>}
                       {sw && <a onClick={() => goSwarm(sw.swarm)}>{t('session.swarmPage')}</a>}
                       {sw ? (
@@ -2833,7 +2842,7 @@ function Sessions({ openTerm, closeTerm, activeTerm, embedded }: {
                           <a style={{ color: '#f85149' }} onClick={() => { if (confirmKill !== s.name) beginClose(s.name) }}>{t('session.close')}</a>
                         </Popconfirm>
                       )}
-                    </div>
+                    </span>
                   </div>
                 </List.Item>
               )

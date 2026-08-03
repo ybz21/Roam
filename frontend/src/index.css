@@ -355,6 +355,55 @@ html[data-size="compact"] .tt-pagehead { gap: var(--sp-2); }
   padding-bottom: calc(126px + env(safe-area-inset-bottom));
 }
 
+/* ── 会话行（图纸 14-desktop-workspace/desktop-ia.html §三）──────────────
+   一条会话原来写两行 67px：第二行只有「创建 · 最后响应」，中间 697px 是空的，
+   而「这条会话属于哪个项目」概览都写了、这一页反而没有。
+   现在同一份 DOM 两种排法：窄档一行折行排；Canvas ≥900 排成七列，
+   空出来的宽度换成两列真信息（项目 / 位置），行高收到 40。 */
+/* 窄档是两行栅格而不是 flex 折行：靠 flex 折的话，行会按名字长短随机折成一行或两行，
+   「关闭」有时孤零零掉到第二行——列表于是没有一条稳定的基线。
+   这是**基础**排法而不是 compact 专属：桌面拉开终端分栏时 Canvas 同样会窄到 <900。 */
+.tt-srow { display: grid; align-items: center; width: 100%; min-width: 0;
+  row-gap: var(--sp-1); column-gap: var(--sp-2);
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  grid-template-areas: "dot nm acts" "dot tags tm"; }
+.tt-srow > * { min-width: 0; }
+.tt-srow > i { grid-area: dot; align-self: start; margin-top: 6px; }
+.tt-srow .nm { grid-area: nm; font-weight: 700; color: var(--text-bright);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-srow .nm .id { margin-left: 4px; font-weight: 400; font-size: var(--fs-meta); opacity: .5; }
+.tt-srow .pj, .tt-srow .loc { display: none; }
+.tt-srow .tags { grid-area: tags; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.tt-srow .tm { grid-area: tm; justify-self: end; font-size: var(--fs-meta);
+  color: var(--text-dimmer); white-space: nowrap; }
+.tt-srow .acts { grid-area: acts; justify-self: end; display: flex; align-items: center;
+  gap: var(--sp-4); white-space: nowrap; }
+
+@container canvas (min-width: 900px) {
+  .tt-srow { column-gap: var(--sp-3); row-gap: 0; grid-template-areas: none;
+    grid-template-columns: 8px minmax(180px, 1fr) 124px minmax(150px, 1.25fr) 132px 82px 92px; }
+  /* 七列按 DOM 顺序自动落位：● / 名称 / 项目 / 位置 / 标记 / 时间 / 操作 */
+  .tt-srow > i, .tt-srow .nm, .tt-srow .tags, .tt-srow .tm, .tt-srow .acts { grid-area: auto; }
+  .tt-srow > i { align-self: center; margin-top: 0; }
+  .tt-srow .pj { display: block; font-size: var(--fs-meta); color: var(--text-dimmer);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tt-srow .loc { display: block; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: var(--fs-meta); color: var(--text-dimmer); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tt-srow .loc .br { color: #7ed0d8; }
+  .tt-srow .tags { flex-wrap: nowrap; overflow: hidden; }
+  /* 位置列已经把分支写全了，行内那枚 ⎇ 标就是重复 */
+  .tt-srow .tags .wt { display: none; }
+  .tt-srow .tm { margin-left: 0; justify-self: end; }
+  /* 破坏性动作不常驻：12 行 12 个红色「关闭」是界面在冲用户喊。
+     :focus-within 一起写——只挂 hover 的话键盘用户永远够不着。 */
+  .tt-srow .acts { justify-self: end; opacity: 0; transition: opacity .14s; }
+  .ant-list-item:hover .tt-srow .acts,
+  .ant-list-item:focus-within .tt-srow .acts,
+  .tt-srow .acts:focus-within { opacity: 1; }
+}
+/* 手指档没有 hover，操作必须常驻 */
+html[data-pointer="coarse"] .tt-srow .acts { opacity: 1; }
+
 .tt-seg-scroll { scrollbar-width: none; }
 .tt-seg-scroll::-webkit-scrollbar { height: 0; }
 .tt-seg-scroll > .ant-segmented { min-width: max-content; }

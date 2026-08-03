@@ -7,7 +7,14 @@
 > [D2 项目工作台](./14-desktop-workspace/projects.html) ·
 > [D3 终端分栏](./14-desktop-workspace/terminal-split.html) ·
 > [D4 终端 Focus](./14-desktop-workspace/terminal-focus.html) ·
-> [D5 超宽屏](./14-desktop-workspace/ultrawide.html)
+> [D5 超宽屏](./14-desktop-workspace/ultrawide.html) ·
+> [D6 概览/项目/会话 三页桌面排布](./14-desktop-workspace/desktop-ia.html)
+>
+> D6 是后补的一稿：三页的**分工**在
+> [13-mobile-responsive/ia.html](./13-mobile-responsive/ia.html) 里定完之后，
+> 桌面仍在用手机那批组件——列表拉到 1174 宽，内容贴左、时间贴右，中间 570–700px 是空的。
+> D6 定的是同一套信息在桌面怎么排：对齐成列、中间的宽度换成「位置」列（⎇ 分支 / 目录）、
+> 破坏性动作随 hover。已实现。
 >
 > 状态：**设计草案，未实现**。本稿只定义 `large ≥ 1280` 的桌面形态；`< 1280`
 > 的手机、平板与小笔电由 [13 · 移动端响应式布局重做](./13-mobile-responsive.md) 负责，

@@ -1315,6 +1315,8 @@ const enUS = {
   'project.unpin': 'Unpin',
   'project.tasks': 'tasks',
   'project.loose': 'Loose sessions',
+  'project.quietSection': 'Other projects',
+  'project.quietHint': 'no sessions running',
   'project.enter': 'Enter',
   'project.forkTask': 'Fork',
   'project.notFound': 'Project not found or retired',

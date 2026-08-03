@@ -14,12 +14,17 @@ import { detectPrompt } from './prompt'
 import { relTime } from './App'
 import { sessionLabel } from './session-label'
 import { dot } from './Projects'
+import { useLayout } from './layout'
+import { sessionLocation } from './session-project'
 
 const OV_CSS = `
 .ov{display:flex;flex-direction:column;gap:var(--sp-4);padding-bottom:32px;max-width:var(--content-overview)}
 
 .ov-sum{display:flex;align-items:center;gap:var(--sp-2) var(--sp-5);flex-wrap:wrap;min-height:40px;
   padding:var(--sp-2) var(--sp-3);border-radius:var(--r-sm);background:var(--bg-container);font-size:var(--fs-meta)}
+/* 窄档：状态条是页头下方的一条横条（它挂在页头的 .acts 槽里，靠 100% 宽换行成整条） */
+.ov .tt-pagehead .acts{width:100%;margin-left:0}
+.ov .tt-pagehead .acts>.ov-sum{flex:1}
 .ov-sum button{display:inline-flex;align-items:center;gap:var(--sp-2);padding:var(--sp-1);margin:calc(var(--sp-1) * -1);border:0;border-radius:var(--r-xs);
   background:none;color:var(--text-dim);font:inherit;cursor:pointer}
 .ov-sum button:hover{color:var(--text-bright);background:var(--list-hover)}
@@ -85,6 +90,10 @@ const OV_CSS = `
 .ov-frow .ag{flex:0 0 auto;padding:1px 6px;border-radius:var(--r-pill);font-size:var(--fs-micro);
   color:#9ccaff;background:var(--accent-soft)}
 .ov-frow .ag.cx{color:#7fd18f;background:rgba(63,185,80,.12)}
+/* 六个格子在手机上按需塌陷：空的项目/Agent 格不占 gap，位置列整条不出现 */
+.ov-frow .agw{display:flex;gap:var(--sp-1);flex:0 0 auto}
+.ov-frow .pj::after{content:" ·"}
+.ov-frow .pj:empty,.ov-frow .agw:empty,.ov-frow .loc{display:none}
 .ov-frow .tm{margin-left:auto;flex:0 0 auto;font-size:var(--fs-meta);color:var(--text-dimmer);white-space:nowrap}
 .ov-go-i{margin-left:3px;vertical-align:-1px;opacity:.75}
 a:hover>.ov-go-i,button:hover>.ov-go-i,.ov-card:hover .ov-go-i{opacity:1}
@@ -95,6 +104,25 @@ a:hover>.ov-go-i,button:hover>.ov-go-i,.ov-card:hover .ov-go-i{opacity:1}
 @container canvas (min-width: 900px){
   .ov-cards{grid-template-columns:repeat(2,minmax(0,1fr))}
   .ov-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  /* 会话流在桌面对齐成列（图纸 14-desktop-workspace/desktop-ia.html §一）。
+     手机那行是「名字贴左、时间贴右」，拉到 838 宽之后中间 570px 是空的；
+     桌面排成六列，空出来的宽度交给「位置」——⎇ 分支，或与项目目录不同时的工作目录。 */
+  .ov-frow{display:grid;grid-template-columns:8px 128px minmax(170px,1fr) 60px 260px 74px;
+    column-gap:var(--sp-3);align-items:center;min-height:40px}
+  .ov-frow>*{min-width:0}
+  .ov-frow .pj,.ov-frow .nm{flex:none;display:block}
+  .ov-frow .pj::after{content:none}
+  .ov-frow .agw{display:flex}
+  .ov-frow .loc{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:var(--fs-meta);color:var(--text-dimmer)}
+  .ov-frow .loc .br{color:#7ed0d8}
+  .ov-frow .tm{margin-left:0;justify-self:end}
+  /* 状态条并进页头右端：省掉一整行，也不会再出现「一枚数字 + 1092px 空白」的胶囊。
+     它仍然是导航入口，所以只脱掉横条的底和内边距，hover/手型都留着。 */
+  .ov .tt-pagehead{align-items:flex-end}
+  .ov .tt-pagehead .acts{width:auto;margin-left:auto;padding-bottom:3px}
+  .ov .tt-pagehead .acts>.ov-sum{flex:0 0 auto}
+  .ov-sum{background:none;padding:0;min-height:0;border-radius:0}
 }
 @container canvas (min-width: 1180px){
   .ov-cards{grid-template-columns:repeat(3,minmax(0,1fr))}
@@ -151,6 +179,7 @@ function icoOf(name: string) {
 
 export default function Overview({ openTerm }: { openTerm: (n: string) => void }) {
   const { t, locale } = useI18n()
+  const { phone: isPhone } = useLayout()
   const [projects, setProjects] = useState<Proj[]>([])
   const [loose, setLoose] = useState<any[]>([])
   const [sessions, setSessions] = useState<any[]>([])
@@ -304,13 +333,16 @@ export default function Overview({ openTerm }: { openTerm: (n: string) => void }
   // 「最近会话」：跨项目扁平流，按最近活动倒序。这是概览与另外两页的分工线——
   // 项目页按仓库分组、会话页给全集+筛选，概览只回答「刚才在动的是哪几个」。
   // **排除已经进了行动卡的会话**：那条信息在上面已经说过一遍，重复出现两层就不互补了。
+  // 桌面多 4 条：桌面一行 40（手机 44），左栏本来比右侧「最近活动」短一大截，
+  // 8 条时页面下方空 310px（图纸 desktop-ia.html §一）。
   const recent = useMemo(() => {
     const inAction = new Set(cards.map((c) => c.session).filter(Boolean) as string[])
-    const rows = new Map<string, { name: string; at: number }>()
-    for (const s of projSess) if (!rows.has(s.name)) rows.set(s.name, { name: s.name, at: Number(s.last_activity || 0) })
-    for (const s of loose as any[]) if (!rows.has(s.name)) rows.set(s.name, { name: s.name, at: Number(s.lastActivity || 0) })
-    return [...rows.values()].filter((r) => !inAction.has(r.name)).sort((a, b) => b.at - a.at).slice(0, 8)
-  }, [projSess, loose, cards])
+    const rows = new Map<string, { name: string; at: number; cwd: string }>()
+    for (const s of projSess) if (!rows.has(s.name)) rows.set(s.name, { name: s.name, at: Number(s.last_activity || 0), cwd: s.cwd || '' })
+    for (const s of loose as any[]) if (!rows.has(s.name)) rows.set(s.name, { name: s.name, at: Number(s.lastActivity || 0), cwd: s.cwd || '' })
+    return [...rows.values()].filter((r) => !inAction.has(r.name))
+      .sort((a, b) => b.at - a.at).slice(0, isPhone ? 8 : 12)
+  }, [projSess, loose, cards, isPhone])
 
   // 最近活动：活跃 git 项目前 3 个各取头 2 条（commit+留痕），合并倒序（60s）
   useEffect(() => {
@@ -379,7 +411,8 @@ export default function Overview({ openTerm }: { openTerm: (n: string) => void }
     <div style={{ height: '100%', overflow: 'auto' }}>
       <style>{OV_CSS}</style>
       <div className="ov">
-        {/* ① 问候区：首屏第一句话回答「今天有几件事需要你」，零事项时是安静状态 */}
+        {/* ① 问候区：首屏第一句话回答「今天有几件事需要你」，零事项时是安静状态。
+            ② 状态概况挂在页头的 .acts 槽里：桌面并到标题右端（省一行），窄档换行成一条横条。 */}
         <header className="tt-pagehead ov-in">
           <div className="ttl">
             <div className="kicker">{kicker}</div>
@@ -390,17 +423,17 @@ export default function Overview({ openTerm }: { openTerm: (n: string) => void }
               ? t('overview.sublineRunning', { count: stats.running, time: relTime(lastAt, t) })
               : t('overview.sublineIdle')}</p>
           </div>
+          {(stats.running + stats.waiting + stats.unfinished + stats.swarms) > 0 && (
+            <div className="acts">
+              <div className="ov-sum ov-in" style={{ animationDelay: '50ms' }}>
+                {sumItem(stats.running, '', t('overview.sumRunning'))}
+                {sumItem(stats.waiting, 'a', t('overview.sumWaiting'))}
+                {sumItem(stats.unfinished, 'a', t('overview.sumUnfinished'))}
+                {sumItem(stats.swarms, 'p', t('overview.sumSwarms'))}
+              </div>
+            </div>
+          )}
         </header>
-
-        {/* ② 状态概况：一条顶掉旧版一排等权数字卡 */}
-        {(stats.running + stats.waiting + stats.unfinished + stats.swarms) > 0 && (
-          <div className="ov-sum ov-in" style={{ animationDelay: '50ms' }}>
-            {sumItem(stats.running, '', t('overview.sumRunning'))}
-            {sumItem(stats.waiting, 'a', t('overview.sumWaiting'))}
-            {sumItem(stats.unfinished, 'a', t('overview.sumUnfinished'))}
-            {sumItem(stats.swarms, 'p', t('overview.sumSwarms'))}
-          </div>
-        )}
 
         <div className="ov-layout">
             <div className="ov-feed">
@@ -443,13 +476,21 @@ export default function Overview({ openTerm }: { openTerm: (n: string) => void }
                     {recent.map((r) => {
                       const w = waiting[r.name]
                       const proj = projects.find((p) => (sessByProj.get(p.key) || []).some((x) => x.name === r.name))
+                      // 六个格子在桌面必须恒定，缺一个就整行错列——所以空的项目/Agent 格照样渲染，
+                      // 由 :empty 在手机上塌陷掉。
+                      const loc = sessionLocation(ann[r.name], r.cwd, proj?.dir)
                       return (
                         <div key={r.name} className="ov-frow" onClick={() => openTerm(r.name)}>
                           {dot(false, w ? '#d29922' : running(r.name) ? '#3fb950' : undefined)}
-                          {proj && <span className="pj">{proj.name} ·</span>}
+                          <span className="pj">{proj?.name}</span>
                           <span className="nm" title={r.name}>{sessionLabel(r.name)}</span>
-                          {cc[r.name] && <span className="ag">Claude</span>}
-                          {cx[r.name] && <span className="ag cx">Codex</span>}
+                          <span className="agw">
+                            {cc[r.name] && <span className="ag">Claude</span>}
+                            {cx[r.name] && <span className="ag cx">Codex</span>}
+                          </span>
+                          <span className="loc" title={loc.title}>
+                            {loc.branch ? <span className="br">⎇ {loc.branch}</span> : loc.path}
+                          </span>
                           <span className="tm">{relTime(r.at, t)}</span>
                         </div>
                       )

@@ -47,6 +47,10 @@ const ico = (d: React.ReactNode) => (
 const ICON_SEARCH = ico(<><circle cx="11" cy="11" r="7" /><line x1="16.5" y1="16.5" x2="21" y2="21" /></>)
 const ICON_SORT = ico(<><path d="M7 4v16" /><path d="M4 8l3-4 3 4" /><path d="M17 20V4" /><path d="M14 16l3 4 3-4" /></>)
 const ICON_CHECK = ico(<polyline points="4 12 9 17 20 6" />)
+const ICON_CHEVRON = (
+  <svg viewBox="0 0 24 24" width={12} height={12} fill="none" stroke="currentColor" aria-hidden="true"
+    strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"><polyline points="5 9 12 16 19 9" /></svg>
+)
 
 // ── 页面级样式（一次注入；产品 token 之上只做布局/微交互）──
 const PRJ_CSS = `
@@ -127,7 +131,9 @@ html[data-size="compact"] .prj-filters{overflow-x:auto;scrollbar-width:none;flex
 html[data-size="compact"] .prj-filters::-webkit-scrollbar{height:0}
 html[data-size="compact"] .prj-filters>*{flex:0 0 auto}
 html[data-size="compact"] .prj-filters .sp,
-html[data-size="compact"] .prj-filters .ant-segmented{display:none}
+/* 手机：排序走右侧钉住的 ⇅ 图标 + 底部 sheet，筛选带里那枚排序控件是重复的 */
+html[data-size="compact"] .prj-filters .ant-segmented,
+html[data-size="compact"] .prj-filters .prj-sortpill{display:none}
 /* 图标按钮：不描边——右边两个方框和左边的圆角 chip 不是一套语言。命中区靠伪元素撑到 44 */
 .prj-iconbtn{position:relative;flex:0 0 auto;width:32px;height:32px;display:none;place-items:center;
   border:0;border-radius:var(--r-sm);background:transparent;color:var(--text-dim);cursor:pointer}
@@ -147,8 +153,23 @@ html[data-size="compact"] .prj-subbar.searching .prj-iconbtn.find{display:none}
 .prj-chip .n{font-family:ui-monospace,monospace;font-size:var(--fs-micro);color:var(--text-dimmer)}
 .prj-chip.on .n{color:#79b8ff}
 
-/* 卡片列固定在 ≥320：原来是 minmax(270,1fr)，右侧一开终端就塌成一条极窄列表（14 §6.1） */
-.prj-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:var(--sp-4)}
+/* 卡片列固定在 ≥320：原来是 minmax(270,1fr)，右侧一开终端就塌成一条极窄列表（14 §6.1）。
+   align-items:start —— 默认的 stretch 会把整行卡片拉到最高那张的高度：一张列了两个会话、
+   邻座一个都没有时，邻座卡的下半截就是空的（实测整行被撑到 167）。 */
+.prj-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:var(--sp-4);align-items:start}
+
+/* 「其他项目」：没有会话在跑的项目不值一张卡（图纸 14-desktop-workspace/desktop-ia.html §二）——
+   实测 4 个空项目占掉 467px 的栅格。折成一行一个：名字 + 路径 + 可清理标。 */
+.prj-quiet{display:grid;grid-template-columns:minmax(96px,150px) minmax(0,1fr) auto;align-items:center;
+  gap:var(--sp-3);min-height:36px;padding:var(--sp-1) var(--sp-2);border-radius:var(--r-sm);
+  cursor:pointer;transition:background .14s}
+.prj-quiet+.prj-quiet{border-top:1px solid var(--border-subtle)}
+.prj-quiet:hover{background:var(--list-hover)}
+.prj-quiet .nm{font-size:var(--fs-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prj-quiet .p{font-family:ui-monospace,monospace;font-size:var(--fs-meta);color:var(--text-dimmer);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+html[data-size="compact"] .prj-quiet{grid-template-columns:minmax(0,1fr) auto;min-height:44px}
+html[data-size="compact"] .prj-quiet .p{display:none}
 
 .prj-card{background:var(--bg-container);border:1px solid var(--border-subtle);border-radius:var(--r-card);
   padding:var(--sp-3) var(--sp-4);cursor:pointer;display:flex;flex-direction:column;gap:8px;
@@ -354,7 +375,12 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
   // 置顶与活跃共用同一套栅格，只靠 section header 分组（14 §6.1）——两套栅格会让
   // 卡片宽度在分组之间对不齐
   const pinned = visible.filter((p) => p.pinned)
-  const rest = visible.filter((p) => !p.pinned)
+  // 没有会话、也没有待收尾/竞赛的项目折到页尾（图纸 desktop-ia.html §二）：它们和「正在跑
+  // 两个任务」的项目占同样大的卡，还被同一行最高的卡撑高，页面下三分之一因此全是空卡。
+  // 「活跃 / 待收尾」筛选下 visible 里本来就没有它们，这里不必再判筛选态。
+  const isQuiet = (p: Proj) => p.sessions <= 0 && p.unfinished <= 0 && p.races <= 0
+  const rest = visible.filter((p) => !p.pinned && !isQuiet(p))
+  const quiet = visible.filter((p) => !p.pinned && isQuiet(p))
 
   // 上下左右移动选中：列数从栅格实际算，不写死——它随 Canvas 宽度变
   const onGridKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -451,8 +477,17 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
                 onClick={() => setFilter(k)}>{label}<span className="n">{n}</span></button>
             ))}
             <span className="sp" />
-            <Segmented size="small" value={sortBy} onChange={(v) => changeSort(v as ProjSort)}
-              options={SORTS.map((k) => ({ label: t(`project.sort.${k}`), value: k }))} />
+            {/* 排序与筛选同一套控件语言：原来左边是 pill 筛选、右边是「两个裸文字 + 一枚实心
+                蓝块」的 Segmented，一条工具带上两种语言（图纸 desktop-ia.html §二）。 */}
+            <Dropdown trigger={['click']} menu={{
+              selectable: true, selectedKeys: [sortBy],
+              items: SORTS.map((k) => ({ key: k, label: t(`project.sort.${k}`) })),
+              onClick: ({ key }) => changeSort(key as ProjSort),
+            }}>
+              <button type="button" className="prj-chip prj-sortpill" aria-label={t('project.sortBy')}>
+                {t(`project.sort.${sortBy}`)}{ICON_CHEVRON}
+              </button>
+            </Dropdown>
           </div>
           {/* 手机：搜索原地展开、排序进 sheet。两枚图标钉在右侧，不随筛选带横滑跑掉 */}
           <button type="button" className="prj-iconbtn find" aria-label={t('project.searchPlaceholder')}
@@ -491,6 +526,25 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
           <div className="prj-sect"><b>{t('overview.activeProjects')}</b><span className="n">{rest.length}</span><span className="ln" /></div>
         )}
         {rest.length > 0 && <div className="prj-grid" onKeyDown={onGridKey}>{rest.map(card)}</div>}
+
+        {quiet.length > 0 && (
+          <>
+            <div className="prj-sect" style={{ marginTop: 22 }}>
+              <b>{t('project.quietSection')}</b><span className="n">{quiet.length}</span>
+              <span style={{ color: 'var(--text-dimmer)', fontWeight: 400, fontSize: 'var(--fs-meta)' }}>
+                {t('project.quietHint')}</span>
+              <span className="ln" />
+            </div>
+            {quiet.map((p) => (
+              <div key={p.key} className="prj-quiet" onClick={() => open(p)}
+                role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); open(p) } }}>
+                <span className="nm">{p.name}</span>
+                <span className="p" title={p.dir}>{p.dir}</span>
+                <span>{p.cleanable > 0 && <Tag color="success" style={{ margin: 0 }}>{t('project.cleanableCount', { count: p.cleanable })}</Tag>}</span>
+              </div>
+            ))}
+          </>
+        )}
 
         {data.loose.length > 0 && (
           <>

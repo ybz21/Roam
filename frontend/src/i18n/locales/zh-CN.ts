@@ -1315,6 +1315,8 @@ const zhCN = {
   'project.unpin': '取消置顶',
   'project.tasks': '任务',
   'project.loose': '散会话',
+  'project.quietSection': '其他项目',
+  'project.quietHint': '没有会话在跑',
   'project.enter': '进入',
   'project.forkTask': '派生',
   'project.notFound': '项目不存在或已退场',
