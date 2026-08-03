@@ -338,12 +338,20 @@ body {
 .tt-sessdock .ttl .pj, .ttl .pj { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; color: var(--text-dimmer); }
 .tt-sessdock .ttl .nm, .ttl .nm { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .tt-sessdock .wait { flex: 0 0 auto; color: #e3b341; font-size: 11.5px; }
-.tt-sessdock .up { flex: 0 0 auto; margin-left: auto; color: var(--text-dimmer); font-size: 13px; }
+.tt-sessdock .up { flex: 0 0 auto; margin-left: auto; color: var(--text-dimmer); }
 .tt-sessdock .cnt {
+  position: relative;
   flex: 0 0 auto; min-width: 30px; height: 30px; padding: 0 8px;
   display: grid; place-items: center; border: 1px solid var(--border); border-radius: 15px;
   background: var(--bg-base); color: var(--text-dim); font: 600 12px/1 ui-monospace, monospace;
   cursor: pointer;
+}
+/* 徽标视觉只有 30，但它是坞上唯一一个「点了不展开会话、而是出切换 sheet」的目标——
+   命中区必须撑到 44，否则手指偏一点就变成展开会话，做的是完全不同的另一件事。
+   真机实测这里原本只有 30（web-ui-checklist 的 44 断言就是为这种情况写的）。 */
+.tt-sessdock .cnt::after {
+  content: ""; position: absolute; left: 50%; top: 50%;
+  width: max(44px, 100%); height: 44px; transform: translate(-50%, -50%);
 }
 .tt-sessdock-x {
   width: 32px; height: 32px; display: grid; place-items: center;

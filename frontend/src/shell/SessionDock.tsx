@@ -62,7 +62,10 @@ export function SessionDock({ sessions, active, needsInput, running, onOpen, onP
         <i className="d" style={{ background: dotColor(cur) }} />
         <DockTitle name={cur} />
         {waiting > 0 && <span className="wait">{t('mobile.waitingN', { count: waiting })}</span>}
-        <span className="up" aria-hidden="true">⌃</span>
+        <svg className="up" viewBox="0 0 24 24" width={14} height={14} aria-hidden="true"
+          fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="6 14 12 8 18 14" />
+        </svg>
         <button type="button" className="cnt" aria-label={t('mobile.switchSession')}
           onClick={(e) => { e.stopPropagation(); setSheet(true) }}>{sessions.length}</button>
       </div>
