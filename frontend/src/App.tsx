@@ -1414,7 +1414,10 @@ function TerminalPane(props: {
   )
   // ── 手机会话页顶栏（13 §5.1）：一行 50，取代「标签条 + 工具条」两行 79 ──
   // 中间胶囊点开 = 会话切换 sheet（取代横滑标签条）；除 Agent 视图切换外，其余控件全进「⋯」。
-  const phoneChrome = isPhone && !inChat ? (
+  // **不能按 !inChat 收窄**：切到 Claude/Codex 对话视图后 phoneChrome 变 null，
+  // 整块外壳就掉回桌面那套「标签条 + 工具条」——按一下渲染模式，页面样式全变了。
+  // 对话只该换中间那块内容，顶栏（返回 / 会话胶囊 / Agent 切换 / 更多）自始至终是同一条。
+  const phoneChrome = isPhone ? (
     <>
       <div className="tt-sesshead">
         <button type="button" className="ic" aria-label={t('common.collapse')} onClick={onCollapse}>
@@ -1463,15 +1466,16 @@ function TerminalPane(props: {
           <SheetRow icon={TI.dpad} title={t('mobile.dpadSide')} desc={ws.dpadSide === 'left' ? t('common.on') : t('common.off')}
             onClick={() => saveWorkspace({ dpadSide: ws.dpadSide === 'left' ? 'right' : 'left' })} />
         )}
-        <SheetSection>{t('mobile.groupScreen')}</SheetSection>
-        <div className="tt-sheet-grid">
+        {/* 画面工具只对终端画布有意义：对话视图有自己的滚动与排版 */}
+        {!inChat && <SheetSection>{t('mobile.groupScreen')}</SheetSection>}
+        {!inChat && <div className="tt-sheet-grid">
           <button type="button" onClick={() => setFontSize(Math.max(10, fontSize - 1))}>A−</button>
           <button type="button" onClick={() => setFontSize(Math.min(22, fontSize + 1))}>A+</button>
           <button type="button" onClick={() => active && termRefs.current[active]?.scroll(-12)}>{TI.scrollUp}</button>
           <button type="button" onClick={() => active && termRefs.current[active]?.toBottom()}>{TI.toBottom}</button>
           <button type="button" onClick={() => active && termRefs.current[active]?.redraw()}>{TI.redraw}</button>
           <button type="button" onClick={() => active && termRefs.current[active]?.reconnect()}>{TI.reconnect}</button>
-        </div>
+        </div>}
       </MobileSheet>
     </>
   ) : null

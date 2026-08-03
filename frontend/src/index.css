@@ -324,6 +324,14 @@ body {
   letter-spacing: -.02em; color: var(--text-bright);
 }
 .tt-pagehead p { margin: var(--sp-2) 0 0; font-size: var(--fs-sm); color: var(--text-dim); }
+/* 手机：眉标和一句话说明去掉，标题降一档。
+   这两行在 766 高的屏上要 39px，而底栏已经高亮着当前页——「工作区 / 项目 / 从仓库进入
+   任务、文件、Git、Worktree 与蜂群」三行连着说的是同一件事。概览页的标题是「今天有 N
+   件事需要你」，那是内容不是标题，所以只砍眉标和说明、保留 h2。 */
+html[data-size="compact"] .tt-pagehead .kicker,
+html[data-size="compact"] .tt-pagehead p { display: none; }
+html[data-size="compact"] .tt-pagehead h2 { margin: 0; font-size: var(--fs-lg); }
+html[data-size="compact"] .tt-pagehead { gap: var(--sp-2); }
 .tt-pagehead .acts { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
 /* ── 页面骨架：所有一级页面从同一个左上角起笔，卡片和工具区间距一致 ── */

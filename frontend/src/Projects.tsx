@@ -105,6 +105,16 @@ const PRJ_CSS = `
 /* sticky subheader（14 §6.1）：筛选与排序不该跟着列表滚走 */
 .prj-subbar{position:sticky;top:0;z-index:var(--z-sticky);display:flex;align-items:center;gap:var(--sp-3);
   flex-wrap:wrap;margin-bottom:12px;padding:8px 0;background:var(--bg-base)}
+.prj-filters{display:flex;align-items:center;gap:var(--sp-2);min-width:0;flex:1 1 auto}
+.prj-filters .sp{flex:1 1 auto}
+/* 手机：搜索独占一行，筛选+排序合成一条横滑带（不换行、隐藏滚动条） */
+html[data-size="compact"] .prj-subbar{flex-wrap:nowrap;flex-direction:column;align-items:stretch;gap:var(--sp-2)}
+html[data-size="compact"] .prj-filters{overflow-x:auto;scrollbar-width:none;flex:0 0 auto}
+html[data-size="compact"] .prj-filters::-webkit-scrollbar{height:0}
+html[data-size="compact"] .prj-filters>*{flex:0 0 auto}
+/* 右缘渐隐：横滑带被切在半个控件上就像"没显示全"（设计系统 §2 的同一条规则） */
+html[data-size="compact"] .prj-filters{mask-image:linear-gradient(90deg,#000 calc(100% - 20px),transparent 100%)}
+html[data-size="compact"] .prj-filters .sp{display:none}
 .prj-chip{display:inline-flex;align-items:center;gap:var(--sp-2);height:28px;padding:0 var(--sp-3);border-radius:var(--r-pill);
   border:1px solid var(--border);background:transparent;color:var(--text-dim);font-size:12px;
   cursor:pointer;white-space:nowrap;transition:color .15s,border-color .15s,background .15s}
@@ -396,21 +406,25 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
         <div className="prj-subbar">
           <Input allowClear size="small" value={q} onChange={(e) => setQ(e.target.value)}
             placeholder={t('project.searchPlaceholder')} style={{ width: 200 }} />
-          {([
-            ['all', t('project.filterAll'), counts.all],
-            ['active', t('project.filterActive'), counts.active],
-            ['unfinished', t('project.section.unfinished'), counts.unfinished],
-          ] as const).map(([k, label, n]) => (
-            <button key={k} type="button" className={`prj-chip${filter === k ? ' on' : ''}`}
-              onClick={() => setFilter(k)}>{label}<span className="n">{n}</span></button>
-          ))}
-          <span style={{ flex: 1 }} />
-          <Segmented size="small" value={sortBy} onChange={(v) => changeSort(v as ProjSort)}
-            options={[
-              { label: t('project.sort.name'), value: 'name' },
-              { label: t('project.sort.created'), value: 'created' },
-              { label: t('project.sort.active'), value: 'active' },
-            ]} />
+          {/* 筛选与排序合成一条横滑带：手机上它俩各自换行，加上搜索框一共占了 5 行，
+              第一张卡片被推到屏幕 26% 处。现在一行装下，滑得到即可。 */}
+          <div className="prj-filters">
+            {([
+              ['all', t('project.filterAll'), counts.all],
+              ['active', t('project.filterActive'), counts.active],
+              ['unfinished', t('project.section.unfinished'), counts.unfinished],
+            ] as const).map(([k, label, n]) => (
+              <button key={k} type="button" className={`prj-chip${filter === k ? ' on' : ''}`}
+                onClick={() => setFilter(k)}>{label}<span className="n">{n}</span></button>
+            ))}
+            <span className="sp" />
+            <Segmented size="small" value={sortBy} onChange={(v) => changeSort(v as ProjSort)}
+              options={[
+                { label: t('project.sort.name'), value: 'name' },
+                { label: t('project.sort.created'), value: 'created' },
+                { label: t('project.sort.active'), value: 'active' },
+              ]} />
+          </div>
         </div>
 
         {loaded && data.projects.length === 0 && (
