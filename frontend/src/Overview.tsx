@@ -8,7 +8,7 @@
 //   ⑤ 最近活动：Canvas ≥1180 进右侧 320 侧轨（sticky），窄于此自动落回页尾
 // 数据全部复用现有接口（/projects、annotations、per-session 探测、/swarms 投影、activity），零新后端。
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Button, Segmented, Tag } from 'antd'
+import { Tag } from 'antd'
 import { api } from './api'
 import { useI18n } from './i18n'
 import { detectPrompt } from './prompt'
@@ -33,6 +33,17 @@ const OV_CSS = `
 .ov-sum b{font-family:ui-monospace,monospace;font-weight:800;font-size:13px;color:var(--text-bright)}
 .ov-sum .d{width:6px;height:6px;border-radius:50%;background:#3fb950;flex:0 0 auto}
 .ov-sum .d.a{background:#d29922}.ov-sum .d.p{background:#a371f7}.ov-sum .d.z{background:var(--border-subtle)}
+
+.ov-tabs{display:flex;align-items:center;gap:2px;margin-top:2px;
+  border-bottom:1px solid var(--border-subtle)}
+.ov-tab{padding:8px 13px 9px;border:0;background:none;font:inherit;font-size:13px;color:var(--text-dim);
+  cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .15s}
+.ov-tab:hover{color:var(--text-bright)}
+.ov-tab.on{color:var(--text-bright);border-bottom-color:var(--accent);font-weight:600}
+.ov-tab-go{margin-left:auto;display:inline-flex;align-items:center;font-size:12px}
+/* 手指档把 tab 撑到 44：真机上默认高度只有 40（13 §7.1 的命中区下限） */
+html[data-pointer="coarse"] .ov-tab{min-height:44px}
+html[data-pointer="coarse"] .ov-tab-go{min-height:44px}
 
 .ov-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;align-items:start}
 .ov-feed{min-width:0;display:flex;flex-direction:column;gap:12px}
@@ -405,13 +416,6 @@ export default function Overview({ openTerm, renderSessions }: { openTerm: (n: s
               ? t('overview.sublineRunning', { count: stats.running, time: relTime(lastAt, t) })
               : t('overview.sublineIdle')}</p>
           </div>
-          <div className="ov-acts">
-            {renderSessions && (
-              <Segmented size="small" value={tab} onChange={(v) => setTab(v as 'projects' | 'sessions')}
-                options={[{ label: t('nav.projects'), value: 'projects' }, { label: t('nav.sessions'), value: 'sessions' }]} />
-            )}
-            <Button size="small" onClick={goProjects}>{t('overview.gotoProjects')}<Go /></Button>
-          </div>
         </header>
 
         {/* ② 状态概况：一条顶掉旧版一排等权数字卡 */}
@@ -420,6 +424,17 @@ export default function Overview({ openTerm, renderSessions }: { openTerm: (n: s
           {sumItem(stats.waiting, 'a', t('overview.sumWaiting'))}
           {sumItem(stats.unfinished, 'a', t('overview.sumUnfinished'))}
           {sumItem(stats.swarms, 'p', t('overview.sumSwarms'))}
+        </div>
+
+        {/* 内容切换与「进入项目页」同处一行：它们都是"看什么"，不该挤在标题右边和问候语抢
+            视线。tab 样式与项目详情页共用一套下划线语言——两页的 tab 长得一样才叫一套壳。 */}
+        <div className="ov-tabs ov-in" style={{ animationDelay: '70ms' }}>
+          {renderSessions && (['projects', 'sessions'] as const).map((k) => (
+            <button key={k} type="button" className={`ov-tab${tab === k ? ' on' : ''}`} onClick={() => setTab(k)}>
+              {t(k === 'projects' ? 'nav.projects' : 'nav.sessions')}
+            </button>
+          ))}
+          <a className="ov-tab-go" onClick={goProjects}>{t('overview.gotoProjects')}<Go /></a>
         </div>
 
         {tab === 'sessions' ? renderSessions!() : (

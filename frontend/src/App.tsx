@@ -79,7 +79,7 @@ const NAV_WORKSPACE = ['overview', 'projects', 'files']
 const NAV_TOOLS = ['browser', 'phone', 'plugins']
 
 // 手机底栏只放高频页，plugins/settings 折进「更多」，避免底栏拥挤（桌面侧栏仍展示全部）
-const MOBILE_NAV_KEYS = ['projects', 'overview', 'files']
+const MOBILE_NAV_KEYS = ['overview', 'projects', 'files']
 const MOBILE_MORE_KEYS = ['browser', 'phone', 'plugins', 'settings']
 
 // 用 Canvas 容器查询排版的页面（见 index.css 的 .tt-canvas[data-cq]）。逐页开，
@@ -2213,6 +2213,7 @@ export function CloseWorktreeModal({ info, onClose, onDone }: {
 
 // ── 会话（可新建/指定目录 / 进终端 / 关闭） ──
 function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) => void; closeTerm: (n: string) => void; activeTerm: string | null }) {
+  const { phone: isPhone } = useLayout()
   const [list, setList] = useState<any[]>([])
   const [cc, setCc] = useState<Record<string, boolean>>({})
   const [cx, setCx] = useState<Record<string, boolean>>({})
@@ -2485,8 +2486,9 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
 
   return (
     <Card
-      title={<Space size={8}>{t('nav.sessions')}<Tag style={{ margin: 0 }}>{cnt('all')}</Tag></Space>}
-      extra={<Space size={8}>
+      // 手机上标题和两枚按钮塞不进一行（标题被挤没、按钮各自截断），改为按钮独占一行
+      title={isPhone ? undefined : <Space size={8}>{t('nav.sessions')}<Tag style={{ margin: 0 }}>{cnt('all')}</Tag></Space>}
+      extra={isPhone ? undefined : <Space size={8}>
         <Tooltip title={t('worktree.entryTip')}>
           <Button onClick={() => { setWtDir(undefined); setWtOpen(true) }}>{t('worktree.entry')}</Button>
         </Tooltip>
@@ -2497,6 +2499,19 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
         </Dropdown.Button>
       </Space>}
     >
+      {isPhone && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          <Button style={{ flex: 1, minWidth: 0 }} onClick={() => { setWtDir(undefined); setWtOpen(true) }}>{t('worktree.entry')}</Button>
+          {/* 必须钉住 flex：Dropdown.Button 内的 Space.Compact 是块级 flex 子项，
+              不钉就会一路撑开并盖住左边那枚按钮（项目页页头踩过同一个坑） */}
+          <span style={{ flex: '0 0 auto', display: 'inline-flex' }}>
+            <Dropdown.Button type="primary" onClick={() => setNewOpen(true)}
+              menu={{ items: [{ key: 'race', label: t('race.new') }], onClick: () => setRaceOpen(true) }}>
+              + {t('session.new')}
+            </Dropdown.Button>
+          </span>
+        </div>
+      )}
       {/* 工具条：搜索 + 排序同一行，类型筛选另起一行 */}
       <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -2514,8 +2529,10 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
             {sortAsc ? '↑' : '↓'}
           </Button>
         </div>
-        <div style={{ overflowX: 'auto' }}>
-          <Segmented block value={filter} onChange={(v) => setFilter(v as any)} size="small" options={[
+        {/* block 会把 6 项等分：392 的屏宽上每格只剩 ~60px，标签全被截成「全部…」，
+            六个筛选器长得一模一样。手机改成按内容宽 + 整条横滑。 */}
+        <div style={{ overflowX: 'auto' }} className="tt-seg-scroll">
+          <Segmented block={!isPhone} value={filter} onChange={(v) => setFilter(v as any)} size="small" options={[
             { label: `${t('common.all')} ${cnt('all')}`, value: 'all' },
             { label: `${t('session.waiting')} ${cnt('waiting')}`, value: 'waiting' },
             { label: `Claude ${cnt('claude')}`, value: 'claude' },

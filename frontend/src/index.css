@@ -304,7 +304,9 @@ body {
 /* ── 页面骨架：所有一级页面从同一个左上角起笔，卡片和工具区间距一致 ── */
 .tt-page {
   min-height: 100%;
-  padding: 16px;
+  /* 吃密度令牌而不是写死 16：compact 档收到 12，392 的屏上多出 8px 内容宽（13 §3.3）。
+     此前令牌定义了却没人消费，手机上还是 16。 */
+  padding: var(--pad-page);
   box-sizing: border-box;
   display: flex;
   align-items: flex-start;
@@ -317,6 +319,10 @@ body {
 .tt-page-mobile.has-dock {
   padding-bottom: calc(126px + env(safe-area-inset-bottom));
 }
+
+.tt-seg-scroll { scrollbar-width: none; }
+.tt-seg-scroll::-webkit-scrollbar { height: 0; }
+.tt-seg-scroll > .ant-segmented { min-width: max-content; }
 
 /* ── 会话坞（13 §4.2）：底栏之上一条 50px 常驻条 ──
    手机上会话此前只有「全屏」和「看不见」两态，退回项目页就不知道还有几个在跑。 */
@@ -379,6 +385,16 @@ body {
 .tt-page .ant-space-vertical {
   align-items: stretch;
 }
+
+/* 手机档收紧容器内边距（13 §3.3 / §6）：antd Card 默认 body padding 18，叠上页面
+   12 就是 30，392 的屏上左右一共吃掉 60px（15%），卡片里的内容被挤成一条。
+   留白是给眼睛的、命中区是给手指的——收留白不影响后者。 */
+html[data-size="compact"] .ant-card { border-radius: var(--r-card); }
+html[data-size="compact"] .ant-card-body { padding: 13px; }
+html[data-size="compact"] .ant-card-head { min-height: 44px; padding-inline: 13px; }
+html[data-size="compact"] .ant-list-item { padding-inline: 0; }
+/* 卡片之间用 --gap，不各写各的 margin */
+html[data-size="compact"] .ant-card + .ant-card { margin-top: var(--gap); }
 
 /* ── 细滚动条：更窄，hover 才稍亮 ── */
 * { scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
