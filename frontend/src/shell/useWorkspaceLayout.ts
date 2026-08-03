@@ -29,15 +29,39 @@ export type FocusTarget = 'none' | 'page' | 'dock'
  * 不钳这一下就会横向溢出——1280 展开侧栏时 `42vw = 538`，Canvas 只剩 510，
  * 自己先破 560 的契约。**拖拽、双击复位、恢复偏好三条路径都必须过这个函数**，
  * 这是「不制造横向滚动」的唯一保证（14 §4.2）。
+ *
+ * 这里**不再压 880**：880 是"默认给多宽"（见 defaultDockWidth），不该同时充当
+ * "用户最多能拖多宽"。用户显式拖到 1200，就该是 1200。
  */
 export function dockBounds(workspaceWidth: number): { min: number; max: number } {
   const room = workspaceWidth - SPLIT_RAIL - CANVAS_MIN
-  return { min: DOCK_MIN, max: Math.max(DOCK_MIN, Math.min(DOCK_MAX, room)) }
+  return { min: DOCK_MIN, max: Math.max(DOCK_MIN, room) }
 }
 
-/** 该档的默认 Dock 宽度：clamp(480, 42vw, 880)，再过一次上界钳制。 */
+/**
+ * 拖拽能到的最远处：Canvas 归零。
+ *
+ * 只让拖到 `dockBounds().max` 的话，1440 屏（侧栏 224）上界就是 648——用户想把终端
+ * 再拉宽一点，界面直接不动了，除非他知道还有个「终端聚焦」按钮。现在允许一路拖过去，
+ * 松手时若 Canvas 已经低于 560 就落进 Focus：**页面要么 ≥560，要么干脆藏起来，
+ * 不留一条 300px 的废条**——这正是 CANVAS_MIN 想守的东西，只是换成了拖拽也能表达。
+ */
+export function dragMaxWidth(workspaceWidth: number): number {
+  return Math.max(DOCK_MIN, workspaceWidth - SPLIT_RAIL)
+}
+
+/** 松手时该不该落进 Focus：Canvas 已经不足最小宽 */
+export function shouldFocusAt(workspaceWidth: number, dockWidth: number): boolean {
+  return workspaceWidth - SPLIT_RAIL - dockWidth < CANVAS_MIN
+}
+
+/**
+ * 该档的默认 Dock 宽度：clamp(480, 42vw, 880)，再过一次几何上界。
+ *
+ * **880 只在这里**：它是"默认给多宽"，不是"用户最多能拖多宽"。dockBounds 不再压它。
+ */
 export function defaultDockWidth(viewportWidth: number, workspaceWidth: number): number {
-  const wish = Math.round(viewportWidth * 0.42)
+  const wish = Math.min(DOCK_MAX, Math.round(viewportWidth * 0.42))
   const { min, max } = dockBounds(workspaceWidth)
   return Math.max(min, Math.min(max, wish))
 }
@@ -88,8 +112,10 @@ export type WorkspaceLayout = {
   setFocus: (target: FocusTarget) => void
   toggleFocus: () => void
   setNavCollapsed: (collapsed: boolean) => void
-  /** 供分隔条读：当前允许拖到的区间 */
+  /** 供分隔条读：当前允许拖到的区间（上界 = Canvas 归零处） */
   bounds: { min: number; max: number }
+  /** 超过这个宽度就该落进 Focus（Canvas 会低于 560） */
+  splitMax: number
 }
 
 /**
@@ -127,13 +153,15 @@ export function useWorkspaceLayout(hasTerms: boolean): WorkspaceLayout {
   const splitCapable = layout.size === 'large'
   const navWidth = splitCapable ? (navCollapsed ? NAV_RAIL : NAV_WIDTH) : NAV_RAIL
   const workspaceWidth = Math.max(0, viewport - navWidth)
-  const bounds = useMemo(() => dockBounds(workspaceWidth), [workspaceWidth])
+  const bounds = useMemo(() => ({ min: DOCK_MIN, max: dragMaxWidth(workspaceWidth) }), [workspaceWidth])
+  const splitMax = useMemo(() => dockBounds(workspaceWidth).max, [workspaceWidth])
 
   // 恢复偏好时先钳制：换到小窗口不能拿旧大屏的宽度把 Canvas 挤爆（14 §9.3）
   const dockWidth = useMemo(() => {
     const wish = width || defaultDockWidth(viewport, workspaceWidth)
-    return Math.max(bounds.min, Math.min(bounds.max, wish))
-  }, [width, viewport, workspaceWidth, bounds])
+    const b = dockBounds(workspaceWidth)
+    return Math.max(b.min, Math.min(b.max, wish))
+  }, [width, viewport, workspaceWidth])
 
   const mode = resolveMode({ hasTerms, dockOpen, focus, size: layout.size, workspaceWidth })
 
@@ -168,6 +196,7 @@ export function useWorkspaceLayout(hasTerms: boolean): WorkspaceLayout {
     splitCapable,
     overlayCapable: layout.size === 'expanded',
     bounds,
+    splitMax,
     toggleDock: () => setDockOpen(!dockOpen),
     setDockOpen,
     setDockWidth,

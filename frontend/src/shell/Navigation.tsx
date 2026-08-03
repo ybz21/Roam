@@ -26,7 +26,7 @@ export type NavEntry = {
 export type NavGroup = { label: string; items: NavEntry[] }
 
 export function Navigation({
-  rail, active, groups, onGo, onSearch, searchHint,
+  rail, active, groups, onGo,
   linkStatus, dock, account, accountName, onToggleRail,
 }: {
   /** 64px 轨态：用户收起 / Focus / 非 large 档 */
@@ -34,9 +34,6 @@ export function Navigation({
   active: string
   groups: NavGroup[]
   onGo: (key: string) => void
-  onSearch: () => void
-  /** ⌘K / Ctrl+K */
-  searchHint: string
   linkStatus: ReactNode
   /** 终端开合入口；没有已打开的终端时传 null */
   dock: { count: number; open: boolean; onToggle: () => void; title: string } | null
@@ -71,20 +68,8 @@ export function Navigation({
         )}
       </div>
 
-      {/* 搜索入口在轨态是唯一露出的那枚放大镜（13 §13.2） */}
-      {rail ? (
-        <Tooltip title={t('workspace.searchPlaceholder')} placement="right">
-          <button type="button" className="tt-nav-search" onClick={onSearch} aria-label={t('workspace.search')}>
-            <span className="ic">{searchIcon}</span>
-          </button>
-        </Tooltip>
-      ) : (
-        <button type="button" className="tt-nav-search" onClick={onSearch}>
-          <span className="ic">{searchIcon}</span>
-          <span className="nm">{t('nav.searchOrJump')}</span>
-          <kbd>{searchHint}</kbd>
-        </button>
-      )}
+      {/* 这里原来还有一枚搜索入口。去掉了：顶栏 Command Center 的搜索横跨整个工作区、
+          轨态下也在，侧栏这枚是同一个动作的第二个入口，只是把导航第一屏又占掉一行。 */}
 
       <div className="tt-nav-list">
         {groups.map((g) => (
@@ -130,7 +115,6 @@ export function Navigation({
 
 const stroke = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
 const svg = (children: ReactNode) => <svg viewBox="0 0 24 24" width={18} height={18} {...stroke}>{children}</svg>
-const searchIcon = svg(<><circle cx="11" cy="11" r="7" /><line x1="16.5" y1="16.5" x2="21" y2="21" /></>)
 const termIcon = svg(<><rect x="3" y="4" width="18" height="16" rx="2" /><line x1="14" y1="4" x2="14" y2="20" /></>)
 // 主机图标而不是姓名首字母：这里代表的是"你连着的这台机器"，不是一个人
 const hostIcon = <svg viewBox="0 0 24 24" width={15} height={15} {...stroke}><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M8 20h8" /><path d="M12 16v4" /></svg>

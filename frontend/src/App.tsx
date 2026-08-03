@@ -637,7 +637,7 @@ export default function App() {
 
   const canvasNode = (
     <Content className="tt-canvas" data-cq={CQ_PAGES.has(tab) ? 'on' : undefined} style={{
-      flex: 1, minWidth: 0, height: '100dvh', padding: 0,
+      flex: 1, minWidth: 0, minHeight: 0, height: '100%', padding: 0,
       overflow: tab === 'browser' || tab === 'phone' || tab === 'files' ? 'hidden' : 'auto',
     }}>{pageNode}</Content>
   )
@@ -697,8 +697,6 @@ export default function App() {
           style={{ position: 'sticky', top: 0, height: '100dvh', background: 'var(--bg-base)', borderRight: '1px solid var(--border-subtle)' }}>
           <Navigation
             rail={navRail} active={tab} groups={navGroups} onGo={go}
-            onSearch={() => window.dispatchEvent(new Event('tt-open-palette'))}
-            searchHint={`${modKeyLabel}K`}
             linkStatus={<LinkStatus collapsed={navRail} />}
             dock={terms.length > 0 ? {
               count: terms.length, open: space.dockVisible,
@@ -731,8 +729,9 @@ export default function App() {
           // 不是组件树，终端因此不会在开合时被卸载重建。
           <Workspace
             mode={space.mode} canvas={canvasNode} dock={dockNode}
-            dockWidth={space.dockWidth} bounds={space.bounds}
+            dockWidth={space.dockWidth} bounds={space.bounds} splitMax={space.splitMax}
             onResize={space.setDockWidth} onReset={space.resetDockWidth}
+            onFocus={() => space.setFocus('dock')}
             onDismiss={() => space.setDockOpen(false)}
             capsule={space.overlayCapable && space.mode === 'page' ? (
               // 胶囊只有 320px，显示 sessionLabel 而不是 sessionDisplay——后者带
@@ -747,7 +746,7 @@ export default function App() {
             ) : null}
           />
         ) : (
-          <div style={{ display: 'flex', height: '100dvh', minHeight: 0 }}>{canvasNode}</div>
+          <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>{canvasNode}</div>
         )}
       </Layout>
 
@@ -1025,6 +1024,16 @@ function TerminalPane(props: {
   const { phone: isPhone } = useLayout()
   const ws = prefsData.workspace
   const [typing, setTyping] = useState(false)
+  // 快捷键条的两侧渐隐：和标签条同一套做法（溢出时才提示"这边还有"）
+  const keyRowRef = useRef<HTMLDivElement>(null)
+  const [keyFadeL, setKeyFadeL] = useState(false)
+  const [keyFadeR, setKeyFadeR] = useState(false)
+  const syncKeyFade = useCallback(() => {
+    const el = keyRowRef.current
+    if (!el) return
+    setKeyFadeL(el.scrollLeft > 2)
+    setKeyFadeR(el.scrollLeft + el.clientWidth < el.scrollWidth - 2)
+  }, [])
   const [switchOpen, setSwitchOpen] = useState(false)
   const [moreSheet, setMoreSheet] = useState(false)
   const [dragTab, setDragTab] = useState<string | null>(null)
@@ -1163,6 +1172,15 @@ function TerminalPane(props: {
   }, [terms])
 
   useEffect(() => { onNeedsInput?.(termNeedsInput) }, [termNeedsInput, onNeedsInput])
+
+  useEffect(() => {
+    syncKeyFade()
+    const el = keyRowRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(syncKeyFade)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [syncKeyFade, typing, inChat])
 
   // 软键盘开合会改可视高度，但 xterm 不会自己重算行数——不重新 fit 就会出现
   // 「PTY 以为还有 25 行、实际只画得下 7 行」的错位，表现为花屏。等一帧让布局落定再量。
@@ -1583,10 +1601,21 @@ function TerminalPane(props: {
         </div>
       )}
       {/* 快捷键条只在输入态出现（13 §5.2）：它常驻 49px，而不打字时一个键也用不上——
-          手机上这 49px 直接等于终端少 3 行。桌面不受影响。 */}
+          手机上这 49px 直接等于终端少 3 行。桌面不受影响。
+          `tt-keyrow` 给两侧渐隐 + 滚轮横移：这一条 15 个按钮宽 913，窄栏里只露得出 605，
+          而原来既没有渐隐也没有滚动条，右边缘正好把某个键切成一半——看着就是"没显示全"。 */}
       {!inChat && (!isPhone || typing) && (
-        <div style={{ display: 'flex', gap: 'var(--sp-2)', padding: 8, borderTop: '1px solid var(--border)', overflowX: 'auto' }}>
-          <Button type="primary" onMouseDown={noBlur} onClick={() => (isTouch ? submitLine() : sendKey('\r'))}>Enter</Button>
+        <div className="tt-keyrow" ref={keyRowRef}
+          onScroll={syncKeyFade}
+          onWheel={(e) => {
+            const el = keyRowRef.current
+            if (!el || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return
+            el.scrollLeft += e.deltaY
+          }}
+          data-l={keyFadeL ? '1' : undefined} data-r={keyFadeR ? '1' : undefined}
+          style={{ display: 'flex', gap: 'var(--sp-2)', padding: 8, borderTop: '1px solid var(--border)', overflowX: 'auto' }}>
+          <Button type="primary" onMouseDown={noBlur} style={{ flex: '0 0 auto' }}
+            onClick={() => (isTouch ? submitLine() : sendKey('\r'))}>Enter</Button>
           {/* 触屏没有 Ctrl+Shift+V / 右键菜单在长按选词后也不再弹出，丝带上补一个直达粘贴 */}
           {isTouch && <Button onMouseDown={noBlur} onClick={() => active && pasteClipboard(active)} style={{ flex: '0 0 auto' }}>{t('terminal.pasteAction')}</Button>}
           {(prefsData.quickCommands || []).map((cmd) => (

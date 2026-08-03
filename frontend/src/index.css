@@ -181,6 +181,11 @@ body {
 .tt-split-rail:focus-visible::after { height: 78px; opacity: 1; background: var(--accent); }
 .tt-split-rail:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
 
+/* 拖拽引导线。越过 splitMax（Canvas 会不足 560）时换成琥珀色：松手的后果从
+   "再宽一点"变成"整页藏起来"，颜色先说一声。 */
+.tt-dock-guide { background: var(--accent); box-shadow: 0 0 0 1px rgba(88, 166, 255, .18); }
+.tt-dock-guide[data-focus='1'] { background: #d29922; box-shadow: 0 0 0 1px rgba(210, 153, 34, .25); }
+
 /* ── expanded 档（905–1279）的覆盖式终端面板（13 §13.1）──
    这一档并排最多只能挤出 561–735 的 Canvas，正是要消灭的「页面被压成预览条」。
    所以终端改成从右侧覆盖：Canvas 布局在开合前后完全不变，概览不会跳列。
@@ -244,20 +249,6 @@ body {
 }
 .tt-nav-brand .wd span { display: block; font-size: 10px; letter-spacing: 1.5px; color: var(--text-dimmer); }
 
-.tt-nav-search {
-  display: flex; align-items: center; gap: 9px; width: 100%; height: 34px; margin-bottom: 6px;
-  padding: 0 10px; border: 1px solid var(--border-subtle); border-radius: 9px;
-  background: var(--bg-container); color: var(--text-dim); font-size: var(--fs-meta);
-  cursor: pointer; transition: border-color .15s, color .15s;
-}
-.tt-nav-search:hover { border-color: var(--accent-border); color: var(--text-bright); }
-.tt-nav-search .ic { display: flex; flex: 0 0 auto; }
-.tt-nav-search .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tt-nav-search kbd {
-  margin-left: auto; flex: 0 0 auto; padding: 1px 5px; border: 1px solid var(--border-subtle);
-  border-radius: 5px; color: var(--text-dimmer); font: 10.5px/1.5 ui-monospace, monospace;
-}
-.tt-nav.rail .tt-nav-search { justify-content: center; padding: 0; }
 
 .tt-nav-list { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
 .tt-nav-group + .tt-nav-group { margin-top: 14px; }
@@ -423,6 +414,16 @@ body {
 .tt-dpad .c { grid-area: 2 / 2; font-size: 15px; color: var(--text-bright); }
 .tt-dpad .r { grid-area: 2 / 3; }
 .tt-dpad .d { grid-area: 3 / 2; }
+
+/* 终端快捷键条：15 个按钮宽 913，窄栏里只露得出 600 出头。原来既没有渐隐也没有
+   滚动条提示，右边缘正好把某个键切成一半——看着就是"没显示全"。
+   与标签条同一套：隐藏滚动条 + 两侧 mask 渐隐 + 竖滚轮横移。 */
+.tt-keyrow { scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.tt-keyrow::-webkit-scrollbar { height: 0; }
+.tt-keyrow > * { flex: 0 0 auto; }
+.tt-keyrow[data-l][data-r] { mask-image: linear-gradient(90deg, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%); }
+.tt-keyrow[data-l]:not([data-r]) { mask-image: linear-gradient(90deg, transparent 0, #000 24px); }
+.tt-keyrow[data-r]:not([data-l]) { mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent 100%); }
 
 /* ── 会话坞（13 §4.2）：底栏之上一条 50px 常驻条 ──
    手机上会话此前只有「全屏」和「看不见」两态，退回项目页就不知道还有几个在跑。 */

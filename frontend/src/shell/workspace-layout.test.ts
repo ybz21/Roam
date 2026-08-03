@@ -2,7 +2,7 @@
 // 这几条断言直接对应 14 设计 §11 验收清单里的前两行。
 import { describe, it, expect } from 'vitest'
 import {
-  dockBounds, defaultDockWidth, canSplit, resolveMode,
+  dockBounds, defaultDockWidth, canSplit, resolveMode, dragMaxWidth, shouldFocusAt,
   CANVAS_MIN, DOCK_MIN, DOCK_MAX, SPLIT_RAIL, NAV_WIDTH, NAV_RAIL, OVERLAY_DOCK,
 } from './useWorkspaceLayout'
 
@@ -35,9 +35,14 @@ describe('Dock 宽度钳制', () => {
     expect(w - SPLIT_RAIL - 538).toBeGreaterThanOrEqual(CANVAS_MIN)
   })
 
-  it('大屏封顶 880，不让终端无限长胖', () => {
+  it('880 是「默认给多宽」，不是「最多能拖多宽」', () => {
+    // 默认值封顶 880，不让终端一开就无限长胖
     expect(defaultDockWidth(2560, workspace(2560))).toBe(DOCK_MAX)
-    expect(dockBounds(workspace(3840)).max).toBe(DOCK_MAX)
+    expect(defaultDockWidth(3840, workspace(3840))).toBe(DOCK_MAX)
+    // 但拖拽/恢复的上界只受 Canvas 最小宽约束——用户显式拖到 1200 就该是 1200。
+    // 之前这里也压 880，导致 1440 屏上「往左拖」拖到 648 就顶死不动。
+    expect(dockBounds(workspace(3840)).max).toBeGreaterThan(DOCK_MAX)
+    expect(dockBounds(workspace(3840)).max).toBe(workspace(3840) - SPLIT_RAIL - CANVAS_MIN)
   })
 
   it('下界始终是 480，哪怕算出来的余量更小', () => {
@@ -66,6 +71,21 @@ describe('并排是否成立', () => {
     expect(canSplit(workspace(1279, false))).toBe(true)
     const canvas = workspace(1279, false) - SPLIT_RAIL - DOCK_MIN
     expect(canvas).toBeLessThan(CANVAS_MIN + 200)
+  })
+})
+
+describe('拖过头落进 Focus（1440 屏上只能拖 43px 的病根）', () => {
+  it('拖拽上界是 Canvas 归零处，不是 splitMax', () => {
+    const w = workspace(1440)                       // 1440 - 224 = 1216
+    expect(dockBounds(w).max).toBe(1216 - SPLIT_RAIL - CANVAS_MIN)   // 648：能并排的最宽
+    expect(dragMaxWidth(w)).toBe(1216 - SPLIT_RAIL)                  // 1208：能拖到的最远
+  })
+
+  it('松手时 Canvas 不足 560 就该藏页面，而不是留一条废条', () => {
+    const w = workspace(1440)
+    expect(shouldFocusAt(w, 648)).toBe(false)   // 正好 560，还能并排
+    expect(shouldFocusAt(w, 649)).toBe(true)    // 差一像素就该整页藏起来
+    expect(shouldFocusAt(w, 1208)).toBe(true)
   })
 })
 

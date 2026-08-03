@@ -32,14 +32,19 @@ import { useI18n } from '../i18n'
 import { PointerResizeShield, usePointerResize } from '../PointerResize'
 import { OVERLAY_DOCK, type SpaceMode } from './useWorkspaceLayout'
 
-export function Workspace({ mode, canvas, dock, dockWidth, bounds, onResize, onReset, onDismiss, capsule }: {
+export function Workspace({ mode, canvas, dock, dockWidth, bounds, splitMax, onResize, onReset, onFocus, onDismiss, capsule }: {
   mode: SpaceMode
   canvas: ReactNode
   dock: ReactNode
   dockWidth: number
+  /** 拖拽区间，上界 = Canvas 归零处 */
   bounds: { min: number; max: number }
+  /** 超过它 Canvas 就不足 560：松手时落进 Focus 而不是留一条废条 */
+  splitMax: number
   onResize: (width: number) => void
   onReset: () => void
+  /** 拖过头：页面藏起来，终端铺满 */
+  onFocus: () => void
   /** 覆盖态点遮罩收起 */
   onDismiss: () => void
   /** 覆盖态收起时右下角的会话胶囊（13 §13.1）；其余档传 null */
@@ -73,27 +78,37 @@ export function Workspace({ mode, canvas, dock, dockWidth, bounds, onResize, onR
         const next = clamp(startWidth - (ev.clientX - startX))
         pending.current = next
         // 分隔条最终会左移 (next - startWidth)，引导线按这个位移走
-        if (guide) guide.style.left = `${railCenter - (next - startWidth)}px`
+        if (guide) {
+          guide.style.left = `${railCenter - (next - startWidth)}px`
+          // 越过 splitMax 换色：松手不是"再宽一点"，而是"整页藏起来"，得先说一声
+          guide.dataset.focus = next > splitMax ? '1' : ''
+        }
       },
       onEnd: () => {
         if (guide) guide.style.display = 'none'
-        if (pending.current != null) {
-          onResize(pending.current)
-          pending.current = null
-        }
+        const next = pending.current
+        pending.current = null
+        if (next == null) return
+        // 拖过 splitMax = Canvas 已经不足 560：与其留一条 300px 的废页面，不如整页藏起来。
+        // 这样「一直往左拖」这个动作有终点，而不是拖到某处就顶死不动。
+        if (next > splitMax) onFocus()
+        else onResize(next)
       },
     })
-  }, [dockWidth, clamp, onResize, start])
+  }, [dockWidth, clamp, onResize, onFocus, splitMax, start])
 
   // 键盘调宽是一次一档，不存在高频重排，直接提交
   const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === 'ArrowLeft') onResize(clamp(dockWidth + 16))
+    if (e.key === 'ArrowLeft') {
+      const next = clamp(dockWidth + 16)
+      if (next > splitMax) onFocus(); else onResize(next)
+    }
     else if (e.key === 'ArrowRight') onResize(clamp(dockWidth - 16))
     else if (e.key === 'Home') onResize(bounds.min)
-    else if (e.key === 'End') onResize(bounds.max)
+    else if (e.key === 'End') onFocus()
     else return
     e.preventDefault()
-  }, [dockWidth, bounds, clamp, onResize])
+  }, [dockWidth, bounds, splitMax, clamp, onResize, onFocus])
 
   const focus = mode === 'focus'
   const overlay = mode === 'overlay'
@@ -113,17 +128,20 @@ export function Workspace({ mode, canvas, dock, dockWidth, bounds, onResize, onR
     : {
         flex: mode === 'split' ? `0 0 ${dockWidth}px` : focus ? '1 1 auto' : '0 0 0px',
         width: mode === 'split' ? dockWidth : focus ? undefined : 0,
-        minWidth: 0, height: '100dvh', overflow: 'hidden',
+        minWidth: 0, height: '100%', minHeight: 0, overflow: 'hidden',
         display: 'flex', flexDirection: 'column',
         background: 'var(--bg-term)',
         transition: active ? 'none' : 'flex-basis .2s, width .2s',
       }
 
   return (
-    <div style={{ position: 'relative', display: 'flex', height: '100dvh', minHeight: 0, minWidth: 0, flex: 1 }}>
+    // 这里**不能**写 height:100dvh：这一层挂在 40px 的 Command Center 下面，
+    // 100dvh 会让整列比可视区高出正好一个顶栏，最底下那条快捷键条只露得出几像素
+    // （终端也跟着多算 40px，最后一行同样看不见）。跟着 Layout 的列走 flex:1 即可。
+    <div style={{ position: 'relative', display: 'flex', height: '100%', minHeight: 0, minWidth: 0, flex: 1 }}>
       <div style={{
         flex: focus ? '0 0 0px' : '1 1 auto', width: focus ? 0 : undefined,
-        minWidth: 0, height: '100dvh', overflow: 'hidden', display: 'flex', flexDirection: 'column',
+        minWidth: 0, height: '100%', minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column',
       }}>
         {canvas}
       </div>
@@ -160,8 +178,7 @@ export function Workspace({ mode, canvas, dock, dockWidth, bounds, onResize, onR
       <div ref={guideRef} data-dock-resize-guide aria-hidden="true" style={{
         display: 'none', position: 'fixed', top: 0, bottom: 0, width: 2,
         zIndex: 1000, pointerEvents: 'none',
-        background: '#58a6ff', boxShadow: '0 0 0 1px rgba(88,166,255,.18)',
-      }} />
+      }} className="tt-dock-guide" />
       <PointerResizeShield active={active} />
     </div>
   )
