@@ -121,9 +121,9 @@ function start() {
   applyDom(state)
   for (const q of Object.values(QUERIES)) {
     const mql = window.matchMedia(q)
-    // Safari < 14 只有 addListener
+    // Safari < 14 只有 addListener；两者都没有就跳过（测试桩、老 WebView）
     if (mql.addEventListener) mql.addEventListener('change', publish)
-    else mql.addListener(publish)
+    else if (typeof mql.addListener === 'function') mql.addListener(publish)
   }
   window.addEventListener('resize', publish)
   window.addEventListener('orientationchange', publish)
