@@ -1477,6 +1477,8 @@ const zhCN = {
   'overview.goFinish': '去收尾',
   'overview.gotoProjects': '进入项目页',
   'overview.inactiveRest': '其余 {count} 个项目无活动 —— 在「项目」页查看全部',
+  'overview.recentSessions': '最近会话',
+  'overview.allSessions': '全部会话',
   'overview.recentActivity': '最近活动',
   'overview.moreTasks': '+{count} 更多',
   // 概览问候区（14 §5.1）：第一句话回答「今天有几件事需要你」

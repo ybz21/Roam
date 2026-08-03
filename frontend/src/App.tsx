@@ -603,7 +603,8 @@ export default function App() {
   )
 
   const pages: any = {
-    overview: <OverviewPage openTerm={openTerm} renderSessions={() => <Sessions openTerm={openTerm} closeTerm={closeTerm} activeTerm={active} embedded />} />,
+    // 概览不再嵌会话列表：那是会话页的活（分工见 docs/design/web/13-mobile-responsive/ia.html）
+    overview: <OverviewPage openTerm={openTerm} />,
     swarm: <Swarm openTerm={openTerm} initialSwarm={swarmSub || undefined} onNav={(n) => { location.hash = n ? '#/swarm/' + encodeURIComponent(n) : '#/swarm' }} />,
     projects: <Projects openTerm={openTerm} closeTerm={closeTerm} initialKey={projectSub || undefined} activeTerm={active} />,
     sessions: <Sessions openTerm={openTerm} closeTerm={closeTerm} activeTerm={active} />,

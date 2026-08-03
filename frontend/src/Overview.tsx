@@ -7,14 +7,13 @@
 //      终端开合只改 Canvas，不该由 viewport 决定列数
 //   ⑤ 最近活动：Canvas ≥1180 进右侧 320 侧轨（sticky），窄于此自动落回页尾
 // 数据全部复用现有接口（/projects、annotations、per-session 探测、/swarms 投影、activity），零新后端。
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Tag } from 'antd'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from './api'
 import { useI18n } from './i18n'
 import { detectPrompt } from './prompt'
 import { relTime } from './App'
-import { Lifec, dot } from './Projects'
-import { usePreferences, savePreferences } from './preferences'
+import { sessionLabel } from './session-label'
+import { dot } from './Projects'
 
 const OV_CSS = `
 .ov{display:flex;flex-direction:column;gap:var(--sp-4);padding-bottom:32px;max-width:var(--content-overview)}
@@ -27,16 +26,7 @@ const OV_CSS = `
 .ov-sum b{font-family:ui-monospace,monospace;font-weight:700;font-size:var(--fs-sm);color:var(--text-bright)}
 .ov-sum .d{width:6px;height:6px;border-radius:50%;background:#3fb950;flex:0 0 auto}
 .ov-sum .d.a{background:#d29922}.ov-sum .d.p{background:#a371f7}
-.ov-tabs{display:flex;align-items:center;gap:2px;margin-top:2px;
-  border-bottom:1px solid var(--border-subtle)}
-.ov-tab{padding:var(--sp-2) var(--sp-3);border:0;background:none;font:inherit;font-size:var(--fs-body);color:var(--text-dim);
-  cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .15s}
-.ov-tab:hover{color:var(--text-bright)}
-.ov-tab.on{color:var(--text-bright);border-bottom-color:var(--accent);font-weight:600}
-.ov-tab-go{margin-left:auto;display:inline-flex;align-items:center;font-size:var(--fs-meta)}
 /* 手指档把 tab 撑到 44：真机上默认高度只有 40（13 §7.1 的命中区下限） */
-html[data-pointer="coarse"] .ov-tab{min-height:44px}
-html[data-pointer="coarse"] .ov-tab-go{min-height:44px}
 
 .ov-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--sp-4);align-items:start}
 .ov-feed{min-width:0;display:flex;flex-direction:column;gap:var(--sp-3)}
@@ -67,33 +57,6 @@ html[data-pointer="coarse"] .ov-tab-go{min-height:44px}
 .ov-card .go{position:absolute;left:var(--sp-3);bottom:var(--sp-3);font-size:var(--fs-meta);color:var(--accent)}
 
 /* 项目卡栅格：阈值看 Canvas，不看 viewport */
-.ov-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--sp-3)}
-.ov-proj{min-width:0;background:var(--bg-container);border:1px solid var(--border-subtle);border-radius:var(--r-card);
-  padding:var(--sp-3) var(--sp-3) var(--sp-2);display:flex;flex-direction:column;gap:var(--sp-1);transition:border-color .15s}
-.ov-proj:hover{border-color:rgba(88,166,255,.35)}
-.ov-proj .hd{display:flex;align-items:center;gap:8px}
-.ov-ico{width:28px;height:28px;flex:0 0 auto;display:grid;place-items:center;border-radius:var(--r-sm);
-  font-size:12px;font-weight:800}
-.ov-proj .nm{min-width:0;flex:1 1 auto}
-.ov-proj .nm b{display:block;font-size:var(--fs-body);color:var(--text-bright);
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ov-proj .nm span{display:block;margin-top:2px;font:var(--fs-micro)/1.3 ui-monospace,monospace;color:var(--text-dimmer);
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ov-proj .hd a{flex:0 0 auto;font-size:var(--fs-meta)}
-.ov-trow{display:flex;align-items:center;gap:var(--sp-2);min-height:32px;padding:var(--sp-1) var(--sp-2);
-  border-radius:var(--r-xs);font-size:var(--fs-sm);cursor:pointer;transition:background .14s}
-.ov-trow:first-of-type{margin-top:6px}
-.ov-trow:hover{background:var(--list-hover)}
-.ov-trow .t{min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ov-trow .tm{margin-left:auto;flex:0 0 auto;font-size:var(--fs-meta);color:var(--text-dimmer);white-space:nowrap}
-.ov-foot{display:flex;align-items:center;gap:var(--sp-2);min-height:28px;margin-top:var(--sp-1);
-  padding:var(--sp-1) var(--sp-2);border-radius:var(--r-xs);font-size:var(--fs-meta);border:1px solid rgba(163,113,247,.22);background:rgba(163,113,247,.05);color:#a371f7}
-.ov-foot.w{border-color:rgba(210,153,34,.24);background:rgba(210,153,34,.05);color:#e3b341}
-.ov-foot a{margin-left:auto;flex:0 0 auto;font-size:var(--fs-meta)}
-.ov-more{padding-left:var(--sp-2);font-size:var(--fs-meta);color:var(--text-dimmer)}
-.ov-rest{display:grid;place-items:center;min-height:96px;padding:var(--sp-3);cursor:pointer;
-  border:1px dashed var(--border-subtle);border-radius:var(--r-card);font-size:var(--fs-sm);color:var(--text-dimmer)}
-.ov-rest:hover{color:var(--text-dim);border-color:rgba(88,166,255,.35)}
 
 /* 最近活动：≥1180 时是右侧 sticky 侧轨；窄于此它只是网格的第二行，自然落回页尾 */
 .ov-rail{min-width:0;padding:var(--sp-3);border-radius:var(--r-card);background:var(--bg-container)}
@@ -110,11 +73,19 @@ html[data-pointer="coarse"] .ov-tab-go{min-height:44px}
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .ov-ev time{display:block;margin-top:var(--sp-1);font-size:var(--fs-micro);color:var(--text-dimmer)}
 
-.ov-loose{padding:var(--sp-3);border-radius:var(--r-card);background:var(--bg-container)}
-.ov-loose .row{display:flex;align-items:center;gap:var(--sp-2);min-height:32px;padding:var(--sp-1) 0;font-size:var(--fs-sm);
-  color:var(--text-dim);cursor:pointer}
-.ov-loose .row:hover{color:var(--text-bright)}
-.ov-loose .tm{margin-left:auto;flex:0 0 auto;font-size:var(--fs-meta);color:var(--text-dimmer)}
+.ov-flow{display:flex;flex-direction:column}
+.ov-frow{display:flex;align-items:center;gap:var(--sp-2);min-height:44px;padding:var(--sp-1) var(--sp-2);
+  border-radius:var(--r-sm);cursor:pointer;transition:background .14s}
+.ov-frow+.ov-frow{border-top:1px solid var(--border-subtle)}
+.ov-frow:hover{background:var(--list-hover)}
+.ov-frow .pj{flex:0 100 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  color:var(--text-dimmer);font-size:var(--fs-meta)}
+.ov-frow .nm{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:var(--fs-sm);font-weight:600}
+.ov-frow .ag{flex:0 0 auto;padding:1px 6px;border-radius:var(--r-pill);font-size:var(--fs-micro);
+  color:#9ccaff;background:var(--accent-soft)}
+.ov-frow .ag.cx{color:#7fd18f;background:rgba(63,185,80,.12)}
+.ov-frow .tm{margin-left:auto;flex:0 0 auto;font-size:var(--fs-meta);color:var(--text-dimmer);white-space:nowrap}
 .ov-go-i{margin-left:3px;vertical-align:-1px;opacity:.75}
 a:hover>.ov-go-i,button:hover>.ov-go-i,.ov-card:hover .ov-go-i{opacity:1}
 .ov-mono{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace}
@@ -153,6 +124,8 @@ type Proj = {
 type Card = {
   key: string; kind: 'waiting' | 'unfinished' | 'swarm'
   proj: string; title: string; desc: string; action: string; go: () => void
+  /** 等待输入卡对应的会话名——「最近会话」要把它排除掉，两层才是互补而不是重复 */
+  session?: string
 }
 
 // 项目图标底色：按名字取一个稳定色，卡片多了才能一眼分辨是哪个项目
@@ -176,12 +149,8 @@ function icoOf(name: string) {
   return ICO[h % ICO.length]
 }
 
-export default function Overview({ openTerm, renderSessions }: { openTerm: (n: string) => void; renderSessions?: () => ReactNode }) {
+export default function Overview({ openTerm }: { openTerm: (n: string) => void }) {
   const { t, locale } = useI18n()
-  // 项目/会话 切换 tab，选择记进偏好（跨设备记忆）。无会话视图（如手机 mini 场景不传）则退回项目视图。
-  const [prefs] = usePreferences()
-  const tab: 'projects' | 'sessions' = renderSessions && prefs.overviewTab === 'sessions' ? 'sessions' : 'projects'
-  const setTab = (v: 'projects' | 'sessions') => savePreferences({ overviewTab: v })
   const [projects, setProjects] = useState<Proj[]>([])
   const [loose, setLoose] = useState<any[]>([])
   const [sessions, setSessions] = useState<any[]>([])
@@ -230,7 +199,6 @@ export default function Overview({ openTerm, renderSessions }: { openTerm: (n: s
 
   // Agent 运行 + 待输入探测（只探项目内会话，上限 14 个防雪崩）
   useEffect(() => {
-    if (tab !== 'projects') return // 会话 tab 时列表页自行探测，避免双重轮询
     const names = projSess.map((s) => s.name).slice(0, 14)
     if (!names.length) return
     let stop = false
@@ -250,7 +218,7 @@ export default function Overview({ openTerm, renderSessions }: { openTerm: (n: s
     check()
     const i = setInterval(check, 6000)
     return () => { stop = true; clearInterval(i) }
-  }, [tab, projSess.map((s) => s.name).join('\n')])
+  }, [projSess.map((s) => s.name).join('\n')])
 
   // 蜂群投影（10s）：归属 = 指挥/成员会话 ∈ 某项目会话
   useEffect(() => {
@@ -294,7 +262,6 @@ export default function Overview({ openTerm, renderSessions }: { openTerm: (n: s
     })
     .sort((a, b) => (projNeeds(b) - projNeeds(a)) || ((b.lastActivity || 0) - (a.lastActivity || 0))),
   [projects, sessByProj, swarms, waiting])
-  const inactiveCount = projects.length - activeProjects.length
   const goProjects = () => { location.hash = '#/projects' }
   const goProject = (key: string) => { location.hash = '#/projects/' + encodeURIComponent(key) }
   const goSwarm = (name: string) => { location.hash = '#/swarm/' + encodeURIComponent(name) }
@@ -306,7 +273,7 @@ export default function Overview({ openTerm, renderSessions }: { openTerm: (n: s
       for (const s of (sessByProj.get(p.key) || [])) {
         if (!waiting[s.name]) continue
         items.push({
-          key: 'w' + s.name, kind: 'waiting', proj: p.name,
+          key: 'w' + s.name, kind: 'waiting', proj: p.name, session: s.name,
           title: s.label || s.name,
           desc: tail[s.name] || t('overview.cardWaitingDesc'),
           action: t('overview.cardGoSession'), go: () => openTerm(s.name),
@@ -333,6 +300,17 @@ export default function Overview({ openTerm, renderSessions }: { openTerm: (n: s
     }
     return items
   }, [projects, sessByProj, waiting, tail, swarms, t])
+
+  // 「最近会话」：跨项目扁平流，按最近活动倒序。这是概览与另外两页的分工线——
+  // 项目页按仓库分组、会话页给全集+筛选，概览只回答「刚才在动的是哪几个」。
+  // **排除已经进了行动卡的会话**：那条信息在上面已经说过一遍，重复出现两层就不互补了。
+  const recent = useMemo(() => {
+    const inAction = new Set(cards.map((c) => c.session).filter(Boolean) as string[])
+    const rows = new Map<string, { name: string; at: number }>()
+    for (const s of projSess) if (!rows.has(s.name)) rows.set(s.name, { name: s.name, at: Number(s.last_activity || 0) })
+    for (const s of loose as any[]) if (!rows.has(s.name)) rows.set(s.name, { name: s.name, at: Number(s.lastActivity || 0) })
+    return [...rows.values()].filter((r) => !inAction.has(r.name)).sort((a, b) => b.at - a.at).slice(0, 8)
+  }, [projSess, loose, cards])
 
   // 最近活动：活跃 git 项目前 3 个各取头 2 条（commit+留痕），合并倒序（60s）
   useEffect(() => {
@@ -424,19 +402,7 @@ export default function Overview({ openTerm, renderSessions }: { openTerm: (n: s
           </div>
         )}
 
-        {/* 内容切换与「进入项目页」同处一行：它们都是"看什么"，不该挤在标题右边和问候语抢
-            视线。tab 样式与项目详情页共用一套下划线语言——两页的 tab 长得一样才叫一套壳。 */}
-        <div className="ov-tabs ov-in" style={{ animationDelay: '70ms' }}>
-          {renderSessions && (['projects', 'sessions'] as const).map((k) => (
-            <button key={k} type="button" className={`ov-tab${tab === k ? ' on' : ''}`} onClick={() => setTab(k)}>
-              {t(k === 'projects' ? 'nav.projects' : 'nav.sessions')}
-            </button>
-          ))}
-          <a className="ov-tab-go" onClick={goProjects}>{t('overview.gotoProjects')}<Go /></a>
-        </div>
-
-        {tab === 'sessions' ? renderSessions!() : (
-          <div className="ov-layout">
+        <div className="ov-layout">
             <div className="ov-feed">
               {/* ③ 行动卡：最多三张，零事项整层不渲染 */}
               {cards.length > 0 && (
@@ -464,82 +430,38 @@ export default function Overview({ openTerm, renderSessions }: { openTerm: (n: s
                 </>
               )}
 
-              {/* ④ 活跃项目作战卡 */}
-              <div className="ov-sect">
-                <span>{t('overview.activeProjects')}</span><span className="n">{activeProjects.length}</span><span className="ln" />
-              </div>
-              <div className="ov-grid">
-                {activeProjects.map((p, i) => {
-                  const rows = (sessByProj.get(p.key) || [])
-                    .sort((a, b) => (Number(running(b.name)) - Number(running(a.name))) || (Number(b.last_activity || 0) - Number(a.last_activity || 0)))
-                  const shown = rows.slice(0, 3)
-                  const projSwarms = swarms.filter((sw) => sw.projKey === p.key)
-                  const [fg, bg] = icoOf(p.key)
-                  return (
-                    <div key={p.key} className="ov-proj ov-in" style={{ animationDelay: `${Math.min(i, 6) * 40}ms` }}>
-                      <div className="hd">
-                        <span className="ov-ico" style={{ color: fg, background: bg }}>{(p.name[0] || '?').toUpperCase()}</span>
-                        <span className="nm">
-                          <b title={p.name}>{p.name}</b>
-                          <span title={p.dir}>{p.dir}</span>
-                        </span>
-                        <a onClick={() => goProject(p.key)}>{t('overview.enterProject')}<Go /></a>
-                      </div>
-                      {shown.map((s) => {
-                        const w = waiting[s.name]
-                        const r = running(s.name)
-                        return (
-                          <div key={s.name} className="ov-trow" onClick={() => openTerm(s.name)}>
-                            {dot(false, w ? '#d29922' : r ? '#3fb950' : undefined)}
-                            <span className="t" title={`${s.label || s.name}（${s.id || s.name}）`}>{s.label || s.name}</span>
-                            {ann[s.name]?.primary?.linked && <Tag color="cyan" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px', padding: '0 5px' }}>⎇</Tag>}
-                            <Lifec done={r ? 1 : 2} cur={r && !w ? 2 : w ? 3 : undefined} />
-                            <span className="tm">{relTime(s.last_activity, t)}</span>
-                          </div>
-                        )
-                      })}
-                      {rows.length > 3 && <div className="ov-more">{t('overview.moreTasks', { count: rows.length - 3 })}</div>}
-                      {projSwarms.map((sw) => (
-                        <div key={sw.name} className="ov-foot">
-                          ⬡ <b>{sw.name}</b>
-                          <span style={{ color: 'var(--text-dimmer)' }}>{t('project.swarm.members', { mine: sw.inProj, total: sw.total })}</span>
-                          <a onClick={() => goSwarm(sw.name)}>{t('project.swarm.board')}<Go /></a>
-                        </div>
-                      ))}
-                      {p.unfinished > 0 && (
-                        <div className="ov-foot w">⚑ {t('overview.unfinishedN', { count: p.unfinished })}
-                          <a onClick={() => goProject(p.key)}>{t('overview.goFinish')}<Go /></a>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-                {inactiveCount > 0 && (
-                  <div className="ov-rest" onClick={goProjects}>{t('overview.inactiveRest', { count: inactiveCount })}</div>
-                )}
-              </div>
-
-              {/* 散会话：不属于任何项目的会话，放在项目之后，避免被作战地图淹没 */}
-              {loose.length > 0 && (
-                <div className="ov-loose">
-                  <div className="ov-sect" style={{ marginBottom: 6 }}>
-                    <span>{t('project.loose')}</span><span className="n">{loose.length}</span><span className="ln" />
+              {/* ④ 最近会话：跨项目扁平流，按最近活动倒序。
+                  这一层**不是**项目卡网格——那是项目页的活；也不是带筛选的会话列表——那是会话页的活。
+                  概览只回答「刚才在动的是哪几个」，所以不分组、不筛选、只取 8 条。 */}
+              {recent.length > 0 && (
+                <>
+                  <div className="ov-sect">
+                    <span>{t('overview.recentSessions')}</span><span className="ln" />
+                    <a onClick={() => { location.hash = '#/sessions' }}>{t('overview.allSessions')}<Go /></a>
                   </div>
-                  {loose.slice(0, 5).map((s: any) => (
-                    <div key={s.name} className="row" onClick={() => openTerm(s.name)}>
-                      {dot(s.attached)}
-                      <b title={`${s.label || s.name}（${s.id || s.name}）`}>{s.label || s.name}</b>
-                      <span className="tm">{relTime(s.lastActivity, t)}</span>
-                    </div>
-                  ))}
-                </div>
+                  <div className="ov-flow">
+                    {recent.map((r) => {
+                      const w = waiting[r.name]
+                      const proj = projects.find((p) => (sessByProj.get(p.key) || []).some((x) => x.name === r.name))
+                      return (
+                        <div key={r.name} className="ov-frow" onClick={() => openTerm(r.name)}>
+                          {dot(false, w ? '#d29922' : running(r.name) ? '#3fb950' : undefined)}
+                          {proj && <span className="pj">{proj.name} ·</span>}
+                          <span className="nm" title={r.name}>{sessionLabel(r.name)}</span>
+                          {cc[r.name] && <span className="ag">Claude</span>}
+                          {cx[r.name] && <span className="ag cx">Codex</span>}
+                          <span className="tm">{relTime(r.at, t)}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </>
               )}
             </div>
 
-            {/* ⑤ 最近活动：Canvas ≥1180 是右侧 sticky 侧轨，窄于此落回页尾 */}
-            {railNode}
-          </div>
-        )}
+          {/* ⑤ 最近活动：Canvas ≥1180 是右侧 sticky 侧轨，窄于此落回页尾 */}
+          {railNode}
+        </div>
       </div>
     </div>
   )

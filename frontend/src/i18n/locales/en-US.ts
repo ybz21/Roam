@@ -1477,6 +1477,8 @@ const enUS = {
   'overview.goFinish': 'Finish',
   'overview.gotoProjects': 'All projects',
   'overview.inactiveRest': '{count} more project(s) idle — see all on the Projects page',
+  'overview.recentSessions': 'Recent sessions',
+  'overview.allSessions': 'All sessions',
   'overview.recentActivity': 'Recent activity',
   'overview.moreTasks': '+{count} more',
   'overview.greetMorning': 'Good morning — ',
