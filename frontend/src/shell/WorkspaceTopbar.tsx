@@ -55,7 +55,9 @@ export function WorkspaceTopbar({ items, online, dockCount, dockOpen, onToggleDo
       <header style={{
         position: 'relative', flex: '0 0 var(--topbar-h)', height: 'var(--topbar-h)',
         display: 'flex', alignItems: 'center', gap: 8, padding: '0 10px',
-        borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-container)',
+        // 与侧栏、页面同底（--bg-base）：顶栏用 --bg-container 会比左右两侧都浅一档，
+        // 整条横在最上面像贴上去的第二层壳
+        borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-base)',
       }}>
         <button onClick={() => setOpen(true)} title={`${t('workspace.search')} (${modKey}K)`}
           style={{
@@ -63,14 +65,14 @@ export function WorkspaceTopbar({ items, online, dockCount, dockOpen, onToggleDo
             width: 'min(480px, 34%)', height: 28, padding: '0 10px',
             display: 'flex', alignItems: 'center', gap: 8,
             border: '1px solid var(--border)', borderRadius: 6,
-            color: 'var(--text-dimmer)', background: 'var(--bg-base)',
+            color: 'var(--text-dimmer)', background: 'var(--bg-container)',
             fontSize: 12, cursor: 'pointer',
           }}>
           <Magnifier />
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t('workspace.searchPlaceholder')}</span>
           <kbd style={{
             marginLeft: 'auto', padding: '1px 5px', border: '1px solid var(--border)',
-            borderRadius: 5, color: 'var(--text-dim)', background: 'var(--bg-container)', fontSize: 10,
+            borderRadius: 5, color: 'var(--text-dim)', background: 'var(--bg-base)', fontSize: 10,
           }}>{modKey}K</kbd>
         </button>
 
