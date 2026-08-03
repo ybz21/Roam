@@ -102,6 +102,12 @@ for (const abs of files) {
     if (chinese.test(line) && /(placeholder|okText|cancelText|message\.|Modal|Button|Empty|Tooltip|Popconfirm|Card|Tag|Text|title=)/.test(line) && !/t\(['"`]/.test(line)) {
       report(issues, file, lineNo, 'possible hardcoded user-facing Chinese', raw)
     }
+
+    // t('不存在的key') 会原样把 key 渲染到界面上，两份 locale 又都缺它 → 上面的
+    // 对齐检查也发现不了。这条专门堵这个洞：拼接出来的动态 key（t('a.' + x)）跳过。
+    for (const match of line.matchAll(/\bt\(\s*'([A-Za-z0-9_.]+)'\s*(\)|,)/g)) {
+      if (!zh.has(match[1])) report(issues, file, lineNo, `unknown i18n key "${match[1]}"`, raw)
+    }
   })
 }
 

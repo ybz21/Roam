@@ -92,11 +92,28 @@ const PRJ_CSS = `
 .prj-row.warn:hover{background:rgba(210,153,34,.09)}
 .prj-row.warn::before{display:none}
 
+/* sticky subheader（14 §6.1）：筛选与排序不该跟着列表滚走 */
+.prj-subbar{position:sticky;top:0;z-index:var(--z-sticky);display:flex;align-items:center;gap:10px;
+  flex-wrap:wrap;margin-bottom:12px;padding:8px 0;background:var(--bg-base)}
+.prj-chip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:999px;
+  border:1px solid var(--border);background:transparent;color:var(--text-dim);font-size:12px;
+  cursor:pointer;white-space:nowrap;transition:color .15s,border-color .15s,background .15s}
+.prj-chip:hover{color:var(--text-bright);border-color:#8b949e}
+.prj-chip.on{color:#79b8ff;border-color:rgba(56,139,253,.55);background:rgba(31,111,235,.14)}
+.prj-chip .n{font-family:ui-monospace,monospace;font-size:10.5px;color:var(--text-dimmer)}
+.prj-chip.on .n{color:#79b8ff}
+
+/* 卡片列固定在 ≥320：原来是 minmax(270,1fr)，右侧一开终端就塌成一条极窄列表（14 §6.1） */
+.prj-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
+
 .prj-card{background:var(--bg-container);border:1px solid var(--border-subtle);border-radius:12px;
   padding:13px 14px 11px;cursor:pointer;display:flex;flex-direction:column;gap:8px;
   transition:border-color .18s,transform .18s,box-shadow .18s}
 .prj-card:hover{border-color:rgba(88,166,255,.45);transform:translateY(-1px);box-shadow:var(--card-hover-shadow)}
+.prj-card:focus-visible{outline:none;border-color:#58a6ff;box-shadow:0 0 0 3px rgba(31,111,235,.22)}
 .prj-card .prj-acts{opacity:.25;transition:opacity .15s;display:inline-flex;gap:10px;align-items:center}
+/* 次要操作 hover 才出现，但键盘走到时同样要看得见——否则纯键盘用户够不着（14 §6.1） */
+.prj-card:focus-within .prj-acts,.prj-card:focus-visible .prj-acts{opacity:1}
 .prj-card:hover .prj-acts{opacity:1}
 .prj-card .prj-acts .pinned{opacity:1}
 
@@ -259,27 +276,47 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
     catch (e: any) { message.error(e.message) }
   }
   const open = (p: Proj) => { location.hash = '#/projects/' + encodeURIComponent(p.key) }
-  return (
-    <div style={{ height: '100%', overflow: 'auto' }}>
-      <div className="prj-wrap-wide">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 16, fontWeight: 700 }}>{t('project.title')}</span>
-          <Segmented size="small" value={sortBy} onChange={(v) => changeSort(v as ProjSort)}
-            options={[
-              { label: t('project.sort.name'), value: 'name' },
-              { label: t('project.sort.created'), value: 'created' },
-              { label: t('project.sort.active'), value: 'active' },
-            ]} />
-          <span style={{ flex: 1 }} />
-          <Button type="primary" size="small" onClick={() => setNewOpen(true)}>{t('project.newProject')}</Button>
-        </div>
 
-        {loaded && data.projects.length === 0 && (
-          <div className="prj-empty" style={{ textAlign: 'center', padding: '48px 0' }}>{t('project.empty')}</div>
-        )}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(270px, 1fr))', gap: 14 }}>
-          {sorted.map((p, i) => (
-            <div key={p.key} onClick={() => open(p)} className="prj-card prj-in" style={{ animationDelay: `${Math.min(i, 8) * 45}ms` }}>
+  // 搜索 + 筛选（14 §6.1）：项目一多，「哪些还欠着事」比「一共有几个」有用得多
+  const [q, setQ] = useState('')
+  const [filter, setFilter] = useState<'all' | 'active' | 'unfinished'>('all')
+  const counts = useMemo(() => ({
+    all: data.projects.length,
+    active: data.projects.filter((p) => p.sessions > 0).length,
+    unfinished: data.projects.filter((p) => p.unfinished > 0).length,
+  }), [data.projects])
+  const visible = useMemo(() => {
+    const kw = q.trim().toLowerCase()
+    return sorted.filter((p) => {
+      if (filter === 'active' && p.sessions <= 0) return false
+      if (filter === 'unfinished' && p.unfinished <= 0) return false
+      if (!kw) return true
+      return p.name.toLowerCase().includes(kw) || p.dir.toLowerCase().includes(kw)
+    })
+  }, [sorted, q, filter])
+  // 置顶与活跃共用同一套栅格，只靠 section header 分组（14 §6.1）——两套栅格会让
+  // 卡片宽度在分组之间对不齐
+  const pinned = visible.filter((p) => p.pinned)
+  const rest = visible.filter((p) => !p.pinned)
+
+  // 上下左右移动选中：列数从栅格实际算，不写死——它随 Canvas 宽度变
+  const onGridKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return
+    const grid = e.currentTarget
+    const cards = [...grid.querySelectorAll<HTMLElement>('[data-prj-card]')]
+    const at = cards.indexOf(document.activeElement as HTMLElement)
+    if (at < 0) return
+    e.preventDefault()
+    const cols = Math.max(1, getComputedStyle(grid).gridTemplateColumns.split(' ').length)
+    const step = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : e.key === 'ArrowUp' ? -cols : cols
+    cards[Math.max(0, Math.min(cards.length - 1, at + step))]?.focus()
+  }
+
+  const card = (p: Proj, i: number) => (
+    <div key={p.key} onClick={() => open(p)} className="prj-card prj-in" data-prj-card
+      role="button" tabIndex={0} aria-label={p.name}
+      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); open(p) } }}
+      style={{ animationDelay: `${Math.min(i, 8) * 45}ms` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontWeight: 700, fontSize: 14.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
                 {p.races > 0 && <Tag color="gold" style={{ margin: 0 }}>{t('project.race', { count: p.races })}</Tag>}
@@ -317,9 +354,51 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
                   ))}
                 </div>
               )}
-            </div>
+    </div>
+  )
+
+  return (
+    <div style={{ height: '100%', overflow: 'auto' }}>
+      <div className="prj-wrap-wide">
+        {/* sticky subheader（14 §6.1）：标题 / 搜索 / 筛选 / 排序 / 新建。
+            滚到项目列表深处时这一条还在——筛选条件跟着内容滚走，等于要滚回顶部才能改。 */}
+        <div className="prj-subbar">
+          <span style={{ fontSize: 16, fontWeight: 700, flex: '0 0 auto' }}>{t('project.title')}</span>
+          <Input allowClear size="small" value={q} onChange={(e) => setQ(e.target.value)}
+            placeholder={t('project.searchPlaceholder')} style={{ width: 200 }} />
+          {([
+            ['all', t('project.filterAll'), counts.all],
+            ['active', t('project.filterActive'), counts.active],
+            ['unfinished', t('project.section.unfinished'), counts.unfinished],
+          ] as const).map(([k, label, n]) => (
+            <button key={k} type="button" className={`prj-chip${filter === k ? ' on' : ''}`}
+              onClick={() => setFilter(k)}>{label}<span className="n">{n}</span></button>
           ))}
+          <span style={{ flex: 1 }} />
+          <Segmented size="small" value={sortBy} onChange={(v) => changeSort(v as ProjSort)}
+            options={[
+              { label: t('project.sort.name'), value: 'name' },
+              { label: t('project.sort.created'), value: 'created' },
+              { label: t('project.sort.active'), value: 'active' },
+            ]} />
+          <Button type="primary" size="small" onClick={() => setNewOpen(true)}>{t('project.newProject')}</Button>
         </div>
+
+        {loaded && data.projects.length === 0 && (
+          <div className="prj-empty" style={{ textAlign: 'center', padding: '48px 0' }}>{t('project.empty')}</div>
+        )}
+        {loaded && data.projects.length > 0 && visible.length === 0 && (
+          <div className="prj-empty" style={{ textAlign: 'center', padding: '48px 0' }}>{t('project.noMatch')}</div>
+        )}
+
+        {pinned.length > 0 && (
+          <div className="prj-sect"><b>{t('project.pinnedSection')}</b><span className="n">{pinned.length}</span><span className="ln" /></div>
+        )}
+        {pinned.length > 0 && <div className="prj-grid" onKeyDown={onGridKey}>{pinned.map(card)}</div>}
+        {pinned.length > 0 && rest.length > 0 && (
+          <div className="prj-sect"><b>{t('overview.activeProjects')}</b><span className="n">{rest.length}</span><span className="ln" /></div>
+        )}
+        {rest.length > 0 && <div className="prj-grid" onKeyDown={onGridKey}>{rest.map(card)}</div>}
 
         {data.loose.length > 0 && (
           <>
