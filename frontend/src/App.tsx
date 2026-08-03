@@ -41,6 +41,7 @@ import { useLayout } from './layout'
 import { useWorkspaceLayout } from './shell/useWorkspaceLayout'
 import { SplitWorkspace } from './shell/SplitWorkspace'
 import { MobileSheet, SheetRow, SheetSection } from './shell/MobileSheet'
+import { WorkspaceTopbar, type PaletteItem } from './shell/WorkspaceTopbar'
 import { copyText } from './chat/blocks'
 import { SessionTitle, setSessionLabels, updateSessionLabel, useSessionLabel, sessionLabel, sessionDisplay } from './session-label'
 import { VoiceInput } from './chat/VoiceInput'
@@ -294,6 +295,12 @@ export default function App() {
   // 空间状态（Page / Split / Focus）与 Dock 宽度：唯一的尺寸契约来源
   const space = useWorkspaceLayout(terms.length > 0)
   const modKeyLabel = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || '') ? '⌘' : 'Ctrl+'
+  const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine)
+  useEffect(() => {
+    const on = () => setOnline(navigator.onLine)
+    window.addEventListener('online', on); window.addEventListener('offline', on)
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', on) }
+  }, [])
   const [fontSize, setFontSize] = useState(13)
   const [statusMap, setStatusMap] = useState<Record<string, TermStatus>>({})
   const termRefs = useRef<Record<string, TermHandle | null>>({})
@@ -525,6 +532,20 @@ export default function App() {
   // 浏览器页不再全幅特例：与 文件/手机 同走 tt-page 满高容器，五页左上角起点统一 (16,16)
   const pageNode = <div className={`tt-page tt-page-${tab}${isMobile ? ' tt-page-mobile' : ''}`}>{page}</div>
   // Canvas 与 Dock 各包一层：两者在 Page / Split / Focus 三态间只改宽度，不改挂载
+  // ⌘K 面板的条目：页面导航 + 已打开的会话。项目/文件两段要等页面把数据提上来，
+  // 没有就不放——面板里出现点了没反应的条目比没有这一段更糟。
+  const paletteItems: PaletteItem[] = [
+    ...NAV.map((n) => ({
+      key: `page:${n.key}`, group: t('workspace.groupPages'), title: t(n.labelKey),
+      icon: ICONS[n.key], run: () => go(n.key),
+    })),
+    ...terms.map((name) => ({
+      key: `term:${name}`, group: t('workspace.groupSessions'),
+      title: sessionDisplay(name), desc: name === active ? t('workspace.current') : undefined,
+      run: () => { setActive(name); space.setDockOpen(true); if (isMobile) setOverlay(true) },
+    })),
+  ]
+
   const canvasNode = (
     <Content style={{
       flex: 1, minWidth: 0, height: '100dvh', padding: 0,
@@ -621,9 +642,18 @@ export default function App() {
         </Sider>
       )}
 
-      {/* 主区：Canvas ｜ 8px 分隔条 ｜ Dock。尺寸契约见 shell/useWorkspaceLayout。
-          终端**常驻挂载**（收起时宽度归零、Focus 时页面归零），换形态不断连接。*/}
-      <Layout style={{ background: 'var(--bg-base)' }}>
+      {/* 主区：Command Center ｜ (Canvas ｜ 8px 分隔条 ｜ Dock)。
+          顶栏横跨页面与终端，位置不因 Dock 开合跳动；终端**常驻挂载**
+          （收起时宽度归零、Focus 时页面归零），换形态不断连接。*/}
+      <Layout style={{ background: 'var(--bg-base)', minWidth: 0 }}>
+        {hasSider && (
+          <WorkspaceTopbar
+            items={paletteItems} online={online} modKey={modKeyLabel}
+            dockCount={terms.length} dockOpen={space.dockVisible}
+            onToggleDock={() => { space.setFocus('none'); space.toggleDock() }}
+            onCreate={() => go('projects')}
+          />
+        )}
         {hasSider && terms.length > 0 ? (
           space.mode === 'split' ? (
             <SplitWorkspace
