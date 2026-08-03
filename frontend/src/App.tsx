@@ -43,6 +43,7 @@ import { useWorkspaceLayout, NAV_WIDTH, NAV_RAIL } from './shell/useWorkspaceLay
 import { Workspace, SessionCapsule } from './shell/Workspace'
 import { Navigation } from './shell/Navigation'
 import { reorderTabs } from './shell/tabs'
+import { sessionProject, setSessionProjects, buildSessionProjects } from './session-project'
 import { MobileSheet, SheetRow, SheetSection } from './shell/MobileSheet'
 import { WorkspaceTopbar, type PaletteItem } from './shell/WorkspaceTopbar'
 import { copyText } from './chat/blocks'
@@ -322,20 +323,61 @@ export default function App() {
   const [codexMap, setCodexMap] = useState<Record<string, ClaudeInfo>>({})
   const [codexView, setCodexView] = useState<Record<string, boolean>>({})
 
-  // 导航 badge 的数据源（14 §4.4）：跨项目待收尾数。一条 /projects 就够，15s 一次；
-  // 概览页也在轮同一条接口，两处显示的是同一个数，不会互相打架。
+  // 一条轮询喂两件事（15s）：
+  //   ① 导航 badge 的跨项目待收尾数（14 §4.4）
+  //   ② 会话 → 项目 归属表，给终端标签写 `项目 · 会话`（14 §6.3）
+  // 概览页轮的是同两条接口，所以两处显示的数字同源，不会互相打架。
   const [unfinished, setUnfinished] = useState(0)
   useEffect(() => {
     if (!hasSider) return
     let stop = false
-    const load = () => api('GET', '/projects').then((r) => {
-      if (stop) return
-      setUnfinished((r?.data?.projects || []).reduce((n: number, p: any) => n + (p.unfinished || 0), 0))
-    }).catch(() => {})
+    const load = async () => {
+      try {
+        const [pr, an] = await Promise.all([
+          api('GET', '/projects'),
+          api('GET', '/sessions/annotations').catch(() => null),
+        ])
+        if (stop) return
+        const projects = pr?.data?.projects || []
+        setUnfinished(projects.reduce((n: number, p: any) => n + (p.unfinished || 0), 0))
+        setSessionProjects(buildSessionProjects(projects, an?.data || {}))
+      } catch { /* 轮询失败就保持上一轮的值，不清空 */ }
+    }
     load()
     const i = setInterval(load, 15000)
     return () => { stop = true; clearInterval(i) }
   }, [hasSider])
+
+  // Canvas 滚动位置（14 §6.3.5）：终端一开，Canvas 变窄、卡片重排，scrollHeight
+  // 从 1108 掉到 781，浏览器顺手把 scrollTop 归零——"你看到哪儿了"就这么没了。
+  //
+  // 两个坑：
+  // ① **不能等状态变了再存**。effect 在 DOM 改完之后才跑，那时 scrollTop 已经是 0。
+  //    所以持续记录，而不是在切换时抓一把。
+  // ② **不能存像素**。两种形态的 scrollHeight 不一样，像素值换算过去是错的位置。
+  //    存比例，还原时再乘回去——重排前后落在同一批卡片上。
+  const canvasRatio = useRef(0)
+  useEffect(() => {
+    if (!hasSider) return
+    const el = document.querySelector<HTMLElement>('.tt-canvas')
+    if (!el) return
+    const on = () => {
+      const room = el.scrollHeight - el.clientHeight
+      if (room > 0) canvasRatio.current = el.scrollTop / room
+    }
+    el.addEventListener('scroll', on, { passive: true })
+    return () => el.removeEventListener('scroll', on)
+  }, [hasSider])
+  useEffect(() => {
+    const el = document.querySelector<HTMLElement>('.tt-canvas')
+    if (!el || !canvasRatio.current) return
+    // 等这一帧的布局落定再还原，否则写进去的值会被重排冲掉
+    const id = requestAnimationFrame(() => {
+      const room = el.scrollHeight - el.clientHeight
+      if (room > 0) el.scrollTop = Math.round(canvasRatio.current * room)
+    })
+    return () => cancelAnimationFrame(id)
+  }, [space.mode])
 
   // ── 工作区快捷键（14 §9.1）：⌘J 开合终端、⌘⇧J 终端聚焦、Esc 退出聚焦 ──
   // 只挂带修饰键的这几个；字母单键快捷键要等命令面板一起做，且必须在输入框/终端
@@ -556,7 +598,7 @@ export default function App() {
   const pages: any = {
     overview: <OverviewPage openTerm={openTerm} renderSessions={() => <Sessions openTerm={openTerm} closeTerm={closeTerm} activeTerm={active} />} />,
     swarm: <Swarm openTerm={openTerm} initialSwarm={swarmSub || undefined} onNav={(n) => { location.hash = n ? '#/swarm/' + encodeURIComponent(n) : '#/swarm' }} />,
-    projects: <Projects openTerm={openTerm} closeTerm={closeTerm} initialKey={projectSub || undefined} />,
+    projects: <Projects openTerm={openTerm} closeTerm={closeTerm} initialKey={projectSub || undefined} activeTerm={active} />,
     sessions: <Sessions openTerm={openTerm} closeTerm={closeTerm} activeTerm={active} />,
     files: <FilesPage openTerm={openTerm} />,
     settings: <EnvPage />,
@@ -1243,10 +1285,14 @@ function TerminalPane(props: {
         {terms.map((termName, i) => {
           const on = termName === active
           const waiting = termNeedsInput[termName]
-          return (
+          const proj = sessionProject(termName)
+          // 分支进 Tooltip，不占标签宽度（14 §6.3.2）
+          const tip = [proj && proj.name, sessionDisplay(termName), proj?.branch && `⎇ ${proj.branch}`]
+            .filter(Boolean).join(' · ')
+          const tab = (
             <span key={termName} ref={on ? activeTabRef : undefined}
               className={`tt-tab${on ? ' on' : ''}${dragTab === termName ? ' dragging' : ''}${dropAt === i ? ' dropL' : ''}`}
-              title={sessionDisplay(termName)} onClick={() => setActive(termName)}
+              title={tip} onClick={() => setActive(termName)}
               draggable={!!onReorder}
               onDragStart={(e) => {
                 // 自定义 MIME：文件区/终端的拖放判定按 type 分流，用通用 text/plain
@@ -1278,6 +1324,17 @@ function TerminalPane(props: {
               <TabName name={termName} />
               <a className="tt-x" title={t('common.close')} onClick={(e) => { e.stopPropagation(); closeTerm(termName) }}>{TI.close}</a>
             </span>
+          )
+          // 右键菜单：标签是跨页常驻的，「这个会话是哪来的」得有个地方能问（14 §6.3.4）
+          return (
+            <Dropdown key={termName} trigger={['contextMenu']} menu={{ items: [
+              ...(proj ? [{ key: 'proj', label: t('terminal.openOwnerProject', { name: proj.name }),
+                onClick: () => { location.hash = '#/projects/' + encodeURIComponent(proj.key) } }] : []),
+              { key: 'newtab', label: t('terminal.openInNewTabTitle'),
+                onClick: () => window.open(`/#/term/${encodeURIComponent(termName)}`, '_blank') },
+              { type: 'divider' as const },
+              { key: 'close', danger: true, label: t('common.close'), onClick: () => closeTerm(termName) },
+            ] }}>{tab}</Dropdown>
           )
         })}
         {/* 拖到最右侧：最后一个标签的右半边已经给出 i+1，这里只补"空白区也能落" */}

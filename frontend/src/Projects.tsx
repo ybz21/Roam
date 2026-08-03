@@ -86,6 +86,9 @@ const PRJ_CSS = `
   background:transparent;transition:background .15s}
 .prj-row:hover{background:var(--list-hover)}
 .prj-row:hover::before{background:rgba(88,166,255,.5)}
+/* 选中行：细蓝边 + 淡底，和 hover 区分得开（14 §6.3.1） */
+.prj-row.on{background:rgba(31,111,235,.10);box-shadow:inset 0 0 0 1px rgba(88,166,255,.45)}
+.prj-row.on::before{background:#58a6ff}
 .prj-row .acts{opacity:.55;transition:opacity .15s;display:flex;gap:12px;font-size:12.5px;flex:0 0 auto;margin-top:3px}
 .prj-row:hover .acts{opacity:1}
 .prj-row.warn{background:rgba(210,153,34,.05);border:1px solid rgba(210,153,34,.18);margin-bottom:4px}
@@ -186,7 +189,7 @@ export function Lifec({ done, cur }: { done: number; cur?: number }) {
   )
 }
 
-export default function Projects({ openTerm, closeTerm, initialKey }: { openTerm: (n: string) => void; closeTerm: (n: string) => void; initialKey?: string }) {
+export default function Projects({ openTerm, closeTerm, initialKey, activeTerm }: { openTerm: (n: string) => void; closeTerm: (n: string) => void; initialKey?: string; activeTerm?: string | null }) {
   const [data, setData] = useState<{ projects: Proj[]; loose: ProjSession[] }>({ projects: [], loose: [] })
   const [loaded, setLoaded] = useState(false)
   const load = () => api('GET', '/projects').then((r) => {
@@ -199,7 +202,7 @@ export default function Projects({ openTerm, closeTerm, initialKey }: { openTerm
     <>
       <style>{PRJ_CSS}</style>
       {initialKey
-        ? <ProjectHome proj={data.projects.find((x) => x.key === initialKey)} allProjects={data.projects} loaded={loaded} openTerm={openTerm} closeTerm={closeTerm} refresh={load} />
+        ? <ProjectHome proj={data.projects.find((x) => x.key === initialKey)} allProjects={data.projects} loaded={loaded} openTerm={openTerm} closeTerm={closeTerm} refresh={load} activeTerm={activeTerm} />
         : <ProjectList data={data} loaded={loaded} openTerm={openTerm} refresh={load} />}
     </>
   )
@@ -547,7 +550,8 @@ function normDir(p: string): string {
 }
 
 // ── P2 项目主页：头部 + composer(hero) + 任务流/Worktree/编队/活动 ──
-function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }: {
+function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, activeTerm }: {
+  activeTerm?: string | null
   proj?: Proj; allProjects: Proj[]; loaded: boolean; openTerm: (n: string) => void; closeTerm: (n: string) => void; refresh: () => void
 }) {
   const { t } = useI18n()
@@ -1026,8 +1030,11 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
     else if (gs === 'merged') { done = 4; stage = t('project.stage.merged') } // 合入检测（10 §5）：导轨走满
     else if (gs === 'pushed') { done = 3; cur = 4; stage = t('project.stage.pushed') } // 已推送待合入：审毕、并在跑
     else if (gs === 'committed') { done = 2; cur = 3; stage = t('project.stage.committed') } // 本地已提交未推送
+    // 从这一行开的会话：行保持选中并给细蓝边，页面与终端的对应关系不靠记（14 §6.3.1）
     return (
-      <div key={s.name} className="prj-row prj-in" style={{ marginLeft: isChild ? 22 : 0, animationDelay: `${Math.min(i, 8) * 40}ms` }}
+      <div key={s.name} className={`prj-row prj-in${activeTerm === s.name ? ' on' : ''}`}
+        aria-current={activeTerm === s.name ? 'true' : undefined}
+        style={{ marginLeft: isChild ? 22 : 0, animationDelay: `${Math.min(i, 8) * 40}ms` }}
         onClick={() => openTerm(s.name)}>
         <span style={{ marginTop: 7, display: 'inline-flex' }}>{dot(false, waiting ? '#d29922' : running ? '#3fb950' : undefined)}</span>
         {isChild && <span style={{ color: '#a371f7', fontSize: 12, marginTop: 3 }}>⑂</span>}

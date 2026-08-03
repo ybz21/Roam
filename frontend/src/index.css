@@ -385,9 +385,14 @@ body {
 .tt-tab.on { color: var(--text-bright); font-weight: 600; }
 .tt-tab .tt-wait { flex: 0 0 auto; color: #d29922; font-weight: 600; }
 /* 名字中间省略：头段收缩 + 尾段不收缩，省略号自然落在中间（见 session-label.tsx TabName） */
-.tt-tab .tt-name { display: flex; min-width: 0; overflow: hidden; }
+.tt-tab .tt-name { display: flex; gap: 4px; min-width: 0; overflow: hidden; }
 .tt-tab .tt-name .h { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tt-tab .tt-name .tl { flex: 0 0 auto; }
+/* 项目前缀弱化并优先被压缩：窄标签下「哪个会话」比「哪个项目」更要紧 */
+.tt-tab .tt-name .pj {
+  flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: clip; white-space: nowrap;
+  color: var(--text-dimmer); font-weight: 400;
+}
 .tt-tab.dragging { opacity: .45; }
 /* 插入位提示线：拖到哪个标签左边，线就画在哪 */
 .tt-tab.dropL::before {

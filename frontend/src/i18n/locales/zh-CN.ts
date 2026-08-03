@@ -135,6 +135,7 @@ const zhCN = {
   'terminal.mobileInputPlaceholder': '输入文字，回车 / 发送 → 终端',
   'terminal.dropToMention': '松手插入为 @文件引用',
   'terminal.openInNewTabTitle': '在新浏览器标签全屏打开此会话',
+  'terminal.openOwnerProject': '打开所属项目 {name}',
   'terminal.newTab': '新标签',
   'terminal.fileBrowserTitle': '文件浏览（当前会话工作目录）',
   'terminal.gitPanelTitle': 'Git 状态（当前会话工作目录）',

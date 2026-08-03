@@ -135,6 +135,7 @@ const enUS = {
   'terminal.mobileInputPlaceholder': 'Type text, then Enter / Send → terminal',
   'terminal.dropToMention': 'Drop to insert as @file reference',
   'terminal.openInNewTabTitle': 'Open this session fullscreen in a new browser tab',
+  'terminal.openOwnerProject': 'Open owner project {name}',
   'terminal.newTab': 'New tab',
   'terminal.fileBrowserTitle': 'File browser for current session working directory',
   'terminal.gitPanelTitle': 'Git status for current session working directory',
