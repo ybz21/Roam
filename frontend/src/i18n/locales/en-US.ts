@@ -1463,6 +1463,7 @@ const enUS = {
   'project.filterActive': 'Active',
   'project.noMatch': 'No matching projects',
   'project.pinnedSection': 'Pinned',
+  'project.sortBy': 'Sort by',
   'project.sort.name': 'Name',
   'project.sort.created': 'Created',
   'project.sort.active': 'Last active',

@@ -9,12 +9,14 @@
 // 分区头沿用设计图纸体例、入场一次性 stagger。全部颜色走 index.css token。
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { App as AntApp, AutoComplete, Button, Dropdown, Input, Modal, Popconfirm, Segmented, Select, Space, Spin, Tag, Tooltip, Typography } from 'antd'
-import type { MenuProps } from 'antd'
+import type { InputRef, MenuProps } from 'antd'
 import { sessionLabel } from './session-label'
 import { api, upload, makeClipboardImageFile } from './api'
 import { useI18n } from './i18n'
 import { usePreferences } from './preferences'
 import { INTENT_EVENT, takeIntent } from './intents'
+import { MobileSheet, SheetRow } from './shell/MobileSheet'
+import { useLayout } from './layout'
 import { detectPrompt } from './prompt'
 import { relTime, taskNameFromPrompt, shq, NewSessionModal, DirPicker, recentDirs, pushRecentDir, CloseWorktreeModal } from './App'
 import FileBrowser from './FileBrowser'
@@ -36,6 +38,15 @@ type Proj = {
 // 项目列表排序模式（置顶恒在最前；选择持久化）
 type ProjSort = 'name' | 'created' | 'active'
 const SORT_KEY = 'roam.projects.sort'
+const SORTS = ['name', 'created', 'active'] as const
+// 设计系统 §2：箭头/符号一律 SVG。⌕ ⇅ ✓ 这类文字符号在手机字体上画得又细又歪
+const ico = (d: React.ReactNode) => (
+  <svg viewBox="0 0 24 24" width={17} height={17} fill="none" stroke="currentColor"
+    strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round">{d}</svg>
+)
+const ICON_SEARCH = ico(<><circle cx="11" cy="11" r="7" /><line x1="16.5" y1="16.5" x2="21" y2="21" /></>)
+const ICON_SORT = ico(<><path d="M7 4v16" /><path d="M4 8l3-4 3 4" /><path d="M17 20V4" /><path d="M14 16l3 4 3-4" /></>)
+const ICON_CHECK = ico(<polyline points="4 12 9 17 20 6" />)
 
 // ── 页面级样式（一次注入；产品 token 之上只做布局/微交互）──
 const PRJ_CSS = `
@@ -107,14 +118,27 @@ const PRJ_CSS = `
   flex-wrap:wrap;margin-bottom:12px;padding:8px 0;background:var(--bg-base)}
 .prj-filters{display:flex;align-items:center;gap:var(--sp-2);min-width:0;flex:1 1 auto}
 .prj-filters .sp{flex:1 1 auto}
-/* 手机：搜索独占一行，筛选+排序合成一条横滑带（不换行、隐藏滚动条） */
-html[data-size="compact"] .prj-subbar{flex-wrap:nowrap;flex-direction:column;align-items:stretch;gap:var(--sp-2)}
-html[data-size="compact"] .prj-filters{overflow-x:auto;scrollbar-width:none;flex:0 0 auto}
+/* 手机：整条 chrome 压成一行 44 —— 筛选带自己就说明了「项目列表、共 12 个」，
+   页名不必再写一遍（底栏已经高亮着「项目」）。搜索与排序收成右侧两枚图标，
+   钉住不随横滑跑掉；筛选带右缘渐隐，否则 chip 会从图标底下钻出来。 */
+html[data-size="compact"] .prj-subbar{flex-wrap:nowrap;gap:var(--sp-2);min-height:44px;padding:0;margin-bottom:var(--sp-2)}
+html[data-size="compact"] .prj-filters{overflow-x:auto;scrollbar-width:none;flex:1 1 auto;
+  mask-image:linear-gradient(90deg,#000 calc(100% - 18px),transparent 100%)}
 html[data-size="compact"] .prj-filters::-webkit-scrollbar{height:0}
 html[data-size="compact"] .prj-filters>*{flex:0 0 auto}
-/* 右缘渐隐：横滑带被切在半个控件上就像"没显示全"（设计系统 §2 的同一条规则） */
-html[data-size="compact"] .prj-filters{mask-image:linear-gradient(90deg,#000 calc(100% - 20px),transparent 100%)}
-html[data-size="compact"] .prj-filters .sp{display:none}
+html[data-size="compact"] .prj-filters .sp,
+html[data-size="compact"] .prj-filters .ant-segmented{display:none}
+/* 图标按钮：不描边——右边两个方框和左边的圆角 chip 不是一套语言。命中区靠伪元素撑到 44 */
+.prj-iconbtn{position:relative;flex:0 0 auto;width:32px;height:32px;display:none;place-items:center;
+  border:0;border-radius:var(--r-sm);background:transparent;color:var(--text-dim);cursor:pointer}
+.prj-iconbtn::after{content:"";position:absolute;left:50%;top:50%;width:44px;height:44px;transform:translate(-50%,-50%)}
+.prj-iconbtn:active{background:var(--list-hover)}
+html[data-size="compact"] .prj-iconbtn{display:grid}
+/* 搜索：桌面常驻，手机点图标后原地展开（不新增一行） */
+html[data-size="compact"] .prj-subbar .prj-search{display:none}
+html[data-size="compact"] .prj-subbar.searching .prj-search{display:block;flex:1 1 auto}
+html[data-size="compact"] .prj-subbar.searching .prj-filters,
+html[data-size="compact"] .prj-subbar.searching .prj-iconbtn.find{display:none}
 .prj-chip{display:inline-flex;align-items:center;gap:var(--sp-2);height:28px;padding:0 var(--sp-3);border-radius:var(--r-pill);
   border:1px solid var(--border);background:transparent;color:var(--text-dim);font-size:12px;
   cursor:pointer;white-space:nowrap;transition:color .15s,border-color .15s,background .15s}
@@ -307,7 +331,11 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
   const open = (p: Proj) => { location.hash = '#/projects/' + encodeURIComponent(p.key) }
 
   // 搜索 + 筛选（14 §6.1）：项目一多，「哪些还欠着事」比「一共有几个」有用得多
+  const { phone: isPhone } = useLayout()
   const [q, setQ] = useState('')
+  const [searching, setSearching] = useState(false)
+  const [sortSheet, setSortSheet] = useState(false)
+  const searchRef = useRef<InputRef>(null)
   const [filter, setFilter] = useState<'all' | 'active' | 'unfinished'>('all')
   const counts = useMemo(() => ({
     all: data.projects.length,
@@ -393,19 +421,24 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
       <div className="prj-wrap-wide">
         {/* 页头与概览共用一套（.tt-pagehead）：眉标 + 标题 + 一句话。原来这里只有一个
             16px 的「项目」挤在搜索框左边，和概览那页完全不像同一个产品。 */}
-        <header className="tt-pagehead" style={{ marginBottom: 14 }}>
-          <div className="ttl">
-            <div className="kicker">{t('nav.groupWorkspace')}</div>
-            <h2>{t('project.title')}</h2>
-            <p>{t('project.subtitle')}</p>
-          </div>
-        </header>
+        {/* 手机上整块不渲染：底栏已高亮「项目」，筛选带里的「全部 12」又说明了总量，
+            再写一遍大号页名等于用 100px 说一句用户已经知道的话。桌面保留。 */}
+        {!isPhone && (
+          <header className="tt-pagehead" style={{ marginBottom: 14 }}>
+            <div className="ttl">
+              <div className="kicker">{t('nav.groupWorkspace')}</div>
+              <h2>{t('project.title')}</h2>
+              <p>{t('project.subtitle')}</p>
+            </div>
+          </header>
+        )}
 
         {/* sticky subheader（14 §6.1）：搜索 / 筛选 / 排序。滚到项目列表深处时这一条还在——
             筛选条件跟着内容滚走，等于要滚回顶部才能改。 */}
-        <div className="prj-subbar">
+        <div className={`prj-subbar${searching ? ' searching' : ''}`}>
           <Input allowClear size="small" value={q} onChange={(e) => setQ(e.target.value)}
-            placeholder={t('project.searchPlaceholder')} style={{ width: 200 }} />
+            ref={searchRef} className="prj-search" onBlur={() => { if (!q) setSearching(false) }}
+            placeholder={t('project.searchPlaceholder')} style={{ width: isPhone ? undefined : 200 }} />
           {/* 筛选与排序合成一条横滑带：手机上它俩各自换行，加上搜索框一共占了 5 行，
               第一张卡片被推到屏幕 26% 处。现在一行装下，滑得到即可。 */}
           <div className="prj-filters">
@@ -419,13 +452,29 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
             ))}
             <span className="sp" />
             <Segmented size="small" value={sortBy} onChange={(v) => changeSort(v as ProjSort)}
-              options={[
-                { label: t('project.sort.name'), value: 'name' },
-                { label: t('project.sort.created'), value: 'created' },
-                { label: t('project.sort.active'), value: 'active' },
-              ]} />
+              options={SORTS.map((k) => ({ label: t(`project.sort.${k}`), value: k }))} />
           </div>
+          {/* 手机：搜索原地展开、排序进 sheet。两枚图标钉在右侧，不随筛选带横滑跑掉 */}
+          <button type="button" className="prj-iconbtn find" aria-label={t('project.searchPlaceholder')}
+            onClick={() => { setSearching(true); setTimeout(() => searchRef.current?.focus(), 0) }}>
+            {ICON_SEARCH}
+          </button>
+          <button type="button" className="prj-iconbtn" aria-label={t('project.sortBy')}
+            onClick={() => setSortSheet(true)}>{ICON_SORT}</button>
+          {searching && (
+            <button type="button" className="prj-iconbtn" style={{ display: 'grid', width: 'auto', padding: '0 4px', fontSize: 'var(--fs-meta)' }}
+              onClick={() => { setSearching(false); setQ('') }}>{t('common.cancel')}</button>
+          )}
         </div>
+
+        <MobileSheet open={sortSheet} title={t('project.sortBy')} onClose={() => setSortSheet(false)}>
+          {SORTS.map((k) => (
+            <SheetRow key={k} minHeight={44} active={sortBy === k}
+              title={t(`project.sort.${k}`)}
+              extra={sortBy === k ? <span style={{ color: 'var(--accent)' }}>{ICON_CHECK}</span> : undefined}
+              onClick={() => { changeSort(k); setSortSheet(false) }} />
+          ))}
+        </MobileSheet>
 
         {loaded && data.projects.length === 0 && (
           <div className="prj-empty" style={{ textAlign: 'center', padding: '48px 0' }}>{t('project.empty')}</div>

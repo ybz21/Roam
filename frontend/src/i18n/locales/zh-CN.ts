@@ -1463,6 +1463,7 @@ const zhCN = {
   'project.filterActive': '活跃',
   'project.noMatch': '没有匹配的项目',
   'project.pinnedSection': '置顶',
+  'project.sortBy': '排序',
   'project.sort.name': '名称',
   'project.sort.created': '创建时间',
   'project.sort.active': '最近活跃',

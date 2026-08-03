@@ -331,6 +331,8 @@ body {
 html[data-size="compact"] .tt-pagehead .kicker,
 html[data-size="compact"] .tt-pagehead p { display: none; }
 html[data-size="compact"] .tt-pagehead h2 { margin: 0; font-size: var(--fs-lg); }
+/* 概览的标题是「今天有 N 件事需要你」——那是内容不是页名，手机上降到 20 自然折行，不砍 */
+html[data-size="compact"] .ov .tt-pagehead h2 { font-size: 20px; line-height: 1.3; }
 html[data-size="compact"] .tt-pagehead { gap: var(--sp-2); }
 .tt-pagehead .acts { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 

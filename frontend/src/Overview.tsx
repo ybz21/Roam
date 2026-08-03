@@ -26,8 +26,7 @@ const OV_CSS = `
 .ov-sum button:hover{color:var(--text-bright);background:var(--list-hover)}
 .ov-sum b{font-family:ui-monospace,monospace;font-weight:700;font-size:var(--fs-sm);color:var(--text-bright)}
 .ov-sum .d{width:6px;height:6px;border-radius:50%;background:#3fb950;flex:0 0 auto}
-.ov-sum .d.a{background:#d29922}.ov-sum .d.p{background:#a371f7}.ov-sum .d.z{background:var(--border-subtle)}
-
+.ov-sum .d.a{background:#d29922}.ov-sum .d.p{background:#a371f7}
 .ov-tabs{display:flex;align-items:center;gap:2px;margin-top:2px;
   border-bottom:1px solid var(--border-subtle)}
 .ov-tab{padding:var(--sp-2) var(--sp-3);border:0;background:none;font:inherit;font-size:var(--fs-body);color:var(--text-dim);
@@ -372,11 +371,14 @@ export default function Overview({ openTerm, renderSessions }: { openTerm: (n: s
     try { return new Date().toLocaleDateString(locale, { weekday: 'long', month: 'long', day: 'numeric' }) } catch { return '' }
   }, [locale])
 
-  const sumItem = (n: number, cls: string, label: string) => (
-    <button type="button" onClick={goProjects}>
-      <i className={`d ${n > 0 ? cls : 'z'}`} /><b>{n}</b>{label}
+  // 零值项整个不渲染：「0 等待输入」不是信息，是噪声——四格里常有两格是 0，
+  // 在 360 的屏上还把这一条挤到横向溢出。全为零时整条消失。
+  // （不在这条右端再放「进入项目页」——下一行的 tab 条右边已经有同一个入口了。）
+  const sumItem = (n: number, cls: string, label: string) => (n > 0 ? (
+    <button key={label} type="button" onClick={goProjects}>
+      <i className={`d ${cls}`} /><b>{n}</b>{label}
     </button>
-  )
+  ) : null)
 
   const railNode = acts.length > 0 && (
     <aside className="ov-rail ov-in" style={{ animationDelay: '160ms' }}>
@@ -413,12 +415,14 @@ export default function Overview({ openTerm, renderSessions }: { openTerm: (n: s
         </header>
 
         {/* ② 状态概况：一条顶掉旧版一排等权数字卡 */}
-        <div className="ov-sum ov-in" style={{ animationDelay: '50ms' }}>
-          {sumItem(stats.running, '', t('overview.sumRunning'))}
-          {sumItem(stats.waiting, 'a', t('overview.sumWaiting'))}
-          {sumItem(stats.unfinished, 'a', t('overview.sumUnfinished'))}
-          {sumItem(stats.swarms, 'p', t('overview.sumSwarms'))}
-        </div>
+        {(stats.running + stats.waiting + stats.unfinished + stats.swarms) > 0 && (
+          <div className="ov-sum ov-in" style={{ animationDelay: '50ms' }}>
+            {sumItem(stats.running, '', t('overview.sumRunning'))}
+            {sumItem(stats.waiting, 'a', t('overview.sumWaiting'))}
+            {sumItem(stats.unfinished, 'a', t('overview.sumUnfinished'))}
+            {sumItem(stats.swarms, 'p', t('overview.sumSwarms'))}
+          </div>
+        )}
 
         {/* 内容切换与「进入项目页」同处一行：它们都是"看什么"，不该挤在标题右边和问候语抢
             视线。tab 样式与项目详情页共用一套下划线语言——两页的 tab 长得一样才叫一套壳。 */}
