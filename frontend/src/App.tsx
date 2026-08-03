@@ -43,6 +43,7 @@ import { useWorkspaceLayout, NAV_WIDTH, NAV_RAIL } from './shell/useWorkspaceLay
 import { Workspace, SessionCapsule } from './shell/Workspace'
 import { Navigation } from './shell/Navigation'
 import { reorderTabs } from './shell/tabs'
+import { requestIntent } from './intents'
 import { sessionProject, setSessionProjects, buildSessionProjects } from './session-project'
 import { MobileSheet, SheetRow, SheetSection } from './shell/MobileSheet'
 import { WorkspaceTopbar, type PaletteItem } from './shell/WorkspaceTopbar'
@@ -714,7 +715,9 @@ export default function App() {
             items={paletteItems} online={online} modKey={modKeyLabel}
             dockCount={terms.length} dockOpen={space.dockVisible}
             onToggleDock={() => { space.setFocus('none'); space.toggleDock() }}
-            onCreate={() => go('projects')}
+            // 切到项目页并留下「要新建」的意图，由那一页挂载后消费（见 intents.ts）。
+            // 从任何页面点「＋ 新建」都是同一条路径，不必在每页各摆一枚按钮。
+            onCreate={() => { go('projects'); requestIntent('new-project') }}
           />
         )}
         {hasSider && terms.length > 0 ? (

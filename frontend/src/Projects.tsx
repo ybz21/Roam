@@ -14,6 +14,7 @@ import { sessionLabel } from './session-label'
 import { api, upload, makeClipboardImageFile } from './api'
 import { useI18n } from './i18n'
 import { usePreferences } from './preferences'
+import { INTENT_EVENT, takeIntent } from './intents'
 import { detectPrompt } from './prompt'
 import { relTime, taskNameFromPrompt, shq, NewSessionModal, DirPicker, recentDirs, pushRecentDir, CloseWorktreeModal } from './App'
 import FileBrowser from './FileBrowser'
@@ -269,6 +270,15 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
     try { return (localStorage.getItem(SORT_KEY) as ProjSort) || 'name' } catch { return 'name' }
   })
   const changeSort = (v: ProjSort) => { setSortBy(v); try { localStorage.setItem(SORT_KEY, v) } catch {} }
+  // 新建项目的按钮只有顶栏那一枚（Command Center，14 §4.5）：它切到本页并留下一个
+  // 意图，这里挂载时取走。挂载时也要取一次——从别的页面点过来时，事件早在本组件
+  // 存在之前就发完了（见 intents.ts）。
+  useEffect(() => {
+    const on = () => { if (takeIntent('new-project')) setNewOpen(true) }
+    on()
+    window.addEventListener(INTENT_EVENT, on)
+    return () => window.removeEventListener(INTENT_EVENT, on)
+  }, [])
   // 排序：置顶恒在最前；名称(默认,稳定)/创建时间(新在前)/最近活跃(新在前)
   const sorted = useMemo(() => [...data.projects].sort((a, b) => {
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
@@ -392,7 +402,6 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
               { label: t('project.sort.created'), value: 'created' },
               { label: t('project.sort.active'), value: 'active' },
             ]} />
-          <Button type="primary" size="small" onClick={() => setNewOpen(true)}>{t('project.newProject')}</Button>
         </div>
 
         {loaded && data.projects.length === 0 && (

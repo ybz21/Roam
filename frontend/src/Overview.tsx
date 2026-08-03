@@ -111,6 +111,8 @@ const OV_CSS = `
   color:var(--text-dim);cursor:pointer}
 .ov-loose .row:hover{color:var(--text-bright)}
 .ov-loose .tm{margin-left:auto;flex:0 0 auto;font-size:11px;color:var(--text-dimmer)}
+.ov-go-i{margin-left:3px;vertical-align:-1px;opacity:.75}
+a:hover>.ov-go-i,button:hover>.ov-go-i,.ov-card:hover .ov-go-i{opacity:1}
 .ov-mono{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace}
 .ov-in{animation:ovIn .34s cubic-bezier(.2,.85,.3,1) backwards}
 @keyframes ovIn{from{opacity:0;transform:translateY(6px)}}
@@ -150,6 +152,15 @@ type Card = {
 }
 
 // 项目图标底色：按名字取一个稳定色，卡片多了才能一眼分辨是哪个项目
+// 文字箭头（→）在正文字号下和标点混在一起，粗细也跟不上界面的线性图标语言。
+// 换成一枚 12px 的 chevron：与导航、标签条同一套描边风格。
+const Go = () => (
+  <svg className="ov-go-i" viewBox="0 0 24 24" width={12} height={12} aria-hidden="true"
+    fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="9 5 16 12 9 19" />
+  </svg>
+)
+
 const ICO = [
   ['#9ccaff', 'rgba(31,111,235,.13)'], ['#c7a5ff', 'rgba(163,113,247,.13)'],
   ['#76d18a', 'rgba(63,185,80,.13)'], ['#f0ba5d', 'rgba(210,153,34,.13)'],
@@ -399,7 +410,7 @@ export default function Overview({ openTerm, renderSessions }: { openTerm: (n: s
               <Segmented size="small" value={tab} onChange={(v) => setTab(v as 'projects' | 'sessions')}
                 options={[{ label: t('nav.projects'), value: 'projects' }, { label: t('nav.sessions'), value: 'sessions' }]} />
             )}
-            <Button size="small" onClick={goProjects}>{t('overview.gotoProjects')} →</Button>
+            <Button size="small" onClick={goProjects}>{t('overview.gotoProjects')}<Go /></Button>
           </div>
         </header>
 
@@ -419,7 +430,7 @@ export default function Overview({ openTerm, renderSessions }: { openTerm: (n: s
                 <>
                   <div className="ov-sect">
                     <span>{t('overview.needsYou')}</span><span className="n">{cards.length}</span><span className="ln" />
-                    {cards.length > 3 && <a onClick={goProjects}>{t('overview.viewAllN', { count: cards.length })} →</a>}
+                    {cards.length > 3 && <a onClick={goProjects}>{t('overview.viewAllN', { count: cards.length })}<Go /></a>}
                   </div>
                   <div className="ov-cards">
                     {cards.slice(0, 3).map((c, i) => (
@@ -433,7 +444,7 @@ export default function Overview({ openTerm, renderSessions }: { openTerm: (n: s
                         </div>
                         <h4 title={c.title}>{c.title}</h4>
                         <p>{c.desc}</p>
-                        <span className="go">{c.action} →</span>
+                        <span className="go">{c.action}<Go /></span>
                       </article>
                     ))}
                   </div>
@@ -459,7 +470,7 @@ export default function Overview({ openTerm, renderSessions }: { openTerm: (n: s
                           <b title={p.name}>{p.name}</b>
                           <span title={p.dir}>{p.dir}</span>
                         </span>
-                        <a onClick={() => goProject(p.key)}>{t('overview.enterProject')} →</a>
+                        <a onClick={() => goProject(p.key)}>{t('overview.enterProject')}<Go /></a>
                       </div>
                       {shown.map((s) => {
                         const w = waiting[s.name]
@@ -479,12 +490,12 @@ export default function Overview({ openTerm, renderSessions }: { openTerm: (n: s
                         <div key={sw.name} className="ov-foot">
                           ⬡ <b>{sw.name}</b>
                           <span style={{ color: 'var(--text-dimmer)' }}>{t('project.swarm.members', { mine: sw.inProj, total: sw.total })}</span>
-                          <a onClick={() => goSwarm(sw.name)}>{t('project.swarm.board')} →</a>
+                          <a onClick={() => goSwarm(sw.name)}>{t('project.swarm.board')}<Go /></a>
                         </div>
                       ))}
                       {p.unfinished > 0 && (
                         <div className="ov-foot w">⚑ {t('overview.unfinishedN', { count: p.unfinished })}
-                          <a onClick={() => goProject(p.key)}>{t('overview.goFinish')} →</a>
+                          <a onClick={() => goProject(p.key)}>{t('overview.goFinish')}<Go /></a>
                         </div>
                       )}
                     </div>
