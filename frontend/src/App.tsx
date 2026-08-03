@@ -71,6 +71,10 @@ const NAV = [
 const MOBILE_NAV_KEYS = ['projects', 'overview', 'files']
 const MOBILE_MORE_KEYS = ['browser', 'phone', 'plugins', 'settings']
 
+// 用 Canvas 容器查询排版的页面（见 index.css 的 .tt-canvas[data-cq]）。逐页开，
+// 不是全局开：container-type 会改变 fixed 后代的包含块。
+const CQ_PAGES = new Set(['overview'])
+
 // 旧链接兼容：/#/env 重定向到 /#/settings
 function normalizeRoute(raw: string): string {
   const route = raw.split('?')[0]
@@ -547,7 +551,7 @@ export default function App() {
   ]
 
   const canvasNode = (
-    <Content style={{
+    <Content className="tt-canvas" data-cq={CQ_PAGES.has(tab) ? 'on' : undefined} style={{
       flex: 1, minWidth: 0, height: '100dvh', padding: 0,
       overflow: tab === 'browser' || tab === 'phone' || tab === 'files' ? 'hidden' : 'auto',
     }}>{pageNode}</Content>

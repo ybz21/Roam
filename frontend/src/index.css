@@ -157,6 +157,13 @@ body {
 .tt-split-rail:focus-visible::after { height: 78px; opacity: 1; background: #58a6ff; }
 .tt-split-rail:focus-visible { outline: 2px solid #58a6ff; outline-offset: -1px; }
 
+/* ── Canvas 容器查询（14 §5.3 / §5.4）──
+   概览的列数、活动侧轨要跟「Canvas 实际有多宽」走，不跟 viewport 走：终端开合只
+   改 Canvas，1920 开着 768 的 Dock 时可用宽只有 920，此时还按 viewport 排三列必挤。
+   只给声明要用的页面开（data-cq="on"）：container-type 会让元素成为 fixed 后代的
+   包含块，全局打开会把 Git 面板 / 浮动文件抽屉这些「视口级」浮层挪进 Canvas 里。 */
+.tt-canvas[data-cq='on'] { container: canvas / inline-size; }
+
 /* ── 页面骨架：所有一级页面从同一个左上角起笔，卡片和工具区间距一致 ── */
 .tt-page {
   min-height: 100%;
