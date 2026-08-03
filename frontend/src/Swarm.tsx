@@ -376,10 +376,10 @@ function SwarmDetail({ name, onBack, openTerm, onGone }: { name: string; onBack:
         </div>
       ) : (
         <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateRows: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12, minHeight: 0, minWidth: 0 }}>
+          <div className="tt-2col" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12, minHeight: 0, minWidth: 0 }}>
             {topo}{plaza}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12, minHeight: 0, minWidth: 0 }}>
+          <div className="tt-2col" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12, minHeight: 0, minWidth: 0 }}>
             {board}{inbox}
           </div>
         </div>

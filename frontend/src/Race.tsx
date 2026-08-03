@@ -324,7 +324,7 @@ export function RaceComparePanel({ race, onClose, openTerm, onChanged }: {
             })()
             const dirtyCount = (l.wt?.dirty || 0) + (l.wt?.untracked || 0)
             return (
-              <div key={l.ct.session} onClick={() => setSel(l.ct.session)} style={{
+              <div key={l.ct.session} className="tt-racecol" onClick={() => setSel(l.ct.session)} style={{
                 flex: '1 1 220px', minWidth: 220, maxWidth: 340, cursor: 'pointer',
                 border: isSel ? '1px solid #58a6ff' : '1px solid var(--border-subtle, #30363d)',
                 boxShadow: isSel ? '0 0 0 1px rgba(88,166,255,.25), 0 0 20px rgba(31,111,235,.12)' : undefined,

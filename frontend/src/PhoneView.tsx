@@ -234,7 +234,7 @@ export default function PhoneView() {
           size="small"
           showSearch
           placeholder={t('phone.launchApp')}
-          style={{ width: 240 }}
+          style={{ width: '100%', maxWidth: 240 }}
           value={null}
           onChange={launch}
           onDropdownVisibleChange={(open) => { if (open) loadApps() }}

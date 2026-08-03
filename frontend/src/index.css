@@ -476,6 +476,42 @@ html[data-size="compact"] .ant-list-item { padding-inline: 0; }
 /* 卡片之间用 --gap，不各写各的 margin */
 html[data-size="compact"] .ant-card + .ant-card { margin-top: var(--gap); }
 
+/* ── 逐页塌陷（13 §6）：几处写死的多栏/固定宽在 compact 下必然溢出 ──
+   这些都是行内 style 写死的，所以只能用 !important 盖；改动集中在这里，
+   页面本身不必各加一个 isPhone 分支。 */
+/* 蜂群：Swarm.tsx 写死两列，360 屏上每列 170，拓扑与成员卡都不可读 */
+html[data-size="compact"] .tt-2col { grid-template-columns: minmax(0, 1fr) !important; }
+/* 并行竞赛：三栏对比 flex 1 1 220px，compact 下改单栏纵向比 */
+html[data-size="compact"] .tt-racecol { flex: 1 1 100% !important; max-width: none !important; }
+
+/* 设置 / Env：Form label 左对齐 + 输入框固定宽 120–220，手机上标签和输入挤成一行。
+   一条覆盖收掉，不逐个表单改（13 §6）。 */
+html[data-size="compact"] .ant-form-item-row { flex-direction: column; align-items: stretch; }
+html[data-size="compact"] .ant-form-item-label {
+  padding: 0 0 4px; text-align: left; flex: 0 0 auto; max-width: 100%;
+}
+html[data-size="compact"] .ant-form-item-label > label { height: auto; }
+html[data-size="compact"] .ant-form-item-control { flex: 1 1 auto; max-width: 100%; }
+html[data-size="compact"] .ant-form-item-control-input-content > .ant-input,
+html[data-size="compact"] .ant-form-item-control-input-content > .ant-input-affix-wrapper,
+html[data-size="compact"] .ant-form-item-control-input-content > .ant-input-number,
+html[data-size="compact"] .ant-form-item-control-input-content > .ant-select,
+html[data-size="compact"] .ant-form-item-control-input-content > .ant-picker { width: 100% !important; }
+
+/* 定时任务卡片（13 §6：表格 → 卡片） */
+.tt-cron-card {
+  padding: 12px; border: 1px solid var(--border-subtle); border-radius: var(--r-card);
+  background: var(--bg-container); display: flex; flex-direction: column; gap: 7px;
+}
+.tt-cron-card .hd { display: flex; align-items: center; gap: 8px; }
+.tt-cron-card .hd b { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-cron-card .sum { color: var(--text-dim); font-size: var(--fs-meta); }
+.tt-cron-card .meta {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  color: var(--text-dimmer); font-size: var(--fs-meta);
+}
+.tt-cron-card .ops { display: flex; gap: 6px; flex-wrap: wrap; }
+
 /* ── 细滚动条：更窄，hover 才稍亮 ── */
 * { scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
 *::-webkit-scrollbar { width: 9px; height: 9px; }
