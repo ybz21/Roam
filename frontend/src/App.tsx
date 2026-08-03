@@ -602,7 +602,7 @@ export default function App() {
   )
 
   const pages: any = {
-    overview: <OverviewPage openTerm={openTerm} renderSessions={() => <Sessions openTerm={openTerm} closeTerm={closeTerm} activeTerm={active} />} />,
+    overview: <OverviewPage openTerm={openTerm} renderSessions={() => <Sessions openTerm={openTerm} closeTerm={closeTerm} activeTerm={active} embedded />} />,
     swarm: <Swarm openTerm={openTerm} initialSwarm={swarmSub || undefined} onNav={(n) => { location.hash = n ? '#/swarm/' + encodeURIComponent(n) : '#/swarm' }} />,
     projects: <Projects openTerm={openTerm} closeTerm={closeTerm} initialKey={projectSub || undefined} activeTerm={active} />,
     sessions: <Sessions openTerm={openTerm} closeTerm={closeTerm} activeTerm={active} />,
@@ -2291,7 +2291,11 @@ export function CloseWorktreeModal({ info, onClose, onDone }: {
 }
 
 // ── 会话（可新建/指定目录 / 进终端 / 关闭） ──
-function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) => void; closeTerm: (n: string) => void; activeTerm: string | null }) {
+function Sessions({ openTerm, closeTerm, activeTerm, embedded }: {
+  openTerm: (n: string) => void; closeTerm: (n: string) => void; activeTerm: string | null
+  /** 嵌在概览「会话」tab 里：不渲染页头（外面的 tab 已经说了这是会话） */
+  embedded?: boolean
+}) {
   const { phone: isPhone } = useLayout()
   const [list, setList] = useState<any[]>([])
   const [cc, setCc] = useState<Record<string, boolean>>({})
@@ -2563,33 +2567,43 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
   }
   const compareRace = races.find((rc) => rc.id === compareId) || null
 
-  return (
-    <Card
-      // 手机上标题和两枚按钮塞不进一行（标题被挤没、按钮各自截断），改为按钮独占一行
-      title={isPhone ? undefined : <Space size={8}>{t('nav.sessions')}<Tag style={{ margin: 0 }}>{cnt('all')}</Tag></Space>}
-      extra={isPhone ? undefined : <Space size={8}>
-        <Tooltip title={t('worktree.entryTip')}>
-          <Button onClick={() => { setWtDir(undefined); setWtOpen(true) }}>{t('worktree.entry')}</Button>
-        </Tooltip>
+  // 会话动作：Worktree 管理 + 新建（两处复用，桌面进页头、手机独占一行）
+  const sessionActions = (
+    <>
+      <Tooltip title={t('worktree.entryTip')}>
+        <Button style={isPhone ? { flex: 1, minWidth: 0 } : undefined}
+          onClick={() => { setWtDir(undefined); setWtOpen(true) }}>{t('worktree.entry')}</Button>
+      </Tooltip>
+      {/* 必须钉住 flex：Dropdown.Button 内的 Space.Compact 是块级 flex 子项，不钉就会
+          一路撑开并盖住左边那枚按钮（项目页页头、手机头部都踩过同一个坑） */}
+      <span style={{ flex: '0 0 auto', display: 'inline-flex' }}>
         {/* 新建下拉(W5 入口)：主点 = 新建会话；菜单 = 新建竞赛 */}
         <Dropdown.Button type="primary" onClick={() => setNewOpen(true)}
           menu={{ items: [{ key: 'race', label: t('race.new') }], onClick: () => setRaceOpen(true) }}>
           + {t('session.new')}
         </Dropdown.Button>
-      </Space>}
-    >
+      </span>
+    </>
+  )
+
+  return (
+    // 不再套 Card：嵌在概览「会话」tab 里时，卡片边框 + 「会话 13」标题与外面的 tab
+    // 完全重复——一层壳里套一层同名的壳。独立页则用与概览/项目同一套页头。
+    <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      {!embedded && (
+        <header className="tt-pagehead" style={{ marginBottom: 14 }}>
+          <div className="ttl">
+            <div className="kicker">{t('nav.groupWorkspace')}</div>
+            <h2>{t('nav.sessions')}</h2>
+            <p>{t('session.subtitle')}</p>
+          </div>
+          {!isPhone && <div className="acts">{sessionActions}</div>}
+        </header>
+      )}
+      {/* 手机才需要自己占一行（横向放不下）；桌面嵌入态并进下面搜索那一行，
+          否则「Worktree 管理 / ＋新建会话」白占一整行 */}
       {isPhone && (
-        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-          <Button style={{ flex: 1, minWidth: 0 }} onClick={() => { setWtDir(undefined); setWtOpen(true) }}>{t('worktree.entry')}</Button>
-          {/* 必须钉住 flex：Dropdown.Button 内的 Space.Compact 是块级 flex 子项，
-              不钉就会一路撑开并盖住左边那枚按钮（项目页页头踩过同一个坑） */}
-          <span style={{ flex: '0 0 auto', display: 'inline-flex' }}>
-            <Dropdown.Button type="primary" onClick={() => setNewOpen(true)}
-              menu={{ items: [{ key: 'race', label: t('race.new') }], onClick: () => setRaceOpen(true) }}>
-              + {t('session.new')}
-            </Dropdown.Button>
-          </span>
-        </div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>{sessionActions}</div>
       )}
       {/* 工具条：搜索 + 排序同一行，类型筛选另起一行 */}
       <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -2607,6 +2621,7 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
             title={sortAsc ? t('session.sortAsc') : t('session.sortDesc')}>
             {sortAsc ? '↑' : '↓'}
           </Button>
+          {embedded && !isPhone && sessionActions}
         </div>
         {/* block 会把 6 项等分：392 的屏宽上每格只剩 ~60px，标签全被截成「全部…」，
             六个筛选器长得一模一样。手机改成按内容宽 + 整条横滑。 */}
@@ -2767,7 +2782,7 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
         {compareRace && <RaceComparePanel race={compareRace} onClose={() => setCompareId('')}
           openTerm={openTerm} onChanged={() => { reloadRaces(); load() }} />}
       </Suspense>
-    </Card>
+    </div>
   )
 }
 

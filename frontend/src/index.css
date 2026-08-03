@@ -301,6 +301,20 @@ body {
    包含块，全局打开会把 Git 面板 / 浮动文件抽屉这些「视口级」浮层挪进 Canvas 里。 */
 .tt-canvas[data-cq='on'] { container: canvas / inline-size; }
 
+/* ── 页头（14 §5.1 / §6.1）：一级页面共用一套——眉标 + 标题 + 一句话说明 ──
+   概览先做出来的这套，项目页照它对齐；再有新页面也照抄这三行，不要各写各的标题行。 */
+.tt-pagehead { display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
+.tt-pagehead .ttl { min-width: 0; flex: 1 1 320px; }
+.tt-pagehead .kicker {
+  font-size: 10.5px; font-weight: 800; letter-spacing: .14em;
+  color: var(--text-dimmer); text-transform: uppercase;
+}
+.tt-pagehead h2 {
+  margin: 5px 0 0; font-size: 22px; line-height: 1.18; letter-spacing: -.02em; color: var(--text-bright);
+}
+.tt-pagehead p { margin: 6px 0 0; font-size: var(--fs-meta); color: var(--text-dim); }
+.tt-pagehead .acts { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
 /* ── 页面骨架：所有一级页面从同一个左上角起笔，卡片和工具区间距一致 ── */
 .tt-page {
   min-height: 100%;

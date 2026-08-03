@@ -18,12 +18,6 @@ import { usePreferences, savePreferences } from './preferences'
 
 const OV_CSS = `
 .ov{display:flex;flex-direction:column;gap:14px;padding-bottom:32px;max-width:var(--content-overview)}
-.ov-head{display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap}
-.ov-title{min-width:0;flex:1 1 320px}
-.ov-kicker{font-size:10.5px;font-weight:800;letter-spacing:.14em;color:var(--text-dimmer);text-transform:uppercase}
-.ov-title h2{margin:5px 0 0;font-size:22px;line-height:1.18;letter-spacing:-.02em;color:var(--text-bright)}
-.ov-title p{margin:6px 0 0;font-size:var(--fs-meta);color:var(--text-dim)}
-.ov-acts{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 
 .ov-sum{display:flex;align-items:center;gap:8px 18px;flex-wrap:wrap;min-height:38px;padding:8px 12px;
   border:1px solid var(--border-subtle);border-radius:10px;background:var(--bg-container);font-size:var(--fs-meta)}
@@ -406,9 +400,9 @@ export default function Overview({ openTerm, renderSessions }: { openTerm: (n: s
       <style>{OV_CSS}</style>
       <div className="ov">
         {/* ① 问候区：首屏第一句话回答「今天有几件事需要你」，零事项时是安静状态 */}
-        <header className="ov-head ov-in">
-          <div className="ov-title">
-            <div className="ov-kicker">{kicker}</div>
+        <header className="tt-pagehead ov-in">
+          <div className="ttl">
+            <div className="kicker">{kicker}</div>
             <h2>{greet}{cards.length > 0
               ? t('overview.headlineNeeds', { count: cards.length })
               : t('overview.headlineQuiet')}</h2>

@@ -381,10 +381,19 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
     // 参照系，而这一层并不真的滚动（真正滚的是 .tt-canvas），于是页头永远粘不住。
     <div>
       <div className="prj-wrap-wide">
-        {/* sticky subheader（14 §6.1）：标题 / 搜索 / 筛选 / 排序 / 新建。
-            滚到项目列表深处时这一条还在——筛选条件跟着内容滚走，等于要滚回顶部才能改。 */}
+        {/* 页头与概览共用一套（.tt-pagehead）：眉标 + 标题 + 一句话。原来这里只有一个
+            16px 的「项目」挤在搜索框左边，和概览那页完全不像同一个产品。 */}
+        <header className="tt-pagehead" style={{ marginBottom: 14 }}>
+          <div className="ttl">
+            <div className="kicker">{t('nav.groupWorkspace')}</div>
+            <h2>{t('project.title')}</h2>
+            <p>{t('project.subtitle')}</p>
+          </div>
+        </header>
+
+        {/* sticky subheader（14 §6.1）：搜索 / 筛选 / 排序。滚到项目列表深处时这一条还在——
+            筛选条件跟着内容滚走，等于要滚回顶部才能改。 */}
         <div className="prj-subbar">
-          <span style={{ fontSize: 16, fontWeight: 700, flex: '0 0 auto' }}>{t('project.title')}</span>
           <Input allowClear size="small" value={q} onChange={(e) => setQ(e.target.value)}
             placeholder={t('project.searchPlaceholder')} style={{ width: 200 }} />
           {([
