@@ -63,11 +63,25 @@ for (const abs of files) {
   if (file.includes('src/i18n/')) continue
 
   const lines = readFileSync(abs, 'utf8').split(/\r?\n/)
+  // 块注释（含 JSX 的 {/* … */}）要整段跳过。只剥 // 的话，一句提到 Button/Modal
+  // 的中文注释就会被当成硬编码文案——注释是写给人看的，本来就该是中文。
+  let inBlock = false
   lines.forEach((raw, i) => {
     const lineNo = i + 1
     const trimmed = raw.trim()
+    if (inBlock) {
+      const end = raw.indexOf('*/')
+      if (end < 0) return
+      inBlock = false
+      raw = raw.slice(end + 2)
+    }
     if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('*')) return
-    const line = stripLineComment(raw)
+    let line = stripLineComment(raw)
+    const open = line.lastIndexOf('/*')
+    if (open >= 0 && line.indexOf('*/', open) < 0) {
+      inBlock = true
+      line = line.slice(0, open)
+    }
 
     for (const attr of attrNames) {
       const attrRe = new RegExp(`${attr}=["']([^"']+)["']`, 'g')

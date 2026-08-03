@@ -64,7 +64,13 @@ const PRJ_CSS = `
 .prj-pill.on.cyan{color:#39c5cf;border-color:rgba(57,197,207,.5);background:rgba(57,197,207,.1)}
 .prj-pill.dis{opacity:.4;cursor:not-allowed}
 
-.prj-tabs{display:flex;gap:2px;margin:20px 0 2px;border-bottom:1px solid var(--border-subtle)}
+/* 项目头 64 / Tabs 40，两者 sticky（14 §6.2）：往下翻任务流时「我在哪个项目、
+   要新建什么、在看哪个 tab」始终在手边 */
+.prj-head{position:sticky;top:0;z-index:calc(var(--z-sticky) + 1);min-height:64px;
+  background:var(--bg-base);border-bottom:1px solid var(--border-subtle);margin-bottom:12px}
+.prj-tabs{position:sticky;top:64px;z-index:var(--z-sticky);
+  display:flex;gap:2px;margin:20px 0 2px;min-height:40px;
+  background:var(--bg-base);border-bottom:1px solid var(--border-subtle)}
 .prj-tab{padding:8px 13px 9px;font-size:13px;color:var(--text-dim);cursor:pointer;user-select:none;
   display:inline-flex;align-items:center;gap:6px;border-bottom:2px solid transparent;margin-bottom:-1px;
   transition:color .15s}
@@ -361,7 +367,9 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
   )
 
   return (
-    <div style={{ height: '100%', overflow: 'auto' }}>
+    // 这里**不能**加 overflow:auto——任何非 visible 的祖先都会成为 sticky 的
+    // 参照系，而这一层并不真的滚动（真正滚的是 .tt-canvas），于是页头永远粘不住。
+    <div>
       <div className="prj-wrap-wide">
         {/* sticky subheader（14 §6.1）：标题 / 搜索 / 筛选 / 排序 / 新建。
             滚到项目列表深处时这一条还在——筛选条件跟着内容滚走，等于要滚回顶部才能改。 */}
@@ -572,6 +580,13 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
   const [races, setRaces] = useState<any[]>([])
   const [swarms, setSwarms] = useState<any[]>([])
   const [swarmOpen, setSwarmOpen] = useState(false)
+  // 「＋ 开始」的主动作：回到 composer 并聚焦——这一页最主要的事就是在这儿描述需求
+  const composerRef = useRef<HTMLDivElement>(null)
+  const promptRef = useRef<any>(null)
+  const focusComposer = () => {
+    composerRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    promptRef.current?.focus?.()
+  }
   const [activity, setActivity] = useState<any[]>([])
   const [finishing, setFinishing] = useState<any>(null)
   const [swarmExtras, setSwarmExtras] = useState<Record<string, { cols: Record<string, number>; last?: any }>>({})
@@ -1095,10 +1110,13 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
   )
 
   return (
-    <div style={{ height: '100%', overflow: 'auto' }}>
+    // 这里**不能**加 overflow:auto——任何非 visible 的祖先都会成为 sticky 的
+    // 参照系，而这一层并不真的滚动（真正滚的是 .tt-canvas），于是页头永远粘不住。
+    <div>
       <div className="prj-wrap">
-        {/* 项目头：面包屑 | 名称 / 路径 · ⎇主干@HEAD | Git 面板 */}
-        <div className="prj-in" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+        {/* 项目头：面包屑 | 名称 / 路径 · ⎇主干@HEAD | 主操作。sticky（14 §6.2）——
+            往下翻任务流时"我在哪个项目、要新建什么"不该跟着滚走。 */}
+        <div className="prj-in prj-head" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Button type="text" size="small" onClick={() => { location.hash = '#/projects' }}
             style={{ color: 'var(--text-dim)', paddingInline: 6, flex: '0 0 auto' }}>‹ {t('project.title')}</Button>
           <span style={{ width: 1, height: 18, background: 'var(--border-subtle)', flex: '0 0 auto' }} />
@@ -1119,13 +1137,30 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
               </Tooltip>
             </div>
           </div>
-          <Button size="small" onClick={newShell}>{t('project.shell')}</Button>
           {isGit && <Button size="small" onClick={() => setGitOpen(true)}>{t('project.gitPanel')}</Button>}
+          {/* 「新建会话 / 蜂群 / Race / 命令行」原来散在页头和编队 tab 里，两处入口互相不知道
+              对方存在。集中成一枚 split button：主动作 = 回到 composer 描述需求（这一页最主要的
+              事），其余进菜单（14 §6.2）。 */}
+          {/* 必须包一层并钉住 flex：Dropdown.Button 内部的 Space.Compact 在 flex 容器里
+              是块级 flex 子项，会一路撑到 723px，把左边的项目名挤成 0 宽 */}
+          <span style={{ flex: '0 0 auto', display: 'inline-flex' }}>
+          <Dropdown.Button size="small" type="primary" trigger={['click']}
+            onClick={focusComposer}
+            menu={{ items: [
+              { key: 'shell', label: t('project.shell'), onClick: newShell },
+              ...(isGit ? [
+                { key: 'swarm', label: t('project.newSwarm'), onClick: () => setSwarmOpen(true) },
+                { key: 'race', label: t('project.newRace'), onClick: () => setRaceOpen(true) },
+              ] : []),
+            ] }}>
+            ＋ {t('project.start')}
+          </Dropdown.Button>
+          </span>
         </div>
 
         {/* Composer（hero）：需求 ⏎ 开干 */}
-        <div className="prj-composer prj-in" style={{ animationDelay: '60ms' }}>
-          <Input.TextArea value={prompt} onChange={(e) => setPrompt(e.target.value)}
+        <div ref={composerRef} className="prj-composer prj-in" style={{ animationDelay: '60ms' }}>
+          <Input.TextArea ref={promptRef} value={prompt} onChange={(e) => setPrompt(e.target.value)}
             placeholder={isGit ? t('project.composerPlaceholder') : t('project.composerPlain')} autoSize={{ minRows: 2, maxRows: 6 }} variant="borderless"
             onPaste={onPasteComposer}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); goCreate() } }} />
@@ -1156,7 +1191,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
           </div>
         </div>
 
-        {/* Tabs：任务 | Worktree | 编队 | 活动（非 git 只有任务） */}
+        {/* Tabs：任务 | Worktree | 编队 | 活动（非 git 只有任务）。同样 sticky，贴在项目头下面 */}
         <div className="prj-tabs prj-in" style={{ animationDelay: '110ms' }}>
           {tabBtn('tasks', t('project.tasks'), mine.length + unfinished.length + cleanable.length + clean.length)}
           {isGit && tabBtn('wt', 'Worktree', wts.length)}
@@ -1520,8 +1555,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
           })}
           {races.length === 0 && swarms.length === 0 && <div className="prj-empty">{t('project.formation.empty')}</div>}
           <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
-            <Button size="small" onClick={() => setRaceOpen(true)}>{t('project.newRace')}</Button>
-            <Button size="small" onClick={() => setSwarmOpen(true)}>{t('project.newSwarm')}</Button>
+            {/* 新建入口统一收在页头的「＋ 开始」里，这里不再重复（14 §6.2） */}
           </div>
         </>)}
 

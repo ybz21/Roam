@@ -1400,6 +1400,7 @@ const zhCN = {
   'project.copyId': '复制项目 id',
   'project.idCopied': '已复制项目 id',
   'project.renamed': '已重命名',
+  'project.start': '开始',
   'project.shell': '＋ 命令行',
   'swarm.rosterLabel': '班子建议（写进指挥开场白，最终由指挥按 dev-roles 拆定）',
   'swarm.rosterTooMany': '建议超过 5 个角色——注意资源开销，指挥会按需精简',

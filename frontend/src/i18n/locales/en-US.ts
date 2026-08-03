@@ -1400,6 +1400,7 @@ const enUS = {
   'project.copyId': 'Copy project id',
   'project.idCopied': 'Project id copied',
   'project.renamed': 'Renamed',
+  'project.start': 'Start',
   'project.shell': '+ Shell',
   'swarm.rosterLabel': 'Roster suggestion (goes into leader kickoff; leader finalizes per dev-roles)',
   'swarm.rosterTooMany': 'More than 5 roles suggested — mind the cost; the leader may trim',
