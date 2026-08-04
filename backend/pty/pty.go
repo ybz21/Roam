@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 
 	creackpty "github.com/creack/pty"
 	"github.com/gin-gonic/gin"
@@ -335,6 +336,14 @@ func Handler(c *gin.Context) {
 		_, _ = cmd.Process.Wait()
 	}()
 	lastSize := *sz
+	// pty 输出和控制消息 pong 可能同时写 WebSocket。gorilla 只允许一个并发 writer，
+	// 所有连接级写入必须从这个小闸门经过，否则后台恢复探测会偶发 concurrent write panic。
+	var writeMu sync.Mutex
+	writeMessage := func(messageType int, data []byte) error {
+		writeMu.Lock()
+		defer writeMu.Unlock()
+		return conn.WriteMessage(messageType, data)
+	}
 
 	// pty → ws
 	go func() {
@@ -342,12 +351,12 @@ func Handler(c *gin.Context) {
 		for {
 			n, err := ptmx.Read(buf)
 			if n > 0 {
-				if werr := conn.WriteMessage(websocket.BinaryMessage, buf[:n]); werr != nil {
+				if werr := writeMessage(websocket.BinaryMessage, buf[:n]); werr != nil {
 					return
 				}
 			}
 			if err != nil {
-				conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+				_ = writeMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 				conn.Close()
 				return
 			}
@@ -374,9 +383,21 @@ func Handler(c *gin.Context) {
 				Lines int    `json:"lines"`
 				Col   int    `json:"col"`
 				Row   int    `json:"row"`
+				ID    string `json:"id"`
 			}
 			if json.Unmarshal(data, &ctrl) == nil && ctrl.Type != "" {
 				switch ctrl.Type {
+				case "ping":
+					// 浏览器从长时间后台恢复时先探测连接，不再无条件 close 全部终端。
+					// pong 只证明这条 WS/PTY 桥仍可双向通信，不触碰 tmux 尺寸和屏幕内容。
+					pong, _ := json.Marshal(struct {
+						Type string `json:"type"`
+						ID   string `json:"id"`
+					}{Type: "pong", ID: ctrl.ID})
+					if err := writeMessage(websocket.TextMessage, pong); err != nil {
+						return
+					}
+					continue
 				case "resize":
 					// 防御异常尺寸：前端布局未就绪 / 面板折叠 / 离屏挂载时可能发来极窄的 cols(如 2)。
 					// 因 window-size=latest，这会把共享会话挤成「窄条」，且客户端断开后仍卡住——

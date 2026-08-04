@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<title>手机顶部 chrome 重设计</title>
+<style>
+:root{
+  --bg:#0d1117; --card:#161b22; --line:#21262d; --line2:#30363d;
+  --tx:#e6edf3; --dim:#8b949e; --dimmer:#6e7681;
+  --acc:#58a6ff; --solid:#4e90dc; --soft:rgba(31,111,235,.14); --accb:rgba(88,166,255,.45);
+  --amber:#d29922; --green:#3fb950;
+  --micro:11px; --meta:12px; --sm:13px; --body:15px; --lg:16px; --title:22px;
+  --r1:6px; --r2:10px; --r3:14px; --rp:999px;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:#07090d;color:var(--tx);
+  font:14px/1.5 Inter,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{max-width:1320px;margin:0 auto;padding:28px 20px 60px}
+h1{font-size:20px;margin:0 0 4px}
+.lede{color:var(--dim);font-size:var(--sm);margin:0 0 26px;max-width:70ch;line-height:1.7}
+.row{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start}
+.col{flex:0 0 auto}
+.cap{font-size:var(--meta);color:var(--dim);margin:0 0 8px;display:flex;align-items:center;gap:8px}
+.cap b{color:var(--tx);font-weight:600;font-size:var(--sm)}
+.tag{font-size:var(--micro);padding:1px 7px;border-radius:var(--rp);border:1px solid var(--line2);color:var(--dimmer)}
+.tag.bad{color:#f2a6a0;border-color:rgba(248,81,73,.4)}
+.tag.good{color:#7fd18f;border-color:rgba(63,185,80,.4)}
+
+/* 手机框 */
+.ph{width:360px;height:640px;border-radius:26px;border:1px solid var(--line2);
+  background:var(--bg);overflow:hidden;position:relative;display:flex;flex-direction:column}
+.ph .chrome{flex:0 0 auto}
+.ph .body{flex:1;min-height:0;overflow:hidden;padding:0 12px}
+.ph .nav{flex:0 0 56px;display:flex;border-top:1px solid var(--line);background:var(--card)}
+.ph .nav i{flex:1;display:grid;place-items:center;font-size:var(--micro);color:var(--dimmer);font-style:normal}
+.ph .nav i.on{color:var(--acc)}
+.pad{padding:0 12px}
+
+/* 现状 */
+.kicker{font-size:var(--micro);letter-spacing:.12em;color:var(--dimmer);text-transform:uppercase;font-weight:700}
+h2.big{font-size:var(--title);margin:4px 0 0;letter-spacing:-.02em}
+.sub{font-size:var(--sm);color:var(--dim);margin:8px 0 0}
+.search{height:32px;border:1px solid var(--line2);border-radius:var(--r2);background:var(--card);
+  display:flex;align-items:center;padding:0 10px;color:var(--dimmer);font-size:var(--meta);gap:8px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.chip{height:28px;padding:0 12px;border-radius:var(--rp);border:1px solid var(--line2);
+  display:inline-flex;align-items:center;gap:6px;font-size:var(--meta);color:var(--dim);white-space:nowrap}
+.chip.on{color:var(--acc);border-color:var(--accb);background:var(--soft)}
+.chip .n{font:var(--micro)/1 ui-monospace,monospace;color:var(--dimmer)}
+.seg{display:inline-flex;gap:2px;margin-top:8px}
+.seg span{padding:5px 10px;border-radius:var(--r2);font-size:var(--meta);color:var(--dim)}
+.seg span.on{background:var(--solid);color:#fff}
+
+/* 新页栏 */
+.bar{height:44px;display:flex;align-items:center;gap:10px;padding:0 12px}
+.bar .name{font-size:var(--sm);font-weight:600;color:var(--tx)}
+.bar .cnt{font:var(--micro)/1 ui-monospace,monospace;color:var(--dimmer);
+  border:1px solid var(--line);border-radius:var(--rp);padding:3px 7px}
+.bar .sp{flex:1}
+.ico{width:32px;height:32px;display:grid;place-items:center;border-radius:var(--r2);
+  border:1px solid var(--line2);color:var(--dim);font-size:14px}
+.pill{height:32px;padding:0 11px;display:inline-flex;align-items:center;gap:7px;border-radius:var(--r2);
+  border:1px solid var(--line2);color:var(--dim);font-size:var(--meta);white-space:nowrap}
+.pill.on{color:var(--acc);border-color:var(--accb);background:var(--soft)}
+.bar.searching{gap:8px}
+.bar .inp{flex:1;height:32px;border:1px solid var(--accb);border-radius:var(--r2);background:var(--card);
+  display:flex;align-items:center;padding:0 10px;color:var(--dimmer);font-size:var(--meta);gap:8px}
+
+/* 卡片 */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r3);padding:12px 14px;margin-bottom:10px}
+.card b{font-size:var(--body)}
+.card .p{font:var(--micro)/1.3 ui-monospace,monospace;color:var(--dimmer);margin-top:2px}
+.card .m{font-size:var(--meta);color:var(--dim);margin-top:8px}
+.task{background:#0b0f14;border-radius:var(--r1);padding:7px 9px;margin-top:8px;display:flex;align-items:center;gap:8px;font-size:var(--sm)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--green);flex:0 0 auto}
+.task .t{margin-left:auto;font-size:var(--meta);color:var(--dimmer)}
+
+/* 概览 */
+.greet{font-size:var(--title);letter-spacing:-.02em;margin:0}
+.gsub{font-size:var(--sm);color:var(--dim);margin:6px 0 0}
+.stat{display:flex;gap:16px;align-items:center;height:40px;padding:0 12px;border-radius:var(--r2);
+  background:var(--card);font-size:var(--meta);color:var(--dim);margin-top:12px}
+.stat b{font:700 var(--sm)/1 ui-monospace,monospace;color:var(--tx)}
+.stat i{width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block;margin-right:6px}
+.stat i.a{background:var(--amber)} .stat i.z{background:var(--line2)}
+.tabs{display:flex;align-items:center;gap:2px;border-bottom:1px solid var(--line);margin-top:12px}
+.tabs s{text-decoration:none;padding:10px 12px;font-size:var(--body);color:var(--dim);border-bottom:2px solid transparent}
+.tabs s.on{color:var(--tx);font-weight:600;border-bottom-color:var(--acc)}
+.tabs .go{margin-left:auto;font-size:var(--meta);color:var(--acc)}
+
+/* 标注 */
+.note{margin-top:10px;font-size:var(--meta);color:var(--dim);line-height:1.65;max-width:360px}
+.note u{text-decoration:none;color:var(--tx)}
+.meas{position:absolute;right:6px;background:rgba(210,153,34,.14);border:1px solid rgba(210,153,34,.4);
+  color:#e3b341;font:var(--micro)/1 ui-monospace,monospace;padding:2px 5px;border-radius:4px}
+hr{border:0;border-top:1px solid var(--line);margin:34px 0 26px}
+h3{font-size:var(--lg);margin:0 0 6px}
+</style></head><body><div class="wrap">
+
+<h1>手机顶部 chrome 重设计</h1>
+<p class="lede">
+问题：手机上「页面标题 + 搜索 + 筛选 + 排序」占掉四分之一屏，而其中信息量最低的恰恰是最占地方的那部分——
+底栏已经高亮着「项目」，页面顶上再写一遍大号「项目」，等于用 100px 说了一句用户已经知道的话。
+下面按页各给一版重设计，右侧标注的是内容起点 y（360×640 的框）。
+</p>
+
+<h3>一、项目页</h3>
+<div class="row">
+
+  <div class="col">
+    <p class="cap"><b>现状</b><span class="tag bad">内容起点 133 / 21%</span></p>
+    <div class="ph">
+      <div class="chrome pad" style="padding-top:12px">
+        <h2 class="big" style="font-size:16px;margin:0">项目</h2>
+        <div class="search" style="margin-top:12px">⌕ 搜索项目或路径</div>
+        <div class="chips" style="flex-wrap:nowrap;overflow:hidden">
+          <span class="chip on">全部 <span class="n">12</span></span>
+          <span class="chip">活跃 <span class="n">8</span></span>
+          <span class="chip">待收尾 <span class="n">1</span></span>
+          <span class="seg" style="margin:0"><span class="on">名称</span><span>创建</span></span>
+        </div>
+      </div>
+      <div class="body" style="margin-top:12px">
+        <div class="card"><b>临时</b><div class="p">/home/ai/codes/tmp</div>
+          <div class="task"><i class="dot"></i>你看看-jetson@192<span class="t">21 分钟前</span></div>
+          <div class="task"><i class="dot"></i>ds4双机部署<span class="t">25 分钟前</span></div></div>
+        <div class="card"><b>线上问题排查</b><div class="p">/home/ai/codes</div>
+          <div class="task"><i class="dot"></i>响应布局<span class="t">21 分钟前</span></div></div>
+      </div>
+      <div class="nav"><i>概览</i><i class="on">项目</i><i>文件</i><i>更多</i></div>
+    </div>
+    <p class="note">三层 chrome：标题一行、搜索一行、筛选+排序一行。标题「项目」与底栏高亮完全重复。</p>
+  </div>
+
+  <div class="col">
+    <p class="cap"><b>方案 B · 筛选带即页栏</b><span class="tag good">内容起点 56 / 9%</span></p>
+    <div class="ph">
+      <div class="chrome">
+        <div class="bar" style="gap:8px">
+          <span class="chip on">全部 <span class="n">12</span></span>
+          <span class="chip">活跃 <span class="n">8</span></span>
+          <span class="chip">待收尾 <span class="n">1</span></span>
+          <span class="sp"></span>
+          <span class="ico">⌕</span>
+          <span class="ico">⇅</span>
+        </div>
+      </div>
+      <div class="body">
+        <div class="card"><b>临时</b><div class="p">/home/ai/codes/tmp</div>
+          <div class="task"><i class="dot"></i>你看看-jetson@192<span class="t">21 分钟前</span></div>
+          <div class="task"><i class="dot"></i>ds4双机部署<span class="t">25 分钟前</span></div></div>
+        <div class="card"><b>线上问题排查</b><div class="p">/home/ai/codes</div>
+          <div class="task"><i class="dot"></i>响应布局<span class="t">21 分钟前</span></div>
+          <div class="task"><i class="dot"></i>ssh-ai@192<span class="t">21 分钟前</span></div></div>
+        <div class="card"><b>blade-agent</b><div class="p">/home/ai/codes/blade-agent</div>
+          <div class="m">1 任务 · 2 worktree</div></div>
+      </div>
+      <div class="nav"><i>概览</i><i class="on">项目</i><i>文件</i><i>更多</i></div>
+    </div>
+    <p class="note">
+      <u>一行里没有一个字是重复底栏的</u>：chip 自己就说明了「项目列表、共 12 个」，
+      连页名都不必写。筛选带左对齐可横滑，右侧钉住搜索与排序两枚图标（<u>不随滑动跑掉</u>）。</p>
+  </div>
+
+  <div class="col">
+    <p class="cap"><b>方案 B · 搜索展开 / 排序 sheet</b></p>
+    <div class="ph">
+      <div class="chrome">
+        <div class="bar searching">
+          <span class="inp">⌕ 搜索项目或路径</span>
+          <span class="pill" style="border:0">取消</span>
+        </div>
+      </div>
+      <div class="body" style="position:relative">
+        <div class="card"><b>临时</b><div class="p">/home/ai/codes/tmp</div>
+          <div class="task"><i class="dot"></i>你看看-jetson@192<span class="t">21 分钟前</span></div></div>
+        <div style="position:absolute;left:0;right:0;bottom:0;background:var(--card);
+             border-top:1px solid var(--line2);border-radius:var(--r3) var(--r3) 0 0;padding:10px 12px 16px">
+          <div style="width:36px;height:4px;border-radius:2px;background:var(--line2);margin:0 auto 12px"></div>
+          <div style="font-size:var(--meta);color:var(--dimmer);margin-bottom:6px">排序</div>
+          <div style="display:flex;flex-direction:column;gap:2px">
+            <div style="height:44px;display:flex;align-items:center;padding:0 10px;border-radius:var(--r2);
+                 background:var(--soft);color:var(--acc);font-size:var(--body)">名称<span style="margin-left:auto">✓</span></div>
+            <div style="height:44px;display:flex;align-items:center;padding:0 10px;font-size:var(--body);color:var(--tx)">创建时间</div>
+            <div style="height:44px;display:flex;align-items:center;padding:0 10px;font-size:var(--body);color:var(--tx)">最近活跃</div>
+          </div>
+        </div>
+      </div>
+      <div class="nav"><i>概览</i><i class="on">项目</i><i>文件</i><i>更多</i></div>
+    </div>
+    <p class="note">搜索<u>原地</u>展开成输入框；排序走底部 sheet，行高 44 拇指够得着，
+    且<u>当前排序有勾</u>——页栏上看不见排序状态这件事，由 sheet 补上。</p>
+  </div>
+
+</div>
+
+<hr>
+
+<h3>二、概览页</h3>
+<div class="row">
+
+  <div class="col">
+    <p class="cap"><b>现状</b><span class="tag bad">四格里两格是 0</span></p>
+    <div class="ph">
+      <div class="chrome pad" style="padding-top:12px">
+        <h2 class="greet">晚上好，今天有 1 件事需要你</h2>
+        <div class="stat">
+          <span><i></i><b>13</b> 运行中</span>
+          <span><i class="z"></i><b>0</b> 等待输入</span>
+          <span><i class="a"></i><b>1</b> 待收尾</span>
+          <span><i class="z"></i><b>0</b> 蜂群</span>
+        </div>
+        <div class="tabs"><s class="on">项目</s><s>会话</s><span class="go">进入项目页 ›</span></div>
+      </div>
+      <div class="body" style="margin-top:12px">
+        <div class="card" style="border-color:rgba(210,153,34,.28);background:linear-gradient(145deg,rgba(210,153,34,.09),rgba(210,153,34,.02))">
+          <div style="font-size:12px;color:#e3b341;font-weight:600">待收尾 · blade-agent</div>
+          <b style="display:block;margin-top:8px">1 个任务待收尾</b></div>
+      </div>
+      <div class="nav"><i class="on">概览</i><i>项目</i><i>文件</i><i>更多</i></div>
+    </div>
+    <p class="note">状态条四格等宽，其中「0 等待输入」「0 蜂群」白占两格；横向还溢出。</p>
+  </div>
+
+  <div class="col">
+    <p class="cap"><b>方案 C · 零值不占位</b><span class="tag good">省一行 + 不溢出</span></p>
+    <div class="ph">
+      <div class="chrome pad" style="padding-top:12px">
+        <h2 class="greet" style="font-size:20px">晚上好，今天有 1 件事需要你</h2>
+        <div class="stat" style="gap:18px">
+          <span><i></i><b>13</b> 运行中</span>
+          <span><i class="a"></i><b>1</b> 待收尾</span>
+          <span style="margin-left:auto;color:var(--dimmer)">全部 ›</span>
+        </div>
+        <div class="tabs"><s class="on">项目</s><s>会话</s><span class="go">进入项目页 ›</span></div>
+      </div>
+      <div class="body" style="margin-top:12px">
+        <div class="card" style="border-color:rgba(210,153,34,.28);background:linear-gradient(145deg,rgba(210,153,34,.09),rgba(210,153,34,.02))">
+          <div style="font-size:12px;color:#e3b341;font-weight:600">待收尾 · blade-agent</div>
+          <b style="display:block;margin-top:8px">1 个任务待收尾</b>
+          <div class="m">分支已可合并或工作区待清理</div></div>
+        <div class="card"><b>blade-agent</b><div class="p">/home/ai/codes/blade-agent</div></div>
+      </div>
+      <div class="nav"><i class="on">概览</i><i>项目</i><i>文件</i><i>更多</i></div>
+    </div>
+    <p class="note">
+      <u>零值项整个不渲染</u>——「0 等待输入」不是信息，是噪声；真要看全部，右侧「全部 ›」进项目页。
+      问候语降到 20px 自然折行——它是真内容（"今天有几件事"），不砍。</p>
+  </div>
+
+</div>
+
+<hr>
+
+<h3>三、方向簇：它到底是干什么的</h3>
+<div class="row">
+  <div class="col" style="max-width:620px">
+    <p class="note" style="max-width:none">
+      <u>用途</u>：在 TUI 里选东西——Claude/Codex 的选项列表、tmux 的 copy-mode、任何用 ↑↓ 选、回车确认的界面。
+      它存在的<b>全部理由</b>是「让软键盘不必弹出来」：手机键盘一弹吃掉半屏，而选一项其实只需要几次方向键。<br><br>
+      <u>现在的问题</u>：① 一个没有标签的十字浮在终端上，谁也看不出是干嘛的；
+      ② 用户反馈点一下会弹键盘——如果属实，它就把自己存在的理由否掉了。<br><br>
+      <u>设计答案</u>：<b>首次出现时带一行说明，点一下就消失</b>；并且默认只在检测到 TUI（Claude/Codex 在跑）时出现，
+      普通 shell 下不显示——普通 shell 里你本来就要打字，方向键的价值低得多。
+    </p>
+    <div class="ph" style="height:360px">
+      <div class="chrome" style="height:50px;display:flex;align-items:center;gap:8px;padding:0 6px;border-bottom:1px solid var(--line)">
+        <span class="ico" style="border:0">←</span>
+        <span class="pill" style="flex:1;border-radius:var(--rp)"><i class="dot" style="background:var(--amber)"></i>auth接入第三方 ▾</span>
+        <span class="ico" style="border:0">✳</span><span class="ico" style="border:0">⋯</span>
+      </div>
+      <div class="body" style="position:relative;background:#06090d;padding:10px 12px;font:12px/1.6 ui-monospace,monospace;color:#7fd18f">
+        ❯ 选择要执行的操作<br>&nbsp;&nbsp;1. 合并并删除<br><span style="color:#e6edf3;background:rgba(88,166,255,.18)">&nbsp;&nbsp;2. 复活到新命令行&nbsp;</span><br>&nbsp;&nbsp;3. 丢弃
+        <div style="position:absolute;right:14px;bottom:96px;display:grid;grid-template-columns:repeat(3,44px);grid-template-rows:repeat(3,44px);gap:2px">
+          <span style="grid-area:1/2" class="ico">↑</span>
+          <span style="grid-area:2/1" class="ico">←</span>
+          <span style="grid-area:2/2" class="ico">⏎</span>
+          <span style="grid-area:2/3" class="ico">→</span>
+          <span style="grid-area:3/2" class="ico">↓</span>
+        </div>
+        <div style="position:absolute;left:12px;right:12px;bottom:12px;background:var(--card);border:1px solid var(--line2);
+             border-radius:var(--r2);padding:9px 11px;font:12px/1.5 Inter,sans-serif;color:var(--dim)">
+          <b style="color:var(--tx)">用方向键选，不用弹键盘</b><br>长按可连发；长按 ⏎ 收起。
+          <span style="float:right;color:var(--acc)">知道了</span>
+        </div>
+      </div>
+      <div class="nav"><i>概览</i><i>项目</i><i>文件</i><i>更多</i></div>
+    </div>
+  </div>
+</div>
+
+</div></body></html>

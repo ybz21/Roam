@@ -105,7 +105,7 @@ function ToolUse({ b, result }: { b: Block; result?: Block }) {
   const [open, setOpen] = useState(false)
   const hasBody = !!(o || b.input)
   return (
-    <div style={{ border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg-base)', padding: '6px 10px', fontSize: 12.5 }}>
+    <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', background: 'var(--bg-base)', padding: '6px 10px', fontSize: 'var(--fs-sm)' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, cursor: hasBody ? 'pointer' : 'default' }} onClick={() => hasBody && setOpen((v) => !v)}>
         <span style={{ color: '#58a6ff', fontWeight: 600, flex: '0 0 auto' }}>{icon} {b.name}</span>
         {title && <span style={{ color: 'var(--text-dim)', fontFamily: MONO, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</span>}

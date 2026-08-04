@@ -3,7 +3,7 @@
 // 数据全部走 backend 薄封装 REST(exec ttmux plugin ... --json),前端不感知 plugind。
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  Alert, Button, Card, Checkbox, Descriptions, Divider, Empty, Form, Grid, Input, List, Modal, Popconfirm, Select,
+  Alert, Button, Card, Checkbox, Descriptions, Divider, Empty, Form, Input, List, Modal, Popconfirm, Select,
   Space, Spin, Switch, Table, Tabs, Tag, Tooltip, Typography, Upload, message,
 } from 'antd'
 import { api } from './api'
@@ -11,6 +11,7 @@ import { useI18n } from './i18n'
 import HostMonitorPanel from './HostMonitorPanel'
 import CronPanel from './CronPanel'
 import MobileSubPage from './MobileSubPage'
+import { useLayout } from './layout'
 
 // 有宿主侧内置面板的插件(v1 插件无自定义前端,面板由宿主按 id 挂载)
 const HOST_MONITOR_ID = 'roam.host-monitor'
@@ -71,8 +72,7 @@ export default function PluginsPanel() {
   const [startingDaemon, setStartingDaemon] = useState(false)
   const [installOpen, setInstallOpen] = useState(false)
   // 手机(窄屏)走两级导航：一级整页插件列表，点某项后详情以全屏二级页(MobileSubPage)展开。
-  const screens = Grid.useBreakpoint()
-  const isMobile = !screens.md
+  const { phone: isMobile } = useLayout()
   const [mobileDetail, setMobileDetail] = useState(false)
 
   const reload = useCallback(async () => {
@@ -137,7 +137,7 @@ export default function PluginsPanel() {
             <List.Item
               onClick={() => { setSelected(p.manifest.id); if (isMobile) setMobileDetail(true) }}
               style={{
-                cursor: 'pointer', borderRadius: 8, padding: '8px 10px',
+                cursor: 'pointer', borderRadius: 'var(--r-sm)', padding: '8px 10px',
                 background: !isMobile && p.manifest.id === selected ? 'var(--bg-elevated, rgba(88,166,255,.12))' : undefined,
               }}
               actions={[<Switch key="sw" size="small" checked={p.enabled}

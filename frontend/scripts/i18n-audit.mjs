@@ -63,11 +63,25 @@ for (const abs of files) {
   if (file.includes('src/i18n/')) continue
 
   const lines = readFileSync(abs, 'utf8').split(/\r?\n/)
+  // 块注释（含 JSX 的 {/* … */}）要整段跳过。只剥 // 的话，一句提到 Button/Modal
+  // 的中文注释就会被当成硬编码文案——注释是写给人看的，本来就该是中文。
+  let inBlock = false
   lines.forEach((raw, i) => {
     const lineNo = i + 1
     const trimmed = raw.trim()
+    if (inBlock) {
+      const end = raw.indexOf('*/')
+      if (end < 0) return
+      inBlock = false
+      raw = raw.slice(end + 2)
+    }
     if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('*')) return
-    const line = stripLineComment(raw)
+    let line = stripLineComment(raw)
+    const open = line.lastIndexOf('/*')
+    if (open >= 0 && line.indexOf('*/', open) < 0) {
+      inBlock = true
+      line = line.slice(0, open)
+    }
 
     for (const attr of attrNames) {
       const attrRe = new RegExp(`${attr}=["']([^"']+)["']`, 'g')
@@ -101,6 +115,12 @@ for (const abs of files) {
 
     if (chinese.test(line) && /(placeholder|okText|cancelText|message\.|Modal|Button|Empty|Tooltip|Popconfirm|Card|Tag|Text|title=)/.test(line) && !/t\(['"`]/.test(line)) {
       report(issues, file, lineNo, 'possible hardcoded user-facing Chinese', raw)
+    }
+
+    // t('不存在的key') 会原样把 key 渲染到界面上，两份 locale 又都缺它 → 上面的
+    // 对齐检查也发现不了。这条专门堵这个洞：拼接出来的动态 key（t('a.' + x)）跳过。
+    for (const match of line.matchAll(/\bt\(\s*'([A-Za-z0-9_.]+)'\s*(\)|,)/g)) {
+      if (!zh.has(match[1])) report(issues, file, lineNo, `unknown i18n key "${match[1]}"`, raw)
     }
   })
 }

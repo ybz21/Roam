@@ -3,11 +3,12 @@
 //   电脑 ≥1200 → 三栏：导航 Sider | 列表(页面) | 终端面板(常驻, 多标签)
 //   平板/手机   → 终端为全屏覆盖层；手机底部 Tab 导航
 // 终端：多标签 / 字号调节 / 复制 / 更多快捷键 / 断线自动重连。
-import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
-  Layout, Menu, Button, Card, List, Tag, Form, Input, Select, Segmented, Tabs, Descriptions,
-  Statistic, Row, Col, Space, Popconfirm, Empty, Modal, Grid, App as AntApp, Typography, Spin, Tooltip, Dropdown, Checkbox, Progress, AutoComplete, Radio, Switch, Collapse, InputNumber,
+  Layout, Button, Card, List, Tag, Form, Input, Select, Segmented, Tabs, Descriptions,
+  Statistic, Row, Col, Space, Popconfirm, Empty, Modal, App as AntApp, Typography, Spin, Tooltip, Dropdown, Checkbox, Progress, AutoComplete, Radio, Switch, Collapse, InputNumber,
 } from 'antd'
+import type { MenuProps } from 'antd'
 import { QRCodeSVG } from 'qrcode.react'
 import { api, upload, makeClipboardImageFile, setUnauthorizedHandler } from './api'
 import Term, { TermHandle, TermStatus } from './Terminal'
@@ -34,10 +35,22 @@ import UpdateBanner from './UpdateBanner'
 import { useThemeMode } from './theme'
 import { useI18n } from './i18n'
 import { usePwaInstall } from './install'
-import { usePreferences, savePreferences, loadPreferences } from './preferences'
-import { PromptDialog, detectPrompt } from './prompt'
+import { usePreferences, savePreferences, saveWorkspace, loadPreferences } from './preferences'
+import { PromptDialog, advancePromptSignal, detectPrompt } from './prompt'
+import type { PromptSignal } from './prompt'
+import { useLayout } from './layout'
+import { useWorkspaceLayout, NAV_WIDTH, NAV_RAIL } from './shell/useWorkspaceLayout'
+import { Workspace, SessionCapsule } from './shell/Workspace'
+import { Navigation } from './shell/Navigation'
+import { reorderTabs } from './shell/tabs'
+import { requestIntent } from './intents'
+import { SessionDock, SessionSwitchSheet } from './shell/SessionDock'
+import { DPad } from './shell/DPad'
+import { sessionProject, setSessionProjects, buildSessionProjects } from './session-project'
+import { MobileSheet, SheetRow, SheetSection } from './shell/MobileSheet'
+import { WorkspaceTopbar, type PaletteItem } from './shell/WorkspaceTopbar'
 import { copyText } from './chat/blocks'
-import { SessionTitle, setSessionLabels, updateSessionLabel, useSessionLabel, sessionLabel, sessionDisplay } from './session-label'
+import { SessionTitle, TabName, setSessionLabels, updateSessionLabel, useSessionLabel, sessionLabel, sessionDisplay } from './session-label'
 import { VoiceInput } from './chat/VoiceInput'
 import LinkStatus from './p2p/LinkStatus'
 import { startControlLink, stopControlLink } from './p2p/transport'
@@ -47,7 +60,6 @@ import { PaneCloseConfirm, type PaneCloseTarget } from './PaneCloseConfirm'
 interface ClaudeInfo { running: boolean; file?: string; dir?: string }
 
 const { Sider, Content } = Layout
-const { useBreakpoint } = Grid
 const { Text } = Typography
 
 // 「会话」「蜂群」不再进导航：项目页是唯一主入口（任务驱动，08 设计）——
@@ -63,8 +75,18 @@ const NAV = [
   { key: 'settings', labelKey: 'nav.env' },
 ]
 
+// 桌面导航的两组（14 §4.4）。NAV 仍是全量注册表——命令面板和手机「更多」都从它取，
+// 所以 settings/about 留在 NAV 里，只是不进这两组，改由账户菜单收口。
+const NAV_WORKSPACE = ['overview', 'projects', 'files']
+const NAV_TOOLS = ['browser', 'phone', 'plugins']
+
 // 手机底栏只放高频页，plugins/settings 折进「更多」，避免底栏拥挤（桌面侧栏仍展示全部）
-const MOBILE_MORE_KEYS = ['plugins', 'settings']
+const MOBILE_NAV_KEYS = ['overview', 'projects', 'files']
+const MOBILE_MORE_KEYS = ['browser', 'phone', 'plugins', 'settings']
+
+// 用 Canvas 容器查询排版的页面（见 index.css 的 .tt-canvas[data-cq]）。逐页开，
+// 不是全局开：container-type 会改变 fixed 后代的包含块。
+const CQ_PAGES = new Set(['overview'])
 
 // 旧链接兼容：/#/env 重定向到 /#/settings
 function normalizeRoute(raw: string): string {
@@ -208,8 +230,7 @@ function FilesPage({ openTerm }: { openTerm: (name: string) => void }) {
   const [prefs] = usePreferences()
   // 手机(窄屏)两级导航：一级整页文件列表，点文件后详情以全屏二级页(MobileSubPage)展开；
   // 桌面仍是 FileWorkspace(文件树 dock + 多 tab 编辑)。
-  const screens = useBreakpoint()
-  const isMobile = !screens.md
+  const { phone: isMobile } = useLayout()
   const [mobileFile, setMobileFile] = useState<string | null>(null)
   const openAgent = async (kind: 'claude' | 'codex', file: string) => {
     const base = pathBasename(file).replace(/[^a-zA-Z0-9_.-]+/g, '-').slice(0, 28) || 'file'
@@ -265,10 +286,7 @@ export default function App() {
   const themeIcon = mode === 'dark'
     ? svg(<><circle cx="12" cy="12" r="4.2" /><path d="M12 2v2.2M12 19.8V22M4.2 4.2l1.6 1.6M18.2 18.2l1.6 1.6M2 12h2.2M19.8 12H22M4.2 19.8l1.6-1.6M18.2 5.8l1.6-1.6" /></>)
     : svg(<><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z" /></>)
-  const [collapsed, setCollapsed] = useState(false)
-  const screens = useBreakpoint()
-  const hasSider = !!screens.md
-  const isMobile = !screens.md
+  const { phone: isMobile, desktop: hasSider } = useLayout()
   // 全屏（平板更易用：隐藏浏览器栏，等价 F11）。监听变化以同步按钮图标
   const [isFs, setIsFs] = useState(false)
   useEffect(() => {
@@ -290,12 +308,16 @@ export default function App() {
   const urlActive = useRef<string>(readTermTokens().active)
   const restored = useRef(false) // 还原完成前不许回写 URL，否则会把待还原的参数抹掉
   const [overlay, setOverlay] = useState(false) // 手机/平板全屏终端
-  const [dockOpen, setDockOpen] = useState(true) // 桌面：右侧终端停靠栏是否展开
-  const [dockMax, setDockMax] = useState(false)  // 桌面：终端栏向左扩展（遮住会话列表）
-  const [customDockWidth, setCustomDockWidth] = useState<number | null>(null)
-  const dockResize = usePointerResize()
-  const pendingDockWidth = useRef<number | null>(null)
-  const dockGuideRef = useRef<HTMLDivElement>(null)
+  const [moreOpen, setMoreOpen] = useState(false) // 手机「更多」sheet
+  // 空间状态（Page / Split / Focus）与 Dock 宽度：唯一的尺寸契约来源
+  const space = useWorkspaceLayout(terms.length > 0)
+  const modKeyLabel = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || '') ? '⌘' : 'Ctrl+'
+  const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine)
+  useEffect(() => {
+    const on = () => setOnline(navigator.onLine)
+    window.addEventListener('online', on); window.addEventListener('offline', on)
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', on) }
+  }, [])
   const [fontSize, setFontSize] = useState(13)
   const [statusMap, setStatusMap] = useState<Record<string, TermStatus>>({})
   const termRefs = useRef<Record<string, TermHandle | null>>({})
@@ -304,6 +326,92 @@ export default function App() {
   const [claudeView, setClaudeView] = useState<Record<string, boolean>>({})
   const [codexMap, setCodexMap] = useState<Record<string, ClaudeInfo>>({})
   const [codexView, setCodexView] = useState<Record<string, boolean>>({})
+
+  // 一条轮询喂两件事（15s）：
+  //   ① 导航 badge 的跨项目待收尾数（14 §4.4）
+  //   ② 会话 → 项目 归属表，给终端标签写 `项目 · 会话`（14 §6.3）
+  // 概览页轮的是同两条接口，所以两处显示的数字同源，不会互相打架。
+  // 会话坞要显示「几个在等你」，而这个信号是 TerminalPane 抓屏算出来的（detectPrompt）。
+  // 它已经在为每个已开会话轮询，别再开第二份——让它把结果递上来即可。
+  const [mobileWaiting, setMobileWaiting] = useState<Record<string, boolean>>({})
+  const [unfinished, setUnfinished] = useState(0)
+  // 不能按 hasSider 收窄：手机没有侧栏，但会话坞同样要写「项目 · 会话」
+  useEffect(() => {
+    let stop = false
+    const load = async () => {
+      try {
+        const [pr, an] = await Promise.all([
+          api('GET', '/projects'),
+          api('GET', '/sessions/annotations').catch(() => null),
+        ])
+        if (stop) return
+        const projects = pr?.data?.projects || []
+        setUnfinished(projects.reduce((n: number, p: any) => n + (p.unfinished || 0), 0))
+        setSessionProjects(buildSessionProjects(projects, an?.data || {}))
+      } catch { /* 轮询失败就保持上一轮的值，不清空 */ }
+    }
+    load()
+    const i = setInterval(load, 15000)
+    return () => { stop = true; clearInterval(i) }
+  }, [])
+
+  // Canvas 滚动位置（14 §6.3.5）：终端一开，Canvas 变窄、卡片重排，scrollHeight
+  // 从 1108 掉到 781，浏览器顺手把 scrollTop 归零——"你看到哪儿了"就这么没了。
+  //
+  // 两个坑：
+  // ① **不能等状态变了再存**。effect 在 DOM 改完之后才跑，那时 scrollTop 已经是 0。
+  //    所以持续记录，而不是在切换时抓一把。
+  // ② **不能存像素**。两种形态的 scrollHeight 不一样，像素值换算过去是错的位置。
+  //    存比例，还原时再乘回去——重排前后落在同一批卡片上。
+  const canvasRatio = useRef(0)
+  useEffect(() => {
+    if (!hasSider) return
+    const el = document.querySelector<HTMLElement>('.tt-canvas')
+    if (!el) return
+    const on = () => {
+      const room = el.scrollHeight - el.clientHeight
+      if (room > 0) canvasRatio.current = el.scrollTop / room
+    }
+    el.addEventListener('scroll', on, { passive: true })
+    return () => el.removeEventListener('scroll', on)
+  }, [hasSider])
+  useEffect(() => {
+    const el = document.querySelector<HTMLElement>('.tt-canvas')
+    if (!el || !canvasRatio.current) return
+    // 等这一帧的布局落定再还原，否则写进去的值会被重排冲掉
+    const id = requestAnimationFrame(() => {
+      const room = el.scrollHeight - el.clientHeight
+      if (room > 0) el.scrollTop = Math.round(canvasRatio.current * room)
+    })
+    return () => cancelAnimationFrame(id)
+  }, [space.mode])
+
+  // ── 工作区快捷键（14 §9.1）：⌘J 开合终端、⌘⇧J 终端聚焦、Esc 退出聚焦 ──
+  // 只挂带修饰键的这几个；字母单键快捷键要等命令面板一起做，且必须在输入框/终端
+  // 聚焦时禁用，否则会把用户正在打的字吃掉。
+  useEffect(() => {
+    if (!hasSider) return
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey
+      if (mod && e.key.toLowerCase() === 'j') {
+        e.preventDefault()
+        if (e.shiftKey) space.toggleFocus()
+        else { space.setFocus('none'); space.toggleDock() }
+        return
+      }
+      // Esc 收一层：覆盖态先收面板，聚焦态退回分栏。两者都不关终端、不离开页面。
+      //
+      // 注意这里**不需要**判断焦点在不在终端里：xterm 在捕获阶段就 stopPropagation
+      // 了 Escape，事件根本冒泡不到 window。于是天然是对的——在 vim/Claude 里按 Esc
+      // 进 TUI，焦点在页面上按 Esc 才收面板。改这段前先确认这条前提还成立。
+      if (e.key === 'Escape') {
+        if (space.mode === 'overlay') space.setDockOpen(false)
+        else if (space.focus !== 'none') space.setFocus('none')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [hasSider, space])
 
   useEffect(() => {
     setUnauthorizedHandler(() => setAuthed(false))
@@ -404,7 +512,7 @@ export default function App() {
     const name = rawName.replace(/[.:]/g, '_')
     setTerms((ts) => (ts.includes(name) ? ts : [...ts, name]))
     setActive(name)
-    if (hasSider) { setDockOpen(true); setDockMax(false) } // 桌面：拉出右侧停靠栏（压缩页面到左）
+    if (hasSider) { space.setDockOpen(true); space.setFocus('none') } // 桌面：拉出右侧停靠栏
     else setOverlay(true)           // 手机/平板：全屏
   }
   const renameOpenTerm = (oldName: string, newName: string) => {
@@ -452,19 +560,16 @@ export default function App() {
     setTerms((ts) => {
       const next = ts.filter((t) => t !== name)
       setActive((a) => (a === name ? (next[next.length - 1] || null) : a))
-      if (next.length === 0) { setOverlay(false); setDockMax(false) }
+      if (next.length === 0) { setOverlay(false); space.setFocus('none') }
       return next
     })
     delete termRefs.current[name]
   }
-  const anyClaude = terms.some((t) => claudeMap[t]?.running || codexMap[t]?.running)
-  const docked = hasSider && terms.length > 0 && dockOpen // 桌面停靠栏已展开
-  const dockResizesPage = docked && tab !== 'browser'
-  const filesDefaultWidth = typeof window === 'undefined' ? 640 : Math.round((window.innerWidth - (collapsed ? 64 : 208) - 18) * 0.5)
-  const defaultDockWidth = tab === 'files' ? Math.max(520, Math.min(900, filesDefaultWidth)) : tab === 'sessions' || tab === 'overview' || tab === 'swarm' || tab === 'settings' || tab === 'phone' ? 420 : 300
-  const dockPageWidth = customDockWidth ?? defaultDockWidth
   const setStatus = (name: string, s: TermStatus) => setStatusMap((m) => ({ ...m, [name]: s }))
   const sendKey = (seq: string) => active && termRefs.current[active]?.send(seq)
+
+  // 标签拖拽排序（14 §7.1）。顺序本来就写进 URL 的 terms=，所以持久化是白拿的。
+  const reorderTerm = (name: string, to: number) => setTerms((ts) => reorderTabs(ts, name, to))
 
 
   // 全屏切换（标准 API + webkit 兜底）。不支持的浏览器（如 iOS Safari）隐藏按钮，改走「添加到主屏幕」
@@ -490,14 +595,18 @@ export default function App() {
       claudeMap={claudeMap} claudeView={claudeView} setClaudeView={setClaudeView}
       codexMap={codexMap} codexView={codexView} setCodexView={setCodexView}
       onRename={renameOpenTerm}
-      onCollapse={() => { setOverlay(false); setDockOpen(false) }}
+      onCollapse={() => { setOverlay(false); space.setDockOpen(false) }}
+      onReorder={reorderTerm}
+      onNeedsInput={setMobileWaiting}
+      // Focus 只在桌面有意义：手机上终端本来就是全屏覆盖层
+      focus={hasSider ? { on: space.focus !== 'none', toggle: space.toggleFocus, hint: `${modKeyLabel}⇧J` } : undefined}
     />
   )
 
   const pages: any = {
-    overview: <OverviewPage openTerm={openTerm} renderSessions={() => <Sessions openTerm={openTerm} closeTerm={closeTerm} activeTerm={active} />} />,
+    overview: <OverviewPage openTerm={openTerm} renderSessions={() => <Sessions openTerm={openTerm} closeTerm={closeTerm} activeTerm={active} embedded />} />,
     swarm: <Swarm openTerm={openTerm} initialSwarm={swarmSub || undefined} onNav={(n) => { location.hash = n ? '#/swarm/' + encodeURIComponent(n) : '#/swarm' }} />,
-    projects: <Projects openTerm={openTerm} closeTerm={closeTerm} initialKey={projectSub || undefined} />,
+    projects: <Projects openTerm={openTerm} closeTerm={closeTerm} initialKey={projectSub || undefined} activeTerm={active} />,
     sessions: <Sessions openTerm={openTerm} closeTerm={closeTerm} activeTerm={active} />,
     files: <FilesPage openTerm={openTerm} />,
     settings: <EnvPage />,
@@ -511,210 +620,194 @@ export default function App() {
   const page = <Suspense fallback={lazyFallback}>{pages[tab] || pages.projects}</Suspense>
   // browser 全幅(自带工具栏铺满)；phone 与概览/会话一致走 tt-page（同 16px 留白 + 满高，见 tt-page-phone）。
   // 浏览器页不再全幅特例：与 文件/手机 同走 tt-page 满高容器，五页左上角起点统一 (16,16)
-  const pageNode = <div className={`tt-page tt-page-${tab}${isMobile ? ' tt-page-mobile' : ''}`}>{page}</div>
+  const pageNode = <div className={`tt-page tt-page-${tab}${isMobile ? ' tt-page-mobile' : ''}${isMobile && terms.length ? ' has-dock' : ''}`}>{page}</div>
+  // Canvas 与 Dock 各包一层：两者在 Page / Split / Focus 三态间只改宽度，不改挂载
+  // ⌘K 面板的条目：页面导航 + 已打开的会话。项目/文件两段要等页面把数据提上来，
+  // 没有就不放——面板里出现点了没反应的条目比没有这一段更糟。
+  const paletteItems: PaletteItem[] = [
+    ...NAV.map((n) => ({
+      key: `page:${n.key}`, group: t('workspace.groupPages'), title: t(n.labelKey),
+      icon: ICONS[n.key], run: () => go(n.key),
+    })),
+    ...terms.map((name) => ({
+      key: `term:${name}`, group: t('workspace.groupSessions'),
+      title: sessionDisplay(name), desc: name === active ? t('workspace.current') : undefined,
+      run: () => { setActive(name); space.setDockOpen(true); if (isMobile) setOverlay(true) },
+    })),
+  ]
 
-  const menu = (
-    <Menu
-      theme={mode} mode="inline" selectedKeys={[tab]} onClick={(e) => go(e.key)}
-      items={NAV.map((n) => ({ key: n.key, icon: ICONS[n.key], label: t(n.labelKey) }))}
-      style={{ borderInlineEnd: 0, background: 'transparent' }}
-    />
+  const canvasNode = (
+    <Content className="tt-canvas" data-cq={CQ_PAGES.has(tab) ? 'on' : undefined} style={{
+      flex: 1, minWidth: 0, minHeight: 0, height: '100%', padding: 0,
+      overflow: tab === 'browser' || tab === 'phone' || tab === 'files' ? 'hidden' : 'auto',
+    }}>{pageNode}</Content>
+  )
+  const dockNode = (
+    <div onTransitionEnd={() => window.dispatchEvent(new Event('resize'))}
+      style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>{termPane}</div>
   )
 
-  // 底部按钮：antd v5 Button 是 flex+居中，textAlign 无效，须用 justifyContent。
-  // 展开时左对齐并让图标与上方 inline Menu 项的图标严格对齐：二者左边缘都在 8px
-  // (菜单项 margin / 底部容器 padding 各 8)，菜单项 paddingLeft=24px 使图标落在 32px，
-  // 故底部按钮同样取 paddingLeft 24px。折叠时居中只显图标。
-  const bottomBtnStyle: CSSProperties = {
-    color: 'var(--text-dim)',
-    justifyContent: collapsed ? 'center' : 'flex-start',
-    paddingInline: collapsed ? undefined : '24px 15px',
-  }
+  // 导航分两组（14 §4.4）：工作区 = 干活的地方，工具 = 看别的东西的地方。
+  // 设置 / 关于 不在任何一组里——它们进底部账户菜单，见下面的 accountMenu。
+  const navGroups = [
+    { label: t('nav.groupWorkspace'), items: NAV_WORKSPACE },
+    { label: t('nav.groupTools'), items: NAV_TOOLS },
+  ].map((g) => ({
+    label: g.label,
+    items: g.items.map((key) => {
+      const n = NAV.find((x) => x.key === key)!
+      return {
+        key: n.key, label: t(n.labelKey), icon: ICONS[n.key],
+        // badge 只报「需要行动」的数量，不报普通总数（14 §4.4）。这里取跨项目待收尾
+        // 数：它来自 /projects 一条请求，全局常新；「等待输入」要逐会话抓屏才知道，
+        // 为一个角标常驻轮询十几个会话不划算，那个数留在概览页。
+        badge: n.key === 'projects' ? unfinished : undefined,
+        badgeTitle: n.key === 'projects' ? t('overview.unfinishedN', { count: unfinished }) : undefined,
+      }
+    }),
+  }))
+
+  const accountMenu: MenuProps['items'] = [
+    { key: 'settings', icon: ICONS.settings, label: t('nav.env'), onClick: () => go('settings') },
+    { key: 'about', icon: ICONS.github, label: t('nav.about'), onClick: () => go('about') },
+    { type: 'divider' },
+    { key: 'theme', icon: themeIcon, label: mode === 'dark' ? t('common.lightTheme') : t('common.darkTheme'), onClick: () => toggleTheme() },
+    ...(fsSupported ? [{ key: 'fs', icon: fsIcon, label: isFs ? t('common.exitFullscreen') : t('common.fullscreen'), onClick: () => toggleFs() }] : []),
+    { type: 'divider' },
+    {
+      key: 'logout', danger: true, label: t('common.logout'),
+      icon: svg(<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></>),
+      onClick: () => Modal.confirm({
+        title: t('common.logoutConfirm'), okText: t('common.logout'), cancelText: t('common.cancel'),
+        okButtonProps: { danger: true }, onOk: logout,
+      }),
+    },
+  ]
+
+  // 侧栏是否是 64px 轨：用户手动收起 / Focus 聚焦 / 非 large 档（expanded 一律用轨）
+  const navRail = space.navCollapsed || space.mode === 'focus'
 
   return (
     <Layout style={{ height: '100dvh', overflow: 'hidden', background: 'var(--bg-base)' }}>
       <UpdateBanner />
-      {/* 拖动时只移动引导线，松手才提交布局，避免 HTML iframe 在每个指针事件上完整重排。 */}
-      <div ref={dockGuideRef} data-dock-resize-guide style={{
-        display: 'none', position: 'fixed', top: 0, bottom: 0, width: 2, zIndex: 1000,
-        pointerEvents: 'none', background: '#58a6ff', boxShadow: '0 0 0 1px rgba(88,166,255,.18)',
-      }} />
-      <PointerResizeShield active={dockResize.active} />
-      {hasSider && !dockMax && (
-        <Sider collapsible trigger={null} collapsed={collapsed} collapsedWidth={64}
-          breakpoint="lg" onBreakpoint={(b) => setCollapsed(b)} width={208} theme={mode}
+      {/* Focus 时导航收成 64px 轨而不是消失——上下文始终可找回（14 §4.1，老 dockMax 的病根）。
+          expanded 档也一律用轨：905–1279 展开 224 侧栏会把 Canvas 挤破契约。*/}
+      {hasSider && (
+        <Sider collapsible trigger={null} collapsedWidth={NAV_RAIL} width={NAV_WIDTH} theme={mode}
+          collapsed={navRail}
           style={{ position: 'sticky', top: 0, height: '100dvh', background: 'var(--bg-base)', borderRight: '1px solid var(--border-subtle)' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: collapsed ? '18px 0 16px' : '18px 18px 16px', justifyContent: collapsed ? 'center' : 'flex-start' }}>
-              <img src="/logo-mark.svg" width={34} height={34} alt="Roam"
-                style={{ flex: '0 0 auto', borderRadius: 10, boxShadow: '0 1px 3px rgba(0,0,0,.5)' }} />
-              {!collapsed && (
-                <div style={{ lineHeight: 1.15 }}>
-                  <div style={{
-                    fontWeight: 800, fontSize: 19, letterSpacing: 0.5,
-                    background: 'var(--brand-grad)',
-                    WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent',
-                  }}>Roam</div>
-                  <div style={{ color: 'var(--text-dimmer)', fontSize: 10, letterSpacing: 1.5 }}>{t('app.tagline')}</div>
-                </div>
-              )}
-            </div>
-            <div style={{ flex: 1, overflowY: 'auto' }}>{menu}</div>
-            {/* 底部：全局 P2P 链路状态在最上（未启用时自隐藏），其次 关于/收起/全屏/退出，竖向堆叠。*/}
-            <div style={{ borderTop: '1px solid var(--border-subtle)', padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <LinkStatus collapsed={collapsed} />
-              <Button type="text" block onClick={() => go('about')} title={t('nav.about')}
-                style={{ ...bottomBtnStyle, color: tab === 'about' ? '#58a6ff' : 'var(--text-dim)' }}>
-                {collapsed ? ICONS.github : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{ICONS.github}{t('nav.about')}</span>}
-              </Button>
-              <Button type="text" block onClick={() => setCollapsed((c) => !c)} style={bottomBtnStyle}
-                title={collapsed ? t('common.expand') : t('common.collapse')}>
-                {(() => { const icon = svg(collapsed ? <><polyline points="9 6 15 12 9 18" /></> : <><polyline points="15 6 9 12 15 18" /></>)
-                  return collapsed ? icon : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{icon}{t('common.collapse')}</span> })()}
-              </Button>
-              {fsSupported && (
-                <Button type="text" block onClick={toggleFs} style={bottomBtnStyle}
-                  title={isFs ? t('common.exitFullscreen') : t('common.fullscreen')}>
-                  {collapsed ? fsIcon : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{fsIcon}{isFs ? t('common.exitFullscreen') : t('common.fullscreen')}</span>}
-                </Button>
-              )}
-              <Popconfirm title={t('common.logoutConfirm')} okText={t('common.logout')} cancelText={t('common.cancel')} onConfirm={logout} placement="topRight">
-                <Button type="text" block style={bottomBtnStyle} title={t('common.exit')}>
-                  {(() => { const icon = svg(<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></>)
-                    return collapsed ? icon : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{icon}{t('common.exit')}</span> })()}
-                </Button>
-              </Popconfirm>
-            </div>
-          </div>
+          <Navigation
+            rail={navRail} active={tab} groups={navGroups} onGo={go}
+            linkStatus={<LinkStatus collapsed={navRail} />}
+            dock={terms.length > 0 ? {
+              count: terms.length, open: space.dockVisible,
+              onToggle: () => { space.setFocus('none'); space.toggleDock() },
+              title: `${space.dockVisible ? t('terminal.collapseRightTitle') : t('terminal.expandTitle')} (${modKeyLabel}J)`,
+            } : null}
+            accountName={t('nav.thisDevice')}
+            account={accountMenu}
+            onToggleRail={() => space.setNavCollapsed(!space.navCollapsed)}
+          />
         </Sider>
       )}
 
-      {/* 主区：左侧页面 + 右侧可停靠终端栏（桌面）。开终端时页面向左压缩。*/}
-      <Layout style={{ background: 'var(--bg-base)' }}>
-        <div style={{ display: 'flex', height: '100dvh', minHeight: 0 }}>
-          <Content style={{
-            // 终端弹出时左侧页面保留可读宽度；继续向左扩展(dockMax)则收到 0、被终端遮住
-            flex: dockResizesPage ? (dockMax ? '0 0 0px' : `0 0 ${dockPageWidth}px`) : 1,
-            width: dockResizesPage ? (dockMax ? 0 : dockPageWidth) : 'auto', minWidth: 0,
-            height: '100dvh', overflow: tab === 'browser' || tab === 'phone' || tab === 'files' ? 'hidden' : 'auto',
-            padding: 0,
-            transition: customDockWidth != null ? 'none' : 'flex-basis .2s, width .2s',
-          }}>
-            {pageNode}
-          </Content>
-
-          {/* 角标把手：上半=向左扩展（大点击区），中间细条=拖拽调宽，下半=向右收起（大点击区）。*/}
-          {hasSider && terms.length > 0 && (
-            <div style={{
-              flex: '0 0 18px', background: 'var(--bg-container)', borderLeft: '1px solid var(--border)',
-              display: 'flex', flexDirection: 'column', color: anyClaude ? '#58a6ff' : 'var(--text-dim)', userSelect: 'none',
-            }}>
-              {/* 上半：向左扩展 / 展开 —— 占据上半区，点击区大 */}
-              <div onClick={() => (dockOpen ? setDockMax(true) : setDockOpen(true))}
-                title={!dockOpen ? t('terminal.expandTitle') : t('terminal.expandLeftTitle')}
-                style={{
-                  flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5,
-                  borderBottom: '1px solid var(--border)', cursor: dockMax ? 'default' : 'pointer', opacity: dockMax ? 0.3 : 1,
-                }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M13 6 L7 12 L13 18" /><path d="M18 6 L12 12 L18 18" />
-                </svg>
-                <span style={{ writingMode: 'vertical-rl', letterSpacing: 1, fontSize: 11, fontWeight: 600 }}>{dockOpen ? t('common.extend') : t('common.expand')}</span>
-                <span style={{ fontSize: 10, background: '#1f6feb', color: '#fff', borderRadius: 8, padding: '0 4px', lineHeight: 1.35 }}>{terms.length}</span>
-              </div>
-              {/* 中间：拖拽调整宽度（占中间 1/3，三等分） */}
-              <div
-                data-dock-resize-handle
-                style={{ flex: 1, cursor: 'col-resize', touchAction: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid var(--border)' }}
-                title={t('common.dragToResize') || 'Drag to resize'}
-                onPointerDown={(e) => {
-                  const siderWidth = collapsed ? 64 : 208
-                  const startX = e.clientX
-                  const startW = dockPageWidth
-                  pendingDockWidth.current = startW
-                  const guide = dockGuideRef.current
-                  if (guide) {
-                    guide.style.display = 'block'
-                    guide.style.left = `${siderWidth + startW}px`
-                  }
-                  dockResize.start(e, {
-                    onMove: (ev) => {
-                      const delta = ev.clientX - startX
-                      const next = Math.max(280, Math.min(window.innerWidth - siderWidth - 200, startW + delta))
-                      pendingDockWidth.current = next
-                      if (guide) guide.style.left = `${siderWidth + next}px`
-                    },
-                    onEnd: () => {
-                      if (guide) guide.style.display = 'none'
-                      const next = pendingDockWidth.current
-                      pendingDockWidth.current = null
-                      if (next != null && next !== startW) setCustomDockWidth(next)
-                    },
-                  })
-                }}
-              >
-                <svg width="6" height="48" viewBox="0 0 6 48" fill="currentColor" opacity="0.5">
-                  <circle cx="1.5" cy="6" r="1.5" /><circle cx="4.5" cy="6" r="1.5" />
-                  <circle cx="1.5" cy="14" r="1.5" /><circle cx="4.5" cy="14" r="1.5" />
-                  <circle cx="1.5" cy="22" r="1.5" /><circle cx="4.5" cy="22" r="1.5" />
-                  <circle cx="1.5" cy="30" r="1.5" /><circle cx="4.5" cy="30" r="1.5" />
-                  <circle cx="1.5" cy="38" r="1.5" /><circle cx="4.5" cy="38" r="1.5" />
-                </svg>
-              </div>
-              {/* 下半：向右收起 / 还原 —— 占据下半区，点击区大 */}
-              <div onClick={() => (dockMax ? setDockMax(false) : setDockOpen(false))}
-                title={dockMax ? t('terminal.restoreTitle') : t('terminal.collapseRightTitle')}
-                style={{
-                  flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5,
-                  cursor: dockOpen ? 'pointer' : 'default', opacity: dockOpen ? 1 : 0.3,
-                }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M11 6 L17 12 L11 18" /><path d="M6 6 L12 12 L6 18" />
-                </svg>
-                <span style={{ writingMode: 'vertical-rl', letterSpacing: 1, fontSize: 11, fontWeight: 600 }}>{dockMax ? t('common.restore') : t('common.collapse')}</span>
-              </div>
-            </div>
-          )}
-
-          {/* 右侧终端停靠栏（桌面）：常驻挂载以保留连接，收起时宽度归零 */}
-          {hasSider && terms.length > 0 && (
-            <div
-              onTransitionEnd={() => window.dispatchEvent(new Event('resize'))}
-              style={{
-              flex: dockOpen ? 1 : '0 0 0px', minWidth: dockOpen ? 480 : 0,
-              width: dockOpen ? 'auto' : 0, overflow: 'hidden', transition: 'flex-basis .2s, min-width .2s',
-              display: 'flex', flexDirection: 'column', background: 'var(--bg-term)',
-            }}>
-              {termPane}
-            </div>
-          )}
-        </div>
+      {/* 主区：Command Center ｜ (Canvas ｜ 8px 分隔条 ｜ Dock)。
+          顶栏横跨页面与终端，位置不因 Dock 开合跳动；终端**常驻挂载**
+          （收起时宽度归零、Focus 时页面归零），换形态不断连接。*/}
+      <Layout style={{ background: 'var(--bg-base)', minWidth: 0 }}>
+        {hasSider && (
+          <WorkspaceTopbar
+            items={paletteItems} online={online} modKey={modKeyLabel}
+            dockCount={terms.length} dockOpen={space.dockVisible}
+            onToggleDock={() => { space.setFocus('none'); space.toggleDock() }}
+            // 切到项目页并留下「要新建」的意图，由那一页挂载后消费（见 intents.ts）。
+            // 从任何页面点「＋ 新建」都是同一条路径，不必在每页各摆一枚按钮。
+            onCreate={() => { go('projects'); requestIntent('new-project') }}
+          />
+        )}
+        {hasSider && terms.length > 0 ? (
+          // 四态（page / split / overlay / focus）都走同一个 Workspace：换的是几何，
+          // 不是组件树，终端因此不会在开合时被卸载重建。
+          <Workspace
+            mode={space.mode} canvas={canvasNode} dock={dockNode}
+            dockWidth={space.dockWidth} bounds={space.bounds} splitMax={space.splitMax}
+            onResize={space.setDockWidth} onReset={space.resetDockWidth}
+            onFocus={() => space.setFocus('dock')}
+            onDismiss={() => space.setDockOpen(false)}
+            capsule={space.overlayCapable && space.mode === 'page' ? (
+              // 胶囊只有 320px，显示 sessionLabel 而不是 sessionDisplay——后者带
+              // 「（会话 id）」后缀，在这个宽度下正好被截在 id 中间，什么也没说清。
+              // 完整名留给 title。（前缀成 `项目 · 会话` 是 14 §7 的统一命名，
+              // 要连 Dock 标签和切换 sheet 一起改，不在这里单独做半套。）
+              <SessionCapsule
+                label={sessionLabel(active) || active} count={terms.length}
+                onOpen={() => { space.setFocus('none'); space.setDockOpen(true) }}
+                title={`${sessionDisplay(active)} · ${t('terminal.expandTitle')} (${modKeyLabel}J)`}
+              />
+            ) : null}
+          />
+        ) : (
+          <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>{canvasNode}</div>
+        )}
       </Layout>
 
+      {/* 底栏 4 格 + 会话坞（13 §4.1/§4.2）：浏览器/手机镜像这类"用手机看手机"的低频页
+          进「更多」sheet，不占底栏。sheet 内部分「工具 / 账户」两段——退出登录和浏览器
+          并排时误触代价差了几个数量级，所以它收在账户行的二级里。*/}
       {isMobile && (
-        <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, display: 'flex', background: 'var(--bg-container)', borderTop: '1px solid var(--border)', zIndex: 50, paddingBottom: 'env(safe-area-inset-bottom)' }}>
-          {NAV.filter((n) => !MOBILE_MORE_KEYS.includes(n.key)).map((n) => (
-            <button key={n.key} onClick={() => go(n.key)}
-              style={{ flex: 1, border: 0, background: 'none', color: tab === n.key ? '#58a6ff' : 'var(--text-dim)', padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11 }}>
-              {ICONS[n.key]}{t(n.labelKey)}
-            </button>
-          ))}
-          {/* plugins/settings + 主题/全屏/退出折叠进「更多」，省出底栏空间 */}
-          <Dropdown placement="top" trigger={['click']} menu={{ items: [
-            ...NAV.filter((n) => MOBILE_MORE_KEYS.includes(n.key)).map((n) => ({ key: n.key, icon: ICONS[n.key], label: t(n.labelKey), onClick: () => go(n.key) })),
-            { type: 'divider' as const },
-            { key: 'theme', icon: themeIcon, label: mode === 'dark' ? t('common.lightTheme') : t('common.darkTheme'), onClick: toggleTheme },
-            ...(fsSupported ? [{ key: 'fs', icon: fsIcon, label: isFs ? t('common.exitFullscreen') : t('common.fullscreen'), onClick: toggleFs }] : []),
-            { key: 'about', icon: ICONS.github, label: t('nav.about'), onClick: () => go('about') },
-            { type: 'divider' as const },
-            { key: 'logout', danger: true, label: t('common.logout'), onClick: () => Modal.confirm({ title: t('common.logoutConfirm'), okText: t('common.logout'), cancelText: t('common.cancel'), okButtonProps: { danger: true }, onOk: logout }) },
-          ] }}>
-            <button
-              style={{ flex: 1, border: 0, background: 'none', color: MOBILE_MORE_KEYS.includes(tab) ? '#58a6ff' : 'var(--text-dim)', padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11 }}>
-              {svg(<><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></>)}{t('common.more')}
-            </button>
-          </Dropdown>
+        <div style={{
+          position: 'fixed', bottom: 0, left: 0, right: 0,
+          zIndex: 'var(--z-nav)' as unknown as number, paddingBottom: 'var(--safe-b)',
+          background: 'var(--bg-container)', borderTop: '1px solid var(--border)',
+        }}>
+        {/* 会话坞叠在底栏之上，两者共用同一个 fixed 容器与安全区内边距——
+            分开两个 fixed 就得手算彼此的高度，底栏一改高度就错位 */}
+        <SessionDock
+          sessions={terms} active={active} needsInput={mobileWaiting}
+          running={(n) => !!(claudeMap[n]?.running || codexMap[n]?.running)}
+          onOpen={() => setOverlay(true)}
+          onPick={(n) => { setActive(n); setOverlay(true) }}
+          onClose={closeTerm}
+        />
+        <nav style={{ display: 'flex' }}>
+          {MOBILE_NAV_KEYS.map((key) => {
+            const n = NAV.find((x) => x.key === key)!
+            return (
+              <button key={n.key} onClick={() => go(n.key)}
+                style={{ flex: 1, minHeight: 'var(--tap)', border: 0, background: 'none', color: tab === n.key ? '#58a6ff' : 'var(--text-dim)', padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11 }}>
+                {ICONS[n.key]}{t(n.labelKey)}
+              </button>
+            )
+          })}
+          <button onClick={() => setMoreOpen(true)}
+            style={{ flex: 1, minHeight: 'var(--tap)', border: 0, background: 'none', color: MOBILE_MORE_KEYS.includes(tab) ? '#58a6ff' : 'var(--text-dim)', padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11 }}>
+            {svg(<><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></>)}{t('common.more')}
+          </button>
         </nav>
+        </div>
+      )}
+
+      {isMobile && (
+        <MobileSheet open={moreOpen} title={t('common.more')} onClose={() => setMoreOpen(false)}>
+          <SheetSection>{t('nav.groupTools')}</SheetSection>
+          {MOBILE_MORE_KEYS.map((key) => {
+            const n = NAV.find((x) => x.key === key)!
+            return <SheetRow key={n.key} icon={ICONS[n.key]} title={t(n.labelKey)}
+              onClick={() => { setMoreOpen(false); go(n.key) }} />
+          })}
+          <SheetSection>{t('mobile.groupAccount')}</SheetSection>
+          <SheetRow icon={themeIcon} title={mode === 'dark' ? t('common.lightTheme') : t('common.darkTheme')}
+            onClick={() => { toggleTheme() }} />
+          {fsSupported && (
+            <SheetRow icon={fsIcon} title={isFs ? t('common.exitFullscreen') : t('common.fullscreen')}
+              onClick={() => { toggleFs() }} />
+          )}
+          <SheetRow icon={ICONS.github} title={t('nav.about')} onClick={() => { setMoreOpen(false); go('about') }} />
+          <SheetRow
+            icon={svg(<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></>)}
+            title={t('common.logout')} desc={t('common.logoutConfirm')} danger
+            onClick={() => { setMoreOpen(false); Modal.confirm({ title: t('common.logoutConfirm'), okText: t('common.logout'), cancelText: t('common.cancel'), okButtonProps: { danger: true }, onOk: logout }) }} />
+        </MobileSheet>
       )}
 
       {/* 手机/平板：全屏会话覆盖层（桌面用右侧停靠栏，不走这里）*/}
@@ -796,6 +889,13 @@ const TI = {
   mic: tIcon(<><rect x="9.2" y="3" width="5.6" height="11" rx="2.8" /><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0" /><path d="M12 18v3" /></>),
   scrollUp: tIcon(<><path d="M4.5 4.5h15" /><path d="M12 20V9" /><path d="m7.5 13.5 4.5-4.5 4.5 4.5" /></>),
   toBottom: tIcon(<><path d="M4.5 19.5h15" /><path d="M12 4v11" /><path d="m7.5 10.5 4.5 4.5 4.5-4.5" /></>),
+  // Focus = 四角向外扩，返回分栏 = 四角向内收
+  focus: tIcon(<><path d="M4 9V4h5" /><path d="M20 9V4h-5" /><path d="M4 15v5h5" /><path d="M20 15v5h-5" /></>),
+  unfocus: tIcon(<><path d="M9 4v5H4" /><path d="M15 4v5h5" /><path d="M9 20v-5H4" /><path d="M15 20v-5h5" /></>),
+  dpad: tIcon(<><polyline points="12 5 12 19" /><polyline points="5 12 19 12" /></>),
+  back: tIcon(<><line x1="20" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></>),
+  caret: tIcon(<polyline points="6 9 12 15 18 9" />),
+  dots: tIcon(<><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></>),
   redraw: tIcon(<><path d="M20 12a8 8 0 1 1-2.6-5.9" /><path d="M20.5 4v5h-5" /></>),
   reconnect: tIcon(<><path d="M10.4 13.6a4.2 4.2 0 0 0 6 0l2.4-2.4a4.2 4.2 0 0 0-6-6l-1.4 1.4" /><path d="M13.6 10.4a4.2 4.2 0 0 0-6 0l-2.4 2.4a4.2 4.2 0 0 0 6 6l1.4-1.4" /></>),
 }
@@ -839,14 +939,21 @@ function TerminalPane(props: {
   claudeMap: Record<string, ClaudeInfo>; claudeView: Record<string, boolean>; setClaudeView: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
   codexMap: Record<string, ClaudeInfo>; codexView: Record<string, boolean>; setCodexView: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
   onRename: (oldName: string, newName: string) => void
+  /** 标签拖拽排序；不传就不可拖（独立单终端页没有多标签） */
+  onReorder?: (name: string, to: number) => void
+  /** 把「哪些会话在等输入」递给外层（手机会话坞要用），避免第二份抓屏轮询 */
+  onNeedsInput?: (map: Record<string, boolean>) => void
+  /** 终端 Focus：传了才渲染工具条右侧那枚按钮（手机没有这个概念） */
+  focus?: { on: boolean; toggle: () => void; hint: string }
   fileDock?: 'right' | 'left'   // 文件面板停靠：'right'=右侧浮动抽屉（默认），'left'=左侧 VSCode 栏（新标签全屏页）
 }) {
-  const { terms, active, setActive, closeTerm, fontSize, setFontSize, statusMap, setStatus, termRefs, sendKey, onCollapse, claudeMap, claudeView, setClaudeView, codexMap, codexView, setCodexView, onRename } = props
+  const { terms, active, setActive, closeTerm, fontSize, setFontSize, statusMap, setStatus, termRefs, sendKey, onCollapse, claudeMap, claudeView, setClaudeView, codexMap, codexView, setCodexView, onRename, onReorder, onNeedsInput, focus } = props
   const fileDock = props.fileDock || 'right'
   const { message, modal } = AntApp.useApp()
   const { t } = useI18n()
   const st = active ? statusMap[active] : undefined
   const [termNeedsInput, setTermNeedsInput] = useState<Record<string, boolean>>({})
+  const promptSignals = useRef<Record<string, PromptSignal>>({})
   // 危险操作目标可视化 / 就地确认：关闭 pane 前先定位目标（几何+cwd+前台进程），
   // confirm 走结构化后端接口，不再盲发 Ctrl-b x 字节（那样只会撞上 tmux 底部原生 y/n 提示）。
   const [paneCloseTarget, setPaneCloseTarget] = useState<PaneCloseTarget | null>(null)
@@ -885,7 +992,7 @@ function TerminalPane(props: {
 
   // 移动端可靠输入：xterm 隐藏 textarea 在软键盘/输入法「合成/预测词」下会把字留在
   // 合成缓冲里不提交，onData 不触发 → 打完字发不出去。触摸设备改用独立输入框：整行送 PTY。
-  const isTouch = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches
+  const { coarse: isTouch } = useLayout()
   const [line, setLine] = useState('')
   const mobileInputRef = useRef<import('antd').InputRef>(null)
   const sendRaw = (s: string) => { if (active) termRefs.current[active]?.send(s, true) } // keepFocus：不抢 xterm 焦点 → 软键盘不收起
@@ -922,6 +1029,53 @@ function TerminalPane(props: {
   // 切换后把它带回可视区（block:'nearest' → 只横向滚标签条，不牵动整页）。
   const activeTabRef = useRef<HTMLSpanElement | null>(null)
   useEffect(() => { activeTabRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' }) }, [active])
+
+  // 标签溢出时两侧给渐隐，提示"这边还有"（14 §7.1）。滚动条本身是隐藏的，
+  // 没有这个提示，窄栏下多出来的标签等于不存在。
+  const tabScrollRef = useRef<HTMLDivElement | null>(null)
+  const [fadeL, setFadeL] = useState(false)
+  const [fadeR, setFadeR] = useState(false)
+  const syncFade = useCallback(() => {
+    const el = tabScrollRef.current
+    if (!el) return
+    setFadeL(el.scrollLeft > 2)
+    setFadeR(el.scrollLeft + el.clientWidth < el.scrollWidth - 2)
+  }, [])
+  useEffect(() => {
+    syncFade()
+    const el = tabScrollRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(syncFade)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [syncFade, terms.length])
+
+  // 标签拖拽排序（14 §7.1）：dragTab / dropAt 只用来画反馈（半透明 + 插入线），
+  // 落点判定全部走事件本身，见下面两个 helper。
+  const { phone: isPhone } = useLayout()
+  const ws = prefsData.workspace
+  const [typing, setTyping] = useState(false)
+  // 快捷键条的两侧渐隐：和标签条同一套做法（溢出时才提示"这边还有"）
+  const keyRowRef = useRef<HTMLDivElement>(null)
+  const [keyFadeL, setKeyFadeL] = useState(false)
+  const [keyFadeR, setKeyFadeR] = useState(false)
+  const syncKeyFade = useCallback(() => {
+    const el = keyRowRef.current
+    if (!el) return
+    setKeyFadeL(el.scrollLeft > 2)
+    setKeyFadeR(el.scrollLeft + el.clientWidth < el.scrollWidth - 2)
+  }, [])
+  const [switchOpen, setSwitchOpen] = useState(false)
+  const [moreSheet, setMoreSheet] = useState(false)
+  const [dragTab, setDragTab] = useState<string | null>(null)
+  const [dropAt, setDropAt] = useState<number | null>(null)
+  // 自定义 MIME：文件区/终端的拖放判定按 type 分流，共用 text/plain 会被它们当路径接走
+  const isTabDrag = (e: React.DragEvent) => e.dataTransfer.types.includes('application/x-tt-tab')
+  /** 落在标签右半边 = 插到它后面 */
+  const dropIndexAt = (e: React.DragEvent, i: number) => {
+    const b = e.currentTarget.getBoundingClientRect()
+    return e.clientX > b.left + b.width / 2 ? i + 1 : i
+  }
 
   // 从文件/Git 面板把文件拖到终端 → 插入为 @绝对路径。
   const [dragOver, setDragOver] = useState(false)
@@ -1012,7 +1166,11 @@ function TerminalPane(props: {
   }, [active, claudeMap, codexMap])
 
   useEffect(() => {
-    if (!terms.length) { setTermNeedsInput({}); return }
+    if (!terms.length) {
+      promptSignals.current = {}
+      setTermNeedsInput((previous) => Object.keys(previous).length ? {} : previous)
+      return
+    }
     let stop = false
     const checkPrompts = async () => {
       const entries = await Promise.all(terms.map(async (name) => {
@@ -1023,12 +1181,46 @@ function TerminalPane(props: {
           return [name, false] as const
         }
       }))
-      if (!stop) setTermNeedsInput(Object.fromEntries(entries))
+      if (stop) return
+      const nextSignals: Record<string, PromptSignal> = {}
+      const nextState: Record<string, boolean> = {}
+      entries.forEach(([name, candidate]) => {
+        const signal = advancePromptSignal(promptSignals.current[name], candidate)
+        nextSignals[name] = signal
+        nextState[name] = signal.stable
+      })
+      promptSignals.current = nextSignals
+      // 未发生语义变化时复用旧对象，避免后台抓屏每 4 秒让整个终端区无意义重渲染。
+      setTermNeedsInput((previous) => {
+        const keys = Object.keys(nextState)
+        const unchanged = keys.length === Object.keys(previous).length && keys.every((name) => previous[name] === nextState[name])
+        return unchanged ? previous : nextState
+      })
     }
     checkPrompts()
     const t = setInterval(checkPrompts, 4000)
     return () => { stop = true; clearInterval(t) }
   }, [terms])
+
+  useEffect(() => { onNeedsInput?.(termNeedsInput) }, [termNeedsInput, onNeedsInput])
+
+  useEffect(() => {
+    syncKeyFade()
+    const el = keyRowRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(syncKeyFade)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [syncKeyFade, typing, inChat])
+
+  // 软键盘开合会改可视高度，但 xterm 不会自己重算行数——不重新 fit 就会出现
+  // 「PTY 以为还有 25 行、实际只画得下 7 行」的错位，表现为花屏。等一帧让布局落定再量。
+  const kb = useLayout().keyboard
+  useEffect(() => {
+    if (!active) return
+    const id = requestAnimationFrame(() => termRefs.current[active]?.fit())
+    return () => cancelAnimationFrame(id)
+  }, [kb, active, typing])
 
   const sendPaste = (session: string, text: string) => {
     if (!text) return
@@ -1163,31 +1355,162 @@ function TerminalPane(props: {
       {active && <SessionTitle name={active} />}
     </>
   )
+  // 标签条：左侧「收起」固定不滚，标签区独立横滚（14 §7.1）。
+  // 收起按钮原来跟着标签一起滚，会话一多它就滑出视口——那是常驻动作，不该跟着内容跑。
   const tabStrip = (
-    <div className="tt-tabs">
+    <div className="tt-tabs-wrap">
       {onCollapse && (
-        <>
+        <div className="tt-tabs-lead">
           <TBtn icon={TI.collapse} label={t('common.collapse')} onClick={onCollapse} />
           <span className="tt-sep" />
-        </>
+        </div>
       )}
-      {terms.map((termName) => {
-        const on = termName === active
-        const waiting = termNeedsInput[termName]
-        return (
-          <span key={termName} ref={on ? activeTabRef : undefined}
-            className={`tt-tab${on ? ' on' : ''}`} title={termName} onClick={() => setActive(termName)}
-            style={on ? { background: 'rgba(88,166,255,.14)', borderColor: 'rgba(88,166,255,.5)' } : undefined}>
-            {statusDot(dotOf(termName))}
-            {waiting && <span title={t('prompt.confirmRequired')} style={{ color: '#d29922', fontWeight: 600 }}>{t('session.waiting')}</span>}
-            {agentMarks(termName)}
-            <span className="tt-name"><SessionTitle name={termName} /></span>
-            <a className="tt-x" title={t('common.close')} onClick={(e) => { e.stopPropagation(); closeTerm(termName) }}>{TI.close}</a>
-          </span>
-        )
-      })}
+      <div className="tt-tabs" ref={tabScrollRef} data-l={fadeL ? '1' : undefined} data-r={fadeR ? '1' : undefined}
+        onScroll={syncFade}
+        // 竖滚轮横移：标签条只有一行，鼠标滚轮在它上面本来什么也不做
+        onWheel={(e) => {
+          const el = tabScrollRef.current
+          if (!el || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return
+          el.scrollLeft += e.deltaY
+        }}>
+        {terms.map((termName, i) => {
+          const on = termName === active
+          const waiting = termNeedsInput[termName]
+          const proj = sessionProject(termName)
+          // 分支进 Tooltip，不占标签宽度（14 §6.3.2）
+          const tip = [proj && proj.name, sessionDisplay(termName), proj?.branch && `⎇ ${proj.branch}`]
+            .filter(Boolean).join(' · ')
+          const tab = (
+            <span key={termName} ref={on ? activeTabRef : undefined}
+              className={`tt-tab${on ? ' on' : ''}${dragTab === termName ? ' dragging' : ''}${dropAt === i ? ' dropL' : ''}`}
+              title={tip} onClick={() => setActive(termName)}
+              draggable={!!onReorder}
+              onDragStart={(e) => {
+                // 自定义 MIME：文件区/终端的拖放判定按 type 分流，用通用 text/plain
+                // 会被它们当成路径拖拽接走（见 isPathDrag）
+                e.dataTransfer.setData('application/x-tt-tab', String(i))
+                e.dataTransfer.effectAllowed = 'move'
+                setDragTab(termName)
+              }}
+              onDragOver={(e) => {
+                if (!isTabDrag(e)) return
+                e.preventDefault(); e.stopPropagation()
+                e.dataTransfer.dropEffect = 'move'
+                setDropAt(dropIndexAt(e, i))
+              }}
+              onDrop={(e) => {
+                if (!isTabDrag(e)) return
+                e.preventDefault(); e.stopPropagation()
+                // 源标签从 dataTransfer 读，不从 dragTab 状态读：状态只用来画拖拽反馈，
+                // 落点判定必须只依赖事件本身，否则 setState 还没刷新时这一拖就静默丢了
+                const from = Number(e.dataTransfer.getData('application/x-tt-tab'))
+                const name = terms[from]
+                if (name) onReorder?.(name, dropIndexAt(e, i))
+                setDragTab(null); setDropAt(null)
+              }}
+              onDragEnd={() => { setDragTab(null); setDropAt(null) }}>
+              {statusDot(dotOf(termName))}
+              {waiting && <span className="tt-wait" title={t('prompt.confirmRequired')}>{t('session.waiting')}</span>}
+              {agentMarks(termName)}
+              <TabName name={termName} />
+              <a className="tt-x" title={t('common.close')} onClick={(e) => { e.stopPropagation(); closeTerm(termName) }}>{TI.close}</a>
+            </span>
+          )
+          // 右键菜单：标签是跨页常驻的，「这个会话是哪来的」得有个地方能问（14 §6.3.4）
+          return (
+            <Dropdown key={termName} trigger={['contextMenu']} menu={{ items: [
+              ...(proj ? [{ key: 'proj', label: t('terminal.openOwnerProject', { name: proj.name }),
+                onClick: () => { location.hash = '#/projects/' + encodeURIComponent(proj.key) } }] : []),
+              { key: 'newtab', label: t('terminal.openInNewTabTitle'),
+                onClick: () => window.open(`/#/term/${encodeURIComponent(termName)}`, '_blank') },
+              { type: 'divider' as const },
+              { key: 'close', danger: true, label: t('common.close'), onClick: () => closeTerm(termName) },
+            ] }}>{tab}</Dropdown>
+          )
+        })}
+        {/* 拖到最右侧：最后一个标签的右半边已经给出 i+1，这里只补"空白区也能落" */}
+        {dragTab && (
+          <span className="tt-tab-tail"
+            onDragOver={(e) => { if (!isTabDrag(e)) return; e.preventDefault(); setDropAt(terms.length) }}
+            onDrop={(e) => {
+              if (!isTabDrag(e)) return
+              e.preventDefault()
+              const name = terms[Number(e.dataTransfer.getData('application/x-tt-tab'))]
+              if (name) onReorder?.(name, terms.length)
+              setDragTab(null); setDropAt(null)
+            }} />
+        )}
+      </div>
     </div>
   )
+  // ── 手机会话页顶栏（13 §5.1）：一行 50，取代「标签条 + 工具条」两行 79 ──
+  // 中间胶囊点开 = 会话切换 sheet（取代横滑标签条）；除 Agent 视图切换外，其余控件全进「⋯」。
+  // **不能按 !inChat 收窄**：切到 Claude/Codex 对话视图后 phoneChrome 变 null，
+  // 整块外壳就掉回桌面那套「标签条 + 工具条」——按一下渲染模式，页面样式全变了。
+  // 对话只该换中间那块内容，顶栏（返回 / 会话胶囊 / Agent 切换 / 更多）自始至终是同一条。
+  const phoneChrome = isPhone ? (
+    <>
+      <div className="tt-sesshead">
+        <button type="button" className="ic" aria-label={t('common.collapse')} onClick={onCollapse}>
+          {TI.back}
+        </button>
+        <button type="button" className="pill" onClick={() => setSwitchOpen(true)}>
+          <i className="d" style={{ background: activeNeedsInput ? '#d29922' : dot }} />
+          {active && <TabName name={active} project={false} />}
+          {TI.caret}
+          {terms.length > 1 && <span className="n">{terms.length}</span>}
+        </button>
+        {active && claudeMap[active]?.running && (
+          <button type="button" className={`ic${claudeView[active] ? ' on' : ''}`} aria-label="Claude"
+            onClick={() => setClaudeView((v) => ({ ...v, [active!]: !v[active!] }))}>
+            <AgentMark kind="claude" size={16} />
+          </button>
+        )}
+        {active && codexMap[active]?.running && (
+          <button type="button" className={`ic${codexView[active] ? ' on' : ''}`} aria-label="Codex"
+            onClick={() => setCodexView((v) => ({ ...v, [active!]: !v[active!] }))}>
+            <AgentMark kind="codex" size={16} />
+          </button>
+        )}
+        <button type="button" className="ic" aria-label={t('common.more')} onClick={() => setMoreSheet(true)}>
+          {TI.dots}
+        </button>
+      </div>
+      <SessionSwitchSheet open={switchOpen} onClose={() => setSwitchOpen(false)}
+        sessions={terms} active={active} needsInput={termNeedsInput}
+        running={(n) => !!(claudeMap[n]?.running || codexMap[n]?.running)}
+        onPick={setActive} onCloseSession={closeTerm} />
+      <MobileSheet open={moreSheet} title={t('common.more')} onClose={() => setMoreSheet(false)}>
+        <SheetSection>{t('mobile.groupSession')}</SheetSection>
+        <SheetRow icon={TI.rename} title={t('session.rename')} onClick={() => { setMoreSheet(false); active && setRenameSession(active) }} />
+        <SheetRow icon={TI.newTab} title={t('terminal.newTab')}
+          onClick={() => { setMoreSheet(false); active && window.open(`/#/term/${encodeURIComponent(active)}`, '_blank') }} />
+        <SheetSection>{t('mobile.groupPanels')}</SheetSection>
+        <SheetRow icon={TI.folder} title={t('chat.files')} onClick={() => { setMoreSheet(false); toggleFiles() }} />
+        <SheetRow icon={TI.git} title={t('git.title')} onClick={() => { setMoreSheet(false); toggleGit() }} />
+        <SheetRow icon={TI.mic} title={t('voice.input')} onClick={() => { setMoreSheet(false); setShowVoice((v) => !v) }} />
+        <SheetRow icon={promptOff ? TI.bellOff : TI.bellOn} title={t('prompt.popup')}
+          desc={promptOff ? t('prompt.popupOff') : t('prompt.popupOn')} onClick={togglePromptOff} />
+        <SheetRow icon={TI.dpad} title={t('mobile.dpadOn')} desc={ws.dpadOn ? t('common.on') : t('common.off')}
+          onClick={() => saveWorkspace({ dpadOn: !ws.dpadOn })} />
+        {ws.dpadOn && (
+          <SheetRow icon={TI.dpad} title={t('mobile.dpadSide')} desc={ws.dpadSide === 'left' ? t('common.on') : t('common.off')}
+            onClick={() => saveWorkspace({ dpadSide: ws.dpadSide === 'left' ? 'right' : 'left' })} />
+        )}
+        {/* 画面工具只对终端画布有意义：对话视图有自己的滚动与排版 */}
+        {!inChat && <SheetSection>{t('mobile.groupScreen')}</SheetSection>}
+        {!inChat && <div className="tt-sheet-grid">
+          <button type="button" onClick={() => setFontSize(Math.max(10, fontSize - 1))}>A−</button>
+          <button type="button" onClick={() => setFontSize(Math.min(22, fontSize + 1))}>A+</button>
+          <button type="button" onClick={() => active && termRefs.current[active]?.scroll(-12)}>{TI.scrollUp}</button>
+          <button type="button" onClick={() => active && termRefs.current[active]?.toBottom()}>{TI.toBottom}</button>
+          <button type="button" onClick={() => active && termRefs.current[active]?.redraw()}>{TI.redraw}</button>
+          <button type="button" onClick={() => active && termRefs.current[active]?.reconnect()}>{TI.reconnect}</button>
+        </div>}
+      </MobileSheet>
+    </>
+  ) : null
+
   // 工具条分三段：左=会话身份与动作，中=面板开关，右（分段组）=只读的画面控制
   const sessionToolbar = (
     <div className="tt-tbar tt-session-toolbar">
@@ -1231,10 +1554,40 @@ function TerminalPane(props: {
         <TBtn icon={TI.redraw} title={t('terminal.redraw')} onClick={() => active && termRefs.current[active]?.redraw()} />
         <TBtn icon={TI.reconnect} title={t('terminal.reconnect')} onClick={() => active && termRefs.current[active]?.reconnect()} />
       </span>
+      {/* Focus 与「返回分栏」是同一枚按钮的两态（14 §7.2）：不额外插一条只在
+          Focus 时出现的横条——那种横条会让 Focus 前后的工具条高度跳一下。 */}
+      {focus && (
+        <TBtn icon={focus.on ? TI.unfocus : TI.focus} label={focus.on ? t('workspace.exitFocus') : t('workspace.focusDock')}
+          on={focus.on} title={`${focus.on ? t('workspace.exitFocus') : t('workspace.focusDock')} (${focus.hint})`}
+          onClick={focus.toggle} />
+      )}
     </div>
   )
+  // 方向簇（13 §5.3）：贴在终端画布上，不吃终端高度。
+  //
+  // **只在 TUI 里出现**——Claude/Codex 在跑的时候。它存在的全部理由是「在选项列表里选一项
+  // 时不必弹软键盘」；普通 shell 下你本来就要打字，键盘总要弹，一个没有标签的十字浮在那儿
+  // 只会让人问「这是干嘛的」（用户原话）。对话视图有自己的输入框，同样不挂。
+  const agentRunning = !!(active && (claudeMap[active]?.running || codexMap[active]?.running))
+  const dpad = isPhone && !inChat && agentRunning && ws.dpadOn ? (
+    <>
+      <DPad side={ws.dpadSide} onSend={(seq) => tapKey(seq)} onHide={() => saveWorkspace({ dpadOn: false })} />
+      {/* 一次性说明：一个没有标签的十字自己解释不了自己 */}
+      {!ws.dpadHintSeen && (
+        <div className="tt-dpad-hint">
+          <span className="tx">
+            <b>{t('mobile.dpadHintTitle')}</b>
+            {t('mobile.dpadHintBody')}
+          </span>
+          <button type="button" onClick={() => saveWorkspace({ dpadHintSeen: true })}>{t('mobile.dpadHintOk')}</button>
+        </div>
+      )}
+    </>
+  ) : null
+
   const terminalArea = (
-    <div style={{ flex: 1, minHeight: 0, display: 'flex', position: 'relative' }}
+    <div className={dpad ? 'tt-has-dpad' : undefined}
+      style={{ flex: 1, minHeight: 0, display: 'flex', position: 'relative' }}
       onDragOver={(e) => {
         if (isFileDrag(e)) { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; setDragOver(true); return } // 系统文件：允许放下并上传
         if (!isPathDrag(e)) return
@@ -1243,16 +1596,25 @@ function TerminalPane(props: {
       }}
       onDragLeave={(e) => { if (e.currentTarget === e.target) setDragOver(false) }}
       onDrop={onTermDrop}>
+      {dpad}
       {dragOver && (
         <div style={{
           position: 'absolute', inset: 0, zIndex: 5, pointerEvents: 'none',
-          border: '2px dashed #58a6ff', borderRadius: 8, background: 'rgba(88,166,255,.08)',
+          border: '2px dashed #58a6ff', borderRadius: 'var(--r-sm)', background: 'rgba(88,166,255,.08)',
           display: 'grid', placeItems: 'center', color: '#58a6ff', fontSize: 14, fontWeight: 600,
         }}>{t('terminal.dropToMention')}</div>
       )}
       <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
         {terms.map((termName) => (
-          <div key={termName} style={{ position: 'absolute', inset: 0, display: termName === active ? 'block' : 'none', padding: 6 }}>
+          // 非当前终端不能用 display:none：xterm 会暂停渲染且容器尺寸归零，切换或关闭当前标签时
+          // 下一张 WebGL 画布要经过“重新量尺寸 → 清画布 → 重画”，中间会露出 1~2 帧黑屏。
+          // visibility:hidden 保留真实尺寸并让后台画布保持就绪；pointerEvents/zIndex 隔离交互与层叠。
+          <div key={termName} style={{
+            position: 'absolute', inset: 0, padding: 6,
+            visibility: termName === active ? 'visible' : 'hidden',
+            pointerEvents: termName === active ? 'auto' : 'none',
+            zIndex: termName === active ? 1 : 0,
+          }}>
             <Term ref={(h) => { termRefs.current[termName] = h }} name={termName} fontSize={fontSize} active={termName === active} onStatus={(s) => setStatus(termName, s)}
               onContextMenu={({ x, y, selection }) => { setActive(termName); setCtx({ x, y, session: termName, selection }) }}
               onSelectionMenu={({ selection }) => { setActive(termName); setCtx(null); if (selection.trim()) { copyText(selection); message.success(t('common.copied')) } }}
@@ -1279,16 +1641,33 @@ function TerminalPane(props: {
   const sessionBottom = (
     <>
       {isTouch && !inChat && (
-        <div style={{ display: 'flex', gap: 6, padding: '8px 8px 0' }} onDragOver={allowPathDrop} onDrop={onInputDrop}>
-          <Input ref={mobileInputRef} value={line} onFocus={exitCopyMode} onChange={(e) => setLine(e.target.value)}
+        <div style={{ display: 'flex', gap: 'var(--sp-2)', padding: '8px 8px 0' }} onDragOver={allowPathDrop} onDrop={onInputDrop}>
+          <Input ref={mobileInputRef} value={line}
+            onFocus={() => { exitCopyMode(); setTyping(true) }}
+            // 延后收起：点快捷键条上的键会先让输入框失焦，立刻收就把那一条抽走了
+            onBlur={() => setTimeout(() => setTyping(false), 180)}
+            onChange={(e) => setLine(e.target.value)}
             onPressEnter={(e) => { if ((e.nativeEvent as any).isComposing) return; submitLine() }}
             placeholder={t('terminal.mobileInputPlaceholder')} allowClear autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} />
           <Button type="primary" onMouseDown={noBlur} onClick={submitLine}>{t('common.send')}</Button>
         </div>
       )}
-      {!inChat && (
-        <div style={{ display: 'flex', gap: 6, padding: 8, borderTop: '1px solid var(--border)', overflowX: 'auto' }}>
-          <Button type="primary" onMouseDown={noBlur} onClick={() => (isTouch ? submitLine() : sendKey('\r'))}>Enter</Button>
+      {/* 快捷键条只在输入态出现（13 §5.2）：它常驻 49px，而不打字时一个键也用不上——
+          手机上这 49px 直接等于终端少 3 行。桌面不受影响。
+          `tt-keyrow` 给两侧渐隐 + 滚轮横移：这一条 15 个按钮宽 913，窄栏里只露得出 605，
+          而原来既没有渐隐也没有滚动条，右边缘正好把某个键切成一半——看着就是"没显示全"。 */}
+      {!inChat && (!isPhone || typing) && (
+        <div className="tt-keyrow" ref={keyRowRef}
+          onScroll={syncKeyFade}
+          onWheel={(e) => {
+            const el = keyRowRef.current
+            if (!el || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return
+            el.scrollLeft += e.deltaY
+          }}
+          data-l={keyFadeL ? '1' : undefined} data-r={keyFadeR ? '1' : undefined}
+          style={{ display: 'flex', gap: 'var(--sp-2)', padding: 8, borderTop: '1px solid var(--border)', overflowX: 'auto' }}>
+          <Button type="primary" onMouseDown={noBlur} style={{ flex: '0 0 auto' }}
+            onClick={() => (isTouch ? submitLine() : sendKey('\r'))}>Enter</Button>
           {/* 触屏没有 Ctrl+Shift+V / 右键菜单在长按选词后也不再弹出，丝带上补一个直达粘贴 */}
           {isTouch && <Button onMouseDown={noBlur} onClick={() => active && pasteClipboard(active)} style={{ flex: '0 0 auto' }}>{t('terminal.pasteAction')}</Button>}
           {(prefsData.quickCommands || []).map((cmd) => (
@@ -1375,8 +1754,7 @@ function TerminalPane(props: {
       ) : (
         <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
           <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-            {tabStrip}
-            {sessionToolbar}
+            {phoneChrome || <>{tabStrip}{sessionToolbar}</>}
             {terminalArea}
             {sessionBottom}
           </div>
@@ -1598,7 +1976,7 @@ export function DirPicker({ open, start, onPick, onClose }: { open: boolean; sta
     <Modal open={open} onCancel={onClose} title={t('dirPicker.title')} zIndex={1100}
       footer={[<Button key="c" onClick={onClose}>{t('common.cancel')}</Button>, <Button key="o" type="primary" onClick={() => choose(data.path)}>{t('dirPicker.chooseCurrent')}</Button>]}>
       {/* 快捷候选：家目录 + 最近用过的目录 */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)', marginBottom: 10 }}>
         <Tag style={{ cursor: 'pointer', margin: 0 }} onClick={() => load(undefined)}>🏠 {t('dirPicker.home')}</Tag>
         {recent.map((d) => (
           <Tooltip key={d} title={d}>
@@ -1815,7 +2193,7 @@ export function NewSessionModal({ open, parent, onClose, onDone }: { open: boole
             )}
           </>)}
           {/* 工作区三选一（W1 交互修订）：常驻不隐藏(cc96123 教训)——非 git 目录整组置灰+tooltip */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <span style={{ color: 'var(--text-dim)', fontSize: 13, flex: '0 0 auto' }}>{t('session.wt.where')}</span>
               <Tooltip title={isGitRepo ? '' : parent ? t('session.fork.parentNotRepo') : t('session.worktreeNeedsRepo')}>
@@ -1840,7 +2218,7 @@ export function NewSessionModal({ open, parent, onClose, onDone }: { open: boole
                     value: w.path,
                     title: `⎇ ${w.branch || w.path.split('/').pop()}`,
                     label: (
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', minWidth: 0 }}>
                         <span style={{ fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis' }}>⎇ {w.branch || '?'}</span>
                         {occupied
                           ? <Tag color="green" style={{ margin: 0, fontSize: 11, lineHeight: '16px' }}>{sessionLabel(w.sessions[0].session)}</Tag>
@@ -1856,7 +2234,7 @@ export function NewSessionModal({ open, parent, onClose, onDone }: { open: boole
             {/* 新建 worktree 展开态（W1 交互修订 4）：只选「基于」（缺省本地主干）。
                 分支不提前指定——占位按会话名派生，Agent 开工后按任务命名 */}
             {wtMode === 'new' && isGitRepo && (
-              <div style={{ background: 'var(--bg-elevated)', borderRadius: 8, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ background: 'var(--bg-elevated)', borderRadius: 'var(--r-sm)', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ flex: '0 0 52px', color: 'var(--text-dim)', fontSize: 13 }}>{t('session.wt.base')}</span>
                   <Select size="small" showSearch optionFilterProp="label" style={{ flex: 1, minWidth: 0 }}
@@ -1991,7 +2369,7 @@ export function CloseWorktreeModal({ info, onClose, onDone }: {
           })}
       </div>
       <Radio.Group value={mode} onChange={(e) => setMode(e.target.value)}
-        style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
         <Radio value="keep">{t('worktree.close.keep')}</Radio>
         {/* 已合入后本地再合并只会空转/添乱：禁用并提示走清理 */}
         <Radio value="merge" disabled={!st.base || merged}>
@@ -2016,7 +2394,12 @@ export function CloseWorktreeModal({ info, onClose, onDone }: {
 }
 
 // ── 会话（可新建/指定目录 / 进终端 / 关闭） ──
-function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) => void; closeTerm: (n: string) => void; activeTerm: string | null }) {
+function Sessions({ openTerm, closeTerm, activeTerm, embedded }: {
+  openTerm: (n: string) => void; closeTerm: (n: string) => void; activeTerm: string | null
+  /** 嵌在概览「会话」tab 里：不渲染页头（外面的 tab 已经说了这是会话） */
+  embedded?: boolean
+}) {
+  const { phone: isPhone } = useLayout()
   const [list, setList] = useState<any[]>([])
   const [cc, setCc] = useState<Record<string, boolean>>({})
   const [cx, setCx] = useState<Record<string, boolean>>({})
@@ -2188,7 +2571,7 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
   })
 
   // ── W2 仓库分组：同仓库 ≥2 个 worktree 会话聚组，组头可折叠(记 localStorage) ──
-  const screens = useBreakpoint()
+  const { desktop: wide } = useLayout()
   const [wtCollapsed, setWtCollapsed] = useState<Record<string, boolean>>(() => {
     try { return JSON.parse(localStorage.getItem('ttmux_wt_groups') || '{}') } catch { return {} }
   })
@@ -2287,22 +2670,46 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
   }
   const compareRace = races.find((rc) => rc.id === compareId) || null
 
-  return (
-    <Card
-      title={<Space size={8}>{t('nav.sessions')}<Tag style={{ margin: 0 }}>{cnt('all')}</Tag></Space>}
-      extra={<Space size={8}>
-        <Tooltip title={t('worktree.entryTip')}>
-          <Button onClick={() => { setWtDir(undefined); setWtOpen(true) }}>{t('worktree.entry')}</Button>
-        </Tooltip>
+  // 会话动作：Worktree 管理 + 新建（两处复用，桌面进页头、手机独占一行）
+  const sessionActions = (
+    <>
+      <Tooltip title={t('worktree.entryTip')}>
+        <Button style={isPhone ? { flex: 1, minWidth: 0 } : undefined}
+          onClick={() => { setWtDir(undefined); setWtOpen(true) }}>{t('worktree.entry')}</Button>
+      </Tooltip>
+      {/* 必须钉住 flex：Dropdown.Button 内的 Space.Compact 是块级 flex 子项，不钉就会
+          一路撑开并盖住左边那枚按钮（项目页页头、手机头部都踩过同一个坑） */}
+      <span style={{ flex: '0 0 auto', display: 'inline-flex' }}>
         {/* 新建下拉(W5 入口)：主点 = 新建会话；菜单 = 新建竞赛 */}
         <Dropdown.Button type="primary" onClick={() => setNewOpen(true)}
           menu={{ items: [{ key: 'race', label: t('race.new') }], onClick: () => setRaceOpen(true) }}>
           + {t('session.new')}
         </Dropdown.Button>
-      </Space>}
-    >
+      </span>
+    </>
+  )
+
+  return (
+    // 不再套 Card：嵌在概览「会话」tab 里时，卡片边框 + 「会话 13」标题与外面的 tab
+    // 完全重复——一层壳里套一层同名的壳。独立页则用与概览/项目同一套页头。
+    <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      {!embedded && (
+        <header className="tt-pagehead" style={{ marginBottom: 14 }}>
+          <div className="ttl">
+            <div className="kicker">{t('nav.groupWorkspace')}</div>
+            <h2>{t('nav.sessions')}</h2>
+            <p>{t('session.subtitle')}</p>
+          </div>
+          {!isPhone && <div className="acts">{sessionActions}</div>}
+        </header>
+      )}
+      {/* 手机才需要自己占一行（横向放不下）；桌面嵌入态并进下面搜索那一行，
+          否则「Worktree 管理 / ＋新建会话」白占一整行 */}
+      {isPhone && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>{sessionActions}</div>
+      )}
       {/* 工具条：搜索 + 排序同一行，类型筛选另起一行 */}
-      <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Input allowClear value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('session.searchPlaceholder')}
             style={{ flex: 1, minWidth: 0 }}
@@ -2317,9 +2724,13 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
             title={sortAsc ? t('session.sortAsc') : t('session.sortDesc')}>
             {sortAsc ? '↑' : '↓'}
           </Button>
+          {embedded && !isPhone && sessionActions}
         </div>
-        <div style={{ overflowX: 'auto' }}>
-          <Segmented block value={filter} onChange={(v) => setFilter(v as any)} size="small" options={[
+        {/* 一律按内容宽：block 在手机上把 6 项等分成 ~60px、标签全截成「全部…」；
+            在桌面上又把 6 个标签摊到 1200px，中间空出大片，读起来是散的。
+            筛选条本来就该贴左、只占它需要的宽度。 */}
+        <div style={{ overflowX: 'auto' }} className="tt-seg-scroll">
+          <Segmented value={filter} onChange={(v) => setFilter(v as any)} size="small" options={[
             { label: `${t('common.all')} ${cnt('all')}`, value: 'all' },
             { label: `${t('session.waiting')} ${cnt('waiting')}`, value: 'waiting' },
             { label: `Claude ${cnt('claude')}`, value: 'claude' },
@@ -2392,21 +2803,22 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
                   position: 'relative', overflow: 'hidden',
                   marginLeft: indent ? 14 * (en.depth || 1) : 0,
                   borderLeft: indent ? (en.race ? '2px solid rgba(212,160,23,.35)' : en.fam ? '2px solid rgba(163,113,247,.4)' : '2px solid rgba(57,197,207,.3)') : undefined,
-                  padding: '10px 8px 10px 12px', cursor: 'pointer', borderRadius: indent ? '0 8px 8px 0' : 8,
+                  padding: '10px 8px 10px 12px', cursor: 'pointer',
+                  borderRadius: indent ? '0 var(--r-sm) var(--r-sm) 0' : 'var(--r-sm)',
                   background: activeRow ? 'linear-gradient(90deg, rgba(31,111,235,.38), rgba(31,111,235,.16))' : undefined,
                   border: activeRow ? '1px solid #58a6ff' : '1px solid transparent',
                   boxShadow: activeRow ? '0 0 0 1px rgba(88,166,255,.18), 0 0 18px rgba(31,111,235,.14)' : undefined,
                 }} onClick={() => openTerm(s.name)}>
                   {activeRow && <span aria-hidden style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: '#58a6ff' }} />}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', width: '100%', minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', minWidth: 0, flex: 1 }}>
                       <i title={waiting ? t('prompt.confirmRequired') : connected ? t('terminal.status.connected') : t('terminal.status.idle')} style={{ width: 8, height: 8, borderRadius: '50%', flex: '0 0 8px', background: waiting ? '#d29922' : connected ? '#3fb950' : 'var(--text-dimmer)' }} />
                       <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' }}>
                           {en.fam && <Tooltip title={t('session.fork.childOf', { parent: s.parent })}><span style={{ color: '#a371f7', flex: '0 0 auto', fontSize: 13 }}>⑂</span></Tooltip>}
                           <span style={{ fontWeight: 700, color: activeRow ? '#fff' : 'var(--text-bright)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${s.label || s.name}（${s.id || s.name}）`}>
                             {s.label || s.name}
-                            {(s.id || s.name) !== (s.label || s.name) && <span style={{ opacity: .5, fontSize: '.85em', marginLeft: 4, fontWeight: 400 }}>({s.id || s.name})</span>}
+                            {(s.id || s.name) !== (s.label || s.name) && <span style={{ opacity: .5, fontSize: 'var(--fs-meta)', marginLeft: 4, fontWeight: 400 }}>({s.id || s.name})</span>}
                           </span>
                           {(() => { // worktree 归属：⎇ 分支紧跟会话名(设计 W2)；外部 worktree 加 ⧉ 标识；手机端只显图标
                             const ann = wtAnn[s.name]
@@ -2417,10 +2829,10 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
                               <Tooltip title={tip}>
                                 <Tag color="cyan" style={{ margin: 0, flex: '0 0 auto', cursor: 'pointer', fontFamily: 'ui-monospace, monospace' }}
                                   onClick={(e) => { e.stopPropagation(); setWtDir(ann.primary.repo); setWtOpen(true) }}>
-                                  {screens.md ? `⎇ ${ann.primary.branch}` : '⎇'}{ann.ambiguous ? ' +' : ''}
+                                  {wide ? `⎇ ${ann.primary.branch}` : '⎇'}{ann.ambiguous ? ' +' : ''}
                                 </Tag>
                               </Tooltip>
-                              {ann.primary.external && <Tag style={{ margin: 0, flex: '0 0 auto' }}>⧉ {screens.md ? t('worktree.external') : ''}</Tag>}
+                              {ann.primary.external && <Tag style={{ margin: 0, flex: '0 0 auto' }}>⧉ {wide ? t('worktree.external') : ''}</Tag>}
                             </>)
                           })()}
                           {sw && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>{t('nav.swarm')}:{sw.swarm}{sw.role === 'leader' ? `·${t('swarm.master')}` : ''}</Tag>}
@@ -2437,8 +2849,8 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
                         </div>
                       </div>
                     </div>
-                    <div onClick={(e) => e.stopPropagation()} style={{ marginLeft: 'auto', display: 'flex', gap: 14, alignItems: 'center', flex: '0 0 auto', whiteSpace: 'nowrap' }}>
-                      {!sw && screens.md && <a onClick={() => setForking(s.name)}>{t('session.fork.entry')}</a>}
+                    <div onClick={(e) => e.stopPropagation()} style={{ marginLeft: 'auto', display: 'flex', gap: 'var(--sp-4)', alignItems: 'center', flex: '0 0 auto', whiteSpace: 'nowrap' }}>
+                      {!sw && wide && <a onClick={() => setForking(s.name)}>{t('session.fork.entry')}</a>}
                       {sw && <a onClick={() => goSwarm(sw.swarm)}>{t('session.swarmPage')}</a>}
                       {sw ? (
                         <Popconfirm
@@ -2475,7 +2887,7 @@ function Sessions({ openTerm, closeTerm, activeTerm }: { openTerm: (n: string) =
         {compareRace && <RaceComparePanel race={compareRace} onClose={() => setCompareId('')}
           openTerm={openTerm} onChanged={() => { reloadRaces(); load() }} />}
       </Suspense>
-    </Card>
+    </div>
   )
 }
 
@@ -2546,7 +2958,7 @@ function P2PCard() {
           <span style={dim}>{t('settings.p2pHelp')}</span>
         </Space>
         {/* STUN 服务器（留空用服务端默认）。仅影响本浏览器的打洞。 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, opacity: on ? 1 : 0.5 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)', opacity: on ? 1 : 0.5 }}>
           <span style={dim}>{t('settings.p2pStun')}</span>
           <Input
             disabled={!on} allowClear value={stunValue}
@@ -2557,7 +2969,7 @@ function P2PCard() {
           <span style={hint}>{t('settings.p2pStunHelp')}</span>
         </div>
         {/* 连接超时（秒）：打洞建链超时后回退 frp。 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, opacity: on ? 1 : 0.5 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)', opacity: on ? 1 : 0.5 }}>
           <span style={dim}>{t('settings.p2pTimeout')}</span>
           <Space align="center" wrap>
             <InputNumber
@@ -2569,7 +2981,7 @@ function P2PCard() {
           </Space>
         </div>
         {/* 候选收集(gather)上限（秒）：慢网(手机蜂窝 srflx 迟到)可调大。 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, opacity: on ? 1 : 0.5 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)', opacity: on ? 1 : 0.5 }}>
           <span style={dim}>{t('settings.p2pGather')}</span>
           <Space align="center" wrap>
             <InputNumber
@@ -2581,7 +2993,7 @@ function P2PCard() {
           </Space>
         </div>
         {/* P2P 最低速率(KB/s)：直连平均落盘速率长期低于此值就回退中转；0=不回退，永远坚持 P2P。 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, opacity: on ? 1 : 0.5 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)', opacity: on ? 1 : 0.5 }}>
           <span style={dim}>{t('settings.p2pMinSpeed')}</span>
           <Space align="center" wrap>
             <InputNumber
@@ -2610,7 +3022,7 @@ function QuickCommandsCard() {
   return (
     <Card title={t('settings.quickCommands')}>
       <Space direction="vertical" size="small" style={{ width: '100%', maxWidth: 520 }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)' }}>
           {cmds.map((cmd, i) => (
             <Tag key={i} closable onClose={() => remove(i)} color="blue" style={{ margin: 0 }}>{cmd}</Tag>
           ))}
@@ -3229,9 +3641,9 @@ function TwoFactorCard() {
 
         {/* 开启流程：扫码 → 输码确认 */}
         {setup && (
-          <div style={{ padding: 16, background: 'var(--bg-base)', borderRadius: 8 }}>
+          <div style={{ padding: 16, background: 'var(--bg-base)', borderRadius: 'var(--r-sm)' }}>
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-              <div style={{ background: '#fff', padding: 10, borderRadius: 8 }}><QRCodeSVG value={setup.uri} size={168} /></div>
+              <div style={{ background: '#fff', padding: 10, borderRadius: 'var(--r-sm)' }}><QRCodeSVG value={setup.uri} size={168} /></div>
               <div style={{ flex: 1, minWidth: 240 }}>
                 <div style={{ color: 'var(--text-dim)', fontSize: 12, marginBottom: 4 }}>{t('twoFactor.scanStep')}</div>
                 <Space.Compact style={{ width: '100%', marginBottom: 10 }}>
@@ -3251,8 +3663,8 @@ function TwoFactorCard() {
 
         {/* 查看当前二维码（已开启时给新设备加） */}
         {qr && (
-          <div style={{ padding: 16, background: 'var(--bg-base)', borderRadius: 8, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-            <div style={{ background: '#fff', padding: 10, borderRadius: 8 }}><QRCodeSVG value={qr.uri} size={168} /></div>
+          <div style={{ padding: 16, background: 'var(--bg-base)', borderRadius: 'var(--r-sm)', display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div style={{ background: '#fff', padding: 10, borderRadius: 'var(--r-sm)' }}><QRCodeSVG value={qr.uri} size={168} /></div>
             <div style={{ flex: 1, minWidth: 240 }}>
               <div style={{ color: 'var(--text-dim)', fontSize: 12, marginBottom: 4 }}>{t('twoFactor.addDevice')}</div>
               <Space.Compact style={{ width: '100%' }}><Input readOnly value={qr.secret} /><Button onClick={() => copy(qr.secret)}>{t('common.copy')}</Button></Space.Compact>
@@ -3355,7 +3767,7 @@ function CollectModal({ group, onClose }: { group: string | null; onClose: () =>
   }, [group, t])
   return (
     <Modal open={!!group} onCancel={onClose} footer={null} title={t('task.collectTitle', { group: group || '' })} width="min(720px,94vw)">
-      <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '60vh', overflow: 'auto', background: 'var(--bg-term)', padding: 12, borderRadius: 8, fontSize: 12.5 }}>{text}</pre>
+      <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '60vh', overflow: 'auto', background: 'var(--bg-term)', padding: 12, borderRadius: 'var(--r-sm)', fontSize: 12.5 }}>{text}</pre>
     </Modal>
   )
 }

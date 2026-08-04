@@ -1,7 +1,7 @@
 // detectPrompt 的回归用例。重点是**窄屏**：手机 attach 后 tmux 窗格常只剩 40 多列，
 // Claude 的选项会折成五六行，早期按「行距 ≤3」分组会把每个选项拆成孤岛 → 手机上根本不弹提问框。
 import { describe, it, expect } from 'vitest'
-import { detectPrompt } from './prompt'
+import { advancePromptSignal, detectPrompt } from './prompt'
 
 // 宽屏：选项彼此紧挨
 const WIDE = `
@@ -45,6 +45,30 @@ const PLAIN_LIST = `
    Done.
 `
 
+// Agent 正常工作时最常见的误报：编号总结里包含 run / command / continue，
+// 这些只是正文，不是一个正在等待用户操作的选择框。
+const COMMAND_LIST = `
+   Running implementation work…
+     1. Run the formatter command
+     2. Continue with the typecheck
+     3. Write the result > report.txt
+   Working…
+`
+
+const NO_CURSOR_PROMPT = `
+   Are you sure you want to proceed?
+     1. Yes, continue
+     2. No, go back
+   Enter to confirm · Esc to cancel
+`
+
+const QUOTED_LIST = `
+   Documentation example:
+   > 1. Run the command
+   > 2. Continue editing
+   Done.
+`
+
 describe('detectPrompt', () => {
   it('宽屏选择框：识别出全部选项与当前游标', () => {
     const p = detectPrompt(WIDE)
@@ -62,13 +86,33 @@ describe('detectPrompt', () => {
 
   it('y/n 提示走兜底分支', () => {
     expect(detectPrompt('Overwrite existing file? (y/n)')?.kind).toBe('yesno')
+    expect(detectPrompt('Documentation: answer (y/n)\nDone.')).toBeNull()
   })
 
   it('普通编号列表不误判', () => {
     expect(detectPrompt(PLAIN_LIST)).toBeNull()
   })
 
+  it('包含 run/command/continue 和重定向符的工作输出不误判', () => {
+    expect(detectPrompt(COMMAND_LIST)).toBeNull()
+    expect(detectPrompt(QUOTED_LIST)).toBeNull()
+  })
+
+  it('没有可见游标时，明确提问和操作提示组合仍可识别', () => {
+    expect(detectPrompt(NO_CURSOR_PROMPT)?.kind).toBe('select')
+  })
+
   it('空屏返回 null', () => {
     expect(detectPrompt('')).toBeNull()
+  })
+
+  it('待确认状态需要连续两次相同采样才切换', () => {
+    const firstPositive = advancePromptSignal(undefined, true)
+    expect(firstPositive.stable).toBe(false)
+    const confirmedPositive = advancePromptSignal(firstPositive, true)
+    expect(confirmedPositive.stable).toBe(true)
+    const firstNegative = advancePromptSignal(confirmedPositive, false)
+    expect(firstNegative.stable).toBe(true)
+    expect(advancePromptSignal(firstNegative, false).stable).toBe(false)
   })
 })

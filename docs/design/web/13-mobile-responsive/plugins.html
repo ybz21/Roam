@@ -1,0 +1,684 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Roam Mobile · 插件页</title>
+<style>
+:root {
+  --stage: #080b10;
+  --stage-panel: #0d121a;
+  --stage-line: rgba(148,163,184,.16);
+  --stage-text: #e6edf5;
+  --stage-muted: #7f8b9b;
+  --blue: #58a6ff;
+  --blue-deep: #1f6feb;
+  --green: #3fb950;
+  --amber: #d29922;
+  --red: #f85149;
+  --purple: #a371f7;
+  --cyan: #39c5cf;
+  --codex: #10a37f;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", sans-serif;
+}
+
+* { box-sizing: border-box; }
+html { min-height: 100%; background: var(--stage); }
+body {
+  min-height: 100vh;
+  margin: 0;
+  color: var(--stage-text);
+  background:
+    radial-gradient(circle at 50% -10%, rgba(31,111,235,.14), transparent 34%),
+    radial-gradient(circle at 90% 55%, rgba(163,113,247,.055), transparent 28%),
+    var(--stage);
+  -webkit-font-smoothing: antialiased;
+}
+button, input { font: inherit; }
+button, a { -webkit-tap-highlight-color: transparent; }
+a { color: inherit; text-decoration: none; }
+
+.prototype-bar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  min-height: 62px;
+  padding: 9px clamp(14px, 3vw, 40px);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: rgba(8,11,16,.82);
+  border-bottom: 1px solid var(--stage-line);
+  backdrop-filter: blur(18px);
+}
+.prototype-brand { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+.prototype-mark {
+  width: 34px; height: 34px; display: grid; place-items: center;
+  border: 1px solid rgba(255,255,255,.12); border-radius: 11px;
+  background: linear-gradient(145deg,#27313e,#10151c);
+}
+.prototype-brand b { display: block; font-size: 13px; }
+.prototype-brand span { display: block; margin-top: 2px; color: var(--stage-muted); font-size: 9.5px; }
+.prototype-nav {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.prototype-nav::-webkit-scrollbar { display: none; }
+.prototype-nav a {
+  min-height: 34px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9px;
+  color: var(--stage-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.prototype-nav a:hover { color: var(--stage-text); background: rgba(255,255,255,.05); }
+.prototype-nav a.on { color: #cfe6ff; background: rgba(88,166,255,.12); }
+.prototype-spacer { flex: 1; }
+.prototype-size {
+  flex: 0 0 auto; padding: 3px; display: flex; gap: 2px;
+  border: 1px solid var(--stage-line); border-radius: 10px;
+  background: rgba(255,255,255,.025);
+}
+.prototype-size button,
+.prototype-theme {
+  min-height: 32px; padding: 0 10px; border: 0; border-radius: 7px;
+  color: var(--stage-muted); background: transparent; cursor: pointer; font-size: 10.5px;
+}
+.prototype-size button.on { color: #fff; background: rgba(88,166,255,.16); }
+.prototype-theme { border: 1px solid var(--stage-line); white-space: nowrap; }
+.prototype-theme:hover { color: #fff; background: rgba(255,255,255,.05); }
+
+.prototype-title {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 34px 20px 8px;
+  text-align: center;
+}
+.prototype-title .kicker {
+  color: var(--blue);
+  font: 700 10px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+  letter-spacing: .15em;
+}
+.prototype-title h1 { margin: 12px 0 8px; font-size: clamp(26px,4vw,38px); letter-spacing: -.035em; }
+.prototype-title p { max-width: 620px; margin: 0 auto; color: var(--stage-muted); font-size: 12.5px; line-height: 1.7; }
+
+.prototype-stage {
+  width: min(1050px, calc(100% - 28px));
+  min-height: 890px;
+  margin: 0 auto;
+  padding: 22px 0 64px;
+  display: grid;
+  grid-template-columns: minmax(220px,1fr) auto minmax(220px,1fr);
+  align-items: center;
+  gap: clamp(22px,4vw,48px);
+}
+.annotation-stack { display: grid; gap: 12px; }
+.annotation {
+  position: relative; overflow: hidden;
+  padding: 16px;
+  border: 1px solid var(--stage-line); border-radius: 15px;
+  background: linear-gradient(145deg,rgba(255,255,255,.04),rgba(255,255,255,.015));
+}
+.annotation::before {
+  content: ""; position: absolute; inset: 0 auto 0 0; width: 2px;
+  background: var(--accent,var(--blue));
+}
+.annotation .no {
+  margin-bottom: 10px; color: var(--accent,var(--blue));
+  font: 700 9.5px/1 ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing: .13em;
+}
+.annotation h3 { margin: 0 0 6px; font-size: 13px; }
+.annotation p { margin: 0; color: var(--stage-muted); font-size: 11px; line-height: 1.7; }
+.annotation b { color: #cbd5e1; }
+.measure {
+  margin-top: 10px; display: grid; grid-template-columns: repeat(2,1fr); gap: 7px;
+}
+.measure span {
+  padding: 8px; border: 1px solid var(--stage-line); border-radius: 9px;
+  color: var(--stage-muted); font-size: 9px;
+}
+.measure b { display: block; margin-bottom: 3px; color: var(--blue); font: 700 14px/1 ui-monospace,monospace; }
+
+.device-wrap { display: grid; place-items: center; }
+.device-label {
+  margin-bottom: 13px; color: #586575;
+  font: 9.5px/1 ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing: .1em;
+}
+.phone {
+  --phone-w: 390px;
+  --phone-h: 844px;
+  --bg: #0d1117;
+  --panel: #161b22;
+  --raised: #1b222b;
+  --term: #06090d;
+  --line: #30363d;
+  --line-soft: #21262d;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --faint: #68717c;
+  width: var(--phone-w);
+  height: var(--phone-h);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  color: var(--text);
+  background: var(--bg);
+  border: 6px solid #11161e;
+  border-radius: 39px;
+  box-shadow: 0 0 0 1px #35404d, 0 34px 78px rgba(0,0,0,.52), inset 0 0 0 1px rgba(255,255,255,.035);
+  transition: width .24s ease,height .24s ease;
+}
+.phone.compact { --phone-w: 360px; --phone-h: 640px; }
+.phone.light {
+  --bg: #f4f7fa;
+  --panel: #fff;
+  --raised: #fff;
+  --line: #d0d7de;
+  --line-soft: #e4e8ed;
+  --text: #1f2328;
+  --muted: #57606a;
+  --faint: #8c959f;
+}
+.hardware {
+  position: absolute; z-index: 60; top: 8px; left: 50%;
+  width: 92px; height: 23px; transform: translateX(-50%);
+  border-radius: 99px; background: #05070a;
+}
+.statusbar {
+  flex: 0 0 30px; padding: 7px 17px 0;
+  display: flex; align-items: center; color: var(--muted); font-size: 9.5px; font-weight: 700;
+}
+.statusbar .right { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.battery { width: 18px; height: 8px; padding: 1px; border: 1px solid var(--muted); border-radius: 2px; }
+.battery::after { content:""; display:block; width:72%; height:100%; border-radius:1px; background:var(--text); }
+.phone-screen { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; overflow: hidden; }
+.homebar { flex: 0 0 16px; display: grid; place-items: center; background: var(--panel); }
+.homebar i { width: 104px; height: 4px; border-radius: 99px; background: var(--line); }
+
+.mobile-header {
+  flex: 0 0 55px;
+  padding: 5px 11px;
+  display: flex; align-items: center; gap: 8px;
+}
+.mobile-header.tinted { border-bottom: 1px solid var(--line-soft); background: var(--panel); }
+.mobile-back,.mobile-icon {
+  width: 44px; height: 44px; flex: 0 0 44px;
+  border: 0; border-radius: 13px; display: grid; place-items: center;
+  color: var(--muted); background: transparent; cursor: pointer;
+}
+.mobile-back:hover,.mobile-icon:hover { color: var(--text); background: var(--raised); }
+.mobile-heading { min-width: 0; flex: 1; }
+.mobile-heading b { display: block; overflow: hidden; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
+.mobile-heading span { display: block; margin-top: 3px; color: var(--faint); font-size: 9.5px; }
+.mobile-header-action {
+  min-height: 39px; padding: 0 12px; border: 0; border-radius: 12px;
+  color: #fff; background: var(--blue-deep); font-size: 10.5px; font-weight: 700; cursor: pointer;
+}
+
+.mobile-page {
+  flex: 1; min-height: 0; padding: 4px 12px 14px;
+  overflow-y: auto; overflow-x: hidden; scrollbar-width: none;
+}
+.mobile-page::-webkit-scrollbar { display:none; }
+.page-title { padding: 8px 2px 15px; display: flex; align-items: flex-end; }
+.page-title h2 { margin: 0; color: var(--text); font-size: 23px; letter-spacing: -.035em; }
+.page-title span { margin: 0 0 2px 8px; color: var(--faint); font-size: 10px; }
+.page-title .add {
+  width: 42px; height: 42px; margin-left: auto; border: 0; border-radius: 14px;
+  color: #fff; background: var(--blue-deep); font-size: 20px; cursor: pointer;
+  box-shadow: 0 8px 20px rgba(31,111,235,.22);
+}
+.search {
+  height: 43px; padding: 0 13px; display: flex; align-items: center; gap: 8px;
+  border: 1px solid var(--line-soft); border-radius: 13px; color: var(--faint);
+  background: var(--panel); font-size: 10.5px;
+}
+.chip-row {
+  margin: 10px -12px 12px; padding: 0 12px; display: flex; gap: 7px;
+  overflow-x: auto; scrollbar-width: none;
+}
+.chip-row::-webkit-scrollbar { display:none; }
+.chip {
+  min-height: 36px; padding: 0 12px; flex: 0 0 auto;
+  border: 1px solid var(--line-soft); border-radius: 11px;
+  color: var(--muted); background: var(--panel); font-size: 10px; cursor: pointer;
+}
+.chip.on { color: #cfe6ff; border-color: rgba(88,166,255,.25); background: rgba(88,166,255,.11); }
+.section-title {
+  min-height: 43px; padding: 14px 2px 8px;
+  display: flex; align-items: center; color: var(--text); font-size: 12px; font-weight: 700;
+}
+.section-title small { margin-left: 7px; color: var(--faint); font-size: 9.5px; font-weight: 500; }
+.section-title a { margin-left: auto; color: var(--blue); font-size: 9.5px; font-weight: 500; }
+
+.card {
+  padding: 13px;
+  border: 1px solid var(--line-soft); border-radius: 16px;
+  background: var(--panel);
+}
+.card + .card { margin-top: 8px; }
+.card.highlight {
+  border-color: rgba(88,166,255,.26);
+  background: linear-gradient(120deg,rgba(88,166,255,.09),transparent 60%),var(--panel);
+}
+.row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.row + .row { margin-top: 9px; }
+.grow { min-width: 0; flex: 1; }
+.truncate { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dot { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: var(--faint); }
+.dot.green { background: var(--green); box-shadow: 0 0 0 4px rgba(63,185,80,.1); }
+.dot.amber { background: var(--amber); box-shadow: 0 0 0 4px rgba(210,153,34,.1); }
+.dot.red { background: var(--red); box-shadow: 0 0 0 4px rgba(248,81,73,.1); }
+.primary-text { color: var(--text); font-size: 12px; font-weight: 700; }
+.secondary-text { color: var(--muted); font-size: 10px; }
+.meta-text { color: var(--faint); font: 9.5px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace; }
+.time { margin-left: auto; color: var(--faint); font-size: 9px; white-space: nowrap; }
+.tag {
+  min-height: 23px; padding: 0 7px; display: inline-flex; align-items: center;
+  border-radius: 7px; color: var(--muted); background: var(--bg); font-size: 9px;
+}
+.tag.blue { color: var(--blue); background: rgba(88,166,255,.1); }
+.tag.green { color: var(--green); background: rgba(63,185,80,.09); }
+.tag.amber { color: #e0b354; background: rgba(210,153,34,.1); }
+.tag.red { color: #ff7b72; background: rgba(248,81,73,.1); }
+.card-actions { margin-top: 11px; display: flex; gap: 7px; }
+.card-actions button {
+  min-height: 39px; padding: 0 12px; border: 1px solid var(--line);
+  border-radius: 11px; color: var(--muted); background: transparent;
+  font-size: 10px; cursor: pointer;
+}
+.card-actions button.primary { color: #d3e9ff; border-color: rgba(88,166,255,.25); background: rgba(31,111,235,.2); }
+.icon-box {
+  width: 37px; height: 37px; flex: 0 0 37px; display: grid; place-items: center;
+  border-radius: 11px; color: var(--blue); background: rgba(88,166,255,.1);
+  font-size: 11px; font-weight: 800;
+}
+.progress { height: 4px; overflow: hidden; border-radius: 99px; background: var(--line-soft); }
+.progress i { display: block; width: var(--value,60%); height: 100%; border-radius: inherit; background: linear-gradient(90deg,var(--blue-deep),var(--blue)); }
+
+.session-dock {
+  flex: 0 0 50px; margin: 0 8px 6px; padding: 0 8px 0 12px;
+  display: flex; align-items: center; gap: 9px;
+  border: 1px solid rgba(88,166,255,.2); border-radius: 15px;
+  color: var(--text);
+  background: linear-gradient(90deg,rgba(88,166,255,.09),transparent 74%),var(--raised);
+  box-shadow: 0 8px 22px rgba(0,0,0,.2); cursor: pointer;
+}
+.dock-copy { min-width: 0; flex: 1; text-align: left; }
+.dock-copy b { display: block; overflow: hidden; font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
+.dock-copy span { display: block; margin-top: 3px; color: var(--faint); font-size: 8.5px; }
+.dock-badge {
+  min-width: 30px; height: 30px; padding: 0 7px; display: grid; place-items: center;
+  border-radius: 10px; color: #cfe6ff; background: rgba(88,166,255,.13);
+  font: 700 9.5px/1 ui-monospace,monospace;
+}
+.dock-badge.wait { color: #e2b457; background: rgba(210,153,34,.12); }
+.mobile-nav {
+  flex: 0 0 60px; padding: 0 8px;
+  display: grid; grid-template-columns: repeat(4,1fr);
+  border-top: 1px solid var(--line-soft); background: var(--panel);
+}
+.mobile-nav a {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px; color: var(--faint); font-size: 9px;
+}
+.mobile-nav svg { width: 18px; height: 18px; }
+.mobile-nav a.on { color: var(--blue); }
+.mobile-nav a.on::before {
+  content:""; position:absolute; top:0; width:30px; height:2px; border-radius:0 0 3px 3px; background:var(--blue);
+}
+
+.phone-layer {
+  position: absolute; z-index: 30; inset: 0;
+  display: flex; flex-direction: column;
+  color: var(--text); background: var(--bg);
+  transform: translateX(100%);
+  transition: transform .25s cubic-bezier(.22,.8,.22,1);
+}
+.phone-layer.open { transform: translateX(0); }
+.layer-body { flex: 1; min-height: 0; padding: 4px 12px 14px; overflow-y: auto; scrollbar-width: none; }
+.layer-body::-webkit-scrollbar { display:none; }
+.scrim {
+  position:absolute; z-index:40; inset:0; border:0;
+  background:rgba(0,0,0,.5); opacity:0; pointer-events:none; transition:opacity .2s;
+}
+.scrim.open { opacity:1; pointer-events:auto; }
+.sheet {
+  position:absolute; z-index:41; left:6px; right:6px; bottom:6px;
+  max-height:76%; overflow:hidden;
+  border:1px solid var(--line); border-radius:22px 22px 28px 28px;
+  background:var(--raised); box-shadow:0 -24px 60px rgba(0,0,0,.4);
+  transform:translateY(calc(100% + 16px)); transition:transform .25s cubic-bezier(.22,.8,.22,1);
+}
+.sheet.open { transform:translateY(0); }
+.sheet-grab { height:22px; display:grid; place-items:center; }
+.sheet-grab i { width:36px; height:4px; border-radius:99px; background:var(--line); }
+.sheet-head { padding:2px 16px 12px; display:flex; align-items:center; }
+.sheet-head b { font-size:14px; }
+.sheet-head span { margin-left:7px; color:var(--faint); font-size:9px; }
+.sheet-close {
+  width:40px; height:40px; margin-left:auto; border:0; border-radius:12px;
+  color:var(--muted); background:var(--panel); cursor:pointer;
+}
+.sheet-body { padding:0 10px 13px; overflow-y:auto; }
+.sheet-label { margin:7px 7px; color:var(--faint); font-size:8.5px; font-weight:800; letter-spacing:.1em; }
+.sheet-row {
+  width:100%; min-height:53px; padding:7px 9px;
+  display:flex; align-items:center; gap:10px;
+  border:0; border-radius:13px; color:var(--text); background:transparent;
+  text-align:left; cursor:pointer;
+}
+.sheet-row:hover,.sheet-row.on { background:var(--panel); }
+.sheet-row .copy { min-width:0; flex:1; }
+.sheet-row .copy b { display:block; overflow:hidden; font-size:10.5px; text-overflow:ellipsis; white-space:nowrap; }
+.sheet-row .copy span { display:block; margin-top:3px; color:var(--faint); font-size:8.5px; }
+
+.toggle {
+  width: 42px; height: 24px; padding: 3px;
+  border: 0; border-radius: 99px;
+  background: var(--line); cursor: pointer; transition: .18s;
+}
+.toggle::after {
+  content:""; display:block; width:18px; height:18px; border-radius:50%;
+  background:#fff; box-shadow:0 2px 6px rgba(0,0,0,.28); transition:.18s;
+}
+.toggle.on { background: var(--blue-deep); }
+.toggle.on::after { transform:translateX(18px); }
+.setting-row {
+  min-height: 59px; padding: 8px 2px; display:flex; align-items:center; gap:10px;
+  border-bottom:1px solid var(--line-soft);
+}
+.setting-copy { min-width:0; flex:1; }
+.setting-copy b { display:block; font-size:11px; }
+.setting-copy span { display:block; margin-top:4px; color:var(--faint); font-size:8.8px; line-height:1.45; }
+
+.toast {
+  position:absolute; z-index:70; top:42px; left:50%;
+  max-width:calc(100% - 30px); padding:10px 13px;
+  border:1px solid rgba(63,185,80,.25); border-radius:12px;
+  color:#b9f3c7; background:rgba(22,27,34,.96);
+  box-shadow:0 10px 28px rgba(0,0,0,.38); font-size:9.5px; white-space:nowrap;
+  opacity:0; pointer-events:none; transform:translate(-50%,-8px); transition:.2s;
+}
+.toast.show { opacity:1; transform:translate(-50%,0); }
+
+/* Browser */
+.browser-toolbar {
+  flex:0 0 104px; padding:4px 9px 8px; border-bottom:1px solid var(--line-soft); background:var(--panel);
+}
+.browser-top { height:40px; display:flex; align-items:center; gap:4px; }
+.browser-top button { width:40px; height:40px; border:0; border-radius:11px; color:var(--muted); background:transparent; cursor:pointer; }
+.address {
+  height:42px; padding:0 12px; display:flex; align-items:center; gap:8px;
+  border:1px solid var(--line-soft); border-radius:13px; color:var(--muted); background:var(--bg); font-size:9.5px;
+}
+.address span { min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.browser-canvas { flex:1; min-height:0; position:relative; overflow:hidden; background:#f6f8fa; color:#1f2328; }
+.browser-site-head { height:54px; padding:0 15px; display:flex; align-items:center; border-bottom:1px solid #e6e9ec; font-size:12px; font-weight:800; }
+.browser-site-head span { margin-left:auto; color:#57606a; font-size:9px; font-weight:500; }
+.browser-hero { padding:26px 18px 20px; background:linear-gradient(140deg,#eff6ff,#f8f5ff); }
+.browser-hero small { color:#1f6feb; font-size:8px; font-weight:800; letter-spacing:.1em; }
+.browser-hero h2 { max-width:280px; margin:8px 0 9px; font-size:22px; line-height:1.12; letter-spacing:-.04em; }
+.browser-hero p { margin:0; color:#57606a; font-size:9px; line-height:1.55; }
+.browser-grid { padding:12px; display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.browser-grid div { min-height:90px; padding:12px; border:1px solid #e6e9ec; border-radius:12px; background:#fff; }
+.browser-grid b { display:block; font-size:10px; }
+.browser-grid span { display:block; margin-top:6px; color:#8c959f; font-size:8px; line-height:1.45; }
+
+/* Phone mirror */
+.device-toolbar {
+  flex:0 0 60px; padding:7px 10px; display:flex; align-items:center; gap:7px;
+  border-bottom:1px solid var(--line-soft); background:var(--panel);
+}
+.device-select { min-width:0; flex:1; }
+.device-select b { display:block; overflow:hidden; font-size:10.5px; text-overflow:ellipsis; white-space:nowrap; }
+.device-select span { display:block; margin-top:3px; color:var(--green); font-size:8.5px; }
+.quality { min-height:36px; padding:0 10px; border:1px solid var(--line); border-radius:10px; color:var(--muted); background:var(--bg); font-size:9px; }
+.mirror-stage { flex:1; min-height:0; padding:13px; display:grid; place-items:center; overflow:hidden; background:#080a0e; }
+.android {
+  width:214px; height:472px; overflow:hidden; position:relative;
+  border:4px solid #2d333b; border-radius:26px; color:#f2f2f2;
+  background:linear-gradient(165deg,#142035,#08101f 52%,#171128);
+  box-shadow:0 20px 42px rgba(0,0,0,.45);
+}
+.android-status { height:25px; padding:6px 10px 0; display:flex; font-size:7px; }
+.android-status span { margin-left:auto; }
+.android-home { padding:32px 15px 0; }
+.android-home h3 { margin:0; font-size:19px; font-weight:400; }
+.android-home p { margin:4px 0 22px; color:#a8b0bd; font-size:8px; }
+.android-search { height:36px; padding:0 12px; display:flex; align-items:center; border-radius:99px; background:rgba(255,255,255,.12); color:#cdd5df; font-size:8px; }
+.app-grid { margin-top:22px; display:grid; grid-template-columns:repeat(4,1fr); gap:16px 10px; }
+.app-icon { text-align:center; color:#dce3ec; font-size:6.5px; }
+.app-icon i { width:33px; height:33px; margin:0 auto 5px; display:grid; place-items:center; border-radius:10px; background:var(--app,#3578e5); color:#fff; font-style:normal; font-size:12px; }
+.mirror-controls { flex:0 0 58px; padding:6px 9px; display:grid; grid-template-columns:repeat(5,1fr); gap:5px; border-top:1px solid var(--line-soft); background:var(--panel); }
+.mirror-controls button { border:0; border-radius:11px; color:var(--muted); background:var(--bg); font-size:9px; cursor:pointer; }
+
+/* Plugins */
+.plugin-logo {
+  width:40px; height:40px; flex:0 0 40px; display:grid; place-items:center;
+  border-radius:12px; color:var(--plugin,var(--blue)); background:color-mix(in srgb,var(--plugin,var(--blue)) 12%,transparent);
+  font-size:14px; font-weight:800;
+}
+.permission-row { margin-top:9px; display:flex; gap:5px; flex-wrap:wrap; }
+
+/* Settings */
+.profile {
+  padding:14px; display:flex; align-items:center; gap:11px;
+  border:1px solid var(--line-soft); border-radius:16px; background:var(--panel);
+}
+.avatar { width:42px; height:42px; display:grid; place-items:center; border-radius:14px; color:#fff; background:linear-gradient(145deg,var(--blue-deep),var(--purple)); font-weight:800; }
+.seg-control { padding:3px; display:grid; grid-template-columns:1fr 1fr; gap:3px; border:1px solid var(--line-soft); border-radius:11px; background:var(--bg); }
+.seg-control button { min-height:34px; border:0; border-radius:8px; color:var(--muted); background:transparent; font-size:9.5px; cursor:pointer; }
+.seg-control button.on { color:var(--text); background:var(--raised); box-shadow:0 2px 7px rgba(0,0,0,.16); }
+
+/* Terminal */
+.terminal-phone { --bg:#06090d; --panel:#0d1117; --raised:#161b22; --text:#e6edf3; --muted:#8b949e; --faint:#6e7681; }
+.term-head { flex:0 0 50px; padding:3px 6px; display:flex; align-items:center; gap:5px; border-bottom:1px solid #21262d; background:#0d1117; }
+.term-head button { border:0; cursor:pointer; }
+.term-back,.term-more { width:44px; height:44px; flex:0 0 44px; border-radius:12px; color:#8b949e; background:transparent; }
+.term-session { min-width:0; flex:1; height:38px; padding:0 10px; display:flex; align-items:center; gap:8px; border:1px solid #30363d!important; border-radius:12px; color:#e6edf3; background:#161b22; }
+.term-session b { min-width:0; overflow:hidden; font-size:10.5px; text-overflow:ellipsis; white-space:nowrap; }
+.term-session .count { width:21px; height:21px; margin-left:auto; display:grid; place-items:center; border-radius:7px; color:#9ccaff; background:rgba(88,166,255,.12); font-size:8.5px; }
+.terminal-body { flex:1; min-height:0; padding:10px 8px; overflow:hidden; color:#c9d1d9; background:#06090d; font:10px/1.62 ui-monospace,SFMono-Regular,Menlo,monospace; }
+.terminal-body .path { color:#79c0ff; }
+.terminal-body .branch { color:#7ee787; }
+.terminal-body .dim { color:#6e7681; }
+.terminal-body .amber { color:#e3b341; }
+.terminal-question { margin:8px 0; padding:10px; border:1px solid rgba(210,153,34,.26); border-radius:10px; color:#f0c666; background:rgba(210,153,34,.07); }
+.keybar { flex:0 0 43px; padding:5px 7px; display:flex; gap:5px; overflow:hidden; border-top:1px solid #21262d; background:#0d1117; }
+.keybar button { min-width:44px; height:33px; border:1px solid #30363d; border-radius:9px; color:#8b949e; background:#161b22; font-size:9px; cursor:pointer; }
+.keybar button.primary { color:#cfe6ff; border-color:rgba(88,166,255,.25); background:rgba(31,111,235,.22); }
+.term-input { flex:0 0 57px; padding:7px; display:flex; gap:7px; border-top:1px solid #21262d; background:#0d1117; }
+.term-input span { min-width:0; flex:1; padding:0 12px; display:flex; align-items:center; border:1px solid #30363d; border-radius:12px; color:#8b949e; background:#161b22; font-size:9.5px; }
+.term-input button { width:44px; border:0; border-radius:12px; color:#fff; background:var(--blue-deep); font-size:16px; cursor:pointer; }
+
+@media (max-width: 1000px) {
+  .prototype-stage { grid-template-columns:1fr auto; align-items:start; }
+  .annotation-stack.right { grid-column:1/-1; grid-template-columns:repeat(3,1fr); }
+}
+@media (max-width: 760px) {
+  .prototype-bar { padding-inline:12px; }
+  .prototype-brand span,.prototype-size { display:none; }
+  .prototype-nav { order:3; width:100%; flex-basis:100%; }
+  .prototype-bar { flex-wrap:wrap; }
+  .prototype-title { padding-top:25px; }
+  .prototype-stage { display:flex; flex-direction:column; align-items:center; width:100%; }
+  .device-wrap { order:1; }
+  .annotation-stack { order:2; width:min(390px,calc(100% - 28px)); }
+  .annotation-stack.right { display:grid; grid-template-columns:1fr; }
+}
+@media (max-width:430px) {
+  .phone { transform:scale(.92); transform-origin:top center; margin-bottom:calc(var(--phone-h) * -.08); }
+  .prototype-title { padding-inline:16px; }
+}
+</style>
+</head>
+<body>
+<header class="prototype-bar">
+  <a class="prototype-brand" href="index.html"><span class="prototype-mark">△</span><span><b>Roam Mobile</b><span>插件页设计稿</span></span></a>
+  <nav class="prototype-nav"><a href="index.html">概览</a><a href="projects.html">项目</a><a href="files.html">文件</a><a href="browser.html">浏览器</a><a href="phone.html">手机</a><a class="on" href="plugins.html">插件</a><a href="settings.html">设置</a><a href="session.html">会话</a></nav>
+  <span class="prototype-spacer"></span><div class="prototype-size"><button data-size="compact">360×640</button><button class="on" data-size="default">390×844</button></div><button class="prototype-theme" data-theme>切换浅色</button>
+</header>
+<section class="prototype-title"><div class="kicker">PAGE 06 · PLUGINS</div><h1>插件页先回答“能不能用”</h1><p>安装状态、守护进程、权限与连接问题优先于长篇描述。详情使用全屏二级页，危险权限单独强调。</p></section>
+<main class="prototype-stage">
+  <aside class="annotation-stack">
+    <article class="annotation" style="--accent:var(--green)"><div class="no">01 · HEALTH</div><h3>健康状态放在首屏</h3><p>守护进程、已启用数量和异常数量组成三格状态区，打开页面即可判断插件系统是否正常。</p></article>
+    <article class="annotation" style="--accent:var(--blue)"><div class="no">02 · LIST</div><h3>列表只保留决策信息</h3><p>名称、用途、启用状态与关键权限。版本、来源、审计日志进入插件详情。</p></article>
+    <article class="annotation" style="--accent:var(--amber)"><div class="no">03 · RISK</div><h3>危险权限不藏在二级菜单</h3><p>Shell、文件写入和外部网络使用琥珀标签，让风险在进入详情前就可见。</p></article>
+  </aside>
+  <div class="device-wrap">
+    <div class="device-label">PLUGINS · 390 × 844</div>
+    <div class="phone">
+      <div class="hardware"></div><div class="statusbar">9:41<span class="right">▂▄▆　5G　<i class="battery"></i></span></div>
+      <div class="phone-screen">
+        <div class="mobile-page">
+          <div class="page-title"><h2>插件</h2><span>能力扩展</span><button class="add" data-toast="打开安装向导">+</button></div>
+          <div class="metrics" style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px">
+            <div class="card" style="padding:11px"><b style="display:block;color:var(--green);font:700 18px ui-monospace">正常</b><span class="secondary-text">守护进程</span></div>
+            <div class="card" style="padding:11px;margin:0"><b style="display:block;color:var(--blue);font:700 18px ui-monospace">4</b><span class="secondary-text">已启用</span></div>
+            <div class="card" style="padding:11px;margin:0"><b style="display:block;color:var(--amber);font:700 18px ui-monospace">1</b><span class="secondary-text">待授权</span></div>
+          </div>
+          <div class="chip-row" data-chip-group><button class="chip on">全部 6</button><button class="chip">已启用 4</button><button class="chip">待授权 1</button><button class="chip">有更新</button></div>
+
+          <div class="card highlight" style="width:100%;text-align:left;color:inherit;cursor:pointer" data-open-layer="pluginDetail">
+            <div class="row"><span class="plugin-logo" style="--plugin:var(--blue)">X</span><span class="grow"><b class="primary-text">Post to X</b><span class="secondary-text" style="display:block;margin-top:4px">通过 Android 设备预填并发布内容</span></span><button class="toggle on" aria-checked="true"></button></div>
+            <div class="permission-row"><span class="tag blue">ADB</span><span class="tag amber">设备控制</span><span class="tag">截图读取</span></div>
+          </div>
+          <div class="card" style="width:100%;text-align:left;color:inherit;cursor:pointer" data-open-layer="pluginDetail">
+            <div class="row"><span class="plugin-logo" style="--plugin:var(--green)">PR</span><span class="grow"><b class="primary-text">Babysit PR</b><span class="secondary-text" style="display:block;margin-top:4px">监控并处理 Codex PR Review</span></span><button class="toggle on" aria-checked="true"></button></div>
+            <div class="permission-row"><span class="tag green">GitHub</span><span class="tag amber">外部网络</span></div>
+          </div>
+          <div class="card" style="width:100%;text-align:left;color:inherit;cursor:pointer" data-open-layer="pluginDetail">
+            <div class="row"><span class="plugin-logo" style="--plugin:var(--purple)">TV</span><span class="grow"><b class="primary-text">Android TV Design</b><span class="secondary-text" style="display:block;margin-top:4px">TV 界面与 D-pad 原型设计</span></span><button class="toggle on" aria-checked="true"></button></div>
+            <div class="permission-row"><span class="tag">文件读取</span><span class="tag">HTML 输出</span></div>
+          </div>
+          <div class="card" style="width:100%;text-align:left;color:inherit;opacity:.72;cursor:pointer" data-open-layer="pluginDetail">
+            <div class="row"><span class="plugin-logo" style="--plugin:var(--amber)">P</span><span class="grow"><b class="primary-text">Patent Disclosure</b><span class="secondary-text" style="display:block;margin-top:4px">等待授予联网查新权限</span></span><span class="tag amber">待授权</span></div>
+          </div>
+        </div>
+        <button class="session-dock" data-toast="恢复 claude-api-refactor"><span class="dot green"></span><span class="dock-copy"><b>ttmux · claude-api-refactor</b><span>正在分析 · 点按恢复会话</span></span><span class="dock-badge wait">⚠2</span><span class="dock-badge">5</span></button>
+        <nav class="mobile-nav">
+          <a href="index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>工作台</a>
+          <a href="projects.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 10.2 12 3l9 7.2"/><path d="M5.5 9v11h13V9"/></svg>项目</a>
+          <a href="files.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>文件</a>
+          <a class="on" href="plugins.html"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>更多</a>
+        </nav>
+
+        <section class="phone-layer" id="pluginDetail">
+          <header class="mobile-header tinted"><button class="mobile-back" data-close-layer>‹</button><span class="mobile-heading"><b>Post to X</b><span>v1.2.0 · 本地插件</span></span><button class="toggle on" aria-checked="true"></button></header>
+          <div class="layer-body">
+            <div class="card highlight"><div class="row"><span class="plugin-logo">X</span><span class="grow"><b class="primary-text">通过手机发布到 X</b><span class="secondary-text" style="display:block;margin-top:4px;line-height:1.55">预填文案、话题与截图，最后停在发送前由你确认。</span></span></div></div>
+            <div class="section-title">权限 <small>3 项</small></div>
+            <div class="card">
+              <div class="setting-row"><span class="icon-box">▯</span><span class="setting-copy"><b>Android 设备控制</b><span>通过 ADB 打开应用并填写内容</span></span><button class="toggle on" aria-checked="true"></button></div>
+              <div class="setting-row"><span class="icon-box">▧</span><span class="setting-copy"><b>读取本地截图</b><span>仅访问你选择的图片文件</span></span><button class="toggle on" aria-checked="true"></button></div>
+              <div class="setting-row"><span class="icon-box">⌘</span><span class="setting-copy"><b>运行 ADB 命令</b><span>高风险权限，每次执行写入审计日志</span></span><span class="tag amber">高风险</span></div>
+            </div>
+            <div class="section-title">最近活动</div>
+            <div class="card"><div class="row"><span class="dot green"></span><span class="grow"><b class="primary-text">预填内容完成</b><span class="secondary-text" style="display:block;margin-top:4px">今天 09:18 · 用户确认后发送</span></span></div></div>
+            <div class="card-actions"><button data-toast="插件配置已打开">配置</button><button data-toast="审计日志已打开">审计日志</button><button style="color:var(--red)" data-toast="插件保持安装">卸载</button></div>
+          </div>
+        </section>
+        <div class="toast">操作已完成</div>
+      </div><div class="homebar"><i></i></div>
+    </div>
+  </div>
+  <aside class="annotation-stack right">
+    <article class="annotation" style="--accent:var(--blue)"><div class="no">04 · DETAIL</div><h3>详情围绕权限组织</h3><p>能力说明之后立即列权限，不让用户先看到宣传信息，最后才发现插件需要高风险访问。</p></article>
+    <article class="annotation" style="--accent:var(--green)"><div class="no">05 · AUDIT</div><h3>敏感操作可追溯</h3><p>每次设备控制、外部请求和 Shell 执行都进入审计日志，并从插件详情一跳可达。</p></article>
+    <article class="annotation" style="--accent:var(--amber)"><div class="no">06 · CONTROL</div><h3>启用与授权分开</h3><p>开关只控制插件是否启用；缺失权限用“待授权”明确表达，避免开关打开却不可用。</p><div class="measure"><span><b>3</b>首屏状态</span><span><b>1</b>风险入口</span></div></article>
+  </aside>
+</main>
+<script>
+const phone = document.querySelector('.phone')
+const toast = document.querySelector('.toast')
+const deviceLabel = document.querySelector('.device-label')
+let toastTimer
+const previewParams = new URLSearchParams(location.search)
+
+function setPreviewSize(size) {
+  const compact = size === 'compact'
+  phone?.classList.toggle('compact', compact)
+  document.querySelectorAll('[data-size]').forEach(item => item.classList.toggle('on', item.dataset.size === size))
+  if (deviceLabel) deviceLabel.textContent = deviceLabel.textContent.replace(/\d+\s*×\s*\d+$/, compact ? '360 × 640' : '390 × 844')
+}
+
+if (previewParams.get('size') === 'compact') {
+  setPreviewSize('compact')
+}
+if (previewParams.get('theme') === 'light') phone?.classList.add('light')
+
+function showToast(message) {
+  if (!toast) return
+  toast.textContent = message || '操作已完成'
+  toast.classList.add('show')
+  clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 1600)
+}
+
+function closeSheets() {
+  document.querySelector('.scrim')?.classList.remove('open')
+  document.querySelectorAll('.sheet.open').forEach(sheet => sheet.classList.remove('open'))
+}
+
+document.querySelectorAll('[data-size]').forEach(button => {
+  button.addEventListener('click', () => {
+    setPreviewSize(button.dataset.size)
+  })
+})
+
+document.querySelector('[data-theme]')?.addEventListener('click', event => {
+  phone?.classList.toggle('light')
+  event.currentTarget.textContent = phone?.classList.contains('light') ? '切换深色' : '切换浅色'
+})
+
+document.addEventListener('click', event => {
+  const toggle = event.target.closest('.toggle')
+  if (toggle) {
+    toggle.classList.toggle('on')
+    toggle.setAttribute('aria-checked', String(toggle.classList.contains('on')))
+    showToast(toggle.classList.contains('on') ? '已开启' : '已关闭')
+    return
+  }
+
+  const toastTarget = event.target.closest('[data-toast]')
+  if (toastTarget) showToast(toastTarget.dataset.toast)
+
+  const openLayer = event.target.closest('[data-open-layer]')
+  if (openLayer) document.getElementById(openLayer.dataset.openLayer)?.classList.add('open')
+
+  const closeLayer = event.target.closest('[data-close-layer]')
+  if (closeLayer) closeLayer.closest('.phone-layer')?.classList.remove('open')
+
+  const openSheet = event.target.closest('[data-open-sheet]')
+  if (openSheet) {
+    closeSheets()
+    document.querySelector('.scrim')?.classList.add('open')
+    document.getElementById(openSheet.dataset.openSheet)?.classList.add('open')
+  }
+
+  if (event.target.closest('[data-close-sheet]') || event.target.classList.contains('scrim')) closeSheets()
+
+  const chip = event.target.closest('[data-chip-group] .chip')
+  if (chip) {
+    chip.parentElement.querySelectorAll('.chip').forEach(item => item.classList.remove('on'))
+    chip.classList.add('on')
+  }
+
+  const segment = event.target.closest('[data-segment] button')
+  if (segment) {
+    segment.parentElement.querySelectorAll('button').forEach(item => item.classList.remove('on'))
+    segment.classList.add('on')
+  }
+})
+</script>
+</body>
+</html>

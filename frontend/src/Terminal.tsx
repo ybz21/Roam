@@ -10,6 +10,9 @@ import '@xterm/xterm/css/xterm.css'
 // 终端符号补字集（约 46KB，仅覆盖框线/箭头/技术符号等区段）：见 FONT_FAMILY 的说明
 import './assets/fonts/roam-symbols.css'
 import { paneCellsToPixelRect } from './terminal-geometry'
+import { shouldJiggleAfterAttach } from './terminal-resize'
+import type { TerminalDimensions } from './terminal-resize'
+import { parseTerminalPong } from './terminal-lifecycle'
 
 export type TermStatus = 'connecting' | 'connected' | 'closed'
 export interface TermHandle {
@@ -29,6 +32,8 @@ export interface TermHandle {
   // 尺寸抖动(cols−1→cols)触发两次 SIGWINCH，逼全屏 TUI 整屏重排重绘。
   // 窄屏(手机)下 Claude Code 等 ink TUI 折行重绘错位会满屏堆叠垃圾行，等价于「拖一下窗口就好了」。
   redraw: () => void
+  // 外层布局即将一次性提交新尺寸时，先冻结当前终端帧；新尺寸完成绘制后组件会自动交接。
+  beginVisualHandoff: () => void
 }
 
 // ── 渲染器坏掉时的自救 ─────────────────────────────────────────────────────
@@ -55,6 +60,49 @@ let atlasClearedForFonts = false
 // 非等宽字体，字形宽度 ≠ 单元格宽度，误差沿行累积就是「同一行后半段错位、字形互相压盖」。
 // 剩下确实超宽的字形（emoji 等）由 rescaleOverlappingGlyphs 压回单元格（需 WebGL 渲染器）。
 const FONT_FAMILY = 'ui-monospace, SFMono-Regular, Menlo, Consolas, "Roam Symbols", monospace'
+const FRAME_STORAGE_PREFIX = 'roam:terminal-frame:'
+const FRAME_MAX_AGE_MS = 15000
+
+type StoredTerminalFrame = { savedAt: number; dataUrl: string }
+
+// 把 xterm 的一个或多个 canvas 合成为单张位图。WebGL 使用 preserveDrawingBuffer，因而这里
+// 能同步读取刚刚显示的像素；DOM renderer 没有 canvas 时返回 false，由正常重绘路径兜底。
+function copyTerminalFrame(source: HTMLElement, target: HTMLCanvasElement): boolean {
+  const sourceRect = source.getBoundingClientRect()
+  const canvases = [...source.querySelectorAll('canvas')].filter((canvas) => canvas.width > 0 && canvas.height > 0)
+  if (!canvases.length || sourceRect.width <= 0 || sourceRect.height <= 0) return false
+  const dpr = Math.max(1, window.devicePixelRatio || 1)
+  target.width = Math.max(1, Math.round(sourceRect.width * dpr))
+  target.height = Math.max(1, Math.round(sourceRect.height * dpr))
+  const ctx = target.getContext('2d')
+  if (!ctx) return false
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  ctx.fillStyle = xtermTheme().background
+  ctx.fillRect(0, 0, sourceRect.width, sourceRect.height)
+  try {
+    for (const canvas of canvases) {
+      const rect = canvas.getBoundingClientRect()
+      ctx.drawImage(canvas, rect.left - sourceRect.left, rect.top - sourceRect.top, rect.width, rect.height)
+    }
+    return true
+  } catch {
+    return false
+  }
+}
+
+function loadStoredTerminalFrame(name: string): string | undefined {
+  try {
+    const key = FRAME_STORAGE_PREFIX + name
+    const raw = sessionStorage.getItem(key)
+    sessionStorage.removeItem(key) // 快照只供紧接着的一次页面恢复使用
+    if (!raw) return undefined
+    const frame = JSON.parse(raw) as StoredTerminalFrame
+    if (!frame.dataUrl || Date.now() - frame.savedAt > FRAME_MAX_AGE_MS) return undefined
+    return frame.dataUrl
+  } catch {
+    return undefined
+  }
+}
 
 // xterm 不认 CSS var()，需具体色值：读 <html> 上的同名变量，随黑/白主题切换。
 function xtermTheme() {
@@ -124,35 +172,98 @@ const Term = forwardRef<TermHandle, {
   onImagePaste?: (files: File[]) => void // 粘贴事件含图片时回调（绕过键盘拦截时的兜底）
 }>(function Term({ name, fontSize, active, onStatus, onContextMenu, onSelectionMenu, onPaste, onImagePaste }, ref) {
   const elRef = useRef<HTMLDivElement>(null)
+  const handoffCanvasRef = useRef<HTMLCanvasElement>(null)
+  const restoredFrameRef = useRef<HTMLImageElement>(null)
+  const [restoredFrame] = useState(() => loadStoredTerminalFrame(name))
   const termRef = useRef<Terminal>()
   const fitRef = useRef<FitAddon>()
   const wsRef = useRef<WebSocket>()
   const unmounted = useRef(false)
   const retry = useRef<any>()
   const webglRef = useRef<WebglAddon>()
+  const activeRef = useRef(active)
+  activeRef.current = active
+  const hasServerFrame = useRef(false)
+  const handoffVisible = useRef(false)
+  const handoffAwaitingServer = useRef(false)
+  const handoffReleaseTimer = useRef<ReturnType<typeof setTimeout>>()
+  const handoffSafetyTimer = useRef<ReturnType<typeof setTimeout>>()
+  const handoffRaf = useRef<number>()
+  const resumeProbeTimer = useRef<ReturnType<typeof setTimeout>>()
+  const resumeProbeID = useRef('')
+  const resumeProbeSeq = useRef(0)
+  const silentReconnect = useRef(false)
+  const resumeHealPending = useRef(false)
+  const rebuildRendererRef = useRef<() => void>()
   // 自增一次 = 拆掉 xterm 实例重建（渲染器/纹理图集/WebSocket 全新），效果等同刷新整页
   const [gen, setGen] = useState(0)
+
+  const hideVisualHandoff = () => {
+    handoffVisible.current = false
+    handoffAwaitingServer.current = false
+    if (handoffCanvasRef.current) handoffCanvasRef.current.style.display = 'none'
+    if (restoredFrameRef.current) restoredFrameRef.current.style.display = 'none'
+  }
+
+  const releaseVisualHandoff = (delay = 80) => {
+    clearTimeout(handoffReleaseTimer.current)
+    handoffReleaseTimer.current = setTimeout(() => {
+      cancelAnimationFrame(handoffRaf.current || 0)
+      handoffRaf.current = requestAnimationFrame(() => {
+        handoffRaf.current = requestAnimationFrame(hideVisualHandoff)
+      })
+    }, delay)
+  }
+
+  // resize canvas 会按规范清空像素。先同步复制旧帧覆盖在 xterm 上面，等新数据 parse + render 后
+  // 再切掉覆盖层，用户看到的是旧帧直接交接到新帧，而不是中间那张空白画布。
+  const beginVisualHandoff = () => {
+    if (!activeRef.current || !hasServerFrame.current || handoffVisible.current) return
+    const el = elRef.current, canvas = handoffCanvasRef.current
+    if (!el || !canvas || !copyTerminalFrame(el, canvas)) return
+    handoffVisible.current = true
+    canvas.style.display = 'block'
+    clearTimeout(handoffSafetyTimer.current)
+    handoffSafetyTimer.current = setTimeout(hideVisualHandoff, 2000)
+  }
+
+  const acknowledgeConnection = () => {
+    if (!resumeProbeID.current) return
+    resumeProbeID.current = ''
+    clearTimeout(resumeProbeTimer.current)
+  }
 
   // 已上报给后端的尺寸。相同尺寸重复上报没有意义，却会让后端 Setsize → SIGWINCH →
   // tmux 整屏重排 → 肉眼一闪，所以这里做去重闸门。新连接时清零以强制重报（新 tmux 客户端要知道尺寸）。
   const lastSent = useRef({ cols: 0, rows: 0 })
   const resizeTimer = useRef<any>()
 
-  const applyResize = () => {
+  // 唯一的“测量 → 本地 fit → 必要时通知 tmux”入口。所有普通布局来源都只能直接或防抖后走这里。
+  const applyResize = (): TerminalDimensions | null => {
     const t = termRef.current, ws = wsRef.current, fit = fitRef.current, el = elRef.current
-    if (!t || !fit || !el) return
-    // 未激活的标签是 display:none、尺寸为 0：此时 fit 拿不到真实宽度，会让终端停在默认 80 列，
-    // tmux 便渲染成左侧窄条。隐藏或尚未布局时跳过，等可见(切回标签)再 fit。
-    if (el.offsetParent === null || el.clientWidth === 0 || el.clientHeight === 0) return
+    if (!t || !fit || !el) return null
+    // 尚未布局（例如整个停靠栏收起）时 fit 拿不到真实宽度，会让终端停在默认 80 列，
+    // tmux 便渲染成左侧窄条。此时跳过，等容器恢复布局后再由 ResizeObserver / active effect 适配。
+    if (el.offsetParent === null || el.clientWidth === 0 || el.clientHeight === 0) return null
     try {
       const dims = fit.proposeDimensions()
-      if (!dims || !isFinite(dims.cols) || !isFinite(dims.rows) || dims.cols < 2 || dims.rows < 2) return
+      if (!dims || !isFinite(dims.cols) || !isFinite(dims.rows) || dims.cols < 2 || dims.rows < 2) return null
+      const changesCells = dims.cols !== t.cols || dims.rows !== t.rows
+      if (changesCells) beginVisualHandoff()
       fit.fit()
-      if (!ws || ws.readyState !== 1) return
-      if (t.cols === lastSent.current.cols && t.rows === lastSent.current.rows) return
-      lastSent.current = { cols: t.cols, rows: t.rows }
-      ws.send(JSON.stringify({ type: 'resize', cols: t.cols, rows: t.rows }))
-    } catch {}
+      const current = { cols: t.cols, rows: t.rows }
+      let sentResize = false
+      if (ws?.readyState === 1 && (current.cols !== lastSent.current.cols || current.rows !== lastSent.current.rows)) {
+        lastSent.current = current
+        ws.send(JSON.stringify({ type: 'resize', ...current }))
+        sentResize = true
+      }
+      if (handoffVisible.current) {
+        handoffAwaitingServer.current = changesCells && sentResize
+        if (!handoffAwaitingServer.current) releaseVisualHandoff()
+      }
+      return current
+    } catch { return null }
   }
 
   // 高频尺寸变化合并成一次。手机上触发源极密集：软键盘弹出/收起的动画每帧一次、地址栏随页面
@@ -319,45 +430,85 @@ const Term = forwardRef<TermHandle, {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
     // 带上当前尺寸：后端据此建 pty，tmux attach 首帧就按真实尺寸画，省掉「先按 80x24 画完再跳一次」
     const t0 = termRef.current
-    const q = t0 && t0.cols > 1 && t0.rows > 1 ? `?cols=${t0.cols}&rows=${t0.rows}` : ''
+    const requested = t0 && t0.cols > 1 && t0.rows > 1 ? { cols: t0.cols, rows: t0.rows } : null
+    const q = requested ? `?cols=${requested.cols}&rows=${requested.rows}` : ''
     const ws = new WebSocket(`${proto}://${location.host}/api/term/${encodeURIComponent(name)}${q}`)
     ws.binaryType = 'arraybuffer'
     wsRef.current = ws
     ws.onopen = () => {
+      silentReconnect.current = false
       onStatus?.('connected'); termRef.current?.focus()
-      lastSent.current = { cols: 0, rows: 0 } // 新 tmux 客户端要重新告知尺寸，绕过去重闸门
+      // query 已经决定了新 pty 的尺寸，把它记为“已同步”。若连接建立期间布局又变了，
+      // applyResize 会只补发最终的新尺寸；没有变化则不再发送一次重复 resize。
+      lastSent.current = requested || { cols: 0, rows: 0 }
       applyResize()
-      // attach 尺寸常与上个客户端不同(桌面↔手机)，宽行重折行会在 TUI 屏上留错位垃圾；
-      // 等首次 resize 生效后自动抖动重绘一次，进来就是干净画面。
-      // 但尺寸与上次 attach 相同时不抖：手机切后台/锁屏/网络抖动会频繁断线重连，
-      // 每次都抖两下 SIGWINCH 就成了周期性闪烁，而同尺寸重连本来就没有折行垃圾要清。
+      // 首次 attach 已在 URL query 里带真实尺寸，不再自动 cols-1 → cols 抖两次：刷新页面时
+      // 那两次 SIGWINCH 正是稳定复现的闪屏。仅真实尺寸变化或久置恢复的强制重同步才 jiggle。
       setTimeout(() => {
         const t = termRef.current
         if (!t) return
         const prev = lastAttach.current
         const forced = forceRepaint.current
         forceRepaint.current = false
-        lastAttach.current = { cols: t.cols, rows: t.rows }
-        if (!forced && prev && prev.cols === t.cols && prev.rows === t.rows) return
-        jiggleResize()
+        const current = { cols: t.cols, rows: t.rows }
+        lastAttach.current = current
+        if (shouldJiggleAfterAttach(prev, current, forced)) jiggleResize()
       }, 600)
     }
     ws.onmessage = (e) => {
       const t = termRef.current
       if (!t) return
-      if (typeof e.data === 'string') t.write(stripMouseEnableStr(e.data))
-      else t.write(stripMouseEnableBytes(new Uint8Array(e.data as ArrayBuffer)))
+      if (typeof e.data === 'string') {
+        const pong = parseTerminalPong(e.data)
+        if (pong) {
+          if (pong.id === resumeProbeID.current) acknowledgeConnection()
+          return
+        }
+      }
+      // 收到任何 PTY 数据都足以证明连接存活；写入解析完成后再让新帧接管旧帧。
+      acknowledgeConnection()
+      hasServerFrame.current = true
+      const data = typeof e.data === 'string'
+        ? stripMouseEnableStr(e.data)
+        : stripMouseEnableBytes(new Uint8Array(e.data as ArrayBuffer))
+      t.write(data, () => releaseVisualHandoff())
     }
     ws.onclose = () => {
-      onStatus?.('closed')
+      acknowledgeConnection()
+      const reconnectImmediately = silentReconnect.current
+      if (!reconnectImmediately) onStatus?.('closed')
       if (unmounted.current) return
-      retry.current = setTimeout(connect, 1200) // 断线自动重连
+      retry.current = setTimeout(connect, reconnectImmediately ? 0 : 1200) // 探测失败立即接管；普通断线稍后重试
     }
+  }
+
+  // 浏览器在后台可能冻结网络事件，readyState=OPEN 并不一定代表链路仍活着。恢复时先发无副作用
+  // ping；pong 或任何 PTY 数据都算存活。只有超时才静默重连，正常恢复不改变绿点、不重画 tmux。
+  const probeConnection = () => {
+    const ws = wsRef.current
+    if (!ws || ws.readyState !== WebSocket.OPEN) return
+    clearTimeout(resumeProbeTimer.current)
+    const id = `${Date.now()}-${++resumeProbeSeq.current}`
+    resumeProbeID.current = id
+    try {
+      ws.send(JSON.stringify({ type: 'ping', id }))
+    } catch {
+      resumeProbeID.current = ''
+      return
+    }
+    resumeProbeTimer.current = setTimeout(() => {
+      if (resumeProbeID.current !== id || wsRef.current !== ws) return
+      resumeProbeID.current = ''
+      beginVisualHandoff()
+      silentReconnect.current = true
+      onStatus?.('connecting')
+      try { ws.close() } catch {}
+    }, 2500)
   }
 
   useImperativeHandle(ref, () => ({
     send: (s, keepFocus) => { const ws = wsRef.current; if (ws && ws.readyState === 1) ws.send(s); if (!keepFocus) termRef.current?.focus() },
-    fit: () => applyResize(),
+    fit: () => { applyResize() },
     copy: () => {
       const sel = termRef.current?.getSelection() || ''
       if (sel) copyText(sel)
@@ -374,6 +525,7 @@ const Term = forwardRef<TermHandle, {
     selectPaneAt: (clientX, clientY) => selectPaneAtClient(clientX, clientY),
     paneScreenRect: (pane) => paneScreenRect(pane),
     redraw: () => jiggleResize(),
+    beginVisualHandoff,
   }))
 
   useEffect(() => {
@@ -394,19 +546,26 @@ const Term = forwardRef<TermHandle, {
     term.open(elRef.current!)
     termRef.current = term
     fitRef.current = fit
+    if (restoredFrame) {
+      // 正常由首批 PTY 数据的 write callback 撤下；后端异常/会话已消失时也不能永久盖着旧图。
+      clearTimeout(handoffSafetyTimer.current)
+      handoffSafetyTimer.current = setTimeout(hideVisualHandoff, 2000)
+    }
     const diagEntry = { name, term, el: elRef.current, webgl: () => !!webglRef.current }
     liveTerms.add(diagEntry)
 
     // WebGL 渲染器：默认的 DOM 渲染器每格一个 span，单元格宽是分数像素，手机 dpr 常为 2.625/3
     // 这类非整数，亚像素误差累积会裁字/叠字，整屏重绘也更容易看到闪烁。WebGL 按纹理网格绘制，
     // 顺带让 rescaleOverlappingGlyphs 生效。
+    // preserveDrawingBuffer=true：终端旁边的标签/页面发生 DOM 更新时，Chrome 可能重新合成 WebGL
+    // canvas；不保留绘制缓冲会在 xterm 下一次 render 前露出空帧。这里优先保证 IDE 终端画面稳定。
     // 上下文丢失（后台切回/GPU 回收/同页 WebGL 上下文超上限被回收最老的那个）时**先试着重建**，
     // 连着重建都失败才退回 DOM 渲染器——旧写法一丢就永久 dispose，此后这个标签一直是降级渲染。
     let lostAt = 0
     const mountWebgl = () => {
       if (unmounted.current) return
       try {
-        const webgl = new WebglAddon()
+        const webgl = new WebglAddon(true)
         webgl.onContextLoss(() => {
           try { webgl.dispose() } catch {}
           webglRef.current = undefined
@@ -426,12 +585,15 @@ const Term = forwardRef<TermHandle, {
     // 不重连、不动后端，只修「本地画丢了」这一类故障。
     const rebuildRenderer = () => {
       if (unmounted.current || termRef.current !== term) return
+      beginVisualHandoff()
       try { webglRef.current?.dispose() } catch {}
       webglRef.current = undefined
       mountWebgl()
       applyResize()
       try { term.refresh(0, term.rows - 1) } catch {}
+      releaseVisualHandoff(100)
     }
+    rebuildRendererRef.current = rebuildRenderer
 
     // dpr 变化（桌面浏览器缩放 Ctrl+± / 拖到另一块缩放比不同的屏、手机页面缩放/横竖屏）：
     // xterm 要按新 dpr 重建纹理图集与画布，这条路径上偶发整屏画空，且后端重绘救不回来。
@@ -451,22 +613,23 @@ const Term = forwardRef<TermHandle, {
     }
     armDprWatch()
 
-    // 切后台再回来（手机上最常见：用一会 → 切出去 → 过一阵回来 → 整屏花）。分两级自愈，
+    // 切后台再回来（手机上最常见：用一会 → 切出去 → 过一阵回来 → 整屏花）。
     // 因为「花屏」其实有两种，修法完全不同（用 __roamTermDiag(true) 把缓冲跟 tmux capture 一比就能分）：
     //   ① 画布/纹理图集坏了：缓冲内容是对的，只是画错了 → 重建渲染器即可；
     //   ② 内容本身就是坏的：安卓会把后台页整个冻住，WebSocket 常常「半死」——readyState 还是 1，
     //      数据其实早就断了；tmux 那头也不会主动重画，于是回来看到的是「旧内容 + 半截新内容」。
     //      这种只重建渲染器没用（把错的东西再画一遍），必须整条链路重来。
-    // 所以：离开 >1.5s 重建渲染器；离开 >10s 再叠一层——关掉 socket 触发重连（新 tmux 客户端 =
-    // 整屏重画），并置 forceRepaint 让这次 attach 无条件抖一次尺寸，把 TUI 重排的垃圾也清掉。
-    const RESYNC_AFTER_MS = 10000
+    // 旧实现按离开时长无条件关闭每一个 WS，导致全部绿点先变红、随后集体重连闪屏。现在渲染器
+    // 只在真正可见的终端上通过帧交接重建；连接一律先 ping 探测，失败才静默重连。
     let hiddenAt = 0
     const healAfterAway = (away: number) => {
       if (away <= 1500) return
-      setTimeout(rebuildRenderer, 60)
-      if (away <= RESYNC_AFTER_MS) return
-      forceRepaint.current = true
-      try { wsRef.current?.close() } catch {} // onclose → 1.2s 后自动重连，走完整 attach 重画
+      resumeHealPending.current = true
+      if (activeRef.current) {
+        resumeHealPending.current = false
+        setTimeout(rebuildRenderer, 60)
+      }
+      probeConnection()
     }
     const onVisibility = () => {
       if (document.visibilityState === 'hidden') { hiddenAt = performance.now(); return }
@@ -476,11 +639,22 @@ const Term = forwardRef<TermHandle, {
       healAfterAway(away)
     }
     document.addEventListener('visibilitychange', onVisibility)
-    // 从 bfcache 恢复（安卓返回键、iOS 侧滑返回）不一定走 visibilitychange：一律按「久置」处理
-    const onPageShow = (e: PageTransitionEvent) => { if (e.persisted) healAfterAway(RESYNC_AFTER_MS + 1) }
+    // 从 bfcache 恢复（安卓返回键、iOS 侧滑返回）不一定走 visibilitychange。
+    const onPageShow = (e: PageTransitionEvent) => { if (e.persisted) healAfterAway(1501) }
     window.addEventListener('pageshow', onPageShow)
 
-    setTimeout(() => { try { fit.fit() } catch {} }, 0)
+    // 硬刷新会销毁整个 document，运行时的覆盖层无法跨文档存在。离开前仅为当前终端保存一张
+    // 短时 session 快照；新文档首个真实 PTY 帧完成后立即移除。bfcache 自带旧 DOM，无需保存。
+    const onPageHide = (e: PageTransitionEvent) => {
+      if (e.persisted || !activeRef.current || !hasServerFrame.current || !elRef.current) return
+      const frame = document.createElement('canvas')
+      if (!copyTerminalFrame(elRef.current, frame)) return
+      try {
+        const stored: StoredTerminalFrame = { savedAt: Date.now(), dataUrl: frame.toDataURL('image/webp', 0.92) }
+        sessionStorage.setItem(FRAME_STORAGE_PREFIX + name, JSON.stringify(stored))
+      } catch { /* storage quota / WebGL 读取失败时继续走普通首屏 */ }
+    }
+    window.addEventListener('pagehide', onPageHide)
 
     // 预热符号补字集。两点必须注意：
     //   1. 带 unicode-range 的 webfont 是「按需加载」的，而 WebGL/Canvas 渲染器是把字形画进
@@ -580,7 +754,21 @@ const Term = forwardRef<TermHandle, {
       }
       ws.send(d)
     })
-    const onViewportChange = () => scheduleResize()
+    // 首次恢复标签时外层 Content 会执行 200ms 宽度过渡。过去 connect() 立即拿到过渡首帧的
+    // 309 列，稍后又 resize 到 181 列；现在等待 ResizeObserver 安静 250ms，再按最终尺寸 attach。
+    let initialConnectTimer: ReturnType<typeof setTimeout> | undefined
+    const connectAfterLayoutSettles = () => {
+      clearTimeout(initialConnectTimer)
+      initialConnectTimer = setTimeout(() => {
+        if (unmounted.current || wsRef.current) return
+        if (!applyResize()) { connectAfterLayoutSettles(); return }
+        connect()
+      }, 250)
+    }
+    const onViewportChange = () => {
+      scheduleResize()
+      if (!wsRef.current) connectAfterLayoutSettles()
+    }
     const ro = new ResizeObserver(onViewportChange)
     if (elRef.current) ro.observe(elRef.current)
     window.addEventListener('resize', onViewportChange)
@@ -776,11 +964,12 @@ const Term = forwardRef<TermHandle, {
     }
     el.addEventListener('drop', onDropGuard)
 
-    connect()
+    connectAfterLayoutSettles()
 
     return () => {
       unmounted.current = true
       clearTimeout(retry.current)
+      clearTimeout(initialConnectTimer)
       ro.disconnect()
       themeObs.disconnect()
       window.removeEventListener('resize', onViewportChange)
@@ -806,6 +995,12 @@ const Term = forwardRef<TermHandle, {
       try { dprMq?.removeEventListener('change', onDpr) } catch {}
       document.removeEventListener('visibilitychange', onVisibility)
       window.removeEventListener('pageshow', onPageShow)
+      window.removeEventListener('pagehide', onPageHide)
+      rebuildRendererRef.current = undefined
+      acknowledgeConnection()
+      clearTimeout(handoffReleaseTimer.current)
+      clearTimeout(handoffSafetyTimer.current)
+      cancelAnimationFrame(handoffRaf.current || 0)
       liveTerms.delete(diagEntry)
       try { wsRef.current?.close() } catch {}
       // 拆终端务必吞异常：这里是 React 的 effect cleanup，抛出去会顺着卸载流程把整棵树炸掉
@@ -822,18 +1017,18 @@ const Term = forwardRef<TermHandle, {
 
   useEffect(() => {
     const t = termRef.current
-    if (t) { t.options.fontSize = fontSize; setTimeout(applyResize, 0) }
+    if (t) { beginVisualHandoff(); t.options.fontSize = fontSize; scheduleResize() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fontSize])
 
-  // 切回该标签：display 从 none → block，需在浏览器完成布局后再 fit。单次 setTimeout 易踩竞态，
-  // 用 rAF 连续重试几帧，确保可见终端按真实宽度铺满（修复"会话变窄条"）。
+  // 非当前标签用 visibility 隐藏但始终保留相同布局尺寸，切回时不需要再次 fit，只需聚焦。
   useEffect(() => {
     if (!active) return
-    let raf = 0, n = 0
-    // applyResize 自带尺寸去重，连打几帧只会真发一次
-    const tick = () => { applyResize(); if (n === 0) termRef.current?.focus(); if (++n < 4) raf = requestAnimationFrame(tick) }
-    raf = requestAnimationFrame(tick)
+    if (resumeHealPending.current) {
+      resumeHealPending.current = false
+      setTimeout(() => rebuildRendererRef.current?.(), 60)
+    }
+    const raf = requestAnimationFrame(() => termRef.current?.focus())
     return () => cancelAnimationFrame(raf)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active])
@@ -855,8 +1050,16 @@ const Term = forwardRef<TermHandle, {
     // 后面的兄弟节点之上：Claude/Codex 对话面板正是这样被一层**透明**画布盖住的——看得见、点不着，
     // 表现为对话区滑不动历史、发送/停止按不动（画布吃掉了所有 pointer/touch）。isolate 把这些
     // z-index 关回终端自己这一层，覆盖层就能正常接事件。真机 CDP 命中测试可复现/回归。
-    <div style={{ position: 'relative', width: '100%', height: '100%', isolation: 'isolate', WebkitTouchCallout: 'none' } as CSSProperties}>
+    <div style={{ position: 'relative', width: '100%', height: '100%', isolation: 'isolate', contain: 'layout paint style', WebkitTouchCallout: 'none' } as CSSProperties}>
       <div ref={elRef} style={{ width: '100%', height: '100%' }} />
+      {restoredFrame && <img ref={restoredFrameRef} data-terminal-restored-frame src={restoredFrame} alt="" aria-hidden style={{
+        position: 'absolute', inset: 0, zIndex: 5, width: '100%', height: '100%', objectFit: 'fill',
+        pointerEvents: 'none', background: 'var(--xterm-bg)',
+      }} />}
+      <canvas ref={handoffCanvasRef} data-terminal-handoff-frame aria-hidden style={{
+        display: 'none', position: 'absolute', inset: 0, zIndex: 5, width: '100%', height: '100%',
+        pointerEvents: 'none', background: 'var(--xterm-bg)',
+      }} />
       {handles && (['start', 'end'] as const).map((which) => (
         <div key={which} onTouchStart={dragHandle(which)} style={handleStyle(which)} />
       ))}

@@ -1,0 +1,107 @@
+# Web UI 设计系统（强制）
+
+前端所有新界面必须走这套令牌与规则。它不是审美偏好，是一次实测的结论：改造前在概览页
+一屏上量出 **10 种字号**（最常用的三种是 11.5 / 11 / 10.5）、**8 种圆角**、**10 种间距**。
+半像素级的差别没人看得出是刻意的，只会读成"随手写的"——这就是"界面不够优雅"的来源。
+
+配套设计稿：[13 移动端响应式](../design/web/13-mobile-responsive.md) ·
+[14 桌面工作区](../design/web/14-desktop-workspace.md)。真机验收跑法见
+[web-ui-checklist.md](./web-ui-checklist.md)。
+
+## 1. 令牌：只准用这些值
+
+全部定义在 `frontend/src/index.css` 的 `:root`。**不要在组件里写死数值**——写死的那一刻，
+下一个人就没有依据再改回来。
+
+### 字号（六档）
+
+| 令牌 | 值 | 用途 |
+|---|---:|---|
+| `--fs-micro` | 11 | 眉标、角标。**唯一允许 <12 的一档** |
+| `--fs-meta` | 12 | 次要信息：时间、路径、计数 |
+| `--fs-sm` | 13 | 密集列表行、区块标题 |
+| `--fs-body` | 14 | 正文（compact 档 15） |
+| `--fs-lg` | 16 | 区块标题 |
+| `--fs-title` | 22 | 页面标题 |
+
+**除眉标/角标外不许低于 12px。** 不要出现 10.5 / 11.5 / 12.5 / 13.5 这类半档。
+
+### 圆角（四档）
+
+`--r-xs 6`（控件）· `--r-sm 10`（行、导航项）· `--r-card 14`（卡片、sheet 内块）·
+`--r-pill 999`（胶囊、徽标）。
+
+### 间距（五档）
+
+`--sp-1 4` · `--sp-2 8` · `--sp-3 12` · `--sp-4 16` · `--sp-5 24`。一律 4 的倍数，
+不要 3/5/7/9/11/13。
+
+### 强调色（一组）
+
+| 令牌 | 用途 |
+|---|---|
+| `--accent` | 线、图标、链接、强调线 |
+| `--accent-solid` | 实心块：主按钮、Segmented 选中、徽标 |
+| `--accent-soft` | 淡底：选中行、当前导航项 |
+| `--accent-border` | 强调描边 |
+
+> **别照抄十六进制。** antd 的 `darkAlgorithm` 会在 seed 基础上**再推导一层**
+> （`#58a6ff` → `rgb(78,144,220)`），任何照抄 seed 的自绘控件都会比 antd 自己画的差一档，
+> 而且深浅色各差一档。`--accent-solid` 由 `theme.tsx` 用 `antdTheme.getDesignToken()`
+> 推导后回填，要跟 antd 一致就用它。
+
+### 密度 / 层级 / 安全区
+
+`--tap 44`（最小命中边长）、`--ctl-h`、`--pad-page`、`--gap`；九个具名 z 层
+（`--z-sticky` … `--z-drag`），不要再写 1199/1200/1201 这类魔数；`--safe-*` 与 `--kb`。
+
+## 2. 结构规则
+
+- **页头统一 `.tt-pagehead`**：眉标（kicker）+ 标题（h2）+ 一句话（p）+ 右侧动作（.acts）。
+  概览 / 项目 / 会话已经在用，新页面照抄这三行，不要各写各的标题行。
+- **不要嵌套同名壳**：页面已经在 tab 或路由里说明了身份，就别再套一层带同名标题的 Card。
+- **区块标题**用 13px 正常字重的亮色文字，**不要**「小号 + 大字距 + 横贯全宽的虚线」——
+  那条线不承载信息却横穿版面。
+- **少画框**：同一屏里状态条、侧轨这类次级容器用底色区分即可，不必每个都描 1px 边。
+- **箭头等符号用 SVG 图标**，不要 `→ ← ⌃` 这类文字符号：字号下与标点混在一起，
+  粗细也跟不上界面的线性图标语言，手机字体上尤其难看。
+
+## 3. 触控
+
+- 粗指针（`html[data-pointer="coarse"]`）下所有可点目标命中区 ≥ **44**。
+  **用伪元素撑命中区，不要撑视觉尺寸**。
+- 视觉小于 44 的控件（角标、行内链接）必须显式补 `::after` 命中区，并在真机上用
+  `document.elementFromPoint` 验证——截图看不出来。
+
+## 4. 断点与档位
+
+只有一个入口：`useLayout()`（`frontend/src/layout.ts`）。**不要**再读 `window.innerWidth`
+或自己 `matchMedia`。四档：compact <600 · medium 600–904 · expanded 905–1279 · large ≥1280。
+纯样式差异走 `<html>` 上的 `data-size` / `data-orient` / `data-pointer` / `data-density`，
+不要往组件里塞 JS 分支。
+
+`data-size="compact"`（窗口窄）与 `data-density="compact"`（信息密）**是两个属性**，
+同名不同义，合并会在 CSS 里撞车。
+
+## 5. 反复踩到的坑
+
+这几条都在真机或 CDP 上咬过，改相关代码前先读：
+
+| 现象 | 真因 |
+|---|---|
+| 页头 `position: sticky` 不生效 | 祖先里有个**不滚动的** `overflow:auto`。任何非 `visible` 的祖先都会成为 sticky 的参照系 |
+| antd `Dropdown.Button` 把兄弟节点挤没/盖住 | 它内部的 `Space.Compact` 在 flex 容器里是块级 flex 子项，会一路撑开。包一层 `flex:0 0 auto` |
+| `--kb` 与 `env(keyboard-inset-height)` 对不上 | VirtualKeyboard API 的 `geometrychange` 没订阅，`--kb` 只能靠 resize 顺带刷新 |
+| 中间省略的名字读成两个词 | 头尾两段之间留了 gap。它俩是同一个名字被切开的两半，间距只加在项目前缀之后 |
+| `项目 · 会话` 两截都被截成碎片 | 两段等比例挨压。给项目前缀 `flex: 0 100 auto`，让它先被吸收干净 |
+| 软键盘收起后终端仍然只有半屏 | Chrome 的 keyboard inset 可能卡住不复位。**量高度前先确认 `env(keyboard-inset-height)` 是 0** |
+| CDP 改视口后档位不变 | `Emulation.setDeviceMetricsOverride` 不触发 `resize` / `matchMedia change`。**每个视口重载一次**；纯 CSS 容器查询不受影响 |
+
+## 6. 提交前必过
+
+```bash
+cd frontend && npm run typecheck && npm run i18n:check && npx vitest run && npm run build
+```
+
+`i18n:check` 除了查两份 locale 对齐，还会查 `t('key')` 引用的 key 是否存在——
+key 拼错时界面会**原样显示这个 key**，而两份 locale 都缺它，只查对齐是发现不了的。

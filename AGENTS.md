@@ -5,6 +5,7 @@ These instructions apply to Codex, Claude Code, and other coding agents working 
 ## Must Read
 
 - [docs/development/i18n.md](docs/development/i18n.md) is the mandatory internationalization standard.
+- [docs/development/ui-design-system.md](docs/development/ui-design-system.md) is the mandatory Web UI design system: type/radius/spacing/accent tokens, the single breakpoint entry point, touch-target rules, and the traps that keep recurring. Read it before any frontend UI change.
 - Frontend changes must follow [docs/design/web/04-frontend.md](docs/design/web/04-frontend.md) unless a newer implementation pattern exists in code.
 
 ## Internationalization Gate

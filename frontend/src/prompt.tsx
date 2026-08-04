@@ -11,11 +11,14 @@ import { useI18n } from './i18n'
 export interface Choice { num: number; label: string; selected: boolean }
 export interface Prompt { kind: 'select' | 'yesno'; question: string; choices: Choice[] }
 
-const CURSOR = /[❯➤▶►▸→›»☞◉●>]/u                      // 选中游标常见字形（含 ASCII >）
+const CURSOR_PREFIX = /^[❯➤▶►▸→›»☞◉●>]\s*/u           // 选中游标必须位于选项开头，不能匹配正文里的 > / ●
 const LEAD = /^[\s│┃|╎┆┊╭╰├╞┝─━═]+/u                  // 行首方框线/竖线/空白
 const TAIL = /[\s│┃|╎┆┊╮╯┤╡┥─━═]+$/u                  // 行尾同上
 const OPT = /^(?:[❯➤▶►▸→›»☞◉●>]\s*)?(\d+)[.)]\s+(\S.*)$/u // [游标?] N. 文本
-const KW = /(would you like|proceed|allow|continue|overwrite|apply|approve|trust|run|command|是否|确认|继续|允许|要不要|执行|命令)/i
+// 无可见游标时只接受“明确提问 + 操作提示”的组合。run/command/执行/命令太常见，
+// Agent 的普通编号总结很容易命中，造成后台标签在“待确认/运行中”之间反复闪动。
+const QUESTION = /(?:would you like|do you want|are you sure|should (?:we|i)|(?:proceed|allow|continue|overwrite|approve|trust).*[?？]|是否(?:继续|允许|确认|执行)|(?:继续|允许|确认|执行).*[?？])/i
+const ACTION_HINT = /(?:(?:enter|return).*(?:select|confirm|continue|submit|accept)|(?:esc|escape).*(?:cancel|back)|(?:回车|enter).*(?:选择|确认|继续)|(?:按|press).*(?:y|n|yes|no).*(?:确认|confirm))/i
 const ANSI = /\x1b\[[0-?]*[ -/]*[@-~]/g
 const CTRL = /[\x00-\x08\x0b-\x1f\x7f]/g
 const stripCtl = (s: string) => s.replace(ANSI, '').replace(CTRL, '')
@@ -28,7 +31,7 @@ export function detectPrompt(capture: string): Prompt | null {
   const opts: P[] = []
   lines.forEach((raw, idx) => {
     const m = clean(raw).match(OPT)
-    if (m) opts.push({ num: Number(m[1]), label: m[2].trim(), selected: CURSOR.test(raw), idx })
+    if (m) opts.push({ num: Number(m[1]), label: m[2].trim(), selected: CURSOR_PREFIX.test(clean(raw)), idx })
   })
   // 取最后一组选项。绑定条件是「编号正好接上」而不是单纯挨得近：手机 attach 后 tmux 窗格常只有
   // 40 多列，Claude 的选项被折成五六行，按行距卡 ≤3 会把每个选项都拆成孤岛 → 一条都识别不出来
@@ -52,8 +55,10 @@ export function detectPrompt(capture: string): Prompt | null {
     }
     const question = qlines.join(' ').trim()
     const windowText = lines.slice(Math.max(0, g[0].idx - 8), Math.min(lines.length, g[g.length - 1].idx + 3)).map(clean).join(' ')
-    // 有游标，或上下文像个确认提示 → 认定为选择框（capture 无颜色，故用游标/关键词双保险）
-    if (g.some((o) => o.selected) || KW.test(question) || KW.test(windowText)) {
+    // 有开头游标，或“明确提问 + Enter/Esc 等操作提示”同时成立，才认定为选择框。
+    // 不能仅凭普通关键词判断，否则 Agent 输出的命令清单会被误报为待确认。
+    const selectedCount = g.filter((o) => o.selected).length
+    if (selectedCount === 1 || (QUESTION.test(question) && ACTION_HINT.test(windowText))) {
       const choices = g.map((o) => ({ num: o.num, label: o.label, selected: o.selected }))
       if (!choices.some((c) => c.selected)) choices[0].selected = true
       return { kind: 'select', question, choices }
@@ -62,9 +67,21 @@ export function detectPrompt(capture: string): Prompt | null {
   // y/n 兜底
   for (let i = lines.length - 1; i >= 0 && lines.length - i <= 12; i--) {
     const c = clean(lines[i])
+    if (!c) continue
     if (/\((?:y\/n|yes\/no|y\/N|Y\/n)\)|\[y\/n\]/i.test(c)) return { kind: 'yesno', question: c, choices: [] }
+    break // 只检查屏幕最后一条非空行，避免把历史说明文字里的 (y/n) 当作当前提示
   }
   return null
+}
+
+// 后台标签的待确认状态需要连续采样后才切换。终端 TUI 在重绘中途可能短暂形成
+// “编号列表 + 游标”的残帧；单次采样不能让标签立刻增删“待确认”并造成视觉闪动。
+export interface PromptSignal { candidate: boolean; streak: number; stable: boolean }
+export function advancePromptSignal(previous: PromptSignal | undefined, candidate: boolean, confirmations = 2): PromptSignal {
+  const sameCandidate = previous?.candidate === candidate
+  const streak = sameCandidate ? (previous?.streak || 0) + 1 : 1
+  const stable = streak >= confirmations ? candidate : (previous?.stable || false)
+  return { candidate, streak, stable }
 }
 
 function PromptActions({ p, accent, busy, choose, press }: {

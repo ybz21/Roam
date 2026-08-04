@@ -1,0 +1,1414 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Roam Mobile · 手机端交互设计稿</title>
+<style>
+  :root {
+    --stage: #080b10;
+    --stage-2: #0c1119;
+    --stage-line: rgba(148,163,184,.15);
+    --stage-text: #d9e2ee;
+    --stage-muted: #7f8b9b;
+    --blue: #58a6ff;
+    --blue-2: #1f6feb;
+    --green: #3fb950;
+    --amber: #d29922;
+    --red: #f85149;
+    --purple: #a371f7;
+    --radius: 18px;
+  }
+
+  * { box-sizing: border-box; }
+  html { min-height: 100%; background: var(--stage); }
+  body {
+    min-height: 100vh;
+    margin: 0;
+    color: var(--stage-text);
+    background:
+      radial-gradient(circle at 50% -16%, rgba(31,111,235,.18), transparent 38%),
+      radial-gradient(circle at 92% 34%, rgba(163,113,247,.07), transparent 25%),
+      var(--stage);
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  button { font: inherit; }
+  button, [role="button"] { -webkit-tap-highlight-color: transparent; }
+
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    min-height: 64px;
+    padding: 10px clamp(16px, 4vw, 48px);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: rgba(8,11,16,.78);
+    border-bottom: 1px solid var(--stage-line);
+    backdrop-filter: blur(20px);
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    min-width: 0;
+  }
+  .brand-mark {
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 11px;
+    color: #fff;
+    background: linear-gradient(145deg, #262f3b, #0c1016);
+    box-shadow: 0 7px 22px rgba(0,0,0,.32);
+  }
+  .brand-copy strong { display: block; font-size: 14px; letter-spacing: .02em; }
+  .brand-copy span { color: var(--stage-muted); font-size: 11px; }
+  .doc-pages {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .doc-pages::-webkit-scrollbar { display: none; }
+  .doc-pages a {
+    min-height: 34px;
+    padding: 0 9px;
+    display: inline-flex;
+    align-items: center;
+    border-radius: 8px;
+    color: var(--stage-muted);
+    font-size: 10.5px;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .doc-pages a:hover { color: #fff; background: rgba(255,255,255,.06); }
+  .doc-pages a.on { color: #cfe6ff; background: rgba(88,166,255,.12); }
+  .top-spacer { flex: 1; }
+
+  .segmented {
+    display: flex;
+    padding: 3px;
+    gap: 2px;
+    border: 1px solid var(--stage-line);
+    border-radius: 11px;
+    background: rgba(255,255,255,.035);
+  }
+  .segmented button,
+  .theme-toggle {
+    min-height: 34px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 8px;
+    color: var(--stage-muted);
+    background: transparent;
+    cursor: pointer;
+    transition: .18s ease;
+  }
+  .segmented button:hover,
+  .theme-toggle:hover { color: #fff; background: rgba(255,255,255,.07); }
+  .segmented button.on { color: #fff; background: rgba(88,166,255,.16); }
+  .theme-toggle {
+    border: 1px solid var(--stage-line);
+    white-space: nowrap;
+  }
+
+  .intro {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 48px 24px 18px;
+    text-align: center;
+  }
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 11px;
+    border: 1px solid rgba(88,166,255,.22);
+    border-radius: 999px;
+    color: #9ccaff;
+    background: rgba(31,111,235,.08);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .12em;
+  }
+  .eyebrow i {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--blue);
+    box-shadow: 0 0 0 5px rgba(88,166,255,.11);
+  }
+  .intro h1 {
+    margin: 18px 0 12px;
+    color: #f0f5fb;
+    font-size: clamp(30px, 5vw, 52px);
+    line-height: 1.08;
+    letter-spacing: -.045em;
+  }
+  .intro h1 em {
+    color: transparent;
+    font-style: normal;
+    background: linear-gradient(120deg, #9ccaff, #58a6ff 56%, #a371f7);
+    background-clip: text;
+    -webkit-background-clip: text;
+  }
+  .intro p {
+    max-width: 700px;
+    margin: 0 auto;
+    color: var(--stage-muted);
+    font-size: 14px;
+    line-height: 1.85;
+  }
+
+  .showcase {
+    width: min(1180px, calc(100% - 32px));
+    margin: 0 auto;
+    padding: 30px 0 78px;
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr);
+    align-items: center;
+    gap: clamp(24px, 4vw, 54px);
+  }
+  .notes { display: flex; flex-direction: column; gap: 14px; }
+  .note-card {
+    position: relative;
+    padding: 17px 17px 18px;
+    overflow: hidden;
+    border: 1px solid var(--stage-line);
+    border-radius: 16px;
+    background: linear-gradient(150deg, rgba(255,255,255,.045), rgba(255,255,255,.015));
+  }
+  .note-card::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 2px;
+    background: var(--card-accent, var(--blue));
+    opacity: .75;
+  }
+  .note-no {
+    margin-bottom: 11px;
+    color: var(--card-accent, var(--blue));
+    font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: .15em;
+  }
+  .note-card h3 { margin: 0 0 7px; font-size: 14px; color: #e7edf5; }
+  .note-card p { margin: 0; color: var(--stage-muted); font-size: 12px; line-height: 1.7; }
+  .note-card b { color: #c8d2df; font-weight: 650; }
+  .flow {
+    display: grid;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .flow-row {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    color: #aeb9c7;
+    font-size: 11.5px;
+  }
+  .flow-row i {
+    width: 24px; height: 24px; display: grid; place-items: center;
+    border: 1px solid var(--stage-line); border-radius: 8px;
+    color: var(--blue); background: rgba(88,166,255,.07);
+    font-style: normal; font-weight: 800;
+  }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 9px 12px;
+    margin-top: 12px;
+    color: var(--stage-muted);
+    font-size: 11px;
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+  .device-wrap { position: relative; display: grid; place-items: center; }
+  .device-hint {
+    position: absolute;
+    top: -25px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #5d6978;
+    font: 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: .09em;
+    white-space: nowrap;
+  }
+  .phone {
+    --phone-w: 390px;
+    --phone-h: 844px;
+    --bg: #0d1117;
+    --panel: #161b22;
+    --raised: #1b222b;
+    --term: #06090d;
+    --line: #27303a;
+    --line-soft: #21262d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --faint: #68717c;
+    width: var(--phone-w);
+    height: var(--phone-h);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    color: var(--text);
+    background: var(--bg);
+    border: 6px solid #11161e;
+    border-radius: 39px;
+    box-shadow:
+      0 0 0 1px #343d49,
+      0 34px 80px rgba(0,0,0,.52),
+      0 8px 24px rgba(0,0,0,.45),
+      inset 0 0 0 1px rgba(255,255,255,.035);
+    transform-origin: top center;
+    transition: width .25s ease, height .25s ease;
+  }
+  .phone.light {
+    --bg: #f4f7fa;
+    --panel: #ffffff;
+    --raised: #ffffff;
+    --term: #0d1117;
+    --line: #d8dee6;
+    --line-soft: #e7ebef;
+    --text: #1f2328;
+    --muted: #57606a;
+    --faint: #8c959f;
+  }
+  .phone.compact { --phone-w: 360px; --phone-h: 640px; }
+  .hardware {
+    position: absolute;
+    z-index: 50;
+    top: 8px;
+    left: 50%;
+    width: 91px;
+    height: 23px;
+    transform: translateX(-50%);
+    border-radius: 20px;
+    background: #05070a;
+  }
+  .statusbar {
+    flex: 0 0 30px;
+    padding: 7px 17px 0;
+    display: flex;
+    align-items: center;
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 650;
+  }
+  .statusbar .right { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+  .statusbar .signal { letter-spacing: -1px; color: var(--text); }
+  .battery {
+    width: 18px; height: 8px; padding: 1px;
+    border: 1px solid var(--muted); border-radius: 2px;
+  }
+  .battery::after { content: ""; display: block; width: 70%; height: 100%; background: var(--text); border-radius: 1px; }
+
+  .screen {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .app-header {
+    flex: 0 0 58px;
+    padding: 6px 15px 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .app-logo {
+    width: 34px; height: 34px; display: grid; place-items: center;
+    border-radius: 11px; color: #fff;
+    background: linear-gradient(145deg, #263241, #121820);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.08);
+  }
+  .app-title { min-width: 0; }
+  .app-title strong { display: block; font-size: 15px; letter-spacing: -.01em; }
+  .app-title span { display: block; margin-top: 2px; color: var(--faint); font-size: 10.5px; }
+  .header-action {
+    width: 44px; height: 44px; margin-left: auto;
+    display: grid; place-items: center;
+    border: 0; border-radius: 14px;
+    color: var(--muted); background: transparent; cursor: pointer;
+  }
+  .header-action:hover { color: var(--text); background: var(--panel); }
+
+  .page {
+    flex: 1;
+    min-height: 0;
+    padding: 0 12px 14px;
+    overflow: auto;
+    scrollbar-width: none;
+  }
+  .page::-webkit-scrollbar { display: none; }
+  .page-view { display: none; }
+  .page-view.on { display: block; }
+  .page-view.enter { animation: page-in .2s ease; }
+  @keyframes page-in { from { opacity: 0; transform: translateY(4px); } }
+
+  .hello { padding: 7px 3px 14px; }
+  .hello .overline { color: var(--faint); font-size: 10.5px; font-weight: 650; letter-spacing: .08em; }
+  .hello h2 { margin: 5px 0 0; color: var(--text); font-size: 23px; letter-spacing: -.035em; }
+  .hello h2 span { color: var(--blue); }
+
+  .attention {
+    position: relative;
+    padding: 15px;
+    overflow: hidden;
+    border: 1px solid rgba(210,153,34,.28);
+    border-radius: 18px;
+    background:
+      radial-gradient(circle at 92% 8%, rgba(210,153,34,.16), transparent 36%),
+      linear-gradient(145deg, rgba(210,153,34,.10), rgba(210,153,34,.035));
+  }
+  .attention::after {
+    content: "";
+    position: absolute;
+    width: 92px; height: 92px;
+    right: -35px; bottom: -52px;
+    border: 17px solid rgba(210,153,34,.045);
+    border-radius: 50%;
+  }
+  .attention-head { display: flex; align-items: center; gap: 9px; }
+  .attention-icon {
+    width: 32px; height: 32px; display: grid; place-items: center;
+    border-radius: 11px; color: #f0b84d; background: rgba(210,153,34,.14);
+  }
+  .attention-copy { min-width: 0; }
+  .attention-copy strong { display: block; font-size: 13.5px; }
+  .attention-copy span { display: block; margin-top: 2px; color: var(--muted); font-size: 10.5px; }
+  .count {
+    margin-left: auto;
+    color: #f2c568;
+    font: 750 21px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .focus-task {
+    position: relative;
+    z-index: 1;
+    margin-top: 13px;
+    padding: 11px 11px 11px 12px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    border: 1px solid rgba(210,153,34,.18);
+    border-radius: 13px;
+    background: rgba(8,11,16,.22);
+  }
+  .phone.light .focus-task { background: rgba(255,255,255,.54); }
+  .focus-task .copy { min-width: 0; flex: 1; }
+  .focus-task .copy b {
+    display: block; overflow: hidden; color: var(--text);
+    font-size: 12px; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .focus-task .copy span { display: block; margin-top: 3px; color: var(--amber); font-size: 10.5px; }
+  .focus-task button {
+    min-width: 72px; min-height: 38px; padding: 0 11px;
+    border: 0; border-radius: 11px;
+    color: #14171c; background: #e3a93c;
+    font-size: 11.5px; font-weight: 750; cursor: pointer;
+    box-shadow: 0 6px 16px rgba(210,153,34,.16);
+  }
+  .focus-task button:active { transform: scale(.97); }
+
+  .metrics {
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .metric {
+    min-height: 69px;
+    padding: 11px;
+    border: 1px solid var(--line-soft);
+    border-radius: 15px;
+    background: var(--panel);
+  }
+  .metric strong { display: block; font: 750 20px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .metric span { display: block; margin-top: 7px; color: var(--muted); font-size: 10.5px; }
+  .metric.blue strong { color: var(--blue); }
+  .metric.green strong { color: var(--green); }
+  .metric.purple strong { color: var(--purple); }
+
+  .section-head {
+    min-height: 45px;
+    padding: 15px 2px 8px;
+    display: flex;
+    align-items: center;
+    color: var(--text);
+    font-size: 12.5px;
+    font-weight: 700;
+  }
+  .section-head small { margin-left: 7px; color: var(--faint); font-size: 10px; font-weight: 500; }
+  .section-head button {
+    min-width: 44px; min-height: 36px; margin-left: auto;
+    border: 0; color: var(--blue); background: transparent;
+    font-size: 10.5px; cursor: pointer;
+  }
+
+  .session-card,
+  .project-card,
+  .file-card {
+    padding: 12px;
+    border: 1px solid var(--line-soft);
+    border-radius: 16px;
+    background: var(--panel);
+  }
+  .session-card + .session-card,
+  .project-card + .project-card,
+  .file-card + .file-card { margin-top: 8px; }
+  .session-card.featured {
+    border-color: rgba(88,166,255,.25);
+    background:
+      linear-gradient(120deg, rgba(88,166,255,.09), transparent 58%),
+      var(--panel);
+  }
+  .card-top { display: flex; align-items: center; gap: 8px; }
+  .dot {
+    width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%;
+    background: var(--muted); box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 12%, transparent);
+  }
+  .dot.green { background: var(--green); }
+  .dot.amber { background: var(--amber); }
+  .dot.red { background: var(--red); }
+  .card-top b {
+    min-width: 0; overflow: hidden;
+    font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .agent {
+    padding: 3px 6px;
+    border-radius: 6px;
+    color: var(--blue);
+    background: rgba(88,166,255,.10);
+    font-size: 9.5px; font-weight: 750;
+  }
+  .agent.codex { color: #41c9a7; background: rgba(16,163,127,.10); }
+  .card-time { margin-left: auto; color: var(--faint); font-size: 10px; white-space: nowrap; }
+  .card-meta {
+    margin: 8px 0 0 16px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+    font: 10px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .card-progress {
+    height: 3px; margin: 10px 0 2px 16px; overflow: hidden;
+    border-radius: 99px; background: var(--line);
+  }
+  .card-progress i {
+    display: block; width: var(--progress, 68%); height: 100%;
+    border-radius: inherit; background: linear-gradient(90deg, var(--blue-2), var(--blue));
+  }
+  .card-actions { margin-top: 10px; display: flex; gap: 7px; }
+  .card-actions button {
+    min-height: 40px; padding: 0 13px;
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    color: var(--muted); background: transparent;
+    font-size: 11px; cursor: pointer;
+  }
+  .card-actions button.primary {
+    border-color: rgba(88,166,255,.2);
+    color: #cae3ff; background: rgba(31,111,235,.22);
+  }
+
+  .page-title {
+    padding: 7px 2px 13px;
+    display: flex;
+    align-items: flex-end;
+  }
+  .page-title h2 { margin: 0; font-size: 22px; letter-spacing: -.03em; }
+  .page-title span { margin: 0 0 2px 8px; color: var(--faint); font-size: 10.5px; }
+  .round-add {
+    width: 42px; height: 42px; margin-left: auto;
+    border: 0; border-radius: 14px; color: #fff;
+    background: var(--blue-2); font-size: 22px; cursor: pointer;
+    box-shadow: 0 8px 22px rgba(31,111,235,.24);
+  }
+  .search {
+    height: 43px;
+    margin-bottom: 11px;
+    padding: 0 13px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    border: 1px solid var(--line-soft);
+    border-radius: 13px;
+    color: var(--faint);
+    background: var(--panel);
+    font-size: 11.5px;
+  }
+  .project-card { padding: 14px; }
+  .project-icon {
+    width: 36px; height: 36px; display: grid; place-items: center;
+    border-radius: 11px; color: var(--blue); background: rgba(88,166,255,.1);
+  }
+  .project-copy { min-width: 0; }
+  .project-copy b { display: block; font-size: 13px; }
+  .project-copy span {
+    display: block; max-width: 210px; margin-top: 4px; overflow: hidden;
+    color: var(--faint); font: 9.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    text-overflow: ellipsis; white-space: nowrap;
+  }
+  .project-badges { margin-top: 12px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .badge {
+    padding: 4px 7px; border-radius: 7px;
+    color: var(--muted); background: var(--bg);
+    font-size: 9.5px;
+  }
+  .badge.blue { color: var(--blue); background: rgba(88,166,255,.09); }
+  .badge.amber { color: #e4b754; background: rgba(210,153,34,.09); }
+
+  .file-card { display: flex; align-items: center; gap: 10px; min-height: 58px; }
+  .file-icon {
+    width: 34px; height: 34px; display: grid; place-items: center;
+    border-radius: 10px; color: var(--blue); background: rgba(88,166,255,.09);
+  }
+  .file-copy { min-width: 0; }
+  .file-copy b { display: block; font-size: 12px; }
+  .file-copy span { display: block; margin-top: 4px; color: var(--faint); font-size: 9.5px; }
+  .file-size { margin-left: auto; color: var(--faint); font-size: 9.5px; }
+
+  .session-dock {
+    flex: 0 0 50px;
+    position: relative;
+    z-index: 10;
+    margin: 0 8px 6px;
+    padding: 0 7px 0 12px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    border: 1px solid rgba(88,166,255,.20);
+    border-radius: 15px;
+    color: var(--text);
+    background:
+      linear-gradient(90deg, rgba(88,166,255,.09), transparent 75%),
+      var(--raised);
+    box-shadow: 0 9px 22px rgba(0,0,0,.21);
+    cursor: pointer;
+  }
+  .dock-copy { min-width: 0; flex: 1; }
+  .dock-copy b {
+    display: block; overflow: hidden;
+    font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .dock-copy span { display: block; margin-top: 2px; color: var(--muted); font-size: 9.5px; }
+  .waiting-pill {
+    min-height: 27px;
+    padding: 0 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border-radius: 9px;
+    color: #e7b753;
+    background: rgba(210,153,34,.11);
+    font-size: 9.5px; font-weight: 700;
+  }
+  .dock-count {
+    min-width: 31px; height: 31px; display: grid; place-items: center;
+    border-radius: 10px; color: #cde5ff; background: rgba(88,166,255,.13);
+    font: 750 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  .bottom-nav {
+    flex: 0 0 60px;
+    position: relative;
+    z-index: 10;
+    padding: 0 8px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-top: 1px solid var(--line-soft);
+    background: color-mix(in srgb, var(--panel) 94%, transparent);
+  }
+  .nav-item {
+    min-width: 0;
+    border: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    color: var(--faint);
+    background: transparent;
+    cursor: pointer;
+  }
+  .nav-item svg { width: 19px; height: 19px; }
+  .nav-item span { font-size: 9.5px; font-weight: 650; }
+  .nav-item.on { color: var(--blue); }
+  .nav-item.on::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    width: 30px;
+    height: 2px;
+    border-radius: 0 0 3px 3px;
+    background: var(--blue);
+  }
+  .homebar {
+    flex: 0 0 16px;
+    display: grid;
+    place-items: center;
+    background: var(--panel);
+  }
+  .homebar i { width: 105px; height: 4px; border-radius: 99px; background: var(--line); }
+
+  .scrim {
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    border: 0;
+    background: rgba(0,0,0,.54);
+    backdrop-filter: blur(1.5px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s ease;
+  }
+  .scrim.open { opacity: 1; pointer-events: auto; }
+  .sheet {
+    position: absolute;
+    z-index: 31;
+    left: 6px; right: 6px; bottom: 6px;
+    max-height: 78%;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 22px 22px 28px 28px;
+    background: var(--raised);
+    box-shadow: 0 -24px 60px rgba(0,0,0,.42);
+    transform: translateY(calc(100% + 16px));
+    transition: transform .26s cubic-bezier(.22,.8,.22,1);
+  }
+  .sheet.open { transform: translateY(0); }
+  .sheet-grab { height: 23px; display: grid; place-items: center; }
+  .sheet-grab i { width: 36px; height: 4px; border-radius: 99px; background: var(--line); }
+  .sheet-head {
+    padding: 2px 17px 13px;
+    display: flex;
+    align-items: center;
+  }
+  .sheet-head strong { font-size: 15px; }
+  .sheet-head span { margin-left: 7px; color: var(--faint); font-size: 10px; }
+  .sheet-close {
+    width: 40px; height: 40px; margin-left: auto;
+    border: 0; border-radius: 12px;
+    color: var(--muted); background: var(--panel); cursor: pointer;
+  }
+  .sheet-body { padding: 0 10px 13px; overflow: auto; }
+  .sheet-section {
+    margin: 6px 7px 8px;
+    color: var(--faint);
+    font-size: 9px; font-weight: 750; letter-spacing: .11em;
+  }
+  .sheet-row {
+    min-height: 54px;
+    padding: 7px 9px;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    border: 0;
+    border-radius: 13px;
+    color: var(--text);
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+  }
+  button.sheet-row { width: 100%; }
+  .sheet-row:hover,
+  .sheet-row.active { background: var(--panel); }
+  .sheet-row-icon {
+    width: 36px; height: 36px; flex: 0 0 36px;
+    display: grid; place-items: center;
+    border: 1px solid var(--line-soft);
+    border-radius: 11px;
+    color: var(--blue); background: var(--panel);
+  }
+  .sheet-row-copy { min-width: 0; flex: 1; }
+  .sheet-row-copy b {
+    display: block; overflow: hidden;
+    font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .sheet-row-copy span { display: block; margin-top: 3px; color: var(--faint); font-size: 9.5px; }
+  .row-arrow { color: var(--faint); font-size: 15px; }
+  .session-state {
+    padding: 4px 7px; border-radius: 7px; color: var(--green);
+    background: rgba(63,185,80,.09); font-size: 9px;
+  }
+  .session-state.wait { color: #e6b857; background: rgba(210,153,34,.10); }
+
+  .terminal-page {
+    position: absolute;
+    z-index: 20;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    color: #e6edf3;
+    background: var(--term);
+    transform: translateX(100%);
+    transition: transform .27s cubic-bezier(.22,.8,.22,1);
+  }
+  .terminal-page.open { transform: translateX(0); }
+  .term-head {
+    flex: 0 0 49px;
+    padding: 3px 6px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    border-bottom: 1px solid #21262d;
+    background: #0d1117;
+  }
+  .term-action {
+    width: 44px; height: 44px; flex: 0 0 44px;
+    border: 0; border-radius: 12px;
+    display: grid; place-items: center;
+    color: #8b949e; background: transparent; cursor: pointer;
+  }
+  .term-action:active { background: #161b22; }
+  .term-session {
+    min-width: 0; flex: 1; height: 38px;
+    padding: 0 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid #27303a;
+    border-radius: 12px;
+    color: #e6edf3; background: #161b22; cursor: pointer;
+  }
+  .term-session b {
+    min-width: 0; overflow: hidden;
+    font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .term-count {
+    width: 21px; height: 21px; margin-left: auto;
+    display: grid; place-items: center;
+    border-radius: 7px; color: #9ccaff; background: rgba(88,166,255,.12);
+    font-size: 9px;
+  }
+  .term-body {
+    flex: 1;
+    min-height: 0;
+    padding: 10px 8px;
+    overflow: hidden;
+    color: #c9d1d9;
+    background:
+      radial-gradient(circle at 50% 100%, rgba(31,111,235,.045), transparent 40%),
+      #06090d;
+    font: 10.5px/1.62 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .term-body .prompt { color: #79c0ff; }
+  .term-body .green { color: #7ee787; }
+  .term-body .dim { color: #6e7681; }
+  .term-body .amber { color: #e3b341; }
+  .term-body .question {
+    margin: 8px -2px 0;
+    padding: 10px;
+    border: 1px solid rgba(210,153,34,.25);
+    border-radius: 10px;
+    color: #f0c666;
+    background: rgba(210,153,34,.07);
+  }
+  .quick-keys {
+    flex: 0 0 43px;
+    padding: 5px 7px;
+    display: flex;
+    gap: 5px;
+    overflow: hidden;
+    border-top: 1px solid #21262d;
+    background: #0d1117;
+  }
+  .quick-keys button {
+    min-width: 44px; height: 33px;
+    border: 1px solid #30363d; border-radius: 9px;
+    color: #8b949e; background: #161b22;
+    font-size: 9.5px; cursor: pointer;
+  }
+  .quick-keys button.primary { color: #cfe6ff; border-color: rgba(88,166,255,.25); background: rgba(31,111,235,.22); }
+  .term-input {
+    flex: 0 0 57px;
+    padding: 7px;
+    display: flex;
+    gap: 7px;
+    border-top: 1px solid #21262d;
+    background: #0d1117;
+  }
+  .term-input .box {
+    min-width: 0; flex: 1;
+    padding: 0 13px;
+    display: flex; align-items: center;
+    border: 1px solid #30363d; border-radius: 12px;
+    color: #8b949e; background: #161b22; font-size: 10.5px;
+  }
+  .term-input button {
+    width: 44px;
+    border: 0; border-radius: 12px;
+    color: #fff; background: var(--blue-2);
+    font-size: 17px; cursor: pointer;
+  }
+
+  .toast {
+    position: absolute;
+    z-index: 60;
+    left: 50%;
+    top: 46px;
+    max-width: calc(100% - 32px);
+    padding: 10px 13px;
+    border: 1px solid rgba(63,185,80,.25);
+    border-radius: 12px;
+    color: #b9f3c7;
+    background: rgba(22,27,34,.96);
+    box-shadow: 0 10px 28px rgba(0,0,0,.38);
+    font-size: 10.5px;
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, -8px);
+    transition: .2s ease;
+    white-space: nowrap;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  .interaction-tip {
+    margin-top: 20px;
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    color: #657182;
+    font-size: 11px;
+  }
+  .interaction-tip i {
+    width: 6px; height: 6px; margin-top: 4px;
+    border-radius: 50%; background: var(--blue);
+    box-shadow: 0 0 0 5px rgba(88,166,255,.08);
+  }
+
+  .specs {
+    border-top: 1px solid var(--stage-line);
+    background: rgba(255,255,255,.012);
+  }
+  .page-gallery {
+    width: min(1050px, calc(100% - 32px));
+    margin: 0 auto;
+    padding: 20px 0 64px;
+  }
+  .page-gallery h2 { margin: 0 0 7px; color: #edf3fa; font-size: 23px; letter-spacing: -.03em; }
+  .page-gallery > p { margin: 0 0 20px; color: var(--stage-muted); font-size: 12.5px; }
+  .page-gallery-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 11px; }
+  .page-link {
+    min-height: 116px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--stage-line);
+    border-radius: 15px;
+    color: inherit;
+    background: linear-gradient(145deg, rgba(255,255,255,.04), rgba(255,255,255,.015));
+    text-decoration: none;
+    transition: transform .16s ease, border-color .16s ease, background .16s ease;
+  }
+  .page-link:hover { transform: translateY(-2px); border-color: rgba(88,166,255,.34); background: rgba(88,166,255,.055); }
+  .page-link i { color: var(--blue); font: 700 9px/1 ui-monospace, monospace; letter-spacing: .12em; font-style: normal; }
+  .page-link b { margin-top: 13px; color: #e4ebf3; font-size: 13px; }
+  .page-link span { margin-top: 6px; color: var(--stage-muted); font-size: 10px; line-height: 1.5; }
+  .specs-inner {
+    width: min(1050px, calc(100% - 32px));
+    margin: 0 auto;
+    padding: 54px 0 70px;
+  }
+  .specs h2 { margin: 0 0 8px; color: #edf3fa; font-size: 23px; letter-spacing: -.03em; }
+  .specs-lead { margin: 0 0 24px; color: var(--stage-muted); font-size: 13px; }
+  .spec-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+  .spec-item {
+    padding: 17px;
+    border: 1px solid var(--stage-line);
+    border-radius: 15px;
+    background: rgba(255,255,255,.025);
+  }
+  .spec-item b { display: block; color: #dce5ef; font-size: 12px; }
+  .spec-item strong {
+    display: block;
+    margin-top: 12px;
+    color: var(--blue);
+    font: 750 22px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .spec-item span { display: block; margin-top: 8px; color: var(--stage-muted); font-size: 10.5px; line-height: 1.5; }
+
+  @media (max-width: 1020px) {
+    .showcase { grid-template-columns: 1fr auto; align-items: start; }
+    .notes.right { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); }
+  }
+  @media (max-width: 760px) {
+    .topbar { padding-inline: 14px; }
+    .brand-copy span, .topbar .segmented, .doc-pages { display: none; }
+    .intro { padding-top: 34px; }
+    .showcase { display: flex; flex-direction: column; align-items: center; }
+    .notes { width: min(390px, 100%); }
+    .notes.left { order: 2; }
+    .device-wrap { order: 1; }
+    .notes.right { order: 3; display: flex; }
+    .spec-grid { grid-template-columns: repeat(2, 1fr); }
+    .page-gallery-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 430px) {
+    .showcase { width: 100%; padding-inline: 0; overflow: hidden; }
+    .phone {
+      transform: scale(.92);
+      margin-bottom: calc(var(--phone-h) * -.08);
+    }
+    .notes { padding-inline: 16px; }
+    .intro { padding-inline: 18px; }
+    .theme-toggle { padding-inline: 10px; font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M5 17.5 12 4l7 13.5M7.5 13h9"/>
+        </svg>
+      </div>
+      <div class="brand-copy">
+        <strong>Roam Mobile</strong>
+        <span>手机端首页 · 交互设计稿</span>
+      </div>
+    </div>
+    <nav class="doc-pages" aria-label="设计页面">
+      <a class="on" href="index.html">概览</a><a href="projects.html">项目</a><a href="files.html">文件</a>
+      <a href="browser.html">浏览器</a><a href="phone.html">手机</a><a href="plugins.html">插件</a>
+      <a href="settings.html">设置</a><a href="session.html">会话</a><a href="expanded.html">平板</a>
+    </nav>
+    <div class="top-spacer"></div>
+    <div class="segmented" aria-label="预览尺寸">
+      <button type="button" data-size="compact">360 × 640</button>
+      <button type="button" class="on" data-size="default">390 × 844</button>
+    </div>
+    <button class="theme-toggle" id="themeToggle" type="button">切换浅色</button>
+  </header>
+
+  <section class="intro">
+    <span class="eyebrow"><i></i> MOBILE FIRST · INTERACTIVE</span>
+    <h1>先看需要处理的事，<br><em>再进入完整工作流</em></h1>
+    <p>首页不再堆功能入口，而是把“等待确认、正在运行、最近项目”按优先级组织。
+      主导航只保留四项，会话常驻在拇指区，关键操作一到两次点击即可完成。</p>
+  </section>
+
+  <main class="showcase">
+    <aside class="notes left">
+      <article class="note-card" style="--card-accent:var(--amber)">
+        <div class="note-no">01 · FIRST GLANCE</div>
+        <h3>最高优先级：需要你处理</h3>
+        <p>等待确认不再藏在会话列表里。琥珀色提醒卡固定在首屏顶部，直接展示对象、原因和唯一主操作。</p>
+      </article>
+      <article class="note-card" style="--card-accent:var(--blue)">
+        <div class="note-no">02 · LIVE CONTEXT</div>
+        <h3>会话坞保持工作连续性</h3>
+        <p>离开终端后仍能看到当前会话、运行状态与等待数量。点整条恢复当前会话，点数量打开切换面板。</p>
+      </article>
+      <article class="note-card" style="--card-accent:var(--green)">
+        <div class="note-no">03 · THUMB ZONE</div>
+        <h3>主操作都在拇指区</h3>
+        <p>底部 <b>50px 会话坞 + 60px 四格导航</b>。核心触控目标 ≥ 44px，避免窄按钮和边缘误触。</p>
+      </article>
+    </aside>
+
+    <div class="device-wrap">
+      <div class="device-hint">可点击原型 · TAP TO EXPLORE</div>
+      <div class="phone" id="phone">
+        <div class="hardware"></div>
+        <div class="statusbar">
+          <span>9:41</span>
+          <span class="right"><span class="signal">▂▄▆</span><span>5G</span><i class="battery"></i></span>
+        </div>
+
+        <div class="screen">
+          <div class="app-header">
+            <div class="app-logo" aria-hidden="true">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M5 17.5 12 4l7 13.5M7.5 13h9"/>
+              </svg>
+            </div>
+            <div class="app-title">
+              <strong>Roam</strong>
+              <span>连接正常 · 3 个 Agent 在线</span>
+            </div>
+            <button class="header-action" type="button" data-action="more" aria-label="打开更多">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <circle cx="12" cy="12" r="2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.37a1.7 1.7 0 0 0-1 .63 1.7 1.7 0 0 0-.37 1.07V21h-4v-.08A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.23 15a1.7 1.7 0 0 0-.63-1A1.7 1.7 0 0 0 2.53 13H2V9h.53A1.7 1.7 0 0 0 4 8a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 8.4 3.63a1.7 1.7 0 0 0 1-.63A1.7 1.7 0 0 0 9.77 2h4A1.7 1.7 0 0 0 15 3.63a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.37 8a1.7 1.7 0 0 0 .63 1h2v4h-2a1.7 1.7 0 0 0-.6 2Z"/>
+              </svg>
+            </button>
+          </div>
+
+          <div class="page">
+            <section class="page-view on" data-page="home">
+              <div class="hello">
+                <div class="overline">THURSDAY · JUL 30</div>
+                <h2>上午好，<span>工作台已就绪</span></h2>
+              </div>
+
+              <div class="attention">
+                <div class="attention-head">
+                  <span class="attention-icon" aria-hidden="true">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5m0 3h.01"/>
+                    </svg>
+                  </span>
+                  <span class="attention-copy"><strong>需要你处理</strong><span>2 个 Agent 正在等待输入</span></span>
+                  <span class="count">2</span>
+                </div>
+                <div class="focus-task">
+                  <span class="dot amber"></span>
+                  <span class="copy"><b>codex-ui-mobile</b><span>ttmux · 等待确认 · 是否应用页面改动？</span></span>
+                  <button type="button" data-action="terminal">立即处理</button>
+                </div>
+                <div class="focus-task">
+                  <span class="dot amber"></span>
+                  <span class="copy"><b>claude-i18n-audit</b><span>blade-core · 等待选择 · 1 / 2 / 3</span></span>
+                  <button type="button" data-action="terminal">立即处理</button>
+                </div>
+              </div>
+
+              <div class="metrics">
+                <div class="metric green"><strong>5</strong><span>运行中</span></div>
+                <div class="metric blue"><strong>7</strong><span>活跃项目</span></div>
+                <div class="metric purple"><strong>1</strong><span>蜂群任务</span></div>
+              </div>
+
+              <div class="section-head">进行中的会话 <small>按最近活动</small><button type="button" data-action="sessions">查看全部</button></div>
+              <div class="session-card featured">
+                <div class="card-top">
+                  <span class="dot green"></span><span class="agent">Claude</span>
+                  <b>claude-api-refactor</b><span class="card-time">刚刚</span>
+                </div>
+                <div class="card-meta">~/codes/ttmux · 正在分析 App.tsx</div>
+                <div class="card-progress"><i style="--progress:72%"></i></div>
+                <div class="card-actions">
+                  <button class="primary" type="button" data-action="terminal">打开会话</button>
+                  <button type="button" data-action="toast" data-message="已在后台持续运行">后台运行</button>
+                </div>
+              </div>
+              <div class="session-card">
+                <div class="card-top">
+                  <span class="dot green"></span><span class="agent codex">Codex</span>
+                  <b>codex-backend-p2p</b><span class="card-time">4 分钟</span>
+                </div>
+                <div class="card-meta">~/codes/ttmux · 运行测试</div>
+              </div>
+            </section>
+
+            <section class="page-view" data-page="projects">
+              <div class="page-title"><h2>项目</h2><span>7 个活跃</span><button class="round-add" type="button" data-action="toast" data-message="新建项目">+</button></div>
+              <div class="search">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+                搜索项目或工作目录
+              </div>
+              <div class="project-card">
+                <div class="card-top">
+                  <span class="project-icon">⌘</span>
+                  <span class="project-copy"><b>ttmux</b><span>~/codes/ttmux</span></span>
+                  <span class="card-time">刚刚</span>
+                </div>
+                <div class="project-badges"><span class="badge blue">3 会话</span><span class="badge">2 worktree</span><span class="badge amber">1 等待</span></div>
+              </div>
+              <div class="project-card">
+                <div class="card-top">
+                  <span class="project-icon" style="color:var(--purple);background:rgba(163,113,247,.1)">◇</span>
+                  <span class="project-copy"><b>blade-core</b><span>~/codes/blade-core</span></span>
+                  <span class="card-time">48 分钟</span>
+                </div>
+                <div class="project-badges"><span class="badge blue">1 会话</span><span class="badge">1 worktree</span></div>
+              </div>
+              <div class="project-card">
+                <div class="card-top">
+                  <span class="project-icon" style="color:var(--green);background:rgba(63,185,80,.1)">△</span>
+                  <span class="project-copy"><b>docs-site</b><span>~/codes/docs-site</span></span>
+                  <span class="card-time">昨天</span>
+                </div>
+                <div class="project-badges"><span class="badge">暂无会话</span></div>
+              </div>
+            </section>
+
+            <section class="page-view" data-page="files">
+              <div class="page-title"><h2>文件</h2><span>最近访问</span><button class="round-add" type="button" data-action="toast" data-message="打开文件选择器">+</button></div>
+              <div class="search">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+                搜索文件名或路径
+              </div>
+              <div class="section-head">最近文件 <small>当前项目 · ttmux</small></div>
+              <div class="file-card"><span class="file-icon">TS</span><span class="file-copy"><b>App.tsx</b><span>frontend/src · 2 分钟前</span></span><span class="file-size">98 KB</span></div>
+              <div class="file-card"><span class="file-icon" style="color:#f1c40f;background:rgba(241,196,15,.08)">JS</span><span class="file-copy"><b>i18n-audit.mjs</b><span>frontend/scripts · 18 分钟前</span></span><span class="file-size">7 KB</span></div>
+              <div class="file-card"><span class="file-icon" style="color:#8fbce6">MD</span><span class="file-copy"><b>13-mobile-responsive.md</b><span>docs/design/web · 1 小时前</span></span><span class="file-size">22 KB</span></div>
+              <div class="section-head">位置</div>
+              <div class="file-card"><span class="file-icon">⌂</span><span class="file-copy"><b>ttmux</b><span>~/codes/ttmux</span></span><span class="row-arrow">›</span></div>
+            </section>
+          </div>
+
+          <button class="session-dock" type="button" data-action="terminal">
+            <span class="dot green"></span>
+            <span class="dock-copy"><b>ttmux · claude-api-refactor</b><span>正在分析 · 点按恢复会话</span></span>
+            <span class="waiting-pill" data-action="sessions">⚠ 2</span>
+            <span class="dock-count" data-action="sessions">5</span>
+          </button>
+
+          <nav class="bottom-nav" aria-label="主导航">
+            <button class="nav-item on" type="button" data-nav="home" aria-label="工作台">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>
+              <span>工作台</span>
+            </button>
+            <button class="nav-item" type="button" data-nav="projects" aria-label="项目">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 10.2 12 3l9 7.2"/><path d="M5.5 9v11h13V9"/><path d="M9.5 20v-5h5v5"/></svg>
+              <span>项目</span>
+            </button>
+            <button class="nav-item" type="button" data-nav="files" aria-label="文件">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M7 12h10m-10 4h6"/></svg>
+              <span>文件</span>
+            </button>
+            <button class="nav-item" type="button" data-action="more" aria-label="更多">
+              <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
+              <span>更多</span>
+            </button>
+          </nav>
+
+          <div class="terminal-page" id="terminalPage">
+            <header class="term-head">
+              <button class="term-action" type="button" data-action="terminal-close" aria-label="收起会话">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
+              </button>
+              <button class="term-session" type="button" data-action="sessions">
+                <span class="dot amber"></span><b>codex-ui-mobile</b><span class="term-count">5</span><span>⌄</span>
+              </button>
+              <button class="term-action" type="button" data-action="terminal-tools" aria-label="会话操作">•••</button>
+            </header>
+            <div class="term-body">
+              <div><span class="prompt">~/codes/ttmux</span> <span class="green">git:(feat/mobile)</span> $</div>
+              <div class="dim">codex --full-auto</div>
+              <br>
+              <div>• 已读取移动端设计规范</div>
+              <div class="dim">  docs/design/web/13-mobile-responsive.md</div>
+              <div>• 正在重构手机端首页信息层级</div>
+              <div class="dim">  4 个主导航 · 1 个常驻会话坞</div>
+              <div>• 已生成交互设计稿</div>
+              <div class="dim">  index.html · responsive · no dependencies</div>
+              <div class="question">? 是否应用这份页面改动？<br><span class="dim">  › y 确认　n 取消</span></div>
+              <br>
+              <div class="amber">等待你的输入…</div>
+            </div>
+            <div class="quick-keys">
+              <button class="primary" type="button" data-action="confirm">y</button>
+              <button type="button" data-action="toast" data-message="已发送 n">n</button>
+              <button type="button">Esc</button><button type="button">Tab</button><button type="button">^C</button><button type="button">↑</button>
+            </div>
+            <div class="term-input"><span class="box">输入命令或回复…</span><button type="button" data-action="confirm">↑</button></div>
+          </div>
+
+          <button class="scrim" id="scrim" type="button" aria-label="关闭面板"></button>
+
+          <section class="sheet" id="moreSheet" aria-label="更多">
+            <div class="sheet-grab"><i></i></div>
+            <div class="sheet-head"><strong>更多</strong><span>工具与设置</span><button class="sheet-close" type="button" data-action="sheet-close">×</button></div>
+            <div class="sheet-body">
+              <div class="sheet-section">工具</div>
+              <button class="sheet-row" type="button" data-action="toast" data-message="打开浏览器镜像">
+                <span class="sheet-row-icon">▱</span><span class="sheet-row-copy"><b>浏览器镜像</b><span>查看远端浏览器并进行操作</span></span><span class="row-arrow">›</span>
+              </button>
+              <button class="sheet-row" type="button" data-action="toast" data-message="打开手机镜像">
+                <span class="sheet-row-icon">▯</span><span class="sheet-row-copy"><b>手机镜像</b><span>连接 Android 设备画面</span></span><span class="row-arrow">›</span>
+              </button>
+              <button class="sheet-row" type="button" data-action="toast" data-message="打开插件中心">
+                <span class="sheet-row-icon">◇</span><span class="sheet-row-copy"><b>插件中心</b><span>管理扩展能力与连接</span></span><span class="row-arrow">›</span>
+              </button>
+              <div class="sheet-section">账户</div>
+              <button class="sheet-row" type="button" data-action="toast" data-message="账户：设置 / 主题 / 全屏 / 退出">
+                <span class="sheet-row-icon">W</span><span class="sheet-row-copy"><b>当前设备</b><span>设置 · 主题 · 全屏 · 退出登录</span></span><span class="row-arrow">›</span>
+              </button>
+            </div>
+          </section>
+
+          <section class="sheet" id="sessionsSheet" aria-label="切换会话">
+            <div class="sheet-grab"><i></i></div>
+            <div class="sheet-head"><strong>切换会话</strong><span>5 个 · 2 个等待</span><button class="sheet-close" type="button" data-action="sheet-close">×</button></div>
+            <div class="sheet-body">
+              <button class="sheet-row active" type="button" data-action="terminal">
+                <span class="dot green"></span><span class="sheet-row-copy"><b>claude-api-refactor</b><span>ttmux · Claude · 正在分析 App.tsx</span></span><span class="session-state">运行中</span>
+              </button>
+              <button class="sheet-row" type="button" data-action="terminal">
+                <span class="dot amber"></span><span class="sheet-row-copy"><b>codex-ui-mobile</b><span>ttmux · 等待确认 · 是否应用页面改动？</span></span><span class="session-state wait">等待</span>
+              </button>
+              <button class="sheet-row" type="button" data-action="terminal">
+                <span class="dot amber"></span><span class="sheet-row-copy"><b>claude-i18n-audit</b><span>blade-core · 等待选择 · 1 / 2 / 3</span></span><span class="session-state wait">等待</span>
+              </button>
+              <button class="sheet-row" type="button" data-action="terminal">
+                <span class="dot green"></span><span class="sheet-row-copy"><b>codex-backend-p2p</b><span>Codex · 正在运行测试</span></span><span class="session-state">运行中</span>
+              </button>
+            </div>
+          </section>
+
+          <section class="sheet" id="toolsSheet" aria-label="会话操作">
+            <div class="sheet-grab"><i></i></div>
+            <div class="sheet-head"><strong>会话操作</strong><span>codex-ui-mobile</span><button class="sheet-close" type="button" data-action="sheet-close">×</button></div>
+            <div class="sheet-body">
+              <div class="sheet-section">会话</div>
+              <button class="sheet-row" type="button" data-action="toast" data-message="已打开文件面板"><span class="sheet-row-icon">▤</span><span class="sheet-row-copy"><b>文件</b><span>浏览当前工作目录</span></span><span class="row-arrow">›</span></button>
+              <button class="sheet-row" type="button" data-action="toast" data-message="已打开 Git 面板"><span class="sheet-row-icon">⑂</span><span class="sheet-row-copy"><b>Git 状态</b><span>查看改动、提交与分支</span></span><span class="row-arrow">›</span></button>
+              <button class="sheet-row" type="button" data-action="toast" data-message="终端已重连"><span class="sheet-row-icon">↻</span><span class="sheet-row-copy"><b>重连终端</b><span>重新连接并重绘画面</span></span><span class="row-arrow">›</span></button>
+            </div>
+          </section>
+
+          <div class="toast" id="toast">操作已完成</div>
+        </div>
+        <div class="homebar"><i></i></div>
+      </div>
+      <div class="interaction-tip"><i></i>试试底栏、会话坞、“立即处理”和右上角设置</div>
+    </div>
+
+    <aside class="notes right">
+      <article class="note-card" style="--card-accent:var(--blue)">
+        <div class="note-no">04 · NAVIGATION</div>
+        <h3>六格入口收敛为四格</h3>
+        <p><b>工作台 / 项目 / 文件 / 更多</b>。浏览器、手机镜像、插件和设置进入半屏 sheet，避免低频入口挤占主导航。</p>
+      </article>
+      <article class="note-card" style="--card-accent:var(--purple)">
+        <div class="note-no">05 · FEEDBACK</div>
+        <h3>每次操作都有明确反馈</h3>
+        <p>页切换有轻量过渡，sheet 可点遮罩关闭，关键提交显示结果 toast。危险或不可逆操作再进入二次确认。</p>
+      </article>
+      <article class="note-card" style="--card-accent:var(--green)">
+        <div class="note-no">06 · PRIMARY FLOW</div>
+        <h3>关键任务只需两步</h3>
+        <div class="flow">
+          <div class="flow-row"><i>1</i><span>首屏发现“需要你处理”</span></div>
+          <div class="flow-row"><i>2</i><span>点“立即处理”进入会话</span></div>
+          <div class="flow-row"><i>3</i><span>在拇指区完成确认并返回</span></div>
+        </div>
+        <div class="legend"><span><i class="dot green"></i>运行</span><span><i class="dot amber"></i>等待</span><span><i class="dot red"></i>失败</span></div>
+      </article>
+    </aside>
+  </main>
+
+  <section class="page-gallery">
+    <h2>完整页面集</h2>
+    <p>每个页面都是独立 HTML，可单独评审尺寸、信息层级和交互。</p>
+    <div class="page-gallery-grid">
+      <a class="page-link" href="projects.html"><i>02 · PROJECTS</i><b>项目</b><span>项目列表、筛选与全屏项目详情</span></a>
+      <a class="page-link" href="files.html"><i>03 · FILES</i><b>文件</b><span>最近文件、位置与沉浸预览</span></a>
+      <a class="page-link" href="browser.html"><i>04 · BROWSER</i><b>浏览器镜像</b><span>地址、链路、标签与远程画布</span></a>
+      <a class="page-link" href="phone.html"><i>05 · PHONE</i><b>手机镜像</b><span>设备、画质与远程系统键</span></a>
+      <a class="page-link" href="plugins.html"><i>06 · PLUGINS</i><b>插件</b><span>健康状态、权限与审计入口</span></a>
+      <a class="page-link" href="settings.html"><i>07 · SETTINGS</i><b>设置</b><span>日常偏好与高级连接参数</span></a>
+      <a class="page-link" href="session.html"><i>08 · SESSION</i><b>会话终端</b><span>终端、会话切换与快捷输入</span></a>
+      <a class="page-link" href="expanded.html"><i>09 · EXPANDED</i><b>平板与小笔电</b><span>905–1279：导航轨与覆盖式终端面板</span></a>
+      <a class="page-link" href="../13-mobile-responsive.md"><i>SPEC · DOCUMENT</i><b>设计规范</b><span>断点、令牌、分期与验收标准</span></a>
+    </div>
+  </section>
+
+  <section class="specs">
+    <div class="specs-inner">
+      <h2>落地规格</h2>
+      <p class="specs-lead">所有尺寸直接对应实现令牌，保证视觉稿和真实页面使用同一套约束。</p>
+      <div class="spec-grid">
+        <article class="spec-item"><b>最小触控目标</b><strong>44 px</strong><span>图标可以更小，但实际命中区不得缩小。</span></article>
+        <article class="spec-item"><b>页面水平留白</b><strong>12 px</strong><span>在 360px 宽度下保留更多有效内容。</span></article>
+        <article class="spec-item"><b>会话坞高度</b><strong>50 px</strong><span>当前上下文常驻，无会话时自动隐藏。</span></article>
+        <article class="spec-item"><b>底部导航</b><strong>4 items</strong><span>每格约 90–97px，图标与文字同时可点。</span></article>
+      </div>
+    </div>
+  </section>
+
+<script>
+  const phone = document.getElementById('phone')
+  const scrim = document.getElementById('scrim')
+  const sheets = {
+    more: document.getElementById('moreSheet'),
+    sessions: document.getElementById('sessionsSheet'),
+    tools: document.getElementById('toolsSheet'),
+  }
+  const terminal = document.getElementById('terminalPage')
+  const toast = document.getElementById('toast')
+  let toastTimer
+
+  function closeSheets() {
+    scrim.classList.remove('open')
+    Object.values(sheets).forEach(sheet => sheet.classList.remove('open'))
+  }
+
+  function openSheet(name) {
+    closeSheets()
+    scrim.classList.add('open')
+    sheets[name].classList.add('open')
+  }
+
+  function showToast(message) {
+    toast.textContent = message
+    toast.classList.add('show')
+    clearTimeout(toastTimer)
+    toastTimer = setTimeout(() => toast.classList.remove('show'), 1700)
+  }
+
+  function showPage(name) {
+    document.querySelectorAll('.page-view').forEach(page => {
+      const active = page.dataset.page === name
+      page.classList.toggle('on', active)
+      page.classList.toggle('enter', active)
+      if (active) setTimeout(() => page.classList.remove('enter'), 220)
+    })
+    document.querySelectorAll('.nav-item[data-nav]').forEach(item => item.classList.toggle('on', item.dataset.nav === name))
+    document.querySelector('.page').scrollTop = 0
+  }
+
+  document.addEventListener('click', event => {
+    const control = event.target.closest('[data-action]')
+    if (!control) return
+    const action = control.dataset.action
+    event.stopPropagation()
+    if (action === 'more') openSheet('more')
+    if (action === 'sessions') openSheet('sessions')
+    if (action === 'terminal-tools') openSheet('tools')
+    if (action === 'sheet-close') closeSheets()
+    if (action === 'terminal') {
+      closeSheets()
+      terminal.classList.add('open')
+    }
+    if (action === 'terminal-close') terminal.classList.remove('open')
+    if (action === 'toast') {
+      closeSheets()
+      showToast(control.dataset.message || '操作已完成')
+    }
+    if (action === 'confirm') {
+      document.querySelector('.term-body .question').innerHTML = '✓ 已确认，正在应用页面改动…'
+      document.querySelector('.term-body .question').style.color = '#7ee787'
+      document.querySelector('.term-body .question').style.borderColor = 'rgba(63,185,80,.25)'
+      document.querySelector('.term-body .question').style.background = 'rgba(63,185,80,.07)'
+      showToast('已发送确认')
+    }
+  })
+
+  document.querySelectorAll('[data-nav]').forEach(item => {
+    item.addEventListener('click', () => showPage(item.dataset.nav))
+  })
+  scrim.addEventListener('click', closeSheets)
+
+  document.querySelectorAll('[data-size]').forEach(button => {
+    button.addEventListener('click', () => {
+      document.querySelectorAll('[data-size]').forEach(item => item.classList.remove('on'))
+      button.classList.add('on')
+      phone.classList.toggle('compact', button.dataset.size === 'compact')
+    })
+  })
+
+  document.getElementById('themeToggle').addEventListener('click', event => {
+    phone.classList.toggle('light')
+    event.currentTarget.textContent = phone.classList.contains('light') ? '切换深色' : '切换浅色'
+  })
+</script>
+</body>
+</html>

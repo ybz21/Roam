@@ -7,6 +7,7 @@ import zhCN from 'antd/locale/zh_CN'
 import enUS from 'antd/locale/en_US'
 import { useI18n } from './i18n'
 import { usePreferences, savePreferences } from './preferences'
+import { applyDensity } from './layout'
 
 export type ThemeMode = 'dark' | 'light'
 const KEY = 'ttmux-theme'
@@ -37,6 +38,14 @@ export const THEME_TOKENS: Record<ThemeMode, ThemeTokens> = {
       '--text-bright': '#e6edf3',
       '--text-dim': '#8b949e',
       '--text-dimmer': '#6e7681',
+      // 强调色只有这一组，别再往组件里写死蓝色十六进制（见下面 buildTheme 的注释）：
+      //   --accent       线 / 图标 / 链接（浅蓝，压在深底上够亮）
+      //   --accent-solid 实心块：主按钮、Segmented 选中、徽标（深蓝，白字够对比）
+      //   --accent-soft  淡底：选中行、当前导航项
+      '--accent': '#58a6ff',
+      '--accent-solid': '#1f6feb',
+      '--accent-soft': 'rgba(31, 111, 235, .14)',
+      '--accent-border': 'rgba(88, 166, 255, .45)',
       '--brand-grad': 'linear-gradient(180deg, #f5f7fa 0%, #c3c9d1 46%, #9aa1ab 56%, #e7ebef 100%)',
       '--list-hover': 'rgba(255, 255, 255, .025)',
       '--scroll-thumb': '#2a313a',
@@ -74,6 +83,10 @@ export const THEME_TOKENS: Record<ThemeMode, ThemeTokens> = {
       '--text-bright': '#1f2328',
       '--text-dim': '#57606a',
       '--text-dimmer': '#8c959f',
+      '--accent': '#0969da',
+      '--accent-solid': '#1f6feb',
+      '--accent-soft': 'rgba(31, 111, 235, .10)',
+      '--accent-border': 'rgba(31, 111, 235, .40)',
       '--brand-grad': 'linear-gradient(180deg, #2c333b 0%, #1f2328 100%)',
       '--list-hover': 'rgba(27, 31, 36, .04)',
       '--scroll-thumb': '#c9d1d9',
@@ -107,14 +120,30 @@ const ThemeCtx = createContext<{ mode: ThemeMode; toggle: () => void; setMode: (
 })
 export const useThemeMode = () => useContext(ThemeCtx)
 
+// 强调色种子。**别在别处照抄这个十六进制**：antd 的 darkAlgorithm 会在它基础上再推导
+// 一层（#58a6ff → rgb(78,144,220)），照抄的值和 antd 实际画出来的必然差一档——
+// 这正是「名称」段控件和「＋新项目」并排时两种蓝的成因。
+// 要和 antd 一致就用 --accent-solid（下面回填成推导后的真值）。
+const ACCENT_SEED = '#58a6ff'
+
+/** antd 推导后的实际主色：Segmented 选中底、自绘实心块都用它 */
+function solidAccent(mode: ThemeMode): string {
+  return antdTheme.getDesignToken({
+    algorithm: mode === 'dark' ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
+    token: { colorPrimary: ACCENT_SEED },
+  }).colorPrimary
+}
+
 function buildTheme(mode: ThemeMode) {
   const dark = mode === 'dark'
   const t = THEME_TOKENS[mode].antd
   return {
     algorithm: dark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
     token: {
-      colorPrimary: '#58a6ff',
-      borderRadius: 8, borderRadiusLG: 12, borderRadiusSM: 6,
+      colorPrimary: ACCENT_SEED,
+      // 圆角跟 CSS 的 --r-* 同一套刻度：控件 10 / 卡片 14 / 小件 6。
+      // 这三个数一改，所有 antd 控件一起对齐，不必逐个组件覆盖。
+      borderRadius: 10, borderRadiusLG: 14, borderRadiusSM: 6,
       fontFamily: FONT_FAMILY,
       fontSize: 14, lineHeight: 1.6,
       colorBgBase: t.bgBase,
@@ -139,12 +168,12 @@ function buildTheme(mode: ThemeMode) {
         itemSelectedColor: '#1f6feb', itemHoverBg: 'rgba(31,111,235,0.06)',
         itemBorderRadius: 8, itemHeight: 42, itemMarginInline: 8,
       },
-      Card: { borderRadiusLG: 12, paddingLG: 18, headerFontSize: 15 },
+      Card: { borderRadiusLG: 14, paddingLG: 18, headerFontSize: 15 },
       Button: { fontWeight: 500, primaryShadow: 'none', defaultShadow: 'none', dangerShadow: 'none' },
       Modal: { borderRadiusLG: 14, contentBg: t.bgContainer, headerBg: 'transparent' },
-      Segmented: { borderRadius: 8, itemSelectedBg: '#1f6feb', itemSelectedColor: '#fff' },
+      Segmented: { borderRadius: 10, itemSelectedBg: solidAccent(mode), itemSelectedColor: '#fff' },
       Tag: { borderRadiusSM: 6 },
-      Tooltip: { borderRadius: 8 },
+      Tooltip: { borderRadius: 10 },
     },
   }
 }
@@ -156,6 +185,8 @@ function applyCssVars(mode: ThemeMode) {
   for (const [key, value] of Object.entries(THEME_TOKENS[mode].css)) {
     root.style.setProperty(key, value)
   }
+  // 实心强调色以 antd 推导出来的为准，自绘控件才不会比 antd 控件差一档蓝
+  root.style.setProperty('--accent-solid', solidAccent(mode))
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
@@ -169,6 +200,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     if (prefs.theme && (prefs.theme === 'dark' || prefs.theme === 'light')) setModeLocal(prefs.theme)
   }, [prefs.theme])
   useLayoutEffect(() => { applyCssVars(mode) }, [mode])
+  // 密度是用户偏好，写到 <html data-density> 上；档位由 layout.ts 写 data-size，两者正交
+  useLayoutEffect(() => { applyDensity(prefs.workspace.density) }, [prefs.workspace.density])
   const setMode = (m: ThemeMode) => {
     setModeLocal(m)
     savePreferences({ theme: m })

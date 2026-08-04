@@ -11,14 +11,15 @@ import (
 // 等待用户输入的交互框（Claude/Codex 的权限确认 / 编号选择菜单 / y-n）。列表绿点
 // 语义（设计 W2）里的「黄=待输入」用它，务必与前端解析口径一致，避免列表/详情打架。
 var (
-	waitANSI   = regexp.MustCompile("\x1b\\[[0-?]*[ -/]*[@-~]")
-	waitCtrl   = regexp.MustCompile("[\x00-\x08\x0b-\x1f\x7f]")
-	waitCursor = regexp.MustCompile(`[❯➤▶►▸→›»☞◉●>]`)
-	waitLead   = regexp.MustCompile(`^[\s│┃|╎┆┊╭╰├╞┝─━═]+`)
-	waitTail   = regexp.MustCompile(`[\s│┃|╎┆┊╮╯┤╡┥─━═]+$`)
-	waitOpt    = regexp.MustCompile(`^(?:[❯➤▶►▸→›»☞◉●>]\s*)?(\d+)[.)]\s+(\S.*)$`)
-	waitKW     = regexp.MustCompile(`(?i)(would you like|proceed|allow|continue|overwrite|apply|approve|trust|run|command|是否|确认|继续|允许|要不要|执行|命令)`)
-	waitYesNo  = regexp.MustCompile(`(?i)\((?:y/n|yes/no)\)|\[y/n\]`)
+	waitANSI         = regexp.MustCompile("\x1b\\[[0-?]*[ -/]*[@-~]")
+	waitCtrl         = regexp.MustCompile("[\x00-\x08\x0b-\x1f\x7f]")
+	waitCursorPrefix = regexp.MustCompile(`^[❯➤▶►▸→›»☞◉●>]\s*`)
+	waitLead         = regexp.MustCompile(`^[\s│┃|╎┆┊╭╰├╞┝─━═]+`)
+	waitTail         = regexp.MustCompile(`[\s│┃|╎┆┊╮╯┤╡┥─━═]+$`)
+	waitOpt          = regexp.MustCompile(`^(?:[❯➤▶►▸→›»☞◉●>]\s*)?(\d+)[.)]\s+(\S.*)$`)
+	waitQuestion     = regexp.MustCompile(`(?i)(would you like|do you want|are you sure|should (we|i)|(proceed|allow|continue|overwrite|approve|trust).*[?？]|是否(继续|允许|确认|执行)|(继续|允许|确认|执行).*[?？])`)
+	waitAction       = regexp.MustCompile(`(?i)((enter|return).*(select|confirm|continue|submit|accept)|(esc|escape).*(cancel|back)|(回车|enter).*(选择|确认|继续)|(按|press).*(y|n|yes|no).*(确认|confirm))`)
+	waitYesNo        = regexp.MustCompile(`(?i)\((?:y/n|yes/no)\)|\[y/n\]`)
 )
 
 func waitStripCtl(s string) string {
@@ -52,13 +53,13 @@ func sessionWaiting(capture string) bool {
 	for idx, raw := range lines {
 		if m := waitOpt.FindStringSubmatch(waitClean(raw)); m != nil {
 			n, _ := strconv.Atoi(m[1])
-			opts = append(opts, opt{num: n, idx: idx, selected: waitCursor.MatchString(raw)})
+			opts = append(opts, opt{num: n, idx: idx, selected: waitCursorPrefix.MatchString(waitClean(raw))})
 		}
 	}
-	// 取最后一组相邻选项（允许 ≤3 行间隔，兼容 Codex 长选项换行）
+	// 取最后一组连续编号选项。窄屏下单个选项可能折成多行，与前端统一放宽到 ≤12 行。
 	var g []opt
 	for i := len(opts) - 1; i >= 0; i-- {
-		if len(g) == 0 || g[0].idx-opts[i].idx <= 3 {
+		if len(g) == 0 || g[0].idx-opts[i].idx <= 12 {
 			g = append([]opt{opts[i]}, g...)
 		} else {
 			break
@@ -104,22 +105,26 @@ func sessionWaiting(capture string) bool {
 			win = append(win, waitClean(l))
 		}
 		windowText := strings.Join(win, " ")
-		anySel := false
+		selectedCount := 0
 		for _, o := range g {
 			if o.selected {
-				anySel = true
-				break
+				selectedCount++
 			}
 		}
-		if anySel || waitKW.MatchString(question) || waitKW.MatchString(windowText) {
+		if selectedCount == 1 || (waitQuestion.MatchString(question) && waitAction.MatchString(windowText)) {
 			return true
 		}
 	}
 	// y/n 兜底
 	for i := len(lines) - 1; i >= 0 && len(lines)-i <= 12; i-- {
-		if waitYesNo.MatchString(waitClean(lines[i])) {
+		line := waitClean(lines[i])
+		if line == "" {
+			continue
+		}
+		if waitYesNo.MatchString(line) {
 			return true
 		}
+		break
 	}
 	return false
 }

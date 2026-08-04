@@ -1,0 +1,1115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Roam Desktop · 桌面工作区优化设计</title>
+<script>
+  const previewPath = new URLSearchParams(location.search).get('path') || location.pathname
+  const previewFile = previewPath.split('/').pop()
+  if (previewFile && previewFile !== 'index.html') document.documentElement.classList.add('sheet')
+</script>
+<style>
+  :root {
+    --stage: #070a0f;
+    --stage-panel: #0c1119;
+    --stage-line: rgba(148,163,184,.15);
+    --stage-text: #dce5f0;
+    --stage-muted: #7d8999;
+    --blue: #58a6ff;
+    --blue-deep: #1f6feb;
+    --green: #3fb950;
+    --amber: #d29922;
+    --red: #f85149;
+    --purple: #a371f7;
+    --cyan: #39c5cf;
+  }
+
+  * { box-sizing: border-box; }
+  html { min-height: 100%; background: var(--stage); }
+  body {
+    min-height: 100vh;
+    margin: 0;
+    color: var(--stage-text);
+    background:
+      radial-gradient(circle at 50% -14%, rgba(31,111,235,.17), transparent 34%),
+      radial-gradient(circle at 90% 28%, rgba(163,113,247,.07), transparent 24%),
+      linear-gradient(180deg, #080b11, var(--stage) 58%);
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input { font: inherit; }
+  button { cursor: pointer; }
+  svg { display: block; }
+
+  .board-top {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    min-height: 62px;
+    padding: 10px clamp(16px, 3vw, 42px);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: rgba(7,10,15,.82);
+    border-bottom: 1px solid var(--stage-line);
+    backdrop-filter: blur(20px);
+  }
+  .board-brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
+  .board-mark {
+    width: 36px; height: 36px; display: grid; place-items: center;
+    border: 1px solid rgba(255,255,255,.12); border-radius: 11px;
+    color: #fff; font-weight: 900; letter-spacing: -.05em;
+    background: linear-gradient(145deg, #263242, #0d121a);
+    box-shadow: 0 8px 24px rgba(0,0,0,.32);
+  }
+  .board-copy strong { display: block; font-size: 14px; }
+  .board-copy span { color: var(--stage-muted); font-size: 11px; }
+  .spacer { flex: 1; }
+  .board-actions { display: flex; gap: 8px; align-items: center; }
+  .seg {
+    display: flex; gap: 2px; padding: 3px;
+    border: 1px solid var(--stage-line); border-radius: 10px;
+    background: rgba(255,255,255,.025);
+  }
+  .seg button, .board-btn {
+    min-height: 34px; padding: 0 11px; border: 0; border-radius: 7px;
+    color: var(--stage-muted); background: transparent; font-size: 12px;
+  }
+  .board-btn { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+  .seg button:hover, .board-btn:hover { color: #fff; background: rgba(255,255,255,.07); }
+  .seg button.on { color: #fff; background: rgba(88,166,255,.16); }
+  .board-btn { border: 1px solid var(--stage-line); white-space: nowrap; }
+
+  .intro {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 45px 24px 24px;
+    text-align: center;
+  }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 11px; border: 1px solid rgba(88,166,255,.23);
+    border-radius: 999px; color: #9ccaff; background: rgba(31,111,235,.08);
+    font-size: 10px; font-weight: 800; letter-spacing: .14em;
+  }
+  .eyebrow i {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--blue); box-shadow: 0 0 0 5px rgba(88,166,255,.11);
+  }
+  .intro h1 {
+    margin: 18px 0 11px; color: #f1f6fc;
+    font-size: clamp(30px, 4.8vw, 54px); line-height: 1.05; letter-spacing: -.05em;
+  }
+  .intro h1 em {
+    color: transparent; font-style: normal;
+    background: linear-gradient(115deg, #a9d3ff, #58a6ff 52%, #a371f7);
+    background-clip: text; -webkit-background-clip: text;
+  }
+  .intro p {
+    max-width: 720px; margin: 0 auto; color: var(--stage-muted);
+    font-size: 14px; line-height: 1.85;
+  }
+
+  .principles {
+    width: min(1220px, calc(100% - 32px));
+    margin: 14px auto 30px;
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px;
+  }
+  .principle {
+    position: relative; min-height: 112px; padding: 15px 16px;
+    overflow: hidden; border: 1px solid var(--stage-line); border-radius: 15px;
+    background: linear-gradient(150deg, rgba(255,255,255,.045), rgba(255,255,255,.012));
+  }
+  .principle::after {
+    content: ""; position: absolute; inset: auto -20px -40px auto;
+    width: 90px; height: 90px; border: 16px solid rgba(88,166,255,.035); border-radius: 50%;
+  }
+  .principle .no { color: var(--blue); font: 800 9px/1 ui-monospace, monospace; letter-spacing: .15em; }
+  .principle h3 { margin: 11px 0 6px; color: #e6edf5; font-size: 13px; }
+  .principle p { margin: 0; color: var(--stage-muted); font-size: 11.5px; line-height: 1.65; }
+
+  .spec-row {
+    width: min(1440px, calc(100% - 32px));
+    margin: 0 auto 12px;
+    display: flex; align-items: center; gap: 10px;
+    color: var(--stage-muted); font-size: 11px;
+  }
+  .spec-row::before, .spec-row::after { content: ""; flex: 1; border-top: 1px dashed var(--stage-line); }
+  .spec-row b { color: #aeb9c7; font: 700 10px/1 ui-monospace, monospace; letter-spacing: .14em; }
+
+  .frame-scale { transform-origin: top left; }
+  html.sheet .frame-scale, body.embed .frame-scale { transform: none !important; height: auto !important; }
+  .frame-wrap {
+    width: min(1480px, calc(100% - 24px));
+    margin: 0 auto;
+    padding: 12px;
+    overflow: auto;
+    border: 1px solid var(--stage-line);
+    border-radius: 22px;
+    background: rgba(255,255,255,.018);
+    box-shadow: 0 40px 100px rgba(0,0,0,.34);
+  }
+  .app {
+    --app-bg: #0d1117;
+    --app-panel: #161b22;
+    --app-raised: #1b222b;
+    --app-term: #06090d;
+    --app-line: #27303a;
+    --app-line-soft: #21262d;
+    --app-text: #e6edf3;
+    --app-muted: #8b949e;
+    --app-faint: #68717c;
+    --link: #79b8ff;
+    --accent-warn: #e3b341;
+    --accent-purple: #c69cff;
+    --accent-ok: #78c887;
+    --nav: 224px;
+    --nav-rail: 64px;
+    --topbar-h: 40px;
+    --canvas-min: 560px;
+    --dock-min: 480px;
+    --dock-max: 880px;
+    --dock: 672px;
+    --split-rail: 8px;
+    --activity-rail: 320px;
+    width: 1600px;
+    height: 820px;
+    position: relative;
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: var(--nav) minmax(0, 1fr);
+    color: var(--app-text);
+    background: var(--app-bg);
+    border: 1px solid #29313b;
+    border-radius: 14px;
+    box-shadow: 0 2px 0 rgba(255,255,255,.035) inset, 0 22px 64px rgba(0,0,0,.52);
+    transition: color .2s, background .2s;
+  }
+  .app.light {
+    --app-bg: #f5f7fa;
+    --app-panel: #ffffff;
+    --app-raised: #ffffff;
+    --app-term: #111820;
+    --app-line: #d5dce4;
+    --app-line-soft: #e8ecf0;
+    --app-text: #1f2328;
+    --app-muted: #57606a;
+    --app-faint: #8c959f;
+    /* 亮色下低饱和底上的强调色要重新取值，保证 WCAG AA */
+    --link: #0a58ca;
+    --accent-warn: #7a5200;
+    --accent-purple: #6b21a8;
+    --accent-ok: #1a7f37;
+  }
+  /* 尺寸档 = 真实视口宽度：图纸按比例缩放显示，独立评审页 1:1 */
+  .app[data-size="1280"] { width: 1280px; --nav: var(--nav-rail); --dock: 480px; }
+  .app[data-size="1600"] { width: 1600px; --dock: 672px; }   /* 42vw */
+  .app[data-size="1920"] { width: 1920px; --dock: 768px; }   /* clamp(640, 40%, 880) */
+  .app.focus-dock { --nav: var(--nav-rail); }
+
+  .nav {
+    min-width: 0; display: flex; flex-direction: column;
+    background:
+      radial-gradient(circle at 20% 0, rgba(88,166,255,.055), transparent 28%),
+      var(--app-panel);
+    border-right: 1px solid var(--app-line-soft);
+  }
+  .nav-brand {
+    height: 70px; padding: 15px 17px; display: flex; align-items: center; gap: 11px;
+  }
+  .nav-logo {
+    flex: 0 0 36px; width: 36px; height: 36px; display: grid; place-items: center;
+    border-radius: 11px; color: #fff; font-weight: 900; letter-spacing: -.06em;
+    background: linear-gradient(145deg, #2d3949, #121922);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.08), 0 8px 18px rgba(0,0,0,.22);
+  }
+  .nav-word { min-width: 0; }
+  .nav-word strong { display: block; font-size: 17px; letter-spacing: -.02em; }
+  .nav-word span { display: block; margin-top: 2px; color: var(--app-faint); font-size: 9px; letter-spacing: .16em; }
+  .nav-search {
+    height: 36px; margin: 2px 11px 16px; padding: 0 11px;
+    display: flex; align-items: center; gap: 9px;
+    border: 1px solid var(--app-line-soft); border-radius: 9px;
+    color: var(--app-faint); background: color-mix(in srgb, var(--app-bg) 76%, transparent);
+    font-size: 11.5px;
+  }
+  .nav-search kbd { margin-left: auto; font-size: 9px; opacity: .75; }
+  .nav-group { padding: 0 9px; }
+  .nav-group + .nav-group { margin-top: 15px; }
+  .group-label { padding: 0 10px 7px; color: var(--app-faint); font-size: 9px; font-weight: 750; letter-spacing: .13em; }
+  .nav-item {
+    height: 39px; margin-bottom: 2px; padding: 0 11px;
+    position: relative; display: flex; align-items: center; gap: 11px;
+    border: 0; border-radius: 9px; color: var(--app-muted); background: transparent;
+    font-size: 12.5px; text-align: left;
+  }
+  .nav-item:hover { color: var(--app-text); background: color-mix(in srgb, var(--app-text) 5%, transparent); }
+  .nav-item.on { color: var(--app-text); background: rgba(31,111,235,.13); }
+  .nav-item.on::before {
+    content: ""; position: absolute; left: -9px; top: 9px; bottom: 9px;
+    width: 3px; border-radius: 3px; background: var(--blue);
+    box-shadow: 0 0 10px rgba(88,166,255,.48);
+  }
+  .nav-icon {
+    flex: 0 0 18px; width: 18px; height: 18px;
+    display: grid; place-items: center; color: currentColor; font-size: 15px;
+  }
+  .nav-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .nav-badge {
+    min-width: 18px; height: 18px; margin-left: auto; padding: 0 5px;
+    display: grid; place-items: center; border-radius: 999px;
+    color: #ffd58a; background: rgba(210,153,34,.13); font: 700 9px/1 ui-monospace, monospace;
+  }
+  .nav-foot { margin-top: auto; padding: 10px 11px 12px; border-top: 1px solid var(--app-line-soft); }
+  .link-status {
+    height: 34px; padding: 0 9px; display: flex; align-items: center; gap: 8px;
+    color: var(--app-muted); font-size: 11px;
+  }
+  .status-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 4px rgba(63,185,80,.10); }
+  .account {
+    width: 100%; height: 43px; padding: 0 8px;
+    display: flex; align-items: center; gap: 9px;
+    border: 1px solid transparent; border-radius: 10px; color: var(--app-text); background: transparent;
+  }
+  .account:hover { border-color: var(--app-line-soft); background: color-mix(in srgb, var(--app-text) 4%, transparent); }
+  .avatar {
+    width: 28px; height: 28px; display: grid; place-items: center; border-radius: 9px;
+    color: #9ccaff; background: rgba(31,111,235,.14); font-size: 12px; font-weight: 800;
+  }
+  .account-copy { min-width: 0; text-align: left; }
+  .account-copy strong { display: block; font-size: 11px; }
+  .account-copy span { display: block; margin-top: 2px; color: var(--app-faint); font-size: 9.5px; }
+  .more-dot { margin-left: auto; color: var(--app-faint); letter-spacing: 2px; }
+
+  :is(.app[data-size="1280"], .app.focus-dock) .nav-word,
+  :is(.app[data-size="1280"], .app.focus-dock) .nav-search span:not(.nav-icon),
+  :is(.app[data-size="1280"], .app.focus-dock) .nav-search kbd,
+  :is(.app[data-size="1280"], .app.focus-dock) .group-label,
+  :is(.app[data-size="1280"], .app.focus-dock) .nav-item > span:not(.nav-icon):not(.nav-badge),
+  :is(.app[data-size="1280"], .app.focus-dock) .link-status > span:not(.status-dot),
+  :is(.app[data-size="1280"], .app.focus-dock) .account-copy,
+  :is(.app[data-size="1280"], .app.focus-dock) .more-dot { display: none; }
+  :is(.app[data-size="1280"], .app.focus-dock) .nav-brand { padding-inline: 14px; }
+  :is(.app[data-size="1280"], .app.focus-dock) .nav-search { width: 40px; margin-inline: 12px; padding: 0; justify-content: center; }
+  :is(.app[data-size="1280"], .app.focus-dock) .nav-group { padding-inline: 6px; }
+  :is(.app[data-size="1280"], .app.focus-dock) .nav-item { width: 52px; padding: 0; justify-content: center; }
+  :is(.app[data-size="1280"], .app.focus-dock) .nav-item.on::before { left: -6px; }
+  :is(.app[data-size="1280"], .app.focus-dock) .nav-badge { position: absolute; right: 1px; top: 1px; min-width: 16px; height: 16px; }
+  :is(.app[data-size="1280"], .app.focus-dock) .link-status { justify-content: center; }
+  :is(.app[data-size="1280"], .app.focus-dock) .account { padding: 0; justify-content: center; }
+
+  .workspace { min-width: 0; display: grid; grid-template-rows: 40px minmax(0, 1fr); }
+  .topbar {
+    min-width: 0; padding: 0 10px 0 14px; position: relative; display: flex; align-items: center; gap: 8px;
+    border-bottom: 1px solid var(--app-line-soft); background: color-mix(in srgb, var(--app-panel) 94%, transparent);
+  }
+  /* Command Center：只放全局搜索 / 创建 / 连接状态；页面标题与项目路径不进顶栏 */
+  .top-search {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    width: min(480px, 34%); height: 28px; padding: 0 10px;
+    display: flex; align-items: center; gap: 8px; border: 1px solid var(--app-line);
+    border-radius: 6px; color: var(--app-faint); background: var(--app-bg); font-size: 11px;
+  }
+  .topbar .top-btn.primary { margin-left: auto; }
+  .top-search kbd {
+    margin-left: auto; padding: 2px 5px; border: 1px solid var(--app-line);
+    border-radius: 5px; color: var(--app-muted); background: var(--app-panel); font-size: 9px;
+  }
+  .top-btn {
+    height: 28px; padding: 0 10px; display: inline-flex; align-items: center; gap: 7px;
+    border: 1px solid var(--app-line); border-radius: 6px;
+    color: var(--app-text); background: var(--app-panel); font-size: 10.5px;
+  }
+  .top-btn:hover { border-color: #536070; }
+  .top-btn.primary { border-color: transparent; color: #fff; background: var(--blue-deep); box-shadow: 0 4px 13px rgba(31,111,235,.23); }
+  .online { display: flex; align-items: center; gap: 7px; color: var(--app-muted); font-size: 10.5px; white-space: nowrap; }
+  .icon-btn {
+    width: 28px; height: 28px; padding: 0; display: grid; place-items: center;
+    border: 1px solid var(--app-line); border-radius: 6px; color: var(--app-muted); background: var(--app-panel);
+  }
+
+  .workbody {
+    min-height: 0; min-width: 0; display: grid;
+    grid-template-columns: minmax(var(--canvas-min), 1fr) var(--split-rail) minmax(var(--dock-min), var(--dock));
+    transition: grid-template-columns .22s ease;
+  }
+  .app.dock-closed .workbody { grid-template-columns: minmax(0, 1fr) 0 0; }
+  .app.focus-dock .workbody { grid-template-columns: 0 0 minmax(0, 1fr); }
+  /* 页面栅格看 Canvas 实际宽度（容器查询），不看 viewport —— 见 14 设计 §5.3 */
+  .canvas {
+    min-width: 0; min-height: 0; overflow: auto; background: var(--app-bg);
+    container-type: inline-size; container-name: canvas;
+  }
+  .app.focus-dock .canvas { overflow: hidden; }
+  .split {
+    position: relative; z-index: 4; min-width: 0;
+    background: var(--app-line-soft); cursor: col-resize;
+  }
+  .split::before {
+    content: ""; position: absolute; inset: 0 -6px; background: transparent;
+  }
+  .split::after {
+    content: ""; position: absolute; width: 3px; height: 42px; left: 50%; top: 50%;
+    transform: translate(-50%,-50%); border-radius: 4px; background: var(--app-faint); opacity: .32;
+    transition: height .15s, opacity .15s, background .15s;
+  }
+  .split:hover::after, .split.dragging::after, .split:focus-visible::after { height: 78px; opacity: 1; background: var(--blue); }
+  .split:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+  .dock {
+    min-width: 0; min-height: 0; overflow: hidden;
+    display: grid; grid-template-rows: 38px 36px minmax(0,1fr);
+    color: #dce6f2; background: var(--app-term);
+  }
+  .dock-tabs {
+    padding: 5px 7px 0; display: flex; gap: 3px; overflow: hidden;
+    border-bottom: 1px solid #222b35; background: #151c24;
+  }
+  .dock-tab {
+    min-width: 132px; max-width: 220px; height: 33px; padding: 0 9px;
+    display: flex; align-items: center; gap: 7px;
+    border: 1px solid transparent; border-bottom: 0; border-radius: 8px 8px 0 0;
+    color: #738092; background: transparent; font-size: 10.5px;
+  }
+  .dock-tab.on { color: #dfe8f3; border-color: #283440; background: var(--app-term); }
+  .dock-tab .status-dot { width: 6px; height: 6px; flex-basis: 6px; box-shadow: none; }
+  .dock-tab .tab-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dock-tab .x { margin-left: auto; opacity: .45; }
+  .dock-toolbar {
+    padding: 0 9px; display: flex; align-items: center; gap: 4px;
+    border-bottom: 1px solid #202832; background: #10171e;
+  }
+  .tool-btn {
+    height: 25px; padding: 0 8px; border: 0; border-radius: 6px;
+    color: #7f8d9c; background: transparent; font-size: 10.5px;
+  }
+  .tool-btn:hover { color: #dbe5f0; background: rgba(255,255,255,.055); }
+  .tool-btn.on { color: #9ccaff; background: rgba(31,111,235,.14); }
+  .tool-sep { height: 16px; margin: 0 3px; border-left: 1px solid #2b3540; }
+  .terminal {
+    position: relative; padding: 16px 17px; overflow: hidden;
+    color: #d6dee8; background:
+      radial-gradient(circle at 60% 0, rgba(31,111,235,.035), transparent 34%),
+      var(--app-term);
+    font: 11px/1.72 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .terminal::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(120% 95% at 50% 0, transparent 65%, rgba(0,0,0,.24));
+  }
+  .term-line { position: relative; z-index: 1; white-space: pre; }
+  .term-line .prompt { color: #56d364; }
+  .term-line .path { color: #79c0ff; }
+  .term-line .dim { color: #566171; }
+  .term-line .purple { color: #c69cff; }
+  .term-line .warn { color: #e3b341; }
+  .cursor { display: inline-block; width: 7px; height: 13px; margin-left: 2px; vertical-align: -2px; background: #b9c4d0; animation: blink 1.05s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .page { min-height: 100%; padding: 22px clamp(18px, 2.2vw, 30px) 38px; }
+  .page-view { display: none; }
+  .page-view.on { display: block; animation: fade-in .22s ease; }
+  @keyframes fade-in { from { opacity: 0; transform: translateY(3px); } }
+  .page-head { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 18px; }
+  .page-title { min-width: 0; }
+  .page-kicker { margin-bottom: 5px; color: var(--app-faint); font-size: 9.5px; font-weight: 800; letter-spacing: .14em; }
+  .page-title h2 { margin: 0; color: var(--app-text); font-size: 23px; line-height: 1.15; letter-spacing: -.035em; }
+  .page-title p { margin: 6px 0 0; color: var(--app-muted); font-size: 11.5px; }
+  .page-actions { margin-left: auto; display: flex; gap: 8px; }
+  .btn {
+    height: 32px; padding: 0 12px; border: 1px solid var(--app-line); border-radius: 8px;
+    color: var(--app-text); background: var(--app-panel); font-size: 11px;
+  }
+  .btn.primary { border-color: transparent; color: #fff; background: var(--blue-deep); box-shadow: 0 5px 14px rgba(31,111,235,.18); }
+  .status-summary {
+    min-height: 38px; margin-bottom: 14px; padding: 7px 11px;
+    display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap;
+    border: 1px solid var(--app-line-soft); border-radius: 10px; color: var(--app-muted);
+    background: color-mix(in srgb, var(--app-panel) 82%, transparent); font-size: 11px;
+  }
+  .summary-item { display: inline-flex; align-items: center; gap: 7px; }
+  .summary-item b { color: var(--app-text); font: 800 11px/1 ui-monospace, monospace; }
+  .summary-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+  .summary-dot.amber { background: var(--amber); }
+  .summary-dot.purple { background: var(--purple); }
+
+  .overview-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .main-feed { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+  .section-head {
+    display: flex; align-items: center; gap: 8px; color: var(--app-muted);
+    font-size: 10px; font-weight: 800; letter-spacing: .1em;
+  }
+  .section-head .count {
+    min-width: 18px; height: 18px; padding: 0 5px; display: grid; place-items: center;
+    border-radius: 999px; color: var(--app-muted); background: var(--app-panel);
+    font: 700 9px/1 ui-monospace, monospace; letter-spacing: 0;
+  }
+  .section-head::after { content: ""; flex: 1; border-top: 1px dashed var(--app-line-soft); }
+  .attention-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 9px; }
+  .attention-card {
+    min-width: 0; min-height: 124px; padding: 12px; position: relative; overflow: hidden;
+    border: 1px solid rgba(210,153,34,.27); border-radius: 12px;
+    background:
+      radial-gradient(circle at 100% 0, rgba(210,153,34,.12), transparent 35%),
+      linear-gradient(145deg, rgba(210,153,34,.085), rgba(210,153,34,.025));
+  }
+  .attention-card.purple {
+    border-color: rgba(163,113,247,.26);
+    background: radial-gradient(circle at 100% 0, rgba(163,113,247,.12), transparent 35%), rgba(163,113,247,.035);
+  }
+  .attention-type { display: flex; align-items: center; gap: 7px; color: var(--accent-warn); font-size: 10.5px; font-weight: 800; }
+  .attention-card.purple .attention-type { color: var(--accent-purple); }
+  .attention-card h4 { margin: 10px 0 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+  .attention-card p { height: 33px; margin: 0; overflow: hidden; color: var(--app-muted); font-size: 10.5px; line-height: 1.55; }
+  .card-link { position: absolute; left: 12px; bottom: 10px; color: var(--link); font-size: 10.5px; }
+  .project-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .project-card {
+    min-width: 0; min-height: 156px; padding: 13px;
+    border: 1px solid var(--app-line-soft); border-radius: 12px; background: var(--app-panel);
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--app-text) 3%, transparent) inset;
+  }
+  .project-card:hover { border-color: color-mix(in srgb, var(--blue) 40%, var(--app-line)); }
+  .project-hd { display: flex; align-items: center; gap: 8px; }
+  .project-icon {
+    width: 29px; height: 29px; display: grid; place-items: center; border-radius: 8px;
+    color: #9ccaff; background: rgba(31,111,235,.12); font-size: 12px; font-weight: 800;
+  }
+  .project-name { min-width: 0; }
+  .project-name b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+  .project-name span { display: block; margin-top: 2px; color: var(--app-faint); font: 9.5px/1.25 ui-monospace, monospace; }
+  .project-meta { margin-left: auto; color: var(--app-faint); font-size: 9.5px; }
+  .task-row {
+    height: 30px; padding: 0 6px; display: flex; align-items: center; gap: 8px;
+    border-radius: 7px; color: var(--app-muted); font-size: 10.5px;
+  }
+  .task-row:first-of-type { margin-top: 9px; }
+  .task-row:hover, .task-row.selected { color: var(--app-text); background: color-mix(in srgb, var(--app-text) 4%, transparent); }
+  .task-row.selected { box-shadow: inset 2px 0 var(--blue); }
+  .task-row b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; }
+  .task-row .time { margin-left: auto; color: var(--app-faint); white-space: nowrap; }
+  .mini-pill {
+    height: 18px; padding: 0 6px; display: inline-grid; place-items: center; border-radius: 999px;
+    color: var(--accent-ok); background: rgba(63,185,80,.10); font-size: 9px;
+  }
+  .project-foot {
+    min-height: 25px; margin-top: 5px; padding: 5px 7px; display: flex; align-items: center; gap: 6px;
+    border: 1px solid rgba(163,113,247,.18); border-radius: 7px;
+    color: var(--accent-purple); background: rgba(163,113,247,.045); font-size: 9.5px;
+  }
+  .project-foot.warn {
+    border-color: rgba(210,153,34,.24); color: var(--accent-warn); background: rgba(210,153,34,.05);
+  }
+  .project-foot .go { margin-left: auto; color: var(--link); }
+
+  .activity {
+    min-width: 0; padding: 13px; align-self: start; position: sticky; top: 0;
+    display: none; border: 1px solid var(--app-line-soft); border-radius: 12px; background: var(--app-panel);
+  }
+
+  /* Canvas 容器查询：项目卡 1 / 2 / 3 列，Canvas ≥1180 才出活动侧轨 */
+  @container canvas (min-width: 900px) {
+    .project-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @container canvas (min-width: 1320px) {
+    .project-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+  @container canvas (min-width: 1180px) {
+    .overview-layout { grid-template-columns: minmax(0, 1fr) var(--activity-rail); }
+    .activity { display: block; }
+  }
+  .activity h3 { margin: 0 0 14px; font-size: 10.5px; }
+  .timeline { position: relative; display: flex; flex-direction: column; gap: 14px; }
+  .timeline::before { content: ""; position: absolute; left: 4px; top: 5px; bottom: 5px; border-left: 1px solid var(--app-line); }
+  .event { position: relative; padding-left: 17px; }
+  .event::before {
+    content: ""; position: absolute; left: 1px; top: 4px; width: 7px; height: 7px;
+    border: 2px solid var(--app-panel); border-radius: 50%; background: var(--blue);
+  }
+  .event.green::before { background: var(--green); }
+  .event.purple::before { background: var(--purple); }
+  .event b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; }
+  .event p { margin: 3px 0 0; color: var(--app-muted); font-size: 9.5px; line-height: 1.5; }
+  .event time { display: block; margin-top: 3px; color: var(--app-faint); font-size: 9px; }
+
+  .project-page .page-head { margin-bottom: 14px; }
+  .subbar {
+    position: sticky; top: -22px; z-index: 3; min-height: 44px; margin: 0 0 12px; padding: 6px 0;
+    display: flex; align-items: center; gap: 8px; background: var(--app-bg);
+  }
+  .filter {
+    width: 210px; height: 31px; padding: 0 10px; display: flex; align-items: center; gap: 8px;
+    border: 1px solid var(--app-line); border-radius: 8px; color: var(--app-faint); background: var(--app-panel); font-size: 10.5px;
+  }
+  .chip {
+    height: 29px; padding: 0 9px; border: 1px solid var(--app-line); border-radius: 7px;
+    color: var(--app-muted); background: var(--app-panel); font-size: 10px;
+  }
+  .chip.on { color: #9ccaff; border-color: rgba(88,166,255,.32); background: rgba(31,111,235,.09); }
+  .sort { margin-left: auto; color: var(--app-faint); font-size: 10px; }
+  /* 项目列表：稳定的 320–360px 列，开关终端只在阈值处重排 */
+  .project-list-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; }
+  .list-card {
+    min-height: 142px; padding: 13px; border: 1px solid var(--app-line-soft);
+    border-radius: 12px; background: var(--app-panel);
+  }
+  .list-card:hover { transform: translateY(-1px); border-color: rgba(88,166,255,.38); box-shadow: 0 10px 25px rgba(0,0,0,.12); }
+  .list-card .project-hd { margin-bottom: 12px; }
+  .metric-row { display: flex; gap: 6px; }
+  .metric {
+    flex: 1; min-width: 0; padding: 7px 6px; border-radius: 7px;
+    color: var(--app-faint); background: var(--app-bg); text-align: center; font-size: 9.5px;
+  }
+  .metric b { display: block; margin-bottom: 3px; color: var(--app-text); font: 800 11px/1 ui-monospace, monospace; }
+  .metric b.ok { color: var(--accent-ok); }
+  .metric b.warn { color: var(--accent-warn); }
+  .list-foot { margin-top: 10px; display: flex; align-items: center; color: var(--app-faint); font-size: 9.5px; }
+  .avatars { display: flex; margin-right: 8px; }
+  .avatars i {
+    width: 20px; height: 20px; margin-right: -5px; display: grid; place-items: center;
+    border: 2px solid var(--app-panel); border-radius: 50%; color: #fff; background: #315c8f;
+    font-style: normal; font-size: 8.5px;
+  }
+  .avatars i:nth-child(2) { background: #7654a7; }
+  .avatars i:nth-child(3) { background: #3f7950; }
+  .list-foot .open { margin-left: auto; color: var(--link); }
+
+  .palette-scrim {
+    position: absolute; inset: 0; z-index: 40; display: none;
+    align-items: flex-start; justify-content: center; padding-top: 104px;
+    background: rgba(3,7,12,.59); backdrop-filter: blur(3px);
+  }
+  .palette-scrim.on { display: flex; }
+  .palette {
+    width: 560px; overflow: hidden; border: 1px solid #394655; border-radius: 14px;
+    color: #dfe7f1; background: #151c24; box-shadow: 0 28px 90px rgba(0,0,0,.58);
+  }
+  .palette-input {
+    height: 52px; padding: 0 15px; display: flex; align-items: center; gap: 10px;
+    border-bottom: 1px solid #28323d;
+  }
+  .palette-input input { flex: 1; border: 0; outline: 0; color: #e5edf6; background: transparent; font-size: 13px; }
+  .palette-input kbd { color: #7e8b9b; font-size: 9px; }
+  .palette-group { padding: 9px; }
+  .palette-label { padding: 4px 8px 7px; color: #657384; font-size: 9px; font-weight: 800; letter-spacing: .12em; }
+  .palette-row {
+    height: 40px; padding: 0 9px; display: flex; align-items: center; gap: 10px;
+    border-radius: 8px; color: #9aa8b8; font-size: 11px;
+  }
+  .palette-row.on { color: #e7eef7; background: rgba(31,111,235,.16); }
+  .palette-row small { margin-left: auto; color: #657384; }
+
+  .measurements {
+    width: min(1260px, calc(100% - 32px));
+    margin: 28px auto 70px;
+    display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px;
+  }
+  .measure {
+    padding: 17px; border: 1px solid var(--stage-line); border-radius: 15px;
+    background: linear-gradient(145deg, rgba(255,255,255,.04), rgba(255,255,255,.012));
+  }
+  .measure b { display: block; margin-bottom: 8px; color: #d9e2ed; font-size: 12px; }
+  .measure p { margin: 0; color: var(--stage-muted); font-size: 11px; line-height: 1.7; }
+  .measure code { color: #9ccaff; font: 10px ui-monospace, monospace; }
+
+  @media (max-width: 980px) {
+    .principles { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .measurements { grid-template-columns: 1fr; }
+    .board-copy span, .board-actions .seg:first-child { display: none; }
+  }
+  @media (max-width: 620px) {
+    .principles { grid-template-columns: 1fr; }
+    .board-btn { display: none; }
+    .intro { padding-top: 32px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  }
+  body.embed {
+    overflow: hidden;
+    background: var(--stage);
+  }
+  body.embed .board-top,
+  body.embed .intro,
+  body.embed .principles,
+  body.embed .spec-row,
+  body.embed .measurements { display: none; }
+  body.embed .frame-wrap {
+    width: 100vw;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  body.embed .app { border: 0; border-radius: 0; box-shadow: none; }
+  html.sheet body {
+    overflow: hidden;
+    background: var(--stage);
+  }
+  html.sheet .board-top,
+  html.sheet .intro,
+  html.sheet .principles,
+  html.sheet .spec-row,
+  html.sheet .measurements { display: none; }
+  html.sheet .frame-wrap {
+    width: 100vw;
+    height: 100vh;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  /* 独立评审页：1:1 铺满视口；导航是否收起仍由 data-size / Focus 决定，不在这里强制 */
+  html.sheet .app[data-size] {
+    width: 100vw;
+    height: 100vh;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+</style>
+</head>
+<body>
+  <header class="board-top">
+    <div class="board-brand">
+      <div class="board-mark">R</div>
+      <div class="board-copy"><strong>Roam Desktop</strong><span>桌面工作区优化设计 · D1—D5</span></div>
+    </div>
+    <div class="spacer"></div>
+    <div class="board-actions">
+      <div class="seg" id="sizeSeg">
+        <button data-size="1280">1280</button>
+        <button class="on" data-size="1600">1600</button>
+        <button data-size="1920">1920</button>
+      </div>
+      <div class="seg" id="viewSeg">
+        <button class="on" data-view="overview">概览</button>
+        <button data-view="projects">项目</button>
+        <button data-view="focus">终端 Focus</button>
+      </div>
+      <a class="board-btn" href="overview.html">独立评审页</a>
+      <button class="board-btn" id="themeBtn">浅色</button>
+    </div>
+  </header>
+
+  <section class="intro">
+    <span class="eyebrow"><i></i> DESKTOP WORKSPACE · LARGE ≥ 1280</span>
+    <h1>让桌面成为真正的<em>工作台</em></h1>
+    <p>导航定位、顶栏调度、页面决策、终端执行。分栏不再把页面压成预览条，
+      大屏也不再只是多出一块空白。上方可切换尺寸、页面、主题；图内分隔条可直接拖动。</p>
+  </section>
+
+  <section class="principles">
+    <article class="principle"><span class="no">01 · CONTEXT</span><h3>上下文不消失</h3><p>终端 Focus 仍保留导航轨和项目路径。执行区最大化，不等于把用户关进黑盒。</p></article>
+    <article class="principle"><span class="no">02 · SPLIT</span><h3>分栏有尺寸契约</h3><p>Canvas ≥ 560、Dock ≥ 480；空间不足自动进入 Focus，不制造横向溢出。</p></article>
+    <article class="principle"><span class="no">03 · PRIORITY</span><h3>行动先于统计</h3><p>「需要你」进入第一视觉层，等权数字卡压成一条状态概况，把首屏还给下一步。</p></article>
+    <article class="principle"><span class="no">04 · SCALE</span><h3>大屏增加并行信息</h3><p>Canvas ≥1180 出活动侧轨，≥1320 项目卡三列——看工作区实际宽度，不看 viewport。</p></article>
+  </section>
+
+  <div class="spec-row"><b>INTERACTIVE WORKSPACE · 图纸按所选视口宽度渲染后等比缩放；1:1 请看独立评审页</b></div>
+
+  <div class="frame-wrap">
+   <div class="frame-scale" id="frameScale">
+    <main class="app" id="app" data-size="1600">
+      <aside class="nav">
+        <div class="nav-brand">
+          <div class="nav-logo">R</div>
+          <div class="nav-word"><strong>Roam</strong><span>ANYWHERE · ANYTIME</span></div>
+        </div>
+        <button class="nav-search js-palette"><span class="nav-icon">⌕</span><span>搜索或跳转</span><kbd>⌘K</kbd></button>
+        <div class="nav-group">
+          <div class="group-label">工作区</div>
+          <button class="nav-item on" data-page="overview">
+            <span class="nav-icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span><span>概览</span><span class="nav-badge">3</span>
+          </button>
+          <button class="nav-item" data-page="projects">
+            <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M3 10.2 12 3l9 7.2"/><path d="M5.5 9v11h13V9"/><path d="M9.5 20v-5h5v5"/></svg></span><span>项目</span>
+          </button>
+          <button class="nav-item">
+            <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M7 12h10"/><path d="M7 16h6"/></svg></span><span>文件</span>
+          </button>
+        </div>
+        <div class="nav-group">
+          <div class="group-label">工具</div>
+          <button class="nav-item"><span class="nav-icon"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><circle cx="6" cy="6.5" r=".5"/></svg></span><span>浏览器</span></button>
+          <button class="nav-item"><span class="nav-icon"><svg viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M10 18.5h4"/></svg></span><span>手机</span></button>
+          <button class="nav-item"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M10 3.5a1.8 1.8 0 0 1 3.6 0V5H17a2 2 0 0 1 2 2v3.4h1.5a1.8 1.8 0 0 1 0 3.6H19V17a2 2 0 0 1-2 2h-3.4v1.5a1.8 1.8 0 0 1-3.6 0V19H7a2 2 0 0 1-2-2v-3.4H3.5a1.8 1.8 0 0 1 0-3.6H5V7a2 2 0 0 1 2-2h3z"/></svg></span><span>插件</span></button>
+        </div>
+        <div class="nav-foot">
+          <div class="link-status"><span class="status-dot"></span><span>P2P 已连接</span><span style="margin-left:auto">24 ms</span></div>
+          <button class="account">
+            <span class="avatar">W</span>
+            <span class="account-copy"><strong>公司工作站</strong><span>设置 · 主题 · 退出</span></span>
+            <span class="more-dot">•••</span>
+          </button>
+        </div>
+      </aside>
+
+      <section class="workspace">
+        <header class="topbar">
+          <button class="top-search js-palette">⌕ <span>搜索项目、会话和文件</span><kbd>⌘ K</kbd></button>
+          <button class="top-btn primary">＋ 新建</button>
+          <span class="online"><i class="status-dot"></i>在线</span>
+          <button class="icon-btn" id="dockToggle" title="开关终端 Dock">⌘</button>
+        </header>
+
+        <div class="workbody">
+          <section class="canvas">
+            <div class="page">
+              <section class="page-view on" data-page-view="overview">
+                <div class="page-head">
+                  <div class="page-title">
+                    <div class="page-kicker">THURSDAY · 30 JULY</div>
+                    <h2>上午好，今天有 3 件事需要你</h2>
+                    <p>4 个任务正在运行，最近一次活动发生在 2 分钟前。</p>
+                  </div>
+                  <div class="page-actions"><button class="btn">查看全部活动</button><button class="btn primary">＋ 开始工作</button></div>
+                </div>
+                <div class="status-summary">
+                  <span class="summary-item"><i class="summary-dot"></i><b>4</b> 个任务运行中</span>
+                  <span class="summary-item"><i class="summary-dot amber"></i><b>2</b> 个等待输入</span>
+                  <span class="summary-item"><i class="summary-dot amber"></i><b>3</b> 项待收尾</span>
+                  <span class="summary-item"><i class="summary-dot purple"></i><b>1</b> 个蜂群</span>
+                </div>
+                <div class="overview-layout">
+                  <div class="main-feed">
+                    <div class="section-head">需要你 <span class="count">3</span></div>
+                    <div class="attention-grid">
+                      <article class="attention-card">
+                        <div class="attention-type"><i class="summary-dot amber"></i>等待输入 · roam-web</div>
+                        <h4>desktop-layout-review</h4>
+                        <p>Codex 正在等待确认是否采用新的分栏尺寸契约…</p>
+                        <span class="card-link">进入会话 →</span>
+                      </article>
+                      <article class="attention-card">
+                        <div class="attention-type"><i class="summary-dot amber"></i>待收尾 · agent-kit</div>
+                        <h4>feat/mobile-shell</h4>
+                        <p>领先 main 3 commits，工作区干净，可以合并并清理。</p>
+                        <span class="card-link">去收尾 →</span>
+                      </article>
+                      <article class="attention-card purple">
+                        <div class="attention-type"><i class="summary-dot purple"></i>蜂群待解锁 · plugin-api</div>
+                        <h4>2 名成员等待依赖</h4>
+                        <p>frontend 与 qa 正在等待 api-contract 完成。</p>
+                        <span class="card-link">查看看板 →</span>
+                      </article>
+                    </div>
+                    <div class="section-head">活跃项目 <span class="count">4</span></div>
+                    <div class="project-grid">
+                      <article class="project-card">
+                        <div class="project-hd"><span class="project-icon">R</span><div class="project-name"><b>roam</b><span>~/codes/ttmux · main</span></div><span class="project-meta">2 分钟前</span></div>
+                        <div class="task-row selected"><i class="status-dot"></i><b>desktop-layout-review</b><span class="mini-pill">Codex</span><span class="time">刚刚</span></div>
+                        <div class="task-row"><i class="summary-dot amber"></i><b>mobile-shell</b><span class="time">8 分钟前</span></div>
+                        <div class="task-row"><i class="summary-dot"></i><b>term-resync</b><span class="time">23 分钟前</span></div>
+                        <div class="project-foot">⬡ plugin-api <span>4 名成员 · 2 活跃</span><span class="go">打开 →</span></div>
+                      </article>
+                      <article class="project-card">
+                        <div class="project-hd"><span class="project-icon" style="color:#c7a5ff;background:rgba(163,113,247,.12)">A</span><div class="project-name"><b>agent-kit</b><span>~/codes/agent-kit · main</span></div><span class="project-meta">12 分钟前</span></div>
+                        <div class="task-row"><i class="status-dot"></i><b>sdk-docs-refresh</b><span class="mini-pill">Claude</span><span class="time">12 分钟前</span></div>
+                        <div class="task-row"><i class="summary-dot amber"></i><b>mobile-shell</b><span class="time">16 分钟前</span></div>
+                        <div class="task-row"><i class="summary-dot" style="background:var(--app-faint)"></i><b>provider-example</b><span class="time">1 小时前</span></div>
+                        <div class="project-foot warn">⚑ 1 项待收尾<span class="go">处理 →</span></div>
+                      </article>
+                      <article class="project-card">
+                        <div class="project-hd"><span class="project-icon" style="color:#76d18a;background:rgba(63,185,80,.12)">S</span><div class="project-name"><b>skills</b><span>~/codes/skills · feature</span></div><span class="project-meta">38 分钟前</span></div>
+                        <div class="task-row"><i class="status-dot"></i><b>product-shots-v2</b><span class="time">38 分钟前</span></div>
+                        <div class="task-row"><i class="summary-dot" style="background:var(--app-faint)"></i><b>android-tv-audit</b><span class="time">昨天</span></div>
+                        <div class="task-row"><i class="summary-dot" style="background:var(--app-faint)"></i><b>docs-cleanup</b><span class="time">昨天</span></div>
+                      </article>
+                      <article class="project-card">
+                        <div class="project-hd"><span class="project-icon" style="color:#f0ba5d;background:rgba(210,153,34,.12)">B</span><div class="project-name"><b>blade-console</b><span>~/codes/blade · develop</span></div><span class="project-meta">1 小时前</span></div>
+                        <div class="task-row"><i class="summary-dot amber"></i><b>release-checklist</b><span class="time">1 小时前</span></div>
+                        <div class="task-row"><i class="status-dot"></i><b>dashboard-query</b><span class="time">2 小时前</span></div>
+                        <div class="project-foot warn">⚑ 2 项待收尾<span class="go">处理 →</span></div>
+                      </article>
+                    </div>
+                  </div>
+                  <aside class="activity">
+                    <h3>最近活动</h3>
+                    <div class="timeline">
+                      <div class="event"><b>338963e · roam</b><p>移除对话面板重复的头部工具行</p><time>2 分钟前</time></div>
+                      <div class="event green"><b>mobile-shell 已完成</b><p>质量检查通过，等待收尾</p><time>12 分钟前</time></div>
+                      <div class="event purple"><b>plugin-api 蜂群</b><p>api-contract 广播接口约定</p><time>18 分钟前</time></div>
+                      <div class="event"><b>sdk-docs-refresh</b><p>更新 ChatView 接入示例</p><time>38 分钟前</time></div>
+                      <div class="event green"><b>term-resync 已合入</b><p>远端 main 已包含提交</p><time>1 小时前</time></div>
+                    </div>
+                  </aside>
+                </div>
+              </section>
+
+              <section class="page-view project-page" data-page-view="projects">
+                <div class="page-head">
+                  <div class="page-title"><div class="page-kicker">WORKSPACE</div><h2>项目</h2><p>从仓库进入任务、文件、Git、Worktree 与蜂群。</p></div>
+                  <div class="page-actions"><button class="btn">导入目录</button><button class="btn primary">＋ 开始</button></div>
+                </div>
+                <div class="subbar">
+                  <div class="filter">⌕ 搜索项目</div>
+                  <button class="chip on">全部 12</button><button class="chip">活跃 4</button><button class="chip">待收尾 3</button>
+                  <span class="sort">最近活动 ↓</span>
+                </div>
+                <div class="section-head" style="margin-bottom:10px">置顶与活跃 <span class="count">6</span></div>
+                <div class="project-list-grid">
+                  <article class="list-card">
+                    <div class="project-hd"><span class="project-icon">R</span><div class="project-name"><b>roam</b><span>~/codes/ttmux</span></div><span class="project-meta">main</span></div>
+                    <div class="metric-row"><div class="metric"><b>3</b>会话</div><div class="metric"><b class="ok">2</b>运行</div><div class="metric"><b class="warn">1</b>等待</div></div>
+                    <div class="list-foot"><span class="avatars"><i>C</i><i>Cx</i><i>Q</i></span>2 分钟前 <span class="open">进入 →</span></div>
+                  </article>
+                  <article class="list-card">
+                    <div class="project-hd"><span class="project-icon" style="color:#c7a5ff;background:rgba(163,113,247,.12)">A</span><div class="project-name"><b>agent-kit</b><span>~/codes/agent-kit</span></div><span class="project-meta">main</span></div>
+                    <div class="metric-row"><div class="metric"><b>4</b>会话</div><div class="metric"><b class="ok">1</b>运行</div><div class="metric"><b class="warn">1</b>收尾</div></div>
+                    <div class="list-foot"><span class="avatars"><i>C</i><i>Q</i></span>12 分钟前 <span class="open">进入 →</span></div>
+                  </article>
+                  <article class="list-card">
+                    <div class="project-hd"><span class="project-icon" style="color:#76d18a;background:rgba(63,185,80,.12)">S</span><div class="project-name"><b>skills</b><span>~/codes/skills</span></div><span class="project-meta">feature</span></div>
+                    <div class="metric-row"><div class="metric"><b>2</b>会话</div><div class="metric"><b class="ok">1</b>运行</div><div class="metric"><b>0</b>等待</div></div>
+                    <div class="list-foot"><span class="avatars"><i>Cx</i></span>38 分钟前 <span class="open">进入 →</span></div>
+                  </article>
+                  <article class="list-card">
+                    <div class="project-hd"><span class="project-icon" style="color:#f0ba5d;background:rgba(210,153,34,.12)">B</span><div class="project-name"><b>blade-console</b><span>~/codes/blade</span></div><span class="project-meta">develop</span></div>
+                    <div class="metric-row"><div class="metric"><b>2</b>会话</div><div class="metric"><b class="ok">1</b>运行</div><div class="metric"><b class="warn">2</b>收尾</div></div>
+                    <div class="list-foot"><span class="avatars"><i>C</i><i>Q</i></span>1 小时前 <span class="open">进入 →</span></div>
+                  </article>
+                  <article class="list-card">
+                    <div class="project-hd"><span class="project-icon" style="color:#72d5de;background:rgba(57,197,207,.12)">P</span><div class="project-name"><b>plugin-market</b><span>~/codes/plugins</span></div><span class="project-meta">main</span></div>
+                    <div class="metric-row"><div class="metric"><b>1</b>会话</div><div class="metric"><b>0</b>运行</div><div class="metric"><b>0</b>等待</div></div>
+                    <div class="list-foot"><span class="avatars"><i>Cx</i></span>昨天 <span class="open">进入 →</span></div>
+                  </article>
+                  <article class="list-card">
+                    <div class="project-hd"><span class="project-icon" style="color:#f29089;background:rgba(248,81,73,.10)">D</span><div class="project-name"><b>design-system</b><span>~/codes/design</span></div><span class="project-meta">main</span></div>
+                    <div class="metric-row"><div class="metric"><b>1</b>会话</div><div class="metric"><b>0</b>运行</div><div class="metric"><b>0</b>等待</div></div>
+                    <div class="list-foot"><span class="avatars"><i>C</i></span>2 天前 <span class="open">进入 →</span></div>
+                  </article>
+                </div>
+              </section>
+            </div>
+          </section>
+
+          <div class="split" id="split" role="separator" aria-orientation="vertical" aria-label="调整终端宽度"
+               tabindex="0" aria-valuemin="480" aria-valuemax="880" aria-valuenow="672"></div>
+
+          <aside class="dock">
+            <div class="dock-tabs">
+              <button class="dock-tab on"><i class="status-dot"></i><span class="tab-name">roam · desktop-layout-review</span><span class="x">×</span></button>
+              <button class="dock-tab"><i class="summary-dot amber"></i><span class="tab-name">mobile-shell</span><span class="x">×</span></button>
+              <button class="dock-tab"><i class="status-dot"></i><span class="tab-name">term-resync</span><span class="x">×</span></button>
+            </div>
+            <div class="dock-toolbar">
+              <button class="tool-btn on">终端</button><button class="tool-btn">对话</button><span class="tool-sep"></span>
+              <button class="tool-btn">文件</button><button class="tool-btn">Git</button><span class="tool-sep"></span>
+              <button class="tool-btn">tmux</button><button class="tool-btn">A−</button><button class="tool-btn">A＋</button>
+              <button class="tool-btn" style="margin-left:auto" id="focusBtn">Focus</button><button class="tool-btn">•••</button>
+            </div>
+            <div class="terminal">
+              <div class="term-line"><span class="dim">Last login: Thu Jul 30 09:42:18 on ttys003</span></div>
+              <div class="term-line"> </div>
+              <div class="term-line"><span class="prompt">➜</span>  <span class="path">task-2</span> git status --short --branch</div>
+              <div class="term-line"><span class="purple">## feat/desktop-page-optimization</span></div>
+              <div class="term-line">?? docs/design/web/14-desktop-workspace.md</div>
+              <div class="term-line">?? docs/design/web/14-desktop-workspace/</div>
+              <div class="term-line"> </div>
+              <div class="term-line"><span class="prompt">➜</span>  <span class="path">task-2</span> npm run design:preview</div>
+              <div class="term-line"><span class="dim">&gt; roam-web@0.1.0 design:preview</span></div>
+              <div class="term-line"><span class="dim">&gt; vite --host 127.0.0.1</span></div>
+              <div class="term-line"> </div>
+              <div class="term-line">  <span class="path">VITE v5.4.10</span>  ready in 284 ms</div>
+              <div class="term-line"> </div>
+              <div class="term-line">  ➜  Local:   <span class="path">http://localhost:5173/</span></div>
+              <div class="term-line">  ➜  press h + enter to show help</div>
+              <div class="term-line"> </div>
+              <div class="term-line"><span class="warn">Codex</span>  已完成桌面工作区图纸初稿，正在执行视觉检查。</div>
+              <div class="term-line"><span class="prompt">➜</span>  <span class="path">task-2</span> <span class="cursor"></span></div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <div class="palette-scrim" id="paletteScrim">
+        <div class="palette">
+          <div class="palette-input">⌕<input id="paletteInput" value="" placeholder="搜索项目、会话、文件或命令…"><kbd>Esc</kbd></div>
+          <div class="palette-group">
+            <div class="palette-label">建议</div>
+            <div class="palette-row on">＋ 新建会话 <small>N</small></div>
+            <div class="palette-row">⌘ 开关终端 Dock <small>⌘ J</small></div>
+            <div class="palette-row">▦ 前往项目 <small>G P</small></div>
+            <div class="palette-row">⌂ 打开 roam 项目 <small>最近访问</small></div>
+          </div>
+        </div>
+      </div>
+    </main>
+   </div>
+  </div>
+
+  <section class="measurements">
+    <article class="measure"><b>尺寸契约</b><p><code>Navigation 224 / 64</code> · <code>Topbar 40</code> · <code>Canvas min 560</code> · <code>Dock min 480</code> · <code>Rail 8（命中 20）</code>。不足时切 Focus，不溢出。</p></article>
+    <article class="measure"><b>容器响应</b><p>项目栅格看 Canvas 实际宽度（<code>@container</code>），不看 viewport。开关终端只在 <code>900 / 1320</code> 阈值处重排，活动侧轨在 <code>1180</code> 出现，不按页面写死 300/420px。</p></article>
+    <article class="measure"><b>状态恢复</b><p>侧栏、Dock 宽度、Focus 与密度写入偏好；URL 只记录可分享的会话 id。换窗口恢复时先钳制，旧大屏宽度不挤爆新窗口。</p></article>
+  </section>
+
+<script>
+  const app = document.getElementById('app')
+  const sizeButtons = document.querySelectorAll('#sizeSeg button')
+  const viewButtons = document.querySelectorAll('#viewSeg button')
+  const navPages = document.querySelectorAll('.nav-item[data-page]')
+  const pageViews = document.querySelectorAll('[data-page-view]')
+  const split = document.getElementById('split')
+  const frameScale = document.getElementById('frameScale')
+  const paletteScrim = document.getElementById('paletteScrim')
+  const paletteInput = document.getElementById('paletteInput')
+  const initial = new URLSearchParams(location.search)
+  const sheetFile = (initial.get('path') || location.pathname).split('/').pop()
+  const sheetDefaults = window.__SHEET__ || ({
+    'overview.html': { size: '1600', view: 'overview', dock: 'closed', title: 'D1 · 桌面概览' },
+    'projects.html': { size: '1600', view: 'projects', dock: 'closed', title: 'D2 · 项目工作台' },
+    'terminal-split.html': { size: '1280', view: 'projects', title: 'D3 · 页面与终端分栏' },
+    'terminal-focus.html': { size: '1600', view: 'focus', title: 'D4 · 终端 Focus' },
+    'ultrawide.html': { size: '1920', view: 'overview', dock: 'closed', title: 'D5 · 超宽屏概览' },
+  }[sheetFile] || {})
+  if (sheetDefaults.title) document.title = sheetDefaults.title
+  if (initial.get('embed') === '1') document.body.classList.add('embed')
+
+  function setPage(page) {
+    app.classList.remove('focus-dock')
+    document.getElementById('focusBtn').textContent = 'Focus'
+    document.querySelectorAll('.nav-item').forEach((el) => el.classList.toggle('on', el.dataset.page === page))
+    pageViews.forEach((el) => el.classList.toggle('on', el.dataset.pageView === page))
+    viewButtons.forEach((el) => el.classList.toggle('on', el.dataset.view === page))
+  }
+
+  function setView(view) {
+    if (view === 'focus') {
+      app.classList.remove('dock-closed')
+      app.classList.add('focus-dock')
+      document.getElementById('focusBtn').textContent = '返回分栏'
+      viewButtons.forEach((el) => el.classList.toggle('on', el.dataset.view === 'focus'))
+      return
+    }
+    setPage(view)
+  }
+
+  // 图纸按真实视口宽度（1280 / 1600 / 1920）渲染，再整体等比缩进画布
+  function fitFrame() {
+    if (document.documentElement.classList.contains('sheet') || document.body.classList.contains('embed')) {
+      frameScale.__scale = 1
+      return
+    }
+    const avail = frameScale.parentElement.clientWidth - 24
+    const scale = Math.min(1, avail / app.offsetWidth)
+    frameScale.__scale = scale
+    frameScale.style.transform = 'scale(' + scale + ')'
+    frameScale.style.height = app.offsetHeight * scale + 'px'
+  }
+  window.addEventListener('resize', fitFrame)
+
+  sizeButtons.forEach((btn) => btn.addEventListener('click', () => {
+    sizeButtons.forEach((el) => el.classList.remove('on'))
+    btn.classList.add('on')
+    app.dataset.size = btn.dataset.size
+    app.style.removeProperty('--dock')   // 换档回到该档的默认 Dock 宽
+    fitFrame()
+  }))
+  viewButtons.forEach((btn) => btn.addEventListener('click', () => setView(btn.dataset.view)))
+  navPages.forEach((btn) => btn.addEventListener('click', () => setPage(btn.dataset.page)))
+
+  document.getElementById('themeBtn').addEventListener('click', (e) => {
+    app.classList.toggle('light')
+    e.currentTarget.textContent = app.classList.contains('light') ? '深色' : '浅色'
+  })
+  document.getElementById('dockToggle').addEventListener('click', () => {
+    app.classList.remove('focus-dock')
+    app.classList.toggle('dock-closed')
+  })
+  // Esc / 返回分栏：只退出 Focus，不关终端、不离开页面
+  function exitFocus() {
+    if (!app.classList.contains('focus-dock')) return
+    app.classList.remove('focus-dock')
+    document.getElementById('focusBtn').textContent = 'Focus'
+    const current = document.querySelector('.page-view.on')?.dataset.pageView || 'overview'
+    viewButtons.forEach((el) => el.classList.toggle('on', el.dataset.view === current))
+    fitFrame()
+  }
+  document.getElementById('focusBtn').addEventListener('click', () => {
+    if (app.classList.contains('focus-dock')) exitFocus()
+    else setView('focus')
+  })
+
+  function openPalette() {
+    paletteScrim.classList.add('on')
+    requestAnimationFrame(() => paletteInput.focus())
+  }
+  function closePalette() { paletteScrim.classList.remove('on') }
+  document.querySelectorAll('.js-palette').forEach((el) => el.addEventListener('click', openPalette))
+  paletteScrim.addEventListener('mousedown', (e) => { if (e.target === paletteScrim) closePalette() })
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openPalette() }
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'j') {
+      e.preventDefault()
+      app.classList.remove('focus-dock')
+      app.classList.toggle('dock-closed')
+    }
+    if (e.key === 'Escape') {
+      if (paletteScrim.classList.contains('on')) closePalette()
+      else exitFocus()
+    }
+  })
+
+  const px = (name) => parseFloat(getComputedStyle(app).getPropertyValue(name)) || 0
+  function dockBounds() {
+    // Dock 最大宽 = 工作区可用宽 - Canvas 最小宽 - 分隔条；不钳这一下就会横向溢出
+    const avail = app.clientWidth - px('--nav') - px('--split-rail')
+    return { min: px('--dock-min'), max: Math.max(px('--dock-min'), Math.min(px('--dock-max'), avail - px('--canvas-min'))) }
+  }
+  function setDock(width) {
+    const { min, max } = dockBounds()
+    const next = Math.round(Math.max(min, Math.min(max, width)))
+    app.style.setProperty('--dock', next + 'px')
+    split.setAttribute('aria-valuenow', String(next))
+    split.setAttribute('aria-valuemax', String(Math.round(max)))
+    return next
+  }
+  let drag = null
+  split.addEventListener('pointerdown', (e) => {
+    drag = { x: e.clientX, width: px('--dock') }
+    split.classList.add('dragging')
+    split.setPointerCapture(e.pointerId)
+  })
+  split.addEventListener('pointermove', (e) => {
+    if (!drag) return
+    const scale = frameScale.__scale || 1
+    setDock(drag.width - (e.clientX - drag.x) / scale)
+  })
+  split.addEventListener('pointerup', () => { drag = null; split.classList.remove('dragging') })
+  split.addEventListener('dblclick', () => { app.style.removeProperty('--dock'); setDock(px('--dock')) })
+  // 键盘调宽：方向键 16px 一档，Home/End 到最小 / 最大
+  split.addEventListener('keydown', (e) => {
+    const { min, max } = dockBounds()
+    if (e.key === 'ArrowLeft') setDock(px('--dock') + 16)
+    else if (e.key === 'ArrowRight') setDock(px('--dock') - 16)
+    else if (e.key === 'Home') setDock(min)
+    else if (e.key === 'End') setDock(max)
+    else return
+    e.preventDefault()
+  })
+
+  const initialSize = initial.get('size') || sheetDefaults.size
+  if (['1280', '1600', '1920'].includes(initialSize)) {
+    app.dataset.size = initialSize
+    sizeButtons.forEach((el) => el.classList.toggle('on', el.dataset.size === initialSize))
+  }
+  const initialView = initial.get('view') || sheetDefaults.view
+  if (['overview', 'projects', 'focus'].includes(initialView)) setView(initialView)
+  if (initial.get('theme') === 'light') {
+    app.classList.add('light')
+    document.getElementById('themeBtn').textContent = '深色'
+  }
+  if ((initial.get('dock') || sheetDefaults.dock) === 'closed') app.classList.add('dock-closed')
+  fitFrame()
+  setDock(px('--dock'))
+</script>
+</body>
+</html>

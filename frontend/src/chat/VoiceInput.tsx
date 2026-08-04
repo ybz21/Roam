@@ -164,7 +164,8 @@ export function VoiceInput({ accent, onResult, inline = false }: { accent: strin
           // 悬浮模式：右下角「微信式」悬浮麦克风（桌面端）。
           ...(inline
             ? { position: 'relative', flex: '0 0 auto', width: 32, height: 32 } // 对齐 antd 默认按钮高度，与 📎/发送 成一排
-            : { position: 'absolute', right: 18, bottom: 54, zIndex: 25, width: 54, height: 54 }),
+            // bottom 用变量：手机上方向簇（13 §5.3）就落在这个角，不让开就会压住 ↓ / →
+            : { position: 'absolute', right: 18, bottom: 'var(--fab-bottom, 54px)', zIndex: 25, width: 54, height: 54 }),
           borderRadius: '50%', cursor: 'pointer',
           border: 'none', touchAction: 'none', userSelect: 'none',
           display: 'flex', alignItems: 'center', justifyContent: 'center',

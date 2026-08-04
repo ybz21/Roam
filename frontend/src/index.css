@@ -17,6 +17,11 @@
   --text-dim: #8b949e;
   --text-dimmer: #6e7681;
   --brand-grad: linear-gradient(180deg, #f5f7fa 0%, #c3c9d1 46%, #9aa1ab 56%, #e7ebef 100%);
+  /* 强调色：全站只有这一组，实心块用 --accent-solid，线/文字用 --accent（见 theme.tsx） */
+  --accent: #58a6ff;
+  --accent-solid: #1f6feb;
+  --accent-soft: rgba(31, 111, 235, .14);
+  --accent-border: rgba(88, 166, 255, .45);
   --list-hover: rgba(255, 255, 255, .025);
   --scroll-thumb: #2a313a;
   --scroll-thumb-hover: #3d444d;
@@ -34,6 +39,98 @@
   --hl-built: #ffa657;
 }
 
+/* ── 布局令牌（13 设计 §3.3 / §3.5 / §8，14 设计 §8.2）─────────────────────
+   断点与档位由 layout.ts 的 useLayout() 写到 <html data-size> 上，这里只放尺寸。
+   密度、层级、安全区、软键盘四组变量全站共用，浮层不再各自硬编码数字。 */
+:root {
+  /* 密度：留白是给眼睛的，触控区是给手指的，两者独立 */
+  --tap: 44px;                    /* 最小命中边长 */
+  --ctl-h: 32px;                  /* 控件高（桌面档） */
+  --pad-page: 16px;               /* 页面四周留白 */
+  --gap: 10px;
+  /* 字号刻度（只有这六档）。此前一个页面上能数出 10 种字号，最常用的三种是
+     11.5 / 11 / 10.5——半像素级的差别没人看得出是刻意的，只会读成"随手写的"。
+     除眉标/角标外不许低于 12。 */
+  --fs-micro: 11px;               /* 眉标、角标，唯一允许 <12 的一档 */
+  --fs-meta: 12px;                /* 次要信息：时间、路径、计数 */
+  --fs-sm: 13px;                  /* 密集列表行 */
+  --fs-body: 14px;                /* 正文 */
+  --fs-lg: 16px;                  /* 区块标题 */
+  --fs-title: 22px;               /* 页面标题 */
+  --fs-chip: 12px;
+
+  /* 圆角刻度（四档）：控件 / 行 / 卡片 / 胶囊 */
+  --r-xs: 6px;
+  --r-sm: 10px;
+  --r-card: 14px;
+  --r-pill: 999px;
+  --r-sheet: 16px;
+
+  /* 间距刻度（五档）：4 的倍数，不再出现 3/5/7/9/11/13 */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --row-cozy: 42px;
+  --row-compact: 34px;
+
+  /* 桌面壳层：Navigation ｜ Canvas ｜ rail ｜ Dock 的尺寸契约 */
+  --nav-w: 224px;
+  --nav-rail: 64px;
+  --topbar-h: 40px;
+  --canvas-min: 560px;
+  --dock-min: 480px;
+  --dock-max: 880px;
+  --split-rail: 8px;
+  --split-hit: 20px;
+  --activity-rail: 320px;
+  --content-overview: 1680px;
+  --content-form: 920px;
+
+  /* 层级：九个具名层，取代 50/90/100/1000/1199/1200/1201/1300/9999 那堆魔数。
+     同层不叠——并排显示的两个 sheet 由栈管理器决定谁在上，不靠差 1 硬顶。 */
+  --z-sticky: 10;                 /* 页面内粘性头 */
+  --z-fab: 30;                    /* 悬浮按钮 / 方向键簇 */
+  --z-nav: 50;                    /* 底栏 / 导航轨 */
+  --z-subpage: 90;                /* 全屏二级页 */
+  --z-session: 100;               /* 会话全屏 */
+  --z-scrim: 900;                 /* 遮罩 */
+  --z-sheet: 1000;                /* 底部 sheet / 抽屉 */
+  --z-popup: 1300;                /* antd 弹层基座 */
+  --z-toast: 1500;
+  --z-drag: 9999;                 /* 拖拽幽灵 */
+
+  /* 边界：所有 position:fixed 的层必须显式吃安全区；--kb 由 layout.ts 回填 */
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  --kb: 0px;
+}
+
+/* 手机档：控件长高、留白收紧、正文反而放大（阅读距离更近但屏更小） */
+html[data-size="compact"] {
+  --ctl-h: 40px;
+  --pad-page: 12px;
+  --gap: 8px;
+  /* 正文放大一档：手机阅读距离更近但屏更小。其余刻度不动——档位不该顺手改整套刻度 */
+  --fs-body: 15px;
+}
+
+/* 密度是用户偏好，与档位正交；粗指针下只收留白，不收命中区 */
+html[data-density="compact"] { --row-cozy: var(--row-compact); --gap: 8px; }
+html[data-pointer="coarse"] { --ctl-h: max(var(--ctl-h), 40px); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 html, body, #root { height: 100%; margin: 0; }
 /* 禁掉移动端「下拉刷新」与滚动链/边缘回弹：轻微下拉不再误触整页刷新 */
 html, body { overscroll-behavior: none; }
@@ -48,10 +145,203 @@ body {
   transition: background-color .2s ease;
 }
 
+/* 底部 sheet 入场（prefers-reduced-motion 下由上面那条全局规则压成 0） */
+@keyframes tt-sheet-up { from { transform: translateY(100%); } }
+@keyframes tt-sheet-fade { from { opacity: 0; } }
+
+/* ── 分栏把手（14 设计 §4.3）：视觉 8px，命中区左右各扩 6px ──
+   只做一件事——拖。开合走 Command Center 的按钮或 ⌘J，不在这条上叠语义。 */
+.tt-split-rail {
+  position: relative;
+  flex: 0 0 var(--split-rail);
+  width: var(--split-rail);
+  background: var(--border-subtle);
+  cursor: col-resize;
+  touch-action: none;
+}
+.tt-split-rail::before {
+  content: "";
+  position: absolute;
+  inset: 0 calc((var(--split-hit) - var(--split-rail)) / -2);
+}
+.tt-split-rail::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 3px;
+  height: 42px;
+  transform: translate(-50%, -50%);
+  border-radius: 4px;
+  background: var(--text-dimmer);
+  opacity: .32;
+  transition: height .15s, opacity .15s, background .15s;
+}
+.tt-split-rail:hover::after,
+.tt-split-rail:focus-visible::after { height: 78px; opacity: 1; background: var(--accent); }
+.tt-split-rail:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+/* 拖拽引导线。越过 splitMax（Canvas 会不足 560）时换成琥珀色：松手的后果从
+   "再宽一点"变成"整页藏起来"，颜色先说一声。 */
+.tt-dock-guide { background: var(--accent); box-shadow: 0 0 0 1px rgba(88, 166, 255, .18); }
+.tt-dock-guide[data-focus='1'] { background: #d29922; box-shadow: 0 0 0 1px rgba(210, 153, 34, .25); }
+
+/* ── expanded 档（905–1279）的覆盖式终端面板（13 §13.1）──
+   这一档并排最多只能挤出 561–735 的 Canvas，正是要消灭的「页面被压成预览条」。
+   所以终端改成从右侧覆盖：Canvas 布局在开合前后完全不变，概览不会跳列。
+   遮罩只盖工作区（导航轨和顶栏留着）——「上下文不消失」在覆盖态同样成立。 */
+.tt-dock-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: calc(var(--z-sheet) - 1);
+  background: rgba(1, 4, 9, .5);
+  animation: ttScrimIn .18s ease;
+}
+@keyframes ttScrimIn { from { opacity: 0; } }
+@keyframes ttDockIn { from { transform: translateX(24px); opacity: .4; } }
+
+/* 会话胶囊：面板收起后右下角的入口，等价于手机上的会话坞。50 高是设计定的，
+   刚好一行「项目 · 会话」，比 FAB 多一个"当前在哪个会话"的信息量。 */
+.tt-session-capsule {
+  position: absolute;
+  right: 16px;
+  bottom: calc(16px + var(--safe-b));
+  z-index: var(--z-fab);
+  height: 50px;
+  max-width: min(320px, 60%);
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 25px;
+  background: var(--bg-container);
+  color: var(--text-bright);
+  font-size: var(--fs-meta);
+  box-shadow: 0 6px 20px rgba(1, 4, 9, .45);
+  cursor: pointer;
+  transition: border-color .15s, transform .15s;
+}
+.tt-session-capsule:hover { border-color: var(--accent-border); transform: translateY(-1px); }
+.tt-session-capsule .d { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: #3fb950; }
+.tt-session-capsule .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-session-capsule .n {
+  flex: 0 0 auto; min-width: 18px; height: 18px; padding: 0 5px;
+  display: grid; place-items: center; border-radius: 9px;
+  background: var(--accent-solid); color: #fff; font-size: 10.5px;
+}
+
+/* ── 侧边导航 / Activity Bar（14 §4.4）──
+   两态一套样式：展开 224、轨 64。轨态只是把文字和分组标题去掉，间距结构不变，
+   所以图标在两态之间不会左右跳。 */
+.tt-nav { display: flex; flex-direction: column; height: 100%; padding: 0 8px 8px; }
+.tt-nav-brand {
+  display: flex; align-items: center; gap: 11px;
+  padding: 18px 10px 14px;
+}
+.tt-nav.rail .tt-nav-brand { justify-content: center; padding: 18px 0 14px; }
+.tt-nav-brand img { flex: 0 0 auto; border-radius: 10px; box-shadow: 0 1px 3px rgba(0, 0, 0, .5); }
+.tt-nav-brand .wd { min-width: 0; line-height: 1.15; }
+.tt-nav-brand .wd strong {
+  display: block; font-size: 19px; font-weight: 800; letter-spacing: .5px;
+  background: var(--brand-grad); -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.tt-nav-brand .wd span { display: block; font-size: 10px; letter-spacing: 1.5px; color: var(--text-dimmer); }
+
+
+.tt-nav-list { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+.tt-nav-group + .tt-nav-group { margin-top: 14px; }
+.tt-nav.rail .tt-nav-group + .tt-nav-group {
+  margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-subtle);
+}
+.tt-nav-group .gl {
+  padding: 0 10px; margin-bottom: var(--sp-1);
+  color: var(--text-dimmer); font-size: var(--fs-micro); font-weight: 700; letter-spacing: .1em;
+}
+
+.tt-nav-item, .tt-nav-account, .tt-nav-collapse {
+  position: relative; display: flex; align-items: center; gap: 11px; width: 100%;
+  min-height: 38px; padding: 0 10px; border: 0; border-radius: var(--r-sm);
+  background: none; color: var(--text-dim); font-size: var(--fs-body); text-align: left;
+  cursor: pointer; transition: background .14s, color .14s;
+}
+.tt-nav.rail .tt-nav-item,
+.tt-nav.rail .tt-nav-account,
+.tt-nav.rail .tt-nav-collapse { justify-content: center; padding: 0; }
+.tt-nav-item:hover, .tt-nav-account:hover, .tt-nav-collapse:hover { background: var(--list-hover); color: var(--text-bright); }
+.tt-nav-item .ic { display: flex; flex: 0 0 auto; }
+.tt-nav-item .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 选中态：3px 左强调线 + 低饱和蓝底。整块高亮会把注意力从内容上夺走（14 §4.4） */
+.tt-nav-item.on { background: var(--accent-soft); color: var(--text-bright); }
+.tt-nav-item.on::before {
+  content: ""; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  width: 3px; height: 20px; border-radius: 0 3px 3px 0; background: var(--accent);
+}
+/* 终端是开关不是页面：给底色，但不给「当前在哪一页」的那条强调线 */
+.tt-nav-item.toggle.on::before { display: none; }
+.tt-nav-item .bd {
+  margin-left: auto; flex: 0 0 auto; min-width: 20px; height: 20px; padding: 0 6px;
+  display: grid; place-items: center; border-radius: var(--r-pill);
+  background: rgba(210, 153, 34, .18); color: #e3b341;
+  font: 600 var(--fs-micro)/1 ui-monospace, monospace;
+}
+.tt-nav-item .bd.blue { background: var(--accent-solid); color: #fff; }
+/* 轨态 badge 缩成右上角一枚点大小的角标，不挤图标 */
+.tt-nav.rail .tt-nav-item .bd {
+  position: absolute; top: 3px; right: 6px; margin: 0; min-width: 15px; height: 15px;
+  padding: 0 3px; font-size: 9.5px;
+}
+
+.tt-nav-foot { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; border-top: 1px solid var(--border-subtle); }
+.tt-nav-account .av {
+  flex: 0 0 auto; width: 26px; height: 26px; display: grid; place-items: center;
+  border-radius: 8px; background: var(--accent-soft); color: var(--accent);
+  font-size: 12px; font-weight: 800;
+}
+.tt-nav-account .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-nav-account .dots { margin-left: auto; flex: 0 0 auto; color: var(--text-dimmer); font-size: 11px; }
+
+.tt-top-create:hover { border-color: var(--accent-border); color: var(--accent); }
+
+/* ── Canvas 容器查询（14 §5.3 / §5.4）──
+   概览的列数、活动侧轨要跟「Canvas 实际有多宽」走，不跟 viewport 走：终端开合只
+   改 Canvas，1920 开着 768 的 Dock 时可用宽只有 920，此时还按 viewport 排三列必挤。
+   只给声明要用的页面开（data-cq="on"）：container-type 会让元素成为 fixed 后代的
+   包含块，全局打开会把 Git 面板 / 浮动文件抽屉这些「视口级」浮层挪进 Canvas 里。 */
+.tt-canvas[data-cq='on'] { container: canvas / inline-size; }
+
+/* ── 页头（14 §5.1 / §6.1）：一级页面共用一套——眉标 + 标题 + 一句话说明 ──
+   概览先做出来的这套，项目页照它对齐；再有新页面也照抄这三行，不要各写各的标题行。 */
+.tt-pagehead { display: flex; align-items: flex-start; gap: var(--sp-4); flex-wrap: wrap; }
+.tt-pagehead .ttl { min-width: 0; flex: 1 1 320px; }
+.tt-pagehead .kicker {
+  font-size: var(--fs-micro); font-weight: 700; letter-spacing: .12em;
+  color: var(--text-dimmer); text-transform: uppercase;
+}
+.tt-pagehead h2 {
+  margin: var(--sp-1) 0 0; font-size: var(--fs-title); line-height: 1.2;
+  letter-spacing: -.02em; color: var(--text-bright);
+}
+.tt-pagehead p { margin: var(--sp-2) 0 0; font-size: var(--fs-sm); color: var(--text-dim); }
+/* 手机：眉标和一句话说明去掉，标题降一档。
+   这两行在 766 高的屏上要 39px，而底栏已经高亮着当前页——「工作区 / 项目 / 从仓库进入
+   任务、文件、Git、Worktree 与蜂群」三行连着说的是同一件事。概览页的标题是「今天有 N
+   件事需要你」，那是内容不是标题，所以只砍眉标和说明、保留 h2。 */
+html[data-size="compact"] .tt-pagehead .kicker,
+html[data-size="compact"] .tt-pagehead p { display: none; }
+html[data-size="compact"] .tt-pagehead h2 { margin: 0; font-size: var(--fs-lg); }
+/* 概览的标题是「今天有 N 件事需要你」——那是内容不是页名，手机上降到 20 自然折行，不砍 */
+html[data-size="compact"] .ov .tt-pagehead h2 { font-size: 20px; line-height: 1.3; }
+html[data-size="compact"] .tt-pagehead { gap: var(--sp-2); }
+.tt-pagehead .acts { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
 /* ── 页面骨架：所有一级页面从同一个左上角起笔，卡片和工具区间距一致 ── */
 .tt-page {
   min-height: 100%;
-  padding: 16px;
+  /* 吃密度令牌而不是写死 16：compact 档收到 12，392 的屏上多出 8px 内容宽（13 §3.3）。
+     此前令牌定义了却没人消费，手机上还是 16。 */
+  padding: var(--pad-page);
   box-sizing: border-box;
   display: flex;
   align-items: flex-start;
@@ -60,6 +350,150 @@ body {
 .tt-page-mobile {
   padding-bottom: calc(76px + env(safe-area-inset-bottom));
 }
+/* 有会话坞时底部再让出 50——否则页面最后一行永远压在坞底下 */
+.tt-page-mobile.has-dock {
+  padding-bottom: calc(126px + env(safe-area-inset-bottom));
+}
+
+.tt-seg-scroll { scrollbar-width: none; }
+.tt-seg-scroll::-webkit-scrollbar { height: 0; }
+.tt-seg-scroll > .ant-segmented { min-width: max-content; }
+
+/* ── 手机会话页顶栏（13 §5.1）：一行 50，取代原来「标签条 + 工具条」两行 79 ──
+   省下的 29px 直接给终端画布；标签条换成中间胶囊点开的切换 sheet。 */
+.tt-sesshead {
+  flex: 0 0 50px; height: 50px; padding: 0 4px;
+  display: flex; align-items: center; gap: 4px;
+  background: var(--bg-container); border-bottom: 1px solid var(--border-subtle);
+}
+.tt-sesshead .ic {
+  flex: 0 0 auto; width: 44px; height: 44px; display: grid; place-items: center;
+  border: 0; border-radius: 10px; background: transparent; color: var(--text-dim); cursor: pointer;
+}
+.tt-sesshead .ic.on { color: var(--accent); background: var(--accent-soft); }
+.tt-sesshead .pill {
+  flex: 1 1 auto; min-width: 0; height: 36px; padding: 0 10px;
+  display: flex; align-items: center; gap: 7px;
+  border: 1px solid var(--border-subtle); border-radius: 18px;
+  background: var(--bg-base); color: var(--text-bright); font-size: var(--fs-meta); cursor: pointer;
+}
+.tt-sesshead .pill .d { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; }
+.tt-sesshead .pill .n {
+  flex: 0 0 auto; min-width: 18px; height: 18px; padding: 0 5px;
+  display: grid; place-items: center; border-radius: 9px;
+  background: var(--accent-solid); color: #fff; font: 600 10.5px/1 ui-monospace, monospace;
+}
+/* 溢出 sheet 里的「画面」一行四格图标 */
+.tt-sheet-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 4px 2px 8px; }
+.tt-sheet-grid button {
+  min-height: 48px; display: grid; place-items: center;
+  border: 1px solid var(--border-subtle); border-radius: 10px;
+  background: var(--bg-container); color: var(--text-dim); font-size: 14px; cursor: pointer;
+}
+.tt-sheet-grid button:active { background: var(--list-hover); }
+
+/* 方向簇在场时，同角的悬浮按钮（语音）整体上移，避开 148 高的十字 + 间距 */
+.tt-has-dpad { --fab-bottom: 214px; }
+
+/* ── 方向键簇（13 §5.3）：右下角十字，键 48×48 ──
+   贴在终端画布之上而不是占一条工具栏：它要常驻，又不该再吃走终端的高度。 */
+.tt-dpad {
+  position: absolute;
+  bottom: calc(12px + var(--safe-b));
+  z-index: var(--z-fab);
+  display: grid;
+  grid-template-columns: repeat(3, 48px);
+  grid-template-rows: repeat(3, 48px);
+  gap: 2px;
+  touch-action: none;
+}
+.tt-dpad[data-side='right'] { right: 10px; }
+.tt-dpad[data-side='left'] { left: 10px; }
+.tt-dpad .k {
+  display: grid; place-items: center;
+  border: 1px solid var(--border-subtle); border-radius: 12px;
+  /* 半透明：簇压在终端上，全不透明会挡住一整块输出 */
+  background: color-mix(in srgb, var(--bg-container) 82%, transparent);
+  color: var(--text-dim); font-size: 17px; line-height: 1;
+  -webkit-tap-highlight-color: transparent; user-select: none; cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+.tt-dpad .k:active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-border); }
+.tt-dpad .u { grid-area: 1 / 2; }
+.tt-dpad .l { grid-area: 2 / 1; }
+.tt-dpad .c { grid-area: 2 / 2; font-size: 15px; color: var(--text-bright); }
+.tt-dpad .r { grid-area: 2 / 3; }
+.tt-dpad .d { grid-area: 3 / 2; }
+
+/* 终端快捷键条：15 个按钮宽 913，窄栏里只露得出 600 出头。原来既没有渐隐也没有
+   滚动条提示，右边缘正好把某个键切成一半——看着就是"没显示全"。
+   与标签条同一套：隐藏滚动条 + 两侧 mask 渐隐 + 竖滚轮横移。 */
+.tt-keyrow { scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.tt-keyrow::-webkit-scrollbar { height: 0; }
+.tt-keyrow > * { flex: 0 0 auto; }
+.tt-keyrow[data-l][data-r] { mask-image: linear-gradient(90deg, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%); }
+.tt-keyrow[data-l]:not([data-r]) { mask-image: linear-gradient(90deg, transparent 0, #000 24px); }
+.tt-keyrow[data-r]:not([data-l]) { mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent 100%); }
+
+/* 方向簇的一次性说明：压在簇上方，点「知道了」后再不出现 */
+.tt-dpad-hint {
+  position: absolute; left: 12px; right: 12px; bottom: calc(178px + var(--safe-b));
+  z-index: var(--z-fab);
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-subtle); border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--bg-container) 92%, transparent);
+  backdrop-filter: blur(6px);
+  color: var(--text-dim); font-size: var(--fs-meta); line-height: 1.5;
+}
+.tt-dpad-hint .tx { min-width: 0; flex: 1 1 auto; }
+.tt-dpad-hint b { display: block; color: var(--text-bright); font-weight: 600; }
+.tt-dpad-hint button {
+  flex: 0 0 auto; min-height: 44px; padding: 0 var(--sp-2);
+  border: 0; background: none; color: var(--accent); font: inherit; cursor: pointer;
+}
+
+/* ── 会话坞（13 §4.2）：底栏之上一条 50px 常驻条 ──
+   手机上会话此前只有「全屏」和「看不见」两态，退回项目页就不知道还有几个在跑。 */
+.tt-sessdock {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 50px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-bright);
+  font-size: var(--fs-meta);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.tt-sessdock .d { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; }
+/* `项目 · 会话`：项目名先被压缩，会话名不省略——会话名才是你要找的那个 */
+.tt-sessdock .ttl, .tt-sessdock-sheet .ttl { display: flex; align-items: baseline; gap: 4px; min-width: 0; }
+.tt-sessdock .ttl .pj, .ttl .pj { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; color: var(--text-dimmer); }
+.tt-sessdock .ttl .nm, .ttl .nm { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.tt-sessdock .wait { flex: 0 0 auto; color: #e3b341; font-size: 11.5px; }
+.tt-sessdock .up { flex: 0 0 auto; margin-left: auto; color: var(--text-dimmer); }
+.tt-sessdock .cnt {
+  position: relative;
+  flex: 0 0 auto; min-width: 30px; height: 30px; padding: 0 8px;
+  display: grid; place-items: center; border: 1px solid var(--border); border-radius: 15px;
+  background: var(--bg-base); color: var(--text-dim); font: 600 12px/1 ui-monospace, monospace;
+  cursor: pointer;
+}
+/* 徽标视觉只有 30，但它是坞上唯一一个「点了不展开会话、而是出切换 sheet」的目标——
+   命中区必须撑到 44，否则手指偏一点就变成展开会话，做的是完全不同的另一件事。
+   真机实测这里原本只有 30（web-ui-checklist 的 44 断言就是为这种情况写的）。 */
+.tt-sessdock .cnt::after {
+  content: ""; position: absolute; left: 50%; top: 50%;
+  width: max(44px, 100%); height: 44px; transform: translate(-50%, -50%);
+}
+.tt-sessdock-x {
+  width: 32px; height: 32px; display: grid; place-items: center;
+  border: 0; border-radius: 8px; background: transparent; color: var(--text-dimmer);
+  font-size: 13px; cursor: pointer;
+}
+.tt-sessdock-x:hover { background: rgba(248, 81, 73, .16); color: #f85149; }
 .tt-page > * {
   width: 100%;
   min-width: 0;
@@ -79,6 +513,59 @@ body {
 }
 .tt-page .ant-space-vertical {
   align-items: stretch;
+}
+
+/* 手机档收紧容器内边距（13 §3.3 / §6）：antd Card 默认 body padding 18，叠上页面
+   12 就是 30，392 的屏上左右一共吃掉 60px（15%），卡片里的内容被挤成一条。
+   留白是给眼睛的、命中区是给手指的——收留白不影响后者。 */
+html[data-size="compact"] .ant-card { border-radius: var(--r-card); }
+html[data-size="compact"] .ant-card-body { padding: 13px; }
+html[data-size="compact"] .ant-card-head { min-height: 44px; padding-inline: 13px; }
+html[data-size="compact"] .ant-list-item { padding-inline: 0; }
+/* 卡片之间用 --gap，不各写各的 margin */
+html[data-size="compact"] .ant-card + .ant-card { margin-top: var(--gap); }
+
+/* ── 逐页塌陷（13 §6）：几处写死的多栏/固定宽在 compact 下必然溢出 ──
+   这些都是行内 style 写死的，所以只能用 !important 盖；改动集中在这里，
+   页面本身不必各加一个 isPhone 分支。 */
+/* 蜂群：Swarm.tsx 写死两列，360 屏上每列 170，拓扑与成员卡都不可读 */
+html[data-size="compact"] .tt-2col { grid-template-columns: minmax(0, 1fr) !important; }
+/* 并行竞赛：三栏对比 flex 1 1 220px，compact 下改单栏纵向比 */
+html[data-size="compact"] .tt-racecol { flex: 1 1 100% !important; max-width: none !important; }
+
+/* 设置 / Env：Form label 左对齐 + 输入框固定宽 120–220，手机上标签和输入挤成一行。
+   一条覆盖收掉，不逐个表单改（13 §6）。 */
+html[data-size="compact"] .ant-form-item-row { flex-direction: column; align-items: stretch; }
+html[data-size="compact"] .ant-form-item-label {
+  padding: 0 0 4px; text-align: left; flex: 0 0 auto; max-width: 100%;
+}
+html[data-size="compact"] .ant-form-item-label > label { height: auto; }
+html[data-size="compact"] .ant-form-item-control { flex: 1 1 auto; max-width: 100%; }
+html[data-size="compact"] .ant-form-item-control-input-content > .ant-input,
+html[data-size="compact"] .ant-form-item-control-input-content > .ant-input-affix-wrapper,
+html[data-size="compact"] .ant-form-item-control-input-content > .ant-input-number,
+html[data-size="compact"] .ant-form-item-control-input-content > .ant-select,
+html[data-size="compact"] .ant-form-item-control-input-content > .ant-picker { width: 100% !important; }
+
+/* 定时任务卡片（13 §6：表格 → 卡片） */
+.tt-cron-card {
+  padding: 12px; border: 1px solid var(--border-subtle); border-radius: var(--r-card);
+  background: var(--bg-container); display: flex; flex-direction: column; gap: 7px;
+}
+.tt-cron-card .hd { display: flex; align-items: center; gap: 8px; }
+.tt-cron-card .hd b { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-cron-card .sum { color: var(--text-dim); font-size: var(--fs-meta); }
+.tt-cron-card .meta {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  color: var(--text-dimmer); font-size: var(--fs-meta);
+}
+.tt-cron-card .ops { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* antd 自带的几处不在刻度上：List 行 8、内联 code 3 且字号 .85em。一条收掉，
+   不必逐个组件传 style（设计系统文档 §1）。 */
+.ant-list-item.ant-list-item { border-radius: var(--r-sm); }
+.ant-typography code, code.ant-typography {
+  border-radius: var(--r-xs); font-size: var(--fs-meta);
 }
 
 /* ── 细滚动条：更窄，hover 才稍亮 ── */
@@ -115,15 +602,53 @@ body {
 .tt-sep { width: 1px; height: 16px; background: var(--border-subtle); margin: 0 5px; }
 .tt-spacer { flex: 1 1 auto; min-width: 8px; }
 
-/* 会话标签：未选中不描边（原来每个都有框，很吵），选中才上强调色底 + 细框 */
+/* 标签条外壳：左侧「收起」固定，标签区独立横滚，两侧溢出给渐隐（14 §7.1） */
+.tt-tabs-wrap {
+  position: relative; display: flex; align-items: center; min-width: 0;
+  background: var(--bg-container); border-bottom: 1px solid var(--border-subtle);
+}
+.tt-tabs-wrap > .tt-tabs { flex: 1 1 auto; min-width: 0; border-bottom: 0; }
+.tt-tabs-lead { flex: 0 0 auto; display: flex; align-items: center; padding-left: 8px; }
+/* 渐隐用 mask 而不是叠一层渐变色块：底色是变量，叠色块在浅色主题下会露出接缝 */
+.tt-tabs[data-l][data-r] { mask-image: linear-gradient(90deg, transparent 0, #000 22px, #000 calc(100% - 22px), transparent 100%); }
+.tt-tabs[data-l]:not([data-r]) { mask-image: linear-gradient(90deg, transparent 0, #000 22px); }
+.tt-tabs[data-r]:not([data-l]) { mask-image: linear-gradient(90deg, #000 calc(100% - 22px), transparent 100%); }
+
+/* 会话标签：未选中不描边（原来每个都有框，很吵），选中才上强调色底 + 细框。
+   宽度 132–220（14 §7.1）：给下限是为了让标签宽度稳定，切换时不会因为名字长短乱跳。 */
 .tt-tab {
-  display: inline-flex; align-items: center; gap: 7px; max-width: 230px;
+  position: relative;
+  display: inline-flex; align-items: center; gap: 7px; min-width: 132px; max-width: 220px;
   height: 28px; padding: 0 5px 0 10px; border: 1px solid transparent; border-radius: 8px;
   color: var(--text-dim); font-size: 12.5px; line-height: 1; white-space: nowrap; cursor: pointer;
 }
 .tt-tab:hover { background: var(--list-hover); color: var(--text-bright); }
 .tt-tab.on { color: var(--text-bright); font-weight: 600; }
-.tt-tab .tt-name { overflow: hidden; text-overflow: ellipsis; }
+.tt-tab .tt-wait { flex: 0 0 auto; color: #d29922; font-weight: 600; }
+/* 名字中间省略：头段收缩 + 尾段不收缩，省略号自然落在中间（见 session-label.tsx TabName） */
+/* 这几条对 .tt-name 通用——标签条和手机会话页胶囊共用同一个 TabName。
+   之前只挂在 .tt-tab 下，胶囊里的标题就换行了，把 50px 的顶栏撑成两行。 */
+.tt-name { display: flex; min-width: 0; overflow: hidden; white-space: nowrap; }
+.tt-name .h { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-name .tl { flex: 0 0 auto; }
+/* 项目前缀弱化并优先被压缩：窄处「哪个会话」比「哪个项目」更要紧 */
+/* 头尾之间**不留 gap**：它俩是同一个名字被中间省略切开的两半，留空隙就读成了两个词
+   （真机上「桌面版… 一版优化设计」看着像两个会话名）。间距只加在项目前缀之后。 */
+.tt-name .pj {
+  /* shrink 因子给到 100：空间不足时项目名几乎吸收全部压缩，会话名尽量留全
+     （13 §4.2「先截项目名，会话名不省略」）。默认的 1 会让两边等比例挨截，
+     真机上就成了「ro… 桌面版…」——两个都没说清。 */
+  flex: 0 100 auto; min-width: 0; margin-right: 5px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--text-dimmer); font-weight: 400;
+}
+.tt-tab.dragging { opacity: .45; }
+/* 插入位提示线：拖到哪个标签左边，线就画在哪 */
+.tt-tab.dropL::before {
+  content: ""; position: absolute; left: -2px; top: 3px; bottom: 3px;
+  width: 2px; border-radius: 2px; background: var(--accent);
+}
+.tt-tab-tail { flex: 1 0 24px; align-self: stretch; }
 .tt-tab .tt-x {
   display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px;
   border-radius: 5px; color: var(--text-dimmer); opacity: 0; transition: opacity .12s ease;

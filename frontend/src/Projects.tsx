@@ -9,11 +9,14 @@
 // 分区头沿用设计图纸体例、入场一次性 stagger。全部颜色走 index.css token。
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { App as AntApp, AutoComplete, Button, Dropdown, Input, Modal, Popconfirm, Segmented, Select, Space, Spin, Tag, Tooltip, Typography } from 'antd'
-import type { MenuProps } from 'antd'
+import type { InputRef, MenuProps } from 'antd'
 import { sessionLabel } from './session-label'
 import { api, upload, makeClipboardImageFile } from './api'
 import { useI18n } from './i18n'
 import { usePreferences } from './preferences'
+import { INTENT_EVENT, takeIntent } from './intents'
+import { MobileSheet, SheetRow } from './shell/MobileSheet'
+import { useLayout } from './layout'
 import { detectPrompt } from './prompt'
 import { relTime, taskNameFromPrompt, shq, NewSessionModal, DirPicker, recentDirs, pushRecentDir, CloseWorktreeModal } from './App'
 import FileBrowser from './FileBrowser'
@@ -35,6 +38,15 @@ type Proj = {
 // 项目列表排序模式（置顶恒在最前；选择持久化）
 type ProjSort = 'name' | 'created' | 'active'
 const SORT_KEY = 'roam.projects.sort'
+const SORTS = ['name', 'created', 'active'] as const
+// 设计系统 §2：箭头/符号一律 SVG。⌕ ⇅ ✓ 这类文字符号在手机字体上画得又细又歪
+const ico = (d: React.ReactNode) => (
+  <svg viewBox="0 0 24 24" width={17} height={17} fill="none" stroke="currentColor"
+    strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round">{d}</svg>
+)
+const ICON_SEARCH = ico(<><circle cx="11" cy="11" r="7" /><line x1="16.5" y1="16.5" x2="21" y2="21" /></>)
+const ICON_SORT = ico(<><path d="M7 4v16" /><path d="M4 8l3-4 3 4" /><path d="M17 20V4" /><path d="M14 16l3 4 3-4" /></>)
+const ICON_CHECK = ico(<polyline points="4 12 9 17 20 6" />)
 
 // ── 页面级样式（一次注入；产品 token 之上只做布局/微交互）──
 const PRJ_CSS = `
@@ -64,7 +76,13 @@ const PRJ_CSS = `
 .prj-pill.on.cyan{color:#39c5cf;border-color:rgba(57,197,207,.5);background:rgba(57,197,207,.1)}
 .prj-pill.dis{opacity:.4;cursor:not-allowed}
 
-.prj-tabs{display:flex;gap:2px;margin:20px 0 2px;border-bottom:1px solid var(--border-subtle)}
+/* 项目头 64 / Tabs 40，两者 sticky（14 §6.2）：往下翻任务流时「我在哪个项目、
+   要新建什么、在看哪个 tab」始终在手边 */
+.prj-head{position:sticky;top:0;z-index:calc(var(--z-sticky) + 1);min-height:64px;
+  background:var(--bg-base);border-bottom:1px solid var(--border-subtle);margin-bottom:12px}
+.prj-tabs{position:sticky;top:64px;z-index:var(--z-sticky);
+  display:flex;gap:2px;margin:20px 0 2px;min-height:40px;
+  background:var(--bg-base);border-bottom:1px solid var(--border-subtle)}
 .prj-tab{padding:8px 13px 9px;font-size:13px;color:var(--text-dim);cursor:pointer;user-select:none;
   display:inline-flex;align-items:center;gap:6px;border-bottom:2px solid transparent;margin-bottom:-1px;
   transition:color .15s}
@@ -73,10 +91,10 @@ const PRJ_CSS = `
 .prj-tab .n{font-size:10.5px;font-family:ui-monospace,monospace;color:var(--text-dimmer);
   background:rgba(177,186,196,.08);border-radius:999px;padding:1px 6px}
 
-.prj-sect{display:flex;align-items:center;gap:8px;margin:16px 2px 4px;
-  font-size:11px;letter-spacing:.08em;color:var(--text-dim);font-weight:700}
-.prj-sect .n{font-family:ui-monospace,monospace;font-size:10.5px;color:var(--text-dimmer);font-weight:400}
-.prj-sect .ln{flex:1;border-top:1px dashed var(--border-subtle)}
+.prj-sect{display:flex;align-items:center;gap:var(--sp-2);margin:var(--sp-4) 0 var(--sp-2);
+  font-size:var(--fs-sm);color:var(--text-bright);font-weight:600}
+.prj-sect .n{font-family:ui-monospace,monospace;font-size:var(--fs-micro);color:var(--text-dim);font-weight:400}
+.prj-sect .ln{flex:1}
 .prj-sect.warn{color:#d29922}
 .prj-sect.ok{color:#3fb950}
 
@@ -86,17 +104,60 @@ const PRJ_CSS = `
   background:transparent;transition:background .15s}
 .prj-row:hover{background:var(--list-hover)}
 .prj-row:hover::before{background:rgba(88,166,255,.5)}
+/* 选中行：细蓝边 + 淡底，和 hover 区分得开（14 §6.3.1） */
+.prj-row.on{background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent-border)}
+.prj-row.on::before{background:var(--accent)}
 .prj-row .acts{opacity:.55;transition:opacity .15s;display:flex;gap:12px;font-size:12.5px;flex:0 0 auto;margin-top:3px}
 .prj-row:hover .acts{opacity:1}
 .prj-row.warn{background:rgba(210,153,34,.05);border:1px solid rgba(210,153,34,.18);margin-bottom:4px}
 .prj-row.warn:hover{background:rgba(210,153,34,.09)}
 .prj-row.warn::before{display:none}
 
-.prj-card{background:var(--bg-container);border:1px solid var(--border-subtle);border-radius:12px;
-  padding:13px 14px 11px;cursor:pointer;display:flex;flex-direction:column;gap:8px;
+/* sticky subheader（14 §6.1）：筛选与排序不该跟着列表滚走 */
+.prj-subbar{position:sticky;top:0;z-index:var(--z-sticky);display:flex;align-items:center;gap:var(--sp-3);
+  flex-wrap:wrap;margin-bottom:12px;padding:8px 0;background:var(--bg-base)}
+.prj-filters{display:flex;align-items:center;gap:var(--sp-2);min-width:0;flex:1 1 auto}
+.prj-filters .sp{flex:1 1 auto}
+/* 手机：整条 chrome 压成一行 44 —— 筛选带自己就说明了「项目列表、共 12 个」，
+   页名不必再写一遍（底栏已经高亮着「项目」）。搜索与排序收成右侧两枚图标，
+   钉住不随横滑跑掉；筛选带右缘渐隐，否则 chip 会从图标底下钻出来。 */
+html[data-size="compact"] .prj-subbar{flex-wrap:nowrap;gap:var(--sp-2);min-height:44px;padding:0;margin-bottom:var(--sp-2)}
+html[data-size="compact"] .prj-filters{overflow-x:auto;scrollbar-width:none;flex:1 1 auto;
+  mask-image:linear-gradient(90deg,#000 calc(100% - 18px),transparent 100%)}
+html[data-size="compact"] .prj-filters::-webkit-scrollbar{height:0}
+html[data-size="compact"] .prj-filters>*{flex:0 0 auto}
+html[data-size="compact"] .prj-filters .sp,
+html[data-size="compact"] .prj-filters .ant-segmented{display:none}
+/* 图标按钮：不描边——右边两个方框和左边的圆角 chip 不是一套语言。命中区靠伪元素撑到 44 */
+.prj-iconbtn{position:relative;flex:0 0 auto;width:32px;height:32px;display:none;place-items:center;
+  border:0;border-radius:var(--r-sm);background:transparent;color:var(--text-dim);cursor:pointer}
+.prj-iconbtn::after{content:"";position:absolute;left:50%;top:50%;width:44px;height:44px;transform:translate(-50%,-50%)}
+.prj-iconbtn:active{background:var(--list-hover)}
+html[data-size="compact"] .prj-iconbtn{display:grid}
+/* 搜索：桌面常驻，手机点图标后原地展开（不新增一行） */
+html[data-size="compact"] .prj-subbar .prj-search{display:none}
+html[data-size="compact"] .prj-subbar.searching .prj-search{display:block;flex:1 1 auto}
+html[data-size="compact"] .prj-subbar.searching .prj-filters,
+html[data-size="compact"] .prj-subbar.searching .prj-iconbtn.find{display:none}
+.prj-chip{display:inline-flex;align-items:center;gap:var(--sp-2);height:28px;padding:0 var(--sp-3);border-radius:var(--r-pill);
+  border:1px solid var(--border);background:transparent;color:var(--text-dim);font-size:12px;
+  cursor:pointer;white-space:nowrap;transition:color .15s,border-color .15s,background .15s}
+.prj-chip:hover{color:var(--text-bright);border-color:#8b949e}
+.prj-chip.on{color:var(--accent);border-color:var(--accent-border);background:var(--accent-soft)}
+.prj-chip .n{font-family:ui-monospace,monospace;font-size:var(--fs-micro);color:var(--text-dimmer)}
+.prj-chip.on .n{color:#79b8ff}
+
+/* 卡片列固定在 ≥320：原来是 minmax(270,1fr)，右侧一开终端就塌成一条极窄列表（14 §6.1） */
+.prj-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:var(--sp-4)}
+
+.prj-card{background:var(--bg-container);border:1px solid var(--border-subtle);border-radius:var(--r-card);
+  padding:var(--sp-3) var(--sp-4);cursor:pointer;display:flex;flex-direction:column;gap:8px;
   transition:border-color .18s,transform .18s,box-shadow .18s}
 .prj-card:hover{border-color:rgba(88,166,255,.45);transform:translateY(-1px);box-shadow:var(--card-hover-shadow)}
-.prj-card .prj-acts{opacity:.25;transition:opacity .15s;display:inline-flex;gap:10px;align-items:center}
+.prj-card:focus-visible{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.prj-card .prj-acts{opacity:.25;transition:opacity .15s;display:inline-flex;gap:var(--sp-3);align-items:center}
+/* 次要操作 hover 才出现，但键盘走到时同样要看得见——否则纯键盘用户够不着（14 §6.1） */
+.prj-card:focus-within .prj-acts,.prj-card:focus-visible .prj-acts{opacity:1}
 .prj-card:hover .prj-acts{opacity:1}
 .prj-card .prj-acts .pinned{opacity:1}
 
@@ -169,7 +230,7 @@ export function Lifec({ done, cur }: { done: number; cur?: number }) {
   )
 }
 
-export default function Projects({ openTerm, closeTerm, initialKey }: { openTerm: (n: string) => void; closeTerm: (n: string) => void; initialKey?: string }) {
+export default function Projects({ openTerm, closeTerm, initialKey, activeTerm }: { openTerm: (n: string) => void; closeTerm: (n: string) => void; initialKey?: string; activeTerm?: string | null }) {
   const [data, setData] = useState<{ projects: Proj[]; loose: ProjSession[] }>({ projects: [], loose: [] })
   const [loaded, setLoaded] = useState(false)
   const load = () => api('GET', '/projects').then((r) => {
@@ -182,7 +243,7 @@ export default function Projects({ openTerm, closeTerm, initialKey }: { openTerm
     <>
       <style>{PRJ_CSS}</style>
       {initialKey
-        ? <ProjectHome proj={data.projects.find((x) => x.key === initialKey)} allProjects={data.projects} loaded={loaded} openTerm={openTerm} closeTerm={closeTerm} refresh={load} />
+        ? <ProjectHome proj={data.projects.find((x) => x.key === initialKey)} allProjects={data.projects} loaded={loaded} openTerm={openTerm} closeTerm={closeTerm} refresh={load} activeTerm={activeTerm} />
         : <ProjectList data={data} loaded={loaded} openTerm={openTerm} refresh={load} />}
     </>
   )
@@ -223,7 +284,7 @@ function NewProjectModal({ open, onClose }: { open: boolean; onClose: () => void
             <Button onClick={() => setPick(true)}>{t('common.browse')}</Button>
           </Space.Compact>
           <Input placeholder={t('project.displayName')} value={name} onChange={(e) => setName(e.target.value)} />
-          <div style={{ fontSize: 12, color: 'var(--text-dimmer)' }}>{t('project.newHint')}</div>
+          <div style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)' }}>{t('project.newHint')}</div>
         </Space>
       </Modal>
       <DirPicker open={pick} start={dir} onPick={(p) => { setDir(p); setPick(false) }} onClose={() => setPick(false)} />
@@ -243,6 +304,15 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
     try { return (localStorage.getItem(SORT_KEY) as ProjSort) || 'name' } catch { return 'name' }
   })
   const changeSort = (v: ProjSort) => { setSortBy(v); try { localStorage.setItem(SORT_KEY, v) } catch {} }
+  // 新建项目的按钮只有顶栏那一枚（Command Center，14 §4.5）：它切到本页并留下一个
+  // 意图，这里挂载时取走。挂载时也要取一次——从别的页面点过来时，事件早在本组件
+  // 存在之前就发完了（见 intents.ts）。
+  useEffect(() => {
+    const on = () => { if (takeIntent('new-project')) setNewOpen(true) }
+    on()
+    window.addEventListener(INTENT_EVENT, on)
+    return () => window.removeEventListener(INTENT_EVENT, on)
+  }, [])
   // 排序：置顶恒在最前；名称(默认,稳定)/创建时间(新在前)/最近活跃(新在前)
   const sorted = useMemo(() => [...data.projects].sort((a, b) => {
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
@@ -259,29 +329,53 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
     catch (e: any) { message.error(e.message) }
   }
   const open = (p: Proj) => { location.hash = '#/projects/' + encodeURIComponent(p.key) }
-  return (
-    <div style={{ height: '100%', overflow: 'auto' }}>
-      <div className="prj-wrap-wide">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 16, fontWeight: 700 }}>{t('project.title')}</span>
-          <Segmented size="small" value={sortBy} onChange={(v) => changeSort(v as ProjSort)}
-            options={[
-              { label: t('project.sort.name'), value: 'name' },
-              { label: t('project.sort.created'), value: 'created' },
-              { label: t('project.sort.active'), value: 'active' },
-            ]} />
-          <span style={{ flex: 1 }} />
-          <Button type="primary" size="small" onClick={() => setNewOpen(true)}>{t('project.newProject')}</Button>
-        </div>
 
-        {loaded && data.projects.length === 0 && (
-          <div className="prj-empty" style={{ textAlign: 'center', padding: '48px 0' }}>{t('project.empty')}</div>
-        )}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(270px, 1fr))', gap: 14 }}>
-          {sorted.map((p, i) => (
-            <div key={p.key} onClick={() => open(p)} className="prj-card prj-in" style={{ animationDelay: `${Math.min(i, 8) * 45}ms` }}>
+  // 搜索 + 筛选（14 §6.1）：项目一多，「哪些还欠着事」比「一共有几个」有用得多
+  const { phone: isPhone } = useLayout()
+  const [q, setQ] = useState('')
+  const [searching, setSearching] = useState(false)
+  const [sortSheet, setSortSheet] = useState(false)
+  const searchRef = useRef<InputRef>(null)
+  const [filter, setFilter] = useState<'all' | 'active' | 'unfinished'>('all')
+  const counts = useMemo(() => ({
+    all: data.projects.length,
+    active: data.projects.filter((p) => p.sessions > 0).length,
+    unfinished: data.projects.filter((p) => p.unfinished > 0).length,
+  }), [data.projects])
+  const visible = useMemo(() => {
+    const kw = q.trim().toLowerCase()
+    return sorted.filter((p) => {
+      if (filter === 'active' && p.sessions <= 0) return false
+      if (filter === 'unfinished' && p.unfinished <= 0) return false
+      if (!kw) return true
+      return p.name.toLowerCase().includes(kw) || p.dir.toLowerCase().includes(kw)
+    })
+  }, [sorted, q, filter])
+  // 置顶与活跃共用同一套栅格，只靠 section header 分组（14 §6.1）——两套栅格会让
+  // 卡片宽度在分组之间对不齐
+  const pinned = visible.filter((p) => p.pinned)
+  const rest = visible.filter((p) => !p.pinned)
+
+  // 上下左右移动选中：列数从栅格实际算，不写死——它随 Canvas 宽度变
+  const onGridKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return
+    const grid = e.currentTarget
+    const cards = [...grid.querySelectorAll<HTMLElement>('[data-prj-card]')]
+    const at = cards.indexOf(document.activeElement as HTMLElement)
+    if (at < 0) return
+    e.preventDefault()
+    const cols = Math.max(1, getComputedStyle(grid).gridTemplateColumns.split(' ').length)
+    const step = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : e.key === 'ArrowUp' ? -cols : cols
+    cards[Math.max(0, Math.min(cards.length - 1, at + step))]?.focus()
+  }
+
+  const card = (p: Proj, i: number) => (
+    <div key={p.key} onClick={() => open(p)} className="prj-card prj-in" data-prj-card
+      role="button" tabIndex={0} aria-label={p.name}
+      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); open(p) } }}
+      style={{ animationDelay: `${Math.min(i, 8) * 45}ms` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontWeight: 700, fontSize: 14.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                <span style={{ fontWeight: 700, fontSize: 'var(--fs-body)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
                 {p.races > 0 && <Tag color="gold" style={{ margin: 0 }}>{t('project.race', { count: p.races })}</Tag>}
                 <span style={{ flex: 1 }} />
                 <span className="prj-acts">
@@ -291,12 +385,12 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
                   </Tooltip>
                   <Popconfirm title={t('project.removeConfirm')} onConfirm={() => remove(p)}
                     onPopupClick={(e) => e.stopPropagation()}>
-                    <a onClick={(e) => e.stopPropagation()} style={{ color: 'var(--text-dimmer)', fontSize: 12 }}>✕</a>
+                    <a onClick={(e) => e.stopPropagation()} style={{ color: 'var(--text-dimmer)', fontSize: 'var(--fs-meta)' }}>✕</a>
                   </Popconfirm>
                 </span>
               </div>
-              <div className="prj-mono" style={{ fontSize: 11, color: 'var(--text-dimmer)', marginTop: -4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.dir}>{p.dir}</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 12, color: 'var(--text-dim)' }}>
+              <div className="prj-mono" style={{ fontSize: 'var(--fs-micro)', color: 'var(--text-dimmer)', marginTop: -4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.dir}>{p.dir}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap', fontSize: 'var(--fs-meta)', color: 'var(--text-dim)' }}>
                 <span><b style={{ color: 'var(--text-bright)' }}>{p.sessions}</b> {t('project.tasks')}</span>
                 {p.git && <>·<span><b style={{ color: 'var(--text-bright)' }}>{p.worktrees}</b> worktree</span></>}
                 {p.unfinished > 0 && <Tag color="warning" style={{ margin: 0 }}>{t('project.unfinished', { count: p.unfinished })}</Tag>}
@@ -304,22 +398,99 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
               </div>
               {(p.top?.length || 0) > 0 && (
                 <div style={{
-                  display: 'flex', flexDirection: 'column', gap: 5, padding: '7px 9px',
-                  borderRadius: 8, background: 'var(--bg-term)', border: '1px solid var(--border-subtle)', fontSize: 12.5,
+                  display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)', padding: '7px 9px',
+                  borderRadius: 'var(--r-sm)', background: 'var(--bg-term)', border: '1px solid var(--border-subtle)', fontSize: 'var(--fs-sm)',
                 }}>
                   {p.top!.map((s) => (
-                    <div key={s.name} style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+                    <div key={s.name} style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', minWidth: 0 }}>
                       {dot(false, s.waiting ? '#d29922' : s.running ? '#3fb950' : undefined)}
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.name}>{s.label || sessionLabel(s.name)}</span>
-                      {s.branch && <Tag color="cyan" style={{ margin: 0, fontSize: 10.5, lineHeight: '16px', padding: '0 5px' }}>⎇</Tag>}
-                      <span style={{ marginLeft: 'auto', color: 'var(--text-dimmer)', fontSize: 11.5, flex: '0 0 auto' }}>{relTime(s.lastActivity, t)}</span>
+                      {s.branch && <Tag color="cyan" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px', padding: '0 5px' }}>⎇</Tag>}
+                      <span style={{ marginLeft: 'auto', color: 'var(--text-dimmer)', fontSize: 'var(--fs-meta)', flex: '0 0 auto' }}>{relTime(s.lastActivity, t)}</span>
                     </div>
                   ))}
                 </div>
               )}
+    </div>
+  )
+
+  return (
+    // 这里**不能**加 overflow:auto——任何非 visible 的祖先都会成为 sticky 的
+    // 参照系，而这一层并不真的滚动（真正滚的是 .tt-canvas），于是页头永远粘不住。
+    <div>
+      <div className="prj-wrap-wide">
+        {/* 页头与概览共用一套（.tt-pagehead）：眉标 + 标题 + 一句话。原来这里只有一个
+            16px 的「项目」挤在搜索框左边，和概览那页完全不像同一个产品。 */}
+        {/* 手机上整块不渲染：底栏已高亮「项目」，筛选带里的「全部 12」又说明了总量，
+            再写一遍大号页名等于用 100px 说一句用户已经知道的话。桌面保留。 */}
+        {!isPhone && (
+          <header className="tt-pagehead" style={{ marginBottom: 14 }}>
+            <div className="ttl">
+              <div className="kicker">{t('nav.groupWorkspace')}</div>
+              <h2>{t('project.title')}</h2>
+              <p>{t('project.subtitle')}</p>
             </div>
-          ))}
+          </header>
+        )}
+
+        {/* sticky subheader（14 §6.1）：搜索 / 筛选 / 排序。滚到项目列表深处时这一条还在——
+            筛选条件跟着内容滚走，等于要滚回顶部才能改。 */}
+        <div className={`prj-subbar${searching ? ' searching' : ''}`}>
+          <Input allowClear size="small" value={q} onChange={(e) => setQ(e.target.value)}
+            ref={searchRef} className="prj-search" onBlur={() => { if (!q) setSearching(false) }}
+            placeholder={t('project.searchPlaceholder')} style={{ width: isPhone ? undefined : 200 }} />
+          {/* 筛选与排序合成一条横滑带：手机上它俩各自换行，加上搜索框一共占了 5 行，
+              第一张卡片被推到屏幕 26% 处。现在一行装下，滑得到即可。 */}
+          <div className="prj-filters">
+            {([
+              ['all', t('project.filterAll'), counts.all],
+              ['active', t('project.filterActive'), counts.active],
+              ['unfinished', t('project.section.unfinished'), counts.unfinished],
+            ] as const).map(([k, label, n]) => (
+              <button key={k} type="button" className={`prj-chip${filter === k ? ' on' : ''}`}
+                onClick={() => setFilter(k)}>{label}<span className="n">{n}</span></button>
+            ))}
+            <span className="sp" />
+            <Segmented size="small" value={sortBy} onChange={(v) => changeSort(v as ProjSort)}
+              options={SORTS.map((k) => ({ label: t(`project.sort.${k}`), value: k }))} />
+          </div>
+          {/* 手机：搜索原地展开、排序进 sheet。两枚图标钉在右侧，不随筛选带横滑跑掉 */}
+          <button type="button" className="prj-iconbtn find" aria-label={t('project.searchPlaceholder')}
+            onClick={() => { setSearching(true); setTimeout(() => searchRef.current?.focus(), 0) }}>
+            {ICON_SEARCH}
+          </button>
+          <button type="button" className="prj-iconbtn" aria-label={t('project.sortBy')}
+            onClick={() => setSortSheet(true)}>{ICON_SORT}</button>
+          {searching && (
+            <button type="button" className="prj-iconbtn" style={{ display: 'grid', width: 'auto', padding: '0 4px', fontSize: 'var(--fs-meta)' }}
+              onClick={() => { setSearching(false); setQ('') }}>{t('common.cancel')}</button>
+          )}
         </div>
+
+        <MobileSheet open={sortSheet} title={t('project.sortBy')} onClose={() => setSortSheet(false)}>
+          {SORTS.map((k) => (
+            <SheetRow key={k} minHeight={44} active={sortBy === k}
+              title={t(`project.sort.${k}`)}
+              extra={sortBy === k ? <span style={{ color: 'var(--accent)' }}>{ICON_CHECK}</span> : undefined}
+              onClick={() => { changeSort(k); setSortSheet(false) }} />
+          ))}
+        </MobileSheet>
+
+        {loaded && data.projects.length === 0 && (
+          <div className="prj-empty" style={{ textAlign: 'center', padding: '48px 0' }}>{t('project.empty')}</div>
+        )}
+        {loaded && data.projects.length > 0 && visible.length === 0 && (
+          <div className="prj-empty" style={{ textAlign: 'center', padding: '48px 0' }}>{t('project.noMatch')}</div>
+        )}
+
+        {pinned.length > 0 && (
+          <div className="prj-sect"><b>{t('project.pinnedSection')}</b><span className="n">{pinned.length}</span><span className="ln" /></div>
+        )}
+        {pinned.length > 0 && <div className="prj-grid" onKeyDown={onGridKey}>{pinned.map(card)}</div>}
+        {pinned.length > 0 && rest.length > 0 && (
+          <div className="prj-sect"><b>{t('overview.activeProjects')}</b><span className="n">{rest.length}</span><span className="ln" /></div>
+        )}
+        {rest.length > 0 && <div className="prj-grid" onKeyDown={onGridKey}>{rest.map(card)}</div>}
 
         {data.loose.length > 0 && (
           <>
@@ -330,7 +501,7 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
               <div key={s.name} className="prj-row" onClick={() => openTerm(s.name)}>
                 <span style={{ marginTop: 5, display: 'inline-flex' }}>{dot(false, s.waiting ? '#d29922' : s.running ? '#3fb950' : undefined)}</span>
                 <span style={{ fontWeight: 600 }} title={s.name}>{s.label || sessionLabel(s.name)}</span>
-                <span style={{ color: 'var(--text-dimmer)', fontSize: 12, marginTop: 2 }}>{relTime(s.lastActivity, t)}</span>
+                <span style={{ color: 'var(--text-dimmer)', fontSize: 'var(--fs-meta)', marginTop: 2 }}>{relTime(s.lastActivity, t)}</span>
                 <span style={{ flex: 1 }} />
                 <span className="acts"><a>{t('project.enter')}</a></span>
               </div>
@@ -387,7 +558,7 @@ function FinishModal({ w, base, onClose, onDone, onRevive }: {
   }
   const radio = (k: typeof mode, title: any, desc: string, danger?: boolean) => (
     <div onClick={() => setMode(k)} style={{
-      display: 'flex', gap: 9, padding: '10px 12px', borderRadius: 10, cursor: 'pointer',
+      display: 'flex', gap: 'var(--sp-2)', padding: '10px 12px', borderRadius: 10, cursor: 'pointer',
       border: `1px solid ${mode === k ? 'rgba(88,166,255,.6)' : 'var(--border)'}`,
       background: mode === k ? 'rgba(31,111,235,.09)' : 'transparent',
     }}>
@@ -398,7 +569,7 @@ function FinishModal({ w, base, onClose, onDone, onRevive }: {
       }} />
       <span style={{ minWidth: 0 }}>
         <b style={{ display: 'block', fontSize: 13.5, color: danger ? '#f85149' : undefined }}>{title}</b>
-        <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>{desc}</span>
+        <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-dim)' }}>{desc}</span>
       </span>
     </div>
   )
@@ -407,7 +578,7 @@ function FinishModal({ w, base, onClose, onDone, onRevive }: {
       okButtonProps={mode === 'discard' && !merged ? { danger: true } : undefined}
       title={<span>{t('project.finish.title')} <Tag color="cyan" className="prj-mono" style={{ marginLeft: 4 }}>⎇ {w.branch}</Tag></span>} destroyOnClose>
       <Space direction="vertical" style={{ width: '100%' }} size={12}>
-        <div className="prj-mono" style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.8, padding: '9px 12px', border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-term)' }}>
+        <div className="prj-mono" style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-dim)', lineHeight: 1.8, padding: '9px 12px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-sm)', background: 'var(--bg-term)' }}>
           <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t('project.finish.kept', { path: w.path })}</div>
           {/* 已合入：损失清单换成绿色定心丸（10 §5），未提交改动仍如实提示 */}
           {merged
@@ -419,10 +590,10 @@ function FinishModal({ w, base, onClose, onDone, onRevive }: {
         </div>
         {(diff?.committed?.files?.length || 0) > 0 && (
           <div>
-            <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 5 }}>{t('project.finish.take', { base: wtBase })}</div>
-            <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '4px 2px', maxHeight: 160, overflow: 'auto' }}>
+            <div style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-dim)', marginBottom: 5 }}>{t('project.finish.take', { base: wtBase })}</div>
+            <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-sm)', padding: '4px 2px', maxHeight: 160, overflow: 'auto' }}>
               {diff.committed.files.slice(0, 20).map((f: any) => (
-                <div key={f.path} className="prj-mono" style={{ display: 'flex', gap: 8, padding: '3px 10px', fontSize: 12 }}>
+                <div key={f.path} className="prj-mono" style={{ display: 'flex', gap: 8, padding: '3px 10px', fontSize: 'var(--fs-meta)' }}>
                   <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.path}</span>
                   {f.binary ? <span style={{ color: 'var(--text-dimmer)' }}>bin</span> : (<span style={{ flex: '0 0 auto' }}>
                     <span style={{ color: '#3fb950' }}>+{f.adds}</span> <span style={{ color: '#f85149' }}>-{f.dels}</span>
@@ -430,7 +601,7 @@ function FinishModal({ w, base, onClose, onDone, onRevive }: {
                 </div>
               ))}
             </div>
-            {uncommitted > 0 && <div style={{ fontSize: 12, color: '#d29922', marginTop: 5 }}>{t('project.finish.uncommitted', { count: uncommitted })}</div>}
+            {uncommitted > 0 && <div style={{ fontSize: 'var(--fs-meta)', color: '#d29922', marginTop: 5 }}>{t('project.finish.uncommitted', { count: uncommitted })}</div>}
           </div>
         )}
         {radio('merge', <>
@@ -444,7 +615,7 @@ function FinishModal({ w, base, onClose, onDone, onRevive }: {
           ? radio('discard', t('project.finish.optDiscard'), t('project.finish.optDiscardMergedDesc', { target: w.mergedInto }))
           : radio('discard', t('project.finish.optDiscard'), t('project.finish.optDiscardDesc', { ahead: w.committedAhead }), true)}
         {mode !== 'revive' && (
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--text-dim)' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--fs-sm)', color: 'var(--text-dim)' }}>
             <input type="checkbox" checked={delBranch} onChange={(e) => setDelBranch(e.target.checked)} style={{ accentColor: '#1f6feb' }} />
             {t('project.finish.delBranch', { branch: w.branch })}
           </label>
@@ -468,7 +639,8 @@ function normDir(p: string): string {
 }
 
 // ── P2 项目主页：头部 + composer(hero) + 任务流/Worktree/编队/活动 ──
-function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }: {
+function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, activeTerm }: {
+  activeTerm?: string | null
   proj?: Proj; allProjects: Proj[]; loaded: boolean; openTerm: (n: string) => void; closeTerm: (n: string) => void; refresh: () => void
 }) {
   const { t } = useI18n()
@@ -489,6 +661,13 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
   const [races, setRaces] = useState<any[]>([])
   const [swarms, setSwarms] = useState<any[]>([])
   const [swarmOpen, setSwarmOpen] = useState(false)
+  // 「＋ 开始」的主动作：回到 composer 并聚焦——这一页最主要的事就是在这儿描述需求
+  const composerRef = useRef<HTMLDivElement>(null)
+  const promptRef = useRef<any>(null)
+  const focusComposer = () => {
+    composerRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    promptRef.current?.focus?.()
+  }
   const [activity, setActivity] = useState<any[]>([])
   const [finishing, setFinishing] = useState<any>(null)
   const [swarmExtras, setSwarmExtras] = useState<Record<string, { cols: Record<string, number>; last?: any }>>({})
@@ -857,7 +1036,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
           content: (
             <div style={{ fontSize: 13 }}>
               <div style={{ marginBottom: 6 }}>{t('worktree.mergeConflictDesc', { stage: ae.stage || '?' })}</div>
-              <ul style={{ paddingLeft: 18, margin: 0, fontFamily: 'ui-monospace, monospace', fontSize: 12 }}>
+              <ul style={{ paddingLeft: 18, margin: 0, fontFamily: 'ui-monospace, monospace', fontSize: 'var(--fs-meta)' }}>
                 {(ae.conflictFiles || []).map((cf: string) => <li key={cf}>{cf}</li>)}
               </ul>
             </div>
@@ -872,7 +1051,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
     Modal.confirm({
       title: t('project.wt.deleteConfirm', { branch: w.branch || w.path }),
       content: (
-        <div style={{ fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.8 }}>
+        <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-dim)', lineHeight: 1.8 }}>
           <div>{t('project.wt.deleteKeepsBranch', { branch: w.branch || '?' })}</div>
           {dirty > 0 && <div style={{ color: '#d29922' }}>{t('project.wt.deleteLosesDirty', { count: dirty })}</div>}
           {w.committedAhead > 0 && !w.pushed && <div style={{ color: '#d29922' }}>{t('project.wt.deleteUnpushed', { count: w.committedAhead })}</div>}
@@ -947,15 +1126,18 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
     else if (gs === 'merged') { done = 4; stage = t('project.stage.merged') } // 合入检测（10 §5）：导轨走满
     else if (gs === 'pushed') { done = 3; cur = 4; stage = t('project.stage.pushed') } // 已推送待合入：审毕、并在跑
     else if (gs === 'committed') { done = 2; cur = 3; stage = t('project.stage.committed') } // 本地已提交未推送
+    // 从这一行开的会话：行保持选中并给细蓝边，页面与终端的对应关系不靠记（14 §6.3.1）
     return (
-      <div key={s.name} className="prj-row prj-in" style={{ marginLeft: isChild ? 22 : 0, animationDelay: `${Math.min(i, 8) * 40}ms` }}
+      <div key={s.name} className={`prj-row prj-in${activeTerm === s.name ? ' on' : ''}`}
+        aria-current={activeTerm === s.name ? 'true' : undefined}
+        style={{ marginLeft: isChild ? 22 : 0, animationDelay: `${Math.min(i, 8) * 40}ms` }}
         onClick={() => openTerm(s.name)}>
         <span style={{ marginTop: 7, display: 'inline-flex' }}>{dot(false, waiting ? '#d29922' : running ? '#3fb950' : undefined)}</span>
-        {isChild && <span style={{ color: '#a371f7', fontSize: 12, marginTop: 3 }}>⑂</span>}
+        {isChild && <span style={{ color: '#a371f7', fontSize: 'var(--fs-meta)', marginTop: 3 }}>⑂</span>}
         <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
             <span style={{ fontWeight: 700 }} title={s.name}>{s.label || sessionLabel(s.name)}</span>
-            {hit.linked && hit.branch && <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 11 }}>⎇ {hit.branch}</Tag>}
+            {hit.linked && hit.branch && <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 'var(--fs-micro)' }}>⎇ {hit.branch}</Tag>}
             {hit.external && hit.linked && <Tag style={{ margin: 0 }}>⧉</Tag>}
             {swarmMap[s.name]?.role === 'leader' && <Tag color="purple" style={{ margin: 0 }}>{t('project.swarm.leaderTag')}</Tag>}
             {swarmMap[s.name]?.subrole && <Tag style={{ margin: 0 }}>{t(('swarm.subrole.' + swarmMap[s.name]!.subrole) as any) || swarmMap[s.name]!.subrole}</Tag>}
@@ -969,21 +1151,21 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
               </Tooltip>
             )}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12, color: 'var(--text-dimmer)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)' }}>
             <Lifec done={done} cur={cur} /><span>{stage}</span>
             {/* 已合入后 ↑n 不再展示（对比远端已零领先，只会误导）；未提交改动照常提示 */}
             {merged && (
               <Tooltip title={`${w.mergedInto} · ${w.mergedKind}`}>
-                <span style={{ color: '#3fb950', fontSize: 11.5 }}>✓ {t('project.mergedTag')}</span>
+                <span style={{ color: '#3fb950', fontSize: 'var(--fs-meta)' }}>✓ {t('project.mergedTag')}</span>
               </Tooltip>
             )}
             {gs === 'pushed' && (
               <Tooltip title={hit.branch ? `origin/${hit.branch}` : undefined}>
-                <span style={{ color: '#58a6ff', fontSize: 11.5 }}>⇡ {t('project.pushedTag')}</span>
+                <span style={{ color: '#58a6ff', fontSize: 'var(--fs-meta)' }}>⇡ {t('project.pushedTag')}</span>
               </Tooltip>
             )}
             {(!merged && ahead > 0 || changes > 0) && (
-              <span className="prj-mono" style={{ fontSize: 11.5 }}>
+              <span className="prj-mono" style={{ fontSize: 'var(--fs-meta)' }}>
                 {!merged && ahead > 0 && <span style={{ color: '#58a6ff' }}>↑{ahead}</span>}
                 {!merged && ahead > 0 && changes > 0 && ' · '}
                 {changes > 0 && <span style={{ color: '#d29922' }}>{t('project.wt.changes', { count: changes })}</span>}
@@ -1009,10 +1191,13 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
   )
 
   return (
-    <div style={{ height: '100%', overflow: 'auto' }}>
+    // 这里**不能**加 overflow:auto——任何非 visible 的祖先都会成为 sticky 的
+    // 参照系，而这一层并不真的滚动（真正滚的是 .tt-canvas），于是页头永远粘不住。
+    <div>
       <div className="prj-wrap">
-        {/* 项目头：面包屑 | 名称 / 路径 · ⎇主干@HEAD | Git 面板 */}
-        <div className="prj-in" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+        {/* 项目头：面包屑 | 名称 / 路径 · ⎇主干@HEAD | 主操作。sticky（14 §6.2）——
+            往下翻任务流时"我在哪个项目、要新建什么"不该跟着滚走。 */}
+        <div className="prj-in prj-head" style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)' }}>
           <Button type="text" size="small" onClick={() => { location.hash = '#/projects' }}
             style={{ color: 'var(--text-dim)', paddingInline: 6, flex: '0 0 auto' }}>‹ {t('project.title')}</Button>
           <span style={{ width: 1, height: 18, background: 'var(--border-subtle)', flex: '0 0 auto' }} />
@@ -1022,7 +1207,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
               ellipsis editable={{ onChange: rename, tooltip: t('project.rename'), triggerType: ['icon'] }}>
               {proj.name}
             </Typography.Text>
-            <div className="prj-mono" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--text-dimmer)' }}>
+            <div className="prj-mono" style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)' }}>
               <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={proj.dir}>
                 {proj.dir}
                 {isGit && defBranch && <span style={{ color: '#39c5cf' }}> · ⎇ {defBranch}{mainHead ? ` @ ${mainHead}` : ''}</span>}
@@ -1033,13 +1218,30 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
               </Tooltip>
             </div>
           </div>
-          <Button size="small" onClick={newShell}>{t('project.shell')}</Button>
           {isGit && <Button size="small" onClick={() => setGitOpen(true)}>{t('project.gitPanel')}</Button>}
+          {/* 「新建会话 / 蜂群 / Race / 命令行」原来散在页头和编队 tab 里，两处入口互相不知道
+              对方存在。集中成一枚 split button：主动作 = 回到 composer 描述需求（这一页最主要的
+              事），其余进菜单（14 §6.2）。 */}
+          {/* 必须包一层并钉住 flex：Dropdown.Button 内部的 Space.Compact 在 flex 容器里
+              是块级 flex 子项，会一路撑到 723px，把左边的项目名挤成 0 宽 */}
+          <span style={{ flex: '0 0 auto', display: 'inline-flex' }}>
+          <Dropdown.Button size="small" type="primary" trigger={['click']}
+            onClick={focusComposer}
+            menu={{ items: [
+              { key: 'shell', label: t('project.shell'), onClick: newShell },
+              ...(isGit ? [
+                { key: 'swarm', label: t('project.newSwarm'), onClick: () => setSwarmOpen(true) },
+                { key: 'race', label: t('project.newRace'), onClick: () => setRaceOpen(true) },
+              ] : []),
+            ] }}>
+            ＋ {t('project.start')}
+          </Dropdown.Button>
+          </span>
         </div>
 
         {/* Composer（hero）：需求 ⏎ 开干 */}
-        <div className="prj-composer prj-in" style={{ animationDelay: '60ms' }}>
-          <Input.TextArea value={prompt} onChange={(e) => setPrompt(e.target.value)}
+        <div ref={composerRef} className="prj-composer prj-in" style={{ animationDelay: '60ms' }}>
+          <Input.TextArea ref={promptRef} value={prompt} onChange={(e) => setPrompt(e.target.value)}
             placeholder={isGit ? t('project.composerPlaceholder') : t('project.composerPlain')} autoSize={{ minRows: 2, maxRows: 6 }} variant="borderless"
             onPaste={onPasteComposer}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); goCreate() } }} />
@@ -1056,21 +1258,21 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
                 <Select size="small" style={{ minWidth: 160 }} value={wtPath} onChange={setWtPath}
                   options={wts.map((w: any) => ({ value: w.path, label: '⎇ ' + (w.branch || w.path.split('/').pop()) }))} />
               )}
-              {wtMode === 'new' && <span className="prj-mono" style={{ fontSize: 11, color: 'var(--text-dimmer)' }}>{defBranch ? t('project.basedOn', { base: defBranch }) : t('project.baseDefault')}</span>}
+              {wtMode === 'new' && <span className="prj-mono" style={{ fontSize: 'var(--fs-micro)', color: 'var(--text-dimmer)' }}>{defBranch ? t('project.basedOn', { base: defBranch }) : t('project.baseDefault')}</span>}
               <span style={{ width: 1, height: 16, background: 'var(--border)' }} />
             </>)}
             <span className={`prj-pill${agent === 'claude' ? ' on' : ''}`} onClick={() => setAgent('claude')}>Claude</span>
             <span className={`prj-pill${agent === 'codex' ? ' on' : ''}`} onClick={() => setAgent('codex')}>Codex</span>
             <span className={`prj-pill${agent === 'none' ? ' on' : ''}`} onClick={() => setAgent('none')}>{t('project.agent.none')}</span>
             {/* 尾组 marginLeft:auto：换行后整组靠右成独立一行，窄屏不散架 */}
-            <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 11.5, color: 'var(--text-dimmer)', whiteSpace: 'nowrap' }}>{t('project.autoName')} · <a style={{ fontSize: 11.5 }} onClick={() => setFullForm(true)}>{t('project.fullForm')} ›</a></span>
+            <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 'var(--sp-3)' }}>
+              <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)', whiteSpace: 'nowrap' }}>{t('project.autoName')} · <a style={{ fontSize: 'var(--fs-meta)' }} onClick={() => setFullForm(true)}>{t('project.fullForm')} ›</a></span>
               <Button type="primary" size="small" loading={creating} onClick={goCreate}>{t('project.go')}</Button>
             </span>
           </div>
         </div>
 
-        {/* Tabs：任务 | Worktree | 编队 | 活动（非 git 只有任务） */}
+        {/* Tabs：任务 | Worktree | 编队 | 活动（非 git 只有任务）。同样 sticky，贴在项目头下面 */}
         <div className="prj-tabs prj-in" style={{ animationDelay: '110ms' }}>
           {tabBtn('tasks', t('project.tasks'), mine.length + unfinished.length + cleanable.length + clean.length)}
           {isGit && tabBtn('wt', 'Worktree', wts.length)}
@@ -1098,12 +1300,12 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
                 const sw = swarms.find((x: any) => x.name === swName)
                 return (
                   <div key={'g' + swName}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 6px 2px', fontSize: 12.5, color: 'var(--text-dim)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 6px 2px', fontSize: 'var(--fs-sm)', color: 'var(--text-dim)' }}>
                       <span style={{ color: '#a371f7' }}>⬡</span>
                       <b style={{ color: 'var(--text-bright)' }}>{swName}</b>
-                      {sw && <span style={{ fontSize: 11.5, color: 'var(--text-dimmer)' }}>{t('project.swarm.members', { mine: sw.inProj, total: sw.roster })}</span>}
+                      {sw && <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)' }}>{t('project.swarm.members', { mine: sw.inProj, total: sw.roster })}</span>}
                       <span style={{ flex: 1 }} />
-                      <a style={{ fontSize: 12 }} onClick={() => { location.hash = '#/swarm/' + encodeURIComponent(swName) }}>{t('project.swarm.board')}</a>
+                      <a style={{ fontSize: 'var(--fs-meta)' }} onClick={() => { location.hash = '#/swarm/' + encodeURIComponent(swName) }}>{t('project.swarm.board')}</a>
                     </div>
                     <div style={{ marginLeft: 6, paddingLeft: 10, borderLeft: '2px solid rgba(163,113,247,.3)' }}>
                       {rows.map(row)}
@@ -1122,15 +1324,15 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
               <div key={w.path} className="prj-row">
                 <span style={{ marginTop: 7, display: 'inline-flex' }}>{dot(false, '#3fb950')}</span>
                 <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-                    <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 11 }}>⎇ {w.branch}</Tag>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+                    <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 'var(--fs-micro)' }}>⎇ {w.branch}</Tag>
                     <Tooltip title={`${w.mergedInto} · ${w.mergedKind}`}>
                       <Tag color="success" style={{ margin: 0 }}>✓ {t('project.mergedTag')}</Tag>
                     </Tooltip>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-dimmer)', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)', flexWrap: 'wrap' }}>
                     <Lifec done={4} /><span>{t('project.stage.merged')}</span>
-                    <span className="prj-mono" style={{ fontSize: 11.5, color: '#3fb950' }}>{t('project.mergedInto', { target: w.mergedInto })}</span>
+                    <span className="prj-mono" style={{ fontSize: 'var(--fs-meta)', color: '#3fb950' }}>{t('project.mergedInto', { target: w.mergedInto })}</span>
                     <span>{relTime(w.lastCommitAt, t)}</span>
                   </div>
                 </div>
@@ -1149,8 +1351,8 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
               <div key={w.path} className="prj-row warn">
                 <span style={{ marginTop: 7, display: 'inline-flex' }}>{dot(false, '#d29922')}</span>
                 <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-                    <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 11 }}>⎇ {w.branch}</Tag>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+                    <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 'var(--fs-micro)' }}>⎇ {w.branch}</Tag>
                     <Tag color="warning" style={{ margin: 0 }}>{t('project.sessionClosed')}</Tag>
                     {/* 已合入但还有未提交改动：绿标缓解焦虑，损失只剩 working tree */}
                     {w.mergedInto && (
@@ -1165,19 +1367,19 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
                       </Tooltip>
                     )}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-dimmer)', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)', flexWrap: 'wrap' }}>
                     {w.mergedInto
                       ? <><Lifec done={2} cur={3} /><span>{t('project.stage.unfinished')}</span></>
                       : w.pushed
                         ? <><Lifec done={3} cur={4} /><span>{t('project.stage.pushed')}</span></>
                         : <><Lifec done={2} cur={3} /><span>{t('project.stage.committed')}</span></>}
-                    <span className="prj-mono" style={{ fontSize: 11.5 }}>
+                    <span className="prj-mono" style={{ fontSize: 'var(--fs-meta)' }}>
                       {w.mergedInto
                         ? <span style={{ color: '#d29922' }}>{t('project.wt.changes', { count: w.dirty + w.untracked })}</span>
                         : t('project.aheadDirty', { ahead: w.committedAhead, dirty: w.dirty + w.untracked })}
                     </span>
                     {/* S3 佐证（10 §4）：远端分支已删只给线索，不替人拍板 */}
-                    {!w.mergedInto && w.remoteGone && <span style={{ color: '#d29922', fontSize: 11.5 }}>{t('project.remoteGoneHint')}</span>}
+                    {!w.mergedInto && w.remoteGone && <span style={{ color: '#d29922', fontSize: 'var(--fs-meta)' }}>{t('project.remoteGoneHint')}</span>}
                     <span>{relTime(w.lastCommitAt, t)}</span>
                   </div>
                 </div>
@@ -1196,11 +1398,11 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
               <div key={w.path} className="prj-row">
                 <span style={{ marginTop: 7, display: 'inline-flex' }}>{dot(false, '#a371f7')}</span>
                 <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-                    <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 11 }}>⎇ {w.branch}</Tag>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+                    <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 'var(--fs-micro)' }}>⎇ {w.branch}</Tag>
                     <Tag color="purple" style={{ margin: 0 }}>⇥ {t('project.mergedClean')}</Tag>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-dimmer)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)' }}>
                     <Lifec done={4} /><span>{t('project.stage.done')}</span>
                   </div>
                 </div>
@@ -1222,7 +1424,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
               <Button size="small" onClick={() => setWtOpen(true)}>＋ {t('project.wt.newWorktree')}</Button>
               <Button size="small" onClick={pruneWts}>{t('project.wt.prune')}</Button>
               <span style={{ flex: 1 }} />
-              <a style={{ fontSize: 12.5 }} onClick={() => setWtOpen(true)}>{t('project.wt.allRepos')} ›</a>
+              <a style={{ fontSize: 'var(--fs-sm)' }} onClick={() => setWtOpen(true)}>{t('project.wt.allRepos')} ›</a>
             </div>
 
             {mainWt && (
@@ -1236,7 +1438,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
                     <div className="n1">
                       <span className="wt-br" style={{ color: FORK_TRUNK }}>{mainWt.branch || 'HEAD'}</span>
                       <Tag style={{ margin: 0 }}>{t('project.wt.mainTag')}</Tag>
-                      <span className="prj-mono" style={{ fontSize: 11, color: 'var(--text-dimmer)' }}>{(mainWt.head || '').slice(0, 7)}</span>
+                      <span className="prj-mono" style={{ fontSize: 'var(--fs-micro)', color: 'var(--text-dimmer)' }}>{(mainWt.head || '').slice(0, 7)}</span>
                     </div>
                     <div className="n2">
                       <span className="prj-mono">{mainWt.path}</span>
@@ -1309,13 +1511,13 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
                           <div key={ref.session} className="prj-subrow" onClick={() => openTerm(ref.session)}>
                             {dot(false, cc[ref.session] || cx[ref.session] ? '#3fb950' : undefined)}
                             <span style={{ fontWeight: 600, fontSize: 13 }} title={ref.session}>{sessionLabel(ref.session)}</span>
-                            {cc[ref.session] && <Tag color="blue" style={{ margin: 0, fontSize: 10.5, lineHeight: '16px' }}>Claude</Tag>}
-                            {cx[ref.session] && <Tag color="green" style={{ margin: 0, fontSize: 10.5, lineHeight: '16px' }}>Codex</Tag>}
+                            {cc[ref.session] && <Tag color="blue" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px' }}>Claude</Tag>}
+                            {cx[ref.session] && <Tag color="green" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px' }}>Codex</Tag>}
                             <span className="prj-peek">{peeks[ref.session] || '…'}</span>
-                            <a style={{ fontSize: 12 }} onClick={(e) => { e.stopPropagation(); openTerm(ref.session) }}>{t('project.enter')}</a>
+                            <a style={{ fontSize: 'var(--fs-meta)' }} onClick={(e) => { e.stopPropagation(); openTerm(ref.session) }}>{t('project.enter')}</a>
                           </div>
                         ))}
-                        {live === 0 && <div style={{ fontSize: 12, color: 'var(--text-dimmer)', padding: '4px 8px' }}>{t('project.wt.noCli')}</div>}
+                        {live === 0 && <div style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)', padding: '4px 8px' }}>{t('project.wt.noCli')}</div>}
                         <div className="prj-addline">
                           {t('project.wt.newCli')}
                           <a onClick={() => newCli(w, 'shell')}>shell</a>·<a onClick={() => newCli(w, 'claude')}>Claude</a>·<a onClick={() => newCli(w, 'codex')}>Codex</a>
@@ -1361,7 +1563,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <Tag color="gold" style={{ margin: 0 }}>RACE</Tag>
                 <b>{r.name}</b>
-                <span style={{ fontSize: 12, color: 'var(--text-dimmer)' }}>{t('project.race.meta', { count: (r.contestants || []).length, base: r.base })}</span>
+                <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)' }}>{t('project.race.meta', { count: (r.contestants || []).length, base: r.base })}</span>
                 <span style={{ flex: 1 }} />
                 <Button size="small" type="primary" onClick={() => setCompareRace(r)}>{t('project.race.compare')} →</Button>
               </div>
@@ -1382,14 +1584,14 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
                   onClick={() => { if (inProj) openTerm(session) }}>
                   {dot(false, status === 'waiting' ? '#d29922' : running ? '#3fb950' : undefined)}
                   <span style={{ fontWeight: 600, fontSize: 13 }} title={session}>{label || sessionLabel(session)}</span>
-                  {role === 'leader' && <Tag color="purple" style={{ margin: 0, fontSize: 10.5, lineHeight: '16px' }}>{t('project.swarm.leaderTag')}</Tag>}
-                  {subrole && <Tag style={{ margin: 0, fontSize: 10.5, lineHeight: '16px' }}>{t(('swarm.subrole.' + subrole) as any) || subrole}</Tag>}
-                  {done && <Tag color="purple" style={{ margin: 0, fontSize: 10.5, lineHeight: '16px' }}>{t('project.swarm.integrate')}</Tag>}
-                  {ann[session]?.primary?.linked && <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 10.5, lineHeight: '16px' }}>⎇ {ann[session].primary.branch}</Tag>}
+                  {role === 'leader' && <Tag color="purple" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px' }}>{t('project.swarm.leaderTag')}</Tag>}
+                  {subrole && <Tag style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px' }}>{t(('swarm.subrole.' + subrole) as any) || subrole}</Tag>}
+                  {done && <Tag color="purple" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px' }}>{t('project.swarm.integrate')}</Tag>}
+                  {ann[session]?.primary?.linked && <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px' }}>⎇ {ann[session].primary.branch}</Tag>}
                   <span style={{ flex: 1 }} />
                   {inProj
-                    ? <a style={{ fontSize: 12 }} onClick={(e) => { e.stopPropagation(); openTerm(session) }}>{t('project.enter')}</a>
-                    : <span style={{ fontSize: 11.5, color: 'var(--text-dimmer)' }}>{t('project.swarm.crossProj')}</span>}
+                    ? <a style={{ fontSize: 'var(--fs-meta)' }} onClick={(e) => { e.stopPropagation(); openTerm(session) }}>{t('project.enter')}</a>
+                    : <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)' }}>{t('project.swarm.crossProj')}</span>}
                 </div>
               )
             }
@@ -1398,11 +1600,11 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <Tag color="purple" style={{ margin: 0 }}>⬡ {t('nav.swarm')}</Tag>
                   <b>{sw.name}</b>
-                  {sw.goal && <span style={{ fontSize: 12, color: 'var(--text-dimmer)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 280 }}>{sw.goal}</span>}
+                  {sw.goal && <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 280 }}>{sw.goal}</span>}
                   {!sw.supervisor && <Tag color="warning" style={{ margin: 0 }}>{t('project.swarm.noLeader')}</Tag>}
                   <span style={{ flex: 1 }} />
                   {ex && Object.keys(ex.cols).length > 0 && (
-                    <span className="prj-mono" style={{ fontSize: 11, color: 'var(--text-dimmer)' }}>
+                    <span className="prj-mono" style={{ fontSize: 'var(--fs-micro)', color: 'var(--text-dimmer)' }}>
                       {['backlog', 'assigned', 'doing', 'review', 'done'].filter((c) => ex.cols[c]).map((c) => `${t(('swarm.board.col.' + c) as any)} ${ex.cols[c]}`).join(' · ')}
                     </span>
                   )}
@@ -1424,7 +1626,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
                     .map((m: any) => memberRow(m.session, m.role, m.subrole, !!m.done, m.status, m.label))}
                 </div>
                 {ex?.last && (
-                  <div className="prj-mono" style={{ display: 'flex', gap: 8, marginTop: 9, padding: '6px 10px', borderRadius: 8, background: 'var(--bg-term)', border: '1px solid var(--border-subtle)', fontSize: 11.5, color: 'var(--text-dim)' }}>
+                  <div className="prj-mono" style={{ display: 'flex', gap: 8, marginTop: 9, padding: '6px 10px', borderRadius: 'var(--r-sm)', background: 'var(--bg-term)', border: '1px solid var(--border-subtle)', fontSize: 'var(--fs-meta)', color: 'var(--text-dim)' }}>
                     <span style={{ color: '#c4a5f9', flex: '0 0 auto' }}>{ex.last.author}</span>
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ex.last.text}</span>
                   </div>
@@ -1434,8 +1636,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
           })}
           {races.length === 0 && swarms.length === 0 && <div className="prj-empty">{t('project.formation.empty')}</div>}
           <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
-            <Button size="small" onClick={() => setRaceOpen(true)}>{t('project.newRace')}</Button>
-            <Button size="small" onClick={() => setSwarmOpen(true)}>{t('project.newSwarm')}</Button>
+            {/* 新建入口统一收在页头的「＋ 开始」里，这里不再重复（14 §6.2） */}
           </div>
         </>)}
 
@@ -1443,26 +1644,26 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh }
         {tab === 'act' && (
           <div className="prj-panel prj-in" style={{ padding: '6px 4px' }}>
             {activity.map((e: any) => e.kind === 'trace' ? (
-              <div key={'t' + e.at + e.branch} className="prj-mono" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', fontSize: 12.5 }}>
+              <div key={'t' + e.at + e.branch} className="prj-mono" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', fontSize: 'var(--fs-sm)' }}>
                 <span style={{ color: '#a371f7' }}>⇥</span>
                 <span style={{ color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {e.action === 'merged'
                     ? t('project.act.traceMerged', { branch: e.branch, base: e.base || '?', strategy: e.strategy || 'squash' })
                     : t('project.act.traceDiscarded', { branch: e.branch })}
                 </span>
-                <span style={{ marginLeft: 'auto', color: 'var(--text-dimmer)', fontSize: 11.5, flex: '0 0 auto' }}>{relTime(e.at, t)}</span>
+                <span style={{ marginLeft: 'auto', color: 'var(--text-dimmer)', fontSize: 'var(--fs-meta)', flex: '0 0 auto' }}>{relTime(e.at, t)}</span>
               </div>
             ) : (
-              <div key={e.oid + e.at} className="prj-mono" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', fontSize: 12.5 }}>
+              <div key={e.oid + e.at} className="prj-mono" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', fontSize: 'var(--fs-sm)' }}>
                 <span style={{ color: '#39c5cf', opacity: 0.8 }}>{e.oid}</span>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.subject}</span>
-                <span style={{ marginLeft: 'auto', color: 'var(--text-dimmer)', fontSize: 11.5, flex: '0 0 auto' }}>
+                <span style={{ marginLeft: 'auto', color: 'var(--text-dimmer)', fontSize: 'var(--fs-meta)', flex: '0 0 auto' }}>
                   {e.refs ? `${String(e.refs).split(',')[0]} · ` : ''}{relTime(e.at, t)}
                 </span>
               </div>
             ))}
             {activity.length === 0 && <div className="prj-empty">{t('project.act.empty')}</div>}
-            <div style={{ fontSize: 11.5, color: 'var(--text-dimmer)', padding: '8px 12px', borderTop: '1px dashed var(--border-subtle)' }}>{t('project.act.hint')}</div>
+            <div style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)', padding: '8px 12px', borderTop: '1px dashed var(--border-subtle)' }}>{t('project.act.hint')}</div>
           </div>
         )}
 

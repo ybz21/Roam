@@ -3,12 +3,13 @@
 // 进入会话（孤儿复活）、合并回 base（squash/merge/rebase）、
 // 删除（先列损失再确认 + 占用检查兜底）与显式清理残留。
 import { useCallback, useEffect, useState } from 'react'
-import { App as AntApp, AutoComplete, Button, Drawer, Dropdown, Empty, Grid, Input, Modal, Popover, Select, Skeleton, Tag, Tooltip } from 'antd'
+import { App as AntApp, AutoComplete, Button, Drawer, Dropdown, Empty, Input, Modal, Popover, Select, Skeleton, Tag, Tooltip } from 'antd'
 import { sessionLabel } from './session-label'
 import { api } from './api'
 import { useI18n } from './i18n'
 import { recentDirs } from './App'
 import DiffView from './DiffView'
+import { useLayout } from './layout'
 
 // 会话视图的 Git 面板挂在 FloatingFileDrawer(z=1200)里，本抽屉从那里打开时必须压过它，
 // 否则整个抽屉被 Git 面板盖住（antd Drawer 默认 z=1000）。抽屉内嵌套弹层 antd 会自动抬升，
@@ -54,7 +55,7 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
 }) {
   const { message, modal } = AntApp.useApp()
   const { t } = useI18n()
-  const screens = Grid.useBreakpoint()
+  const { desktop: wide } = useLayout()
   // dir 为空 = 跨仓库总览（当前全部会话触达的仓库）；填目录 = 聚焦单仓库
   const [dir, setDir] = useState('')
   const [list, setList] = useState<Worktree[] | null>(null)
@@ -324,7 +325,7 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
     const canMerge = !wt.external && !!wt.base
     const canCompare = !!wt.base && !wt.branch.startsWith('_')
     const enterLabel = wt.sessions?.length ? t('worktree.enter') : t('worktree.enterNew')
-    if (!screens.md) {
+    if (!wide) {
       const items: any[] = []
       if (canCompare) items.push({ key: 'cmp', label: t('worktree.compare') })
       if (canMerge) {
@@ -414,7 +415,7 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
   })()
 
   return (
-    <Drawer open={open} onClose={onClose} title={t('worktree.title')} width={screens.md ? 520 : '100%'} zIndex={DRAWER_Z}
+    <Drawer open={open} onClose={onClose} title={t('worktree.title')} width={wide ? 520 : '100%'} zIndex={DRAWER_Z}
       styles={{ body: { display: 'flex', flexDirection: 'column', gap: 0, paddingTop: 14 } }}>
       {/* 头部：仓库目录（留空 = 跨仓库总览）+ 新建 + 刷新 */}
       <div style={{ display: 'flex', gap: 8 }}>

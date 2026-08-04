@@ -7,6 +7,7 @@ import {
   Typography, message,
 } from 'antd'
 import { api } from './api'
+import { useLayout } from './layout'
 import CronEditor from './CronEditor'
 
 // 一条任务的原始配置 + 运行态(与 Go 端 jobView 对齐)。
@@ -42,6 +43,7 @@ type FormValues = {
 type T = (k: string, vars?: Record<string, string | number>) => string
 
 export default function CronPanel({ pluginId, enabled, t }: { pluginId: string; enabled: boolean; t: T }) {
+  const { phone: isPhone } = useLayout()
   const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState<Job | null>(null) // 非空=编辑;{} 视图当新增用 open 区分
@@ -168,7 +170,36 @@ export default function CronPanel({ pluginId, enabled, t }: { pluginId: string; 
       </div>
       {jobs.length === 0
         ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('cron.empty')} />
-        : <Table<Job> size="small" rowKey="name" dataSource={jobs} columns={columns as any}
+        // 手机换卡片列表（13 §6）：这张表七列固定宽合计 730，360 的屏上必然横滚，
+        // 而横滚表格在手机上等于「每一列都要滑到才看得见」。
+        : isPhone ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {jobs.map((j) => (
+              <div key={j.name} className="tt-cron-card">
+                <div className="hd">
+                  <b>{j.name}</b>
+                  <Tag color={ACTION_COLOR[j.action]} style={{ margin: 0 }}>{t(`cron.action.${j.action}`)}</Tag>
+                  <Switch size="small" checked={j.enabled} loading={busy === j.name}
+                    disabled={!enabled} onChange={(on) => toggle(j, on)} />
+                </div>
+                <div className="sum">{actionSummary(j, t)}</div>
+                <div className="meta">
+                  <Typography.Text code style={{ fontSize: 12 }}>{j.schedule}</Typography.Text>
+                  <span>{j.enabled ? (j.nextRunAt || '—') : t('cron.paused')}</span>
+                  <span>{t('cron.colRuns')} {j.runs || 0}</span>
+                </div>
+                <div className="ops">
+                  <Button size="small" disabled={!enabled || busy === j.name} onClick={() => runNow(j)}>{t('cron.runNow')}</Button>
+                  <Button size="small" disabled={!enabled} onClick={() => { setEditing(j); setOpen(true) }}>{t('cron.edit')}</Button>
+                  <Popconfirm title={t('cron.removeConfirm', { name: j.name })} onConfirm={() => remove(j)}
+                    okText={t('cron.remove')} cancelText={t('cron.cancel')}>
+                    <Button size="small" danger disabled={!enabled}>{t('cron.remove')}</Button>
+                  </Popconfirm>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : <Table<Job> size="small" rowKey="name" dataSource={jobs} columns={columns as any}
             pagination={{ pageSize: 20, hideOnSinglePage: true }} scroll={{ x: 720 }} />}
       <JobModal open={open} job={editing} existing={jobs} t={t} pluginId={pluginId}
         onClose={() => setOpen(false)}
