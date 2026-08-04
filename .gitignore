@@ -18,3 +18,10 @@
 /backend/roam
 /backend/internal/webui/site/*
 !/backend/internal/webui/site/.gitkeep
+
+# 本机噪声：工具缓存、运行态、手工备份。都不入库，但一直挂在 git status 里当噪声，
+# 让人以为「还有东西没提交」。
+/.vite/
+/.roam/
+*.bak-gitpanel
+/frontend/dist.bak-*/
