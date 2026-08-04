@@ -769,7 +769,7 @@ export default function FileBrowser({
             </Tooltip>
           </Dropdown>
           <IconButton title={t('file.newFolder')} disabled={!cur} onClick={() => { setMkdirName(''); setMkdirDir(null); setMkdirOpen(true) }}><NewFolderIcon /></IconButton>
-          <IconButton title={t('file.uploadHere')} disabled={uploading || !cur} onClick={() => { uploadTargetRef.current = cur; fileRef.current?.click() }}>{uploading ? '…' : <UploadIcon />}</IconButton>
+          <IconButton title={t('file.uploadHere')} disabled={uploading || !cur} onClick={() => { uploadTargetRef.current = cur; fileRef.current?.click() }}>{uploading ? <Spin size="small" /> : <UploadIcon />}</IconButton>
         </div>
       </div>
       {searchOpen && (

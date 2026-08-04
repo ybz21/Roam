@@ -9,7 +9,7 @@ import { FileTypeIcon } from './file-icons'
 import { useI18n } from './i18n'
 import { PointerResizeShield, usePointerResize } from './PointerResize'
 import { useLayout } from './layout'
-import { CloseIcon } from './icons'
+import { CloseIcon, MoreIcon } from './icons'
 import { INTENT_EVENT, OPEN_FILE_INTENT, takeIntentData } from './intents'
 
 type Group = 'A' | 'B'
@@ -17,6 +17,7 @@ const TAB_MIME = 'application/x-ttmux-tab'
 const PATH_MIME = 'application/x-ttmux-path'
 const LEAD_MIME = 'application/x-ttmux-lead' // 拖会话(首)tab → 左右易位
 const PREVIEW_PREFIX = 'preview://' // 侧栏预览 tab 的标识前缀（区别于同文件的源码 tab）
+const DOCK_MIN = 160, DOCK_MAX = 640, DOCK_DEFAULT = 280
 
 function baseName(p: string): string {
   return p.split('/').pop() || p
@@ -180,28 +181,38 @@ export default function FileWorkspace({
   const [swapped, setSwapped] = useState(false)
   const leftGroup: Group = swapped ? 'B' : 'A'
 
+  const clampFrac = (v: number) => Math.min(0.85, Math.max(0.15, v))
   const startSplitResize = (e: React.PointerEvent<HTMLDivElement>) => {
     resize.start(e, {
       onMove: (ev) => {
         const el = panesRef.current; if (!el) return
         const r = el.getBoundingClientRect(); if (r.width <= 0) return
-        setSplitFrac(Math.min(0.85, Math.max(0.15, (ev.clientX - r.left) / r.width)))
+        setSplitFrac(clampFrac((ev.clientX - r.left) / r.width))
       },
     })
   }
 
   // 左侧文件栏宽度：可拖拽调整，记 localStorage
-  const [dockW, setDockW] = useState(() => { const s = Number(localStorage.getItem('ttmux.fileDockW')); return s >= 160 && s <= 640 ? s : 280 })
+  const [dockW, setDockW] = useState(() => { const s = Number(localStorage.getItem('ttmux.fileDockW')); return s >= DOCK_MIN && s <= DOCK_MAX ? s : DOCK_DEFAULT })
   const dockWRef = useRef(dockW)
   dockWRef.current = dockW
+  const saveDockW = (v: number) => {
+    const w = Math.min(DOCK_MAX, Math.max(DOCK_MIN, v))
+    setDockW(w); localStorage.setItem('ttmux.fileDockW', String(w))
+  }
   const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
     const startX = e.clientX, startW = dockW
     resize.start(e, {
-      onMove: (ev) => setDockW(Math.min(640, Math.max(160, startW + ev.clientX - startX))),
+      onMove: (ev) => setDockW(Math.min(DOCK_MAX, Math.max(DOCK_MIN, startW + ev.clientX - startX))),
       onEnd: () => {
         localStorage.setItem('ttmux.fileDockW', String(dockWRef.current))
       },
     })
+  }
+  // 把手聚焦后用 ←/→ 微调（.tt-split-rail 自带 :focus-visible 描边，得有键盘路径才算数）
+  const railKey = (e: React.KeyboardEvent, step: (dir: -1 | 1, big: boolean) => void, reset: () => void) => {
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); step(e.key === 'ArrowLeft' ? -1 : 1, e.shiftKey) }
+    else if (e.key === 'Home' || e.key === 'End') { e.preventDefault(); reset() }
   }
 
   const dragHasPayload = (e: React.DragEvent) => e.dataTransfer.types.includes(TAB_MIME) || e.dataTransfer.types.includes(PATH_MIME) || e.dataTransfer.types.includes(LEAD_MIME)
@@ -285,7 +296,7 @@ export default function FileWorkspace({
     return (
       <Dropdown trigger={['click']} placement="bottomRight" menu={{ items }}>
         <span className="cc-tabmenu" title={t('file.tabActions')} onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}
-          style={{ padding: '0 4px', color: 'var(--text-dim)', fontSize: 15, lineHeight: 1 }}>⋯</span>
+          style={{ display: 'inline-flex', padding: '0 var(--sp-1)', color: 'var(--text-dim)', lineHeight: 1 }}><MoreIcon size={14} /></span>
       </Dropdown>
     )
   }
@@ -305,7 +316,7 @@ export default function FileWorkspace({
     setDropHint(null); applyDrop(e, target)
   }
 
-  const tabBase: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap', fontSize: 12, cursor: 'pointer', borderRight: '1px solid var(--border)', touchAction: 'none' }
+  const tabBase: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap', fontSize: 'var(--fs-meta)', cursor: 'pointer', borderRight: '1px solid var(--border-subtle)', touchAction: 'none' }
 
   const fileTab = (f: string, g: Group) => {
     const prev = isPreview(f)
@@ -318,7 +329,7 @@ export default function FileWorkspace({
         onPointerDown={(e) => startTouchDrag(e, { kind: 'tab', path: f, from: g }, baseName(f))}
         onClick={() => { if (draggedRef.current) return; setActiveOf(g, f); setFocus(g) }}
         className={`cc-filetab${isDirty ? ' dirty' : ''}`}
-        style={{ ...tabBase, gap: 3, padding: '5px 8px 5px 10px', color: act ? 'var(--text-bright)' : 'var(--text-dim)', background: act ? 'var(--bg-base)' : 'transparent', borderTop: `2px solid ${act ? 'var(--accent)' : 'transparent'}` }}>
+        style={{ ...tabBase, gap: 'var(--sp-1)', padding: 'var(--sp-1) var(--sp-2)', color: act ? 'var(--text-bright)' : 'var(--text-dim)', background: act ? 'var(--bg-base)' : 'transparent', boxShadow: act ? 'inset 0 2px 0 var(--accent)' : undefined }}>
         <span style={{ display: 'inline-flex', transform: 'scale(0.72)' }}><FileTypeIcon name={rp} /></span>
         <span style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', fontStyle: prev ? 'italic' : undefined }}>{prev ? `${t('file.preview')}: ${baseName(rp)}` : baseName(f)}</span>
         {tabMenuBtn({ kind: 'tab', path: f, from: g })}
@@ -338,7 +349,7 @@ export default function FileWorkspace({
     return (
       <div style={{ flex: `${grow} 1 0`, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}
         onClick={() => setFocus(g)}>
-        <div style={{ display: 'flex', alignItems: 'stretch', borderBottom: '1px solid var(--border)', background: 'var(--bg-container)' }}>
+        <div style={{ display: 'flex', alignItems: 'stretch', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-container)' }}>
           <div data-drop-group={g} ref={(el) => { tabStripRef.current[g] = el }} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'stretch', overflowX: 'auto' }}
             onDragOver={(e) => { if (dragHasPayload(e)) { e.preventDefault(); setDropHint(g) } }}
             onDragLeave={() => setDropHint((h) => (h === g ? null : h))}
@@ -348,13 +359,13 @@ export default function FileWorkspace({
                 draggable={split}
                 onDragStart={(e) => { e.dataTransfer.setData(LEAD_MIME, '1'); e.dataTransfer.effectAllowed = 'move'; setDragging(true); setDragKind('lead') }}
                 onPointerDown={(e) => { if (split) startTouchDrag(e, { kind: 'lead' }, leadingTitle || '') }}
-                style={{ ...tabBase, gap: 6, padding: '5px 12px', color: leadingActive ? 'var(--text-bright)' : 'var(--text-dim)', background: leadingActive ? 'var(--bg-base)' : 'transparent', borderTop: `2px solid ${leadingActive ? 'var(--accent)' : 'transparent'}` }}>
+                style={{ ...tabBase, gap: 'var(--sp-2)', padding: 'var(--sp-1) var(--sp-3)', color: leadingActive ? 'var(--text-bright)' : 'var(--text-dim)', background: leadingActive ? 'var(--bg-base)' : 'transparent', boxShadow: leadingActive ? 'inset 0 2px 0 var(--accent)' : undefined }}>
                 {leadingTab}
                 {tabMenuBtn({ kind: 'lead' })}
               </div>
             )}
             {files.map((f) => fileTab(f, g))}
-            {dropHint === g && <div style={{ flex: 1, minWidth: 24, background: 'rgba(88,166,255,.18)' }} />}
+            {dropHint === g && <div style={{ flex: 1, minWidth: 24, background: 'var(--accent-soft)' }} />}
           </div>
         </div>
         {/* 会话工具栏：只属会话，放在会话首 tab 的正下方、终端之上（跟着会话那栏走） */}
@@ -376,7 +387,7 @@ export default function FileWorkspace({
             )
           })}
           {(!primary || !hasLeading) && active === null && files.length === 0 && (
-            <div style={{ flex: 1, display: 'grid', placeItems: 'center', color: 'var(--text-dimmer)', fontSize: 13 }}>{emptyText || t('file.selectPreview')}</div>
+            <div style={{ flex: 1, display: 'grid', placeItems: 'center', color: 'var(--text-dimmer)', fontSize: 'var(--fs-sm)' }}>{emptyText || t('file.selectPreview')}</div>
           )}
           {/* 拖拽期透明接盘层：盖在终端/Monaco 之上，抢在它们之前接住 dragover/drop，
               否则拖 tab 到有终端/编辑器的那一栏时事件被内层吞掉 → 拖不进去。
@@ -390,7 +401,7 @@ export default function FileWorkspace({
           )}
           {/* 单栏时拖到右半区 → 拆出第二栏 */}
           {!split && primary && dropHint === 'split' && (
-            <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: '50%', zIndex: 20, pointerEvents: 'none', background: 'rgba(88,166,255,.12)', borderLeft: '2px dashed var(--accent)', display: 'grid', placeItems: 'center', color: 'var(--accent)', fontSize: 13, fontWeight: 600 }}>{t('file.splitHere')}</div>
+            <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: '50%', zIndex: 20, pointerEvents: 'none', background: 'var(--accent-soft)', borderLeft: '1px dashed var(--accent-border)', display: 'grid', placeItems: 'center', color: 'var(--accent)', fontSize: 'var(--fs-sm)', fontWeight: 600 }}>{t('file.splitHere')}</div>
           )}
         </div>
         {/* 会话底部输入/快捷键栏：只属会话，放在会话那栏终端下方 */}
@@ -412,7 +423,14 @@ export default function FileWorkspace({
           <div style={{ flex: `0 0 ${dockW}px`, minWidth: 0, minHeight: 0, display: 'flex' }}>
             <FileBrowser dir={dir} accent={accent} layout="dock" onClose={onExplorerClose} onOpenFile={openFileTab} selectedPath={activeA ? realPath(activeA) : null} onOpenAgent={onOpenAgent} />
           </div>
-          <div data-resize-handle="dock" onPointerDown={startResize} title={t('file.dragResize')} style={{ flex: '0 0 5px', cursor: 'col-resize', background: 'var(--border)', touchAction: 'none' }} />
+          {/* 分栏把手统一走 .tt-split-rail（设计系统 §4.3）：细底槽 + 居中握把，
+              别再自画一条 --border 实心竖条——那条在页面上就是一道大粗线。 */}
+          <div data-resize-handle="dock" className="tt-split-rail"
+            role="separator" aria-orientation="vertical" tabIndex={0}
+            aria-label={t('file.dragResize')} aria-valuemin={DOCK_MIN} aria-valuemax={DOCK_MAX} aria-valuenow={Math.round(dockW)}
+            onPointerDown={startResize} title={t('file.dragResize')}
+            onDoubleClick={() => saveDockW(DOCK_DEFAULT)}
+            onKeyDown={(e) => railKey(e, (dir, big) => saveDockW(dockW + dir * (big ? 48 : 16)), () => saveDockW(DOCK_DEFAULT))} />
         </>
       )}
       <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
@@ -420,14 +438,21 @@ export default function FileWorkspace({
           {(split ? (swapped ? ['B', 'A'] : ['A', 'B']) : ['A'] as Group[]).map((g, i) => (
             // key 按组固定 → 易位/分栏时 React 不重挂终端(会话)，PTY/xterm 不断
             <Fragment key={g}>
-              {i > 0 && <div data-resize-handle="split" onPointerDown={startSplitResize} title={t('file.dragResize')} style={{ flex: '0 0 5px', cursor: 'col-resize', background: 'var(--border)', touchAction: 'none' }} />}
+              {i > 0 && (
+                <div data-resize-handle="split" className="tt-split-rail"
+                  role="separator" aria-orientation="vertical" tabIndex={0}
+                  aria-label={t('file.dragResize')} aria-valuemin={15} aria-valuemax={85} aria-valuenow={Math.round(splitFrac * 100)}
+                  onPointerDown={startSplitResize} title={t('file.dragResize')}
+                  onDoubleClick={() => setSplitFrac(0.5)}
+                  onKeyDown={(e) => railKey(e, (dir, big) => setSplitFrac((f) => clampFrac(f + dir * (big ? 0.1 : 0.02))), () => setSplitFrac(0.5))} />
+              )}
               {pane(g as Group)}
             </Fragment>
           ))}
         </div>
       </div>
       {touchDrag && (
-        <div style={{ position: 'fixed', left: touchDrag.x + 12, top: touchDrag.y + 12, zIndex: 9999, pointerEvents: 'none', padding: '4px 10px', fontSize: 12, borderRadius: 6, background: 'var(--bg-container)', border: '1px solid var(--accent)', color: 'var(--text-bright)', boxShadow: '0 4px 16px rgba(0,0,0,.4)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{touchDrag.label}</div>
+        <div style={{ position: 'fixed', left: touchDrag.x + 12, top: touchDrag.y + 12, zIndex: 9999, pointerEvents: 'none', padding: 'var(--sp-1) var(--sp-3)', fontSize: 'var(--fs-meta)', borderRadius: 'var(--r-xs)', background: 'var(--bg-container)', border: '1px solid var(--accent-border)', color: 'var(--text-bright)', boxShadow: 'var(--card-hover-shadow)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{touchDrag.label}</div>
       )}
       <PointerResizeShield active={resize.active} />
     </div>

@@ -156,13 +156,17 @@ body {
 @keyframes tt-sheet-up { from { transform: translateY(100%); } }
 @keyframes tt-sheet-fade { from { opacity: 0; } }
 
-/* ── 分栏把手（14 设计 §4.3）：视觉 8px，命中区左右各扩 6px ──
-   只做一件事——拖。开合走 Command Center 的按钮或 ⌘J，不在这条上叠语义。 */
+/* ── 分栏把手（14 设计 §4.3）──
+   只做一件事——拖。开合走 Command Center 的按钮或 ⌘J，不在这条上叠语义。
+   **8px 是留给指针的占位，不是线宽**（同「命中区用伪元素撑、不撑视觉尺寸」那条）：
+   底色透明，视觉只有居中那条 1px 细线；把整条 8px 涂成 --border-subtle 会在页面上
+   拉出一道比任何分隔线都粗的亮带——文件页曾经就是这么难看的。
+   悬停/聚焦时线加粗到 2px 并转强调色，代替原来那枚握把。 */
 .tt-split-rail {
   position: relative;
   flex: 0 0 var(--split-rail);
   width: var(--split-rail);
-  background: var(--border-subtle);
+  background: transparent;
   cursor: col-resize;
   touch-action: none;
 }
@@ -175,17 +179,16 @@ body {
   content: "";
   position: absolute;
   left: 50%;
-  top: 50%;
-  width: 3px;
-  height: 42px;
-  transform: translate(-50%, -50%);
-  border-radius: 4px;
-  background: var(--text-dimmer);
-  opacity: .32;
-  transition: height .15s, opacity .15s, background .15s;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--border-subtle);
+  transition: width .15s, background .15s;
 }
 .tt-split-rail:hover::after,
-.tt-split-rail:focus-visible::after { height: 78px; opacity: 1; background: var(--accent); }
+.tt-split-rail:active::after,
+.tt-split-rail:focus-visible::after { width: 2px; background: var(--accent); }
 .tt-split-rail:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
 
 /* 拖拽引导线。越过 splitMax（Canvas 会不足 560）时换成琥珀色：松手的后果从
