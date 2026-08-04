@@ -13,6 +13,7 @@ import { useI18n } from '../i18n'
 import { sessionLabel } from '../session-label'
 import { useSessionProject } from '../session-project'
 import { MobileSheet, SheetRow } from './MobileSheet'
+import { CloseIcon } from '../icons'
 
 /** `项目 · 会话`：空间不足时先截项目名，会话名不省略——会话名才是你要找的那个 */
 export function DockTitle({ name }: { name: string }) {
@@ -42,7 +43,7 @@ export function SessionDock({ sessions, active, needsInput, running, onOpen, onP
   if (!sessions.length) return null
 
   const cur = active && sessions.includes(active) ? active : sessions[0]
-  const dotColor = (n: string) => (needsInput[n] ? '#d29922' : running(n) ? '#3fb950' : 'var(--text-dimmer)')
+  const dotColor = (n: string) => (needsInput[n] ? '#d29922' : running(n) ? 'var(--ok)' : 'var(--text-dimmer)')
 
   return (
     <>
@@ -95,7 +96,7 @@ export function SessionSwitchSheet({ open, sessions, active, needsInput, running
   onClose: () => void
 }) {
   const { t } = useI18n()
-  const dotColor = (n: string) => (needsInput[n] ? '#d29922' : running(n) ? '#3fb950' : 'var(--text-dimmer)')
+  const dotColor = (n: string) => (needsInput[n] ? '#d29922' : running(n) ? 'var(--ok)' : 'var(--text-dimmer)')
   return (
     <MobileSheet open={open} title={t('mobile.switchSession')} onClose={onClose}>
       {sessions.map((n) => (
@@ -108,7 +109,7 @@ export function SessionSwitchSheet({ open, sessions, active, needsInput, running
           onClick={() => { onClose(); onPick(n) }}
           extra={(
             <button type="button" className="tt-sessdock-x" aria-label={t('common.close')}
-              onClick={(e) => { e.stopPropagation(); onCloseSession(n) }}>✕</button>
+              onClick={(e) => { e.stopPropagation(); onCloseSession(n) }}><CloseIcon /></button>
           )}
         />
       ))}

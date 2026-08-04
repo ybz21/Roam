@@ -1,41 +1,43 @@
 // Claude 工具调用 + 气泡渲染。工具按类型富展示（命令/写入/diff/待办…），
 // 工具结果按 tool_use_id 折叠在对应调用之下。
-import { memo, useState } from 'react'
+import { memo, useState, type ReactNode } from 'react'
 import Markdown from '../Markdown'
 import { CodeBox, Collapsible, Diff, MONO, copyText, fmtTs, ToolResult } from './blocks'
 import { useI18n } from '../i18n'
 import type { Block, Msg } from './types'
+import { BotIcon, CheckIcon, ChecklistIcon, CircleIcon, ClockIcon, Disclosure, GearIcon, GlobeIcon, NotebookIcon, PencilIcon, QuestionIcon, ReadIcon, SearchIcon, TerminalIcon } from '../icons'
 
 function parseInput(input?: string): any {
   if (!input) return null
   try { return JSON.parse(input) } catch { return null }
 }
 
-// 工具名 → 图标 + 单行标题（取最有信息量的字段）
-function toolHead(name: string | undefined, o: any, t: (key: string, vars?: Record<string, string | number>) => string): { icon: string; title: string } {
+// 工具名 → 图标 + 单行标题（取最有信息量的字段）。
+// 图标是 SVG 不是 emoji：emoji 在各平台字体里大小/基线/配色全不一样，一列排下来高低不齐。
+function toolHead(name: string | undefined, o: any, t: (key: string, vars?: Record<string, string | number>) => string): { icon: ReactNode; title: string } {
   const n = name || t('chat.tool')
   const s = (v: any) => (v == null ? '' : String(v))
   const clip = (v: string) => (v.length > 140 ? v.slice(0, 140) + '…' : v)
   switch (n) {
-    case 'Bash': return { icon: '$', title: clip(s(o?.command)) }
-    case 'Read': return { icon: '📖', title: clip(s(o?.file_path)) }
-    case 'Write': return { icon: '✏️', title: clip(s(o?.file_path)) }
-    case 'Edit': case 'MultiEdit': return { icon: '✏️', title: clip(s(o?.file_path)) }
-    case 'NotebookEdit': return { icon: '📓', title: clip(s(o?.notebook_path)) }
-    case 'Glob': return { icon: '🔍', title: clip(s(o?.pattern) + (o?.path ? `  @ ${o.path}` : '')) }
-    case 'Grep': return { icon: '🔍', title: clip(s(o?.pattern) + (o?.path ? `  @ ${o.path}` : '')) }
-    case 'Task': return { icon: '🤖', title: clip(s(o?.description || o?.subagent_type)) }
-    case 'TodoWrite': return { icon: '☑', title: t('chat.todoCount', { count: (o?.todos || []).length }) }
-    case 'WebFetch': return { icon: '🌐', title: clip(s(o?.url)) }
-    case 'WebSearch': return { icon: '🌐', title: clip(s(o?.query)) }
+    case 'Bash': return { icon: <TerminalIcon />, title: clip(s(o?.command)) }
+    case 'Read': return { icon: <ReadIcon />, title: clip(s(o?.file_path)) }
+    case 'Write': return { icon: <PencilIcon />, title: clip(s(o?.file_path)) }
+    case 'Edit': case 'MultiEdit': return { icon: <PencilIcon />, title: clip(s(o?.file_path)) }
+    case 'NotebookEdit': return { icon: <NotebookIcon />, title: clip(s(o?.notebook_path)) }
+    case 'Glob': return { icon: <SearchIcon />, title: clip(s(o?.pattern) + (o?.path ? `  @ ${o.path}` : '')) }
+    case 'Grep': return { icon: <SearchIcon />, title: clip(s(o?.pattern) + (o?.path ? `  @ ${o.path}` : '')) }
+    case 'Task': return { icon: <BotIcon size={13} />, title: clip(s(o?.description || o?.subagent_type)) }
+    case 'TodoWrite': return { icon: <ChecklistIcon />, title: t('chat.todoCount', { count: (o?.todos || []).length }) }
+    case 'WebFetch': return { icon: <GlobeIcon />, title: clip(s(o?.url)) }
+    case 'WebSearch': return { icon: <GlobeIcon />, title: clip(s(o?.query)) }
     case 'AskUserQuestion': {
       const qs = Array.isArray(o?.questions) ? o.questions : []
       const more = qs.length > 1 ? ` (+${qs.length - 1})` : ''
-      return { icon: '❓', title: clip(s(qs[0]?.question)) + more }
+      return { icon: <QuestionIcon size={13} />, title: clip(s(qs[0]?.question)) + more }
     }
     default: {
       const key = o && ['command', 'file_path', 'path', 'pattern', 'query', 'prompt', 'description'].find((k) => o[k])
-      return { icon: '⚙', title: clip(key ? s(o[key]) : (o ? JSON.stringify(o) : '')) }
+      return { icon: <GearIcon />, title: clip(key ? s(o[key]) : (o ? JSON.stringify(o) : '')) }
     }
   }
 }
@@ -80,12 +82,16 @@ function ToolBody({ name, o, raw }: { name?: string; o: any; raw?: string }) {
     return <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>{o.edits.map((e: any, i: number) => <ToolBody key={i} name="Edit" o={e} />)}</div>
   }
   if (name === 'TodoWrite' && Array.isArray(o?.todos)) {
-    const mark: Record<string, string> = { completed: '✅', in_progress: '🔄', pending: '⬜' }
+    const mark = (status: string) => (
+      status === 'completed' ? <span style={{ color: 'var(--ok)', display: 'flex' }}><CheckIcon size={12} /></span>
+        : status === 'in_progress' ? <span style={{ color: '#d29922', display: 'flex' }}><ClockIcon size={12} /></span>
+          : <span style={{ color: 'var(--text-dimmer)', display: 'flex' }}><CircleIcon size={12} /></span>
+    )
     return (
       <div style={{ marginTop: 6, fontSize: 12.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
         {o.todos.map((t: any, i: number) => (
-          <div key={i} style={{ color: t.status === 'completed' ? 'var(--text-dim)' : 'var(--text-bright)', textDecoration: t.status === 'completed' ? 'line-through' : 'none' }}>
-            {mark[t.status] || '⬜'} {t.content}
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, color: t.status === 'completed' ? 'var(--text-dim)' : 'var(--text-bright)', textDecoration: t.status === 'completed' ? 'line-through' : 'none' }}>
+            {mark(t.status)}<span>{t.content}</span>
           </div>
         ))}
       </div>
@@ -107,9 +113,9 @@ function ToolUse({ b, result }: { b: Block; result?: Block }) {
   return (
     <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', background: 'var(--bg-base)', padding: '6px 10px', fontSize: 'var(--fs-sm)' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, cursor: hasBody ? 'pointer' : 'default' }} onClick={() => hasBody && setOpen((v) => !v)}>
-        <span style={{ color: '#58a6ff', fontWeight: 600, flex: '0 0 auto' }}>{icon} {b.name}</span>
+        <span style={{ color: 'var(--accent)', fontWeight: 600, flex: '0 0 auto', display: 'inline-flex', alignItems: 'center', gap: 5 }}>{icon}{b.name}</span>
         {title && <span style={{ color: 'var(--text-dim)', fontFamily: MONO, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</span>}
-        {hasBody && <span style={{ marginLeft: 'auto', color: 'var(--text-dimmer)', flex: '0 0 auto' }}>{open ? '▾' : '▸'}</span>}
+        {hasBody && <span style={{ marginLeft: 'auto', color: 'var(--text-dimmer)', flex: '0 0 auto', display: 'inline-flex' }}><Disclosure open={open} /></span>}
       </div>
       {open && <ToolBody name={b.name} o={o} raw={b.input} />}
       {result && <ToolResult result={result} />}
@@ -129,17 +135,17 @@ export const ClaudeBubble = memo(function ClaudeBubble({ m, results }: { m: Msg;
   const isUser = m.role === 'user'
   const isTool = m.role === 'tool'
   const align = isUser ? 'flex-end' : 'flex-start'
-  const bg = isUser ? '#1f6feb' : isTool ? 'transparent' : 'var(--bg-container)'
+  const bg = isUser ? 'var(--accent-solid)' : isTool ? 'transparent' : 'var(--bg-container)'
   const border = isUser || isTool ? 'none' : '1px solid var(--border)'
   return (
     <div className="cc-msg" style={{ display: 'flex', flexDirection: 'column', alignItems: align, margin: '6px 0', gap: 2 }}>
       <div style={{ maxWidth: isUser ? '86%' : '100%', width: isUser ? 'auto' : '100%', background: bg, border, borderRadius: 12, padding: isTool ? 0 : '8px 12px', color: isUser ? '#fff' : 'var(--text-bright)', display: 'flex', flexDirection: 'column', gap: 6 }}>
         {m.blocks.map((b, i) => {
-          if (b.kind === 'text') return <Markdown key={i} accent={isUser ? '#cfe1ff' : '#58a6ff'}>{b.text || ''}</Markdown>
+          if (b.kind === 'text') return <Markdown key={i} accent={isUser ? '#cfe1ff' : 'var(--accent)'}>{b.text || ''}</Markdown>
           if (b.kind === 'thinking') return <Collapsible key={i} label={t('chat.thinking')} text={b.text} color="var(--text-dim)" />
           if (b.kind === 'tool_use') return <ToolUse key={i} b={b} result={b.id ? results[b.id] : undefined} />
           if (b.kind === 'tool_result') return <Collapsible key={i} label={b.isError ? t('chat.toolOutputError') : t('chat.toolOutput')} text={b.text} color={b.isError ? '#f85149' : 'var(--text-dim)'} />
-          if (b.text) return <Markdown key={i} accent="#58a6ff">{b.text}</Markdown>
+          if (b.text) return <Markdown key={i} accent="var(--accent)">{b.text}</Markdown>
           return null
         })}
       </div>

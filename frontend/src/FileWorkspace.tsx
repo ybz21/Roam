@@ -9,6 +9,7 @@ import { FileTypeIcon } from './file-icons'
 import { useI18n } from './i18n'
 import { PointerResizeShield, usePointerResize } from './PointerResize'
 import { useLayout } from './layout'
+import { CloseIcon } from './icons'
 
 type Group = 'A' | 'B'
 const TAB_MIME = 'application/x-ttmux-tab'
@@ -24,7 +25,7 @@ const realPath = (id: string) => (isPreview(id) ? id.slice(PREVIEW_PREFIX.length
 
 export default function FileWorkspace({
   dir,
-  accent = '#58a6ff',
+  accent = 'var(--accent)',
   onOpenAgent,
   explorerOpen = true,
   onExplorerClose,
@@ -302,12 +303,12 @@ export default function FileWorkspace({
         onPointerDown={(e) => startTouchDrag(e, { kind: 'tab', path: f, from: g }, baseName(f))}
         onClick={() => { if (draggedRef.current) return; setActiveOf(g, f); setFocus(g) }}
         className={`cc-filetab${isDirty ? ' dirty' : ''}`}
-        style={{ ...tabBase, gap: 3, padding: '5px 8px 5px 10px', color: act ? 'var(--text-bright)' : 'var(--text-dim)', background: act ? 'var(--bg-base)' : 'transparent', borderTop: `2px solid ${act ? '#58a6ff' : 'transparent'}` }}>
+        style={{ ...tabBase, gap: 3, padding: '5px 8px 5px 10px', color: act ? 'var(--text-bright)' : 'var(--text-dim)', background: act ? 'var(--bg-base)' : 'transparent', borderTop: `2px solid ${act ? 'var(--accent)' : 'transparent'}` }}>
         <span style={{ display: 'inline-flex', transform: 'scale(0.72)' }}><FileTypeIcon name={rp} /></span>
         <span style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', fontStyle: prev ? 'italic' : undefined }}>{prev ? `${t('file.preview')}: ${baseName(rp)}` : baseName(f)}</span>
         {tabMenuBtn({ kind: 'tab', path: f, from: g })}
         <a className="cc-tabx" onClick={(e) => { e.stopPropagation(); closeFileTab(f, g) }} onPointerDown={(e) => e.stopPropagation()} title={isDirty ? t('file.unsaved') : t('file.closeTab')}>
-          <span className="dot">●</span><span className="x">×</span>
+          <span className="dot" /><span className="x"><CloseIcon size={11} /></span>
         </a>
       </div>
     )
@@ -332,7 +333,7 @@ export default function FileWorkspace({
                 draggable={split}
                 onDragStart={(e) => { e.dataTransfer.setData(LEAD_MIME, '1'); e.dataTransfer.effectAllowed = 'move'; setDragging(true); setDragKind('lead') }}
                 onPointerDown={(e) => { if (split) startTouchDrag(e, { kind: 'lead' }, leadingTitle || '') }}
-                style={{ ...tabBase, gap: 6, padding: '5px 12px', color: leadingActive ? 'var(--text-bright)' : 'var(--text-dim)', background: leadingActive ? 'var(--bg-base)' : 'transparent', borderTop: `2px solid ${leadingActive ? '#58a6ff' : 'transparent'}` }}>
+                style={{ ...tabBase, gap: 6, padding: '5px 12px', color: leadingActive ? 'var(--text-bright)' : 'var(--text-dim)', background: leadingActive ? 'var(--bg-base)' : 'transparent', borderTop: `2px solid ${leadingActive ? 'var(--accent)' : 'transparent'}` }}>
                 {leadingTab}
                 {tabMenuBtn({ kind: 'lead' })}
               </div>
@@ -374,7 +375,7 @@ export default function FileWorkspace({
           )}
           {/* 单栏时拖到右半区 → 拆出第二栏 */}
           {!split && primary && dropHint === 'split' && (
-            <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: '50%', zIndex: 20, pointerEvents: 'none', background: 'rgba(88,166,255,.12)', borderLeft: '2px dashed #58a6ff', display: 'grid', placeItems: 'center', color: '#58a6ff', fontSize: 13, fontWeight: 600 }}>{t('file.splitHere')}</div>
+            <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: '50%', zIndex: 20, pointerEvents: 'none', background: 'rgba(88,166,255,.12)', borderLeft: '2px dashed var(--accent)', display: 'grid', placeItems: 'center', color: 'var(--accent)', fontSize: 13, fontWeight: 600 }}>{t('file.splitHere')}</div>
           )}
         </div>
         {/* 会话底部输入/快捷键栏：只属会话，放在会话那栏终端下方 */}
@@ -411,7 +412,7 @@ export default function FileWorkspace({
         </div>
       </div>
       {touchDrag && (
-        <div style={{ position: 'fixed', left: touchDrag.x + 12, top: touchDrag.y + 12, zIndex: 9999, pointerEvents: 'none', padding: '4px 10px', fontSize: 12, borderRadius: 6, background: 'var(--bg-container)', border: '1px solid #58a6ff', color: 'var(--text-bright)', boxShadow: '0 4px 16px rgba(0,0,0,.4)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{touchDrag.label}</div>
+        <div style={{ position: 'fixed', left: touchDrag.x + 12, top: touchDrag.y + 12, zIndex: 9999, pointerEvents: 'none', padding: '4px 10px', fontSize: 12, borderRadius: 6, background: 'var(--bg-container)', border: '1px solid var(--accent)', color: 'var(--text-bright)', boxShadow: '0 4px 16px rgba(0,0,0,.4)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{touchDrag.label}</div>
       )}
       <PointerResizeShield active={resize.active} />
     </div>

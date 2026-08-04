@@ -2,6 +2,7 @@
 // index.html 由后端以 no-cache 提供，所以轮询它拿到的就是最新 hash。
 import { useEffect, useState } from 'react'
 import { useI18n } from './i18n'
+import { RefreshIcon } from './icons'
 
 const RE = /assets\/index-([A-Za-z0-9_-]+)\.js/
 
@@ -37,8 +38,8 @@ export default function UpdateBanner() {
   if (!stale || dismissed) return null
   return (
     <div style={{ position: 'fixed', left: '50%', bottom: 18, transform: 'translateX(-50%)', zIndex: 2000, display: 'flex', alignItems: 'center', gap: 12, background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 14px', boxShadow: 'var(--elevated-shadow)', color: 'var(--text-bright)', fontSize: 13, flexWrap: 'wrap', maxWidth: '90vw' }}>
-      <span>🔄 {t('update.newVersion')}</span>
-      <a onClick={() => location.reload()} style={{ color: '#58a6ff', fontWeight: 600 }}>{t('common.refresh')}</a>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><RefreshIcon /> {t('update.newVersion')}</span>
+      <a onClick={() => location.reload()} style={{ color: 'var(--accent)', fontWeight: 600 }}>{t('common.refresh')}</a>
       <a onClick={() => setDismissed(true)} style={{ color: 'var(--text-dim)' }}>{t('update.later')}</a>
     </div>
   )

@@ -5,8 +5,9 @@ import Markdown from '../Markdown'
 import { CodeBox, Collapsible, Diff, MONO, copyText, fmtTs, ToolResult } from './blocks'
 import { useI18n } from '../i18n'
 import type { Block, Msg } from './types'
+import { GearIcon, PencilIcon, TerminalIcon } from '../icons'
 
-export const CODEX_ACCENT = '#10a37f' // OpenAI 绿
+export const CODEX_ACCENT = 'var(--ok)' // Codex 一方的强调色＝全站唯一那支绿
 
 function extractCmd(input?: string): string | null {
   if (!input) return null
@@ -32,17 +33,17 @@ function ToolCard({ b, result }: { b: Block; result?: Block }) {
     <div style={{ border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg-base)', padding: cmd ? '6px 10px' : '8px 10px', fontSize: 12.5 }}>
       {b.name === 'apply_patch' ? (
         <>
-          <div style={{ color: CODEX_ACCENT, fontWeight: 600, fontSize: 12.5, marginBottom: 6 }}>✎ apply_patch</div>
+          <div style={{ color: CODEX_ACCENT, fontWeight: 600, fontSize: 12.5, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}><PencilIcon />apply_patch</div>
           {b.input && <Diff text={b.input} />}
         </>
       ) : cmd ? (
         <div>
-          <div style={{ fontFamily: MONO, color: CODEX_ACCENT, fontWeight: 600, fontSize: 12.5 }}>❯ shell</div>
+          <div style={{ fontFamily: MONO, color: CODEX_ACCENT, fontWeight: 600, fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 5 }}><TerminalIcon />shell</div>
           <CodeBox text={cmd} max={180} />
         </div>
       ) : (
         <div>
-          <span style={{ color: CODEX_ACCENT, fontWeight: 600 }}>⚙ {b.name}</span>
+          <span style={{ color: CODEX_ACCENT, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5 }}><GearIcon />{b.name}</span>
           {argSummary(b.input) && <span style={{ color: 'var(--text-dim)', marginLeft: 8, fontFamily: MONO }}>{argSummary(b.input)}</span>}
         </div>
       )}

@@ -56,7 +56,7 @@ export function LinkStatus({ collapsed = false }: { collapsed?: boolean }) {
   let color = 'var(--text-dim)'
   let text: string
   if (isP2P) {
-    color = '#3fb950'
+    color = 'var(--ok)'
     text = t('p2p.link.direct', { path: t(pathLabelKey(status.path)) })
   } else if (isRelay) {
     color = '#d29922'
@@ -68,7 +68,7 @@ export function LinkStatus({ collapsed = false }: { collapsed?: boolean }) {
   const subRow = (labelKey: string, state: LinkState | undefined, path: string | undefined) => (
     <>
       <span style={{ color: 'var(--text-dim)' }}>{t(labelKey)}</span>
-      <span style={{ color: state === 'connected' ? '#3fb950' : state === 'relay' ? '#d29922' : 'var(--text-dimmer)' }}>
+      <span style={{ color: state === 'connected' ? 'var(--ok)' : state === 'relay' ? '#d29922' : 'var(--text-dimmer)' }}>
         {state === 'connected'
           ? t('p2p.link.sub.directPath', { path: t(pathLabelKey(path)) })
           : t(SUBLINK_STATE_KEY[state ?? 'disabled'])}

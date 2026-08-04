@@ -16,6 +16,7 @@ import {
   FolderUpIcon, ForwardIcon, IconButton, ListIcon, NewFolderIcon, RefreshIcon, SearchIcon, SortIcon, TreeIcon, UploadIcon,
 } from './file-icons'
 import { Viewer } from './fileview'
+import { ArrowUp } from './icons'
 
 interface Entry { name: string; dir: boolean; size: number; mtime: number; ctime: number }
 interface Dir { path: string; parent: string; entries: Entry[] }
@@ -302,7 +303,7 @@ function FileTree({
                 if ((ev.target as HTMLElement).closest('[data-file-action]')) return
                 e.dir ? toggleDir(full) : onOpenFile(full)
               }}
-              style={{ ...rowStyle(), gap: 0, padding: 0, alignItems: 'stretch', minHeight: 26, background: full === selected ? '#1f6feb22' : undefined }}>
+              style={{ ...rowStyle(), gap: 0, padding: 0, alignItems: 'stretch', minHeight: 26, background: full === selected ? 'var(--accent-soft)' : undefined }}>
               {/* VSCode 式层级缩进导引线：每深一层一条竖线，逐行拼成连续的层级线 */}
               <span style={{ flex: '0 0 auto', width: 8 }} />
               {Array.from({ length: depth }).map((_, i) => (
@@ -330,7 +331,7 @@ function FileTree({
 
 export default function FileBrowser({
   dir,
-  accent = '#58a6ff',
+  accent = 'var(--accent)',
   layout = 'sidebar',
   onClose,
   onInsertPath,
@@ -799,7 +800,7 @@ export default function FileBrowser({
                 <Tooltip key={c.path} title={c.path}>
                   <span onClick={() => navigate(c.path)} style={{
                     cursor: 'pointer', fontSize: 11, padding: '1px 8px', borderRadius: 4,
-                    background: c.path === cur ? '#1f6feb' : 'var(--bg-base)', color: c.path === cur ? '#fff' : 'var(--text-dim)',
+                    background: c.path === cur ? 'var(--accent-solid)' : 'var(--bg-base)', color: c.path === cur ? '#fff' : 'var(--text-dim)',
                     border: '1px solid var(--border-subtle)', whiteSpace: 'nowrap',
                   }}>{c.label}</span>
                 </Tooltip>
@@ -840,7 +841,7 @@ export default function FileBrowser({
                 <div key={r.path} className="cc-filerow" draggable
                   onDragStart={(ev) => startPathDrag(ev, r.path)}
                   onClick={() => openFile(r.path)}
-                  style={{ ...rowStyle(), background: r.path === sel ? '#1f6feb22' : undefined }}>
+                  style={{ ...rowStyle(), background: r.path === sel ? 'var(--accent-soft)' : undefined }}>
                   <span style={{ color: 'var(--text-dimmer)', flex: '0 0 auto', display: 'inline-flex', width: 25, justifyContent: 'center' }}><FileTypeIcon name={r.name} /></span>
                   <Tooltip title={<><div>{r.name}</div><div style={{ opacity: .65, fontSize: 11 }}>{r.rel}</div></>} placement="topLeft" mouseEnterDelay={0.4} styles={{ root: { maxWidth: 420, wordBreak: 'break-all' } }}>
                     <span style={{ flex: 1, minWidth: 0 }}>
@@ -858,7 +859,7 @@ export default function FileBrowser({
         {err && <div style={{ color: '#f85149', fontSize: 12, padding: '6px 10px' }}>{err}</div>}
         {canUp && (
           <div onClick={goUp} style={rowStyle()}>
-            <span style={{ color: 'var(--text-dim)' }}>↑</span><span style={{ color: 'var(--text-dim)' }}>{t('file.parentDir')}</span>
+            <span style={{ color: 'var(--text-dim)', display: 'inline-flex' }}><ArrowUp size={13} /></span><span style={{ color: 'var(--text-dim)' }}>{t('file.parentDir')}</span>
           </div>
         )}
         {browseMode === 'tree' ? (
@@ -875,7 +876,7 @@ export default function FileBrowser({
                   if ((ev.target as HTMLElement).closest('[data-file-action]')) return
                   e.dir ? navigate(full) : openFile(full)
                 }}
-                style={{ ...rowStyle(), background: full === sel ? '#1f6feb22' : undefined }}>
+                style={{ ...rowStyle(), background: full === sel ? 'var(--accent-soft)' : undefined }}>
                 <FileRowBody full={full} name={e.name} isDir={e.dir} size={e.size} accent={accent} onInsertPath={onInsertPath} onDownload={downloadEntry} />
               </div>
             </FileContextMenu>

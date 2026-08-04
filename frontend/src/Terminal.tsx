@@ -109,7 +109,9 @@ function xtermTheme() {
   const cs = getComputedStyle(document.documentElement)
   const bg = cs.getPropertyValue('--xterm-bg').trim() || '#06090d'
   const fg = cs.getPropertyValue('--xterm-fg').trim() || '#e6edf3'
-  return { background: bg, foreground: fg, cursor: '#58a6ff' }
+  // 光标同样吃全站强调色（--accent），这里必须取解析后的值——xterm 不认 var()
+  const cursor = cs.getPropertyValue('--accent').trim() || '#58a6ff'
+  return { background: bg, foreground: fg, cursor }
 }
 
 // 滤掉应用(Claude Code/Codex/vim 等)开启「鼠标上报」的 DECSET 序列 ESC[?1000/1001/1002/1003h。
@@ -1039,7 +1041,7 @@ const Term = forwardRef<TermHandle, {
     left: which === 'start' ? (handles?.sx ?? 0) - 22 : handles?.ex ?? 0,
     top: (which === 'start' ? handles?.sy : handles?.ey) ?? 0,
     width: 22, height: 22, zIndex: 6, touchAction: 'none',
-    background: '#58a6ff',
+    background: 'var(--accent)',
     border: '1.5px solid rgba(255,255,255,.9)',
     boxShadow: '0 1px 4px rgba(0,0,0,.4)',
     borderRadius: which === 'start' ? '50% 0 50% 50%' : '0 50% 50% 50%',

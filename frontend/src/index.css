@@ -22,6 +22,11 @@
   --accent-solid: #1f6feb;
   --accent-soft: rgba(31, 111, 235, .14);
   --accent-border: rgba(88, 166, 255, .45);
+  /* 成功/运行绿：全站也只有这一组（见 theme.tsx） */
+  --ok: #3fb950;
+  --ok-solid: #238636;
+  --ok-soft: rgba(63, 185, 80, .14);
+  --ok-border: rgba(63, 185, 80, .42);
   --list-hover: rgba(255, 255, 255, .025);
   --scroll-thumb: #2a313a;
   --scroll-thumb-hover: #3d444d;
@@ -225,7 +230,7 @@ body {
   transition: border-color .15s, transform .15s;
 }
 .tt-session-capsule:hover { border-color: var(--accent-border); transform: translateY(-1px); }
-.tt-session-capsule .d { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: #3fb950; }
+.tt-session-capsule .d { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--ok); }
 .tt-session-capsule .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tt-session-capsule .n {
   flex: 0 0 auto; min-width: 18px; height: 18px; padding: 0 5px;
@@ -272,8 +277,14 @@ body {
 .tt-nav.rail .tt-nav-account,
 .tt-nav.rail .tt-nav-collapse { justify-content: center; padding: 0; }
 .tt-nav-item:hover, .tt-nav-account:hover, .tt-nav-collapse:hover { background: var(--list-hover); color: var(--text-bright); }
-.tt-nav-item .ic { display: flex; flex: 0 0 auto; }
-.tt-nav-item .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 图标槽：导航项 / 终端开关 / 账户 / 收起 用同一个 20px 方槽，图标才在一条竖线上。
+   账户那枚以前是「蓝底圆角块」，在一列裸图标里自成一格——同一列里不要两种图标语言。 */
+.tt-nav-item .ic, .tt-nav-account .av, .tt-nav-collapse .ic {
+  flex: 0 0 auto; width: 20px; height: 20px; display: grid; place-items: center;
+}
+.tt-nav-item .nm, .tt-nav-account .nm, .tt-nav-collapse .nm {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 /* 选中态：3px 左强调线 + 低饱和蓝底。整块高亮会把注意力从内容上夺走（14 §4.4） */
 .tt-nav-item.on { background: var(--accent-soft); color: var(--text-bright); }
 .tt-nav-item.on::before {
@@ -282,13 +293,15 @@ body {
 }
 /* 终端是开关不是页面：给底色，但不给「当前在哪一页」的那条强调线 */
 .tt-nav-item.toggle.on::before { display: none; }
+/* 角标只有一种形状与分量（淡底 + 同色字），颜色只用来分语义：
+   琥珀＝需要你处理，蓝＝计数。一个实心蓝圆点混在一列淡底胶囊里会读成「更重要」 */
 .tt-nav-item .bd {
   margin-left: auto; flex: 0 0 auto; min-width: 20px; height: 20px; padding: 0 6px;
   display: grid; place-items: center; border-radius: var(--r-pill);
   background: rgba(210, 153, 34, .18); color: #e3b341;
   font: 600 var(--fs-micro)/1 ui-monospace, monospace;
 }
-.tt-nav-item .bd.blue { background: var(--accent-solid); color: #fff; }
+.tt-nav-item .bd.blue { background: var(--accent-soft); color: var(--accent); }
 /* 轨态 badge 缩成右上角一枚点大小的角标，不挤图标 */
 .tt-nav.rail .tt-nav-item .bd {
   position: absolute; top: 3px; right: 6px; margin: 0; min-width: 15px; height: 15px;
@@ -296,13 +309,7 @@ body {
 }
 
 .tt-nav-foot { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; border-top: 1px solid var(--border-subtle); }
-.tt-nav-account .av {
-  flex: 0 0 auto; width: 26px; height: 26px; display: grid; place-items: center;
-  border-radius: 8px; background: var(--accent-soft); color: var(--accent);
-  font-size: 12px; font-weight: 800;
-}
-.tt-nav-account .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tt-nav-account .dots { margin-left: auto; flex: 0 0 auto; color: var(--text-dimmer); font-size: 11px; }
+.tt-nav-account .dots { margin-left: auto; flex: 0 0 auto; display: flex; color: var(--text-dimmer); }
 
 .tt-top-create:hover { border-color: var(--accent-border); color: var(--accent); }
 
@@ -431,7 +438,7 @@ html[data-size="compact"] .tt-pagedivider { display: none; }
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tt-srow .loc { display: block; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
     font-size: var(--fs-meta); color: var(--text-dimmer); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .tt-srow .loc .br { color: #7ed0d8; }
+  .tt-srow .loc .br { color: #7ed0d8; display: inline-flex; align-items: center; gap: 4px; }
   .tt-srow .tags { flex-wrap: nowrap; overflow: hidden; }
   /* 位置列已经把分支写全了，行内那枚 ⎇ 标就是重复 */
   .tt-srow .tags .wt { display: none; }
@@ -818,7 +825,7 @@ html[data-size="compact"] .ant-form-item-control-input-content > .ant-picker { w
 .ant-tag { border-radius: 6px; letter-spacing: .2px; }
 
 /* ── 链接：默认偏中性，hover 才上主色 ── */
-.ant-typography a, a.ant-typography { color: #58a6ff; }
+.ant-typography a, a.ant-typography { color: var(--accent); }
 
 /* 等宽数字（统计/指标对齐不跳动） */
 .ant-statistic-content-value, .tnum { font-variant-numeric: tabular-nums; }
@@ -846,7 +853,7 @@ html[data-size="compact"] .ant-form-item-control-input-content > .ant-picker { w
 .cc-filerow { border-radius: 6px; margin: 1px 4px; }
 .cc-filerow:hover { background: rgba(88, 166, 255, .08); }
 /* 右键菜单打开期间保持目标行高亮；状态留在菜单组件内，避免重渲染整棵文件列表。 */
-.tt-file-context-open > .cc-filerow { background: #1f6feb22; }
+.tt-file-context-open > .cc-filerow { background: var(--accent-soft); }
 /* 手动控制的右键菜单不要被整行触发器拉伸到文件抽屉宽度。 */
 .tt-file-context-menu { width: max-content !important; min-width: 130px !important; }
 /* Git 分组标题上的操作按钮：平时半透明，hover 分组时变实 */
@@ -861,14 +868,15 @@ html[data-pointer="coarse"] .cc-git-section-act .cc-dl { opacity: 1; }
 
 /* 编辑器文件 tab 的关闭键：干净常显 ×；脏文件平时显橙点、hover tab 时变 × 可关（VSCode 行为）。会话 tab 无此键 → 不可关。 */
 .cc-tabx { margin-left: 2px; padding: 0 3px; line-height: 1; border-radius: 4px; display: inline-flex; align-items: center; }
-.cc-tabx .dot { display: none; color: #d29922; font-size: 14px; }
-.cc-tabx .x { display: inline; color: var(--text-dim); font-size: 14px; }
+/* 未保存点：以前是个 ● 字符，字号/基线跟着字体走。改成画出来的圆点，和关闭图标同槽 */
+.cc-tabx .dot { display: none; width: 8px; height: 8px; border-radius: 50%; background: #d29922; }
+.cc-tabx .x { display: inline-flex; width: 8px; height: 8px; align-items: center; justify-content: center; color: var(--text-dim); }
 .cc-filetab:hover .cc-tabx .x { color: var(--text-bright); }
 .cc-tabx:hover { background: rgba(255, 255, 255, .1); }
-.cc-filetab.dirty .cc-tabx .dot { display: inline; }
+.cc-filetab.dirty .cc-tabx .dot { display: block; }
 .cc-filetab.dirty .cc-tabx .x { display: none; }
 .cc-filetab.dirty:hover .cc-tabx .dot { display: none; }
-.cc-filetab.dirty:hover .cc-tabx .x { display: inline; }
+.cc-filetab.dirty:hover .cc-tabx .x { display: inline-flex; }
 
 .tt-file-detail {
   transform: translateZ(0);
@@ -949,6 +957,9 @@ html[data-pointer="coarse"] .cc-git-section-act .cc-dl { opacity: 1; }
   text-shadow: 0 1px 0 color-mix(in srgb, var(--bg-container) 70%, transparent);
 }
 .swarm-office-label b {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   overflow: hidden;
   max-width: 132px;
   text-overflow: ellipsis;
@@ -1032,7 +1043,7 @@ html[data-pointer="coarse"] .cc-git-section-act .cc-dl { opacity: 1; }
   transform: translateX(-50%);
   border: 3px solid rgba(222,228,236,.95);
   border-radius: 3px;
-  background: linear-gradient(135deg, #5eb1ff, #0f4fa8);
+  background: linear-gradient(135deg, var(--accent), var(--accent-solid));
   box-shadow: 0 9px 16px rgba(1, 4, 9, .13);
   animation: swarm-office-screen-idle 3.8s ease-in-out infinite;
 }
@@ -1047,10 +1058,10 @@ html[data-pointer="coarse"] .cc-git-section-act .cc-dl { opacity: 1; }
   font-size: 8px;
 }
 .swarm-office-monitor.is-codex {
-  background: linear-gradient(135deg, #3fb950, #0b5f2a);
+  background: linear-gradient(135deg, var(--ok), var(--ok-solid));
 }
 .swarm-office-monitor.is-claude {
-  background: linear-gradient(135deg, #58a6ff, #0f4fa8);
+  background: linear-gradient(135deg, var(--accent), var(--accent-solid));
 }
 .swarm-office-monitor span {
   position: absolute;
@@ -1380,9 +1391,13 @@ html[data-pointer="coarse"] .cc-git-section-act .cc-dl { opacity: 1; }
 .swarm-node-mark {
   color: var(--node-accent);
   flex: 0 0 auto;
+  display: flex;
 }
 .swarm-node-name {
   flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

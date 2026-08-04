@@ -16,6 +16,8 @@ import { relTime } from './App'
 import { dot } from './Projects'
 import { useLayout } from './layout'
 import { requestIntent } from './intents'
+import { FlagIcon, MergeIcon, PlusIcon, SwarmIcon } from './icons'
+import { BranchIcon } from './git/parts'
 
 const OV_CSS = `
 .ov{display:flex;flex-direction:column;gap:var(--sp-4);padding-bottom:32px;max-width:var(--content-overview)}
@@ -37,7 +39,7 @@ const OV_CSS = `
   background:none;color:var(--text-dim);font:inherit;cursor:pointer}
 .ov-sum button:hover{color:var(--text-bright);background:var(--list-hover)}
 .ov-sum b{font-family:ui-monospace,monospace;font-weight:700;font-size:var(--fs-sm);color:var(--text-bright)}
-.ov-sum .d{width:6px;height:6px;border-radius:50%;background:#3fb950;flex:0 0 auto}
+.ov-sum .d{width:6px;height:6px;border-radius:50%;background:var(--ok);flex:0 0 auto}
 .ov-sum .d.a{background:#d29922}.ov-sum .d.p{background:#a371f7}
 /* 手指档把 tab 撑到 44：真机上默认高度只有 40（13 §7.1 的命中区下限） */
 
@@ -114,9 +116,10 @@ const OV_CSS = `
 .ov-ev{position:relative;padding-left:18px}
 .ov-ev::before{content:"";position:absolute;left:1px;top:4px;width:7px;height:7px;border-radius:50%;
   border:2px solid var(--bg-container);background:#39c5cf}
-.ov-ev.g::before{background:#3fb950}.ov-ev.p::before{background:#a371f7}
-.ov-ev b{display:block;font-size:var(--fs-meta);color:var(--text-bright);
+.ov-ev.g::before{background:var(--ok)}.ov-ev.p::before{background:#a371f7}
+.ov-ev b{display:flex;align-items:center;gap:var(--sp-1);font-size:var(--fs-meta);color:var(--text-bright);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ov-ev b svg{flex:0 0 auto}
 .ov-ev p{margin:var(--sp-1) 0 0;font-size:var(--fs-meta);line-height:1.55;color:var(--text-dim);
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .ov-ev time{display:block;margin-top:var(--sp-1);font-size:var(--fs-micro);color:var(--text-dimmer)}
@@ -331,7 +334,7 @@ export default function Overview({ openTerm }: { openTerm: (n: string) => void }
       if (sw.pending <= 0) continue
       items.push({
         key: 's' + sw.name, kind: 'swarm', proj: sw.projName,
-        title: '⬡ ' + sw.name,
+        title: sw.name,
         desc: t('overview.cardSwarmDesc', { count: sw.pending }),
         action: t('project.swarm.board'), go: () => goSwarm(sw.name),
       })
@@ -402,7 +405,9 @@ export default function Overview({ openTerm }: { openTerm: (n: string) => void }
       <div className="ov-tl">
         {acts.map((e: any) => (
           <div key={(e.oid || e.branch) + e.at} className={`ov-ev ${e.kind === 'trace' ? 'p' : ''}`}>
-            <b>{e.kind === 'trace' ? `⇥ ${e.branch}` : <><span className="ov-mono">{e.oid}</span> · {e.projName}</>}</b>
+            <b>{e.kind === 'trace'
+              ? <><MergeIcon size={12} />{e.branch}</>
+              : <><span className="ov-mono">{e.oid}</span> · {e.projName}</>}</b>
             <p>{e.kind === 'trace'
               ? t('project.act.traceMerged', { branch: e.branch, base: e.base || '?', strategy: e.strategy || 'squash' })
               : e.subject}</p>
@@ -436,7 +441,7 @@ export default function Overview({ openTerm }: { openTerm: (n: string) => void }
             {!isPhone && (
               <button type="button" className="ov-new"
                 onClick={() => { location.hash = '#/projects'; requestIntent('new-project') }}>
-                ＋ {t('overview.newTask')}
+                <PlusIcon size={13} />{t('overview.newTask')}
               </button>
             )}
           </div>
@@ -506,9 +511,9 @@ export default function Overview({ openTerm }: { openTerm: (n: string) => void }
                         const r = running(s.name)
                         return (
                           <div key={s.name} className="ov-trow" onClick={() => openTerm(s.name)}>
-                            {dot(false, w ? '#d29922' : r ? '#3fb950' : undefined)}
+                            {dot(false, w ? '#d29922' : r ? 'var(--ok)' : undefined)}
                             <span className="t" title={`${s.label || s.name}（${s.id || s.name}）`}>{s.label || s.name}</span>
-                            {ann[s.name]?.primary?.linked && <Tag color="cyan" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px', padding: '0 5px' }}>⎇</Tag>}
+                            {ann[s.name]?.primary?.linked && <Tag color="cyan" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px', padding: '0 5px' }}><BranchIcon size={11} /></Tag>}
                             {cc[s.name] && <Tag color="blue" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px', padding: '0 5px' }}>Claude</Tag>}
                             {cx[s.name] && <Tag color="green" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px', padding: '0 5px' }}>Codex</Tag>}
                             <span className="tm">{relTime(s.last_activity, t)}</span>
@@ -518,13 +523,13 @@ export default function Overview({ openTerm }: { openTerm: (n: string) => void }
                       {rows.length > 3 && <div className="ov-more">{t('overview.moreTasks', { count: rows.length - 3 })}</div>}
                       {projSwarms.map((sw) => (
                         <div key={sw.name} className="ov-foot">
-                          ⬡ <b>{sw.name}</b>
+                          <SwarmIcon size={12} /><b>{sw.name}</b>
                           <span style={{ color: 'var(--text-dimmer)' }}>{t('project.swarm.members', { mine: sw.inProj, total: sw.total })}</span>
                           <a onClick={() => goSwarm(sw.name)}>{t('project.swarm.board')}<Go /></a>
                         </div>
                       ))}
                       {p.unfinished > 0 && (
-                        <div className="ov-foot w">⚑ {t('overview.unfinishedN', { count: p.unfinished })}
+                        <div className="ov-foot w"><FlagIcon size={12} />{t('overview.unfinishedN', { count: p.unfinished })}
                           <a onClick={() => goProject(p.key)}>{t('overview.goFinish')}<Go /></a>
                         </div>
                       )}

@@ -8,6 +8,7 @@ import { api } from './api'
 import { useI18n } from './i18n'
 import { usePreferences, savePreferences } from './preferences'
 import { connect, type DuplexTransport } from './p2p/transport'
+import { ChevronLeft, ChevronRight, CloseIcon, RefreshIcon } from './icons'
 
 interface TabInfo { id: string; title: string; url: string }
 
@@ -33,8 +34,8 @@ function BrowserTab({ tab, active, onSelect, onClose }: {
       <span
         onClick={(e) => { e.stopPropagation(); onClose() }}
         onMouseDown={(e) => e.stopPropagation()}
-        style={{ flex: '0 0 auto', width: 16, height: 16, lineHeight: '15px', textAlign: 'center', borderRadius: 4, color: 'var(--text-dim)' }}
-      >×</span>
+        style={{ flex: '0 0 auto', width: 16, height: 16, display: 'grid', placeItems: 'center', borderRadius: 4, color: 'var(--text-dim)' }}
+      ><CloseIcon size={12} /></span>
     </div>
   )
 }
@@ -677,16 +678,6 @@ export default function BrowserView() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* 图标用的金属高光渐变（银色 chrome 质感，与品牌 mark 一致） */}
-      <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true">
-        <defs>
-          <linearGradient id="metalIcon" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#f2f5f9" />
-            <stop offset="0.45" stopColor="#c4cbd4" />
-            <stop offset="0.55" stopColor="#878f9b" />
-            <stop offset="1" stopColor="#b3bbc6" />
-          </linearGradient>
-        </defs>
-      </svg>
       {/* 标签栏：左=标签页(自定义固定宽度，切换不易位)，右=接管/清晰度/状态/指标 */}
       <TabBar
         tabs={tabs}
@@ -713,7 +704,7 @@ export default function BrowserView() {
                     type={on ? 'primary' : 'default'}
                     onClick={() => changeQuality(o.value)}
                     style={on
-                      ? { background: '#1f6feb', borderColor: '#1f6feb', color: '#fff', fontWeight: 700, boxShadow: '0 0 0 2px rgba(31,111,235,.35)', zIndex: 1 }
+                      ? { background: 'var(--accent-solid)', borderColor: 'var(--accent-solid)', color: '#fff', fontWeight: 700, boxShadow: '0 0 0 2px rgba(31,111,235,.35)', zIndex: 1 }
                       : { background: 'transparent', borderColor: 'var(--border)', color: 'var(--text-dim)' }}
                   >{t(o.labelKey)}</Button>
                 )
@@ -723,11 +714,11 @@ export default function BrowserView() {
             <Button size="small" onClick={rotate} title={t('browser.rotateTitle')}
               type={rotation ? 'primary' : 'default'}
               style={rotation
-                ? { background: '#1f6feb', borderColor: '#1f6feb', color: '#fff', fontWeight: 700, boxShadow: '0 0 0 2px rgba(31,111,235,.35)' }
+                ? { background: 'var(--accent-solid)', borderColor: 'var(--accent-solid)', color: '#fff', fontWeight: 700, boxShadow: '0 0 0 2px rgba(31,111,235,.35)' }
                 : { background: 'transparent', borderColor: 'var(--border)', color: 'var(--text-dim)' }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 {/* 屏幕旋转图标（倾斜设备框 + 对角双箭头），明显区别于刷新的环形箭头 */}
-                <svg viewBox="0 0 24 24" width={15} height={15} fill={rotation ? '#fff' : 'url(#metalIcon)'} style={{ display: 'block' }}>
+                <svg viewBox="0 0 24 24" width={15} height={15} fill="currentColor" style={{ display: 'block' }}>
                   <path d="M16.48 2.52c3.27 1.55 5.61 4.72 5.97 8.48h1.5C23.44 4.84 18.29 0 12 0l-.66.03 3.81 3.81 1.33-1.32zM10.23 1.75c-.59-.59-1.54-.59-2.12 0L1.75 8.11c-.59.59-.59 1.54 0 2.12l12.02 12.02c.59.59 1.54.59 2.12 0l6.36-6.36c.59-.59.59-1.54 0-2.12L10.23 1.75zm4.6 19.44L2.81 9.17l6.36-6.36 12.02 12.02-6.36 6.36zM7.52 21.48C4.25 19.94 1.91 16.76 1.55 13H.05C.56 19.16 5.71 24 12 24l.66-.03-3.81-3.81-1.33 1.32z" />
                 </svg>
                 {rotation ? <span>{rotation}°</span> : null}
@@ -735,7 +726,7 @@ export default function BrowserView() {
             </Button>
             <Tag color={connected ? 'green' : 'red'} style={{ marginInlineEnd: 0 }}>{connected ? t('browser.connected') : t('browser.disconnected')}</Tag>
             <span style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap' }}>
-              {quality === 'auto' && levelName ? <span style={{ color: '#58a6ff' }}>{levelName} ·</span> : null}
+              {quality === 'auto' && levelName ? <span style={{ color: 'var(--accent)' }}>{levelName} ·</span> : null}
               {cell(latency == null ? '—' : latency + 'ms', 48)} ·{cell(fmtRate(bw), 70)} ·{cell(fps + 'fps', 42)}
             </span>
           </Space>
@@ -744,11 +735,11 @@ export default function BrowserView() {
       {/* 地址栏：紧凑一行，地址框自适应铺满（横向不自垫，与各页 16px 原点对齐） */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 0', flex: '0 0 auto' }}>
         <Button.Group size="small">
-          <Button onClick={() => act('back')} title={t('file.back')}>←</Button>
-          <Button onClick={() => act('forward')} title={t('file.forward')}>→</Button>
-          <Button onClick={() => act('reload')} title={t('common.refresh')}>⟳</Button>
+          <Button onClick={() => act('back')} title={t('file.back')} icon={<ChevronLeft />} />
+          <Button onClick={() => act('forward')} title={t('file.forward')} icon={<ChevronRight />} />
+          <Button onClick={() => act('reload')} title={t('common.refresh')} icon={<RefreshIcon size={15} />} />
           <Button onClick={() => act('navigate', { url: home })} title={t('browser.home')}>
-            <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="url(#metalIcon)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+            <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
               <path d="M3 11.5 L12 4 L21 11.5" />
               <path d="M5.5 10 V19.5 H18.5 V10" />
             </svg>
@@ -782,7 +773,7 @@ export default function BrowserView() {
       </div>
       <style>{`
         .bv-ripple{position:absolute;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;
-          border:2px solid #58a6ff;pointer-events:none;animation:bvRip .45s ease-out forwards;}
+          border:2px solid var(--accent);pointer-events:none;animation:bvRip .45s ease-out forwards;}
         @keyframes bvRip{from{transform:scale(.3);opacity:.9}to{transform:scale(2.6);opacity:0}}
       `}</style>
       <div

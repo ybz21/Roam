@@ -27,7 +27,7 @@ const inlineCode: CSSProperties = {
 
 export default function Markdown({
   children,
-  accent = '#58a6ff',
+  accent = 'var(--accent)',
   resolveHref,
   onLinkClick,
   fill,

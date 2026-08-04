@@ -3,6 +3,9 @@
 import type { ReactNode } from 'react'
 import { Tooltip } from 'antd'
 import type { RawRef } from './graph'
+import { ArrowDown, ArrowUp, CloudIcon, WindowsIcon } from '../icons'
+
+export { CloudIcon }
 
 export const MONO = "ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, Consolas, monospace"
 
@@ -26,12 +29,11 @@ export const TagIcon = () => svg(<><path d="M20.6 13.4 12 22l-9-9V3h10l7.6 7.6a2
 export const StashIcon = () => svg(<><rect x="3" y="4" width="18" height="5" rx="1.4" /><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9" /><path d="M10 13h4" /></>, 13)
 export const CheckIcon = () => svg(<path d="m5 12.5 4.5 4.5L19 7" />, 14, { strokeWidth: 2.2 })
 export const SearchIcon = () => svg(<><circle cx="11" cy="11" r="7" /><path d="m20 20-3.6-3.6" /></>, 14)
-export const CloudIcon = () => svg(<path d="M6.5 18a4.5 4.5 0 0 1-.4-9 6 6 0 0 1 11.6 1.4A3.8 3.8 0 0 1 17.5 18Z" />, 13)
 export const CopyIcon = () => svg(<><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></>, 13)
 
 // 引用徽标：当前 HEAD 绿、本地分支蓝、远端灰蓝、标签琥珀。
 const REF_STYLE: Record<string, { fg: string; bg: string; bd: string }> = {
-  head: { fg: 'hsl(140,58%,45%)', bg: 'hsla(140,58%,45%,.14)', bd: 'hsla(140,58%,45%,.42)' },
+  head: { fg: 'var(--ok)', bg: 'var(--ok-soft)', bd: 'var(--ok-border)' },
   branch: { fg: 'hsl(212,78%,58%)', bg: 'hsla(212,78%,58%,.13)', bd: 'hsla(212,78%,58%,.38)' },
   remote: { fg: 'hsl(258,30%,62%)', bg: 'hsla(258,30%,62%,.13)', bd: 'hsla(258,30%,62%,.34)' },
   tag: { fg: 'hsl(32,85%,52%)', bg: 'hsla(32,85%,52%,.14)', bd: 'hsla(32,85%,52%,.4)' },
@@ -53,7 +55,7 @@ export function RefBadge({ r, onClick, title, wt, onWt }: {
       }}>
       {r.kind === 'head' && <span style={{ width: 5, height: 5, borderRadius: '50%', background: s.fg, flex: '0 0 auto' }} />}
       {r.kind === 'tag' && <span style={{ opacity: .8 }}>#</span>}
-      {r.kind === 'remote' && <span style={{ opacity: .8, fontSize: 9 }}>☁</span>}
+      {r.kind === 'remote' && <span style={{ opacity: .8, display: 'inline-flex' }}><CloudIcon size={10} /></span>}
       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
     </span>
   )
@@ -64,7 +66,7 @@ export function RefBadge({ r, onClick, title, wt, onWt }: {
       {badge}
       <Tooltip title={wt}>
         <span onClick={(e) => { e.stopPropagation(); onWt?.() }}
-          style={{ color: 'hsl(190,60%,50%)', fontSize: 11, cursor: onWt ? 'pointer' : 'default', lineHeight: 1 }}>⧉</span>
+          style={{ color: 'hsl(190,60%,50%)', display: 'inline-flex', cursor: onWt ? 'pointer' : 'default', lineHeight: 1 }}><WindowsIcon size={11} /></span>
       </Tooltip>
     </span>
   )
@@ -104,8 +106,8 @@ export function AheadBehind({ ahead, behind, size = 11 }: { ahead?: number; behi
   if (!ahead && !behind) return null
   return (
     <span style={{ display: 'inline-flex', gap: 5, fontFamily: MONO, fontSize: size, flex: '0 0 auto' }}>
-      {!!behind && <span style={{ color: 'hsl(32,85%,55%)' }}>↓{behind}</span>}
-      {!!ahead && <span style={{ color: 'hsl(150,52%,50%)' }}>↑{ahead}</span>}
+      {!!behind && <span style={{ color: 'hsl(32,85%,55%)', display: 'inline-flex', alignItems: 'center', gap: 1 }}><ArrowDown size={size} />{behind}</span>}
+      {!!ahead && <span style={{ color: 'var(--ok)', display: 'inline-flex', alignItems: 'center', gap: 1 }}><ArrowUp size={size} />{ahead}</span>}
     </span>
   )
 }

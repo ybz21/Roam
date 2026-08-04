@@ -46,6 +46,12 @@ export const THEME_TOKENS: Record<ThemeMode, ThemeTokens> = {
       '--accent-solid': '#1f6feb',
       '--accent-soft': 'rgba(31, 111, 235, .14)',
       '--accent-border': 'rgba(88, 166, 255, .45)',
+      // 成功/运行绿也只有这一组，同理别写死：--ok 线/文字（含 diff 的 +），
+      // --ok-solid 实心块，--ok-soft 淡底，--ok-border 描边
+      '--ok': '#3fb950',
+      '--ok-solid': '#238636',
+      '--ok-soft': 'rgba(63, 185, 80, .14)',
+      '--ok-border': 'rgba(63, 185, 80, .42)',
       '--brand-grad': 'linear-gradient(180deg, #f5f7fa 0%, #c3c9d1 46%, #9aa1ab 56%, #e7ebef 100%)',
       '--list-hover': 'rgba(255, 255, 255, .025)',
       '--scroll-thumb': '#2a313a',
@@ -87,6 +93,10 @@ export const THEME_TOKENS: Record<ThemeMode, ThemeTokens> = {
       '--accent-solid': '#1f6feb',
       '--accent-soft': 'rgba(31, 111, 235, .10)',
       '--accent-border': 'rgba(31, 111, 235, .40)',
+      '--ok': '#1a7f37',
+      '--ok-solid': '#1f883d',
+      '--ok-soft': 'rgba(31, 136, 61, .10)',
+      '--ok-border': 'rgba(31, 136, 61, .40)',
       '--brand-grad': 'linear-gradient(180deg, #2c333b 0%, #1f2328 100%)',
       '--list-hover': 'rgba(27, 31, 36, .04)',
       '--scroll-thumb': '#c9d1d9',
@@ -124,7 +134,9 @@ export const useThemeMode = () => useContext(ThemeCtx)
 // 一层（#58a6ff → rgb(78,144,220)），照抄的值和 antd 实际画出来的必然差一档——
 // 这正是「名称」段控件和「＋新项目」并排时两种蓝的成因。
 // 要和 antd 一致就用 --accent-solid（下面回填成推导后的真值）。
-const ACCENT_SEED = '#58a6ff'
+const ACCENT_SEED = THEME_TOKENS.dark.css['--accent']
+// 成功色种子：antd 的 Tag success / Result / 校验通过都吃它，和自绘的 --ok 同源
+const SUCCESS_SEED = THEME_TOKENS.dark.css['--ok']
 
 /** antd 推导后的实际主色：Segmented 选中底、自绘实心块都用它 */
 function solidAccent(mode: ThemeMode): string {
@@ -141,6 +153,7 @@ function buildTheme(mode: ThemeMode) {
     algorithm: dark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
     token: {
       colorPrimary: ACCENT_SEED,
+      colorSuccess: SUCCESS_SEED,
       // 圆角跟 CSS 的 --r-* 同一套刻度：控件 10 / 卡片 14 / 小件 6。
       // 这三个数一改，所有 antd 控件一起对齐，不必逐个组件覆盖。
       borderRadius: 10, borderRadiusLG: 14, borderRadiusSM: 6,
@@ -161,11 +174,11 @@ function buildTheme(mode: ThemeMode) {
         : { siderBg: t.bgContainer, headerBg: t.bgContainer, bodyBg: t.bgLayout },
       Menu: dark ? {
         darkItemBg: 'transparent', darkItemSelectedBg: 'rgba(88,166,255,0.16)',
-        darkItemSelectedColor: '#58a6ff', darkItemHoverBg: 'rgba(255,255,255,0.04)',
+        darkItemSelectedColor: THEME_TOKENS.dark.css['--accent'], darkItemHoverBg: 'rgba(255,255,255,0.04)',
         itemBorderRadius: 8, itemHeight: 42, itemMarginInline: 8,
       } : {
         itemBg: 'transparent', itemSelectedBg: 'rgba(31,111,235,0.10)',
-        itemSelectedColor: '#1f6feb', itemHoverBg: 'rgba(31,111,235,0.06)',
+        itemSelectedColor: THEME_TOKENS.light.css['--accent-solid'], itemHoverBg: 'rgba(31,111,235,0.06)',
         itemBorderRadius: 8, itemHeight: 42, itemMarginInline: 8,
       },
       Card: { borderRadiusLG: 14, paddingLG: 18, headerFontSize: 15 },

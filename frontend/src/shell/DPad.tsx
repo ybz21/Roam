@@ -6,8 +6,9 @@
 //
 // 所以方向键单独拎出来常驻：右下角十字簇，48×48，长按连发。
 // 「让键盘根本不必弹起」是这块的全部意义——键盘一弹就吃掉半屏。
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, type ReactNode } from 'react'
 import { useI18n } from '../i18n'
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, EnterIcon } from '../icons'
 
 /** 首发 400ms 后进入连发，之后 90ms 一次（13 §5.3） */
 const REPEAT_DELAY = 400
@@ -57,7 +58,7 @@ export function DPad({ side, onSend, onHide }: {
     stop()
   }, [onSend, stop])
 
-  const key = (cls: string, seq: string, label: string, aria: string) => (
+  const key = (cls: string, seq: string, label: ReactNode, aria: string) => (
     <button type="button" className={`k ${cls}`} aria-label={aria}
       onPointerDown={press(seq)} onPointerUp={stop} onPointerLeave={stop} onPointerCancel={stop}
       onContextMenu={(e) => e.preventDefault()}>{label}</button>
@@ -65,14 +66,14 @@ export function DPad({ side, onSend, onHide }: {
 
   return (
     <div className="tt-dpad" data-side={side} role="group" aria-label={t('mobile.dpad')}>
-      {key('u', SEQ.up, '↑', t('mobile.dpadUp'))}
-      {key('l', SEQ.left, '←', t('mobile.dpadLeft'))}
+      {key('u', SEQ.up, <ChevronUp size={18} />, t('mobile.dpadUp'))}
+      {key('l', SEQ.left, <ChevronLeft size={18} />, t('mobile.dpadLeft'))}
       <button type="button" className="k c" aria-label={t('mobile.dpadEnter')}
         onPointerDown={pressCenter} onPointerUp={releaseCenter}
         onPointerLeave={stop} onPointerCancel={stop}
-        onContextMenu={(e) => e.preventDefault()}>⏎</button>
-      {key('r', SEQ.right, '→', t('mobile.dpadRight'))}
-      {key('d', SEQ.down, '↓', t('mobile.dpadDown'))}
+        onContextMenu={(e) => e.preventDefault()}><EnterIcon size={18} /></button>
+      {key('r', SEQ.right, <ChevronRight size={18} />, t('mobile.dpadRight'))}
+      {key('d', SEQ.down, <ChevronDown size={18} />, t('mobile.dpadDown'))}
     </div>
   )
 }

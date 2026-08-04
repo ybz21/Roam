@@ -22,6 +22,8 @@ import { useLayout } from './layout'
 import { detectPrompt } from './prompt'
 import { relTime, taskNameFromPrompt, shq, NewSessionModal, DirPicker, recentDirs, pushRecentDir, CloseWorktreeModal } from './App'
 import FileBrowser from './FileBrowser'
+import { ArrowDown, ArrowUp, CheckIcon, ChevronDown, CloseIcon, MergeIcon, PaperclipIcon, PlusIcon, PushIcon, StarIcon, SwarmIcon, WarnIcon, WindowsIcon } from './icons'
+import { BranchIcon } from './git/parts'
 
 const WorktreePanel = lazy(() => import('./WorktreePanel'))
 const GitPanel = lazy(() => import('./GitPanel'))
@@ -78,7 +80,7 @@ const PRJ_CSS = `
   border:1px solid var(--border);background:rgba(177,186,196,.03);
   transition:color .15s,border-color .15s,background .15s}
 .prj-pill:hover{color:var(--text-bright);border-color:#8b949e}
-.prj-pill.on{color:#79b8ff;border-color:rgba(56,139,253,.55);background:rgba(31,111,235,.14)}
+.prj-pill.on{color:var(--accent);border-color:var(--accent-border);background:var(--accent-soft)}
 .prj-pill.on.cyan{color:#39c5cf;border-color:rgba(57,197,207,.5);background:rgba(57,197,207,.1)}
 .prj-pill.dis{opacity:.4;cursor:not-allowed}
 
@@ -93,7 +95,7 @@ const PRJ_CSS = `
   display:inline-flex;align-items:center;gap:6px;border-bottom:2px solid transparent;margin-bottom:-1px;
   transition:color .15s}
 .prj-tab:hover{color:var(--text-bright)}
-.prj-tab.on{color:var(--text-bright);border-bottom-color:#58a6ff;font-weight:600}
+.prj-tab.on{color:var(--text-bright);border-bottom-color:var(--accent);font-weight:600}
 .prj-tab .n{font-size:10.5px;font-family:ui-monospace,monospace;color:var(--text-dimmer);
   background:rgba(177,186,196,.08);border-radius:999px;padding:1px 6px}
 
@@ -102,7 +104,7 @@ const PRJ_CSS = `
 .prj-sect .n{font-family:ui-monospace,monospace;font-size:var(--fs-micro);color:var(--text-dim);font-weight:400}
 .prj-sect .ln{flex:1}
 .prj-sect.warn{color:#d29922}
-.prj-sect.ok{color:#3fb950}
+.prj-sect.ok{color:var(--ok)}
 
 .prj-row{position:relative;display:flex;align-items:flex-start;gap:9px;padding:10px 12px;
   border-radius:10px;cursor:pointer;transition:background .15s}
@@ -158,7 +160,7 @@ html[data-size="compact"] .prj-subbar.searching .prj-iconbtn.find{display:none}
 .prj-chip:hover{color:var(--text-bright);border-color:#8b949e}
 .prj-chip.on{color:var(--accent);border-color:var(--accent-border);background:var(--accent-soft)}
 .prj-chip .n{font-family:ui-monospace,monospace;font-size:var(--fs-micro);color:var(--text-dimmer)}
-.prj-chip.on .n{color:#79b8ff}
+.prj-chip.on .n{color:var(--accent)}
 
 /* 卡片列固定在 ≥320：原来是 minmax(270,1fr)，右侧一开终端就塌成一条极窄列表（14 §6.1）。
    align-items:start —— 默认的 stretch 会把整行卡片拉到最高那张的高度：一张列了两个会话、
@@ -219,9 +221,9 @@ html[data-pointer="coarse"] .prj-card .prj-acts{opacity:1}
 .prj-fork .n2{font-size:12px;color:var(--text-dimmer)}
 .prj-fork .wt-br{font-family:ui-monospace,'SF Mono','JetBrains Mono',Menlo,Consolas,monospace;
   font-size:13.5px;font-weight:600;color:#39c5cf}
-.prj-fork .wt-br::before{content:'⎇ ';opacity:.7}
-.prj-fork .wt-ab{font-family:ui-monospace,monospace;font-size:12px}
-.prj-fork .wt-ab.up{color:#3fb950} .prj-fork .wt-ab.dn{color:#d29922}
+.prj-fork .wt-br{display:inline-flex;align-items:center;gap:4px}
+.prj-fork .wt-ab{font-family:ui-monospace,monospace;font-size:12px;display:inline-flex;align-items:center;gap:1px}
+.prj-fork .wt-ab.up{color:var(--ok)} .prj-fork .wt-ab.dn{color:#d29922}
 .prj-fork .wt-acts{flex:0 0 auto;display:flex;gap:6px;align-items:center;opacity:.55;transition:opacity .15s}
 .prj-fork:hover .wt-acts,.prj-fork .wt-acts:focus-within{opacity:1}
 html[data-pointer="coarse"] .prj-fork .wt-acts{opacity:1}
@@ -232,20 +234,20 @@ html[data-pointer="coarse"] .prj-fork .wt-acts{opacity:1}
 // 绿=有会话在跑 / 琥珀=孤儿待收尾 / 灰虚线=已合入待清理 / 灰菱形=外部。
 const FORK_TRUNK = 'hsl(212, 78%, 58%)'
 const FORK_COLOR: Record<string, string> = {
-  live: '#3fb950', orphan: '#d29922', merged: 'rgba(139,148,158,.55)', ext: 'rgba(139,148,158,.7)',
+  live: 'var(--ok)', orphan: '#d29922', merged: 'rgba(139,148,158,.55)', ext: 'rgba(139,148,158,.7)',
 }
 const CLI_KINDS = ['shell', 'claude', 'codex'] as const
 
 export const dot = (on: boolean, color?: string) => (
   <span style={{
     width: 8, height: 8, borderRadius: '50%', flex: '0 0 8px', display: 'inline-block',
-    background: color || (on ? '#3fb950' : 'var(--text-dimmer)'),
+    background: color || (on ? 'var(--ok)' : 'var(--text-dimmer)'),
     boxShadow: color || on ? `0 0 0 3px ${color ? 'rgba(210,153,34,.12)' : 'rgba(63,185,80,.12)'}` : undefined,
   }} />
 )
 
 // ── 生命周期导轨（P2 图纸）：建→干→审→并，当前段呼吸 ──────
-const LIFEC_COLORS = ['#39c5cf', '#3fb950', '#d29922', '#a371f7']
+const LIFEC_COLORS = ['#39c5cf', 'var(--ok)', '#d29922', '#a371f7']
 export function Lifec({ done, cur }: { done: number; cur?: number }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
@@ -430,11 +432,11 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
                 <span className="prj-acts">
                   <Tooltip title={p.pinned ? t('project.unpin') : t('project.pin')}>
                     <a className={p.pinned ? 'pinned' : ''} onClick={(e) => { e.stopPropagation(); pin(p) }}
-                      style={{ color: p.pinned ? '#d29922' : 'var(--text-dimmer)', fontSize: 13 }}>★</a>
+                      style={{ color: p.pinned ? '#d29922' : 'var(--text-dimmer)', display: 'inline-flex' }}><StarIcon filled={p.pinned} /></a>
                   </Tooltip>
                   <Popconfirm title={t('project.removeConfirm')} onConfirm={() => remove(p)}
                     onPopupClick={(e) => e.stopPropagation()}>
-                    <a onClick={(e) => e.stopPropagation()} style={{ color: 'var(--text-dimmer)', fontSize: 'var(--fs-meta)' }}>✕</a>
+                    <a onClick={(e) => e.stopPropagation()} style={{ color: 'var(--text-dimmer)', display: 'inline-flex' }}><CloseIcon size={13} /></a>
                   </Popconfirm>
                 </span>
               </div>
@@ -452,9 +454,9 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
                 }}>
                   {p.top!.map((s) => (
                     <div key={s.name} style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', minWidth: 0 }}>
-                      {dot(false, s.waiting ? '#d29922' : s.running ? '#3fb950' : undefined)}
+                      {dot(false, s.waiting ? '#d29922' : s.running ? 'var(--ok)' : undefined)}
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.name}>{s.label || sessionLabel(s.name)}</span>
-                      {s.branch && <Tag color="cyan" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px', padding: '0 5px' }}>⎇</Tag>}
+                      {s.branch && <Tag color="cyan" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px', padding: '0 5px' }}><BranchIcon size={11} /></Tag>}
                       <span style={{ marginLeft: 'auto', color: 'var(--text-dimmer)', fontSize: 'var(--fs-meta)', flex: '0 0 auto' }}>{relTime(s.lastActivity, t)}</span>
                     </div>
                   ))}
@@ -564,7 +566,7 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
             </div>
             {data.loose.map((s) => (
               <div key={s.name} className="prj-row" onClick={() => openTerm(s.name)}>
-                <span style={{ marginTop: 5, display: 'inline-flex' }}>{dot(false, s.waiting ? '#d29922' : s.running ? '#3fb950' : undefined)}</span>
+                <span style={{ marginTop: 5, display: 'inline-flex' }}>{dot(false, s.waiting ? '#d29922' : s.running ? 'var(--ok)' : undefined)}</span>
                 <span style={{ fontWeight: 600 }} title={s.name}>{s.label || sessionLabel(s.name)}</span>
                 <span style={{ color: 'var(--text-dimmer)', fontSize: 'var(--fs-meta)', marginTop: 2 }}>{relTime(s.lastActivity, t)}</span>
                 <span style={{ flex: 1 }} />
@@ -629,8 +631,8 @@ function FinishModal({ w, base, onClose, onDone, onRevive }: {
     }}>
       <span style={{
         width: 14, height: 14, borderRadius: '50%', marginTop: 3, flex: '0 0 14px',
-        border: `1.5px solid ${mode === k ? '#58a6ff' : 'var(--text-dimmer)'}`,
-        background: mode === k ? 'radial-gradient(circle at center, #58a6ff 40%, transparent 45%)' : 'transparent',
+        border: `1.5px solid ${mode === k ? 'var(--accent)' : 'var(--text-dimmer)'}`,
+        background: mode === k ? 'radial-gradient(circle at center, var(--accent) 40%, transparent 45%)' : 'transparent',
       }} />
       <span style={{ minWidth: 0 }}>
         <b style={{ display: 'block', fontSize: 13.5, color: danger ? '#f85149' : undefined }}>{title}</b>
@@ -641,14 +643,14 @@ function FinishModal({ w, base, onClose, onDone, onRevive }: {
   return (
     <Modal open onCancel={onClose} onOk={ok} okText={t('project.finish.ok')} confirmLoading={busy}
       okButtonProps={mode === 'discard' && !merged ? { danger: true } : undefined}
-      title={<span>{t('project.finish.title')} <Tag color="cyan" className="prj-mono" style={{ marginLeft: 4 }}>⎇ {w.branch}</Tag></span>} destroyOnClose>
+      title={<span>{t('project.finish.title')} <Tag color="cyan" className="prj-mono" style={{ marginLeft: 4 }} icon={<BranchIcon size={10} />}>{w.branch}</Tag></span>} destroyOnClose>
       <Space direction="vertical" style={{ width: '100%' }} size={12}>
         <div className="prj-mono" style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-dim)', lineHeight: 1.8, padding: '9px 12px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-sm)', background: 'var(--bg-term)' }}>
           <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t('project.finish.kept', { path: w.path })}</div>
           {/* 已合入：损失清单换成绿色定心丸（10 §5），未提交改动仍如实提示 */}
           {merged
             ? (<>
-              <div style={{ color: '#3fb950' }}>{t('project.finish.mergedRemote', { target: w.mergedInto, kind: w.mergedKind })}</div>
+              <div style={{ color: 'var(--ok)' }}>{t('project.finish.mergedRemote', { target: w.mergedInto, kind: w.mergedKind })}</div>
               {uncommitted > 0 && <div style={{ color: '#d29922' }}>{t('project.finish.uncommitted', { count: uncommitted })}</div>}
             </>)
             : <div>{t('project.finish.stats', { base: wtBase || '?', ahead: w.committedAhead, dirty: uncommitted })}</div>}
@@ -661,7 +663,7 @@ function FinishModal({ w, base, onClose, onDone, onRevive }: {
                 <div key={f.path} className="prj-mono" style={{ display: 'flex', gap: 8, padding: '3px 10px', fontSize: 'var(--fs-meta)' }}>
                   <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.path}</span>
                   {f.binary ? <span style={{ color: 'var(--text-dimmer)' }}>bin</span> : (<span style={{ flex: '0 0 auto' }}>
-                    <span style={{ color: '#3fb950' }}>+{f.adds}</span> <span style={{ color: '#f85149' }}>-{f.dels}</span>
+                    <span style={{ color: 'var(--ok)' }}>+{f.adds}</span> <span style={{ color: '#f85149' }}>-{f.dels}</span>
                   </span>)}
                 </div>
               ))}
@@ -681,7 +683,7 @@ function FinishModal({ w, base, onClose, onDone, onRevive }: {
           : radio('discard', t('project.finish.optDiscard'), t('project.finish.optDiscardDesc', { ahead: w.committedAhead }), true)}
         {mode !== 'revive' && (
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--fs-sm)', color: 'var(--text-dim)' }}>
-            <input type="checkbox" checked={delBranch} onChange={(e) => setDelBranch(e.target.checked)} style={{ accentColor: '#1f6feb' }} />
+            <input type="checkbox" checked={delBranch} onChange={(e) => setDelBranch(e.target.checked)} style={{ accentColor: 'var(--accent-solid)' }} />
             {t('project.finish.delBranch', { branch: w.branch })}
           </label>
         )}
@@ -1197,13 +1199,13 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
         aria-current={activeTerm === s.name ? 'true' : undefined}
         style={{ marginLeft: isChild ? 22 : 0, animationDelay: `${Math.min(i, 8) * 40}ms` }}
         onClick={() => openTerm(s.name)}>
-        <span style={{ marginTop: 7, display: 'inline-flex' }}>{dot(false, waiting ? '#d29922' : running ? '#3fb950' : undefined)}</span>
-        {isChild && <span style={{ color: '#a371f7', fontSize: 'var(--fs-meta)', marginTop: 3 }}>⑂</span>}
+        <span style={{ marginTop: 7, display: 'inline-flex' }}>{dot(false, waiting ? '#d29922' : running ? 'var(--ok)' : undefined)}</span>
+        {isChild && <span style={{ color: '#a371f7', marginTop: 3, display: 'inline-flex' }}><BranchIcon size={12} /></span>}
         <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
             <span style={{ fontWeight: 700 }} title={s.name}>{s.label || sessionLabel(s.name)}</span>
-            {hit.linked && hit.branch && <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 'var(--fs-micro)' }}>⎇ {hit.branch}</Tag>}
-            {hit.external && hit.linked && <Tag style={{ margin: 0 }}>⧉</Tag>}
+            {hit.linked && hit.branch && <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 'var(--fs-micro)' }} icon={<BranchIcon size={10} />}>{hit.branch}</Tag>}
+            {hit.external && hit.linked && <Tag style={{ margin: 0 }}><WindowsIcon size={11} /></Tag>}
             {swarmMap[s.name]?.role === 'leader' && <Tag color="purple" style={{ margin: 0 }}>{t('project.swarm.leaderTag')}</Tag>}
             {swarmMap[s.name]?.subrole && <Tag style={{ margin: 0 }}>{t(('swarm.subrole.' + swarmMap[s.name]!.subrole) as any) || swarmMap[s.name]!.subrole}</Tag>}
             {swarmMap[s.name]?.done && <Tag color="purple" style={{ margin: 0 }}>{t('project.swarm.integrate')}</Tag>}
@@ -1212,7 +1214,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
             {waiting && <Tag color="warning" style={{ margin: 0 }}>{t('session.waiting')}</Tag>}
             {a.ambiguous && (
               <Tooltip title={(a.matches || []).map((m: any) => m.worktree).join('\n')}>
-                <span style={{ color: '#d29922' }}>⚠</span>
+                <span style={{ color: '#d29922', display: 'inline-flex' }}><WarnIcon size={13} /></span>
               </Tooltip>
             )}
           </div>
@@ -1221,17 +1223,17 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
             {/* 已合入后 ↑n 不再展示（对比远端已零领先，只会误导）；未提交改动照常提示 */}
             {merged && (
               <Tooltip title={`${w.mergedInto} · ${w.mergedKind}`}>
-                <span style={{ color: '#3fb950', fontSize: 'var(--fs-meta)' }}>✓ {t('project.mergedTag')}</span>
+                <span style={{ color: 'var(--ok)', fontSize: 'var(--fs-meta)', display: 'inline-flex', alignItems: 'center', gap: 3 }}><CheckIcon size={12} />{t('project.mergedTag')}</span>
               </Tooltip>
             )}
             {gs === 'pushed' && (
               <Tooltip title={hit.branch ? `origin/${hit.branch}` : undefined}>
-                <span style={{ color: '#58a6ff', fontSize: 'var(--fs-meta)' }}>⇡ {t('project.pushedTag')}</span>
+                <span style={{ color: 'var(--accent)', fontSize: 'var(--fs-meta)', display: 'inline-flex', alignItems: 'center', gap: 3 }}><PushIcon size={12} />{t('project.pushedTag')}</span>
               </Tooltip>
             )}
             {(!merged && ahead > 0 || changes > 0) && (
               <span className="prj-mono" style={{ fontSize: 'var(--fs-meta)' }}>
-                {!merged && ahead > 0 && <span style={{ color: '#58a6ff' }}>↑{ahead}</span>}
+                {!merged && ahead > 0 && <span style={{ color: 'var(--accent)', display: 'inline-flex', alignItems: 'center', gap: 1 }}><ArrowUp size={11} />{ahead}</span>}
                 {!merged && ahead > 0 && changes > 0 && ' · '}
                 {changes > 0 && <span style={{ color: '#d29922' }}>{t('project.wt.changes', { count: changes })}</span>}
               </span>
@@ -1275,7 +1277,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
             <div className="prj-mono" style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)' }}>
               <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={proj.dir}>
                 {proj.dir}
-                {isGit && defBranch && <span style={{ color: '#39c5cf' }}> · ⎇ {defBranch}{mainHead ? ` @ ${mainHead}` : ''}</span>}
+                {isGit && defBranch && <span style={{ color: '#39c5cf', display: 'inline-flex', alignItems: 'center', gap: 4 }}> · <BranchIcon size={11} />{defBranch}{mainHead ? ` @ ${mainHead}` : ''}</span>}
               </span>
               {/* 项目 id（不可变，目录搬家也不变）：排障时对着日志/台账查同一个项目 */}
               <Tooltip title={t('project.copyId')}>
@@ -1299,7 +1301,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
                 { key: 'race', label: t('project.newRace'), onClick: () => setRaceOpen(true) },
               ] : []),
             ] }}>
-            ＋ {t('project.start')}
+            <PlusIcon size={13} /> {t('project.start')}
           </Dropdown.Button>
           </span>
         </div>
@@ -1313,15 +1315,15 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
           <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: 'none' }}
             onChange={(e) => { const fs = e.target.files ? Array.from(e.target.files) : []; e.target.value = ''; if (fs.length) uploadImages(fs) }} />
           <div className="prj-cbar">
-            <Button size="small" type="text" title={t('project.attachImage')} loading={uploading} onClick={() => fileRef.current?.click()} style={{ padding: '0 4px' }}>📎</Button>
+            <Button size="small" type="text" title={t('project.attachImage')} loading={uploading} onClick={() => fileRef.current?.click()} style={{ padding: '0 4px' }} icon={<PaperclipIcon size={14} />} />
             {isGit && (<>
-              <span className={`prj-pill cyan${wtMode === 'new' ? ' on' : ''}`} onClick={() => setWtMode('new')}>⎇ {t('project.where.new')}</span>
+              <span className={`prj-pill cyan${wtMode === 'new' ? ' on' : ''}`} onClick={() => setWtMode('new')}><BranchIcon size={11} />{t('project.where.new')}</span>
               <span className={`prj-pill${wtMode === 'repo' ? ' on' : ''}`} onClick={() => setWtMode('repo')}>{t('project.where.repo')}</span>
               <span className={`prj-pill${wtMode === 'existing' ? ' on' : ''}${wts.length ? '' : ' dis'}`}
                 onClick={() => { if (wts.length) setWtMode('existing') }}>{t('project.where.existing', { count: wts.length })}</span>
               {wtMode === 'existing' && (
                 <Select size="small" style={{ minWidth: 160 }} value={wtPath} onChange={setWtPath}
-                  options={wts.map((w: any) => ({ value: w.path, label: '⎇ ' + (w.branch || w.path.split('/').pop()) }))} />
+                  options={wts.map((w: any) => ({ value: w.path, label: w.branch || w.path.split('/').pop() }))} />
               )}
               {wtMode === 'new' && <span className="prj-mono" style={{ fontSize: 'var(--fs-micro)', color: 'var(--text-dimmer)' }}>{defBranch ? t('project.basedOn', { base: defBranch }) : t('project.baseDefault')}</span>}
               <span style={{ width: 1, height: 16, background: 'var(--border)' }} />
@@ -1366,7 +1368,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
                 return (
                   <div key={'g' + swName}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 6px 2px', fontSize: 'var(--fs-sm)', color: 'var(--text-dim)' }}>
-                      <span style={{ color: '#a371f7' }}>⬡</span>
+                      <span style={{ color: '#a371f7', display: 'inline-flex' }}><SwarmIcon /></span>
                       <b style={{ color: 'var(--text-bright)' }}>{swName}</b>
                       {sw && <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)' }}>{t('project.swarm.members', { mine: sw.inProj, total: sw.roster })}</span>}
                       <span style={{ flex: 1 }} />
@@ -1387,22 +1389,22 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
             {sect(t('project.section.cleanable'), cleanable.length, 'ok')}
             {cleanable.map((w: any) => (
               <div key={w.path} className="prj-row">
-                <span style={{ marginTop: 7, display: 'inline-flex' }}>{dot(false, '#3fb950')}</span>
+                <span style={{ marginTop: 7, display: 'inline-flex' }}>{dot(false, 'var(--ok)')}</span>
                 <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
-                    <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 'var(--fs-micro)' }}>⎇ {w.branch}</Tag>
+                    <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 'var(--fs-micro)' }} icon={<BranchIcon size={10} />}>{w.branch}</Tag>
                     <Tooltip title={`${w.mergedInto} · ${w.mergedKind}`}>
-                      <Tag color="success" style={{ margin: 0 }}>✓ {t('project.mergedTag')}</Tag>
+                      <Tag color="success" style={{ margin: 0 }} icon={<CheckIcon size={11} />}>{t('project.mergedTag')}</Tag>
                     </Tooltip>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)', flexWrap: 'wrap' }}>
                     <Lifec done={4} /><span>{t('project.stage.merged')}</span>
-                    <span className="prj-mono" style={{ fontSize: 'var(--fs-meta)', color: '#3fb950' }}>{t('project.mergedInto', { target: w.mergedInto })}</span>
+                    <span className="prj-mono" style={{ fontSize: 'var(--fs-meta)', color: 'var(--ok)' }}>{t('project.mergedInto', { target: w.mergedInto })}</span>
                     <span>{relTime(w.lastCommitAt, t)}</span>
                   </div>
                 </div>
                 <span className="acts">
-                  <a style={{ color: '#3fb950' }} onClick={() => cleanupMerged(w)}>{t('project.cleanup')}</a>
+                  <a style={{ color: 'var(--ok)' }} onClick={() => cleanupMerged(w)}>{t('project.cleanup')}</a>
                   <a onClick={() => newCli(w, 'shell')}>{t('project.revive')}</a>
                   <a onClick={() => setGitOpen(true)}>{t('project.compare')}</a>
                 </span>
@@ -1417,18 +1419,18 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
                 <span style={{ marginTop: 7, display: 'inline-flex' }}>{dot(false, '#d29922')}</span>
                 <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
-                    <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 'var(--fs-micro)' }}>⎇ {w.branch}</Tag>
+                    <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 'var(--fs-micro)' }} icon={<BranchIcon size={10} />}>{w.branch}</Tag>
                     <Tag color="warning" style={{ margin: 0 }}>{t('project.sessionClosed')}</Tag>
                     {/* 已合入但还有未提交改动：绿标缓解焦虑，损失只剩 working tree */}
                     {w.mergedInto && (
                       <Tooltip title={`${w.mergedInto} · ${w.mergedKind}`}>
-                        <Tag color="success" style={{ margin: 0 }}>✓ {t('project.mergedTag')}</Tag>
+                        <Tag color="success" style={{ margin: 0 }} icon={<CheckIcon size={11} />}>{t('project.mergedTag')}</Tag>
                       </Tooltip>
                     )}
                     {/* 三态细化：已推送未合入——蓝标区分「本地已提交」，收尾丢弃前知道远端还留着 */}
                     {!w.mergedInto && w.pushed && (
                       <Tooltip title={`origin/${w.branch}`}>
-                        <Tag color="blue" style={{ margin: 0 }}>⇡ {t('project.pushedTag')}</Tag>
+                        <Tag color="blue" style={{ margin: 0 }} icon={<PushIcon size={11} />}>{t('project.pushedTag')}</Tag>
                       </Tooltip>
                     )}
                   </div>
@@ -1464,8 +1466,8 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
                 <span style={{ marginTop: 7, display: 'inline-flex' }}>{dot(false, '#a371f7')}</span>
                 <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
-                    <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 'var(--fs-micro)' }}>⎇ {w.branch}</Tag>
-                    <Tag color="purple" style={{ margin: 0 }}>⇥ {t('project.mergedClean')}</Tag>
+                    <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 'var(--fs-micro)' }} icon={<BranchIcon size={10} />}>{w.branch}</Tag>
+                    <Tag color="purple" style={{ margin: 0 }} icon={<MergeIcon size={11} />}>{t('project.mergedClean')}</Tag>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)' }}>
                     <Lifec done={4} /><span>{t('project.stage.done')}</span>
@@ -1486,7 +1488,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
         {tab === 'wt' && (
           <div className="prj-panel prj-in">
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)', flexWrap: 'wrap' }}>
-              <Button size="small" onClick={() => setWtOpen(true)}>＋ {t('project.wt.newWorktree')}</Button>
+              <Button size="small" onClick={() => setWtOpen(true)} icon={<PlusIcon size={12} />}>{t('project.wt.newWorktree')}</Button>
               <Button size="small" onClick={pruneWts}>{t('project.wt.prune')}</Button>
               <span style={{ flex: 1 }} />
               <a style={{ fontSize: 'var(--fs-sm)' }} onClick={() => setWtOpen(true)}>{t('project.wt.allRepos')} ›</a>
@@ -1545,11 +1547,11 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
                         style={{ cursor: 'pointer', color: cat === 'merged' || cat === 'ext' ? 'var(--text-dim)' : undefined }}>
                         {w.branch || '(detached)'}
                       </span>
-                      {w.committedAhead > 0 && <span className="wt-ab up">↑{w.committedAhead}</span>}
-                      {w.behind > 0 && <span className="wt-ab dn">↓{w.behind}</span>}
+                      {w.committedAhead > 0 && <span className="wt-ab up"><ArrowUp size={10} />{w.committedAhead}</span>}
+                      {w.behind > 0 && <span className="wt-ab dn"><ArrowDown size={10} />{w.behind}</span>}
                       {cat === 'live' && <Tag color="green" style={{ margin: 0 }}>{t('project.wt.cli', { count: live })}</Tag>}
                       {cat === 'orphan' && <Tag color="warning" style={{ margin: 0 }}>{t('project.wt.orphanPending')}</Tag>}
-                      {cat === 'merged' && <Tag color="success" style={{ margin: 0 }}>✓ {t('project.wt.mergedInto', { target: w.mergedInto })}</Tag>}
+                      {cat === 'merged' && <Tag color="success" style={{ margin: 0 }} icon={<CheckIcon size={11} />}>{t('project.wt.mergedInto', { target: w.mergedInto })}</Tag>}
                       {cat === 'ext' && <Tag style={{ margin: 0 }}>{t('project.wt.externalTag')}</Tag>}
                     </div>
                     <div className="n2 prj-mono">
@@ -1574,7 +1576,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
                       <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
                         {(w.sessions || []).map((ref: any) => (
                           <div key={ref.session} className="prj-subrow" onClick={() => openTerm(ref.session)}>
-                            {dot(false, cc[ref.session] || cx[ref.session] ? '#3fb950' : undefined)}
+                            {dot(false, cc[ref.session] || cx[ref.session] ? 'var(--ok)' : undefined)}
                             <span style={{ fontWeight: 600, fontSize: 13 }} title={ref.session}>{sessionLabel(ref.session)}</span>
                             {cc[ref.session] && <Tag color="blue" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px' }}>Claude</Tag>}
                             {cx[ref.session] && <Tag color="green" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px' }}>Codex</Tag>}
@@ -1601,10 +1603,10 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
                       {!cleanable && !w.external && !!w.base && (
                         live === 0 && w.committedAhead === 0 && dirty === 0
                           ? <Dropdown menu={{ items: CLI_KINDS.map((k) => ({ key: k, label: k })), onClick: ({ key }) => newCli(w, key as any) }}>
-                              <Button size="small">{t('project.wt.resume')} ▾</Button>
+                              <Button size="small" iconPosition="end" icon={<ChevronDown size={11} />}>{t('project.wt.resume')}</Button>
                             </Dropdown>
                           : <Dropdown.Button size="small" type="primary" disabled={mergingWt === w.path}
-                              icon={<span style={{ fontSize: 10 }}>▾</span>}
+                              icon={<ChevronDown size={11} />}
                               onClick={() => mergeWt(w, 'squash')}
                               menu={{ items: [{ key: 'merge', label: 'merge' }, { key: 'rebase', label: 'rebase' }], onClick: ({ key }) => mergeWt(w, key as any) }}>
                               {mergingWt === w.path ? <Spin size="small" /> : t('worktree.mergeInto', { base: w.base })}
@@ -1647,12 +1649,12 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
               return (
                 <div key={session} className="prj-subrow" style={{ opacity: inProj ? 1 : 0.45 }}
                   onClick={() => { if (inProj) openTerm(session) }}>
-                  {dot(false, status === 'waiting' ? '#d29922' : running ? '#3fb950' : undefined)}
+                  {dot(false, status === 'waiting' ? '#d29922' : running ? 'var(--ok)' : undefined)}
                   <span style={{ fontWeight: 600, fontSize: 13 }} title={session}>{label || sessionLabel(session)}</span>
                   {role === 'leader' && <Tag color="purple" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px' }}>{t('project.swarm.leaderTag')}</Tag>}
                   {subrole && <Tag style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px' }}>{t(('swarm.subrole.' + subrole) as any) || subrole}</Tag>}
                   {done && <Tag color="purple" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px' }}>{t('project.swarm.integrate')}</Tag>}
-                  {ann[session]?.primary?.linked && <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px' }}>⎇ {ann[session].primary.branch}</Tag>}
+                  {ann[session]?.primary?.linked && <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px' }} icon={<BranchIcon size={10} />}>{ann[session].primary.branch}</Tag>}
                   <span style={{ flex: 1 }} />
                   {inProj
                     ? <a style={{ fontSize: 'var(--fs-meta)' }} onClick={(e) => { e.stopPropagation(); openTerm(session) }}>{t('project.enter')}</a>
@@ -1663,7 +1665,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
             return (
               <div key={sw.id || sw.name} className="prj-panel prj-in" style={{ padding: '13px 16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <Tag color="purple" style={{ margin: 0 }}>⬡ {t('nav.swarm')}</Tag>
+                  <Tag color="purple" style={{ margin: 0 }} icon={<SwarmIcon size={11} />}>{t('nav.swarm')}</Tag>
                   <b>{sw.name}</b>
                   {sw.goal && <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 280 }}>{sw.goal}</span>}
                   {!sw.supervisor && <Tag color="warning" style={{ margin: 0 }}>{t('project.swarm.noLeader')}</Tag>}
@@ -1710,7 +1712,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
           <div className="prj-panel prj-in" style={{ padding: '6px 4px' }}>
             {activity.map((e: any) => e.kind === 'trace' ? (
               <div key={'t' + e.at + e.branch} className="prj-mono" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', fontSize: 'var(--fs-sm)' }}>
-                <span style={{ color: '#a371f7' }}>⇥</span>
+                <span style={{ color: '#a371f7', display: 'inline-flex' }}><MergeIcon /></span>
                 <span style={{ color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {e.action === 'merged'
                     ? t('project.act.traceMerged', { branch: e.branch, base: e.base || '?', strategy: e.strategy || 'squash' })

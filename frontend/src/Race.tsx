@@ -8,6 +8,8 @@ import { useI18n } from './i18n'
 import { usePreferences } from './preferences'
 import { recentDirs } from './App'
 import DiffView from './DiffView'
+import { CloseIcon, PlusIcon } from './icons'
+import { BranchIcon } from './git/parts'
 
 export type RaceContestant = {
   // session 会话名(= 会话 id)：打开终端的 handle；label 展示名 `<竞赛>-<字母>`
@@ -20,7 +22,7 @@ export type Race = {
 }
 
 const enc = encodeURIComponent
-const AGENT_COLOR: Record<string, string> = { claude: 'var(--blue, #58a6ff)', codex: '#3fb950' }
+const AGENT_COLOR: Record<string, string> = { claude: 'var(--accent)', codex: 'var(--ok)' }
 const MAX_CONTESTANTS = 5
 
 function laneSlug(name: string): string {
@@ -122,7 +124,7 @@ export function RaceCreateModal({ open, onClose, onDone }: {
                 position: 'relative', background: 'var(--bg-elevated)', display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center',
               }}>
                 <span style={{ position: 'absolute', top: 3, right: 8, color: 'var(--text-dimmer)', fontSize: 11, cursor: 'pointer' }}
-                  onClick={() => setAgents((xs) => xs.filter((_, j) => j !== i))}>✕</span>
+                  onClick={() => setAgents((xs) => xs.filter((_, j) => j !== i))}><CloseIcon size={12} /></span>
                 <span style={{ fontSize: 13, fontWeight: 700, color: AGENT_COLOR[a] }}>{a === 'claude' ? 'Claude' : 'Codex'}</span>
                 <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 11, color: 'var(--text-dimmer)', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {slug}-{String.fromCharCode(97 + i)}
@@ -139,8 +141,8 @@ export function RaceCreateModal({ open, onClose, onDone }: {
               }}>
                 <div style={{
                   width: 112, minHeight: 66, border: '1px dashed var(--border-subtle, #30363d)', borderRadius: 10,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-dimmer)', cursor: 'pointer', fontSize: 12.5,
-                }}>{t('race.addContestant')}</div>
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, color: 'var(--text-dimmer)', cursor: 'pointer', fontSize: 12.5,
+                }}><PlusIcon size={12} />{t('race.addContestant')}</div>
               </Dropdown>
             )}
           </div>
@@ -326,7 +328,7 @@ export function RaceComparePanel({ race, onClose, openTerm, onChanged }: {
             return (
               <div key={l.ct.session} className="tt-racecol" onClick={() => setSel(l.ct.session)} style={{
                 flex: '1 1 220px', minWidth: 220, maxWidth: 340, cursor: 'pointer',
-                border: isSel ? '1px solid #58a6ff' : '1px solid var(--border-subtle, #30363d)',
+                border: isSel ? '1px solid var(--accent)' : '1px solid var(--border-subtle, #30363d)',
                 boxShadow: isSel ? '0 0 0 1px rgba(88,166,255,.25), 0 0 20px rgba(31,111,235,.12)' : undefined,
                 borderRadius: 12, background: 'var(--bg-container)', padding: '12px 14px',
                 display: 'flex', flexDirection: 'column', gap: 8,
@@ -336,14 +338,14 @@ export function RaceComparePanel({ race, onClose, openTerm, onChanged }: {
                   <span style={{ fontFamily: 'ui-monospace, monospace', color: 'var(--text-dim)', fontWeight: 400, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.ct.label || l.ct.session}</span>
                   <span style={{ marginLeft: 'auto', flex: '0 0 auto' }}>{laneStatus(l)}</span>
                 </div>
-                <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: 11.5, color: '#39c5cf' }}>⎇ {l.ct.branch}</div>
+                <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: 11.5, color: '#39c5cf', display: 'flex', alignItems: 'center', gap: 4 }}><BranchIcon size={11} />{l.ct.branch}</div>
                 {l.ct.status === 'failed' ? (
                   <div style={{ color: 'var(--text-dimmer)', fontSize: 12 }}>{l.ct.error}</div>
                 ) : (<>
                   <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text-dim)' }}>
                     <span><b style={{ display: 'block', color: 'var(--text-bright)', fontSize: 15, fontFamily: 'ui-monospace, monospace' }}>{laneFiles}</b>{t('race.stat.files')}</span>
                     <span><b style={{ display: 'block', fontSize: 15, fontFamily: 'ui-monospace, monospace' }}>
-                      <span style={{ color: '#3fb950' }}>+{adds}</span> <span style={{ color: '#f85149' }}>−{dels}</span>
+                      <span style={{ color: 'var(--ok)' }}>+{adds}</span> <span style={{ color: '#f85149' }}>−{dels}</span>
                     </b>{t('race.stat.lines')}</span>
                     <span><b style={{ display: 'block', color: 'var(--text-bright)', fontSize: 15, fontFamily: 'ui-monospace, monospace' }}>{l.wt?.committedAhead ?? 0}</b>{t('race.stat.commits')}</span>
                   </div>

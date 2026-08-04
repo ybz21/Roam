@@ -7,8 +7,8 @@
       <stop offset="1" stop-color="#020409"/>
     </linearGradient>
     <radialGradient id="roam-halo" cx="32" cy="30" r="26" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#538EE7" stop-opacity=".24"/>
-      <stop offset="1" stop-color="#538EE7" stop-opacity="0"/>
+      <stop offset="0" stop-color="#58A6FF" stop-opacity=".24"/>
+      <stop offset="1" stop-color="#58A6FF" stop-opacity="0"/>
     </radialGradient>
     <filter id="roam-shadow" x="-40%" y="-40%" width="180%" height="180%">
       <feDropShadow dx="0" dy="1.6" stdDeviation="1.6" flood-color="#000" flood-opacity=".5"/>
@@ -21,12 +21,12 @@
 
   <!-- 交织丝带：assets/logo-mobius.svg 原样等比缩放居中（132x188 → 30.9x44） -->
   <g filter="url(#roam-shadow)" transform="translate(16.55 10) scale(.234)">
-    <g fill="#0F4089">
+    <g fill="#1F6FEB">
       <path d="M66 0 66 56 42 72 0 44Z"/>
       <path d="M90 72 132 100 108 116 66 88Z"/>
       <path d="M21 114 63 142 0 184 0 128Z"/>
     </g>
-    <g fill="#538EE7">
+    <g fill="#58A6FF">
       <path d="M66 0 132 44 132 100 90 72 66 56Z"/>
       <path d="M0 44 132 132 132 188 0 100Z"/>
     </g>

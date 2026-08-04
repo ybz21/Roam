@@ -8,6 +8,7 @@
 // （输入框、终端聚焦时不抢，见 App 里的挂载条件）。
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useI18n } from '../i18n'
+import { PlusIcon } from '../icons'
 
 export type PaletteItem = {
   key: string
@@ -81,13 +82,13 @@ export function WorkspaceTopbar({ items, online, dockCount, dockOpen, onToggleDo
         <button onClick={onCreate} className="tt-top-create" style={{
           marginLeft: 'auto', height: 28, padding: '0 11px', border: 0, borderRadius: 6,
           color: '#fff', background: 'var(--accent-solid)', fontSize: 12, cursor: 'pointer',
-        }}>＋ {t('common.create')}</button>
+        }}><PlusIcon size={12} />{t('common.create')}</button>
 
         <span title={online ? t('workspace.online') : t('workspace.offline')} style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
           color: 'var(--text-dim)', fontSize: 11, whiteSpace: 'nowrap',
         }}>
-          <i style={{ width: 7, height: 7, borderRadius: '50%', background: online ? '#3fb950' : 'var(--text-dimmer)' }} />
+          <i style={{ width: 7, height: 7, borderRadius: '50%', background: online ? 'var(--ok)' : 'var(--text-dimmer)' }} />
           {online ? t('workspace.online') : t('workspace.offline')}
         </span>
 
@@ -95,7 +96,7 @@ export function WorkspaceTopbar({ items, online, dockCount, dockOpen, onToggleDo
           <button onClick={onToggleDock} title={`${t('nav.terminal')} (${modKey}J)`} style={{
             height: 28, padding: '0 9px', display: 'inline-flex', alignItems: 'center', gap: 6,
             border: '1px solid var(--border)', borderRadius: 6,
-            color: dockOpen ? '#58a6ff' : 'var(--text-dim)', background: 'var(--bg-container)',
+            color: dockOpen ? 'var(--accent)' : 'var(--text-dim)', background: 'var(--bg-container)',
             fontSize: 11, cursor: 'pointer',
           }}>
             <TerminalGlyph />{dockCount}
@@ -182,7 +183,7 @@ function CommandPalette({ items, onClose }: { items: PaletteItem[]; onClose: () 
                     display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left',
                     border: 0, borderRadius: 9, cursor: 'pointer',
                     color: 'var(--text-bright)',
-                    background: idx === cursor ? 'rgba(88,166,255,.14)' : 'transparent',
+                    background: idx === cursor ? 'var(--accent-soft)' : 'transparent',
                   }}>
                   {hit.icon && <span style={{ flex: '0 0 18px', display: 'grid', placeItems: 'center', color: 'var(--text-dim)' }}>{hit.icon}</span>}
                   <span style={{ minWidth: 0 }}>

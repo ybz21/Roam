@@ -7,6 +7,7 @@ import type { MenuProps } from 'antd'
 import { useI18n } from '../i18n'
 import { relTime } from './graph'
 import { AheadBehind, BranchIcon, CloudIcon, MONO, MoreIcon, PlusIcon, Section, StashIcon, TagIcon } from './parts'
+import { ArrowUp, CheckIcon } from '../icons'
 
 export interface BranchInfo {
   name: string; short: string; upstream?: string
@@ -173,13 +174,13 @@ export default function RefsView({
                   icon={<span style={{
                     width: 7, height: 7, flex: '0 0 auto', display: 'block',
                     borderRadius: w.external ? 1 : '50%', transform: w.external ? 'rotate(45deg)' : undefined,
-                    background: live ? 'hsl(150,52%,48%)' : cleanable ? 'transparent' : w.external ? 'transparent' : 'hsl(32,85%,55%)',
+                    background: live ? 'var(--ok)' : cleanable ? 'transparent' : w.external ? 'transparent' : 'hsl(32,85%,55%)',
                     border: (cleanable || w.external) ? '1px solid var(--text-dimmer)' : undefined,
                   }} />}
                   badge={<>
                     {here && <span style={{ fontSize: 10, color: 'var(--text-dimmer)' }}>{t('git.refs.youAreHere')}</span>}
-                    {!!w.committedAhead && <span style={{ fontFamily: MONO, fontSize: 11, color: 'hsl(150,52%,50%)' }}>↑{w.committedAhead}</span>}
-                    {cleanable && <span style={{ fontSize: 10, color: 'hsl(150,52%,50%)' }}>✓</span>}
+                    {!!w.committedAhead && <span style={{ fontFamily: MONO, fontSize: 11, color: 'var(--ok)', display: 'inline-flex', alignItems: 'center', gap: 1 }}><ArrowUp size={10} />{w.committedAhead}</span>}
+                    {cleanable && <span style={{ display: 'inline-flex', color: 'var(--ok)' }}><CheckIcon size={11} /></span>}
                     {w.external && <span style={{ fontSize: 10, color: 'var(--text-dimmer)' }}>{t('git.refs.externalWt')}</span>}
                   </>}
                   sub={w.path}

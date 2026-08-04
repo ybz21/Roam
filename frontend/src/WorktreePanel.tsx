@@ -12,6 +12,9 @@ import DiffView from './DiffView'
 import { useLayout } from './layout'
 import AdaptivePanel from './shell/AdaptivePanel'
 import { useBackDismiss } from './shell/useBackDismiss'
+import { ArrowDown, ArrowUp, CloseIcon, PlusIcon } from './icons'
+import { BranchIcon } from './git/parts'
+import { WindowsIcon } from './icons'
 
 // 会话视图的 Git 面板挂在右侧浮动面板(--z-panel)里，本抽屉从那里打开时必须压过它，
 // 否则整个抽屉被 Git 面板盖住（antd Drawer 默认 z=1000）。抽屉内嵌套弹层 antd 会自动抬升，
@@ -47,7 +50,7 @@ function catOf(wt: Worktree): 'main' | 'live' | 'orphan' | 'external' {
   return 'orphan'
 }
 const RAIL: Record<string, string> = {
-  main: 'rgba(139,148,158,.45)', live: '#3fb950', orphan: '#d29922', external: 'rgba(139,148,158,.7)',
+  main: 'rgba(139,148,158,.45)', live: 'var(--ok)', orphan: '#d29922', external: 'rgba(139,148,158,.7)',
 }
 
 export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
@@ -169,12 +172,12 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
             {t('worktree.deleteLossDesc')}
             <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
               {dirtyAll > 0 && <li style={{ color: '#d29922' }}>{t('worktree.lossDirty', { count: dirtyAll })}</li>}
-              {ahead > 0 && <li style={{ color: '#58a6ff' }}>{t('worktree.lossAhead', { count: ahead, base: wt.base || 'base' })}</li>}
+              {ahead > 0 && <li style={{ color: 'var(--accent)' }}>{t('worktree.lossAhead', { count: ahead, base: wt.base || 'base' })}</li>}
             </ul>
           </div>
           {!!wt.branch && (
             <label style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer' }}>
-              <input type="checkbox" defaultChecked style={{ accentColor: '#1f6feb' }}
+              <input type="checkbox" defaultChecked style={{ accentColor: 'var(--accent-solid)' }}
                 onChange={(e) => { delBranch.current = e.target.checked }} />
               <span>{t('worktree.deleteBranchToo')} <span style={{ fontFamily: 'ui-monospace, monospace', color: '#39c5cf' }}>{wt.branch}</span></span>
             </label>
@@ -297,7 +300,7 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
     } else if (!wt.external) {
       out.push(<Tag key="o" color="warning" style={{ margin: 0 }}>{t('worktree.orphan')}</Tag>)
     }
-    if (wt.external) out.push(<Tag key="e" style={{ margin: 0 }}>⧉ {t('worktree.external')}</Tag>)
+    if (wt.external) out.push(<Tag key="e" style={{ margin: 0 }} icon={<WindowsIcon size={11} />}>{t('worktree.external')}</Tag>)
     if (wt.branch.startsWith('_')) out.push(<Tag key="l" color="warning" style={{ margin: 0 }}>{t('worktree.legacy')}</Tag>)
     return out
   }
@@ -310,9 +313,9 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
         <span>{t('worktree.baseOf', { base: '' })}<b style={{ fontFamily: 'ui-monospace, monospace', color: 'var(--text-dim)' }}>{wt.base || '?'}</b></span>
         <span>·</span>
         <span>
-          <b style={{ color: wt.committedAhead > 0 ? '#58a6ff' : undefined, fontWeight: wt.committedAhead > 0 ? 700 : 400 }}>↑{wt.committedAhead}</b>
+          <b style={{ color: wt.committedAhead > 0 ? 'var(--accent)' : undefined, fontWeight: wt.committedAhead > 0 ? 700 : 400, display: 'inline-flex', alignItems: 'center', gap: 1 }}><ArrowUp size={11} />{wt.committedAhead}</b>
           {' '}
-          <span style={{ color: wt.behind > 0 ? 'var(--text-dim)' : undefined }}>↓{wt.behind}</span>
+          <span style={{ color: wt.behind > 0 ? 'var(--text-dim)' : undefined, display: 'inline-flex', alignItems: 'center', gap: 1 }}><ArrowDown size={11} />{wt.behind}</span>
         </span>
         <span>·</span>
         <span style={{ color: dirtyAll > 0 ? '#d29922' : undefined, fontWeight: dirtyAll > 0 ? 700 : 400 }}>
@@ -434,7 +437,7 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
           <b style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-bright)' }}>{t('worktree.title')}</b>
           <span style={{ flex: 1 }} />
           <button type="button" className="tt-file-close" onClick={onClose}
-            title={t('common.close')} aria-label={t('common.close')}>✕</button>
+            title={t('common.close')} aria-label={t('common.close')}><CloseIcon /></button>
         </div>
       )}
       <div style={{
@@ -459,7 +462,7 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
             </div>
           }>
           <Tooltip title={focused ? t('worktree.create') : t('worktree.createNeedsDir')}>
-            <Button style={{ flex: '0 0 auto' }} disabled={!focused}>＋</Button>
+            <Button style={{ flex: '0 0 auto' }} disabled={!focused} icon={<PlusIcon size={13} />} />
           </Tooltip>
         </Popover>
         <Button onClick={() => load(dir)} loading={loading} style={{ flex: '0 0 auto' }}>{t('common.refresh')}</Button>
@@ -486,10 +489,10 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
         ) : dataReady && counts.all === 0 ? (
           // 空态（Result 风格）：聚焦仓库时给直接新建 CTA；总览时说明数据来源
           <div style={{ textAlign: 'center', padding: '48px 16px' }}>
-            <div style={{ fontSize: 30, opacity: 0.4, fontFamily: 'ui-monospace, monospace' }}>⎇</div>
+            <div style={{ opacity: 0.4, display: 'flex', justifyContent: 'center', color: 'var(--text-dim)' }}><BranchIcon size={30} /></div>
             <div style={{ fontSize: 14, margin: '10px 0 4px', color: 'var(--text-bright)' }}>{t('worktree.emptyTitle')}</div>
             <div style={{ fontSize: 12.5, color: 'var(--text-dimmer)', marginBottom: 14 }}>{focused ? t('worktree.emptyHint') : t('worktree.allEmptyHint')}</div>
-            {focused && <Button size="small" type="primary" onClick={() => setCreateOpen(true)}>＋ {t('worktree.create')}</Button>}
+            {focused && <Button size="small" type="primary" onClick={() => setCreateOpen(true)} icon={<PlusIcon size={12} />}>{t('worktree.create')}</Button>}
           </div>
         ) : dataReady ? (
           <>
@@ -519,7 +522,8 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
                         <span title={wt.path} style={{
                           fontFamily: 'monospace', fontWeight: 600, color: wt.branch.startsWith('_') ? 'var(--text-dimmer)' : 'var(--text-bright)',
                           minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        }}>⎇ {wt.branch || wt.head?.slice(0, 8) || '?'}</span>
+                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                        }}><BranchIcon size={11} /><span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{wt.branch || wt.head?.slice(0, 8) || '?'}</span></span>
                         <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, flex: '0 0 auto' }}>{badges(wt)}</span>
                       </div>
                       {metaLine(wt)}
@@ -547,7 +551,7 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
       <Modal open={!!cmp} onCancel={() => setCmp(null)} footer={null} width="min(860px, 94vw)" destroyOnClose
         title={cmp && (
           <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-            <span style={{ fontFamily: 'ui-monospace, monospace' }}>⎇ {cmp.branch}</span>
+            <span style={{ fontFamily: 'ui-monospace, monospace', display: 'inline-flex', alignItems: 'center', gap: 4 }}><BranchIcon size={11} />{cmp.branch}</span>
             <span style={{ color: 'var(--text-dimmer)', fontWeight: 400, fontSize: 12.5 }}>{t('worktree.compareVs', { base: cmp.base || '?' })}</span>
           </span>
         )}>
@@ -558,11 +562,11 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
             <div style={{ display: 'flex', gap: 14, fontSize: 12.5, color: 'var(--text-dim)', flexWrap: 'wrap' }}>
               <span>
                 {t('worktree.cmpCommitted')}: {(cmpData.committed?.files || []).length} {t('race.stat.files')}
-                {' '}<b style={{ color: '#3fb950' }}>+{cmpData.committed?.adds || 0}</b> <b style={{ color: '#f85149' }}>−{cmpData.committed?.dels || 0}</b>
+                {' '}<b style={{ color: 'var(--ok)' }}>+{cmpData.committed?.adds || 0}</b> <b style={{ color: '#f85149' }}>−{cmpData.committed?.dels || 0}</b>
               </span>
               <span>
                 {t('worktree.cmpWorking')}: {(cmpData.workingTree?.files || []).length} {t('race.stat.files')}
-                {' '}<b style={{ color: '#3fb950' }}>+{cmpData.workingTree?.adds || 0}</b> <b style={{ color: '#f85149' }}>−{cmpData.workingTree?.dels || 0}</b>
+                {' '}<b style={{ color: 'var(--ok)' }}>+{cmpData.workingTree?.adds || 0}</b> <b style={{ color: '#f85149' }}>−{cmpData.workingTree?.dels || 0}</b>
                 {(cmpData.untracked || 0) > 0 && <span style={{ color: 'var(--text-dimmer)' }}>（+{cmpData.untracked} untracked）</span>}
               </span>
             </div>

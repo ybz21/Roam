@@ -16,6 +16,7 @@ import { MarkdownView } from './MarkdownView'
 import { CsvView } from './CsvView'
 import { CodeView } from './CodeView'
 import { OfficeView } from './OfficeView'
+import { ChevronRight, WarnIcon } from '../icons'
 
 export function FileView({
   path,
@@ -156,7 +157,7 @@ export function FileView({
       )}
       {!tabbed && (
         <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          <span style={{ color: accent }}>▸</span> {name}
+          <span style={{ color: accent, display: 'inline-flex', verticalAlign: -2 }}><ChevronRight size={12} /></span> {name}
         </span>
       )}
       {dirty && <span title={t('file.unsaved')} style={{ width: 8, height: 8, borderRadius: '50%', background: '#d29922', flex: '0 0 auto' }} />}
@@ -203,7 +204,7 @@ export function FileView({
                   : isHtml && (!source || forcePreview)
                     ? <HtmlView rawUrl={serveUrl} name={name} mtime={data.mtime} height={previewHeight} />
                     : <CodeView value={draft} language={monacoLangOf(path)} dark={mode === 'dark'} readOnly={!editable} tabbed={tabbed} height={previewHeight} onChange={setDraft} onSave={() => saveRef.current()} />}
-              {data.truncated && <div style={{ color: '#d29922', fontSize: 12, marginTop: 6 }}>⚠ {t('file.truncatedLong')}</div>}
+              {data.truncated && <div style={{ color: '#d29922', fontSize: 12, marginTop: 6, display: 'flex', alignItems: 'center', gap: 5 }}><WarnIcon size={12} />{t('file.truncatedLong')}</div>}
             </>
           )}
         </>
@@ -250,7 +251,7 @@ export function FileView({
           {/* 文件被外部(cc/codex)改动、但本地有未保存改动 → 提示条 */}
           {stale && dirty && (
             <div style={{ position: 'absolute', top: 6, left: '50%', transform: 'translateX(-50%)', zIndex: 11, display: 'inline-flex', alignItems: 'center', gap: 8, padding: '4px 10px', borderRadius: 8, fontSize: 12, background: 'var(--bg-container)', border: '1px solid #d29922', color: 'var(--text-bright)', boxShadow: 'var(--elevated-shadow)' }}>
-              <span>⚠ {t('file.changedOnDisk')}</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><WarnIcon size={12} />{t('file.changedOnDisk')}</span>
               <Button size="small" danger onClick={reloadFromDisk}>{t('file.reloadFromDisk')}</Button>
             </div>
           )}

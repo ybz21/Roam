@@ -4,6 +4,7 @@
 import { Component, Fragment, type ReactNode } from 'react'
 import { Button } from 'antd'
 import { useI18n } from './i18n'
+import { WarnIcon } from './icons'
 
 function Fallback({ retry, error }: { retry: () => void; error: Error }) {
   const { t } = useI18n()
@@ -12,7 +13,7 @@ function Fallback({ retry, error }: { retry: () => void; error: Error }) {
     : (error.message || t('error.generic'))
   return (
     <div style={{ padding: 20, color: 'var(--text-dim)', display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start' }}>
-      <div style={{ color: '#d29922' }}>⚠ {msg}</div>
+      <div style={{ color: '#d29922', display: 'flex', alignItems: 'center', gap: 6 }}><WarnIcon /> {msg}</div>
       <Button size="small" onClick={retry}>{t('error.retry')}</Button>
     </div>
   )

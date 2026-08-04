@@ -21,6 +21,8 @@ import {
 import type { RawCommit } from './git/graph'
 import { useLayout } from './layout'
 import { useBackDismiss } from './shell/useBackDismiss'
+import { CheckIcon, ChevronDown, ChevronRight, WarnIcon } from './icons'
+import { WindowsIcon } from './icons'
 
 const WorktreePanel = lazy(() => import('./WorktreePanel'))
 
@@ -40,7 +42,7 @@ const GRAPH_PAGE = 150
 function statusColor(code: string): string {
   switch (code) {
     case 'M': return 'hsl(38,90%,55%)'
-    case 'A': return 'hsl(140,55%,48%)'
+    case 'A': return 'var(--ok)'
     case 'D': return 'hsl(0,70%,58%)'
     case 'R': case 'C': return 'hsl(210,75%,60%)'
     case 'U': return 'hsl(0,75%,60%)'
@@ -68,7 +70,7 @@ function GitRow({ f, accent, active, kind, root, onOpen, onStage, onUnstage, onD
         ev.dataTransfer.setData('text/plain', fullPath)
         ev.dataTransfer.effectAllowed = 'copy'
       }}
-      style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px 4px 10px', cursor: 'pointer', fontSize: 13, userSelect: 'none', background: active ? 'rgba(88,166,255,.12)' : undefined }}>
+      style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px 4px 10px', cursor: 'pointer', fontSize: 13, userSelect: 'none', background: active ? 'var(--accent-soft)' : undefined }}>
       <span style={{ width: 16, flex: '0 0 auto', textAlign: 'center', fontFamily: MONO, fontWeight: 700, color: statusColor(kind === 'conflict' ? 'U' : badge) }}>
         {kind === 'conflict' ? 'U' : badge}
       </span>
@@ -88,7 +90,7 @@ function GitRow({ f, accent, active, kind, root, onOpen, onStage, onUnstage, onD
   )
 }
 
-export default function GitPanel({ dir, accent = '#58a6ff', onClose, openTerm, initialTab }: {
+export default function GitPanel({ dir, accent = 'var(--accent)', onClose, openTerm, initialTab }: {
   dir?: string; accent?: string; onClose?: () => void
   openTerm?: (name: string) => void
   /** 从项目页分叉图点「对比 base」进来时直接落在该 tab */
@@ -583,7 +585,7 @@ export default function GitPanel({ dir, accent = '#58a6ff', onClose, openTerm, i
               }}>
               <span style={{ color: accent, display: 'inline-flex', flex: '0 0 auto' }}><BranchIcon size={12} /></span>
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{status.branch || 'HEAD'}</span>
-              <span style={{ color: 'var(--text-dimmer)', fontSize: 9, flex: '0 0 auto' }}>▾</span>
+              <span style={{ color: 'var(--text-dimmer)', display: 'inline-flex', flex: '0 0 auto' }}><ChevronDown size={11} /></span>
             </button>
           </Popover>
           <Tooltip title={t('git.sync')}>
@@ -594,7 +596,7 @@ export default function GitPanel({ dir, accent = '#58a6ff', onClose, openTerm, i
           </Tooltip>
           {wt && (
             <Tooltip title={t('git.wt.badgeTip')}>
-              <Tag color="cyan" style={{ margin: 0, cursor: 'pointer', flex: '0 0 auto' }} onClick={() => setWtOpen(true)}>worktree{wt.external ? ' · ⧉' : ''}</Tag>
+              <Tag color="cyan" style={{ margin: 0, cursor: 'pointer', flex: '0 0 auto' }} onClick={() => setWtOpen(true)}>worktree{wt.external ? <> · <WindowsIcon size={10} /></> : ''}</Tag>
             </Tooltip>
           )}
           {status.upstream && (
@@ -632,7 +634,7 @@ export default function GitPanel({ dir, accent = '#58a6ff', onClose, openTerm, i
       display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', flex: '0 0 auto',
       background: 'rgba(210,153,34,.10)', borderBottom: '1px solid rgba(210,153,34,.3)', fontSize: 12, color: '#e3b341',
     }}>
-      <span>⚠ {t(`git.state.${status.state}` as any)}</span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><WarnIcon size={13} /> {t(`git.state.${status.state}` as any)}</span>
       {!!conflicts.length && <span>· {t('git.state.conflicts', { count: conflicts.length })}</span>}
       <span style={{ flex: 1 }} />
       <Button size="small" style={{ height: 22, fontSize: 11.5 }} disabled={busy || !!conflicts.length}
@@ -659,12 +661,12 @@ export default function GitPanel({ dir, accent = '#58a6ff', onClose, openTerm, i
         <div style={{ display: 'flex', gap: 6 }}>
           <Dropdown.Button
             size="small" type="primary" style={{ flex: 1 }}
-            icon={<span style={{ fontSize: 10 }}>▾</span>}
+            icon={<ChevronDown size={11} />}
             disabled={busy || !msg.trim()}
             onClick={() => doCommit('plain')}
             menu={{ items: [{ key: 'push', label: t('git.commitPush') }, { key: 'sync', label: t('git.commitSync') }], onClick: ({ key }) => doCommit(key as any) }}
           >
-            ✓ {amend ? t('git.amend') : t('git.commit')}{staged.length ? ` (${staged.length})` : ''}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><CheckIcon size={13} />{amend ? t('git.amend') : t('git.commit')}{staged.length ? ` (${staged.length})` : ''}</span>
           </Dropdown.Button>
           <Tooltip title={t('git.amendTip')}>
             <Button size="small" type={amend ? 'primary' : 'default'} ghost={amend} onClick={toggleAmend}>{t('git.amend')}</Button>
@@ -678,7 +680,7 @@ export default function GitPanel({ dir, accent = '#58a6ff', onClose, openTerm, i
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 0' }}>
         {(loading || busy) && <div style={{ display: 'flex', justifyContent: 'center', padding: 10 }}><Spin size="small" /></div>}
         {err && <div style={{ color: '#f85149', fontSize: 12, padding: '6px 10px' }}>{t('git.loadFailed', { message: err })}</div>}
-        {clean && <div style={{ color: 'var(--text-dimmer)', fontSize: 12, padding: 10 }}>✓ {t('git.noChanges')}</div>}
+        {clean && <div style={{ color: 'var(--text-dimmer)', fontSize: 12, padding: 10, display: 'flex', alignItems: 'center', gap: 5 }}><CheckIcon size={12} />{t('git.noChanges')}</div>}
 
         {!!conflicts.length && (
           <Section title={t('git.conflicts')} count={conflicts.length}
@@ -730,15 +732,15 @@ export default function GitPanel({ dir, accent = '#58a6ff', onClose, openTerm, i
               <div style={{ color: 'var(--text-dimmer)', marginTop: 2 }}>{t('git.wt.workingNote', { count: (cmp.workingTree?.files?.length ?? 0) + (cmp.untracked ?? 0) })}</div>
             )}
           </div>
-          {!(cmp.committed?.files?.length) && <div style={{ color: 'var(--text-dimmer)', fontSize: 12, padding: '8px 10px' }}>✓ {t('git.wt.noDiff', { base: wt.base })}</div>}
+          {!(cmp.committed?.files?.length) && <div style={{ color: 'var(--text-dimmer)', fontSize: 12, padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 5 }}><CheckIcon size={12} />{t('git.wt.noDiff', { base: wt.base })}</div>}
           {(cmp.committed?.files || []).map((fs: any) => (
             <div key={fs.path} className="cc-filerow" onClick={() => setDetail({ kind: 'file', file: fs.path, staged: false, untracked: false, base: true })}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 10px', cursor: 'pointer', fontSize: 13, background: detail?.kind === 'file' && detail.file === fs.path && detail.base ? 'rgba(88,166,255,.12)' : undefined }}>
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 10px', cursor: 'pointer', fontSize: 13, background: detail?.kind === 'file' && detail.file === fs.path && detail.base ? 'var(--accent-soft)' : undefined }}>
               <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-bright)' }} title={fs.path}>{fileNameOf(fs.path)}
                 <span style={{ color: 'var(--text-dimmer)', fontSize: 11, marginLeft: 6 }}>{fs.path.includes('/') ? fs.path.slice(0, fs.path.lastIndexOf('/')) : ''}</span>
               </span>
               <span style={{ flex: '0 0 auto', fontFamily: MONO, fontSize: 11.5 }}>
-                {fs.binary ? <span style={{ color: 'var(--text-dimmer)' }}>bin</span> : <><span style={{ color: 'hsl(140,60%,55%)' }}>+{fs.adds}</span> <span style={{ color: 'hsl(0,72%,60%)' }}>−{fs.dels}</span></>}
+                {fs.binary ? <span style={{ color: 'var(--text-dimmer)' }}>bin</span> : <><span style={{ color: 'var(--ok)' }}>+{fs.adds}</span> <span style={{ color: 'hsl(0,72%,60%)' }}>−{fs.dels}</span></>}
               </span>
             </div>
           ))}
@@ -761,7 +763,7 @@ export default function GitPanel({ dir, accent = '#58a6ff', onClose, openTerm, i
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderBottom: '1px solid var(--border-subtle)', flex: '0 0 auto' }}>
         <button type="button" className="tt-file-close" onClick={() => setDetail(null)} title={t('common.back')} aria-label={t('common.back')}><BackIcon /></button>
         <span style={{ fontFamily: MONO, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
-          <span style={{ color: accent }}>▸</span> {detail.file}
+          <span style={{ color: accent, display: 'inline-flex', verticalAlign: -2 }}><ChevronRight size={12} /></span> {detail.file}
         </span>
         <span style={{ flex: 1 }} />
         {!detail.untracked && !detail.base && (
@@ -827,7 +829,7 @@ export default function GitPanel({ dir, accent = '#58a6ff', onClose, openTerm, i
         <div style={{ borderTop: '1px solid var(--border-subtle)', padding: 8, display: 'flex', gap: 8, flex: '0 0 auto' }}>
           {!!wt.base && !wt.external && (
             <Dropdown.Button size="small" type="primary" style={{ flex: 1 }} disabled={merging}
-              icon={<span style={{ fontSize: 10 }}>▾</span>}
+              icon={<ChevronDown size={11} />}
               onClick={() => doWtMerge('squash')}
               menu={{ items: [{ key: 'merge', label: 'merge' }, { key: 'rebase', label: 'rebase' }], onClick: ({ key }) => doWtMerge(key as any) }}>
               {merging ? <Spin size="small" /> : t('git.wt.merge', { base: wt.base })}
@@ -884,11 +886,11 @@ function BranchSwitcher({ dir, tick, current, onPick, onNew }: {
             style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', borderRadius: 6, cursor: b.name === current ? 'default' : 'pointer' }}>
             <span style={{
               width: 6, height: 6, borderRadius: '50%', flex: '0 0 auto',
-              background: b.name === current ? '#58a6ff' : 'transparent', border: b.name === current ? undefined : '1px solid var(--border)',
+              background: b.name === current ? 'var(--accent)' : 'transparent', border: b.name === current ? undefined : '1px solid var(--border)',
             }} />
             <span style={{
               flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              fontFamily: MONO, fontSize: 12.5, color: b.name === current ? '#58a6ff' : 'var(--text-bright)',
+              fontFamily: MONO, fontSize: 12.5, color: b.name === current ? 'var(--accent)' : 'var(--text-bright)',
               fontWeight: b.name === current ? 600 : 400,
             }} title={b.name}>{b.name}</span>
             <AheadBehind ahead={b.ahead} behind={b.behind} />
@@ -897,7 +899,7 @@ function BranchSwitcher({ dir, tick, current, onPick, onNew }: {
       </div>
       <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 6 }}>
         <button type="button" onClick={onNew}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', border: 0, background: 'transparent', color: '#58a6ff', fontSize: 12.5, cursor: 'pointer', padding: '2px 4px' }}>
+          style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', border: 0, background: 'transparent', color: 'var(--accent)', fontSize: 12.5, cursor: 'pointer', padding: '2px 4px' }}>
           <PlusIcon />{t('git.refs.newBranch')}
         </button>
       </div>

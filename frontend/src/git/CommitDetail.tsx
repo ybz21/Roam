@@ -8,6 +8,7 @@ import { useI18n } from '../i18n'
 import DiffView from '../DiffView'
 import { absTime, type RawRef } from './graph'
 import { BackIcon, CloseIcon, CopyIcon, MONO, MoreIcon, RefBadge } from './parts'
+import { DiamondIcon } from '../icons'
 
 interface ShowFile { path: string; orig?: string; status: string; adds: number; dels: number; binary: boolean }
 interface ShowData {
@@ -19,7 +20,7 @@ interface ShowData {
 }
 
 const STATUS_COLOR: Record<string, string> = {
-  A: 'hsl(150,52%,48%)', M: 'hsl(32,85%,55%)', D: 'hsl(0,70%,60%)',
+  A: 'var(--ok)', M: 'hsl(32,85%,55%)', D: 'hsl(0,70%,60%)',
   R: 'hsl(212,78%,60%)', C: 'hsl(212,78%,60%)', T: 'hsl(280,55%,66%)',
 }
 
@@ -70,7 +71,7 @@ export default function CommitDetail({ root, hash, accent, menu, onClose, onPick
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 10px 9px 12px', borderBottom: '1px solid var(--border-subtle)', flex: '0 0 auto' }}>
       {file
         ? <button type="button" className="tt-file-close" onClick={() => setFile(null)} title={t('git.detail.backToFiles')} aria-label={t('git.detail.backToFiles')}><BackIcon /></button>
-        : <span style={{ color: accent, display: 'inline-flex', flex: '0 0 auto' }}>◈</span>}
+        : <span style={{ color: accent, display: 'inline-flex', flex: '0 0 auto' }}><DiamondIcon size={12} /></span>}
       <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13, color: 'var(--text-bright)' }}
         title={file || data?.subject}>
         {file || data?.subject || t('git.detail.loading')}
@@ -146,7 +147,7 @@ export default function CommitDetail({ root, hash, accent, menu, onClose, onPick
               <span style={{ color: 'var(--text-dimmer)', fontWeight: 500 }}>{data.files.length}</span>
               <span style={{ flex: 1 }} />
               <span style={{ fontFamily: MONO, textTransform: 'none', letterSpacing: 0 }}>
-                <span style={{ color: 'hsl(150,55%,50%)' }}>+{data.adds}</span> <span style={{ color: 'hsl(0,72%,62%)' }}>−{data.dels}</span>
+                <span style={{ color: 'var(--ok)' }}>+{data.adds}</span> <span style={{ color: 'hsl(0,72%,62%)' }}>−{data.dels}</span>
               </span>
             </div>
             {!data.files.length && (
@@ -163,7 +164,7 @@ export default function CommitDetail({ root, hash, accent, menu, onClose, onPick
                 </span>
                 <span style={{ flex: '0 0 auto', fontFamily: MONO, fontSize: 11 }}>
                   {f.binary ? <span style={{ color: 'var(--text-dimmer)' }}>bin</span>
-                    : <><span style={{ color: 'hsl(150,55%,50%)' }}>+{f.adds}</span> <span style={{ color: 'hsl(0,72%,62%)' }}>−{f.dels}</span></>}
+                    : <><span style={{ color: 'var(--ok)' }}>+{f.adds}</span> <span style={{ color: 'hsl(0,72%,62%)' }}>−{f.dels}</span></>}
                 </span>
               </div>
             ))}

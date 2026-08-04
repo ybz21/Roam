@@ -15,11 +15,11 @@ export default function ClaudeChat({ name, file }: { name: string; file?: string
 
   return (
     <ChatShell
-      name={name} accent="#58a6ff" error={err}
+      name={name} accent="var(--accent)" error={err}
       placeholder={t('chat.claudePlaceholder')}
       messages={view}
       renderMessage={(m, i) => <ClaudeBubble key={m.id || i} m={m} results={results} />}
-      pending={pending ? <Typing color="#58a6ff" /> : undefined}
+      pending={pending ? <Typing color="var(--accent)" /> : undefined}
       busy={pending}
     />
   )

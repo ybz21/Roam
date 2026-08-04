@@ -198,7 +198,9 @@ function StatusTag({ status, code }: { status?: string; code?: string }) {
 }
 function TypeTag({ type }: { type?: string }) {
   const { t } = useI18n()
-  return type === 'agent' ? <Tag color="blue">🤖 {t('session.type.agent')}</Tag> : <Tag>⌨️ {t('session.type.command')}</Tag>
+  return type === 'agent'
+    ? <Tag color="blue" icon={<BotIcon size={11} />}>{t('session.type.agent')}</Tag>
+    : <Tag icon={<KeyboardIcon size={11} />}>{t('session.type.command')}</Tag>
 }
 
 function pathDirname(path: string): string {
@@ -259,10 +261,10 @@ function FilesPage({ openTerm }: { openTerm: (name: string) => void }) {
   if (isMobile) {
     return (
       <div style={{ height: '100%', minHeight: 0, display: 'flex' }}>
-        <FileBrowser dir="" accent="#58a6ff" layout="dock" onOpenFile={setMobileFile} onOpenAgent={openAgent} />
+        <FileBrowser dir="" accent="var(--accent)" layout="dock" onOpenFile={setMobileFile} onOpenAgent={openAgent} />
         {mobileFile && (
           <MobileSubPage onBack={() => setMobileFile(null)}>
-            <FileView path={mobileFile} accent="#58a6ff" inline onBack={() => setMobileFile(null)}
+            <FileView path={mobileFile} accent="var(--accent)" inline onBack={() => setMobileFile(null)}
               onClose={() => setMobileFile(null)} onOpenPath={setMobileFile} onOpenAgent={openAgent} />
           </MobileSubPage>
         )}
@@ -271,7 +273,7 @@ function FilesPage({ openTerm }: { openTerm: (name: string) => void }) {
   }
   return (
     <div style={{ height: '100%', minHeight: 0, display: 'flex' }}>
-      <FileWorkspace dir="" accent="#58a6ff" onOpenAgent={openAgent} />
+      <FileWorkspace dir="" accent="var(--accent)" onOpenAgent={openAgent} />
     </div>
   )
 }
@@ -794,13 +796,13 @@ export default function App() {
             const n = NAV.find((x) => x.key === key)!
             return (
               <button key={n.key} onClick={() => go(n.key)}
-                style={{ flex: 1, minHeight: 'var(--tap)', border: 0, background: 'none', color: tab === n.key ? '#58a6ff' : 'var(--text-dim)', padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11 }}>
+                style={{ flex: 1, minHeight: 'var(--tap)', border: 0, background: 'none', color: tab === n.key ? 'var(--accent)' : 'var(--text-dim)', padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11 }}>
                 {ICONS[n.key]}{t(n.labelKey)}
               </button>
             )
           })}
           <button onClick={() => setMoreOpen(true)}
-            style={{ flex: 1, minHeight: 'var(--tap)', border: 0, background: 'none', color: MOBILE_MORE_KEYS.includes(tab) ? '#58a6ff' : 'var(--text-dim)', padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11 }}>
+            style={{ flex: 1, minHeight: 'var(--tap)', border: 0, background: 'none', color: MOBILE_MORE_KEYS.includes(tab) ? 'var(--accent)' : 'var(--text-dim)', padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11 }}>
             {svg(<><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></>)}{t('common.more')}
           </button>
         </nav>
@@ -941,7 +943,7 @@ function AgentMark({ kind, size = 13 }: { kind: 'claude' | 'codex'; size?: numbe
 }
 // 工具条按钮：默认安静（无框），开启态才由 tone 上强调色（会话蓝 / Codex 绿）。
 // tone 是 6 位十六进制，追加 alpha 后缀直接拿来做底色/描边，避免 color-mix 的兼容性问题。
-function TBtn({ icon, label, on, tone = '#58a6ff', title, onClick, onMouseDown }: {
+function TBtn({ icon, label, on, tone = 'var(--accent)', title, onClick, onMouseDown }: {
   icon?: ReactNode; label?: ReactNode; on?: boolean; tone?: string; title?: ReactNode
   onClick?: () => void; onMouseDown?: (e: React.MouseEvent) => void
 }) {
@@ -1011,7 +1013,7 @@ function TerminalPane(props: {
     }
   }
   const activeNeedsInput = !!(active && termNeedsInput[active])
-  const dot = activeNeedsInput ? '#d29922' : st === 'connected' ? '#3fb950' : st === 'connecting' ? '#d29922' : '#f85149'
+  const dot = activeNeedsInput ? '#d29922' : st === 'connected' ? 'var(--ok)' : st === 'connecting' ? '#d29922' : '#f85149'
   // 当前标签是否在 Claude/Codex 对话视图：此时聊天 UI 自带输入框，
   // 终端那条移动输入条 + 快捷键栏要隐藏，否则手机上会出现两个输入框。
   const inChat = !!active && ((claudeView[active] && claudeMap[active]?.running) || (codexView[active] && codexMap[active]?.running))
@@ -1352,7 +1354,7 @@ function TerminalPane(props: {
     return (
       <div style={{ flex: 1, display: 'grid', placeItems: 'center', color: 'var(--text-dim)' }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 40 }}>▸</div>
+          <div style={{ display: 'flex', justifyContent: 'center', color: 'var(--text-dimmer)' }}><TerminalIcon size={40} /></div>
           <div>{t('terminal.openHint', { terminal: t('common.terminal') })}</div>
         </div>
       </div>
@@ -1363,15 +1365,15 @@ function TerminalPane(props: {
   // 标签条是单行横向滑动：窄栏/手机上开的会话一多，当前标签就滑出视口了 → 切换后把它带回来。
   // 会话状态点：等待确认=琥珀，已连接=绿，连接中=琥珀，断开=红（与列表页同一套色）
   const dotOf = (name: string) => termNeedsInput[name] ? '#d29922'
-    : statusMap[name] === 'connected' ? '#3fb950' : statusMap[name] === 'connecting' ? '#d29922' : '#f85149'
+    : statusMap[name] === 'connected' ? 'var(--ok)' : statusMap[name] === 'connecting' ? '#d29922' : '#f85149'
   const statusDot = (color: string, size = 7) => (
     <i style={{ width: size, height: size, borderRadius: '50%', flex: `0 0 ${size}px`, background: color, boxShadow: `0 0 0 3px ${color}26` }} />
   )
   // 标签内的会话标记：Claude 蓝 / Codex 绿，跟状态点同一行且同一光学尺寸
   const agentMarks = (name: string) => (
     <>
-      {claudeMap[name]?.running && <span title={t('session.runningClaude')} style={{ display: 'inline-flex', color: '#58a6ff' }}><AgentMark kind="claude" /></span>}
-      {codexMap[name]?.running && <span title={t('session.runningCodex')} style={{ display: 'inline-flex', color: '#10a37f' }}><AgentMark kind="codex" /></span>}
+      {claudeMap[name]?.running && <span title={t('session.runningClaude')} style={{ display: 'inline-flex', color: 'var(--accent)' }}><AgentMark kind="claude" /></span>}
+      {codexMap[name]?.running && <span title={t('session.runningCodex')} style={{ display: 'inline-flex', color: 'var(--ok)' }}><AgentMark kind="codex" /></span>}
     </>
   )
   const sessionTab = (
@@ -1404,7 +1406,7 @@ function TerminalPane(props: {
           const waiting = termNeedsInput[termName]
           const proj = sessionProject(termName)
           // 分支进 Tooltip，不占标签宽度（14 §6.3.2）
-          const tip = [proj && proj.name, sessionDisplay(termName), proj?.branch && `⎇ ${proj.branch}`]
+          const tip = [proj && proj.name, sessionDisplay(termName), proj?.branch]
             .filter(Boolean).join(' · ')
           const tab = (
             <span key={termName} ref={on ? activeTabRef : undefined}
@@ -1545,16 +1547,16 @@ function TerminalPane(props: {
         {activeNeedsInput ? t('session.waiting') : st === 'connected' ? t('terminal.status.connected') : st === 'connecting' ? t('terminal.status.connecting') : t('terminal.status.disconnected')}
       </span>
       {active && claudeMap[active]?.running && (
-        <TBtn icon={<AgentMark kind="claude" size={14} />} label="Claude" tone="#58a6ff" on={!!claudeView[active]}
+        <TBtn icon={<AgentMark kind="claude" size={14} />} label="Claude" tone="var(--accent)" on={!!claudeView[active]}
           title={t('chat.switchToClaude')} onClick={() => setClaudeView((v) => ({ ...v, [active!]: !v[active!] }))} />
       )}
       {active && codexMap[active]?.running && (
-        <TBtn icon={<AgentMark kind="codex" size={14} />} label="Codex" tone="#10a37f" on={!!codexView[active]}
+        <TBtn icon={<AgentMark kind="codex" size={14} />} label="Codex" tone="var(--ok)" on={!!codexView[active]}
           title={t('chat.switchToCodex')} onClick={() => setCodexView((v) => ({ ...v, [active!]: !v[active!] }))} />
       )}
       <span className="tt-sep" />
       <Dropdown trigger={['click']} menu={{ items: tmuxMenu(t) as any, onClick: ({ key }) => { if (key === PFX + 'x') openPaneCloseConfirm(); else sendKey(key) } }} placement="bottomLeft">
-        <button type="button" className="tt-tbtn">{TI.tmux}<span>tmux</span><span style={{ color: 'var(--text-dimmer)', fontSize: 9 }}>▼</span></button>
+        <button type="button" className="tt-tbtn">{TI.tmux}<span>tmux</span><span style={{ color: 'var(--text-dimmer)', display: 'inline-flex' }}><ChevronDown size={11} /></span></button>
       </Dropdown>
       {active && (
         <TBtn icon={TI.newTab} label={t('terminal.newTab')} title={t('terminal.openInNewTabTitle')}
@@ -1626,8 +1628,8 @@ function TerminalPane(props: {
       {dragOver && (
         <div style={{
           position: 'absolute', inset: 0, zIndex: 5, pointerEvents: 'none',
-          border: '2px dashed #58a6ff', borderRadius: 'var(--r-sm)', background: 'rgba(88,166,255,.08)',
-          display: 'grid', placeItems: 'center', color: '#58a6ff', fontSize: 14, fontWeight: 600,
+          border: '2px dashed var(--accent)', borderRadius: 'var(--r-sm)', background: 'rgba(88,166,255,.08)',
+          display: 'grid', placeItems: 'center', color: 'var(--accent)', fontSize: 14, fontWeight: 600,
         }}>{t('terminal.dropToMention')}</div>
       )}
       <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
@@ -1657,7 +1659,7 @@ function TerminalPane(props: {
               </div>
             )}
             {showVoice && !claudeView[termName] && !codexView[termName] && (
-              <VoiceInput accent="#58a6ff" onResult={(text) => { api('POST', `/sessions/${encodeURIComponent(termName)}/type`, { text }).catch((e: any) => message.error(e.message)) }} />
+              <VoiceInput accent="var(--accent)" onResult={(text) => { api('POST', `/sessions/${encodeURIComponent(termName)}/type`, { text }).catch((e: any) => message.error(e.message)) }} />
             )}
           </div>
         ))}
@@ -1725,7 +1727,7 @@ function TerminalPane(props: {
     // paddingBottom=env(keyboard-inset-height)：软键盘悬浮覆盖时(见 main.tsx/index.html)，
     // 把整块内容抬到键盘之上，让底部输入条/快捷键栏不被遮住。桌面无虚拟键盘 → 0，无影响。
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, paddingBottom: 'env(keyboard-inset-height, 0px)', transition: 'padding-bottom .15s ease-out' }}>
-      {active && <PromptDialog name={active} accent={codexMap[active]?.running ? '#10a37f' : '#58a6ff'} enabled={!inChat && !promptOff} />}
+      {active && <PromptDialog name={active} accent={codexMap[active]?.running ? 'var(--ok)' : 'var(--accent)'} enabled={!inChat && !promptOff} />}
       <Modal
         open={pasteOpen}
         title={t('terminal.pasteTitle')}
@@ -1772,7 +1774,7 @@ function TerminalPane(props: {
           会话（终端）各部件用上面抽出的 sessionTab/sessionToolbar/terminalArea/sessionBottom 复用。 */}
       {fileDock === 'left' ? (
         <FileWorkspace
-          dir={cwd} accent="#58a6ff"
+          dir={cwd} accent="var(--accent)"
           explorerOpen={showFiles} onExplorerClose={() => setShowFiles(false)}
           leadingTitle={active || ''} leadingTab={sessionTab}
           leadingContent={terminalArea} chrome={sessionToolbar} footer={sessionBottom}
@@ -1792,7 +1794,7 @@ function TerminalPane(props: {
       {fileDock === 'right' && (
         <AdaptivePanel open={showFiles} layer="session" title={t('nav.files')}
           onClose={() => setShowFiles(false)}>
-          <FileBrowser dir={cwd} accent="#58a6ff" layout="dock" onClose={() => setShowFiles(false)} />
+          <FileBrowser dir={cwd} accent="var(--accent)" layout="dock" onClose={() => setShowFiles(false)} />
         </AdaptivePanel>
       )}
       {/* 手机走全屏二级页（13 §6）：420 的浮层在 360 屏上盖到 92vw，还压着底栏、不吃安全区。
@@ -1800,7 +1802,7 @@ function TerminalPane(props: {
       <AdaptivePanel open={showGit} layer="session" title={t('git.title')}
         onClose={() => setShowGit(false)}>
         <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}><Spin /></div>}>
-          <GitPanel dir={cwd} accent="#58a6ff" onClose={() => setShowGit(false)} />
+          <GitPanel dir={cwd} accent="var(--accent)" onClose={() => setShowGit(false)} />
         </Suspense>
       </AdaptivePanel>
       {paneCloseTarget && (
@@ -1983,6 +1985,8 @@ function Tasks({ openTerm }: { openTerm: (n: string) => void }) {
 // ── 服务器目录选择器 ──
 // 最近用过的工作目录（服务端偏好 + localStorage 兜底），作为目录选择器的快捷候选
 import { getPreferences } from './preferences'
+import { ArrowDown, ArrowUp, BotIcon, CheckIcon, ChevronDown, ChevronRight, CloseIcon, Disclosure, HomeIcon, KeyboardIcon, MoonIcon, PlusIcon, SunIcon, TerminalIcon, WindowsIcon } from './icons'
+import { BranchIcon } from './git/parts'
 const RECENT_DIRS_KEY = 'ttmux_recent_dirs'
 export function recentDirs(): string[] {
   const fromPrefs = getPreferences().recentDirs
@@ -2010,7 +2014,7 @@ export function DirPicker({ open, start, onPick, onClose }: { open: boolean; sta
       footer={[<Button key="c" onClick={onClose}>{t('common.cancel')}</Button>, <Button key="o" type="primary" onClick={() => choose(data.path)}>{t('dirPicker.chooseCurrent')}</Button>]}>
       {/* 快捷候选：家目录 + 最近用过的目录 */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)', marginBottom: 10 }}>
-        <Tag style={{ cursor: 'pointer', margin: 0 }} onClick={() => load(undefined)}>🏠 {t('dirPicker.home')}</Tag>
+        <Tag style={{ cursor: 'pointer', margin: 0 }} onClick={() => load(undefined)} icon={<HomeIcon size={11} />}>{t('dirPicker.home')}</Tag>
         {recent.map((d) => (
           <Tooltip key={d} title={d}>
             <Tag color="blue" style={{ cursor: 'pointer', margin: 0, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}
@@ -2025,7 +2029,9 @@ export function DirPicker({ open, start, onPick, onClose }: { open: boolean; sta
         dataSource={['..', ...(data.dirs || [])]}
         renderItem={(d: string) => (
           <List.Item style={{ cursor: 'pointer' }} onClick={() => (d === '..' ? load(data.parent) : enter(d))}>
-            <span style={{ color: d === '..' ? 'var(--text-dim)' : 'var(--text-bright)' }}>{d === '..' ? `↑ ${t('file.parentDir')}` : '▸ ' + d}</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: d === '..' ? 'var(--text-dim)' : 'var(--text-bright)' }}>
+              {d === '..' ? <><ArrowUp size={12} />{t('file.parentDir')}</> : <><ChevronRight size={12} />{d}</>}
+            </span>
           </List.Item>
         )} />
     </Modal>
@@ -2249,10 +2255,10 @@ export function NewSessionModal({ open, parent, onClose, onDone }: { open: boole
                   const occupied = (w.sessions || []).length > 0
                   return {
                     value: w.path,
-                    title: `⎇ ${w.branch || w.path.split('/').pop()}`,
+                    title: w.branch || w.path.split('/').pop(),
                     label: (
                       <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', minWidth: 0 }}>
-                        <span style={{ fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis' }}>⎇ {w.branch || '?'}</span>
+                        <span style={{ fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', display: 'inline-flex', alignItems: 'center', gap: 4 }}><BranchIcon size={11} />{w.branch || '?'}</span>
                         {occupied
                           ? <Tag color="green" style={{ margin: 0, fontSize: 11, lineHeight: '16px' }}>{sessionLabel(w.sessions[0].session)}</Tag>
                           : w.external
@@ -2389,7 +2395,7 @@ export function CloseWorktreeModal({ info, onClose, onDone }: {
         {/* 已合入（10 §5）：损失叙事换成绿色定心丸；未提交改动仍如实提示 */}
         {merged
           ? (<>
-            <div style={{ color: '#3fb950' }}>{t('project.finish.mergedRemote', { target: st.mergedInto, kind: st.mergedKind })}</div>
+            <div style={{ color: 'var(--ok)' }}>{t('project.finish.mergedRemote', { target: st.mergedInto, kind: st.mergedKind })}</div>
             {(st.dirty || 0) + (st.untracked || 0) > 0 && (
               <div style={{ color: '#d29922', marginTop: 4 }}>{t('project.finish.uncommitted', { count: (st.dirty || 0) + (st.untracked || 0) })}</div>
             )}
@@ -2418,7 +2424,7 @@ export function CloseWorktreeModal({ info, onClose, onDone }: {
         </Radio>
         <Radio value="discard">
           {merged
-            ? <span style={{ color: '#3fb950' }}>{t('worktree.close.discardMerged', { target: st.mergedInto })}</span>
+            ? <span style={{ color: 'var(--ok)' }}>{t('worktree.close.discardMerged', { target: st.mergedInto })}</span>
             : <span style={{ color: '#f85149' }}>{t('worktree.close.discard')}</span>}
         </Radio>
       </Radio.Group>
@@ -2754,7 +2760,7 @@ function Sessions({ openTerm, closeTerm, activeTerm, embedded }: {
             ]} />
           <Button onClick={() => setSortAsc((v) => !v)} style={{ flex: '0 0 auto' }}
             title={sortAsc ? t('session.sortAsc') : t('session.sortDesc')}>
-            {sortAsc ? '↑' : '↓'}
+            {sortAsc ? <ArrowUp size={13} /> : <ArrowDown size={13} />}
           </Button>
           {!isPhone && sessionActions}
         </div>
@@ -2784,7 +2790,7 @@ function Sessions({ openTerm, closeTerm, activeTerm, embedded }: {
                   // 竞赛组头(W6 入口)：RACE 徽标 + 名字 + 选手数 + 对比台
                   <List.Item style={{ padding: '10px 8px 4px 6px', cursor: 'pointer', borderBlockEnd: 'none' }} onClick={() => toggleGroup(en.key)}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', minWidth: 0 }}>
-                      <span style={{ fontSize: 10, color: 'var(--text-dimmer)', flex: '0 0 auto' }}>{collapsed ? '▸' : '▾'}</span>
+                      <span style={{ color: 'var(--text-dimmer)', flex: '0 0 auto', display: 'inline-flex' }}><Disclosure open={!collapsed} /></span>
                       <Tag color="gold" style={{ margin: 0, flex: '0 0 auto', fontSize: 11, lineHeight: '18px', height: 20 }}>RACE</Tag>
                       <span style={{ fontWeight: 700, color: 'var(--text-bright)', fontSize: 13, flex: '0 0 auto' }}>{rc.name}</span>
                       {rc.base && <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 11.5, color: 'var(--text-dimmer)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{t('race.groupBase', { base: rc.base })}</span>}
@@ -2804,7 +2810,7 @@ function Sessions({ openTerm, closeTerm, activeTerm, embedded }: {
                   // 仓库分组头(W2)：折叠三角 + 仓库名 + 路径 + worktree 计数 + 管理入口
                   <List.Item style={{ padding: '10px 8px 4px 6px', cursor: 'pointer', borderBlockEnd: 'none' }} onClick={() => toggleGroup(repo)}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', minWidth: 0 }}>
-                      <span style={{ fontSize: 10, color: 'var(--text-dimmer)', flex: '0 0 auto' }}>{collapsed ? '▸' : '▾'}</span>
+                      <span style={{ color: 'var(--text-dimmer)', flex: '0 0 auto', display: 'inline-flex' }}><Disclosure open={!collapsed} /></span>
                       <span style={{ fontWeight: 700, color: 'var(--text-bright)', fontSize: 13, flex: '0 0 auto' }}>{base}</span>
                       <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 11.5, color: 'var(--text-dimmer)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{repo}</span>
                       <Tag color="cyan" style={{ margin: 0, flex: '0 0 auto', fontSize: 11, lineHeight: '18px', height: 20 }}>{t('worktree.groupCount', { count: repoWt[repo]?.total ?? en.count })}</Tag>
@@ -2838,16 +2844,16 @@ function Sessions({ openTerm, closeTerm, activeTerm, embedded }: {
                   padding: '10px 8px 10px 12px', cursor: 'pointer',
                   borderRadius: indent ? '0 var(--r-sm) var(--r-sm) 0' : 'var(--r-sm)',
                   background: activeRow ? 'linear-gradient(90deg, rgba(31,111,235,.38), rgba(31,111,235,.16))' : undefined,
-                  border: activeRow ? '1px solid #58a6ff' : '1px solid transparent',
+                  border: activeRow ? '1px solid var(--accent)' : '1px solid transparent',
                   boxShadow: activeRow ? '0 0 0 1px rgba(88,166,255,.18), 0 0 18px rgba(31,111,235,.14)' : undefined,
                 }} onClick={() => openTerm(s.name)}>
-                  {activeRow && <span aria-hidden style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: '#58a6ff' }} />}
+                  {activeRow && <span aria-hidden style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: 'var(--accent)' }} />}
                   {/* 七个格子恒定：缺一个桌面上就整行错列，所以空的项目/位置格照样渲染（见 .tt-srow） */}
                   <div className="tt-srow">
-                    <i title={waiting ? t('prompt.confirmRequired') : connected ? t('terminal.status.connected') : t('terminal.status.idle')} style={{ width: 8, height: 8, borderRadius: '50%', flex: '0 0 8px', background: waiting ? '#d29922' : connected ? '#3fb950' : 'var(--text-dimmer)' }} />
+                    <i title={waiting ? t('prompt.confirmRequired') : connected ? t('terminal.status.connected') : t('terminal.status.idle')} style={{ width: 8, height: 8, borderRadius: '50%', flex: '0 0 8px', background: waiting ? '#d29922' : connected ? 'var(--ok)' : 'var(--text-dimmer)' }} />
                     <span className="nm" style={{ color: activeRow ? '#fff' : undefined }}
                       title={`${s.label || s.name}（${s.id || s.name}）· ${t('session.createdAt')} ${absTime(s.created)}`}>
-                      {en.fam && <Tooltip title={t('session.fork.childOf', { parent: s.parent })}><span style={{ color: '#a371f7', fontSize: 13, marginRight: 6 }}>⑂</span></Tooltip>}
+                      {en.fam && <Tooltip title={t('session.fork.childOf', { parent: s.parent })}><span style={{ color: '#a371f7', marginRight: 6, display: 'inline-flex' }}><BranchIcon size={12} /></span></Tooltip>}
                       {s.label || s.name}
                       {/* 会话 ID 只留尾 4 位：全名与名字同权并排时，每行前半截都在念一串日期 */}
                       {(s.id || s.name) !== (s.label || s.name) && <span className="id">{(s.id || s.name).slice(-4)}</span>}
@@ -2865,7 +2871,7 @@ function Sessions({ openTerm, closeTerm, activeTerm, embedded }: {
                         <span className="loc" title={tip}
                           onClick={ann?.primary?.linked ? (e) => { e.stopPropagation(); setWtDir(ann.primary.repo); setWtOpen(true) } : undefined}
                           style={ann?.primary?.linked ? { cursor: 'pointer' } : undefined}>
-                          {loc.branch ? <span className="br">⎇ {loc.branch}{ann?.ambiguous ? ' +' : ''}</span> : loc.path}
+                          {loc.branch ? <span className="br"><BranchIcon size={11} />{loc.branch}{ann?.ambiguous ? ' +' : ''}</span> : loc.path}
                         </span>
                       )
                     })()}
@@ -2875,14 +2881,14 @@ function Sessions({ openTerm, closeTerm, activeTerm, embedded }: {
                         if (!ann?.primary?.linked) return null
                         return (<>
                           <Tag className="wt" color="cyan" style={{ margin: 0, flex: '0 0 auto', cursor: 'pointer', fontFamily: 'ui-monospace, monospace' }}
-                            onClick={(e) => { e.stopPropagation(); setWtDir(ann.primary.repo); setWtOpen(true) }}>⎇</Tag>
-                          {ann.primary.external && <Tag className="wt" style={{ margin: 0, flex: '0 0 auto' }}>⧉</Tag>}
+                            onClick={(e) => { e.stopPropagation(); setWtDir(ann.primary.repo); setWtOpen(true) }}><BranchIcon size={11} /></Tag>
+                          {ann.primary.external && <Tag className="wt" style={{ margin: 0, flex: '0 0 auto' }}><WindowsIcon size={11} /></Tag>}
                         </>)
                       })()}
                       {sw && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>{t('nav.swarm')}:{sw.swarm}{sw.role === 'leader' ? `·${t('swarm.master')}` : ''}</Tag>}
                       {waiting && <Tag color="warning" style={{ margin: 0, flex: '0 0 auto' }}>{t('session.waiting')}</Tag>}
-                      {cc[s.name] && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>✳ Claude</Tag>}
-                      {cx[s.name] && <Tag color="green" style={{ margin: 0, flex: '0 0 auto' }}>✸ Codex</Tag>}
+                      {cc[s.name] && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }} icon={<AgentMark kind="claude" size={11} />}>Claude</Tag>}
+                      {cx[s.name] && <Tag color="green" style={{ margin: 0, flex: '0 0 auto' }} icon={<AgentMark kind="codex" size={11} />}>Codex</Tag>}
                       {!sw && !agent && <Tag style={{ margin: 0, flex: '0 0 auto' }}>{connected ? t('terminal.status.connected') : t('terminal.status.idle')}</Tag>}
                       {/* 窗口数 99% 的会话都是 1，常驻就是一列噪声——只在 >1 时说 */}
                       {s.windows > 1 && <span style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap' }}>{t('session.windows', { count: s.windows })}</span>}
@@ -3272,7 +3278,7 @@ function PhoneSettingsCard() {
               </Space>
               <Space wrap size={8}>
                 <Tag color={st.connected ? 'green' : (st.error ? 'red' : 'default')}>
-                  {st.connected ? '● ' + (st.device || t('phone.connected')) : (st.error || t('phone.disconnected'))}
+                  {st.connected ? (st.device || t('phone.connected')) : (st.error || t('phone.disconnected'))}
                 </Tag>
                 {canSS && st.running != null && <Tag color={st.running ? 'blue' : 'default'}>{st.running ? t('phone.redroidRunning') : t('phone.redroidStopped')}</Tag>}
               </Space>
@@ -3390,8 +3396,8 @@ function EnvPage() {
                 value={mode}
                 onChange={(v) => setMode(v as 'light' | 'dark')}
                 options={[
-                  { label: `☾ ${t('common.darkTheme')}`, value: 'dark' },
-                  { label: `☀ ${t('common.lightTheme')}`, value: 'light' },
+                  { label: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><MoonIcon size={12} />{t('common.darkTheme')}</span>, value: 'dark' },
+                  { label: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><SunIcon size={12} />{t('common.lightTheme')}</span>, value: 'light' },
                 ]}
               />
               <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('settings.themeHelp')}</span>
@@ -3416,7 +3422,7 @@ function EnvPage() {
           <Card title={t('install.settingsTitle')}>
             <Space align="center" wrap>
               {pwaInstalled
-                ? <span style={{ color: 'var(--text-bright)' }}>✓ {t('install.installed')}</span>
+                ? <span style={{ color: 'var(--text-bright)', display: 'inline-flex', alignItems: 'center', gap: 5 }}><CheckIcon size={13} />{t('install.installed')}</span>
                 : <Button type="primary" onClick={doInstall}>{t('install.button')}</Button>}
               <CertDownloadButton />
               <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('install.settingsHelp')}</span>
@@ -3746,10 +3752,10 @@ function SpawnModal({ open, onClose, onDone }: { open: boolean; onClose: () => v
                   <Space key={f.key} align="baseline" style={{ display: 'flex', marginBottom: 8 }}>
                     <Form.Item {...f} name={[f.name, 'name']} noStyle><Input placeholder={t('common.name')} style={{ width: 110 }} /></Form.Item>
                     <Form.Item {...f} name={[f.name, 'payload']} noStyle><Input placeholder={type === 'agent' ? t('task.description') : t('common.command')} style={{ width: 240 }} /></Form.Item>
-                    <a onClick={() => remove(f.name)} style={{ color: '#f85149' }}>×</a>
+                    <a onClick={() => remove(f.name)} style={{ color: '#f85149', display: 'inline-flex' }}><CloseIcon size={13} /></a>
                   </Space>
                 ))}
-                <Button type="dashed" onClick={() => add()} block>+ {t('task.addRow')}</Button>
+                <Button type="dashed" onClick={() => add()} block icon={<PlusIcon size={13} />}>{t('task.addRow')}</Button>
               </>
             )}
           </Form.List>

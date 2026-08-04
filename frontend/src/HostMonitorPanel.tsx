@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Alert, Card, Empty, Progress, Segmented, Space, Spin, Tag, Tooltip, Typography } from 'antd'
 import { api } from './api'
+import { ArrowDown, ArrowUp, Swatch } from './icons'
 
 type HistoryDot = { t: number; cpu: number; mem: number; gpu: number; rx: number; tx: number }
 
@@ -39,7 +40,7 @@ function fmtBytes(n: number, perSec = false): string {
 function usageColor(p: number): string {
   if (p >= 90) return '#f5222d'
   if (p >= 70) return '#faad14'
-  return '#52c41a'
+  return 'var(--ok)'
 }
 
 // ── 轻量 SVG 面积走势图(不引图表库) ──
@@ -146,7 +147,7 @@ export default function HostMonitorPanel({ pluginId, enabled, t }: {
             <Progress type="dashboard" size={88} percent={Math.round(cpu.usagePercent)}
               strokeColor={usageColor(cpu.usagePercent)} />
             <div style={{ flex: 1, minWidth: 0, alignSelf: 'stretch', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
-              <Sparkline series={history.map((h) => h.cpu)} color="#58a6ff" max={100} />
+              <Sparkline series={history.map((h) => h.cpu)} color="var(--accent)" max={100} />
             </div>
           </Space>
           {!!cpu.perCore?.length && (
@@ -212,17 +213,17 @@ export default function HostMonitorPanel({ pluginId, enabled, t }: {
 
         {/* 网络 */}
         <StatCard title={t('plugins.monitor.network')}
-          extra={<Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            ↓ {fmtBytes(network.rxBytesPerSec, true)} · ↑ {fmtBytes(network.txBytesPerSec, true)}
+          extra={<Typography.Text type="secondary" style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <ArrowDown size={11} />{fmtBytes(network.rxBytesPerSec, true)} · <ArrowUp size={11} />{fmtBytes(network.txBytesPerSec, true)}
           </Typography.Text>}>
           <Sparkline series={history.map((h) => h.rx)} color="#79c0ff" height={40} />
           <Sparkline series={history.map((h) => h.tx)} color="#ffa657" height={40} />
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              <span style={{ color: '#79c0ff' }}>■</span> {t('plugins.monitor.rx')}
+            <Typography.Text type="secondary" style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <Swatch color="#79c0ff" /> {t('plugins.monitor.rx')}
             </Typography.Text>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              <span style={{ color: '#ffa657' }}>■</span> {t('plugins.monitor.tx')}
+            <Typography.Text type="secondary" style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <Swatch color="#ffa657" /> {t('plugins.monitor.tx')}
             </Typography.Text>
           </div>
         </StatCard>

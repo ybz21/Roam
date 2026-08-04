@@ -10,6 +10,7 @@ import { useI18n } from '../i18n'
 import { VoiceInput } from './VoiceInput'
 import type { Msg } from './types'
 import { useLayout } from '../layout'
+import { ArrowToBottom, PaperclipIcon, StopIcon } from '../icons'
 
 export function ChatShell({ name, accent, placeholder, messages, renderMessage, pending, busy, error }: {
   name: string
@@ -174,8 +175,8 @@ export function ChatShell({ name, accent, placeholder, messages, renderMessage, 
           </div>
           {showJump && (
             <button onClick={jump} title={t('chat.jumpToBottom')}
-              style={{ position: 'absolute', right: 14, bottom: 12, width: 34, height: 34, borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--bg-container)', color: accent, fontSize: 16, cursor: 'pointer', boxShadow: 'var(--card-hover-shadow)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              ↓
+              style={{ position: 'absolute', right: 14, bottom: 12, width: 34, height: 34, borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--bg-container)', color: accent, cursor: 'pointer', boxShadow: 'var(--card-hover-shadow)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <ArrowToBottom size={16} />
             </button>
           )}
           {/* 桌面端悬浮语音按钮（长按说话，识别回填输入框）：挂在消息区这层而不是整页外壳——
@@ -200,23 +201,23 @@ export function ChatShell({ name, accent, placeholder, messages, renderMessage, 
                 onPaste={onPaste}
               />
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Button shape="circle" title={t('chat.uploadToCwd')} loading={uploading} onMouseDown={noBlur} onClick={() => fileRef.current?.click()}>📎</Button>
+                <Button shape="circle" title={t('chat.uploadToCwd')} loading={uploading} onMouseDown={noBlur} onClick={() => fileRef.current?.click()} icon={<PaperclipIcon size={15} />} />
                 {showVoice && <VoiceInput inline accent={accent} onResult={appendText} />}
                 <span style={{ flex: 1 }} />
-                {busy && <Button danger title={t('chat.stopTitle')} onMouseDown={noBlur} onClick={stop}>{t('chat.stop')}</Button>}
+                {busy && <Button danger title={t('chat.stopTitle')} onMouseDown={noBlur} onClick={stop} icon={<StopIcon size={11} />}>{t('chat.stop')}</Button>}
                 <Button type="primary" loading={sending} onMouseDown={noBlur} onClick={send} style={{ background: accent, borderColor: accent }}>{t('common.send')}</Button>
               </div>
             </>
           ) : (
             <>
-              <Button title={t('chat.uploadToCwd')} loading={uploading} onClick={() => fileRef.current?.click()}>📎</Button>
+              <Button title={t('chat.uploadToCwd')} loading={uploading} onClick={() => fileRef.current?.click()} icon={<PaperclipIcon size={15} />} />
               <Input.TextArea
                 value={input} onChange={(e) => setInput(e.target.value)}
                 autoSize={{ minRows: 1, maxRows: 5 }} placeholder={placeholder}
                 onPressEnter={(e) => { if (!e.shiftKey) { e.preventDefault(); send() } }}
                 onPaste={onPaste}
               />
-              {busy && <Button danger title={t('chat.stopTitle')} onClick={stop}>{t('chat.stop')}</Button>}
+              {busy && <Button danger title={t('chat.stopTitle')} onClick={stop} icon={<StopIcon size={11} />}>{t('chat.stop')}</Button>}
               <Button type="primary" loading={sending} onClick={send} style={{ background: accent, borderColor: accent }}>{t('common.send')}</Button>
             </>
           )}
@@ -265,7 +266,7 @@ function LiveTail({ name }: { name: string }) {
   return (
     <div style={{ margin: '4px 0', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg-base)', overflow: 'hidden' }}>
       <div style={{ fontSize: 11, color: 'var(--text-dim)', padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span className="cc-pulse" style={{ width: 6, height: 6, borderRadius: '50%', background: '#3fb950', display: 'inline-block' }} />
+        <span className="cc-pulse" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--ok)', display: 'inline-block' }} />
         {t('chat.liveTerminalOutput')}
       </div>
       <pre style={{ margin: 0, padding: '0 8px 8px', maxHeight: 160, overflow: 'auto', fontFamily: 'ui-monospace, monospace', fontSize: 11.5, lineHeight: 1.45, color: 'var(--text-dim)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{text}</pre>

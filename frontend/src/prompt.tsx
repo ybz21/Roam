@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react'
 import { Button, Modal, Space } from 'antd'
 import { api } from './api'
 import { useI18n } from './i18n'
+import { ArrowDown, ArrowUp, ChevronRight, DotIcon } from './icons'
 
 export interface Choice { num: number; label: string; selected: boolean }
 export interface Prompt { kind: 'select' | 'yesno'; question: string; choices: Choice[] }
@@ -104,19 +105,19 @@ function PromptActions({ p, accent, busy, choose, press }: {
                 borderColor: ch.selected ? accent : 'var(--border)', color: 'var(--text-bright)',
                 background: ch.selected ? accent + '22' : 'transparent',
               }}>
-              <b style={{ color: accent, marginRight: 6 }}>{ch.selected ? '❯' : ''}{ch.num}.</b>{ch.label}
+              <b style={{ color: accent, marginRight: 6, display: 'inline-flex', alignItems: 'center' }}>{ch.selected ? <ChevronRight size={12} /> : null}{ch.num}.</b>{ch.label}
             </Button>
           ))}
         </Space>
       ) : (
         <Space>
-          <Button disabled={busy} onClick={() => press(['y'])} style={{ color: '#3fb950', borderColor: '#3fb95066' }}>{t('prompt.yes')}</Button>
+          <Button disabled={busy} onClick={() => press(['y'])} style={{ color: 'var(--ok)', borderColor: 'var(--ok-border)' }}>{t('prompt.yes')}</Button>
           <Button disabled={busy} onClick={() => press(['n'])} style={{ color: '#f85149', borderColor: '#f8514966' }}>{t('prompt.no')}</Button>
         </Space>
       )}
       <Space size={4} style={{ marginTop: 8 }}>
-        <Button size="small" disabled={busy} onClick={() => press(['Up'])} title={t('prompt.up')}>↑</Button>
-        <Button size="small" disabled={busy} onClick={() => press(['Down'])} title={t('prompt.down')}>↓</Button>
+        <Button size="small" disabled={busy} onClick={() => press(['Up'])} title={t('prompt.up')} icon={<ArrowUp size={13} />} />
+        <Button size="small" disabled={busy} onClick={() => press(['Down'])} title={t('prompt.down')} icon={<ArrowDown size={13} />} />
         <Button size="small" disabled={busy} onClick={() => press(['Enter'])}>{t('prompt.enter')}</Button>
         <Button size="small" disabled={busy} onClick={() => press(['Escape'])}>Esc</Button>
       </Space>
@@ -172,7 +173,7 @@ export function PromptPanel({ name, accent }: { name: string; accent: string }) 
 
   return (
     <div style={{ borderTop: `1px solid ${accent}55`, background: 'var(--bg-base)', padding: '10px 12px' }}>
-      <div style={{ color: accent, fontSize: 12, fontWeight: 600, marginBottom: 8 }}>● {t('prompt.confirmRequired')}</div>
+      <div style={{ color: accent, fontSize: 12, fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}><DotIcon size={9} />{t('prompt.confirmRequired')}</div>
       <PromptActions p={p} accent={accent} busy={busy} choose={choose} press={press} />
     </div>
   )

@@ -2,6 +2,7 @@
 import { useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import type { Block } from './types'
 import { useI18n } from '../i18n'
+import { CheckIcon, Disclosure } from '../icons'
 
 export const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
 
@@ -33,8 +34,8 @@ export function CodeBox({ text, max = 320, fill, className, children }: { text: 
   return (
     <div style={{ position: 'relative', height: fill ? '100%' : undefined }} className="cc-codebox">
       <button onClick={onCopy} title={t('common.copy')} className="cc-copy"
-        style={{ position: 'absolute', top: 6, right: 6, zIndex: 1, border: '1px solid var(--border)', background: 'var(--bg-container)', color: copied ? '#3fb950' : 'var(--text-dim)', borderRadius: 6, fontSize: 11, lineHeight: 1, padding: '3px 7px', cursor: 'pointer' }}>
-        {copied ? `✓ ${t('common.copied')}` : t('common.copy')}
+        style={{ position: 'absolute', top: 6, right: 6, zIndex: 1, border: '1px solid var(--border)', background: 'var(--bg-container)', color: copied ? 'var(--ok)' : 'var(--text-dim)', borderRadius: 6, fontSize: 11, lineHeight: 1, padding: '3px 7px', cursor: 'pointer' }}>
+        {copied ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><CheckIcon size={11} />{t('common.copied')}</span> : t('common.copy')}
       </button>
       <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: fill ? 0 : '6px 0 0', height: fill ? '100%' : undefined, maxHeight: fill ? 'none' : max, boxSizing: 'border-box', overflow: 'auto', background: 'var(--bg-base)', padding: 8, borderRadius: 6, fontFamily: MONO, fontSize: 12, lineHeight: 1.5, color: 'var(--text-bright)' }}>
         <code className={className}>{children ?? text}</code>
@@ -50,7 +51,7 @@ export function ToolResult({ result }: { result: Block }) {
   return (
     <div style={{ marginTop: 6, borderTop: '1px dashed var(--border)', paddingTop: 4 }}>
       <a onClick={() => setOpen((v) => !v)} style={{ color: result.isError ? '#f85149' : 'var(--text-dim)', fontSize: 12 }}>
-        {open ? '▾' : '▸'} {result.isError ? t('chat.outputError') : t('common.output')}
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Disclosure open={open} />{result.isError ? t('chat.outputError') : t('common.output')}</span>
       </a>
       {open && <CodeBox text={result.text || t('common.empty')} />}
     </div>
@@ -62,7 +63,7 @@ export function Collapsible({ label, text, color, open: dflt = false }: { label:
   if (!text) return null
   return (
     <div style={{ fontSize: 12 }}>
-      <a onClick={() => setOpen((o) => !o)} style={{ color }}>{open ? '▾' : '▸'} {label}</a>
+      <a onClick={() => setOpen((o) => !o)} style={{ color, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Disclosure open={open} />{label}</a>
       {open && <CodeBox text={text} />}
     </div>
   )
@@ -81,13 +82,13 @@ export function Diff({ text, max = 360 }: { text: string; max?: number }) {
   return (
     <div style={{ position: 'relative' }} className="cc-codebox">
       <button onClick={onCopy} title={t('common.copy')} className="cc-copy"
-        style={{ position: 'absolute', top: 6, right: 6, zIndex: 1, border: '1px solid var(--border)', background: 'var(--bg-container)', color: copied ? '#3fb950' : 'var(--text-dim)', borderRadius: 6, fontSize: 11, lineHeight: 1, padding: '3px 7px', cursor: 'pointer' }}>
-        {copied ? `✓ ${t('common.copied')}` : t('common.copy')}
+        style={{ position: 'absolute', top: 6, right: 6, zIndex: 1, border: '1px solid var(--border)', background: 'var(--bg-container)', color: copied ? 'var(--ok)' : 'var(--text-dim)', borderRadius: 6, fontSize: 11, lineHeight: 1, padding: '3px 7px', cursor: 'pointer' }}>
+        {copied ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><CheckIcon size={11} />{t('common.copied')}</span> : t('common.copy')}
       </button>
       <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: max, overflow: 'auto', fontFamily: MONO, fontSize: 12, lineHeight: 1.45, paddingRight: 54 }}>
         {text.split('\n').map((l, i) => {
           let color = 'var(--text-bright)'
-          if (l.startsWith('+') && !l.startsWith('+++')) color = '#3fb950'
+          if (l.startsWith('+') && !l.startsWith('+++')) color = 'var(--ok)'
           else if (l.startsWith('-') && !l.startsWith('---')) color = '#f85149'
           else if (l.startsWith('@@') || l.startsWith('***')) color = '#d2a8ff'
           return <div key={i} style={{ color }}>{l || ' '}</div>
@@ -97,7 +98,7 @@ export function Diff({ text, max = 360 }: { text: string; max?: number }) {
   )
 }
 
-export function Typing({ color = '#58a6ff' }: { color?: string }) {
+export function Typing({ color = 'var(--accent)' }: { color?: string }) {
   const { t } = useI18n()
   return (
     <div style={{ display: 'flex', justifyContent: 'flex-start', margin: '6px 0' }}>

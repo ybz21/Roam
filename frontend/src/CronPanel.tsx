@@ -9,6 +9,7 @@ import {
 import { api } from './api'
 import { useLayout } from './layout'
 import CronEditor from './CronEditor'
+import { PlusIcon } from './icons'
 
 // 一条任务的原始配置 + 运行态(与 Go 端 jobView 对齐)。
 type Action = 'agent' | 'exec'
@@ -166,7 +167,7 @@ export default function CronPanel({ pluginId, enabled, t }: { pluginId: string; 
       {!enabled && <Alert type="warning" showIcon message={t('cron.enablePluginHint')} />}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography.Text type="secondary">{t('cron.intro')}</Typography.Text>
-        <Button type="primary" disabled={!enabled} onClick={() => { setEditing(null); setOpen(true) }}>{t('cron.add')}</Button>
+        <Button type="primary" disabled={!enabled} onClick={() => { setEditing(null); setOpen(true) }} icon={<PlusIcon size={13} />}>{t('cron.add')}</Button>
       </div>
       {jobs.length === 0
         ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('cron.empty')} />
@@ -212,8 +213,8 @@ export default function CronPanel({ pluginId, enabled, t }: { pluginId: string; 
 // 一句话概括「干什么」,列在任务名下方。
 function actionSummary(j: Job, t: T): string {
   switch (j.action) {
-    case 'agent': return `🤖 ${j.provider || t('cron.providerAuto')}${j.interactive ? ' ⭯' : ''} · ${(j.prompt || '').slice(0, 40)}`
-    case 'exec': return `＄ ${(j.command || '').slice(0, 50)}`
+    case 'agent': return `${j.provider || t('cron.providerAuto')}${j.interactive ? ` · ${t('cron.fieldInteractive')}` : ''} · ${(j.prompt || '').slice(0, 40)}`
+    case 'exec': return (j.command || '').slice(0, 50)
     default: return ''
   }
 }

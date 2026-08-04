@@ -8,6 +8,7 @@
 import { type ReactNode } from 'react'
 import { useI18n } from '../i18n'
 import { useBackDismiss } from './useBackDismiss'
+import { CloseIcon } from '../icons'
 
 export function MobileSheet({ open, title, onClose, children }: {
   open: boolean
@@ -56,7 +57,7 @@ export function MobileSheet({ open, title, onClose, children }: {
             style={{
               marginLeft: 'auto', width: 'var(--tap)', height: 'var(--tap)',
               border: 0, background: 'none', color: 'var(--text-dim)', fontSize: 18, cursor: 'pointer',
-            }}>×</button>
+            }}><CloseIcon size={14} /></button>
         </div>
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 8px 10px' }}>{children}</div>
       </div>

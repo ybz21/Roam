@@ -14,12 +14,13 @@ import { DirPicker, recentDirs, pushRecentDir } from './App'
 import { useI18n } from './i18n'
 import Markdown from './Markdown'
 import { useLayout } from './layout'
+import { BlockIcon, BotIcon, CheckIcon, ChevronLeft, ClockIcon, CloseIcon, DiamondIcon, DotIcon, KeyboardIcon, LinkIcon, MegaphoneIcon, OpenInIcon, QuestionIcon, ReplyIcon, TargetIcon } from './icons'
 
 // ── 配色（与 App.tsx 一致） ──
 const C = {
   bg: 'var(--bg-base)', bg2: 'var(--bg-container)', bg3: 'var(--bg-term)', line: 'var(--border-subtle)', line2: 'var(--border)',
   fg: 'var(--text-bright)', fg2: 'var(--text-dim)', fg3: 'var(--text-dimmer)',
-  blue: '#58a6ff', green: '#3fb950', amber: '#d29922', red: '#f85149', magenta: '#d2a8ff', cyan: '#39c5cf',
+  blue: 'var(--accent)', green: 'var(--ok)', amber: '#d29922', red: '#f85149', magenta: '#d2a8ff', cyan: '#39c5cf',
 }
 const COLS = ['backlog', 'assigned', 'doing', 'review', 'done', 'blocked'] as const
 type Col = typeof COLS[number]
@@ -131,7 +132,7 @@ function SwarmCard({ s, onOpen }: { s: SwarmRow; onOpen: (n: string) => void }) 
       }}>
       <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: accent }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <span style={{ color: C.magenta, fontSize: 15 }}>◆</span>
+        <span style={{ color: C.magenta, display: 'inline-flex' }}><DiamondIcon size={12} /></span>
         <span style={{ fontSize: 16, fontWeight: 700, color: C.fg }}>{s.name}</span>
         <span style={{ marginLeft: 'auto' }}>{statusTag(s.status, t)}</span>
       </div>
@@ -147,14 +148,14 @@ function SwarmCard({ s, onOpen }: { s: SwarmRow; onOpen: (n: string) => void }) 
           {s.total + s.pending === 0 && !s.supervisor && <span style={{ color: C.fg3, fontSize: 12 }}>{t('swarm.noMembers')}</span>}
         </span>
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center', fontSize: 12, color: C.fg2, flexWrap: 'wrap' }}>
-          {s.supervisor && <span style={{ color: C.magenta }}>◆ {t('swarm.master')}</span>}
+          {s.supervisor && <span style={{ color: C.magenta, display: 'inline-flex', alignItems: 'center', gap: 4 }}><DiamondIcon size={9} />{t('swarm.master')}</span>}
           {(s.total + s.pending) > 0 && <span>{t('swarm.memberSummary', { total: s.total, alive: s.alive })}</span>}
           {(s.total + s.pending) === 0 && !s.supervisor && <span style={{ color: C.fg3 }}>{t('swarm.noMembers')}</span>}
           {s.pending > 0 && <span style={{ color: C.amber }}>+{s.pending} {t('swarm.pendingUnlock')}</span>}
         </span>
       </div>
       <div style={{ marginTop: 10, paddingTop: 9, borderTop: `1px solid ${C.line}`, display: 'flex', alignItems: 'center', fontSize: 11.5, color: C.fg3, flexWrap: 'wrap', gap: 4 }}>
-        <span style={{ color: s.supervisor ? C.magenta : C.fg3 }}>{s.supervisor ? `◆ ${s.supervisor}` : t('swarm.noSupervisor')}</span>
+        <span style={{ color: s.supervisor ? C.magenta : C.fg3, display: 'inline-flex', alignItems: 'center', gap: 4 }}>{s.supervisor ? <><DiamondIcon size={9} />{s.supervisor}</> : t('swarm.noSupervisor')}</span>
         <span style={{ marginLeft: 'auto' }}>{(s.created || '').slice(5, 16)}</span>
       </div>
     </div>
@@ -343,7 +344,7 @@ function SwarmDetail({ name, onBack, openTerm, onGone }: { name: string; onBack:
     <div ref={rootRef} style={{ display: 'flex', flexDirection: 'column', height: 'calc(100dvh - 32px)', minHeight: 0 }}>
       {/* 顶部条 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '4px 2px 12px', flexWrap: 'wrap' }}>
-        <a onClick={onBack} style={{ color: C.fg2 }}>← {t('nav.swarm')}</a>
+        <a onClick={onBack} style={{ color: C.fg2, display: 'inline-flex', alignItems: 'center', gap: 4 }}><ChevronLeft size={13} />{t('nav.swarm')}</a>
         <span style={{ fontSize: 17, fontWeight: 700 }}>{name}</span>
         {detail?.goal && (
           <Tooltip title={<div style={{ maxHeight: '60vh', overflow: 'auto', whiteSpace: 'pre-wrap' }}>{detail.goal}</div>} overlayStyle={{ maxWidth: 520 }}>
@@ -351,7 +352,7 @@ function SwarmDetail({ name, onBack, openTerm, onGone }: { name: string; onBack:
           </Tooltip>
         )}
         {detail && statusTag(detail.status, t)}
-        {detail?.supervisor && <span style={{ color: C.magenta, fontSize: 12 }}>◆ {detail.supervisor}</span>}
+        {detail?.supervisor && <span style={{ color: C.magenta, fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}><DiamondIcon size={9} />{detail.supervisor}</span>}
         {detail && (
           <span style={{ color: C.fg2, fontSize: 12 }}>
             {t('swarm.memberSummary', { total: detail.members.length, alive: detail.members.filter((m) => ['running', 'idle', 'waiting'].includes(m.status)).length })}{detail.pending.length ? <> · <span style={{ color: C.amber }}>{t('swarm.pendingSummary', { count: detail.pending.length })}</span></> : null}
@@ -415,15 +416,18 @@ function AddMemberModal({ open, name, members, onClose, onDone }: { open: boolea
     <Modal open={open} onCancel={onClose} onOk={ok} okText={t('swarm.addMember')} confirmLoading={busy} title={t('swarm.addMember')} destroyOnClose>
       <Space direction="vertical" style={{ width: '100%' }}>
         <Segmented block value={type} onChange={(v) => setType(v as string)}
-          options={[{ label: '🤖 Agent', value: 'agent' }, { label: `⌨️ ${t('common.command')}`, value: 'task' }]} />
+          options={[
+            { label: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><BotIcon size={12} />Agent</span>, value: 'agent' },
+            { label: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><KeyboardIcon size={12} />{t('common.command')}</span>, value: 'task' },
+          ]} />
         {type === 'agent' && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ color: C.fg2, fontSize: 12, whiteSpace: 'nowrap' }}>{t('swarm.engine')}</span>
             <Segmented value={kind} onChange={(v) => setKind(v as string)}
-              options={[{ label: '✳ Claude', value: 'claude' }, { label: '✸ Codex', value: 'codex' }]} />
+              options={[{ label: 'Claude', value: 'claude' }, { label: 'Codex', value: 'codex' }]} />
             <span style={{ flex: 1 }} />
             <Tag color={willBeLeader ? 'magenta' : 'default'} bordered={false}>
-              {willBeLeader ? `◆ ${t('swarm.masterFirst')}` : t('swarm.member')}
+              {willBeLeader ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><DiamondIcon size={9} />{t('swarm.masterFirst')}</span> : t('swarm.member')}
             </Tag>
           </div>
         )}
@@ -586,7 +590,7 @@ function Topology({ detail, swarm, cards, posts, focus, onNode }: {
                     {view === 'office' ? (
                       <div className={`swarm-office-desk ${n.w < 220 ? 'is-compact' : ''} ${running ? 'is-running' : ''} ${n.kind === 'idle' ? 'is-idle' : ''} ${n.kind === 'waiting' ? 'is-waiting' : ''}`} style={{ ['--node-accent' as any]: col }} title={n.mduty || undefined}>
                         <div className="swarm-office-label">
-                          <b>{isLeaderRole(n.mrole) ? `◆ ${n.name}` : n.name}</b>
+                          <b>{isLeaderRole(n.mrole) ? <><DiamondIcon size={9} />{n.name}</> : n.name}</b>
                           {subroleKey(n) && <span className="swarm-office-role" style={{ ['--role-color' as any]: memberHatColor(n) }}>{(SUBROLE_MAP[subroleKey(n)!]?.icon || '👤')} {subroleText(t, subroleKey(n))}</span>}
                           <span className="swarm-office-status">{nodeStatus(n, t)}</span>
                         </div>
@@ -608,7 +612,7 @@ function Topology({ detail, swarm, cards, posts, focus, onNode }: {
                       <div className={`swarm-node-card ${running ? 'is-running' : ''} ${n.kind === 'idle' ? 'is-idle' : ''} ${n.kind === 'waiting' ? 'is-waiting' : ''} ${n.kind === 'pending' ? 'is-pending' : ''}`} style={{ ['--node-accent' as any]: col }}>
                         <div className="swarm-node-head">
                           <span className="swarm-node-mark">{nodeIcon(n)}</span>
-                          <span className="swarm-node-name">{isLeaderRole(n.mrole) ? '◆ ' : ''}{n.name}</span>
+                          <span className="swarm-node-name">{isLeaderRole(n.mrole) ? <DiamondIcon size={10} /> : null}{n.name}</span>
                           <span className="swarm-node-status">{nodeStatus(n, t)}</span>
                         </div>
                         <div className="swarm-node-meta">
@@ -654,8 +658,8 @@ function OfficeBackdrop({ w, h }: { w: number; h: number }) {
   )
 }
 
-const MEMBER_COLORS = ['#58a6ff', '#3fb950', '#d2a8ff', '#39c5cf', '#ff7b72', '#f2cc60', '#a5d6ff', '#db6d28']
-const MEMBER_HAT_COLORS = ['#f2cc60', '#58a6ff', '#d2a8ff']
+const MEMBER_COLORS = ['var(--accent)', 'var(--ok)', '#d2a8ff', '#39c5cf', '#ff7b72', '#f2cc60', '#a5d6ff', '#db6d28']
+const MEMBER_HAT_COLORS = ['#f2cc60', 'var(--accent)', '#d2a8ff']
 function stableIndex(name: string, mod: number) {
   let h = 0
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0
@@ -670,7 +674,7 @@ const SUBROLES: { key: string; icon: string; color: string; hat: string }[] = [
   { key: 'pm', icon: '🧭', color: '#39c5cf', hat: 'round' },
   { key: 'architect', icon: '🏛', color: '#d2a8ff', hat: 'round' },
   { key: 'frontend', icon: '🎨', color: '#ff9bce', hat: 'cap' },
-  { key: 'backend', icon: '⚙️', color: '#58a6ff', hat: 'cap' },
+  { key: 'backend', icon: '⚙️', color: 'var(--accent)', hat: 'cap' },
   { key: 'fullstack', icon: '🛠', color: '#7ee787', hat: 'cap' },
   { key: 'qa', icon: '🧪', color: '#d29922', hat: 'flat' },
   { key: 'designer', icon: '✏️', color: '#f0883e', hat: 'round' },
@@ -714,12 +718,12 @@ function nodeColor(n: any) {
   return memberColor(n.name || kind)
 }
 function nodeIcon(n: any) {
-  if (n.role === 'leader') return '◆'
-  if (n.kind === 'done') return '✔'
-  if (n.kind === 'waiting') return '?'
-  if (n.kind === 'pending') return '⏳'
-  if (n.kind === 'failed') return '✕'
-  return '●'
+  if (n.role === 'leader') return <DiamondIcon size={11} />
+  if (n.kind === 'done') return <CheckIcon size={12} />
+  if (n.kind === 'waiting') return <QuestionIcon size={12} />
+  if (n.kind === 'pending') return <ClockIcon size={12} />
+  if (n.kind === 'failed') return <CloseIcon size={12} />
+  return <DotIcon size={11} />
 }
 function nodeStatus(n: any, t: T) {
   if (n.kind === 'pending') return t('swarm.pending')
@@ -837,9 +841,9 @@ function Plaza({ name, posts, focus }: { name: string; posts: Post[]; focus: str
           return (
             <div key={p.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13, opacity: dim ? 0.4 : 1 }}>
               <span style={{ color: C.fg3, fontSize: 11, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', paddingTop: 2 }}>#{p.id} {(p.ts || '').slice(11, 16)}</span>
-              <span style={{ color: who, fontWeight: 600, whiteSpace: 'nowrap' }}>{isLeaderAuthor(p.author) ? '◆' : '●'} {authorLabel(p.author, t)}</span>
+              <span style={{ color: who, fontWeight: 600, whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 4 }}>{isLeaderAuthor(p.author) ? <DiamondIcon size={9} /> : <DotIcon size={9} />}{authorLabel(p.author, t)}</span>
               <span style={{ fontSize: 12 }}>{kindIcon(p.kind)}</span>
-              {p.re != null && <span style={{ color: C.fg3, fontSize: 12, whiteSpace: 'nowrap' }}>⤷#{p.re}</span>}
+              {p.re != null && <span style={{ color: C.fg3, fontSize: 12, whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 2 }}><ReplyIcon size={11} />#{p.re}</span>}
               <span style={{ color: C.fg, flex: 1, minWidth: 0 }}>{p.text}</span>
               <Button size="small" type="link" style={{ padding: '0 2px', height: 20, fontSize: 12 }} onClick={() => setReplyTo(p)}>
                 {t('swarm.reply')}
@@ -866,10 +870,13 @@ function Plaza({ name, posts, focus }: { name: string; posts: Post[]; focus: str
 }
 function kindIcon(k: string) {
   const m: Record<string, React.ReactNode> = {
-    broadcast: '📢', done: <span style={{ color: C.green }}>✔</span>, ask: <span style={{ color: C.amber }}>?</span>,
-    decide: <span style={{ color: C.cyan }}>◎</span>, block: <span style={{ color: C.red }}>!</span>,
+    broadcast: <MegaphoneIcon size={13} />,
+    done: <span style={{ color: C.green, display: 'flex' }}><CheckIcon size={13} /></span>,
+    ask: <span style={{ color: C.amber, display: 'flex' }}><QuestionIcon size={13} /></span>,
+    decide: <span style={{ color: C.cyan, display: 'flex' }}><TargetIcon size={13} /></span>,
+    block: <span style={{ color: C.red, display: 'flex' }}><BlockIcon size={13} /></span>,
   }
-  return m[k] || <span style={{ color: C.fg3 }}>·</span>
+  return m[k] || <span style={{ color: C.fg3, display: 'flex' }}><DotIcon size={9} /></span>
 }
 
 // ── Inbox：把需要 master / human 介入的事项收敛到一个队列 ──
@@ -977,11 +984,11 @@ function Board({ name, cards, focus, onCard, reload, setCards }: {
                               <div style={{ fontSize: 13, marginBottom: 6, display: 'flex', gap: 6 }}>
                                 <span style={{ color: C.fg3, fontSize: 11 }}>{card.id}</span>
                                 <span style={{ flex: 1 }}>{card.title}</span>
-                                <Popconfirm title={t('swarm.deleteCardConfirm')} onConfirm={() => del(card.id)}><a onClick={(e) => e.stopPropagation()} style={{ color: C.fg3 }}>×</a></Popconfirm>
+                                <Popconfirm title={t('swarm.deleteCardConfirm')} onConfirm={() => del(card.id)}><a onClick={(e) => e.stopPropagation()} style={{ color: C.fg3, display: 'inline-flex' }}><CloseIcon size={12} /></a></Popconfirm>
                               </div>
                               <div style={{ display: 'flex', gap: 6, alignItems: 'center', color: C.fg2, fontSize: 11 }}>
                                 {card.assignee && <span style={{ color: C.green }}>@{card.assignee}</span>}
-                                {card.deps && <span style={{ color: C.fg3 }}>⛓ {card.deps}</span>}
+                                {card.deps && <span style={{ color: C.fg3, display: 'inline-flex', alignItems: 'center', gap: 3 }}><LinkIcon size={11} />{card.deps}</span>}
                               </div>
                             </div>
                           )
@@ -1067,7 +1074,7 @@ function NodeDrawer({ swarm, member, detail, cards, posts, openTerm, onClose, on
             <div style={{ fontSize: 13 }}>{isMaster ? t('swarm.master') : `${m?.type || 'agent'} · ${t('swarm.member')}`}{srKey && <> · {srIcon} {subroleText(t, srKey)}</>} · {t('common.terminal')} <b title={session}>{sessionLabel(session)}</b></div>
             {(m?.deps || pend?.deps) && <div style={{ fontSize: 12, color: C.fg3, marginTop: 4 }}>{t('swarm.depsArrow')} {m?.deps || pend?.deps}</div>}
             <Space wrap style={{ marginTop: 10 }}>
-              <Button size="small" type="primary" onClick={() => { openTerm(session); onClose() }}>{t('swarm.openTerminal')} ↗</Button>
+              <Button size="small" type="primary" iconPosition="end" icon={<OpenInIcon size={12} />} onClick={() => { openTerm(session); onClose() }}>{t('swarm.openTerminal')}</Button>
               {!isMaster && (pend ? (
                 <>
                   <Button size="small" onClick={() => { onActivate(member!); onClose() }}>{t('swarm.unlockWhenReady')}</Button>
@@ -1077,7 +1084,7 @@ function NodeDrawer({ swarm, member, detail, cards, posts, openTerm, onClose, on
                 <Popconfirm title={t('swarm.markMemberDoneConfirm', { member })} onConfirm={() => { onDone(member!); onClose() }}>
                   <Button size="small">{t('swarm.markDone')}</Button>
                 </Popconfirm>
-              ) : <Tag color="success">✔ {t('swarm.doneMarked')}</Tag>)}
+              ) : <Tag color="success" icon={<CheckIcon size={11} />}>{t('swarm.doneMarked')}</Tag>)}
             </Space>
           </div>
           {m?.duty && (

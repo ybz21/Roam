@@ -15,6 +15,7 @@ import { fmtSize } from '../file-utils'
 import { pathLabelKey, type P2PPathLabel } from './labels'
 import type { P2PState, P2PProgress } from './download'
 import type { PairDiag } from './stats'
+import { CloseIcon } from '../icons'
 
 // 一次可见传输的完整视图模型（由 FileBrowser 按 transferId 维护并下发）。
 export interface TransferView {
@@ -58,7 +59,7 @@ function TransferBadge({ tf, onDismiss }: { tf: TransferView; onDismiss: (id: st
   let badgeBg = 'rgba(148,163,184,0.14)'
   let badgeText: string
   if (isP2P) {
-    badgeColor = '#3fb950'
+    badgeColor = 'var(--ok)'
     badgeBg = 'rgba(63,185,80,0.14)'
     const label = t(pathLabelKey(tf.path))
     badgeText = t('p2p.status.direct', { path: label, rate: fmtRate(rate, t) })
@@ -104,7 +105,7 @@ function TransferBadge({ tf, onDismiss }: { tf: TransferView; onDismiss: (id: st
           height: '100%', borderRadius: 2,
           width: pct != null ? `${pct}%` : '100%',
           opacity: pct != null ? 1 : 0.35,
-          background: isRelay ? '#d29922' : isP2P ? '#3fb950' : 'var(--text-dim)',
+          background: isRelay ? '#d29922' : isP2P ? 'var(--ok)' : 'var(--text-dim)',
           transition: 'width 0.3s ease',
         }} />
       </div>
@@ -148,7 +149,7 @@ function TransferBadge({ tf, onDismiss }: { tf: TransferView; onDismiss: (id: st
 
       {/* 结束态可手动关掉这条（正常流程由 FileBrowser 在 done/error 后自动移除）。 */}
       {(tf.state === 'idle') && (
-        <button type="button" onClick={() => onDismiss(tf.id)} style={{ position: 'absolute', top: 4, right: 6, border: 'none', background: 'transparent', color: 'var(--text-dimmer)', cursor: 'pointer', fontSize: 12 }}>×</button>
+        <button type="button" onClick={() => onDismiss(tf.id)} style={{ position: 'absolute', top: 4, right: 6, border: 'none', background: 'transparent', color: 'var(--text-dimmer)', cursor: 'pointer', display: 'inline-flex' }}><CloseIcon size={12} /></button>
       )}
     </div>
   )

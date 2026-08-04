@@ -7,6 +7,7 @@ import { Button, Select, Space, Tag, App as AntApp } from 'antd'
 import { api } from './api'
 import { useI18n } from './i18n'
 import { connect, type DuplexTransport } from './p2p/transport'
+import { PhoneAssistIcon, PhoneBackIcon, PhoneHomeIcon, PhoneRecentsIcon, PowerIcon } from './icons'
 
 interface PhoneApp { id: string; name?: string }
 
@@ -212,7 +213,7 @@ export default function PhoneView() {
             const on = quality === o.value
             return (
               <Button key={o.value} size="small" type={on ? 'primary' : 'default'} onClick={() => changeQuality(o.value)}
-                style={on ? { background: '#1f6feb', borderColor: '#1f6feb', color: '#fff', fontWeight: 700 }
+                style={on ? { background: 'var(--accent-solid)', borderColor: 'var(--accent-solid)', color: '#fff', fontWeight: 700 }
                   : { background: 'transparent', borderColor: 'var(--border)', color: 'var(--text-dim)' }}>
                 {t(o.labelKey)}
               </Button>
@@ -223,7 +224,7 @@ export default function PhoneView() {
           {connected ? t('phone.connected') : t('phone.disconnected')}
         </Tag>
         <span style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
-          {quality === 'auto' && levelName ? <span style={{ color: '#58a6ff' }}>{levelName} · </span> : null}
+          {quality === 'auto' && levelName ? <span style={{ color: 'var(--accent)' }}>{levelName} · </span> : null}
           {latency == null ? '—' : latency + 'ms'} · {fmtRate(bw)} · {fps}fps
         </span>
       </div>
@@ -245,7 +246,7 @@ export default function PhoneView() {
 
       <style>{`
         .pv-ripple{position:absolute;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;
-          border:2px solid #58a6ff;pointer-events:none;animation:pvRip .45s ease-out forwards;}
+          border:2px solid var(--accent);pointer-events:none;animation:pvRip .45s ease-out forwards;}
         @keyframes pvRip{from{transform:scale(.3);opacity:.9}to{transform:scale(2.6);opacity:0}}
       `}</style>
 
@@ -284,15 +285,15 @@ export default function PhoneView() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 28, padding: '8px 0', flex: '0 0 auto', borderTop: '1px solid var(--border-subtle)' }}>
         {platform === 'ios' ? (
           <>
-            <Button shape="circle" onClick={() => pressKey('home')} title={t('phone.home')}>○</Button>
-            <Button shape="circle" onClick={() => pressKey('lock')} title={t('phone.lock')}>⏻</Button>
-            <Button shape="circle" onClick={() => pressKey('siri')} title={t('phone.siri')}>◉</Button>
+            <Button shape="circle" onClick={() => pressKey('home')} title={t('phone.home')} icon={<PhoneHomeIcon />} />
+            <Button shape="circle" onClick={() => pressKey('lock')} title={t('phone.lock')} icon={<PowerIcon />} />
+            <Button shape="circle" onClick={() => pressKey('siri')} title={t('phone.siri')} icon={<PhoneAssistIcon />} />
           </>
         ) : (
           <>
-            <Button shape="circle" onClick={() => pressKey('back')} title={t('phone.back')}>◁</Button>
-            <Button shape="circle" onClick={() => pressKey('home')} title={t('phone.home')}>○</Button>
-            <Button shape="circle" onClick={() => pressKey('recents')} title={t('phone.recents')}>▭</Button>
+            <Button shape="circle" onClick={() => pressKey('back')} title={t('phone.back')} icon={<PhoneBackIcon />} />
+            <Button shape="circle" onClick={() => pressKey('home')} title={t('phone.home')} icon={<PhoneHomeIcon />} />
+            <Button shape="circle" onClick={() => pressKey('recents')} title={t('phone.recents')} icon={<PhoneRecentsIcon />} />
           </>
         )}
       </div>
