@@ -1745,8 +1745,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
           {/* 手机走全屏二级页；桌面仍是右缘面板 + 遮罩。原来这里是一套手搓的
               zIndex:1000 遮罩 + 面板，和会话页那套 FloatingFileDrawer 宽度/层级/阴影全不一样——
               同一个 GitPanel 不该有两套壳（13 §6）。 */}
-          <AdaptivePanel open={!!(gitOpen || gitAt)} desktop="floating" scrim
-            title={t('git.title')} width="min(520px, 94vw)"
+          <AdaptivePanel open={!!(gitOpen || gitAt)} title={t('git.title')}
             onClose={() => { setGitOpen(false); setGitAt(null) }}>
             <GitPanel dir={gitAt?.dir || dir} initialTab={gitAt?.tab} openTerm={openTerm}
               onClose={() => { setGitOpen(false); setGitAt(null) }} />

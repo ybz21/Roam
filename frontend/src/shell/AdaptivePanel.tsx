@@ -1,61 +1,61 @@
-// 一棵组件树，两种容器（13 §6）。
+// 一棵组件树，两种容器（13 §6 手机 / 14 panels-desktop.html 桌面）。
 //
-// Git 面板和 Worktree 在手机上一直是桌面抽屉：420/520 的浮层压在底栏上、不吃安全区、
-// 返回键不认它。但面板本体（GitPanel / WorktreePanel）没有问题，问题全在**容器**——
-// 所以这里只换壳：手机档给 MobileSubPage（整页 + ← + 返回键），桌面维持原样。
+// Git 面板和 Worktree 的问题从来不在面板本体，全在**容器**：
+//   · 手机上是桌面抽屉：420/520 的浮层压在底栏上、不吃安全区、返回键不认它；
+//   · 桌面上是 fixed 浮层：不参与 Shell 的尺寸契约，只会「盖」不会「让」——
+//     实测 1440 会话页开 Git，终端从 605 被盖到只剩 185。
 //
-// 桌面两种形态都要保留，它们的差别是历史形成的、也确实合理：
-//   floating —— 会话页/项目页的 Git，停在右缘，不遮挡左边正在看的内容；
-//   drawer   —— Worktree，antd Drawer，层级要压过 floating 面板（它可以从 Git 里唤起）。
-import { type ReactNode } from 'react'
-import { Drawer } from 'antd'
+// 所以这里只换壳：
+//   手机 → MobileSubPage（整页 + ← + 物理返回键）
+//   桌面 → Inspector 列（Shell 的第三列，可拖、可记忆、不带遮罩）
+//
+// 桌面不带遮罩是有意的：遮罩 = 模态 = 「先关掉才能干别的」，而 Git 面板恰恰要边看边干。
+// 代价是「点外面不会关」，所以面板必须常驻一个关闭入口（GitPanel/WorktreePanel 都有）。
+import { useEffect, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { useLayout } from '../layout'
 import MobileSubPage from '../MobileSubPage'
-import FloatingFileDrawer from '../FloatingFileDrawer'
+import { claimInspector, releaseInspector, useInspectorSlot } from './inspector'
 
-export default function AdaptivePanel({
-  open, title, onClose, desktop, width, right, scrim, zIndex, drawerStyles, layer, children,
-}: {
+export default function AdaptivePanel({ open, title, onClose, layer, children }: {
   open: boolean
-  /** 手机二级页的页头标题；桌面的 floating 形态不用它（面板自带头） */
+  /** 手机二级页的页头标题；桌面由面板自己的头承担 */
   title: ReactNode
   onClose: () => void
-  desktop: 'floating' | 'drawer'
-  width?: number | string
-  /** floating：距右缘的偏移（文件抽屉已经占了右边时往左让） */
-  right?: number | string
-  /** floating：是否带点击关闭的遮罩 */
-  scrim?: boolean
-  zIndex?: number
-  drawerStyles?: Record<string, any>
   /** 'session' = 从会话全屏覆盖层里唤起，手机档要换更高的层 */
   layer?: 'page' | 'session'
   children: ReactNode
 }) {
   const { phone } = useLayout()
-  if (!open) return null
 
+  // 登记槽位：只有栈顶那个可见。从 Git 面板里还能唤起 Worktree（WorktreePanel 就渲染在
+  // GitPanel 的子树里），两个都 portal 进同一个槽会叠在一起——所以非栈顶的**藏起来**。
+  //
+  // 是藏不是卸载：卸载 Git 会连它子树里的 Worktree 一起卸掉 → Worktree 释放槽位 →
+  // Git 又成栈顶重新挂载（wtOpen 已随卸载丢失）→ 看起来就是「点了 Worktree 没反应」。
+  // 藏起来还顺带保住了滚动位置与展开态，**关掉栈顶自然露出下面那个**，
+  // 「从 Git 跳 Worktree 再回来」因此是免费的。
+  const [id, setId] = useState(0)
+  useEffect(() => {
+    if (!open || phone) return
+    const claimed = claimInspector()
+    setId(claimed)
+    return () => { releaseInspector(claimed); setId(0) }
+  }, [open, phone])
+  const { slot, isTop } = useInspectorSlot(id)
+
+  if (!open) return null
   if (phone) {
     return <MobileSubPage title={title} onBack={onClose} layer={layer}>{children}</MobileSubPage>
   }
-
-  if (desktop === 'drawer') {
-    return (
-      <Drawer open={open} onClose={onClose} title={title} width={width} zIndex={zIndex} styles={drawerStyles}>
-        {children}
-      </Drawer>
-    )
-  }
-
-  return (
-    <>
-      {scrim && (
-        <div onClick={onClose} style={{
-          position: 'fixed', inset: 0, background: 'rgba(1,4,9,.6)',
-          zIndex: 'var(--z-scrim)' as unknown as number,
-        }} />
-      )}
-      <FloatingFileDrawer open={open} right={right} width={width}>{children}</FloatingFileDrawer>
-    </>
+  if (!slot) return null
+  return createPortal(
+    <div style={{
+      flex: 1, minHeight: 0, minWidth: 0, flexDirection: 'column',
+      display: isTop ? 'flex' : 'none',
+    }}>
+      {children}
+    </div>,
+    slot,
   )
 }

@@ -46,6 +46,7 @@ const enUS = {
   'nav.thisDevice': 'This device',
   'nav.terminal': 'Terminal',
   'workspace.resizeDock': 'Resize terminal',
+  'workspace.resizeInspector': 'Drag to resize panel',
   'workspace.focusDock': 'Focus terminal',
   'workspace.terminalPanel': 'Terminal panel',
   'workspace.exitFocus': 'Back to split',

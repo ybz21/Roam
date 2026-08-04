@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>桌面版面板：Git / Worktree 进 Shell</title>
+<style>
+:root{
+  --bg:#0d1117;--card:#161b22;--inset:#0b0f14;--line:#21262d;--line2:#30363d;
+  --tx:#e6edf3;--dim:#8b949e;--dimmer:#6e7681;
+  --acc:#58a6ff;--solid:#4e90dc;--soft:rgba(31,111,235,.14);--accb:rgba(88,166,255,.45);
+  --amber:#d29922;--green:#3fb950;--purple:#a371f7;--cyan:#39c5cf;--red:#f85149;
+  --micro:11px;--meta:12px;--sm:13px;--body:15px;--lg:16px;
+  --r1:6px;--r2:10px;--r3:14px;--rp:999px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:#07090d;color:var(--tx);font:14px/1.6 Inter,-apple-system,"PingFang SC",sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:30px 22px 80px}
+h1{font-size:22px;margin:0 0 8px}
+h2{font-size:var(--lg);margin:38px 0 6px;padding-top:24px;border-top:1px solid var(--line)}
+.lede{color:var(--dim);font-size:var(--sm);line-height:1.85;max-width:80ch;margin:0 0 16px}
+.lede b{color:var(--tx)}
+code{font:var(--meta)/1.4 ui-monospace,monospace;color:#c9d5e2;background:rgba(148,163,184,.1);padding:2px 6px;border-radius:4px}
+ul.pts,ol.pts{margin:0 0 20px;padding-left:20px;color:var(--dim);font-size:var(--sm);line-height:1.85;max-width:80ch}
+ul.pts b,ol.pts b{color:var(--tx)}
+ul.pts em,ol.pts em{font-style:normal;color:#f2a6a0}
+ol.sr{margin:0;padding-left:20px;color:var(--dim);font-size:var(--sm);line-height:1.85;max-width:80ch}
+ol.sr li{margin-bottom:10px} ol.sr b{color:var(--tx)} ol.sr em{font-style:normal;color:#f2a6a0}
+.cap{display:flex;align-items:center;gap:8px;margin:0 0 9px;font-size:var(--meta);color:var(--dim)}
+.cap b{color:var(--tx);font-size:var(--sm)}
+.tag{font-size:var(--micro);padding:1px 8px;border-radius:var(--rp);border:1px solid var(--line2);color:var(--dimmer)}
+.tag.bad{color:#f2a6a0;border-color:rgba(248,81,73,.42)}
+.tag.good{color:#7fd18f;border-color:rgba(63,185,80,.42)}
+.note{margin:10px 0 0;font-size:var(--meta);color:var(--dim);line-height:1.8;max-width:520px}
+.note u{text-decoration:none;color:var(--tx)} .note em{font-style:normal;color:#f2a6a0}
+.row{display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start}
+
+/* 桌面框：真实 1440×620 缩到 .385（两幅并排） */
+.stage{overflow:hidden;border-radius:10px;border:1px solid var(--line2);background:var(--bg)}
+.dk{zoom:.36;width:1440px;height:620px;display:flex;position:relative}
+.dk.wide{zoom:.335;width:1760px}
+.nav{flex:0 0 224px;background:var(--card);border-right:1px solid var(--line);padding:14px 12px}
+.nav .lg{font-size:19px;font-weight:800}
+.nav i{display:block;font-style:normal;font-size:15px;color:var(--dim);padding:9px 10px;border-radius:8px;margin-top:5px}
+.nav i.on{color:var(--acc);background:var(--soft)}
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.top{flex:0 0 40px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:center;
+  color:var(--dimmer);font-size:14px;background:var(--card)}
+.cols{flex:1;min-height:0;display:flex;position:relative}
+.canvas{flex:1;min-width:0;padding:16px 18px;overflow:hidden}
+.canvas h3{margin:0 0 4px;font-size:24px}
+.canvas .p{font:var(--meta)/1.4 ui-monospace,monospace;color:var(--dimmer)}
+.lrow{display:flex;align-items:center;gap:10px;height:38px;border-bottom:1px solid var(--line);font-size:14px;color:var(--dim)}
+.lrow b{color:var(--tx);font-size:14px}
+.rail{flex:0 0 8px;background:var(--line);position:relative}
+.rail::after{content:"";position:absolute;left:3px;top:50%;width:2px;height:26px;background:var(--line2);transform:translateY(-50%)}
+.dock{flex:0 0 auto;background:#06090d;padding:12px 14px;font:12px/1.7 ui-monospace,monospace;color:#7fd18f;
+  border-left:1px solid var(--line);overflow:hidden}
+.dock .u{color:#e6edf3}
+.dock .hd{color:var(--dim);font-family:Inter,sans-serif;font-size:13px;margin-bottom:8px}
+.keyrow{position:absolute;left:0;right:0;bottom:0;height:38px;background:var(--card);border-top:1px solid var(--line);
+  display:flex;align-items:center;gap:8px;padding:0 10px;font-size:12px;color:var(--dim)}
+.keyrow span{padding:4px 12px;border-radius:7px;background:var(--inset)}
+
+/* 面板 */
+.panel{background:var(--card);border-left:1px solid var(--line2);display:flex;flex-direction:column;overflow:hidden}
+.panel.float{position:absolute;top:0;bottom:0;right:0;box-shadow:-16px 0 40px rgba(0,0,0,.6);z-index:5}
+.panel .ph{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.panel .ph b{font-size:14px}
+.panel .ph .sp{flex:1}
+.panel .ph .ic{color:var(--dim);font-size:15px}
+.panel .bd{flex:1;min-height:0;padding:10px 12px;display:flex;flex-direction:column;gap:9px;overflow:hidden}
+.scrim{position:absolute;inset:0;background:rgba(1,4,9,.6);z-index:4}
+.segs{display:flex;gap:2px;background:var(--inset);border-radius:8px;padding:3px}
+.segs span{flex:1;text-align:center;padding:5px 0;font-size:12px;color:var(--dim);border-radius:6px}
+.segs span.on{background:var(--solid);color:#fff}
+.chip{height:24px;padding:0 10px;border-radius:var(--rp);border:1px solid var(--line2);display:inline-flex;align-items:center;
+  gap:6px;font-size:12px;color:var(--dim);white-space:nowrap}
+.chip.br{font-family:ui-monospace,monospace;color:#7ed0d8;border-color:rgba(57,197,207,.4);background:rgba(57,197,207,.08)}
+.frow{display:flex;align-items:center;gap:8px;height:30px;font-size:13px;border-bottom:1px solid var(--line)}
+.frow .st{width:12px;font:11px/1 ui-monospace,monospace}
+.frow .st.m{color:var(--amber)}.frow .st.a{color:var(--green)}.frow .st.d{color:var(--red)}
+.frow .p{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,monospace;font-size:12px}
+.diffbox{flex:1;min-height:0;border:1px solid var(--line);border-radius:8px;background:var(--inset);
+  font:11px/1.65 ui-monospace,monospace;padding:8px;overflow:hidden}
+.diffbox .add{color:#7fd18f}.diffbox .del{color:#f2a6a0}.diffbox .hu{color:#7ed0d8}
+.wtcard{border:1px solid var(--line);border-radius:8px;background:var(--inset);padding:8px 10px}
+.wtcard b{font:13px/1.4 ui-monospace,monospace;color:#7ed0d8}
+.wtcard .p{font:11px/1.4 ui-monospace,monospace;color:var(--dimmer);margin-top:3px}
+
+/* 量尺 */
+.void{position:absolute;background:repeating-linear-gradient(45deg,rgba(248,81,73,.14),rgba(248,81,73,.14) 6px,transparent 6px,transparent 13px);
+  border:1px dashed rgba(248,81,73,.6);border-radius:5px;display:grid;place-items:center;z-index:8;
+  font:13px/1.35 ui-monospace,monospace;color:#f2a6a0;text-align:center;padding:4px}
+.ok{position:absolute;border:1px dashed rgba(63,185,80,.6);border-radius:5px;background:rgba(63,185,80,.07);z-index:8;
+  display:grid;place-items:center;font:13px/1.35 ui-monospace,monospace;color:#7fd18f;text-align:center;padding:4px}
+table.tt{border-collapse:collapse;width:100%;font-size:var(--sm);margin:8px 0 20px}
+table.tt th,table.tt td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+table.tt th{color:var(--dimmer);font-size:var(--meta);font-weight:600}
+table.tt td{color:var(--dim)} table.tt td b{color:var(--tx)}
+table.tt code{white-space:nowrap}
+</style></head><body><div class="wrap">
+
+<h1>桌面版面板：Git / Worktree 进 Shell</h1>
+<p class="lede">
+手机那轮把 Git/Worktree 收进了全屏二级页（#149），桌面是<b>刻意冻住</b>的——那一轮的验收标准就是「桌面逐像素不变」。
+但桌面本身有问题，而且比手机那份更糙：<b>同一个面板有四种壳</b>，其中一种会<em>把终端盖掉 70%</em>。
+</p>
+<p class="lede" style="margin-bottom:8px">
+根因只有一句：<b>这些面板浮在 Workspace Shell 之上，不参与 Canvas / Dock 的尺寸契约</b>（14 §4.2）。
+浮层只会「盖」，不会「让」。手机上正确答案是整页（已做）；桌面上正确答案是——<b>成为 Shell 的一列</b>。
+</p>
+
+<h2>一、现状：四种壳</h2>
+
+<div class="row">
+  <div>
+    <p class="cap"><b>① 会话页 Git</b><span class="tag bad">420 浮层 · 盖掉终端 70%</span></p>
+    <div class="stage"><div class="dk">
+      <div class="nav"><div class="lg">Roam</div><i>概览</i><i class="on">会话</i><i>文件</i></div>
+      <div class="main">
+        <div class="top">⌕ 搜索项目、会话和文件</div>
+        <div class="cols">
+          <div class="canvas">
+            <h3>会话</h3><div class="p">所有会话，按 Agent、等待状态筛选</div>
+            <div class="lrow" style="margin-top:14px"><b>桌面版页面也出一版优化设计</b></div>
+            <div class="lrow"><b>auth接入第三方</b></div>
+            <div class="lrow"><b>blade-agent-/tmp</b></div>
+            <div class="lrow"><b>roam-bug修复</b></div>
+          </div>
+          <div class="rail"></div>
+          <div class="dock" style="flex:0 0 605px">
+            <div class="hd">● 桌面版页面也出一版优化设计</div>
+            <span class="u">❯</span> npm run build<br>vite v5 building for production…<br>✓ built in 36.74s
+            <div class="keyrow"><span>Enter</span><span>Esc</span><span>Tab</span><span>↑</span><span>↓</span></div>
+          </div>
+          <div class="panel float" style="width:420px">
+            <div class="ph"><b>源代码管理</b><span class="sp"></span><span class="ic">⋯</span><span class="ic">↻</span><span class="ic">✕</span></div>
+            <div class="bd">
+              <span class="chip br" style="align-self:flex-start">⎇ mobile/panels-subpage</span>
+              <div class="segs"><span class="on">改动 14</span><span>提交树</span><span>分支</span></div>
+              <div class="frow"><span class="st m">M</span><span class="p">frontend/src/App.tsx</span></div>
+              <div class="frow"><span class="st m">M</span><span class="p">frontend/src/GitPanel.tsx</span></div>
+              <div class="frow"><span class="st a">A</span><span class="p">shell/AdaptivePanel.tsx</span></div>
+            </div>
+          </div>
+          <div class="void" style="left:610px;top:0;bottom:0;width:186px">终端<br>只剩<br>185px</div>
+          <div class="void" style="left:18px;top:120px;width:560px;height:300px">Canvas 603px 全是空列表<br>——没人用</div>
+        </div>
+      </div>
+    </div></div>
+    <p class="note">1440 实测：Dock 从 x=835 起、宽 605；Git 面板 x=1020、宽 420、<code>z-index:1200</code>。
+    <u>你打开 Git 恰恰是要对着终端里的改动看，结果终端被盖掉 70%</u>；而左边 603px 的会话列表全程没人看。
+    底部那条快捷键条还从面板下面露出来——因为面板是 fixed 浮层，压根不在 Shell 的布局里。</p>
+  </div>
+
+  <div>
+    <p class="cap"><b>② 项目页 Git</b><span class="tag bad">520 + 全屏遮罩（模态）</span></p>
+    <div class="stage"><div class="dk">
+      <div class="nav"><div class="lg">Roam</div><i>概览</i><i class="on">项目</i><i>文件</i></div>
+      <div class="main">
+        <div class="top">⌕ 搜索项目、会话和文件</div>
+        <div class="cols">
+          <div class="canvas">
+            <h3>roam</h3><div class="p">/home/ai/codes/ttmux · ⎇ main</div>
+            <div class="lrow" style="margin-top:14px"><b>任务 2</b></div>
+            <div class="lrow"><b>Worktree 1</b></div>
+          </div>
+          <div class="scrim"></div>
+          <div class="panel float" style="width:520px">
+            <div class="ph"><b>源代码管理</b><span class="sp"></span><span class="ic">⋯</span><span class="ic">↻</span><span class="ic">✕</span></div>
+            <div class="bd">
+              <span class="chip br" style="align-self:flex-start">⎇ main</span>
+              <div class="segs"><span class="on">改动 3</span><span>提交树</span><span>分支</span></div>
+              <div class="frow"><span class="st d">U</span><span class="p">.roam/</span></div>
+              <div class="frow"><span class="st d">U</span><span class="p">ttmux-web.bak-gitpanel</span></div>
+            </div>
+          </div>
+          <div class="void" style="left:18px;top:150px;width:420px;height:120px">全屏压暗<br>= 这是个模态？</div>
+        </div>
+      </div>
+    </div></div>
+    <p class="note">同一个 <code>&lt;GitPanel&gt;</code>：这里是 <b>520</b> 宽、<b>带全屏遮罩</b>；上一帧是 <b>420</b> 宽、<b>没有遮罩</b>。
+    遮罩意味着「这是模态，先关掉才能干别的」——但 Git 面板<u>恰恰是要边看边干的</u>，它不该是模态。</p>
+  </div>
+</div>
+
+<div class="row" style="margin-top:22px">
+  <div>
+    <p class="cap"><b>③ Worktree</b><span class="tag bad">antd Drawer：第三种遮罩 + 横切进场</span></p>
+    <div class="stage"><div class="dk">
+      <div class="nav"><div class="lg">Roam</div><i>概览</i><i class="on">项目</i><i>文件</i></div>
+      <div class="main">
+        <div class="top">⌕ 搜索项目、会话和文件</div>
+        <div class="cols">
+          <div class="canvas"><h3>roam</h3><div class="p">/home/ai/codes/ttmux</div></div>
+          <div class="scrim" style="background:rgba(0,0,0,.45)"></div>
+          <div class="panel float" style="width:520px">
+            <div class="ph"><b>Worktree 管理</b><span class="sp"></span><span class="ic">✕</span></div>
+            <div class="bd">
+              <div class="wtcard"><b>⎇ feat/web-session-tokens</b><div class="p">…/.worktrees/task-1</div></div>
+              <div class="wtcard"><b>⎇ mobile/panels-subpage</b><div class="p">…/.worktrees/task-2</div></div>
+            </div>
+          </div>
+          <div class="void" style="left:640px;top:8px;width:180px;height:44px">第三种遮罩<br>(antd mask)</div>
+        </div>
+      </div>
+    </div></div>
+    <p class="note">antd <code>Drawer</code>：自己的遮罩、自己的横切进场、自己的层级基座。
+    <u>和前两种是三套不同的「从右边出来一块」</u>。</p>
+  </div>
+
+  <div>
+    <p class="cap"><b>④ diff 详情</b><span class="tag bad">第四种：贴着面板左缘的浮层</span></p>
+    <div class="stage"><div class="dk">
+      <div class="nav"><div class="lg">Roam</div><i>概览</i><i class="on">项目</i><i>文件</i></div>
+      <div class="main">
+        <div class="top">⌕ 搜索项目、会话和文件</div>
+        <div class="cols">
+          <div class="canvas"><h3>roam</h3><div class="p">/home/ai/codes/ttmux</div></div>
+          <div class="panel float" style="width:520px">
+            <div class="ph"><b>源代码管理</b><span class="sp"></span><span class="ic">✕</span></div>
+            <div class="bd">
+              <div class="frow" style="background:var(--soft)"><span class="st m">M</span><span class="p">frontend/src/App.tsx</span></div>
+              <div class="frow"><span class="st m">M</span><span class="p">frontend/src/GitPanel.tsx</span></div>
+            </div>
+          </div>
+          <div class="panel float" style="width:520px;right:520px;box-shadow:-16px 0 40px rgba(0,0,0,.5)">
+            <div class="ph"><span class="ic">←</span><b style="font-family:ui-monospace,monospace;font-size:13px">frontend/src/App.tsx</b></div>
+            <div class="bd"><div class="diffbox">
+              <span class="hu">@@ -1738,7 +1738,12 @@</span><br>
+              <span class="del">- &lt;FloatingFileDrawer open={showGit}&gt;</span><br>
+              <span class="add">+ &lt;AdaptivePanel desktop="floating"</span><br>
+              <span class="add">+&nbsp;&nbsp; layer="session" …&gt;</span>
+            </div></div>
+          </div>
+          <div class="void" style="left:18px;top:150px;width:340px;height:110px">页面被两层浮层<br>推到左边一条缝</div>
+        </div>
+      </div>
+    </div></div>
+    <p class="note">详情按 <code>right: calc(100vw − panelLeft)</code> 定位、宽 <code>min(560, panelLeft−40)</code>：
+    位置随面板算、宽度随剩余空间算，<u>于是它既不是列也不是抽屉</u>。两层浮层叠起来，底下的页面只剩一条缝。</p>
+  </div>
+</div>
+
+<h2>二、新版：Inspector 是 Shell 的第三区</h2>
+<p class="lede">
+把这四种壳收敛成一种：<b>Inspector</b>——和 Dock 同级的一列，走同一套尺寸契约（可拖、双击复位、宽度记忆、有下限）。
+<b>不带遮罩</b>：它不是模态，是工作区的一部分。
+</p>
+<table class="tt">
+  <tr><th style="width:120px">令牌</th><th style="width:120px">值</th><th>理由</th></tr>
+  <tr><td><code>INSPECTOR_MIN</code></td><td>360</td><td>文件行 + 状态字母 + 增删数字的最小可读宽</td></tr>
+  <tr><td><code>INSPECTOR_DEFAULT</code></td><td>420</td><td>沿用今天会话页那份的宽度，改动最小</td></tr>
+  <tr><td><code>INSPECTOR_SPLIT</code></td><td>720</td><td>≥720 时面板内左右分栏（列表 ｜ diff），不再开第二层浮层</td></tr>
+  <tr><td><code>INSPECTOR_MAX</code></td><td>880</td><td>与 Dock 同一个上界，视觉节奏一致</td></tr>
+</table>
+
+<div class="row">
+  <div>
+    <p class="cap"><b>≥1700：三列并存</b><span class="tag good">终端完整可见</span></p>
+    <div class="stage"><div class="dk wide">
+      <div class="nav"><div class="lg">Roam</div><i>概览</i><i class="on">会话</i><i>文件</i></div>
+      <div class="main">
+        <div class="top">⌕ 搜索项目、会话和文件</div>
+        <div class="cols">
+          <div class="canvas">
+            <h3>会话</h3><div class="p">所有会话</div>
+            <div class="lrow" style="margin-top:14px"><b>桌面版页面也出一版优化设计</b></div>
+            <div class="lrow"><b>auth接入第三方</b></div>
+          </div>
+          <div class="rail"></div>
+          <div class="dock" style="flex:0 0 480px">
+            <div class="hd">● 桌面版页面也出一版优化设计</div>
+            <span class="u">❯</span> npm run build<br>✓ built in 36.74s
+            <div class="keyrow"><span>Enter</span><span>Esc</span><span>Tab</span></div>
+          </div>
+          <div class="rail"></div>
+          <div class="panel" style="flex:0 0 420px">
+            <div class="ph"><b>Git</b><span class="chip br" style="height:20px">⎇ mobile/panels-subpage</span><span class="sp"></span><span class="ic">⋯</span><span class="ic">✕</span></div>
+            <div class="bd">
+              <div class="segs"><span class="on">改动 14</span><span>提交树</span><span>分支</span></div>
+              <div class="frow"><span class="st m">M</span><span class="p">frontend/src/App.tsx</span></div>
+              <div class="frow"><span class="st m">M</span><span class="p">frontend/src/GitPanel.tsx</span></div>
+              <div class="frow"><span class="st a">A</span><span class="p">shell/AdaptivePanel.tsx</span></div>
+              <div class="frow"><span class="st a">A</span><span class="p">shell/useBackDismiss.ts</span></div>
+            </div>
+          </div>
+          <div class="ok" style="left:566px;bottom:52px;width:480px;height:36px">终端一寸没被盖</div>
+        </div>
+      </div>
+    </div></div>
+    <p class="note">
+      三列的门槛按<b>实际宽度</b>算，不是一个固定数：<code>224 + 560 + 8 + dock + 8 + inspector</code>。<br>
+      · 全部取下限（dock 480 / inspector 360）＝ <b>1640</b>；<br>
+      · 默认宽度（dock 480 / inspector 420）＝ <b>1700</b>（上图是 1760）；<br>
+      · dock 被拖宽过就按拖过的算——42vw 的默认 dock 在 1680 上是 705，那时<u>三列放不下，Canvas 让位</u>。
+      <em>这一条是实测纠正的：初稿画的是「1680 三列」，算下来 1700 才够，图纸错了、代码是对的。</em></p>
+  </div>
+
+  <div>
+    <p class="cap"><b>1280–1639：Canvas 让位</b><span class="tag good">让的是页面，不是终端</span></p>
+    <div class="stage"><div class="dk">
+      <div class="nav"><div class="lg">Roam</div><i>概览</i><i class="on">会话</i><i>文件</i></div>
+      <div class="main">
+        <div class="top">⌕ 搜索项目、会话和文件</div>
+        <div class="cols">
+          <div class="dock" style="flex:1;border-left:0">
+            <div class="hd">● 桌面版页面也出一版优化设计　<span style="color:var(--acc)">↩ 显示页面</span></div>
+            <span class="u">❯</span> npm run build<br>vite v5 building for production…<br>✓ built in 36.74s<br>
+            <span class="u">❯</span> git status<br>On branch mobile/panels-subpage
+            <div class="keyrow"><span>Enter</span><span>Esc</span><span>Tab</span><span>↑</span><span>↓</span></div>
+          </div>
+          <div class="rail"></div>
+          <div class="panel" style="flex:0 0 420px">
+            <div class="ph"><b>Git</b><span class="chip br" style="height:20px">⎇ mobile/panels…</span><span class="sp"></span><span class="ic">⋯</span><span class="ic">✕</span></div>
+            <div class="bd">
+              <div class="segs"><span class="on">改动 14</span><span>提交树</span><span>分支</span></div>
+              <div class="frow"><span class="st m">M</span><span class="p">frontend/src/App.tsx</span></div>
+              <div class="frow"><span class="st m">M</span><span class="p">frontend/src/GitPanel.tsx</span></div>
+              <div class="frow"><span class="st a">A</span><span class="p">shell/AdaptivePanel.tsx</span></div>
+            </div>
+          </div>
+          <div class="ok" style="left:12px;bottom:52px;width:520px;height:36px">终端拿到 748px（原来只剩 185）</div>
+        </div>
+      </div>
+    </div></div>
+    <p class="note">
+      1440 上三列要 1640 才够，必须有人让。<b>让 Canvas，不让 Dock</b>——
+      你按下 Git 的那一刻，注意力在终端和改动上，页面是三者里最不需要的那个。
+      让位后终端从 <u>185px 变成 748px</u>，顶栏留「↩ 显示页面」一键回来（和 ⌘⇧J 同一个开关）。</p>
+  </div>
+</div>
+
+<div class="row" style="margin-top:22px">
+  <div>
+    <p class="cap"><b>Inspector ≥720：面板内分栏</b><span class="tag good">取消第四种壳</span></p>
+    <div class="stage"><div class="dk">
+      <div class="nav"><div class="lg">Roam</div><i>概览</i><i class="on">项目</i><i>文件</i></div>
+      <div class="main">
+        <div class="top">⌕ 搜索项目、会话和文件</div>
+        <div class="cols">
+          <div class="canvas"><h3>roam</h3><div class="p">/home/ai/codes/ttmux</div>
+            <div class="lrow" style="margin-top:14px"><b>任务 2</b></div></div>
+          <div class="rail"></div>
+          <div class="panel" style="flex:0 0 760px">
+            <div class="ph"><b>Git</b><span class="chip br" style="height:20px">⎇ main</span><span class="sp"></span><span class="ic">⋯</span><span class="ic">✕</span></div>
+            <div style="flex:1;min-height:0;display:flex">
+              <div class="bd" style="flex:0 0 280px;border-right:1px solid var(--line)">
+                <div class="segs"><span class="on">改动 14</span><span>提交树</span></div>
+                <div class="frow" style="background:var(--soft)"><span class="st m">M</span><span class="p">App.tsx</span></div>
+                <div class="frow"><span class="st m">M</span><span class="p">GitPanel.tsx</span></div>
+                <div class="frow"><span class="st a">A</span><span class="p">AdaptivePanel.tsx</span></div>
+              </div>
+              <div class="bd" style="flex:1;min-width:0">
+                <div style="font:12px/1 ui-monospace,monospace;color:var(--dim)">frontend/src/App.tsx</div>
+                <div class="diffbox">
+                  <span class="hu">@@ -1738,7 +1738,12 @@</span><br>
+                  <span class="del">- &lt;FloatingFileDrawer open={showGit} right={…}&gt;</span><br>
+                  <span class="add">+ &lt;AdaptivePanel desktop="inspector"</span><br>
+                  <span class="add">+&nbsp;&nbsp;&nbsp;title={t('git.title')}</span><br>
+                  <span class="add">+&nbsp;&nbsp;&nbsp;onClose={() =&gt; setShowGit(false)}&gt;</span><br>
+                  &nbsp;&nbsp;&nbsp;&lt;GitPanel dir={cwd} … /&gt;
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <p class="note">拖到 ≥720 就在<u>面板内部</u>分成「列表 ｜ diff」两栏——这是容器查询，看的是面板自己的宽度。
+    窄于 720 时 diff 仍旧盖成第二层，但那是<b>面板内的</b>覆盖层（手机上已经是这个行为），
+    不再是那个按 <code>100vw − panelLeft</code> 算位置的第四种壳。</p>
+  </div>
+
+  <div>
+    <p class="cap"><b>Worktree 用同一个壳</b><span class="tag good">四种 → 一种</span></p>
+    <div class="stage"><div class="dk">
+      <div class="nav"><div class="lg">Roam</div><i>概览</i><i class="on">项目</i><i>文件</i></div>
+      <div class="main">
+        <div class="top">⌕ 搜索项目、会话和文件</div>
+        <div class="cols">
+          <div class="canvas"><h3>roam</h3><div class="p">/home/ai/codes/ttmux</div>
+            <div class="lrow" style="margin-top:14px"><b>任务 2</b></div>
+            <div class="lrow"><b>Worktree 4</b></div></div>
+          <div class="rail"></div>
+          <div class="panel" style="flex:0 0 520px">
+            <div class="ph"><b>Worktree</b><span class="sp"></span><span class="ic">＋</span><span class="ic">↻</span><span class="ic">✕</span></div>
+            <div class="bd">
+              <div style="display:flex;gap:7px"><span class="chip" style="color:var(--acc);border-color:var(--accb);background:var(--soft)">全部 4</span><span class="chip">在跑 2</span><span class="chip">可清理 1</span></div>
+              <div class="wtcard"><b>⎇ feat/web-session-tokens</b><div class="p">…/.worktrees/task-1</div></div>
+              <div class="wtcard"><b>⎇ mobile/panels-subpage</b><div class="p">…/.worktrees/task-2</div></div>
+              <div class="wtcard" style="opacity:.7"><b>⎇ docs/ba-prompt-analysis</b><div class="p">…/.worktrees/task-3</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <p class="note">同一条 rail、同一套宽度记忆、同一个关闭语义。
+    <u>Worktree 与 Git 现在可以并存吗？不能</u>——同一时刻只有一个 Inspector，后开的替换先开的，
+    就像 Dock 里同时只有一个终端标签在前台。这比「Worktree 抽屉盖在 Git 面板上」清楚。</p>
+  </div>
+</div>
+
+<h2>三、契约</h2>
+<table class="tt">
+  <tr><th style="width:130px">场景</th><th style="width:190px">规则</th><th>理由</th></tr>
+  <tr><td><b>先从 Dock 借</b></td><td>Canvas ｜ Dock(借窄) ｜ Inspector</td>
+      <td>判据用 Dock 的<b>下限</b>：<code>workspace − 480 − inspector − 两条 rail ≥ 560</code>。
+      成立就把 Dock 借到刚好（不低于 480、不超过用户拖出来的宽度）。
+      实测 1920：终端 794 → 688，<u>三列都在</u></td></tr>
+  <tr><td><b>借不够就让 Canvas</b></td><td>Dock ｜ Inspector（页面整个让掉）</td>
+      <td>此时 Dock 用回原宽、<b>终端一寸不变</b>——实测 1440：593 → 593，只是整体左移，
+      所以连 fit/SIGWINCH 都不触发</td></tr>
+  <tr><td><b>无终端</b></td><td>Canvas ｜ Inspector 两列</td><td><code>224+560+8+420 = 1212</code>，1280 就够</td></tr>
+  <tr><td><b>905–1279（expanded）</b></td><td>Inspector 走覆盖式（同 Dock 的 overlay 语义）+ 遮罩</td><td>这一档本来就没有三列的空间，与 13 §13.1 一致</td></tr>
+  <tr><td><b>&lt;905（phone）</b></td><td>全屏二级页（#149 已实现）</td><td>不变</td></tr>
+  <tr><td><b>同时只有一个</b></td><td>Git 与 Worktree 互斥，后开替换先开</td><td>否则又回到「抽屉盖面板」</td></tr>
+  <tr><td><b>不带遮罩</b></td><td>≥1280 的两种形态都不加遮罩</td><td>遮罩 = 模态 = 「先关掉才能干别的」，而 Git 恰恰要边看边干</td></tr>
+</table>
+
+<h2>四、自审：画完之后自己挑的毛病</h2>
+<ol class="sr">
+  <li><b>Inspector 放哪一侧？</b>第一版我画在 Canvas 和 Dock <u>之间</u>（页面｜Git｜终端）。
+      问题是每次开关 Git，<em>终端的起点都会横向平移</em>——终端最忌讳这个，宽度一变就 fit → SIGWINCH →
+      tmux 整屏重排，肉眼是闪一下。放到最右之后，开关 Inspector 只让终端变窄，起点不动。
+      （变窄仍会 fit 一次，但比「被整个盖住」强得多，也比「盖住 + 起点平移」少一次。）</li>
+  <li><b>「Canvas 让位」会不会太粗暴？</b>另一个方案是 Inspector 浮在 Canvas 上、Dock 不动——
+      但那正是<u>今天项目页那份的做法</u>，也就是这一稿要治的病（浮层只会盖）。
+      折中方案是让位后顶栏留一枚「↩ 显示页面」，并且这个让位<b>复用已有的 Focus 态</b>，
+      不新增第五种空间状态——⌘⇧J 本来就是它。</li>
+  <li><b>Git 与 Worktree 互斥，会不会挡住「从 Git 里点 worktree 徽标」这条路？</b>会。
+      今天是 Worktree 抽屉盖在 Git 面板上（1300 盖 1200）。互斥之后那一跳会替换掉 Git 面板，
+      <u>返回时要能回到 Git</u>——所以 Inspector 需要一个「上一个面板」的返回箭头，
+      语义与手机二级页的 ← 一致。这条不做的话，从 Git 跳 Worktree 就是单程票。</li>
+  <li><b>720 这个分栏阈值是拍的吗？</b>不是：<code>280(列表) + 8 + 400(diff 最窄可读) + 32(padding) ≈ 720</code>。
+      低于它硬分栏的话 diff 会窄到每行都折，还不如盖成第二层。</li>
+  <li><b>「不带遮罩」有代价。</b>没有遮罩，用户可能不知道点外面不会关掉它。
+      所以 Inspector 必须<u>常驻一个 ✕ 和 Esc</u>，并且状态记忆——下次打开还在，不需要每次找关闭。</li>
+  <li><b>expanded 档（905–1279）我原本想跳过。</b>但那一档今天也会被 420 浮层盖住终端覆盖面板，
+      问题一模一样。既然 Dock 在那一档已经是 overlay，Inspector 沿用同一套语义即可，
+      <u>不额外发明</u>。</li>
+  <li><b>「↩ 显示页面」那枚按钮是多余的。</b>我在 1280–1639 那帧画了它，想着让位之后总得有路回去。
+      但让位的原因是<u>空间真的不够</u>——按下去除了关掉 Inspector 没有第二种可能，
+      而关闭本来就有 ✕ 和 Esc。<em>删掉，不做。</em></li>
+  <li><b>三列门槛写成一个固定数是错的。</b>初稿写「≥1640 三列并存」并画了 1680 的图，
+      实测 1680 上 Canvas 仍然让位——因为默认 dock 是 42vw（1680 上 = 705），
+      而 1640 那个数假设的是 dock 取下限 480。<u>判据必须按实际宽度算</u>，不是断点。</li>
+  <li><b>「让页面，不让终端」这条我写得太绝对了。</b>照它实现之后实测：<em>1920 上打开 Git，
+      页面照样整个消失</em>——因为默认 Dock 是 42vw（1920 上 806），拿它去判永远凑不齐三列。
+      而在 1920 上「终端窄 13%（794→688）换页面留在原地」显然更划算，那正是买大屏的理由。<br>
+      改成两步：<b>先从 Dock 借宽</b>（不低于 480、不超过用户拖出来的宽度），
+      <b>借不够再让 Canvas</b>——让位时 Dock 用回原宽，终端一寸不变。
+      原来那句话真正想守的是「终端不能被<u>盖住</u>」，不是「终端一像素都不能动」。</li>
+</ol>
+
+<h2>五、分期</h2>
+<ol class="pts">
+  <li><b>P1（本轮）</b>：Inspector 作为 Shell 的第三列落地 —— <code>useWorkspaceLayout</code> 加 inspector 宽度/开关，
+      <code>Workspace</code> 加第三列与第二条 rail，<code>AdaptivePanel</code> 桌面分支从 floating/drawer 改成 inspector；
+      Git 两个调用点 + Worktree 接上；<b>取消遮罩</b>；1280–1639 打开时 Canvas 让位。</li>
+  <li><b>P2</b>：Inspector ≥720 面板内分栏（容器查询），取消 <code>.tt-file-detail</code> 那第四种壳。</li>
+  <li><b>P3</b>：Inspector 的「上一个面板」返回（Git ⇄ Worktree），宽度按面板类型分别记忆。</li>
+</ol>
+
+</div></body></html>

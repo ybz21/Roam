@@ -3,7 +3,9 @@
 import { describe, it, expect } from 'vitest'
 import {
   dockBounds, defaultDockWidth, canSplit, resolveMode, dragMaxWidth, shouldFocusAt,
+  canvasFitsWith, effectiveDockWidth, inspectorBounds,
   CANVAS_MIN, DOCK_MIN, DOCK_MAX, SPLIT_RAIL, NAV_WIDTH, NAV_RAIL, OVERLAY_DOCK,
+  INSPECTOR_MIN, INSPECTOR_DEFAULT, INSPECTOR_MAX,
 } from './useWorkspaceLayout'
 
 /** 工作区宽 = 视口 - 导航（导航展开与否影响很大，1280 档尤其） */
@@ -121,5 +123,57 @@ describe('四态判定', () => {
     // 这一档 Canvas 最窄是 905-64=841，扣掉 480 还剩 361 的可见页面 —— 遮罩下仍看得见上下文
     expect(OVERLAY_DOCK).toBe(DOCK_MIN)
     expect(905 - NAV_RAIL - OVERLAY_DOCK).toBeGreaterThan(0)
+  })
+})
+
+
+// Inspector（Git / Worktree 列）的让位次序，见 14-desktop-workspace/panels-desktop.html。
+// 规则是两步：**先从 Dock 借宽，借不够再让 Canvas**。初版写死「让页面不让终端」，
+// 实测 1920 上页面照样整个消失——因为默认 Dock 是 42vw，拿它去判永远凑不齐三列。
+describe('Inspector 让位次序', () => {
+  const ins = INSPECTOR_DEFAULT
+
+  it('宽屏：从 Dock 借宽，三列都在，页面保住 560', () => {
+    const w = workspace(1920) // 1696
+    expect(canvasFitsWith({ workspaceWidth: w, inspectorWidth: ins, hasDock: true })).toBe(true)
+    const dock = effectiveDockWidth({
+      workspaceWidth: w, dockWidth: defaultDockWidth(1920, w), inspectorWidth: ins, inspectorOpen: true,
+    })
+    expect(dock).toBeGreaterThanOrEqual(DOCK_MIN)
+    expect(w - dock - SPLIT_RAIL * 2 - ins).toBeGreaterThanOrEqual(CANVAS_MIN)
+  })
+
+  it('1440：借不够，Canvas 让位，且 Dock 用回原宽（终端一寸不变）', () => {
+    const w = workspace(1440) // 1216
+    expect(canvasFitsWith({ workspaceWidth: w, inspectorWidth: ins, hasDock: true })).toBe(false)
+    const mine = defaultDockWidth(1440, w)
+    expect(effectiveDockWidth({ workspaceWidth: w, dockWidth: mine, inspectorWidth: ins, inspectorOpen: true }))
+      .toBe(mine)
+  })
+
+  it('借宽绝不越过用户拖出来的宽度，也绝不低于 480', () => {
+    for (const viewport of [1280, 1440, 1680, 1920, 2560]) {
+      const w = workspace(viewport)
+      for (const mine of [DOCK_MIN, 600, 880]) {
+        const got = effectiveDockWidth({ workspaceWidth: w, dockWidth: mine, inspectorWidth: ins, inspectorOpen: true })
+        expect(got).toBeLessThanOrEqual(mine)
+        expect(got).toBeGreaterThanOrEqual(DOCK_MIN)
+      }
+    }
+  })
+
+  it('没开 Inspector 时 Dock 宽度原样返回', () => {
+    expect(effectiveDockWidth({ workspaceWidth: 1216, dockWidth: 605, inspectorWidth: ins, inspectorOpen: false }))
+      .toBe(605)
+  })
+
+  it('Inspector 区间：下界 360、上界不越过 Dock 的地盘', () => {
+    for (const viewport of [1280, 1440, 1920]) {
+      const w = workspace(viewport)
+      const b = inspectorBounds({ workspaceWidth: w, dockWidth: defaultDockWidth(viewport, w), hasDock: true })
+      expect(b.min).toBe(INSPECTOR_MIN)
+      expect(b.max).toBeLessThanOrEqual(INSPECTOR_MAX)
+      expect(b.max).toBeGreaterThanOrEqual(INSPECTOR_MIN)
+    }
   })
 })

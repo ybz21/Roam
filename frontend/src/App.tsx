@@ -18,6 +18,8 @@ import FileBrowser from './FileBrowser'
 import FileWorkspace from './FileWorkspace'
 import FloatingFileDrawer from './FloatingFileDrawer'
 import AdaptivePanel from './shell/AdaptivePanel'
+import { InspectorColumn } from './shell/InspectorColumn'
+import { useInspectorReserved } from './shell/inspector'
 import MobileSubPage from './MobileSubPage'
 import { FileView } from './fileview'
 // 非首屏的重页面（蜂群/Git 面板/浏览器/手机镜像/插件）按路由懒加载：切到对应 tab 才拉 chunk，
@@ -737,10 +739,13 @@ export default function App() {
           // 不是组件树，终端因此不会在开合时被卸载重建。
           <Workspace
             mode={space.mode} canvas={canvasNode} dock={dockNode}
-            dockWidth={space.dockWidth} bounds={space.bounds} splitMax={space.splitMax}
+            dockWidth={space.dockRenderWidth} bounds={space.bounds} splitMax={space.splitMax}
             onResize={space.setDockWidth} onReset={space.resetDockWidth}
             onFocus={() => space.setFocus('dock')}
             onDismiss={() => space.setDockOpen(false)}
+            inspectorWidth={space.inspectorWidth} inspectorBounds={space.inspectorBounds}
+            inspectorOverlay={!space.splitCapable} canvasFitsInspector={space.canvasFitsInspector}
+            onInspectorResize={space.setInspectorWidth} onInspectorReset={space.resetInspectorWidth}
             capsule={space.overlayCapable && space.mode === 'page' ? (
               // 胶囊只有 320px，显示 sessionLabel 而不是 sessionDisplay——后者带
               // 「（会话 id）」后缀，在这个宽度下正好被截在 id 中间，什么也没说清。
@@ -754,7 +759,16 @@ export default function App() {
             ) : null}
           />
         ) : (
-          <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>{canvasNode}</div>
+          // 没有终端时不走 Workspace（不必为空 Dock 撑一套几何），但 Inspector 这一列
+          // 两边都要有——Git 面板在项目页也开得出来。
+          <div style={{ position: 'relative', display: 'flex', flex: 1, minHeight: 0 }}>
+            {canvasNode}
+            {hasSider && (
+              <InspectorColumn width={space.inspectorWidth} bounds={space.inspectorBounds}
+                overlay={!space.splitCapable} onResize={space.setInspectorWidth}
+                onReset={space.resetInspectorWidth} />
+            )}
+          </div>
         )}
       </Layout>
 
@@ -1002,6 +1016,7 @@ function TerminalPane(props: {
   // 编辑器多 tab / 打开的文件 / 拖拽调宽等都下沉到 <FileWorkspace>（左侧停靠时用），这里只保留 showFiles。
   const [showFiles, setShowFiles] = useState(fileDock === 'left')
   const [showGit, setShowGit] = useState(false)
+  const inspectorReserved = useInspectorReserved()
   const [cwd, setCwd] = useState('')
   // 文件栏与 Git 面板可并存：左侧停靠时文件走左栏、Git 走右抽屉，天然并列；
   // 右侧停靠时两者都是右抽屉，Git 抽屉在文件也开着时向左让位（见下方 right 偏移），并排显示而非互相覆盖。
@@ -1744,14 +1759,15 @@ function TerminalPane(props: {
         </div>
       )}
       {fileDock === 'right' && (
-        <FloatingFileDrawer open={showFiles}>
+        // 文件抽屉这一轮仍是浮层（P4 再收），但要按 Inspector 占掉的宽度往左让，
+        // 否则开着 Git 时它会盖住那一列
+        <FloatingFileDrawer open={showFiles} right={inspectorReserved}>
           <FileBrowser dir={cwd} accent="#58a6ff" layout="dock" onClose={() => setShowFiles(false)} />
         </FloatingFileDrawer>
       )}
       {/* 手机走全屏二级页（13 §6）：420 的浮层在 360 屏上盖到 92vw，还压着底栏、不吃安全区。
           桌面维持右缘浮动面板不变。layer="session" —— 这一层是从会话全屏(100)里唤起的。 */}
-      <AdaptivePanel open={showGit} desktop="floating" layer="session" title={t('git.title')}
-        width="min(420px, 92vw)" right={fileDock === 'right' && showFiles ? 'min(420px, 92vw)' : 0}
+      <AdaptivePanel open={showGit} layer="session" title={t('git.title')}
         onClose={() => setShowGit(false)}>
         <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}><Spin /></div>}>
           <GitPanel dir={cwd} accent="#58a6ff" onClose={() => setShowGit(false)} />

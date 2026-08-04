@@ -421,10 +421,26 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
 
   return (
     // 手机走全屏二级页（13 §6）：全宽的 antd Drawer「既不是页也不是 sheet」——
-    // 从右横切进场、右上角一个 ×、返回键不认它。桌面维持 520 抽屉不变。
-    <AdaptivePanel open={open} onClose={onClose} title={t('worktree.title')}
-      desktop="drawer" width={520} zIndex={DRAWER_Z}
-      drawerStyles={{ body: { display: 'flex', flexDirection: 'column', gap: 0, paddingTop: 14 } }}>
+    // 从右横切进场、右上角一个 ×、返回键不认它。
+    // 桌面走 Inspector 列（14 panels-desktop.html）：抽屉的遮罩 + 横切进场是第三种
+    // 「从右边出来一块」，和 Git 面板那两种并列。现在三者同一条 rail、同一套宽度记忆。
+    <AdaptivePanel open={open} onClose={onClose} title={t('worktree.title')}>
+      {/* 桌面档的面板头：抽屉原来提供的标题与关闭，进 Inspector 之后要自己长出来 */}
+      {wide && (
+        <div style={{
+          flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 8,
+          padding: '10px 12px', borderBottom: '1px solid var(--border-subtle)',
+        }}>
+          <b style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-bright)' }}>{t('worktree.title')}</b>
+          <span style={{ flex: 1 }} />
+          <button type="button" className="tt-file-close" onClick={onClose}
+            title={t('common.close')} aria-label={t('common.close')}>✕</button>
+        </div>
+      )}
+      <div style={{
+        flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column',
+        gap: 0, padding: '14px 12px 12px',
+      }}>
       {/* 头部：仓库目录（留空 = 跨仓库总览）+ 新建 + 刷新 */}
       <div style={{ display: 'flex', gap: 8 }}>
         <AutoComplete style={{ flex: 1, minWidth: 0 }} value={dir} onChange={setDir} allowClear
@@ -571,6 +587,7 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
           </div>
         )}
       </Modal>
+      </div>
     </AdaptivePanel>
   )
 }
