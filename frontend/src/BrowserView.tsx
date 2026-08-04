@@ -8,7 +8,7 @@ import { api } from './api'
 import { useI18n } from './i18n'
 import { usePreferences, savePreferences } from './preferences'
 import { connect, type DuplexTransport } from './p2p/transport'
-import { ChevronLeft, ChevronRight, CloseIcon, PlayIcon, RefreshIcon } from './icons'
+import { BotIcon, ChevronLeft, ChevronRight, CloseIcon, RefreshIcon, UserIcon } from './icons'
 
 interface TabInfo { id: string; title: string; url: string }
 
@@ -189,18 +189,17 @@ export default function BrowserView() {
   const imeRef = useRef<HTMLTextAreaElement>(null)
   const composingRef = useRef(false)
   const [imePos, setImePos] = useState({ x: 8, y: 8 })
-  // 跟随 agent：后端广播 {type:'active'} 时若未暂停就自动切到 agent 正在操作的标签。
-  // 用户手动切标签/操作镜像页面时暂停，空闲一段时间无操作后自动恢复。
+  // 智能体模式 / 手动模式：两个持久状态，不是"暂停时才冒出来的临时按钮"。智能体模式下
+  // 后端广播 {type:'active'} 会自动切到 agent 正在操作的标签；用户在画面里点击/打字
+  // 视为接管，自动切到手动模式。切回智能体模式只能靠主动点按钮——不设空闲自动恢复，
+  // 模式要长期保持，不能自己漂移回去（人正盯着一个 agent 没打算离开的页面时尤其如此）。
   const [followPaused, setFollowPaused] = useState(false)
   const followPausedRef = useRef(false)
-  const followIdleTimerRef = useRef(0 as any)
-  const FOLLOW_RESUME_IDLE_MS = 12000
 
   // control 开关用 ref 同步，供事件回调读取最新值
   useEffect(() => { controlRef.current = control }, [control])
   useEffect(() => { deviceRef.current = device }, [device])
   useEffect(() => { tabsRef.current = tabs }, [tabs])
-  useEffect(() => () => clearTimeout(followIdleTimerRef.current), [])
 
   // 跟踪舞台尺寸：旋转 90/270 时 <img> 盒子宽高要对调，才能铺满竖屏
   useEffect(() => {
@@ -261,16 +260,13 @@ export default function BrowserView() {
     if (t) setUrl(t.url === 'about:blank' ? '' : t.url)
   }, [target, tabs])
 
-  // 暂停跟随：人正在手动操作（切标签/点镜像页面），此时后端广播的 active 不该把面板拽走。
-  // 空闲 12s 无操作后自动恢复——不需要用户记得手动点回来。
+  // 切到手动模式：人正在手动操作（切标签/点镜像页面），此时后端广播的 active 不该把
+  // 面板拽走。只能靠主动点"智能体模式"按钮切回去，不会自己超时恢复。
   const pauseFollow = () => {
     followPausedRef.current = true
     setFollowPaused(true)
-    clearTimeout(followIdleTimerRef.current)
-    followIdleTimerRef.current = setTimeout(resumeFollow, FOLLOW_RESUME_IDLE_MS)
   }
   const resumeFollow = () => {
-    clearTimeout(followIdleTimerRef.current)
     followPausedRef.current = false
     setFollowPaused(false)
   }
@@ -687,12 +683,22 @@ export default function BrowserView() {
         onAdd={newTab}
         extra={
           <Space size={10} style={{ paddingRight: 4 }}>
-            {/* 暂停跟随时才出现：人正在手动操作，点一下立即恢复自动跟随 agent 的标签 */}
-            {followPaused && (
-              <Button size="small" onClick={resumeFollow} title={t('browser.resumeFollowTitle')} icon={<PlayIcon size={11} />}>
-                {t('browser.resumeFollow')}
-              </Button>
-            )}
+            {/* 常驻的模式切换：智能体模式(面板跟着 agent 的标签走，高亮) / 手动模式(用户
+                已接管，不高亮)。双向切换：手动模式下点它切回智能体模式；智能体模式下点它
+                主动切到手动模式，不用非得去画面里点一下才能接管。样式跟清晰度/旋转按钮
+                同款(选中亮底+白字+辉光，未选中透明+灰边灰字)，保持这一排按钮视觉统一。 */}
+            <Button
+              size="small"
+              onClick={() => (followPaused ? resumeFollow() : pauseFollow())}
+              title={followPaused ? t('browser.followModeHumanTitle') : t('browser.followModeAgentTitle')}
+              icon={followPaused ? <UserIcon size={13} /> : <BotIcon size={13} />}
+              type={followPaused ? 'default' : 'primary'}
+              style={followPaused
+                ? { background: 'transparent', borderColor: 'var(--border)', color: 'var(--text-dim)' }
+                : { background: 'var(--accent-solid)', borderColor: 'var(--accent-solid)', color: '#fff', fontWeight: 700, boxShadow: '0 0 0 2px rgba(31,111,235,.35)' }}
+            >
+              {followPaused ? t('browser.followModeHuman') : t('browser.followModeAgent')}
+            </Button>
             {/* 清晰度：选中档亮蓝底 + 白字加粗 + 辉光，未选中压暗，对比鲜明 */}
             <Space.Compact size="small">
               {QUALITY_OPTS.map((o) => {
