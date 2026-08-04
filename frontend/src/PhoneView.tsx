@@ -3,28 +3,17 @@
 //   收 二进制帧 [w:u16][h:u16][seq:u16][jpeg...] | {type:'pong'|'error'|'level'}
 //   发 {type:'ack',n} | {type:'ping',t} | {type:'tap'|'swipe'|'text'|'key'}
 import { useEffect, useRef, useState } from 'react'
-import { Button, Select, Space, Tag, App as AntApp } from 'antd'
+import { Button, Select, App as AntApp } from 'antd'
 import { api } from './api'
 import { useI18n } from './i18n'
 import { connect, type DuplexTransport } from './p2p/transport'
-import { PhoneAssistIcon, PhoneBackIcon, PhoneHomeIcon, PhoneRecentsIcon, PowerIcon } from './icons'
+import { AppLaunchIcon, PhoneAssistIcon, PhoneBackIcon, PhoneHomeIcon, PhoneRecentsIcon, PowerIcon } from './icons'
+import { MirrorHead, QualityPicker, StreamStat, type Quality } from './mirror'
 
 interface PhoneApp { id: string; name?: string }
 
-// 与浏览器对齐：自动(自适应) / 标清 / 高清 / 超清（复用 browser.quality.* 文案）
-type Quality = number | 'auto'
-const QUALITY_OPTS: { labelKey: string; value: Quality }[] = [
-  { labelKey: 'browser.quality.auto', value: 'auto' },
-  { labelKey: 'browser.quality.standard', value: 50 },
-  { labelKey: 'browser.quality.high', value: 80 },
-  { labelKey: 'browser.quality.ultra', value: 92 },
-]
+// 清晰度档位与浏览器页共用（mirror.tsx 的 QUALITY_OPTS），这里只有存盘的 key 不同
 const QKEY = 'ttmux.phone.quality'
-
-function fmtRate(bps: number) {
-  if (bps >= 1 << 20) return (bps / (1 << 20)).toFixed(1) + ' MB/s'
-  return Math.round(bps / 1024) + ' KB/s'
-}
 
 export default function PhoneView() {
   const { message } = AntApp.useApp()
@@ -206,43 +195,30 @@ export default function PhoneView() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* 第一栏：画质 + 连接状态 + 指标（全站统一：首行贴 tt-page 的 16,16，不再自垫内边距） */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 0 6px', flex: '0 0 auto', flexWrap: 'wrap' }}>
-        <Space.Compact size="small">
-          {QUALITY_OPTS.map((o) => {
-            const on = quality === o.value
-            return (
-              <Button key={o.value} size="small" type={on ? 'primary' : 'default'} onClick={() => changeQuality(o.value)}
-                style={on ? { background: 'var(--accent-solid)', borderColor: 'var(--accent-solid)', color: '#fff', fontWeight: 700 }
-                  : { background: 'transparent', borderColor: 'var(--border)', color: 'var(--text-dim)' }}>
-                {t(o.labelKey)}
-              </Button>
-            )
-          })}
-        </Space.Compact>
-        <Tag color={connected ? 'green' : 'red'} style={{ marginInlineEnd: 0, marginLeft: 'auto' }}>
-          {connected ? t('phone.connected') : t('phone.disconnected')}
-        </Tag>
-        <span style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
-          {quality === 'auto' && levelName ? <span style={{ color: 'var(--accent)' }}>{levelName} · </span> : null}
-          {latency == null ? '—' : latency + 'ms'} · {fmtRate(bw)} · {fps}fps
-        </span>
-      </div>
-
-      {/* 第二栏：打开应用 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 10px 8px', flex: '0 0 auto' }}>
+      {/* 页头：页名 + 清晰度 + 启动应用 + 流状态，一行装下（与浏览器页同一套壳，见 mirror.tsx）。
+          原来是两行：清晰度/状态一行，「启动应用」独占第二行且自垫了 10px 左内边距——
+          跟第一行的左沿对不齐，两行毛边。舞台的高度比这一行值钱。 */}
+      <MirrorHead name={t('nav.phone')} hint={t('phone.subtitle')}>
+        <QualityPicker value={quality} onChange={changeQuality} />
         <Select
           size="small"
           showSearch
           placeholder={t('phone.launchApp')}
-          style={{ width: '100%', maxWidth: 240 }}
+          className="pv-applaunch"
+          style={{ width: 160 }}
           value={null}
           onChange={launch}
+          suffixIcon={<AppLaunchIcon />}
           onDropdownVisibleChange={(open) => { if (open) loadApps() }}
           filterOption={(input, opt) => String(opt?.value || '').toLowerCase().includes(input.toLowerCase())}
           options={apps.map((a) => ({ value: a.id, label: a.name || a.id }))}
         />
-      </div>
+        <span className="end">
+          <StreamStat connected={connected} label={connected ? t('phone.connected') : t('phone.disconnected')}
+            level={quality === 'auto' ? levelName : undefined}
+            latency={latency} bytesPerSec={bw} fps={fps} />
+        </span>
+      </MirrorHead>
 
       <style>{`
         .pv-ripple{position:absolute;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;
@@ -274,7 +250,7 @@ export default function PhoneView() {
         {ripples.map((p) => (<span key={p.id} className="pv-ripple" style={{ left: p.x, top: p.y }} />))}
         {!connected && healthMsg && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, pointerEvents: 'none' }}>
-            <div style={{ maxWidth: 520, padding: '12px 16px', borderRadius: 'var(--r-sm)', background: 'rgba(0,0,0,.72)', border: '1px solid #f8514955', color: '#ffb4a8', fontSize: 13, lineHeight: 1.6, textAlign: 'center' }}>
+            <div style={{ maxWidth: 520, padding: 'var(--sp-3) var(--sp-4)', borderRadius: 'var(--r-sm)', background: 'rgba(0,0,0,.72)', border: '1px solid var(--danger-border)', color: 'var(--danger)', fontSize: 'var(--fs-sm)', lineHeight: 1.6, textAlign: 'center' }}>
               {t('phone.unavailable')}<br />{healthMsg}
             </div>
           </div>

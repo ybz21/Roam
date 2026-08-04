@@ -126,6 +126,18 @@ export const PhoneAssistIcon = ({ size = 16 }: P) => line(
   <><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" /></>, size, 2)
 export const PowerIcon = ({ size = 16 }: P) => line(<><path d="M12 3.5v8" /><path d="M17.7 6.8a8 8 0 1 1-11.4 0" /></>, size, 2)
 
+// ── 镜像页（BrowserView / PhoneView）的工具条 ──
+// 这三枚原来是就地画在组件里的一次性 SVG（旋转那枚还是 Material 的实心件，
+// 线宽/填充都跟旁边的线性图标对不上），按「新图标默认加在 icons.tsx」收进来。
+/** 旋转画面 90°：设备框 + 绕角的回转箭头，明显区别于刷新的整环箭头 */
+export const RotateScreenIcon = ({ size = 15 }: P) => line(
+  <><rect x="3" y="7.5" width="11" height="13.5" rx="1.8" /><path d="M9.5 3.5h6.5A4.5 4.5 0 0 1 20.5 8v4" /><path d="m12 6 2.6-2.5L12 1" /></>, size)
+/** 开发者工具：尖括号，取代文字按钮「调试」 */
+export const CodeIcon = ({ size = 15 }: P) => line(<><path d="m8 8-4.5 4L8 16" /><path d="m16 8 4.5 4L16 16" /><path d="m13.5 5-3 14" /></>, size)
+/** 启动应用：方框里一个向右的箭头 */
+export const AppLaunchIcon = ({ size = 13 }: P) => line(
+  <><rect x="3.5" y="3.5" width="17" height="17" rx="3" /><path d="M9 12h6" /><path d="m12.5 9 3 3-3 3" /></>, size)
+
 /** 图例色块：原来写作 ■（实心方块字符），高度和基线跟着字体走 */
 export const Swatch = ({ color, size = 9 }: { color: string; size?: number }) => (
   <span aria-hidden style={{

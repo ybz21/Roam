@@ -52,6 +52,11 @@ export const THEME_TOKENS: Record<ThemeMode, ThemeTokens> = {
       '--ok-solid': '#238636',
       '--ok-soft': 'rgba(63, 185, 80, .14)',
       '--ok-border': 'rgba(63, 185, 80, .42)',
+      // 危险/断开红同样只有这一组。此前没有这一档，#f85149 就散在 index.css 与
+      // 各组件里手抄——和当初蓝、绿被抄得到处都是的成因一模一样。
+      '--danger': '#f85149',
+      '--danger-soft': 'rgba(248, 81, 73, .16)',
+      '--danger-border': 'rgba(248, 81, 73, .45)',
       '--brand-grad': 'linear-gradient(180deg, #f5f7fa 0%, #c3c9d1 46%, #9aa1ab 56%, #e7ebef 100%)',
       '--list-hover': 'rgba(255, 255, 255, .025)',
       '--scroll-thumb': '#2a313a',
@@ -97,6 +102,9 @@ export const THEME_TOKENS: Record<ThemeMode, ThemeTokens> = {
       '--ok-solid': '#1f883d',
       '--ok-soft': 'rgba(31, 136, 61, .10)',
       '--ok-border': 'rgba(31, 136, 61, .40)',
+      '--danger': '#cf222e',
+      '--danger-soft': 'rgba(207, 34, 46, .10)',
+      '--danger-border': 'rgba(207, 34, 46, .40)',
       '--brand-grad': 'linear-gradient(180deg, #2c333b 0%, #1f2328 100%)',
       '--list-hover': 'rgba(27, 31, 36, .04)',
       '--scroll-thumb': '#c9d1d9',

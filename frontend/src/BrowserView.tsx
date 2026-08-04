@@ -3,12 +3,16 @@
 //   收 {type:'frame', data, w, h} | {type:'pong', t} | {type:'error', msg}
 //   发 {type:'nav', url} | {type:'ping', t} | {type:'mouse'|'wheel'|'key', ...}（输入仅 control=1 生效）
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Button, Input, Select, Space, Tag, App as AntApp } from 'antd'
+import { Button, Input, Select, App as AntApp } from 'antd'
 import { api } from './api'
 import { useI18n } from './i18n'
 import { usePreferences, savePreferences } from './preferences'
 import { connect, type DuplexTransport } from './p2p/transport'
-import { BotIcon, ChevronLeft, ChevronRight, CloseIcon, RefreshIcon, UserIcon } from './icons'
+import {
+  BotIcon, ChevronLeft, ChevronRight, CloseIcon, CodeIcon, HomeIcon, OpenInIcon,
+  PlusIcon, RefreshIcon, RotateScreenIcon, UserIcon,
+} from './icons'
+import { MirrorHead, QualityPicker, StreamStat, type Quality } from './mirror'
 
 interface TabInfo { id: string; title: string; url: string }
 
@@ -17,30 +21,16 @@ function BrowserTab({ tab, active, onSelect, onClose }: {
   tab: TabInfo; active: boolean; onSelect: () => void; onClose: () => void
 }) {
   return (
-    <div
-      onClick={onSelect}
-      title={tab.url}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 6, width: 150, flex: '0 0 auto', height: 28,
-        padding: '0 8px', borderRadius: 6, cursor: 'pointer', userSelect: 'none', fontSize: 12,
-        background: active ? '#283039' : 'transparent',
-        color: active ? 'var(--text-bright)' : '#9aa4ae',
-        border: '1px solid ' + (active ? '#3d444d' : 'transparent'),
-      }}
-    >
-      <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {tab.title || tab.url || 'about:blank'}
+    <div onClick={onSelect} title={tab.url} className={`bv-tab${active ? ' on' : ''}`}>
+      <span className="ttl">{tab.title || tab.url || 'about:blank'}</span>
+      <span className="x" onClick={(e) => { e.stopPropagation(); onClose() }} onMouseDown={(e) => e.stopPropagation()}>
+        <CloseIcon size={12} />
       </span>
-      <span
-        onClick={(e) => { e.stopPropagation(); onClose() }}
-        onMouseDown={(e) => e.stopPropagation()}
-        style={{ flex: '0 0 auto', width: 16, height: 16, display: 'grid', placeItems: 'center', borderRadius: 4, color: 'var(--text-dim)' }}
-      ><CloseIcon size={12} /></span>
     </div>
   )
 }
 
-// 标签栏：左=可横向滚动的标签 + 新建，右=固定区域(extra)。两侧宽度独立，互不挤占。
+// 标签栏：页名 + 可横向滚动的标签 + 新建，右=固定区域(extra)。两侧宽度独立，互不挤占。
 function TabBar({ tabs, active, onSelect, onClose, onAdd, extra }: {
   tabs: TabInfo[]; active: string
   onSelect: (id: string) => void; onClose: (id: string) => void; onAdd: () => void; extra: ReactNode
@@ -48,32 +38,22 @@ function TabBar({ tabs, active, onSelect, onClose, onAdd, extra }: {
   const { t } = useI18n()
   return (
     // 全站统一：工具页首行贴 tt-page 的 (16,16)，不再自垫横向内边距
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 0, flex: '0 0 auto' }}>
-      <div style={{ display: 'flex', gap: 4, overflowX: 'auto', flex: 1, minWidth: 0 }}>
-        {tabs.map((t) => (
-          <BrowserTab key={t.id} tab={t} active={t.id === active} onSelect={() => onSelect(t.id)} onClose={() => onClose(t.id)} />
+    <MirrorHead name={t('nav.browser')} hint={t('browser.subtitle')}>
+      <div className="bv-tabs">
+        {tabs.map((tb) => (
+          <BrowserTab key={tb.id} tab={tb} active={tb.id === active} onSelect={() => onSelect(tb.id)} onClose={() => onClose(tb.id)} />
         ))}
-        <button
-          onClick={onAdd}
-          title={t('browser.newTab')}
-          style={{ flex: '0 0 auto', width: 28, height: 28, border: 'none', background: 'transparent', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 16, borderRadius: 6 }}
-        >+</button>
+        <Button size="small" type="text" onClick={onAdd} title={t('browser.newTab')} icon={<PlusIcon />}
+          style={{ flex: '0 0 auto' }} />
       </div>
-      <div style={{ flex: '0 0 auto' }}>{extra}</div>
-    </div>
+      <span className="end">{extra}</span>
+    </MirrorHead>
   )
 }
 
-// 清晰度档位（栏目级配置，存 localStorage）。'auto'=自适应，数字=固定 JPEG 质量
-type Quality = number | 'auto'
+// 清晰度档位与手机页共用（mirror.tsx 的 QUALITY_OPTS），这里只有存盘的 key 不同
 const QKEY = 'ttmux.browser.quality'
 const RKEY = 'ttmux.browser.rotate' // 画面旋转角度（0/90/180/270），手机竖屏看横屏用
-const QUALITY_OPTS: { labelKey: string; value: Quality }[] = [
-  { labelKey: 'browser.quality.auto', value: 'auto' },
-  { labelKey: 'browser.quality.standard', value: 50 },
-  { labelKey: 'browser.quality.high', value: 80 },
-  { labelKey: 'browser.quality.ultra', value: 92 },
-]
 
 // 手机模式设备档（栏目级配置，存 localStorage）。空 key = 桌面（不模拟）。
 // 维度是 CSS 像素视口，dpr 决定渲染像素密度；ua 让做 UA 嗅探的站点切到移动版。
@@ -89,11 +69,6 @@ const DEVICES: Device[] = [
     ua: 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' },
 ]
 
-function fmtRate(bytesPerSec: number) {
-  if (bytesPerSec >= 1 << 20) return (bytesPerSec / (1 << 20)).toFixed(1) + ' MB/s'
-  return Math.round(bytesPerSec / 1024) + ' KB/s'
-}
-
 // 地址栏自适应 http/https：本机/内网地址默认 http，其余默认 https。
 // 已带 scheme 的原样返回；避免内网 IP / localhost 被强转 https 连不上。
 function smartUrl(input: string): string {
@@ -107,11 +82,6 @@ function smartUrl(input: string): string {
     /^192\.168\./.test(host) ||                      // 192.168.0.0/16
     /^172\.(1[6-9]|2\d|3[01])\./.test(host)          // 172.16.0.0/12
   return (local ? 'http://' : 'https://') + s
-}
-
-// 固定宽度数字槽：右对齐 + 等宽数字，数值变化不改变总宽（避免挤占/回流）
-function cell(text: string, w: number) {
-  return <span style={{ display: 'inline-block', width: w, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{text}</span>
 }
 
 // Chrome 的 /json(标签页)顺序不稳定：激活/聚焦/新开都会重排，直接用它每 3s 一刷新
@@ -673,98 +643,64 @@ export default function BrowserView() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* 图标用的金属高光渐变（银色 chrome 质感，与品牌 mark 一致） */}
-      {/* 标签栏：左=标签页(自定义固定宽度，切换不易位)，右=接管/清晰度/状态/指标 */}
+      {/* 第一行 = 这块屏幕本身：页名 + 标签页 + 跟随 + 流状态。
+          清晰度/旋转/设备是「怎么看」，挪到第二行地址栏尾部与导航同处一条，
+          否则第一行右半边被四枚清晰度按钮 + 旋转 + 状态标签占满，标签页没地方长。 */}
       <TabBar
         tabs={tabs}
         active={target}
         onSelect={switchTab}
         onClose={closeTab}
         onAdd={newTab}
-        extra={
-          <Space size={10} style={{ paddingRight: 4 }}>
-            {/* 常驻的模式切换：智能体模式(面板跟着 agent 的标签走，高亮) / 手动模式(用户
-                已接管，不高亮)。双向切换：手动模式下点它切回智能体模式；智能体模式下点它
-                主动切到手动模式，不用非得去画面里点一下才能接管。样式跟清晰度/旋转按钮
-                同款(选中亮底+白字+辉光，未选中透明+灰边灰字)，保持这一排按钮视觉统一。 */}
-            <Button
-              size="small"
-              onClick={() => (followPaused ? resumeFollow() : pauseFollow())}
-              title={followPaused ? t('browser.followModeHumanTitle') : t('browser.followModeAgentTitle')}
-              icon={followPaused ? <UserIcon size={13} /> : <BotIcon size={13} />}
-              type={followPaused ? 'default' : 'primary'}
-              style={followPaused
-                ? { background: 'transparent', borderColor: 'var(--border)', color: 'var(--text-dim)' }
-                : { background: 'var(--accent-solid)', borderColor: 'var(--accent-solid)', color: '#fff', fontWeight: 700, boxShadow: '0 0 0 2px rgba(31,111,235,.35)' }}
-            >
-              {followPaused ? t('browser.followModeHuman') : t('browser.followModeAgent')}
-            </Button>
-            {/* 清晰度：选中档亮蓝底 + 白字加粗 + 辉光，未选中压暗，对比鲜明 */}
-            <Space.Compact size="small">
-              {QUALITY_OPTS.map((o) => {
-                const on = quality === o.value
-                return (
-                  <Button
-                    key={String(o.value)}
-                    size="small"
-                    type={on ? 'primary' : 'default'}
-                    onClick={() => changeQuality(o.value)}
-                    style={on
-                      ? { background: 'var(--accent-solid)', borderColor: 'var(--accent-solid)', color: '#fff', fontWeight: 700, boxShadow: '0 0 0 2px rgba(31,111,235,.35)', zIndex: 1 }
-                      : { background: 'transparent', borderColor: 'var(--border)', color: 'var(--text-dim)' }}
-                  >{t(o.labelKey)}</Button>
-                )
-              })}
-            </Space.Compact>
-            {/* 旋转：紧跟清晰度组之后，样式与清晰度档完全同款（激活=蓝底，未激活=灰边灰字） */}
-            <Button size="small" onClick={rotate} title={t('browser.rotateTitle')}
-              type={rotation ? 'primary' : 'default'}
-              style={rotation
-                ? { background: 'var(--accent-solid)', borderColor: 'var(--accent-solid)', color: '#fff', fontWeight: 700, boxShadow: '0 0 0 2px rgba(31,111,235,.35)' }
-                : { background: 'transparent', borderColor: 'var(--border)', color: 'var(--text-dim)' }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                {/* 屏幕旋转图标（倾斜设备框 + 对角双箭头），明显区别于刷新的环形箭头 */}
-                <svg viewBox="0 0 24 24" width={15} height={15} fill="currentColor" style={{ display: 'block' }}>
-                  <path d="M16.48 2.52c3.27 1.55 5.61 4.72 5.97 8.48h1.5C23.44 4.84 18.29 0 12 0l-.66.03 3.81 3.81 1.33-1.32zM10.23 1.75c-.59-.59-1.54-.59-2.12 0L1.75 8.11c-.59.59-.59 1.54 0 2.12l12.02 12.02c.59.59 1.54.59 2.12 0l6.36-6.36c.59-.59.59-1.54 0-2.12L10.23 1.75zm4.6 19.44L2.81 9.17l6.36-6.36 12.02 12.02-6.36 6.36zM7.52 21.48C4.25 19.94 1.91 16.76 1.55 13H.05C.56 19.16 5.71 24 12 24l.66-.03-3.81-3.81-1.33 1.32z" />
-                </svg>
-                {rotation ? <span>{rotation}°</span> : null}
-              </span>
-            </Button>
-            <Tag color={connected ? 'green' : 'red'} style={{ marginInlineEnd: 0 }}>{connected ? t('browser.connected') : t('browser.disconnected')}</Tag>
-            <span style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap' }}>
-              {quality === 'auto' && levelName ? <span style={{ color: 'var(--accent)' }}>{levelName} ·</span> : null}
-              {cell(latency == null ? '—' : latency + 'ms', 48)} ·{cell(fmtRate(bw), 70)} ·{cell(fps + 'fps', 42)}
-            </span>
-          </Space>
-        }
+        extra={<>
+          {/* 常驻的模式切换：智能体模式(面板跟着 agent 的标签走，高亮) / 手动模式(用户
+              已接管，不高亮)。双向切换：手动模式下点它切回智能体模式；智能体模式下点它
+              主动切到手动模式，不用非得去画面里点一下才能接管。
+              高亮态交给 antd 的 primary——照抄 --accent-solid 再补一圈辉光，画出来必然
+              比 antd 自己按 seed 推的那档差一点（darkAlgorithm 会再推一层）。 */}
+          <Button
+            size="small"
+            onClick={() => (followPaused ? resumeFollow() : pauseFollow())}
+            title={followPaused ? t('browser.followModeHumanTitle') : t('browser.followModeAgentTitle')}
+            icon={followPaused ? <UserIcon size={13} /> : <BotIcon size={13} />}
+            type={followPaused ? 'default' : 'primary'}
+          >
+            {followPaused ? t('browser.followModeHuman') : t('browser.followModeAgent')}
+          </Button>
+          <StreamStat connected={connected} label={connected ? t('browser.connected') : t('browser.disconnected')}
+            level={quality === 'auto' ? levelName : undefined}
+            latency={latency} bytesPerSec={bw} fps={fps} />
+        </>}
       />
-      {/* 地址栏：紧凑一行，地址框自适应铺满（横向不自垫，与各页 16px 原点对齐） */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 0', flex: '0 0 auto' }}>
+      {/* 第二行 = 导航与看法：前进后退 / 地址 / 前往，然后是清晰度、旋转、设备、调试、外部打开。
+          后四个原来是文字按钮（前往·调试·外部打开）+ 一枚自画的实心旋转 SVG，
+          三段文字挤在地址栏右边、图标粗细还各不相同；现在统一成线性图标 + tooltip。 */}
+      <div className="bv-bar">
         <Button.Group size="small">
           <Button onClick={() => act('back')} title={t('file.back')} icon={<ChevronLeft />} />
           <Button onClick={() => act('forward')} title={t('file.forward')} icon={<ChevronRight />} />
           <Button onClick={() => act('reload')} title={t('common.refresh')} icon={<RefreshIcon size={15} />} />
-          <Button onClick={() => act('navigate', { url: home })} title={t('browser.home')}>
-            <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
-              <path d="M3 11.5 L12 4 L21 11.5" />
-              <path d="M5.5 10 V19.5 H18.5 V10" />
-            </svg>
-          </Button>
+          <Button onClick={() => act('navigate', { url: home })} title={t('browser.home')} icon={<HomeIcon size={15} />} />
         </Button.Group>
         <Input
           size="small"
           placeholder={t('browser.urlPlaceholder')}
           value={url}
-          style={{ flex: 1 }}
+          style={{ flex: 1, minWidth: 120 }}
           onChange={(e) => setUrl(e.target.value)}
           onFocus={() => { addrFocused.current = true }}
           onBlur={() => { addrFocused.current = false }}
           onPressEnter={navigate}
         />
-        <Button size="small" onClick={navigate}>{t('browser.go')}</Button>
-        <Button size="small" onClick={openDevtools} title={t('browser.devtoolsTitle')}>{t('browser.debug')}</Button>
-        <Button size="small" onClick={openExternal} title={t('browser.openExternalTitle')}>{t('browser.openExternal')}</Button>
-        {/* 手机模式：紧跟调试按钮。选机型即模拟移动视口（持久化、重连生效） */}
+        <Button size="small" type="primary" onClick={navigate}>{t('browser.go')}</Button>
+        <span className="tt-pagedivider" aria-hidden="true" />
+        <QualityPicker value={quality} onChange={changeQuality} />
+        {/* 旋转：激活态由 antd 的 primary 给，不再照抄十六进制 + 一圈辉光 */}
+        <Button size="small" onClick={rotate} title={t('browser.rotateTitle')}
+          type={rotation ? 'primary' : 'default'} icon={<RotateScreenIcon />}>
+          {rotation ? `${rotation}°` : null}
+        </Button>
+        {/* 手机模式：选机型即模拟移动视口（持久化、重连生效） */}
         <Select
           size="small"
           value={device}
@@ -776,6 +712,8 @@ export default function BrowserView() {
             ...DEVICES.map((d) => ({ value: d.key, label: t(d.nameKey) })),
           ]}
         />
+        <Button size="small" onClick={openDevtools} title={t('browser.devtoolsTitle')} icon={<CodeIcon />} />
+        <Button size="small" onClick={openExternal} title={t('browser.openExternalTitle')} icon={<OpenInIcon size={15} />} />
       </div>
       <style>{`
         .bv-ripple{position:absolute;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;
@@ -849,8 +787,8 @@ export default function BrowserView() {
             padding: 24, pointerEvents: 'none',
           }}>
             <div style={{
-              maxWidth: 520, padding: '12px 16px', borderRadius: 8, background: 'rgba(0,0,0,.72)',
-              border: '1px solid #f8514955', color: '#ffb4a8', fontSize: 13, lineHeight: 1.6, textAlign: 'center',
+              maxWidth: 520, padding: 'var(--sp-3) var(--sp-4)', borderRadius: 'var(--r-sm)', background: 'rgba(0,0,0,.72)',
+              border: '1px solid var(--danger-border)', color: 'var(--danger)', fontSize: 'var(--fs-sm)', lineHeight: 1.6, textAlign: 'center',
             }}>
               {t('browser.launchFailed')}<br />{healthMsg}
             </div>
