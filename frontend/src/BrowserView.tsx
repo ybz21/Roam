@@ -8,7 +8,7 @@ import { api } from './api'
 import { useI18n } from './i18n'
 import { usePreferences, savePreferences } from './preferences'
 import { connect, type DuplexTransport } from './p2p/transport'
-import { ChevronLeft, ChevronRight, CloseIcon, RefreshIcon } from './icons'
+import { ChevronLeft, ChevronRight, CloseIcon, PlayIcon, RefreshIcon } from './icons'
 
 interface TabInfo { id: string; title: string; url: string }
 
@@ -689,8 +689,8 @@ export default function BrowserView() {
           <Space size={10} style={{ paddingRight: 4 }}>
             {/* 暂停跟随时才出现：人正在手动操作，点一下立即恢复自动跟随 agent 的标签 */}
             {followPaused && (
-              <Button size="small" onClick={resumeFollow} title={t('browser.resumeFollowTitle')}>
-                ▶ {t('browser.resumeFollow')}
+              <Button size="small" onClick={resumeFollow} title={t('browser.resumeFollowTitle')} icon={<PlayIcon size={11} />}>
+                {t('browser.resumeFollow')}
               </Button>
             )}
             {/* 清晰度：选中档亮蓝底 + 白字加粗 + 辉光，未选中压暗，对比鲜明 */}

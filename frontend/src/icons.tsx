@@ -28,6 +28,8 @@ export const MoreIcon = ({ size = 15 }: P) => solid(
   <><circle cx="5" cy="12" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="19" cy="12" r="1.7" /></>, size)
 export const PaperclipIcon = ({ size = 15 }: P) => line(
   <path d="M20 11.5 12.4 19a4.6 4.6 0 0 1-6.5-6.5l7.8-7.8a3 3 0 0 1 4.3 4.3l-7.7 7.7a1.5 1.5 0 0 1-2.1-2.1l7-7" />, size)
+/** 继续 / 恢复：原来写作 ▶ */
+export const PlayIcon = ({ size = 12 }: P) => solid(<path d="M8 5.5v13l11-6.5Z" />, size)
 export const StopIcon = ({ size = 12 }: P) => solid(<rect x="6" y="6" width="12" height="12" rx="2" />, size)
 
 // ── 方向 ──
