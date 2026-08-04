@@ -8,20 +8,28 @@
 //   ⑤ 最近活动：Canvas ≥1180 进右侧 320 侧轨（sticky），窄于此自动落回页尾
 // 数据全部复用现有接口（/projects、annotations、per-session 探测、/swarms 投影、activity），零新后端。
 import { useEffect, useMemo, useState } from 'react'
+import { Tag } from 'antd'
 import { api } from './api'
 import { useI18n } from './i18n'
 import { detectPrompt } from './prompt'
 import { relTime } from './App'
-import { sessionLabel } from './session-label'
 import { dot } from './Projects'
 import { useLayout } from './layout'
-import { sessionLocation } from './session-project'
+import { requestIntent } from './intents'
 
 const OV_CSS = `
 .ov{display:flex;flex-direction:column;gap:var(--sp-4);padding-bottom:32px;max-width:var(--content-overview)}
 
 .ov-sum{display:flex;align-items:center;gap:var(--sp-2) var(--sp-5);flex-wrap:wrap;min-height:40px;
   padding:var(--sp-2) var(--sp-3);border-radius:var(--r-sm);background:var(--bg-container);font-size:var(--fs-meta)}
+
+/* 快捷创建（14 §5.1 第一层「问候 + 当前状态 + 快捷创建」，一直没实现）：
+   行动卡为 0 时首屏本来没有任何出口，只剩一张表。它与顶栏的「＋ 新建」触发同一个
+   intent——两处行为必须一致，不能各写一套。 */
+.ov-new{flex:0 0 auto;display:inline-flex;align-items:center;gap:var(--sp-2);height:34px;padding:0 var(--sp-4);
+  border:0;border-radius:var(--r-sm);background:var(--accent-solid);color:#fff;
+  font-size:var(--fs-sm);font-weight:600;cursor:pointer;transition:filter .15s}
+.ov-new:hover{filter:brightness(1.08)}
 /* 窄档：状态条是页头下方的一条横条（它挂在页头的 .acts 槽里，靠 100% 宽换行成整条） */
 .ov .tt-pagehead .acts{width:100%;margin-left:0}
 .ov .tt-pagehead .acts>.ov-sum{flex:1}
@@ -63,6 +71,41 @@ const OV_CSS = `
 
 /* 项目卡栅格：阈值看 Canvas，不看 viewport */
 
+/* 项目卡栅格：阈值看 Canvas，不看 viewport */
+.ov-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--sp-3);align-items:start}
+.ov-proj{min-width:0;background:var(--bg-container);border:1px solid var(--border-subtle);border-radius:var(--r-card);
+  padding:var(--sp-3) var(--sp-3) var(--sp-2);display:flex;flex-direction:column;gap:var(--sp-1);transition:border-color .15s}
+.ov-proj:hover{border-color:rgba(88,166,255,.35)}
+.ov-proj .hd{display:flex;align-items:center;gap:8px}
+.ov-ico{width:28px;height:28px;flex:0 0 auto;display:grid;place-items:center;border-radius:var(--r-sm);
+  font-size:12px;font-weight:800}
+.ov-proj .nm{min-width:0;flex:1 1 auto}
+.ov-proj .nm b{display:block;font-size:var(--fs-body);color:var(--text-bright);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ov-proj .nm span{display:block;margin-top:2px;font:var(--fs-micro)/1.3 ui-monospace,monospace;color:var(--text-dimmer);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ov-proj .hd a{flex:0 0 auto;font-size:var(--fs-meta)}
+.ov-trow{display:flex;align-items:center;gap:var(--sp-2);min-height:32px;padding:var(--sp-1) var(--sp-2);
+  border-radius:var(--r-xs);font-size:var(--fs-sm);cursor:pointer;transition:background .14s}
+.ov-trow:first-of-type{margin-top:6px}
+.ov-trow:hover{background:var(--list-hover)}
+.ov-trow .t{min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ov-trow .tm{margin-left:auto;flex:0 0 auto;font-size:var(--fs-meta);color:var(--text-dimmer);white-space:nowrap}
+.ov-foot{display:flex;align-items:center;gap:var(--sp-2);min-height:28px;margin-top:var(--sp-1);
+  padding:var(--sp-1) var(--sp-2);border-radius:var(--r-xs);font-size:var(--fs-meta);border:1px solid rgba(163,113,247,.22);background:rgba(163,113,247,.05);color:#a371f7}
+.ov-foot.w{border-color:rgba(210,153,34,.24);background:rgba(210,153,34,.05);color:#e3b341}
+.ov-foot a{margin-left:auto;flex:0 0 auto;font-size:var(--fs-meta)}
+.ov-more{padding-left:var(--sp-2);font-size:var(--fs-meta);color:var(--text-dimmer)}
+.ov-rest{grid-column:1/-1;display:flex;align-items:center;justify-content:center;min-height:0;
+  padding:var(--sp-2);cursor:pointer;font-size:var(--fs-meta);color:var(--text-dimmer)}
+.ov-rest:hover{color:var(--text-dim);border-color:rgba(88,166,255,.35)}
+
+.ov-loose{padding:var(--sp-3);border-radius:var(--r-card);background:var(--bg-container)}
+.ov-loose .row{display:flex;align-items:center;gap:var(--sp-2);min-height:32px;padding:var(--sp-1) 0;font-size:var(--fs-sm);
+  color:var(--text-dim);cursor:pointer}
+.ov-loose .row:hover{color:var(--text-bright)}
+.ov-loose .tm{margin-left:auto;flex:0 0 auto;font-size:var(--fs-meta);color:var(--text-dimmer)}
+
 /* 最近活动：≥1180 时是右侧 sticky 侧轨；窄于此它只是网格的第二行，自然落回页尾 */
 .ov-rail{min-width:0;padding:var(--sp-3);border-radius:var(--r-card);background:var(--bg-container)}
 .ov-rail h3{margin:0 0 var(--sp-3);font-size:var(--fs-sm);font-weight:600;color:var(--text-bright)}
@@ -78,23 +121,6 @@ const OV_CSS = `
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .ov-ev time{display:block;margin-top:var(--sp-1);font-size:var(--fs-micro);color:var(--text-dimmer)}
 
-.ov-flow{display:flex;flex-direction:column}
-.ov-frow{display:flex;align-items:center;gap:var(--sp-2);min-height:44px;padding:var(--sp-1) var(--sp-2);
-  border-radius:var(--r-sm);cursor:pointer;transition:background .14s}
-.ov-frow+.ov-frow{border-top:1px solid var(--border-subtle)}
-.ov-frow:hover{background:var(--list-hover)}
-.ov-frow .pj{flex:0 100 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-  color:var(--text-dimmer);font-size:var(--fs-meta)}
-.ov-frow .nm{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-  font-size:var(--fs-sm);font-weight:600}
-.ov-frow .ag{flex:0 0 auto;padding:1px 6px;border-radius:var(--r-pill);font-size:var(--fs-micro);
-  color:#9ccaff;background:var(--accent-soft)}
-.ov-frow .ag.cx{color:#7fd18f;background:rgba(63,185,80,.12)}
-/* 六个格子在手机上按需塌陷：空的项目/Agent 格不占 gap，位置列整条不出现 */
-.ov-frow .agw{display:flex;gap:var(--sp-1);flex:0 0 auto}
-.ov-frow .pj::after{content:" ·"}
-.ov-frow .pj:empty,.ov-frow .agw:empty,.ov-frow .loc{display:none}
-.ov-frow .tm{margin-left:auto;flex:0 0 auto;font-size:var(--fs-meta);color:var(--text-dimmer);white-space:nowrap}
 .ov-go-i{margin-left:3px;vertical-align:-1px;opacity:.75}
 a:hover>.ov-go-i,button:hover>.ov-go-i,.ov-card:hover .ov-go-i{opacity:1}
 .ov-mono{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace}
@@ -104,25 +130,15 @@ a:hover>.ov-go-i,button:hover>.ov-go-i,.ov-card:hover .ov-go-i{opacity:1}
 @container canvas (min-width: 900px){
   .ov-cards{grid-template-columns:repeat(2,minmax(0,1fr))}
   .ov-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-  /* 会话流在桌面对齐成列（图纸 14-desktop-workspace/desktop-ia.html §一）。
-     手机那行是「名字贴左、时间贴右」，拉到 838 宽之后中间 570px 是空的；
-     桌面排成六列，空出来的宽度交给「位置」——⎇ 分支，或与项目目录不同时的工作目录。 */
-  .ov-frow{display:grid;grid-template-columns:8px 128px minmax(170px,1fr) 60px 260px 74px;
-    column-gap:var(--sp-3);align-items:center;min-height:40px}
-  .ov-frow>*{min-width:0}
-  .ov-frow .pj,.ov-frow .nm{flex:none;display:block}
-  .ov-frow .pj::after{content:none}
-  .ov-frow .agw{display:flex}
-  .ov-frow .loc{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-    font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:var(--fs-meta);color:var(--text-dimmer)}
-  .ov-frow .loc .br{color:#7ed0d8}
-  .ov-frow .tm{margin-left:0;justify-self:end}
-  /* 状态条并进页头右端：省掉一整行，也不会再出现「一枚数字 + 1092px 空白」的胶囊。
-     它仍然是导航入口，所以只脱掉横条的底和内边距，hover/手型都留着。 */
+  .ov-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  /* 状态概况并进页头右端：省掉一整行，也不会出现「一枚数字 + 1092px 空白」的胶囊。
+     它仍然是导航入口，所以只脱掉横条的底和内边距，hover/手型都留着。
+     （曾经改成四个数字块，实测四块里三块是 0，比一条横条更空——回到 D1 原稿。） */
   .ov .tt-pagehead{align-items:flex-end}
-  .ov .tt-pagehead .acts{width:auto;margin-left:auto;padding-bottom:3px}
-  .ov .tt-pagehead .acts>.ov-sum{flex:0 0 auto}
-  .ov-sum{background:none;padding:0;min-height:0;border-radius:0}
+  .ov .tt-pagehead .acts:first-of-type{width:auto;margin-left:auto;padding-bottom:3px}
+  .ov .tt-pagehead .acts>.ov-sum{flex:1}
+  /* 右轨每条只留一行：commit 标题本来就是一行式摘要，展开三行只会和左栏挤在一起 */
+  .ov-ev p{-webkit-line-clamp:1}
 }
 @container canvas (min-width: 1180px){
   .ov-cards{grid-template-columns:repeat(3,minmax(0,1fr))}
@@ -130,6 +146,7 @@ a:hover>.ov-go-i,button:hover>.ov-go-i,.ov-card:hover .ov-go-i{opacity:1}
   .ov-rail{position:sticky;top:0;align-self:start}
 }
 @container canvas (min-width: 1320px){
+  .ov-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
   .ov-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
 /* 不支持容器查询的老 WebView：退回单列，只是信息密度低，不会错位 */
@@ -291,6 +308,7 @@ export default function Overview({ openTerm }: { openTerm: (n: string) => void }
     })
     .sort((a, b) => (projNeeds(b) - projNeeds(a)) || ((b.lastActivity || 0) - (a.lastActivity || 0))),
   [projects, sessByProj, swarms, waiting])
+  const inactiveCount = projects.length - activeProjects.length
   const goProjects = () => { location.hash = '#/projects' }
   const goProject = (key: string) => { location.hash = '#/projects/' + encodeURIComponent(key) }
   const goSwarm = (name: string) => { location.hash = '#/swarm/' + encodeURIComponent(name) }
@@ -329,20 +347,6 @@ export default function Overview({ openTerm }: { openTerm: (n: string) => void }
     }
     return items
   }, [projects, sessByProj, waiting, tail, swarms, t])
-
-  // 「最近会话」：跨项目扁平流，按最近活动倒序。这是概览与另外两页的分工线——
-  // 项目页按仓库分组、会话页给全集+筛选，概览只回答「刚才在动的是哪几个」。
-  // **排除已经进了行动卡的会话**：那条信息在上面已经说过一遍，重复出现两层就不互补了。
-  // 桌面多 4 条：桌面一行 40（手机 44），左栏本来比右侧「最近活动」短一大截，
-  // 8 条时页面下方空 310px（图纸 desktop-ia.html §一）。
-  const recent = useMemo(() => {
-    const inAction = new Set(cards.map((c) => c.session).filter(Boolean) as string[])
-    const rows = new Map<string, { name: string; at: number; cwd: string }>()
-    for (const s of projSess) if (!rows.has(s.name)) rows.set(s.name, { name: s.name, at: Number(s.last_activity || 0), cwd: s.cwd || '' })
-    for (const s of loose as any[]) if (!rows.has(s.name)) rows.set(s.name, { name: s.name, at: Number(s.lastActivity || 0), cwd: s.cwd || '' })
-    return [...rows.values()].filter((r) => !inAction.has(r.name))
-      .sort((a, b) => b.at - a.at).slice(0, isPhone ? 8 : 12)
-  }, [projSess, loose, cards, isPhone])
 
   // 最近活动：活跃 git 项目前 3 个各取头 2 条（commit+留痕），合并倒序（60s）
   useEffect(() => {
@@ -384,6 +388,8 @@ export default function Overview({ openTerm }: { openTerm: (n: string) => void }
   // 零值项整个不渲染：「0 等待输入」不是信息，是噪声——四格里常有两格是 0，
   // 在 360 的屏上还把这一条挤到横向溢出。全为零时整条消失。
   // （不在这条右端再放「进入项目页」——下一行的 tab 条右边已经有同一个入口了。）
+  // 零值项整个不渲染：「0 等待输入」不是信息，是噪声。曾经试过桌面保留零值并灰掉，
+  // 实测四项里常有三项是 0，一排「0」比不显示更空洞（D1 原稿也是有才显示）。
   const sumItem = (n: number, cls: string, label: string) => (n > 0 ? (
     <button key={label} type="button" onClick={goProjects}>
       <i className={`d ${cls}`} /><b>{n}</b>{label}
@@ -426,10 +432,18 @@ export default function Overview({ openTerm }: { openTerm: (n: string) => void }
               ? t('overview.metaActivity', { time: relTime(lastAt, t) })
               : t('overview.sublineIdle')}</p>
           </div>
+          <div className="acts">
+            {!isPhone && (
+              <button type="button" className="ov-new"
+                onClick={() => { location.hash = '#/projects'; requestIntent('new-project') }}>
+                ＋ {t('overview.newTask')}
+              </button>
+            )}
+          </div>
           {(stats.running + stats.waiting + stats.unfinished + stats.swarms) > 0 && (
-            <div className="acts">
+            <div className="acts" style={{ width: '100%' }}>
               <div className="ov-sum ov-in" style={{ animationDelay: '50ms' }}>
-                {sumItem(stats.running, '', t('overview.sumRunning'))}
+                    {sumItem(stats.running, '', t('overview.sumRunning'))}
                 {sumItem(stats.waiting, 'a', t('overview.sumWaiting'))}
                 {sumItem(stats.unfinished, 'a', t('overview.sumUnfinished'))}
                 {sumItem(stats.swarms, 'p', t('overview.sumSwarms'))}
@@ -466,40 +480,76 @@ export default function Overview({ openTerm }: { openTerm: (n: string) => void }
                 </>
               )}
 
-              {/* ④ 最近会话：跨项目扁平流，按最近活动倒序。
-                  这一层**不是**项目卡网格——那是项目页的活；也不是带筛选的会话列表——那是会话页的活。
-                  概览只回答「刚才在动的是哪几个」，所以不分组、不筛选、只取 8 条。 */}
-              {recent.length > 0 && (
-                <>
-                  <div className="ov-sect">
-                    <span>{t('overview.recentSessions')}</span><span className="ln" />
-                    <a onClick={() => { location.hash = '#/sessions' }}>{t('overview.allSessions')}<Go /></a>
-                  </div>
-                  <div className="ov-flow">
-                    {recent.map((r) => {
-                      const w = waiting[r.name]
-                      const proj = projects.find((p) => (sessByProj.get(p.key) || []).some((x) => x.name === r.name))
-                      // 六个格子在桌面必须恒定，缺一个就整行错列——所以空的项目/Agent 格照样渲染，
-                      // 由 :empty 在手机上塌陷掉。
-                      const loc = sessionLocation(ann[r.name], r.cwd, proj?.dir)
-                      return (
-                        <div key={r.name} className="ov-frow" onClick={() => openTerm(r.name)}>
-                          {dot(false, w ? '#d29922' : running(r.name) ? '#3fb950' : undefined)}
-                          <span className="pj">{proj?.name}</span>
-                          <span className="nm" title={r.name}>{sessionLabel(r.name)}</span>
-                          <span className="agw">
-                            {cc[r.name] && <span className="ag">Claude</span>}
-                            {cx[r.name] && <span className="ag cx">Codex</span>}
-                          </span>
-                          <span className="loc" title={loc.title}>
-                            {loc.branch ? <span className="br">⎇ {loc.branch}</span> : loc.path}
-                          </span>
-                          <span className="tm">{relTime(r.at, t)}</span>
+              {/* ④ 活跃项目作战卡 */}
+              <div className="ov-sect">
+                <span>{t('overview.activeProjects')}</span><span className="n">{activeProjects.length}</span><span className="ln" />
+              </div>
+              <div className="ov-grid">
+                {activeProjects.map((p, i) => {
+                  const rows = (sessByProj.get(p.key) || [])
+                    .sort((a, b) => (Number(running(b.name)) - Number(running(a.name))) || (Number(b.last_activity || 0) - Number(a.last_activity || 0)))
+                  const shown = rows.slice(0, 3)
+                  const projSwarms = swarms.filter((sw) => sw.projKey === p.key)
+                  const [fg, bg] = icoOf(p.key)
+                  return (
+                    <div key={p.key} className="ov-proj ov-in" style={{ animationDelay: `${Math.min(i, 6) * 40}ms` }}>
+                      <div className="hd">
+                        <span className="ov-ico" style={{ color: fg, background: bg }}>{(p.name[0] || '?').toUpperCase()}</span>
+                        <span className="nm">
+                          <b title={p.name}>{p.name}</b>
+                          <span title={p.dir}>{p.dir}</span>
+                        </span>
+                        <a onClick={() => goProject(p.key)}>{t('overview.enterProject')}<Go /></a>
+                      </div>
+                      {shown.map((s) => {
+                        const w = waiting[s.name]
+                        const r = running(s.name)
+                        return (
+                          <div key={s.name} className="ov-trow" onClick={() => openTerm(s.name)}>
+                            {dot(false, w ? '#d29922' : r ? '#3fb950' : undefined)}
+                            <span className="t" title={`${s.label || s.name}（${s.id || s.name}）`}>{s.label || s.name}</span>
+                            {ann[s.name]?.primary?.linked && <Tag color="cyan" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px', padding: '0 5px' }}>⎇</Tag>}
+                            {cc[s.name] && <Tag color="blue" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px', padding: '0 5px' }}>Claude</Tag>}
+                            {cx[s.name] && <Tag color="green" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px', padding: '0 5px' }}>Codex</Tag>}
+                            <span className="tm">{relTime(s.last_activity, t)}</span>
+                          </div>
+                        )
+                      })}
+                      {rows.length > 3 && <div className="ov-more">{t('overview.moreTasks', { count: rows.length - 3 })}</div>}
+                      {projSwarms.map((sw) => (
+                        <div key={sw.name} className="ov-foot">
+                          ⬡ <b>{sw.name}</b>
+                          <span style={{ color: 'var(--text-dimmer)' }}>{t('project.swarm.members', { mine: sw.inProj, total: sw.total })}</span>
+                          <a onClick={() => goSwarm(sw.name)}>{t('project.swarm.board')}<Go /></a>
                         </div>
-                      )
-                    })}
+                      ))}
+                      {p.unfinished > 0 && (
+                        <div className="ov-foot w">⚑ {t('overview.unfinishedN', { count: p.unfinished })}
+                          <a onClick={() => goProject(p.key)}>{t('overview.goFinish')}<Go /></a>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+                {inactiveCount > 0 && (
+                  <div className="ov-rest" onClick={goProjects}>{t('overview.inactiveRest', { count: inactiveCount })}</div>
+                )}
+              </div>
+
+              {/* 散会话：不属于任何项目的会话，放在项目之后，避免被作战地图淹没 */}
+              {loose.length > 0 && (
+                <div className="ov-loose">
+                  <div className="ov-sect" style={{ marginBottom: 6 }}>
+                    <span>{t('project.loose')}</span><span className="n">{loose.length}</span><span className="ln" />
                   </div>
-                </>
+                  {loose.slice(0, 5).map((s: any) => (
+                    <div key={s.name} className="row" onClick={() => openTerm(s.name)}>
+                      {dot(s.attached)}
+                      <b title={`${s.label || s.name}（${s.id || s.name}）`}>{s.label || s.name}</b>
+                      <span className="tm">{relTime(s.lastActivity, t)}</span>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
 

@@ -1495,6 +1495,8 @@ const zhCN = {
   'overview.sublineIdle': '没有正在运行的任务，随时可以开始新的工作',
   'overview.metaActivity': '最近活动 {time}',
   // 状态概况的四个数（14 §5.1）
+  'overview.newTask': '开一个新任务',
+  'overview.restQuiet': '其余 {count} 个会话更久没动过',
   'overview.sumRunning': '运行中',
   'overview.sumWaiting': '等待输入',
   'overview.sumUnfinished': '待收尾',
