@@ -2692,24 +2692,21 @@ function Sessions({ openTerm, closeTerm, activeTerm, embedded }: {
     // 不再套 Card：嵌在概览「会话」tab 里时，卡片边框 + 「会话 13」标题与外面的 tab
     // 完全重复——一层壳里套一层同名的壳。独立页则用与概览/项目同一套页头。
     <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-      {!embedded && (
-        <header className="tt-pagehead" style={{ marginBottom: 14 }}>
-          <div className="ttl">
-            <div className="kicker">{t('nav.groupWorkspace')}</div>
-            <h2>{t('nav.sessions')}</h2>
-            <p>{t('session.subtitle')}</p>
-          </div>
-          {!isPhone && <div className="acts">{sessionActions}</div>}
-        </header>
-      )}
-      {/* 手机才需要自己占一行（横向放不下）；桌面嵌入态并进下面搜索那一行，
+      {/* 手机才需要自己占一行（横向放不下）；桌面并进下面搜索那一行，
           否则「Worktree 管理 / ＋新建会话」白占一整行 */}
       {isPhone && (
         <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>{sessionActions}</div>
       )}
-      {/* 工具条：搜索 + 排序同一行，类型筛选另起一行 */}
+      {/* 工具条：页名 + 搜索 + 排序同一行，类型筛选另起一行。
+          页名并进这一行而不是单独的 .tt-pagehead（图纸 14-desktop-workspace/pagehead.html）：
+          眉标「工作区」+ 大标题「会话」+ 一句「所有会话，按 Agent、等待状态与最近响应筛选」
+          三层 91px，说的全是侧栏那条高亮导航项已经说完的事。 */}
       <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {!embedded && !isPhone && (<>
+            <span className="tt-pagename" title={t('session.subtitle')}>{t('nav.sessions')}</span>
+            <span className="tt-pagedivider" aria-hidden="true" />
+          </>)}
           <Input allowClear value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('session.searchPlaceholder')}
             style={{ flex: 1, minWidth: 0 }}
             prefix={svg(<><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></>)} />
@@ -2723,7 +2720,7 @@ function Sessions({ openTerm, closeTerm, activeTerm, embedded }: {
             title={sortAsc ? t('session.sortAsc') : t('session.sortDesc')}>
             {sortAsc ? '↑' : '↓'}
           </Button>
-          {embedded && !isPhone && sessionActions}
+          {!isPhone && sessionActions}
         </div>
         {/* 一律按内容宽：block 在手机上把 6 项等分成 ~60px、标签全截成「全部…」；
             在桌面上又把 6 个标签摊到 1200px，中间空出大片，读起来是散的。

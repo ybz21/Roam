@@ -1492,6 +1492,7 @@ const enUS = {
   'overview.headlineQuiet': 'nothing needs you right now',
   'overview.sublineRunning': '{count} task(s) running · last activity {time}',
   'overview.sublineIdle': 'No tasks running — a good time to start something new',
+  'overview.metaActivity': 'Last activity {time}',
   'overview.sumRunning': 'running',
   'overview.sumWaiting': 'awaiting input',
   'overview.sumUnfinished': 'to finish',

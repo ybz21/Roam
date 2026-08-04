@@ -139,7 +139,7 @@ html[data-size="compact"] .prj-filters>*{flex:0 0 auto}
 html[data-size="compact"] .prj-filters .sp,
 /* 手机：排序走右侧钉住的 ⇅ 图标 + 底部 sheet，筛选带里那枚排序控件是重复的 */
 html[data-size="compact"] .prj-filters .ant-segmented,
-html[data-size="compact"] .prj-filters .prj-sortpill{display:none}
+html[data-size="compact"] .prj-subbar .prj-sortpill{display:none}
 /* 图标按钮：不描边——右边两个方框和左边的圆角 chip 不是一套语言。命中区靠伪元素撑到 44 */
 .prj-iconbtn{position:relative;flex:0 0 auto;width:32px;height:32px;display:none;place-items:center;
   border:0;border-radius:var(--r-sm);background:transparent;color:var(--text-dim);cursor:pointer}
@@ -453,26 +453,11 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
     // 参照系，而这一层并不真的滚动（真正滚的是 .tt-canvas），于是页头永远粘不住。
     <div>
       <div className="prj-wrap-wide">
-        {/* 页头与概览共用一套（.tt-pagehead）：眉标 + 标题 + 一句话。原来这里只有一个
-            16px 的「项目」挤在搜索框左边，和概览那页完全不像同一个产品。 */}
-        {/* 手机上整块不渲染：底栏已高亮「项目」，筛选带里的「全部 12」又说明了总量，
-            再写一遍大号页名等于用 100px 说一句用户已经知道的话。桌面保留。 */}
-        {!isPhone && (
-          <header className="tt-pagehead" style={{ marginBottom: 14 }}>
-            <div className="ttl">
-              <div className="kicker">{t('nav.groupWorkspace')}</div>
-              <h2>{t('project.title')}</h2>
-              <p>{t('project.subtitle')}</p>
-            </div>
-          </header>
-        )}
-
         {/* sticky subheader（14 §6.1）：搜索 / 筛选 / 排序。滚到项目列表深处时这一条还在——
             筛选条件跟着内容滚走，等于要滚回顶部才能改。 */}
         <div className={`prj-subbar${searching ? ' searching' : ''}`}>
-          <Input allowClear size="small" value={q} onChange={(e) => setQ(e.target.value)}
-            ref={searchRef} className="prj-search" onBlur={() => { if (!q) setSearching(false) }}
-            placeholder={t('project.searchPlaceholder')} style={{ width: isPhone ? undefined : 200 }} />
+          <span className="tt-pagename" title={t('project.subtitle')}>{t('project.title')}</span>
+          <span className="tt-pagedivider" aria-hidden="true" />
           {/* 筛选与排序合成一条横滑带：手机上它俩各自换行，加上搜索框一共占了 5 行，
               第一张卡片被推到屏幕 26% 处。现在一行装下，滑得到即可。 */}
           <div className="prj-filters">
@@ -485,18 +470,21 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
                 onClick={() => setFilter(k)}>{label}<span className="n">{n}</span></button>
             ))}
             <span className="sp" />
-            {/* 排序与筛选同一套控件语言：原来左边是 pill 筛选、右边是「两个裸文字 + 一枚实心
-                蓝块」的 Segmented，一条工具带上两种语言（图纸 desktop-ia.html §二）。 */}
-            <Dropdown trigger={['click']} menu={{
-              selectable: true, selectedKeys: [sortBy],
-              items: SORTS.map((k) => ({ key: k, label: t(`project.sort.${k}`) })),
-              onClick: ({ key }) => changeSort(key as ProjSort),
-            }}>
-              <button type="button" className="prj-chip prj-sortpill" aria-label={t('project.sortBy')}>
-                {t(`project.sort.${sortBy}`)}{ICON_CHEVRON}
-              </button>
-            </Dropdown>
           </div>
+          {/* 搜索与排序贴右：左端回答「看什么」（筛选，属于内容），右端放「怎么找」（工具）。
+              原来搜索在最左、排序甩到最右，中间空掉 ~700px。 */}
+          <Input allowClear size="small" value={q} onChange={(e) => setQ(e.target.value)}
+            ref={searchRef} className="prj-search" onBlur={() => { if (!q) setSearching(false) }}
+            placeholder={t('project.searchPlaceholder')} style={{ width: isPhone ? undefined : 200 }} />
+          <Dropdown trigger={['click']} menu={{
+            selectable: true, selectedKeys: [sortBy],
+            items: SORTS.map((k) => ({ key: k, label: t(`project.sort.${k}`) })),
+            onClick: ({ key }) => changeSort(key as ProjSort),
+          }}>
+            <button type="button" className="prj-chip prj-sortpill" aria-label={t('project.sortBy')}>
+              {t(`project.sort.${sortBy}`)}{ICON_CHEVRON}
+            </button>
+          </Dropdown>
           {/* 手机：搜索原地展开、排序进 sheet。两枚图标钉在右侧，不随筛选带横滑跑掉 */}
           <button type="button" className="prj-iconbtn find" aria-label={t('project.searchPlaceholder')}
             onClick={() => { setSearching(true); setTimeout(() => searchRef.current?.focus(), 0) }}>

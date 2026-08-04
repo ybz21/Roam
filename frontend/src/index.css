@@ -315,6 +315,8 @@ body {
 
 /* ── 页头（14 §5.1 / §6.1）：一级页面共用一套——眉标 + 标题 + 一句话说明 ──
    概览先做出来的这套，项目页照它对齐；再有新页面也照抄这三行，不要各写各的标题行。 */
+/* 页头：现在只剩概览在用——它的 h2 是内容（「早上好，今天有 N 件事需要你」）不是页名。
+   项目/会话的页名已并进各自的工具条（见下面的 .tt-pagename 与 pagehead.html）。 */
 .tt-pagehead { display: flex; align-items: flex-start; gap: var(--sp-4); flex-wrap: wrap; }
 .tt-pagehead .ttl { min-width: 0; flex: 1 1 320px; }
 .tt-pagehead .kicker {
@@ -337,6 +339,18 @@ html[data-size="compact"] .tt-pagehead h2 { margin: 0; font-size: var(--fs-lg); 
 html[data-size="compact"] .ov .tt-pagehead h2 { font-size: 20px; line-height: 1.3; }
 html[data-size="compact"] .tt-pagehead { gap: var(--sp-2); }
 .tt-pagehead .acts { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* 页名并进工具条（图纸 14-desktop-workspace/pagehead.html）。
+   项目页原来是眉标「工作区」+ 大标题「项目」+ 一句功能清单三层 91px，第一张卡片要到
+   y=203 才出现（900 高的屏 = 16% 首屏）；而左边侧栏此刻正高亮着「工作区 › 项目」——
+   这三件事它一次全说完了。
+   页名保留、只降到 19px 并入工具条：工具条是 sticky 的，滚下去之后屏幕上总得有个字
+   说明这是哪一页（项目卡与会话卡在余光里长得很像）。说明句进 title，鼠标停上去还在。
+   概览页不适用——它的 h2 是内容（「晚上好，今天有 N 件事需要你」），不是页名。 */
+.tt-pagename { flex: 0 0 auto; font-size: 19px; font-weight: 700; letter-spacing: -.01em; color: var(--text-bright); }
+.tt-pagedivider { flex: 0 0 auto; width: 1px; height: 18px; background: var(--border); }
+html[data-size="compact"] .tt-pagename,
+html[data-size="compact"] .tt-pagedivider { display: none; }
 
 /* ── 页面骨架：所有一级页面从同一个左上角起笔，卡片和工具区间距一致 ── */
 .tt-page {

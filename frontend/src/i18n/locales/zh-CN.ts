@@ -1493,6 +1493,7 @@ const zhCN = {
   'overview.headlineQuiet': '当前没有待处理事项',
   'overview.sublineRunning': '{count} 个任务正在运行，最近一次活动在{time}',
   'overview.sublineIdle': '没有正在运行的任务，随时可以开始新的工作',
+  'overview.metaActivity': '最近活动 {time}',
   // 状态概况的四个数（14 §5.1）
   'overview.sumRunning': '运行中',
   'overview.sumWaiting': '等待输入',

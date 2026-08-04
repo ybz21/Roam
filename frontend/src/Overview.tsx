@@ -415,12 +415,15 @@ export default function Overview({ openTerm }: { openTerm: (n: string) => void }
             ② 状态概况挂在页头的 .acts 槽里：桌面并到标题右端（省一行），窄档换行成一条横条。 */}
         <header className="tt-pagehead ov-in">
           <div className="ttl">
-            <div className="kicker">{kicker}</div>
             <h2>{greet}{cards.length > 0
               ? t('overview.headlineNeeds', { count: cards.length })
               : t('overview.headlineQuiet')}</h2>
-            <p>{stats.running > 0
-              ? t('overview.sublineRunning', { count: stats.running, time: relTime(lastAt, t) })
+            {/* 日期从标题上方挪到下方，与「最近活动」合成一行小字（图纸 pagehead.html §三）：
+                先说事、再说时间。副句里原本还写着「12 个任务正在运行」——和右端状态条的
+                「12 运行中」是同一个数，一左一右钉在同一条基线上、中间空 800px。
+                数字归状态条，一个数只说一次。 */}
+            <p>{kicker}{' · '}{stats.running > 0
+              ? t('overview.metaActivity', { time: relTime(lastAt, t) })
               : t('overview.sublineIdle')}</p>
           </div>
           {(stats.running + stats.waiting + stats.unfinished + stats.swarms) > 0 && (
