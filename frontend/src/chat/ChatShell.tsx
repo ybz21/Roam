@@ -1,7 +1,7 @@
 // 对话页外壳：滚动区 / 交互选择框 / 输入发送。
 // 会话名、切回终端、文件面板都在上方的会话工具条里，这里不再重复一行头部。
 // Claude、Codex 共用，差异只在 accent、占位文案与消息渲染(renderMessage)。
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Button, Input, App as AntApp } from 'antd'
 import { api, upload, makeClipboardImageFile } from '../api'
 import { PromptPanel, detectPrompt } from '../prompt'
@@ -10,9 +10,11 @@ import { useI18n } from '../i18n'
 import { VoiceInput } from './VoiceInput'
 import type { Msg } from './types'
 import { useLayout } from '../layout'
-import { ArrowToBottom, PaperclipIcon, StopIcon } from '../icons'
+import { ArrowToBottom, ArrowUp, FileTextIcon, PaperclipIcon, StopIcon } from '../icons'
+import { ChatActionsProvider } from './actions'
+import type { TaskIndex } from './tasks'
 
-export function ChatShell({ name, accent, placeholder, messages, renderMessage, pending, busy, error }: {
+export function ChatShell({ name, accent, placeholder, messages, renderMessage, pending, busy, error, onOpenFile, tasks }: {
   name: string
   accent: string
   placeholder: string
@@ -21,6 +23,8 @@ export function ChatShell({ name, accent, placeholder, messages, renderMessage, 
   pending?: ReactNode
   busy?: boolean
   error?: string
+  onOpenFile?: (path: string, line?: number) => void
+  tasks?: TaskIndex
 }) {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -136,8 +140,11 @@ export function ChatShell({ name, accent, placeholder, messages, renderMessage, 
   const stop = () => { api('POST', `/sessions/${encodeURIComponent(name)}/keys`, { keys: ['Escape'] }).catch(() => {}) }
 
   const errMsg = sendErr || error
+  // 工具行里的路径要能点开：用 context 送到最里层，不然要一路穿过工具注册表
+  const actions = useMemo(() => ({ openFile: onOpenFile, tasks }), [onOpenFile, tasks])
 
   return (
+    <ChatActionsProvider value={actions}>
     <div style={{ display: 'flex', height: '100%', background: 'var(--bg-term)' }}>
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}
         onDragEnter={(e) => { e.preventDefault() }}
@@ -157,7 +164,8 @@ export function ChatShell({ name, accent, placeholder, messages, renderMessage, 
           if (e.dataTransfer?.files?.length) doUpload(e.dataTransfer.files) // 从系统拖来的：上传
         }}>
         {dragOver && (
-          <div style={{ position: 'absolute', inset: 0, zIndex: 30, pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)', border: `2px dashed ${accent}`, borderRadius: 12, color: accent, fontSize: 15, fontWeight: 600 }}>
+          <div style={{ position: 'absolute', inset: 0, zIndex: 30, pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--sp-2)', background: 'rgba(0,0,0,0.45)', border: `2px dashed ${accent}`, borderRadius: 'var(--r-card)', color: accent, fontSize: 'var(--fs-lg)', fontWeight: 600 }}>
+            {dropMode === 'path' ? <FileTextIcon size={16} /> : <PaperclipIcon size={16} />}
             {dropMode === 'path' ? t('chat.dropInsertPath') : t('chat.dropUpload')}
           </div>
         )}
@@ -166,7 +174,9 @@ export function ChatShell({ name, accent, placeholder, messages, renderMessage, 
             {messages.length === 0 && !pending && <div style={{ color: 'var(--text-dim)', textAlign: 'center', marginTop: 30 }}>{t('chat.loadingTranscript')}</div>}
             {hidden > 0 && (
               <div style={{ textAlign: 'center', margin: '2px 0 8px' }}>
-                <a onClick={() => setLimit((l) => l + 200)} style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('chat.loadEarlier', { count: hidden })}</a>
+                <a onClick={() => setLimit((l) => l + 200)} style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--sp-1)', color: 'var(--text-dim)', fontSize: 'var(--fs-meta)' }}>
+                  <ArrowUp size={12} />{t('chat.loadEarlier', { count: hidden })}
+                </a>
               </div>
             )}
             {visible.map(renderMessage)}
@@ -224,6 +234,7 @@ export function ChatShell({ name, accent, placeholder, messages, renderMessage, 
         </div>
       </div>
     </div>
+    </ChatActionsProvider>
   )
 }
 

@@ -31,6 +31,7 @@ export function FileView({
   onOpenAgent,
   onDirtyChange,
   onPreviewToSide,
+  revealLine,
 }: {
   path: string
   accent: string
@@ -51,6 +52,8 @@ export function FileView({
   onDirtyChange?: (path: string, dirty: boolean) => void
   // 在侧栏打开渲染预览（外层 FileWorkspace 处理，开另一栏）
   onPreviewToSide?: (path: string) => void
+  // 从对话页点「Grep 命中 path:line」跳过来时定位到那一行；nonce 让重复点同一处也能再次定位
+  revealLine?: { line: number; nonce: number }
 }) {
   const kind = fileKind(path)
   const { isImg, isMd, isHtml, isPdf, isOffice, isSheet } = kind

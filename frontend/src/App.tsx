@@ -1058,7 +1058,10 @@ function TerminalPane(props: {
     }
   }
   const activeNeedsInput = !!(active && termNeedsInput[active])
-  const dot = activeNeedsInput ? '#d29922' : st === 'connected' ? 'var(--ok)' : st === 'connecting' ? '#d29922' : '#f85149'
+  const dot = activeNeedsInput ? 'var(--warn)' : st === 'connected' ? 'var(--ok)' : st === 'connecting' ? 'var(--warn)' : 'var(--danger)'
+  // 灵动岛的「活着」判据：有 Agent 在跑。会话只是连着（st==='connected'）不算——
+  // 那是个静态事实，让点一直呼吸等于把呼吸这个信号用废了。
+  const activeAgentLive = !!(active && (claudeMap[active]?.running || codexMap[active]?.running))
   // 当前标签是否在 Claude/Codex 对话视图：此时聊天 UI 自带输入框，
   // 终端那条移动输入条 + 快捷键栏要隐藏，否则手机上会出现两个输入框。
   const inChat = !!active && ((claudeView[active] && claudeMap[active]?.running) || (codexView[active] && codexMap[active]?.running))
@@ -1097,6 +1100,15 @@ function TerminalPane(props: {
   // 右侧停靠时两者都是右抽屉，Git 抽屉在文件也开着时向左让位（见下方 right 偏移），并排显示而非互相覆盖。
   const toggleFiles = () => setShowFiles((s) => !s)
   const toggleGit = () => setShowGit((s) => !s)
+  // 对话页里点工具行的文件路径 → 在文件面板打开（带行号就跳到那一行）。
+  // 左侧停靠时 <FileWorkspace> 已挂载在同一页，直接发意图即可开成对话旁边的标签页；
+  // 否则先切到文件页再发，跟 ⌘K 搜索结果打开文件是同一条路（见 intents.ts）。
+  // 手机上不给：文件面板是全屏二级页，从对话里跳过去会丢上下文且回不到原滚动位置，
+  // 所以窄屏干脆不传 onOpenFile，路径退化成普通文字（见 15 设计 §9）。
+  const openFileFromChat = (path: string, line?: number) => {
+    if (fileDock !== 'left') location.hash = '#/files'
+    requestIntent(OPEN_FILE_INTENT, { path, line })
+  }
 
   // 标签条是单行横向滑动（见 index.css .tt-tabs）：窄栏/手机上会话一多，当前标签会滑出视口，
   // 切换后把它带回可视区（block:'nearest' → 只横向滚标签条，不牵动整页）。
@@ -1409,8 +1421,8 @@ function TerminalPane(props: {
   // ── 会话（终端）各部件抽成局部 JSX：左侧停靠走 <FileWorkspace> 的槽位，右侧抽屉走原地布局，二者共用同一份 ──
   // 标签条是单行横向滑动：窄栏/手机上开的会话一多，当前标签就滑出视口了 → 切换后把它带回来。
   // 会话状态点：等待确认=琥珀，已连接=绿，连接中=琥珀，断开=红（与列表页同一套色）
-  const dotOf = (name: string) => termNeedsInput[name] ? '#d29922'
-    : statusMap[name] === 'connected' ? 'var(--ok)' : statusMap[name] === 'connecting' ? '#d29922' : '#f85149'
+  const dotOf = (name: string) => termNeedsInput[name] ? 'var(--warn)'
+    : statusMap[name] === 'connected' ? 'var(--ok)' : statusMap[name] === 'connecting' ? 'var(--warn)' : 'var(--danger)'
   const statusDot = (color: string, size = 7) => (
     <i style={{ width: size, height: size, borderRadius: '50%', flex: `0 0 ${size}px`, background: color, boxShadow: `0 0 0 3px ${color}26` }} />
   )
@@ -1527,11 +1539,16 @@ function TerminalPane(props: {
         <button type="button" className="ic" aria-label={t('common.collapse')} onClick={onCollapse}>
           {TI.back}
         </button>
-        <button type="button" className="pill" onClick={() => setSwitchOpen(true)}>
-          <i className="d" style={{ background: activeNeedsInput ? '#d29922' : dot }} />
+        {/* 灵动岛：胶囊本身就是当前会话的状态显示器，不只是个「点我换会话」的按钮。
+            名字吃掉所有余量、右侧那簇贴边——之前名字不 grow，一胶囊右半截是空的，
+            看着像没画完。待确认时整颗岛变黄并浮出文字：那是唯一需要人立刻动手的状态，
+            只把 8px 的点变黄在 50px 顶栏里根本注意不到。 */}
+        <button type="button" className={`pill${activeNeedsInput ? ' wait' : ''}`} onClick={() => setSwitchOpen(true)}>
+          <i className={`d${activeAgentLive && !activeNeedsInput ? ' live' : ''}`} style={{ background: dot }} />
           {active && <TabName name={active} project={false} />}
-          {TI.caret}
+          {activeNeedsInput && <span className="tag">{t('session.waiting')}</span>}
           {terms.length > 1 && <span className="n">{terms.length}</span>}
+          <span className="ca">{TI.caret}</span>
         </button>
         {active && claudeMap[active]?.running && (
           <button type="button" className={`ic${claudeView[active] ? ' on' : ''}`} aria-label="Claude"
@@ -1695,12 +1712,12 @@ function TerminalPane(props: {
               onImagePaste={(files) => { setActive(termName); pasteImage(termName, files) }} />
             {claudeView[termName] && claudeMap[termName]?.running && (
               <div style={{ position: 'absolute', inset: 0 }}>
-                <ClaudeChat name={termName} file={claudeMap[termName].file} />
+                <ClaudeChat name={termName} file={claudeMap[termName].file} onOpenFile={isPhone ? undefined : openFileFromChat} />
               </div>
             )}
             {codexView[termName] && codexMap[termName]?.running && (
               <div style={{ position: 'absolute', inset: 0 }}>
-                <CodexChat name={termName} file={codexMap[termName].file} />
+                <CodexChat name={termName} file={codexMap[termName].file} onOpenFile={isPhone ? undefined : openFileFromChat} />
               </div>
             )}
             {showVoice && !claudeView[termName] && !codexView[termName] && (

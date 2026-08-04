@@ -115,15 +115,20 @@ export default function FileWorkspace({
     setActiveOf(g, p); setFocus(g)
   }
   const openFileTab = (p: string) => openInGroup(p, split ? focus : 'A')
+  // 对话页点「Grep 命中 path:line」跳过来时要定位到那一行。按路径记，nonce 自增——
+  // 同一文件已经开着时 FileView 的 props 不变，没有 nonce 第二次点同一处就毫无反应。
+  const [reveal, setReveal] = useState<{ path: string; line: number; nonce: number } | null>(null)
   // ⌘K 搜到文件 → 切到文件页 → 这里把它开成标签页。挂载时也取一次：从别的页面
   // 点过来时，意图早在本组件存在之前就发完了（见 intents.ts）。
   const openFileRef = useRef(openFileTab)
   openFileRef.current = openFileTab
   useEffect(() => {
     const on = () => {
-      const data = takeIntentData<{ path?: string }>(OPEN_FILE_INTENT)
-      const p = data && data !== true ? data.path : ''
-      if (p) openFileRef.current(p)
+      const data = takeIntentData<{ path?: string; line?: number }>(OPEN_FILE_INTENT)
+      if (!data || data === true || !data.path) return
+      openFileRef.current(data.path)
+      const line = Number(data.line)
+      if (line > 0) setReveal((prev) => ({ path: data.path!, line, nonce: (prev?.nonce || 0) + 1 }))
     }
     on()
     window.addEventListener(INTENT_EVENT, on)
@@ -382,6 +387,7 @@ export default function FileWorkspace({
                 <FileView path={realPath(f)} accent={accent} inline tabbed forcePreview={prev} active={active === f}
                   onClose={() => closeFileTab(f, g)} onOpenPath={(p) => openInGroup(p, g)}
                   onDirtyChange={prev ? undefined : setFileDirty} onOpenAgent={onOpenAgent}
+                  revealLine={!prev && reveal?.path === realPath(f) ? { line: reveal.line, nonce: reveal.nonce } : undefined}
                   onPreviewToSide={prev ? undefined : (p) => openPreviewToSide(g, p)} />
               </div>
             )

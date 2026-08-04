@@ -248,7 +248,7 @@ func rawContentText(raw json.RawMessage) string {
 		for _, x := range arr {
 			switch x.Type {
 			case "image":
-				b.WriteString("[图片]\n")
+				b.WriteString("[image]\n") // 同上：哨兵，前端出译文
 			default:
 				b.WriteString(x.Text)
 			}
@@ -316,7 +316,9 @@ func parseLine(line string) *cMsg {
 				blocks = append(blocks, cBlock{Kind: "thinking", Text: clip(t)})
 			}
 		case "redacted_thinking":
-			blocks = append(blocks, cBlock{Kind: "thinking", Text: "（思考内容已加密，无法展示）"})
+			// 哨兵而非中文文案：这条会直接进 API 响应给前端展示，文案必须由前端出译文
+			// （docs/development/i18n.md「会被前端直接展示的后端 API 消息」）
+			blocks = append(blocks, cBlock{Kind: "thinking", Text: "[redacted_thinking]"})
 		case "tool_use":
 			blocks = append(blocks, cBlock{Kind: "tool_use", Name: b.Name, Input: clip(string(b.Input)), ID: b.ID})
 		case "tool_result":

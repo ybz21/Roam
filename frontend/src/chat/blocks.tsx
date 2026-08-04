@@ -1,6 +1,5 @@
 // 对话渲染共用的小组件：代码框 / 折叠块 / 彩色 diff / 「正在生成」省略号。
 import { useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
-import type { Block } from './types'
 import { useI18n } from '../i18n'
 import { CheckIcon, Disclosure } from '../icons'
 
@@ -40,20 +39,6 @@ export function CodeBox({ text, max = 320, fill, className, children }: { text: 
       <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: fill ? 0 : '6px 0 0', height: fill ? '100%' : undefined, maxHeight: fill ? 'none' : max, boxSizing: 'border-box', overflow: 'auto', background: 'var(--bg-base)', padding: 8, borderRadius: 6, fontFamily: MONO, fontSize: 12, lineHeight: 1.5, color: 'var(--text-bright)' }}>
         <code className={className}>{children ?? text}</code>
       </pre>
-    </div>
-  )
-}
-
-// 工具调用的输出（折叠；出错默认展开）。Claude / Codex 共用。
-export function ToolResult({ result }: { result: Block }) {
-  const [open, setOpen] = useState(!!result.isError)
-  const { t } = useI18n()
-  return (
-    <div style={{ marginTop: 6, borderTop: '1px dashed var(--border)', paddingTop: 4 }}>
-      <a onClick={() => setOpen((v) => !v)} style={{ color: result.isError ? '#f85149' : 'var(--text-dim)', fontSize: 12 }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Disclosure open={open} />{result.isError ? t('chat.outputError') : t('common.output')}</span>
-      </a>
-      {open && <CodeBox text={result.text || t('common.empty')} />}
     </div>
   )
 }
