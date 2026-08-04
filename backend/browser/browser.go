@@ -19,6 +19,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -173,6 +174,9 @@ func ensureChrome() error {
 		"--no-first-run", "--no-default-browser-check",
 		// 高 DPI 渲染：像素密度翻倍但 CSS 布局不变 → 画面更清晰
 		"--force-device-scale-factor=" + cfg.Scale,
+		// 隐藏 navigator.webdriver 等自动化痕迹：镜像 Chrome 由 CDP 驱动，天然带自动化特征，
+		// 部分站点（尤其搜索引擎）据此提高验证码触发概率；关掉这个 blink 特性降低误伤。
+		"--disable-blink-features=AutomationControlled",
 	}
 	// 无头/有头：auto=按有无显示器自动判断；on=强制无头；off=强制有头。
 	// 强制有头但无显示器(DISPLAY 空)时 Chrome 会起不来——属用户显式选择。
@@ -275,7 +279,9 @@ func browserUA() string {
 		UserAgent string `json:"User-Agent"`
 	}
 	_ = json.Unmarshal(b, &v)
-	return v.UserAgent
+	// 无头模式下原生 UA 可能带 "HeadlessChrome" 标记，一眼被站点识别为自动化；抹掉这个词，
+	// 其余版本号/平台信息不变，看起来和有头 Chrome 一致。
+	return strings.Replace(v.UserAgent, "HeadlessChrome", "Chrome", 1)
 }
 
 // listPages 返回所有 page 类型的标签页（过滤掉 service worker / iframe 等其它 target）。
@@ -315,7 +321,7 @@ func targetWS(id string) (string, error) {
 		return "", fmt.Errorf("标签页不存在: %s", id)
 	}
 	// 没有任何 page，开一个空白页再找
-	_ = newTab("about:blank")
+	_, _ = newTab("about:blank")
 	for _, t := range listPages() {
 		if t.WebSocketDebuggerURL != "" {
 			return t.WebSocketDebuggerURL, nil
@@ -324,8 +330,8 @@ func targetWS(id string) (string, error) {
 	return "", fmt.Errorf("找不到可用的 page 目标")
 }
 
-// newTab 新建一个标签页（Chrome ≥111 要求 PUT /json/new）。
-func newTab(rawURL string) error {
+// newTab 新建一个标签页（Chrome ≥111 要求 PUT /json/new），返回新标签 id。
+func newTab(rawURL string) (string, error) {
 	u := CDPBase + "/json/new"
 	if rawURL != "" {
 		u += "?" + rawURL
@@ -333,13 +339,17 @@ func newTab(rawURL string) error {
 	req, _ := http.NewRequest(http.MethodPut, u, nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
-		return fmt.Errorf("新建标签页失败: %s", resp.Status)
+		return "", fmt.Errorf("新建标签页失败: %s", resp.Status)
 	}
-	return nil
+	b, _ := io.ReadAll(resp.Body)
+	var t target
+	_ = json.Unmarshal(b, &t)
+	markFront(t.ID) // 新标签即前置，watcher 据此广播让镜像面板跟到新标签
+	return t.ID, nil
 }
 
 // closeTab 关闭指定标签页。
@@ -352,6 +362,35 @@ func closeTab(id string) error {
 	return nil
 }
 
+// 最近被「前置」的标签追踪（用户在镜像面板点标签、或经 REST 激活）。watcher 据此广播
+// 「活跃标签」给前端做自动跟随。chrome-cli 走的是裸 CDP（不经这层 HTTP API，见
+// driver.mjs），它对目标标签发的 /json/activate 会被下面 watchFrontTab 的 /json 顺序
+// 兜底捕捉到——两条路径互补：本函数覆盖「经后端」的前置，兜底覆盖「绕过后端直连
+// CDP」的前置。gen 单调递增供 watcher 判变。
+var (
+	frontMu  sync.Mutex
+	frontID  string
+	frontGen uint64
+)
+
+func markFront(id string) {
+	if id == "" {
+		return
+	}
+	frontMu.Lock()
+	if id != frontID {
+		frontID = id
+		frontGen++
+	}
+	frontMu.Unlock()
+}
+
+func frontSnapshot() (string, uint64) {
+	frontMu.Lock()
+	defer frontMu.Unlock()
+	return frontID, frontGen
+}
+
 // activateTab 把指定标签页在 Chrome 里前置（让 agent 的前台焦点与正在镜像的一致）。
 func activateTab(id string) error {
 	resp, err := http.Get(CDPBase + "/json/activate/" + id)
@@ -359,6 +398,7 @@ func activateTab(id string) error {
 		return err
 	}
 	resp.Body.Close()
+	markFront(id)
 	return nil
 }
 

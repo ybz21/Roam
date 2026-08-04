@@ -478,6 +478,8 @@ const zhCN = {
   'browser.openExternal': '外部打开',
   'browser.openExternalFailed': '唤起系统浏览器失败',
   'browser.openExternalNoUrl': '当前没有可打开的网址',
+  'browser.resumeFollow': '跟随 Agent',
+  'browser.resumeFollowTitle': '已暂停自动跟随（你在手动操作），点击立即恢复，或 12 秒无操作后自动恢复',
   'browser.deviceTitle': '设备模拟：切换手机/平板视口，测移动端页面',
   'browser.copied': '已复制',
   'browser.noSelection': '网页里没有选中文字',

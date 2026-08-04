@@ -188,11 +188,18 @@ export default function BrowserView() {
   const imeRef = useRef<HTMLTextAreaElement>(null)
   const composingRef = useRef(false)
   const [imePos, setImePos] = useState({ x: 8, y: 8 })
+  // 跟随 agent：后端广播 {type:'active'} 时若未暂停就自动切到 agent 正在操作的标签。
+  // 用户手动切标签/操作镜像页面时暂停，空闲一段时间无操作后自动恢复。
+  const [followPaused, setFollowPaused] = useState(false)
+  const followPausedRef = useRef(false)
+  const followIdleTimerRef = useRef(0 as any)
+  const FOLLOW_RESUME_IDLE_MS = 12000
 
   // control 开关用 ref 同步，供事件回调读取最新值
   useEffect(() => { controlRef.current = control }, [control])
   useEffect(() => { deviceRef.current = device }, [device])
   useEffect(() => { tabsRef.current = tabs }, [tabs])
+  useEffect(() => () => clearTimeout(followIdleTimerRef.current), [])
 
   // 跟踪舞台尺寸：旋转 90/270 时 <img> 盒子宽高要对调，才能铺满竖屏
   useEffect(() => {
@@ -253,8 +260,23 @@ export default function BrowserView() {
     if (t) setUrl(t.url === 'about:blank' ? '' : t.url)
   }, [target, tabs])
 
+  // 暂停跟随：人正在手动操作（切标签/点镜像页面），此时后端广播的 active 不该把面板拽走。
+  // 空闲 12s 无操作后自动恢复——不需要用户记得手动点回来。
+  const pauseFollow = () => {
+    followPausedRef.current = true
+    setFollowPaused(true)
+    clearTimeout(followIdleTimerRef.current)
+    followIdleTimerRef.current = setTimeout(resumeFollow, FOLLOW_RESUME_IDLE_MS)
+  }
+  const resumeFollow = () => {
+    clearTimeout(followIdleTimerRef.current)
+    followPausedRef.current = false
+    setFollowPaused(false)
+  }
+
   // 切换标签：镜像该 tab + 在 Chrome 里把它前置（让 agent 前台焦点一致）
   const switchTab = (id: string) => {
+    pauseFollow() // 人手动选的，别被下一条 active 广播立刻拽回去
     setTarget(id)
     api('POST', `/browser/tabs/${id}/activate`).catch(() => {})
   }
@@ -295,6 +317,11 @@ export default function BrowserView() {
     catch (e: any) { message.error(e.message) }
   }
 
+  // 桌面视口按 ≥2x 采样出图（哪怕显示器是 1x），JPEG 压缩本身会糊字，超采样后再压缩，
+  // 文字边缘留下的细节更多，肉眼看起来清晰得多；观看端本来就用 object-fit 缩放显示，
+  // 采样倍数与显示器实际 dpr 无需一致。
+  const desktopDpr = () => Math.max(window.devicePixelRatio || 1, 2)
+
   // 当前设备 → emulate 消息载荷。桌面把远端渲染成「和观看区同比、但宽≥1280 的桌面视口」，整帧
   // 铺满组件。视口只在观看区【宽】变化时重算(见 emulate effect)；高度抖动(移动端工具栏/滚动)不重算，
   // 显示盒的高也只按【宽】算(见 <img>) → 铺满且高度抖动时内容缩放比恒定、不忽大忽小。
@@ -304,12 +331,12 @@ export default function BrowserView() {
     const el = stageRef.current
     const pw = el ? el.clientWidth : 0
     const ph = el ? el.clientHeight : 0
-    if (pw <= 0 || ph <= 0) return { type: 'emulate', mobile: false, mw: 0, mh: 0, dpr: window.devicePixelRatio || 1 }
+    if (pw <= 0 || ph <= 0) return { type: 'emulate', mobile: false, mw: 0, mh: 0, dpr: desktopDpr() }
     // 宽 = max(观看区宽, 桌面下限 1280)：窄窗格(iPad 分屏/手机)也按桌面宽出图、不掉手机版；宽屏用原生宽。
     // 高 = 宽 × 观看区当前宽高比 → 视口与观看区同比、铺满不留白。
     const mw = Math.max(Math.round(pw), 1280)
     const mh = Math.max(1, Math.round((mw * ph) / pw))
-    return { type: 'emulate', mobile: false, mw, mh, dpr: window.devicePixelRatio || 1 }
+    return { type: 'emulate', mobile: false, mw, mh, dpr: desktopDpr() }
   }
 
   // 发 emulate 但【去重】：载荷和上次一样就不发。重设 device metrics 会让后端产一个「视口尚未稳」
@@ -366,6 +393,13 @@ export default function BrowserView() {
       if (msg.type === 'level') { setLevelName(msg.name || ''); return }
       // 被镜像页打开了新窗口/标签 → 镜像跟过去（点 target=_blank 链接、window.open 等）
       if (msg.type === 'newtab') { followNewTab(); return }
+      // 后端广播的当前前台标签（agent 经 chrome-cli 操作、或别处经 REST 前置）：
+      // 未暂停跟随时自动切过去；顺手拿它带的标签列表刷新标题/地址，比 3s 轮询更及时。
+      if (msg.type === 'active') {
+        if (Array.isArray(msg.tabs)) setTabs((prev) => mergeTabs(prev, msg.tabs))
+        if (!followPausedRef.current && msg.id && msg.id !== target) setTarget(msg.id)
+        return
+      }
       // 复制选区回包：把远端页面当前选区文本写进本设备剪贴板（需安全上下文，HTTPS 默认已开）
       if (msg.type === 'copied') {
         const text: string = msg.text || ''
@@ -482,6 +516,7 @@ export default function BrowserView() {
   const onMouse = (sub: string) => (e: React.MouseEvent) => {
     if (!controlRef.current) return
     e.preventDefault()
+    if (sub === 'down') pauseFollow() // 人在直接操作镜像页面，别被 agent 的 active 广播拽走
     const pt = mapXY(e)
     if (sub === 'down') {
       const st = stageRef.current
@@ -500,6 +535,24 @@ export default function BrowserView() {
       d.active = false
     }
   }
+  // 兜底：在 <img> 范围外松开鼠标时，浏览器把 mouseup 派给鼠标当前所在的元素而不是 <img>
+  // 本身，导致 onMouse('up') 收不到事件 —— 拖拽框选/远端滑块会一直卡在"按下"态。用 window
+  // 级监听兜底；靠 dragRef.active 去重（同一次释放若已被 <img> 自身的 onMouseUp 处理过，
+  // active 会先被置 false，这里直接跳过，不会重复发送)。
+  useEffect(() => {
+    const onWindowMouseUp = (e: MouseEvent) => {
+      const d = dragRef.current
+      if (!d.active) return
+      d.active = false
+      if (!controlRef.current) return
+      const pt = mapClientXY(e.clientX, e.clientY)
+      send({ type: 'mouse', sub: 'up', x: pt.x, y: pt.y, button: 'left', buttons: 0, modifiers: mods(e) })
+      if (d.moved) send({ type: 'select', x1: d.x, y1: d.y, x2: pt.x, y2: pt.y })
+    }
+    window.addEventListener('mouseup', onWindowMouseUp)
+    return () => window.removeEventListener('mouseup', onWindowMouseUp)
+  }, [rotation])
+
   // 移动节流：低带宽下高频 move 会挤占上行，限到 ~45ms 一发
   const onMove = (e: React.MouseEvent) => {
     if (!controlRef.current) return
@@ -534,11 +587,13 @@ export default function BrowserView() {
   // 滚轮合并：40ms 窗口内累加 delta 后一次性发，避免滚动时刷爆上行
   const onWheel = (e: React.WheelEvent) => {
     if (!controlRef.current) return
+    pauseFollow()
     const { x, y } = mapXY(e as any)
     queueWheel(x, y, e.deltaX, e.deltaY, mods(e))
   }
   const onTouchStart = (e: React.TouchEvent) => {
     if (!controlRef.current || e.touches.length !== 1) return
+    pauseFollow()
     const t = e.touches[0]
     touchRef.current = { x: t.clientX, y: t.clientY, t: performance.now(), moved: false }
     stageRef.current?.focus()
@@ -601,6 +656,7 @@ export default function BrowserView() {
   }
   const onKey = (e: React.KeyboardEvent) => {
     if (!controlRef.current) return
+    pauseFollow()
     // 输入法组合中：按键属于输入法（key 为 "Process"/keyCode 229），不转发也不
     // preventDefault，否则组合被打断；组合结果统一由 flushIme 发送。
     if (composingRef.current || e.nativeEvent.isComposing || e.keyCode === 229) return
@@ -640,6 +696,12 @@ export default function BrowserView() {
         onAdd={newTab}
         extra={
           <Space size={10} style={{ paddingRight: 4 }}>
+            {/* 暂停跟随时才出现：人正在手动操作，点一下立即恢复自动跟随 agent 的标签 */}
+            {followPaused && (
+              <Button size="small" onClick={resumeFollow} title={t('browser.resumeFollowTitle')}>
+                ▶ {t('browser.resumeFollow')}
+              </Button>
+            )}
             {/* 清晰度：选中档亮蓝底 + 白字加粗 + 辉光，未选中压暗，对比鲜明 */}
             <Space.Compact size="small">
               {QUALITY_OPTS.map((o) => {

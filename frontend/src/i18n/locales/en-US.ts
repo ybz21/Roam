@@ -478,6 +478,8 @@ const enUS = {
   'browser.openExternal': 'Open externally',
   'browser.openExternalFailed': 'Failed to launch the system browser',
   'browser.openExternalNoUrl': 'No URL to open',
+  'browser.resumeFollow': 'Follow agent',
+  'browser.resumeFollowTitle': 'Auto-follow paused (you’re driving manually) — click to resume now, or it resumes on its own after 12s idle',
   'browser.deviceTitle': 'Device emulation: switch to a phone/tablet viewport to test mobile pages',
   'browser.copied': 'Copied',
   'browser.noSelection': 'Nothing selected in the page',

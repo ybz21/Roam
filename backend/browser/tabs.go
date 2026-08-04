@@ -38,7 +38,7 @@ func NewTab(c *gin.Context) {
 	if body.URL == "" {
 		body.URL = "about:blank"
 	}
-	if err := newTab(body.URL); err != nil {
+	if _, err := newTab(body.URL); err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": gin.H{"message": err.Error()}})
 		return
 	}

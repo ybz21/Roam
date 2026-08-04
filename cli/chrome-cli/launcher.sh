@@ -123,6 +123,9 @@ chrome — 浏览器自动化（Playwright over CDP，驱动 ttmux Web 镜像那
   chrome tabs                      列出标签页（序号 / 标题 / url）
   chrome new   [url]               新开标签页
   chrome close                     关闭标签页
+  chrome record start <文件.mp4>   录制目标标签当前画面（需要系统装有 ffmpeg）
+  chrome record stop               停止并落盘录制
+  chrome record status             查看是否在录制
 
   通用选项: --tab <序号> | --url <子串>  选目标标签页（默认第一个）
             --timeout <ms>（默认 15000）  --cdp <地址>
@@ -131,6 +134,7 @@ chrome — 浏览器自动化（Playwright over CDP，驱动 ttmux Web 镜像那
             --mobile（手机视口=iPhone）  --device iphone|iphone-se|pixel|ipad（指定机型）
             默认截图失败时自动降级到 CDP 截图；所有路径受 --timeout 约束
   环境变量: TTMUX_CHROME_CDP=http://127.0.0.1:9222  TTMUX_CHROME_SCALE=2
+            TTMUX_CHROME_DAEMON_IDLE=300（常驻 daemon 空闲自杀秒数）
 EOF
 }
 

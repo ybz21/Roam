@@ -136,10 +136,52 @@ var ladder = []lvl{
 	{52, 1280, 800, 1, "标清"},
 	{64, 1600, 1000, 1, "清晰"},
 	{76, 1920, 1200, 1, "高清"},
-	{86, 2560, 1600, 1, "超清"},
+	{90, 3840, 2160, 1, "超清"}, // 顶档放宽到 4K 采集上限，配合前端 ≥2x 超采样(desktopDpr)保文字清晰
 }
 
 const autoStart = 2 // 自适应初始档（标清，快速起步再按链路上探）
+
+// cursorScript 注入被镜像页：画一个跟随指针的光点，点击时在光点处绽放涟漪。
+// 无论输入来自用户接管（Input.dispatchMouseEvent）还是 agent 经 chrome-cli/CDP 操作，
+// 都会触发页面自身的 mousemove/mousedown 监听 → 观看端由此看清「谁在哪里点/在哪」，
+// 而不是像前端本地涟漪(addRipple)那样只在查看端画、进不了实际截屏帧。
+// __bladeCur 防重复注入；__bladeCurHide 供用户接管期间短暂抑制（人在面板上已有系统光标，
+// 不需要双光标）。
+const cursorScript = `(() => {
+  if (window.__bladeCur) return; window.__bladeCur = 1;
+  const cur = document.createElement('div');
+  cur.style.cssText = 'position:fixed;left:0;top:0;z-index:2147483647;width:14px;height:14px;' +
+    'margin:-7px 0 0 -7px;border-radius:50%;background:radial-gradient(circle,#4d9bff 0%,#1f6feb 60%,rgba(31,111,235,0) 100%);' +
+    'box-shadow:0 0 10px 3px rgba(31,111,235,.6);pointer-events:none;opacity:0;transition:opacity .3s;will-change:transform';
+  const style = document.createElement('style');
+  style.textContent = '@keyframes __bladeRip{from{transform:scale(.35);opacity:.95}to{transform:scale(2.4);opacity:0}}';
+  const mount = () => {
+    (document.head || document.documentElement).appendChild(style);
+    (document.body || document.documentElement).appendChild(cur);
+  };
+  if (document.body) mount(); else addEventListener('DOMContentLoaded', mount);
+  let hideTimer;
+  let suppressUntil = 0;
+  window.__bladeCurHide = (ms) => { suppressUntil = Date.now() + (ms || 1200); cur.style.opacity = '0'; };
+  const show = (x, y) => {
+    if (Date.now() < suppressUntil) return;
+    cur.style.transform = 'translate(' + x + 'px,' + y + 'px)';
+    cur.style.opacity = '1';
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => { cur.style.opacity = '0'; }, 2000);
+  };
+  addEventListener('mousemove', (e) => show(e.clientX, e.clientY), { capture: true, passive: true });
+  addEventListener('mousedown', (e) => {
+    if (Date.now() < suppressUntil) return;
+    show(e.clientX, e.clientY);
+    const rip = document.createElement('div');
+    rip.style.cssText = 'position:fixed;z-index:2147483646;left:' + (e.clientX - 12) + 'px;top:' + (e.clientY - 12) +
+      'px;width:24px;height:24px;border-radius:50%;border:3px solid #1f6feb;pointer-events:none;' +
+      'animation:__bladeRip .5s ease-out forwards';
+    (document.body || document.documentElement).appendChild(rip);
+    setTimeout(() => rip.remove(), 600);
+  }, { capture: true, passive: true });
+})()`
 
 // keyInfo 把 DOM KeyboardEvent.key 映射到 CDP 需要的 (code, windowsVirtualKeyCode, text)。
 // 只覆盖非可打印的常用键；可打印字符走 Input.insertText，不经过这里。
@@ -188,6 +230,13 @@ func buildFrame(jpeg []byte, w, h int, seq uint16) []byte {
 func nowMs() int64 { return time.Now().UnixMilli() }
 
 func absInt(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
+}
+
+func absFloat(n float64) float64 {
 	if n < 0 {
 		return -n
 	}
@@ -255,6 +304,12 @@ func runScreencast(sink frameSink, opts scOptions) {
 		reassert     func() // 重发本会话 device metrics 覆盖
 		lastReassert int64  // 上次自愈时刻(ms)；600ms 防抖，避免与另一活跃会话打乒乓
 		lastStreamMs int64  // 最近一帧正常 screencast 到达时间；流仍活跃时无需额外请求补帧
+		// 连击识别：CDP Input.dispatchMouseEvent 要求调用方显式给 clickCount，不会像真实 OS
+		// 那样按时间/位置自动识别双击、三击——不补的话网页的 dblclick 监听永远不会触发。
+		lastClickAt            int64 // 上次 mousedown 时刻(ms)
+		lastClickX, lastClickY float64
+		lastClickBtn           string
+		clickStreak            int
 	)
 
 	// 初始档：auto 用阶梯，手动用前端给的 q（分辨率给足，质量听用户）
@@ -269,7 +324,7 @@ func runScreencast(sink frameSink, opts scOptions) {
 		} else if q > 100 {
 			q = 100
 		}
-		cur = lvl{q: q, w: 2560, h: 1600, nth: 1, name: "手动"}
+		cur = lvl{q: q, w: 3840, h: 2160, nth: 1, name: "手动"}
 	}
 	applyLevel := func(l lvl) {
 		conn.send("Page.startScreencast", map[string]any{
@@ -336,6 +391,78 @@ func runScreencast(sink frameSink, opts scOptions) {
 		}()
 	}
 	conn.send("Page.enable", nil)
+
+	// 虚拟光标：往被镜像页注入轻量脚本，监听 mousemove/mousedown 画光标+点击涟漪。
+	// addScriptToEvaluateOnNewDocument 覆盖后续导航，Runtime.evaluate 覆盖当前已加载页；
+	// __bladeCur 防重复注入。
+	conn.send("Page.addScriptToEvaluateOnNewDocument", map[string]any{"source": cursorScript})
+	conn.send("Runtime.evaluate", map[string]any{"expression": cursorScript})
+
+	// 只给非本人操作画光标：人在面板上已有系统光标，双光标观感怪 —— 用户接管的每次鼠标
+	// 输入前节流通知页面暂停虚拟光标 1.5s。500ms 节流：连续操作最多每半秒发一次。
+	var lastCurHide int64
+	hideCursorForUser := func() {
+		now := nowMs()
+		if now-lastCurHide < 500 {
+			return
+		}
+		lastCurHide = now
+		conn.send("Runtime.evaluate", map[string]any{"expression": "window.__bladeCurHide&&window.__bladeCurHide(1500)"})
+	}
+
+	// 前台标签跟随：谁在操作、operating 到哪个标签，就把这个连接对应的镜像面板广播过去
+	// 跟上（前端据此实现"首连即同步到 agent 当前标签"和"agent 切标签面板自动跟随"）。
+	// 活跃标签以 markFront 的显式记录（frontSnapshot）为准——它在经后端 REST 前置
+	// （用户点标签栏、TabActivate、newTab）时更新；chrome-cli 走裸 CDP 直连 Chrome（见
+	// driver.mjs），不经这层 HTTP API，markFront 感知不到，所以再叠一层 /json 顺序兜底：
+	// 首位标签变化也视为一次前置，兜的正是"绕过后端直连 CDP"这条路径。
+	watchDone := make(chan struct{})
+	defer close(watchDone)
+	go func() {
+		lastGen := uint64(0)
+		lastOrderFirst := ""
+		synced := false
+		tick := time.NewTicker(1 * time.Second)
+		defer tick.Stop()
+		for {
+			select {
+			case <-watchDone:
+				return
+			case <-tick.C:
+			}
+			pages := listPages()
+			if len(pages) == 0 {
+				continue
+			}
+			if pages[0].ID != lastOrderFirst {
+				lastOrderFirst = pages[0].ID
+				markFront(pages[0].ID)
+			}
+			id, gen := frontSnapshot()
+			if synced && gen == lastGen {
+				continue
+			}
+			lastGen = gen
+			var active *target
+			for i := range pages {
+				if pages[i].ID == id {
+					active = &pages[i]
+					break
+				}
+			}
+			if active == nil { // 还没有前置记录（刚启动）：退回第一个标签，至少给个基线
+				active = &pages[0]
+			}
+			synced = true
+			list := make([]map[string]any, 0, len(pages))
+			for _, p := range pages {
+				list = append(list, map[string]any{"id": p.ID, "title": p.Title, "url": p.URL})
+			}
+			if sink.writeText(map[string]any{"type": "active", "id": active.ID, "url": active.URL, "tabs": list}) != nil {
+				return
+			}
+		}
+	}()
 
 	// 手机模式：把本镜像连接对应的渲染器切到移动视口（设备指标/触摸/UA 覆盖作用于整个
 	// page 渲染，故镜像里看到的就是真实移动端布局，agent 用 chrome-cli 截同一页也是移动端）。
@@ -707,7 +834,7 @@ func runScreencast(sink frameSink, opts scOptions) {
 				}
 				mu.Lock()
 				auto = false
-				cur = lvl{q: q, w: 2560, h: 1600, nth: 1, name: "手动"}
+				cur = lvl{q: q, w: 3840, h: 2160, nth: 1, name: "手动"}
 				l := cur
 				mu.Unlock()
 				applyLevel(l)
@@ -750,6 +877,7 @@ func runScreencast(sink frameSink, opts scOptions) {
 			if t == "" {
 				return
 			}
+			hideCursorForUser()
 			p := map[string]any{"type": t, "x": ev.X, "y": ev.Y, "modifiers": ev.Modifiers}
 			if ev.Sub != "move" {
 				btn := ev.Button
@@ -757,8 +885,21 @@ func runScreencast(sink frameSink, opts scOptions) {
 					btn = "left"
 				}
 				p["button"] = btn
-				p["buttons"] = 1
-				p["clickCount"] = 1
+				if ev.Sub == "down" {
+					// 500ms 内、24px 半径内、同键位 → 算一次连击；否则重新起算连击数。
+					now := nowMs()
+					if clickStreak > 0 && btn == lastClickBtn && now-lastClickAt <= 500 &&
+						absFloat(ev.X-lastClickX) <= 24 && absFloat(ev.Y-lastClickY) <= 24 {
+						clickStreak++
+					} else {
+						clickStreak = 1
+					}
+					lastClickAt, lastClickX, lastClickY, lastClickBtn = now, ev.X, ev.Y, btn
+					p["buttons"] = 1
+				} else { // up：松开时键位掩码归零，clickCount 沿用本次按下时定的连击数
+					p["buttons"] = 0
+				}
+				p["clickCount"] = clickStreak
 			} else {
 				// 移动时带住按下的键位（1=左键），否则 Chrome 当成悬停 → 拖滑块/画布/拖拽都失效
 				p["buttons"] = ev.Buttons
