@@ -11,6 +11,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { App as AntApp, AutoComplete, Button, Dropdown, Input, Modal, Popconfirm, Segmented, Select, Space, Spin, Tag, Tooltip, Typography } from 'antd'
 import type { InputRef, MenuProps } from 'antd'
 import { sessionLabel } from './session-label'
+import { dirTailName } from './dir-name'
 import { api, upload, makeClipboardImageFile } from './api'
 import { useI18n } from './i18n'
 import { usePreferences } from './preferences'
@@ -287,7 +288,17 @@ function NewProjectModal({ open, onClose }: { open: boolean; onClose: () => void
   const [name, setName] = useState('')
   const [pick, setPick] = useState(false)
   const [creating, setCreating] = useState(false)
-  useEffect(() => { if (open) { setDir(''); setName('') } }, [open])
+  // 名字是不是用户自己写过：写过就不再被目录覆盖，否则改一次目录就把他写的名字冲掉
+  const [nameTouched, setNameTouched] = useState(false)
+  useEffect(() => { if (open) { setDir(''); setName(''); setNameTouched(false) } }, [open])
+
+  /** 目录定下来就把名字填成路径最后一段（/home/ai/codes/ttmux → ttmux）。
+   *  只在「选完」时填——选目录、选历史项、离开输入框，不跟着每次按键跳。 */
+  const fillNameFromDir = (p: string) => {
+    if (nameTouched) return
+    const seg = dirTailName(p)
+    if (seg) setName(seg)
+  }
   const ok = async () => {
     if (!dir.trim()) { message.error(t('session.dirPlaceholder')); return }
     try {
@@ -307,16 +318,20 @@ function NewProjectModal({ open, onClose }: { open: boolean; onClose: () => void
         <Space direction="vertical" style={{ width: '100%' }}>
           <Space.Compact style={{ width: '100%' }}>
             <AutoComplete style={{ flex: 1 }} value={dir} onChange={setDir} autoFocus
+              onSelect={(v) => fillNameFromDir(String(v))}
+              onBlur={() => fillNameFromDir(dir)}
               options={recentDirs().map((d) => ({ value: d }))}
               filterOption={(input, opt) => String(opt?.value).toLowerCase().includes(input.toLowerCase())}
               placeholder={t('session.dirPlaceholder')} />
             <Button onClick={() => setPick(true)}>{t('common.browse')}</Button>
           </Space.Compact>
-          <Input placeholder={t('project.displayName')} value={name} onChange={(e) => setName(e.target.value)} />
+          <Input placeholder={t('project.displayName')} value={name}
+            onChange={(e) => { setName(e.target.value); setNameTouched(true) }} />
           <div style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)' }}>{t('project.newHint')}</div>
         </Space>
       </Modal>
-      <DirPicker open={pick} start={dir} onPick={(p) => { setDir(p); setPick(false) }} onClose={() => setPick(false)} />
+      <DirPicker open={pick} start={dir}
+        onPick={(p) => { setDir(p); fillNameFromDir(p); setPick(false) }} onClose={() => setPick(false)} />
     </>
   )
 }
