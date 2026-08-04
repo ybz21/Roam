@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 132 188" width="132" height="188" role="img" aria-label="Interlocking ribbon mark">
+  <title>Interlocking ribbon mark</title>
+  <!--
+    Möbius-style interlocking ribbon, rebuilt as exact geometry:
+    every edge is either vertical or has slope dx:dy = 3:2, all vertices are integers.
+    Front faces: #538EE7   Back (shadow) faces: #0F4089
+  -->
+  <g fill="#0F4089">
+    <path d="M66 0 66 56 42 72 0 44Z"/>
+    <path d="M90 72 132 100 108 116 66 88Z"/>
+    <path d="M21 114 63 142 0 184 0 128Z"/>
+  </g>
+  <g fill="#538EE7">
+    <path d="M66 0 132 44 132 100 90 72 66 56Z"/>
+    <path d="M0 44 132 132 132 188 0 100Z"/>
+  </g>
+</svg>
