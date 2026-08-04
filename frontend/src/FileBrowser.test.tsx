@@ -3,7 +3,6 @@ import { App as AntApp } from 'antd'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import FileBrowser from './FileBrowser'
-import FloatingFileDrawer from './FloatingFileDrawer'
 import { I18nProvider } from './i18n'
 
 vi.mock('./App', () => ({ recentDirs: () => [] }))
@@ -61,9 +60,11 @@ describe('FileBrowser folder context menu', () => {
   const renderBrowser = () => render(
     <I18nProvider>
       <AntApp>
-        <FloatingFileDrawer open>
+        {/* 原来这里套的是 FloatingFileDrawer（右侧 420 浮层）。它已经下线——文件树
+            进了 Inspector 列（图纸 panels-desktop.html），容器只剩一个定宽的 flex 列。 */}
+        <div style={{ display: 'flex', flexDirection: 'column', width: 420, height: 600 }}>
           <FileBrowser dir="/workspace" layout="dock" />
-        </FloatingFileDrawer>
+        </div>
       </AntApp>
     </I18nProvider>,
   )

@@ -450,13 +450,28 @@ table.tt code{white-space:nowrap}
       原来那句话真正想守的是「终端不能被<u>盖住</u>」，不是「终端一像素都不能动」。</li>
 </ol>
 
-<h2>五、分期</h2>
+<h2>五、分期（已全部落地）</h2>
 <ol class="pts">
-  <li><b>P1（本轮）</b>：Inspector 作为 Shell 的第三列落地 —— <code>useWorkspaceLayout</code> 加 inspector 宽度/开关，
-      <code>Workspace</code> 加第三列与第二条 rail，<code>AdaptivePanel</code> 桌面分支从 floating/drawer 改成 inspector；
-      Git 两个调用点 + Worktree 接上；<b>取消遮罩</b>；1280–1639 打开时 Canvas 让位。</li>
-  <li><b>P2</b>：Inspector ≥720 面板内分栏（容器查询），取消 <code>.tt-file-detail</code> 那第四种壳。</li>
-  <li><b>P3</b>：Inspector 的「上一个面板」返回（Git ⇄ Worktree），宽度按面板类型分别记忆。</li>
+  <li><b>P1 ✓</b>：Inspector 作为 Shell 的第三列 —— <code>useWorkspaceLayout</code> 加宽度/开关，
+      <code>InspectorColumn</code> 出列与 rail，<code>AdaptivePanel</code> 桌面分支改成 portal 进槽位；
+      Git 两个调用点 + Worktree 接上；<b>取消遮罩</b>；放不下时先借 Dock 再让 Canvas。</li>
+  <li><b>P2 ✓</b>：Inspector ≥720 面板内分栏（容器查询），<code>.tt-file-detail</code> 那第四种壳退场。</li>
+  <li><b>P3 ✓（免费得到）</b>：非栈顶的面板是<u>藏起来</u>而不是卸载，所以关掉栈顶自然露出下面那个——
+      「从 Git 跳 Worktree 再回来」不需要额外做返回箭头。宽度仍是<b>一个</b>（不按面板类型分别记）：
+      三种面板的内容密度接近，分开记只会让「上次拖的宽度」变得不可预测。</li>
+  <li><b>P4 ✓</b>：文件树也进 Inspector，<code>FloatingFileDrawer</code> 整个删掉。
+      至此「四种壳」全部收敛成一种，<u>文件 / Git / Worktree 三者互斥</u>。</li>
 </ol>
+
+<h2>六、落地时踩到的一条</h2>
+<p class="note" style="max-width:80ch">
+<b>容器查询不能挂在要被它改样式的那个元素上。</b>第一版我把
+<code>container-type: inline-size</code> 写在 <code>.tt-git-root</code> 上，然后用
+<code>@container (min-width:720px){ .tt-git-root{flex-direction:row} }</code> 去切它自己——
+<em>实测：detail 的 <code>position</code> 切了（它是后代），root 的 <code>flex-direction</code> 没切</em>。
+容器查询只作用于<u>后代</u>。改成把容器挂在 Inspector 那一列的槽位上
+（<code>container-name: inspector</code>），面板整体就都是后代了。
+顺带一个好处：手机档没有这一列，查询自然不匹配，diff 退回覆盖式——不用再写一条 <code>data-size</code> 分支。
+</p>
 
 </div></body></html>

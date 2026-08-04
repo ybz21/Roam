@@ -49,17 +49,6 @@ export function releaseInspector(id: number) {
   emit()
 }
 
-/** 这一列当前实际占掉的宽度（覆盖态算 0）——文件抽屉那类仍然浮着的层要避开它 */
-let reserved = 0
-export function setInspectorReserved(px: number) {
-  if (reserved === px) return
-  reserved = px
-  emit()
-}
-export function useInspectorReserved(): number {
-  return useSyncExternalStore(subscribe, () => reserved, () => 0)
-}
-
 type Snapshot = { slot: HTMLElement | null; top: number }
 let snap: Snapshot = { slot: null, top: 0 }
 function read(): Snapshot {
@@ -84,6 +73,5 @@ export function resetInspector() {
   slot = null
   stack = []
   seq = 0
-  reserved = 0
   snap = { slot: null, top: 0 }
 }

@@ -16,10 +16,8 @@ import ClaudeChat from './ClaudeChat'
 import CodexChat from './CodexChat'
 import FileBrowser from './FileBrowser'
 import FileWorkspace from './FileWorkspace'
-import FloatingFileDrawer from './FloatingFileDrawer'
 import AdaptivePanel from './shell/AdaptivePanel'
 import { InspectorColumn } from './shell/InspectorColumn'
-import { useInspectorReserved } from './shell/inspector'
 import MobileSubPage from './MobileSubPage'
 import { FileView } from './fileview'
 // 非首屏的重页面（蜂群/Git 面板/浏览器/手机镜像/插件）按路由懒加载：切到对应 tab 才拉 chunk，
@@ -1016,7 +1014,6 @@ function TerminalPane(props: {
   // 编辑器多 tab / 打开的文件 / 拖拽调宽等都下沉到 <FileWorkspace>（左侧停靠时用），这里只保留 showFiles。
   const [showFiles, setShowFiles] = useState(fileDock === 'left')
   const [showGit, setShowGit] = useState(false)
-  const inspectorReserved = useInspectorReserved()
   const [cwd, setCwd] = useState('')
   // 文件栏与 Git 面板可并存：左侧停靠时文件走左栏、Git 走右抽屉，天然并列；
   // 右侧停靠时两者都是右抽屉，Git 抽屉在文件也开着时向左让位（见下方 right 偏移），并排显示而非互相覆盖。
@@ -1758,12 +1755,14 @@ function TerminalPane(props: {
           </div>
         </div>
       )}
+      {/* 文件树也进 Inspector：它是最后一种「从右边出来一块」的浮层（420 fixed，
+          同样盖住终端）。收进来之后 文件 / Git / Worktree 三者互斥——同一时刻只有一个
+          Inspector，关掉栈顶自然露出下面那个（图纸 panels-desktop.html §二）。 */}
       {fileDock === 'right' && (
-        // 文件抽屉这一轮仍是浮层（P4 再收），但要按 Inspector 占掉的宽度往左让，
-        // 否则开着 Git 时它会盖住那一列
-        <FloatingFileDrawer open={showFiles} right={inspectorReserved}>
+        <AdaptivePanel open={showFiles} layer="session" title={t('nav.files')}
+          onClose={() => setShowFiles(false)}>
           <FileBrowser dir={cwd} accent="#58a6ff" layout="dock" onClose={() => setShowFiles(false)} />
-        </FloatingFileDrawer>
+        </AdaptivePanel>
       )}
       {/* 手机走全屏二级页（13 §6）：420 的浮层在 360 屏上盖到 92vw，还压着底栏、不吃安全区。
           桌面维持右缘浮动面板不变。layer="session" —— 这一层是从会话全屏(100)里唤起的。 */}

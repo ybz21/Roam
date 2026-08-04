@@ -137,17 +137,6 @@ export default function GitPanel({ dir, accent = '#58a6ff', onClose, openTerm, i
   const { desktop: wide } = useLayout()
   // 窄档：返回键先关 diff 详情（面板本身由外面的二级页接管，一次返回退一层）
   useBackDismiss(!wide && !!detail, () => setDetail(null))
-  const [panelLeft, setPanelLeft] = useState(0)
-  useEffect(() => {
-    const on = () => {
-      const r = panelRef.current?.getBoundingClientRect()
-      if (r) setPanelLeft(r.left)
-    }
-    on()
-    window.addEventListener('resize', on)
-    return () => window.removeEventListener('resize', on)
-  }, [detail])
-
   const root = status?.root
   const refresh = useCallback(() => setTick((n) => n + 1), [])
 
@@ -770,7 +759,7 @@ export default function GitPanel({ dir, accent = '#58a6ff', onClose, openTerm, i
   ) : detail?.kind === 'file' ? (
     <>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderBottom: '1px solid var(--border-subtle)', flex: '0 0 auto' }}>
-        {!wide && <button type="button" className="tt-file-close" onClick={() => setDetail(null)} title={t('common.back')} aria-label={t('common.back')}><BackIcon /></button>}
+        <button type="button" className="tt-file-close" onClick={() => setDetail(null)} title={t('common.back')} aria-label={t('common.back')}><BackIcon /></button>
         <span style={{ fontFamily: MONO, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
           <span style={{ color: accent }}>▸</span> {detail.file}
         </span>
@@ -791,7 +780,11 @@ export default function GitPanel({ dir, accent = '#58a6ff', onClose, openTerm, i
   ) : null
 
   const panel = (
-    <div ref={panelRef} style={{ display: 'flex', flexDirection: 'column', flex: 1, height: '100%', minHeight: 0, width: '100%', background: 'var(--bg-container)', borderLeft: '1px solid var(--border-subtle)', overflow: 'hidden', position: 'relative' }}>
+    // 容器查询看的是**面板自己的宽度**：拖到 ≥720 就在面板内部分成「列表 ｜ diff」两栏，
+    // 窄于此 diff 盖成面板内的第二层。取代的是原来那个按 `100vw − panelLeft` 算位置的
+    // 浮层——它既不是列也不是抽屉（图纸 panels-desktop.html §一④）。
+    <div ref={panelRef} className="tt-git-root">
+      <div className="tt-git-main">
       {header}
       {banner}
 
@@ -844,12 +837,9 @@ export default function GitPanel({ dir, accent = '#58a6ff', onClose, openTerm, i
         </div>
       )}
 
-      {/* 窄屏：详情列直接盖在面板上（同一层，左上角返回） */}
-      {!wide && detail && (
-        <div style={{ position: 'absolute', inset: 0, zIndex: 3, background: 'var(--bg-base)', display: 'flex', flexDirection: 'column' }}>
-          {detailBody}
-        </div>
-      )}
+      </div>
+      {/* ≥720：这是右边那一栏；窄于 720：绝对定位盖住整块（CSS 里切） */}
+      {detail && <div className="tt-git-detail">{detailBody}</div>}
     </div>
   )
 
@@ -860,20 +850,6 @@ export default function GitPanel({ dir, accent = '#58a6ff', onClose, openTerm, i
         <WorktreePanel open={wtOpen} onClose={() => { setWtOpen(false); refresh() }} openTerm={openTerm} initialDir={repoRoot || dir} />
       </Suspense>
       <AskModal spec={ask} onClose={() => setAsk(null)} />
-      {wide && detail && (
-        <div className="tt-file-detail"
-          style={{
-            // 紧贴在右侧浮动面板之下：详情从面板里划出来，视觉上是面板的左邻
-            position: 'fixed', top: 0, bottom: 0, height: '100dvh',
-            zIndex: 'calc(var(--z-panel) - 1)' as unknown as number,
-            right: `calc(100vw - ${Math.max(0, panelLeft)}px)`,
-            width: `min(560px, ${Math.max(240, panelLeft - 40)}px)`,
-            background: 'var(--bg-base)', borderLeft: '1px solid var(--border)', boxShadow: 'var(--elevated-shadow)',
-            display: 'flex', flexDirection: 'column',
-          }}>
-          {detailBody}
-        </div>
-      )}
     </>
   )
 }

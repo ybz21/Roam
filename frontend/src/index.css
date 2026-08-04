@@ -347,6 +347,32 @@ html[data-size="compact"] .tt-pagehead { gap: var(--sp-2); }
    页名保留、只降到 19px 并入工具条：工具条是 sticky 的，滚下去之后屏幕上总得有个字
    说明这是哪一页（项目卡与会话卡在余光里长得很像）。说明句进 title，鼠标停上去还在。
    概览页不适用——它的 h2 是内容（「晚上好，今天有 N 件事需要你」），不是页名。 */
+/* Git 面板：面板内的「列表 ｜ diff」（图纸 14-desktop-workspace/panels-desktop.html §二）。
+   原来 diff 详情是第四种壳——`position:fixed`，按 `100vw − panelLeft` 算位置、
+   宽度随剩余空间算，既不是列也不是抽屉，两层浮层叠起来把页面挤成一条缝。
+   现在它就在面板里：面板自己宽 ≥720 就左右分栏，窄于此盖成第二层。
+   阈值 720 = 280(列表) + 8 + 400(diff 最窄可读) + 32(padding)。
+   容器是 Inspector 那一列（InspectorColumn 的槽位上挂 container-name: inspector）——
+   **不能挂在 .tt-git-root 自己身上**：容器查询只作用于后代，挂在自己身上时
+   `.tt-git-root{flex-direction:row}` 那条永远不生效（实测踩到：detail 的 position 切了、
+   root 的 flex-direction 没切）。手机档没有这一列，查询不匹配，自然退回覆盖式。 */
+.tt-git-root {
+  position: relative; display: flex; flex-direction: column;
+  flex: 1; height: 100%; min-height: 0; width: 100%; overflow: hidden;
+  background: var(--bg-container); border-left: 1px solid var(--border-subtle);
+}
+.tt-git-main { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+/* 窄：盖住整块（container-type 让本层成为绝对定位后代的包含块） */
+.tt-git-detail {
+  position: absolute; inset: 0; z-index: 3;
+  background: var(--bg-base); display: flex; flex-direction: column; min-width: 0;
+}
+@container inspector (min-width: 720px) {
+  .tt-git-root { flex-direction: row; }
+  .tt-git-main { flex: 0 0 300px; border-right: 1px solid var(--border-subtle); }
+  .tt-git-detail { position: static; flex: 1; border-left: 0; }
+}
+
 .tt-pagename { flex: 0 0 auto; font-size: 19px; font-weight: 700; letter-spacing: -.01em; color: var(--text-bright); }
 .tt-pagedivider { flex: 0 0 auto; width: 1px; height: 18px; background: var(--border); }
 html[data-size="compact"] .tt-pagename,
