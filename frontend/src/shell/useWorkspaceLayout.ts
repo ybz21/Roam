@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLayout, type WindowSize } from '../layout'
 import { usePreferences, saveWorkspace } from '../preferences'
+import { useInspectorOpen } from './inspector'
 
 /** 尺寸契约，与 index.css 的 --canvas-min / --dock-* 同源（14 §8.2）。 */
 export const CANVAS_MIN = 560
@@ -19,6 +20,13 @@ export const NAV_WIDTH = 224
 export const NAV_RAIL = 64
 /** expanded 档覆盖式终端面板的宽度（13 §13.1）。 */
 export const OVERLAY_DOCK = 480
+
+/** Inspector（Git / Worktree 列）的尺寸契约，见 14-desktop-workspace/panels-desktop.html */
+export const INSPECTOR_MIN = 360
+export const INSPECTOR_DEFAULT = 420
+export const INSPECTOR_MAX = 880
+/** 面板内左右分栏（列表 ｜ diff）的阈值：280 列表 + 8 + 400 diff + 32 padding */
+export const INSPECTOR_SPLIT = 720
 
 export type SpaceMode = 'page' | 'split' | 'focus' | 'overlay'
 export type FocusTarget = 'none' | 'page' | 'dock'
@@ -64,6 +72,46 @@ export function defaultDockWidth(viewportWidth: number, workspaceWidth: number):
   const wish = Math.min(DOCK_MAX, Math.round(viewportWidth * 0.42))
   const { min, max } = dockBounds(workspaceWidth)
   return Math.max(min, Math.min(max, wish))
+}
+
+/**
+ * Inspector 打开之后，Canvas 还保不保得住 560。
+ *
+ * 判据用 **Dock 的下限**而不是它当前的宽度：宽屏上默认 Dock 是 42vw（1920 上 806），
+ * 拿当前宽度判的话三列永远凑不齐——1920 都要把页面整个让掉，而那正是买大屏要避免的。
+ * 所以顺序是「**先从 Dock 借，借不够再让 Canvas**」，见 effectiveDockWidth。
+ */
+export function canvasFitsWith(o: {
+  workspaceWidth: number; inspectorWidth: number; hasDock: boolean
+}): boolean {
+  const used = (o.hasDock ? DOCK_MIN + SPLIT_RAIL : 0) + o.inspectorWidth + SPLIT_RAIL
+  return o.workspaceWidth - used >= CANVAS_MIN
+}
+
+/**
+ * Inspector 打开时 Dock 实际渲染多宽。
+ *
+ * 保得住 Canvas 就从 Dock 借到刚好（不低于 480、也不超过用户拖出来的宽度）；
+ * 保不住就不折腾终端——Canvas 反正要整个让掉，Dock 用回用户那个宽度。
+ * 借宽会让终端 fit 一次，但「终端窄 13%」远好过「页面整个消失」。
+ */
+export function effectiveDockWidth(o: {
+  workspaceWidth: number; dockWidth: number; inspectorWidth: number; inspectorOpen: boolean
+}): number {
+  if (!o.inspectorOpen) return o.dockWidth
+  if (!canvasFitsWith({ workspaceWidth: o.workspaceWidth, inspectorWidth: o.inspectorWidth, hasDock: true })) {
+    return o.dockWidth
+  }
+  const room = o.workspaceWidth - CANVAS_MIN - SPLIT_RAIL * 2 - o.inspectorWidth
+  return Math.max(DOCK_MIN, Math.min(o.dockWidth, room))
+}
+
+/** Inspector 的拖拽区间：下界 360，上界不能把 Dock 挤破 */
+export function inspectorBounds(o: {
+  workspaceWidth: number; dockWidth: number; hasDock: boolean
+}): { min: number; max: number } {
+  const room = o.workspaceWidth - SPLIT_RAIL - (o.hasDock ? o.dockWidth + SPLIT_RAIL : 0)
+  return { min: INSPECTOR_MIN, max: Math.max(INSPECTOR_MIN, Math.min(INSPECTOR_MAX, room)) }
 }
 
 /** 并排是否成立：Canvas 560 + rail 8 + Dock 480（不含导航）。 */
@@ -116,6 +164,15 @@ export type WorkspaceLayout = {
   bounds: { min: number; max: number }
   /** 超过这个宽度就该落进 Focus（Canvas 会低于 560） */
   splitMax: number
+  /** Inspector 列宽（Git / Worktree），已按当前几何钳过 */
+  inspectorWidth: number
+  inspectorBounds: { min: number; max: number }
+  setInspectorWidth: (width: number) => void
+  resetInspectorWidth: () => void
+  /** Inspector 打开时 Canvas 还够不够 560——不够就让位 */
+  canvasFitsInspector: boolean
+  /** Dock 实际渲染宽度：Inspector 打开时可能被借走一部分 */
+  dockRenderWidth: number
 }
 
 /**
@@ -138,6 +195,7 @@ export function useWorkspaceLayout(hasTerms: boolean): WorkspaceLayout {
   const [focus, setFocusLocal] = useState<FocusTarget>(ws.workspaceFocus)
   const [navCollapsed, setNavCollapsedLocal] = useState(ws.navCollapsed)
   const [width, setWidthLocal] = useState(ws.dockWidth || 0)
+  const [insWidth, setInsWidthLocal] = useState(ws.inspectorWidth || 0)
   const hydrated = useRef(false)
 
   // 偏好从服务端到达后同步一次（首屏时 usePreferences 还是默认值）
@@ -148,7 +206,8 @@ export function useWorkspaceLayout(hasTerms: boolean): WorkspaceLayout {
     setFocusLocal(ws.workspaceFocus)
     setNavCollapsedLocal(ws.navCollapsed)
     setWidthLocal(ws.dockWidth || 0)
-  }, [ws.dockOpen, ws.workspaceFocus, ws.navCollapsed, ws.dockWidth])
+    setInsWidthLocal(ws.inspectorWidth || 0)
+  }, [ws.dockOpen, ws.workspaceFocus, ws.navCollapsed, ws.dockWidth, ws.inspectorWidth])
 
   const splitCapable = layout.size === 'large'
   const navWidth = splitCapable ? (navCollapsed ? NAV_RAIL : NAV_WIDTH) : NAV_RAIL
@@ -164,6 +223,18 @@ export function useWorkspaceLayout(hasTerms: boolean): WorkspaceLayout {
   }, [width, viewport, workspaceWidth])
 
   const mode = resolveMode({ hasTerms, dockOpen, focus, size: layout.size, workspaceWidth })
+
+  // Inspector 宽度同样先钳后用：换到窄窗口不能拿旧大屏的宽度把 Dock 挤破
+  const hasDock = mode === 'split'
+  const inspectorOpen = useInspectorOpen() && splitCapable
+  const insBounds = useMemo(
+    () => inspectorBounds({ workspaceWidth, dockWidth, hasDock }),
+    [workspaceWidth, dockWidth, hasDock],
+  )
+  const inspectorWidth = useMemo(() => {
+    const wish = insWidth || INSPECTOR_DEFAULT
+    return Math.max(insBounds.min, Math.min(insBounds.max, wish))
+  }, [insWidth, insBounds])
 
   const setDockOpen = useCallback((open: boolean) => {
     setDockOpenLocal(open)
@@ -182,6 +253,15 @@ export function useWorkspaceLayout(hasTerms: boolean): WorkspaceLayout {
     saveWorkspace({ dockWidth: clamped })
   }, [workspaceWidth])
 
+  // 打开 Inspector 时先从 Dock 借宽；借不够时 Canvas 让位（此时 Dock 用回原宽）
+  const dockRenderWidth = effectiveDockWidth({ workspaceWidth, dockWidth, inspectorWidth, inspectorOpen: inspectorOpen && hasDock })
+
+  const setInspectorWidth = useCallback((next: number) => {
+    const clamped = Math.round(Math.max(insBounds.min, Math.min(insBounds.max, next)))
+    setInsWidthLocal(clamped)
+    saveWorkspace({ inspectorWidth: clamped })
+  }, [insBounds])
+
   const setNavCollapsed = useCallback((collapsed: boolean) => {
     setNavCollapsedLocal(collapsed)
     saveWorkspace({ navCollapsed: collapsed })
@@ -197,6 +277,12 @@ export function useWorkspaceLayout(hasTerms: boolean): WorkspaceLayout {
     overlayCapable: layout.size === 'expanded',
     bounds,
     splitMax,
+    inspectorWidth,
+    inspectorBounds: insBounds,
+    setInspectorWidth,
+    resetInspectorWidth: () => { setInsWidthLocal(0); saveWorkspace({ inspectorWidth: 0 }) },
+    canvasFitsInspector: canvasFitsWith({ workspaceWidth, inspectorWidth, hasDock }),
+    dockRenderWidth,
     toggleDock: () => setDockOpen(!dockOpen),
     setDockOpen,
     setDockWidth,

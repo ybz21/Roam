@@ -31,8 +31,13 @@ import { useCallback, useRef, type CSSProperties, type ReactNode } from 'react'
 import { useI18n } from '../i18n'
 import { PointerResizeShield, usePointerResize } from '../PointerResize'
 import { OVERLAY_DOCK, type SpaceMode } from './useWorkspaceLayout'
+import { useInspectorOpen } from './inspector'
+import { InspectorColumn } from './InspectorColumn'
 
-export function Workspace({ mode, canvas, dock, dockWidth, bounds, splitMax, onResize, onReset, onFocus, onDismiss, capsule }: {
+export function Workspace({
+  mode, canvas, dock, dockWidth, bounds, splitMax, onResize, onReset, onFocus, onDismiss, capsule,
+  inspectorWidth, inspectorBounds, inspectorOverlay, canvasFitsInspector, onInspectorResize, onInspectorReset,
+}: {
   mode: SpaceMode
   canvas: ReactNode
   dock: ReactNode
@@ -49,6 +54,15 @@ export function Workspace({ mode, canvas, dock, dockWidth, bounds, splitMax, onR
   onDismiss: () => void
   /** 覆盖态收起时右下角的会话胶囊（13 §13.1）；其余档传 null */
   capsule?: ReactNode
+  /** Inspector（Git / Worktree）列宽与区间 */
+  inspectorWidth: number
+  inspectorBounds: { min: number; max: number }
+  /** expanded 档：Inspector 也走覆盖式（与 Dock 同语义） */
+  inspectorOverlay: boolean
+  /** Inspector 打开后 Canvas 还够不够 560：不够就让位 */
+  canvasFitsInspector: boolean
+  onInspectorResize: (width: number) => void
+  onInspectorReset: () => void
 }) {
   const { t } = useI18n()
   const { active, start } = usePointerResize()
@@ -97,6 +111,7 @@ export function Workspace({ mode, canvas, dock, dockWidth, bounds, splitMax, onR
     })
   }, [dockWidth, clamp, onResize, onFocus, splitMax, start])
 
+
   // 键盘调宽是一次一档，不存在高频重排，直接提交
   const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'ArrowLeft') {
@@ -112,6 +127,12 @@ export function Workspace({ mode, canvas, dock, dockWidth, bounds, splitMax, onR
 
   const focus = mode === 'focus'
   const overlay = mode === 'overlay'
+
+  // Inspector 占用与否由槽位登记决定（面板自己 portal 进来），Shell 只管留不留这一列
+  const insOpen = useInspectorOpen()
+  const insInline = insOpen && !inspectorOverlay
+  // 三列摆不下时让 Canvas（图纸 §三：让页面，不让终端）
+  const canvasHidden = focus || (insInline && !canvasFitsInspector)
 
   const dockStyle: CSSProperties = overlay
     ? {
@@ -140,7 +161,7 @@ export function Workspace({ mode, canvas, dock, dockWidth, bounds, splitMax, onR
     // （终端也跟着多算 40px，最后一行同样看不见）。跟着 Layout 的列走 flex:1 即可。
     <div style={{ position: 'relative', display: 'flex', height: '100%', minHeight: 0, minWidth: 0, flex: 1 }}>
       <div style={{
-        flex: focus ? '0 0 0px' : '1 1 auto', width: focus ? 0 : undefined,
+        flex: canvasHidden ? '0 0 0px' : '1 1 auto', width: canvasHidden ? 0 : undefined,
         minWidth: 0, height: '100%', minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column',
       }}>
         {canvas}
@@ -171,6 +192,11 @@ export function Workspace({ mode, canvas, dock, dockWidth, bounds, splitMax, onR
         aria-label={overlay ? t('workspace.terminalPanel') : undefined}>
         {dock}
       </div>
+
+      {/* Inspector：Git / Worktree 这一列（图纸 panels-desktop.html）。
+          它自带 rail 与拖拽——没有终端时 App 走的是另一棵树，那边也要有同一列。 */}
+      <InspectorColumn width={inspectorWidth} bounds={inspectorBounds}
+        overlay={inspectorOverlay} onResize={onInspectorResize} onReset={onInspectorReset} />
 
       {capsule}
 

@@ -112,6 +112,13 @@ export function SessionSwitchSheet({ open, sessions, active, needsInput, running
           )}
         />
       ))}
+      {/* 这张 sheet 只列「开着的终端」；搜索、筛选、Worktree 管理、新建竞赛都在会话页。
+          你正想着会话的时候就在这儿，入口放这里比绕回概览近得多。 */}
+      <SheetRow
+        icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="7" x2="20" y2="7" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="17" x2="14" y2="17" /></svg>}
+        title={t('project.allSessions')}
+        onClick={() => { onClose(); location.hash = '#/sessions' }}
+      />
     </MobileSheet>
   )
 }

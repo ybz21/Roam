@@ -16,6 +16,7 @@ import { useI18n } from './i18n'
 import { usePreferences } from './preferences'
 import { INTENT_EVENT, takeIntent } from './intents'
 import { MobileSheet, SheetRow } from './shell/MobileSheet'
+import AdaptivePanel from './shell/AdaptivePanel'
 import { useLayout } from './layout'
 import { detectPrompt } from './prompt'
 import { relTime, taskNameFromPrompt, shq, NewSessionModal, DirPicker, recentDirs, pushRecentDir, CloseWorktreeModal } from './App'
@@ -47,6 +48,10 @@ const ico = (d: React.ReactNode) => (
 const ICON_SEARCH = ico(<><circle cx="11" cy="11" r="7" /><line x1="16.5" y1="16.5" x2="21" y2="21" /></>)
 const ICON_SORT = ico(<><path d="M7 4v16" /><path d="M4 8l3-4 3 4" /><path d="M17 20V4" /><path d="M14 16l3 4 3-4" /></>)
 const ICON_CHECK = ico(<polyline points="4 12 9 17 20 6" />)
+const ICON_CHEVRON = (
+  <svg viewBox="0 0 24 24" width={12} height={12} fill="none" stroke="currentColor" aria-hidden="true"
+    strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"><polyline points="5 9 12 16 19 9" /></svg>
+)
 
 // ── 页面级样式（一次注入；产品 token 之上只做布局/微交互）──
 const PRJ_CSS = `
@@ -108,7 +113,12 @@ const PRJ_CSS = `
 .prj-row.on{background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent-border)}
 .prj-row.on::before{background:var(--accent)}
 .prj-row .acts{opacity:.55;transition:opacity .15s;display:flex;gap:12px;font-size:12.5px;flex:0 0 auto;margin-top:3px}
-.prj-row:hover .acts{opacity:1}
+.prj-row:hover .acts,.prj-row .acts:focus-within{opacity:1}
+/* 手指档没有 hover：半透明的操作等于不存在（13 §7） */
+html[data-pointer="coarse"] .prj-row .acts{opacity:1}
+html[data-pointer="coarse"] .prj-row .acts a{position:relative}
+html[data-pointer="coarse"] .prj-row .acts a::after{content:'';position:absolute;left:-6px;right:-6px;
+  top:50%;height:var(--tap);transform:translateY(-50%)}
 .prj-row.warn{background:rgba(210,153,34,.05);border:1px solid rgba(210,153,34,.18);margin-bottom:4px}
 .prj-row.warn:hover{background:rgba(210,153,34,.09)}
 .prj-row.warn::before{display:none}
@@ -127,7 +137,9 @@ html[data-size="compact"] .prj-filters{overflow-x:auto;scrollbar-width:none;flex
 html[data-size="compact"] .prj-filters::-webkit-scrollbar{height:0}
 html[data-size="compact"] .prj-filters>*{flex:0 0 auto}
 html[data-size="compact"] .prj-filters .sp,
-html[data-size="compact"] .prj-filters .ant-segmented{display:none}
+/* 手机：排序走右侧钉住的 ⇅ 图标 + 底部 sheet，筛选带里那枚排序控件是重复的 */
+html[data-size="compact"] .prj-filters .ant-segmented,
+html[data-size="compact"] .prj-subbar .prj-sortpill{display:none}
 /* 图标按钮：不描边——右边两个方框和左边的圆角 chip 不是一套语言。命中区靠伪元素撑到 44 */
 .prj-iconbtn{position:relative;flex:0 0 auto;width:32px;height:32px;display:none;place-items:center;
   border:0;border-radius:var(--r-sm);background:transparent;color:var(--text-dim);cursor:pointer}
@@ -147,8 +159,23 @@ html[data-size="compact"] .prj-subbar.searching .prj-iconbtn.find{display:none}
 .prj-chip .n{font-family:ui-monospace,monospace;font-size:var(--fs-micro);color:var(--text-dimmer)}
 .prj-chip.on .n{color:#79b8ff}
 
-/* 卡片列固定在 ≥320：原来是 minmax(270,1fr)，右侧一开终端就塌成一条极窄列表（14 §6.1） */
-.prj-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:var(--sp-4)}
+/* 卡片列固定在 ≥320：原来是 minmax(270,1fr)，右侧一开终端就塌成一条极窄列表（14 §6.1）。
+   align-items:start —— 默认的 stretch 会把整行卡片拉到最高那张的高度：一张列了两个会话、
+   邻座一个都没有时，邻座卡的下半截就是空的（实测整行被撑到 167）。 */
+.prj-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:var(--sp-4);align-items:start}
+
+/* 「其他项目」：没有会话在跑的项目不值一张卡（图纸 14-desktop-workspace/desktop-ia.html §二）——
+   实测 4 个空项目占掉 467px 的栅格。折成一行一个：名字 + 路径 + 可清理标。 */
+.prj-quiet{display:grid;grid-template-columns:minmax(96px,150px) minmax(0,1fr) auto;align-items:center;
+  gap:var(--sp-3);min-height:36px;padding:var(--sp-1) var(--sp-2);border-radius:var(--r-sm);
+  cursor:pointer;transition:background .14s}
+.prj-quiet+.prj-quiet{border-top:1px solid var(--border-subtle)}
+.prj-quiet:hover{background:var(--list-hover)}
+.prj-quiet .nm{font-size:var(--fs-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prj-quiet .p{font-family:ui-monospace,monospace;font-size:var(--fs-meta);color:var(--text-dimmer);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+html[data-size="compact"] .prj-quiet{grid-template-columns:minmax(0,1fr) auto;min-height:44px}
+html[data-size="compact"] .prj-quiet .p{display:none}
 
 .prj-card{background:var(--bg-container);border:1px solid var(--border-subtle);border-radius:var(--r-card);
   padding:var(--sp-3) var(--sp-4);cursor:pointer;display:flex;flex-direction:column;gap:8px;
@@ -159,6 +186,7 @@ html[data-size="compact"] .prj-subbar.searching .prj-iconbtn.find{display:none}
 /* 次要操作 hover 才出现，但键盘走到时同样要看得见——否则纯键盘用户够不着（14 §6.1） */
 .prj-card:focus-within .prj-acts,.prj-card:focus-visible .prj-acts{opacity:1}
 .prj-card:hover .prj-acts{opacity:1}
+html[data-pointer="coarse"] .prj-card .prj-acts{opacity:1}
 .prj-card .prj-acts .pinned{opacity:1}
 
 .prj-panel{background:var(--bg-container);border:1px solid var(--border-subtle);border-radius:12px;margin-top:8px}
@@ -195,6 +223,7 @@ html[data-size="compact"] .prj-subbar.searching .prj-iconbtn.find{display:none}
 .prj-fork .wt-ab.up{color:#3fb950} .prj-fork .wt-ab.dn{color:#d29922}
 .prj-fork .wt-acts{flex:0 0 auto;display:flex;gap:6px;align-items:center;opacity:.55;transition:opacity .15s}
 .prj-fork:hover .wt-acts,.prj-fork .wt-acts:focus-within{opacity:1}
+html[data-pointer="coarse"] .prj-fork .wt-acts{opacity:1}
 .prj-fork.merged .col,.prj-fork.ext .col{opacity:.75}
 `
 
@@ -354,7 +383,12 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
   // 置顶与活跃共用同一套栅格，只靠 section header 分组（14 §6.1）——两套栅格会让
   // 卡片宽度在分组之间对不齐
   const pinned = visible.filter((p) => p.pinned)
-  const rest = visible.filter((p) => !p.pinned)
+  // 没有会话、也没有待收尾/竞赛的项目折到页尾（图纸 desktop-ia.html §二）：它们和「正在跑
+  // 两个任务」的项目占同样大的卡，还被同一行最高的卡撑高，页面下三分之一因此全是空卡。
+  // 「活跃 / 待收尾」筛选下 visible 里本来就没有它们，这里不必再判筛选态。
+  const isQuiet = (p: Proj) => p.sessions <= 0 && p.unfinished <= 0 && p.races <= 0
+  const rest = visible.filter((p) => !p.pinned && !isQuiet(p))
+  const quiet = visible.filter((p) => !p.pinned && isQuiet(p))
 
   // 上下左右移动选中：列数从栅格实际算，不写死——它随 Canvas 宽度变
   const onGridKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -419,26 +453,11 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
     // 参照系，而这一层并不真的滚动（真正滚的是 .tt-canvas），于是页头永远粘不住。
     <div>
       <div className="prj-wrap-wide">
-        {/* 页头与概览共用一套（.tt-pagehead）：眉标 + 标题 + 一句话。原来这里只有一个
-            16px 的「项目」挤在搜索框左边，和概览那页完全不像同一个产品。 */}
-        {/* 手机上整块不渲染：底栏已高亮「项目」，筛选带里的「全部 12」又说明了总量，
-            再写一遍大号页名等于用 100px 说一句用户已经知道的话。桌面保留。 */}
-        {!isPhone && (
-          <header className="tt-pagehead" style={{ marginBottom: 14 }}>
-            <div className="ttl">
-              <div className="kicker">{t('nav.groupWorkspace')}</div>
-              <h2>{t('project.title')}</h2>
-              <p>{t('project.subtitle')}</p>
-            </div>
-          </header>
-        )}
-
         {/* sticky subheader（14 §6.1）：搜索 / 筛选 / 排序。滚到项目列表深处时这一条还在——
             筛选条件跟着内容滚走，等于要滚回顶部才能改。 */}
         <div className={`prj-subbar${searching ? ' searching' : ''}`}>
-          <Input allowClear size="small" value={q} onChange={(e) => setQ(e.target.value)}
-            ref={searchRef} className="prj-search" onBlur={() => { if (!q) setSearching(false) }}
-            placeholder={t('project.searchPlaceholder')} style={{ width: isPhone ? undefined : 200 }} />
+          <span className="tt-pagename" title={t('project.subtitle')}>{t('project.title')}</span>
+          <span className="tt-pagedivider" aria-hidden="true" />
           {/* 筛选与排序合成一条横滑带：手机上它俩各自换行，加上搜索框一共占了 5 行，
               第一张卡片被推到屏幕 26% 处。现在一行装下，滑得到即可。 */}
           <div className="prj-filters">
@@ -451,9 +470,21 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
                 onClick={() => setFilter(k)}>{label}<span className="n">{n}</span></button>
             ))}
             <span className="sp" />
-            <Segmented size="small" value={sortBy} onChange={(v) => changeSort(v as ProjSort)}
-              options={SORTS.map((k) => ({ label: t(`project.sort.${k}`), value: k }))} />
           </div>
+          {/* 搜索与排序贴右：左端回答「看什么」（筛选，属于内容），右端放「怎么找」（工具）。
+              原来搜索在最左、排序甩到最右，中间空掉 ~700px。 */}
+          <Input allowClear size="small" value={q} onChange={(e) => setQ(e.target.value)}
+            ref={searchRef} className="prj-search" onBlur={() => { if (!q) setSearching(false) }}
+            placeholder={t('project.searchPlaceholder')} style={{ width: isPhone ? undefined : 200 }} />
+          <Dropdown trigger={['click']} menu={{
+            selectable: true, selectedKeys: [sortBy],
+            items: SORTS.map((k) => ({ key: k, label: t(`project.sort.${k}`) })),
+            onClick: ({ key }) => changeSort(key as ProjSort),
+          }}>
+            <button type="button" className="prj-chip prj-sortpill" aria-label={t('project.sortBy')}>
+              {t(`project.sort.${sortBy}`)}{ICON_CHEVRON}
+            </button>
+          </Dropdown>
           {/* 手机：搜索原地展开、排序进 sheet。两枚图标钉在右侧，不随筛选带横滑跑掉 */}
           <button type="button" className="prj-iconbtn find" aria-label={t('project.searchPlaceholder')}
             onClick={() => { setSearching(true); setTimeout(() => searchRef.current?.focus(), 0) }}>
@@ -491,6 +522,25 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
           <div className="prj-sect"><b>{t('overview.activeProjects')}</b><span className="n">{rest.length}</span><span className="ln" /></div>
         )}
         {rest.length > 0 && <div className="prj-grid" onKeyDown={onGridKey}>{rest.map(card)}</div>}
+
+        {quiet.length > 0 && (
+          <>
+            <div className="prj-sect" style={{ marginTop: 22 }}>
+              <b>{t('project.quietSection')}</b><span className="n">{quiet.length}</span>
+              <span style={{ color: 'var(--text-dimmer)', fontWeight: 400, fontSize: 'var(--fs-meta)' }}>
+                {t('project.quietHint')}</span>
+              <span className="ln" />
+            </div>
+            {quiet.map((p) => (
+              <div key={p.key} className="prj-quiet" onClick={() => open(p)}
+                role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); open(p) } }}>
+                <span className="nm">{p.name}</span>
+                <span className="p" title={p.dir}>{p.dir}</span>
+                <span>{p.cleanable > 0 && <Tag color="success" style={{ margin: 0 }}>{t('project.cleanableCount', { count: p.cleanable })}</Tag>}</span>
+              </div>
+            ))}
+          </>
+        )}
 
         {data.loose.length > 0 && (
           <>
@@ -1680,15 +1730,14 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
 
         <Suspense fallback={<Spin />}>
           {wtOpen && <WorktreePanel open={wtOpen} onClose={() => { setWtOpen(false); refresh() }} openTerm={openTerm} initialDir={dir} />}
-          {(gitOpen || gitAt) && (
-            <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(1,4,9,.6)' }} onClick={() => { setGitOpen(false); setGitAt(null) }}>
-              <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 'min(520px, 94vw)', background: 'var(--bg-container)', borderLeft: '1px solid var(--border)' }}
-                onClick={(e) => e.stopPropagation()}>
-                <GitPanel dir={gitAt?.dir || dir} initialTab={gitAt?.tab} openTerm={openTerm}
-                  onClose={() => { setGitOpen(false); setGitAt(null) }} />
-              </div>
-            </div>
-          )}
+          {/* 手机走全屏二级页；桌面仍是右缘面板 + 遮罩。原来这里是一套手搓的
+              zIndex:1000 遮罩 + 面板，和会话页那套 FloatingFileDrawer 宽度/层级/阴影全不一样——
+              同一个 GitPanel 不该有两套壳（13 §6）。 */}
+          <AdaptivePanel open={!!(gitOpen || gitAt)} title={t('git.title')}
+            onClose={() => { setGitOpen(false); setGitAt(null) }}>
+            <GitPanel dir={gitAt?.dir || dir} initialTab={gitAt?.tab} openTerm={openTerm}
+              onClose={() => { setGitOpen(false); setGitAt(null) }} />
+          </AdaptivePanel>
           {raceOpen && <RaceCreateModal open={raceOpen} onClose={() => setRaceOpen(false)} onDone={() => { setRaceOpen(false); refresh() }} />}
           {swarmOpen && (
             <NewSwarmModal open={swarmOpen} initialDir={dir} lockDir

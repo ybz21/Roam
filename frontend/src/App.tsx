@@ -17,6 +17,9 @@ import CodexChat from './CodexChat'
 import FileBrowser from './FileBrowser'
 import FileWorkspace from './FileWorkspace'
 import FloatingFileDrawer from './FloatingFileDrawer'
+import AdaptivePanel from './shell/AdaptivePanel'
+import { InspectorColumn } from './shell/InspectorColumn'
+import { useInspectorReserved } from './shell/inspector'
 import MobileSubPage from './MobileSubPage'
 import { FileView } from './fileview'
 // 非首屏的重页面（蜂群/Git 面板/浏览器/手机镜像/插件）按路由懒加载：切到对应 tab 才拉 chunk，
@@ -46,7 +49,7 @@ import { reorderTabs } from './shell/tabs'
 import { requestIntent } from './intents'
 import { SessionDock, SessionSwitchSheet } from './shell/SessionDock'
 import { DPad } from './shell/DPad'
-import { sessionProject, setSessionProjects, buildSessionProjects } from './session-project'
+import { sessionProject, setSessionProjects, buildSessionProjects, useSessionProjects, sessionLocation } from './session-project'
 import { MobileSheet, SheetRow, SheetSection } from './shell/MobileSheet'
 import { WorkspaceTopbar, type PaletteItem } from './shell/WorkspaceTopbar'
 import { copyText } from './chat/blocks'
@@ -62,12 +65,15 @@ interface ClaudeInfo { running: boolean; file?: string; dir?: string }
 const { Sider, Content } = Layout
 const { Text } = Typography
 
-// 「会话」「蜂群」不再进导航：项目页是唯一主入口（任务驱动，08 设计）——
-// 蜂群从项目编队 tab 进（蜂群台深链 #/swarm/<名>），会话平铺页留 #/sessions 直达；
-// 两页组件与路由都保留，概览页统计仍可跳转。
+// 「蜂群」不进导航：项目页是唯一主入口（任务驱动，08 设计），蜂群从项目编队 tab 进
+// （蜂群台深链 #/swarm/<名>）。
+// 「会话」在 NAV 里但不进桌面侧栏两组：桌面从项目页/概览进，命令面板能搜到；
+// 手机则**必须**有个导航入口——此前它只能从概览的「全部会话」链接进，而搜索、筛选、
+// Worktree 管理、新建竞赛全在那一页（13 §6）。
 const NAV = [
   { key: 'overview', labelKey: 'nav.overview' },
   { key: 'projects', labelKey: 'nav.projects' },
+  { key: 'sessions', labelKey: 'nav.sessions' },
   { key: 'files', labelKey: 'nav.files' },
   { key: 'browser', labelKey: 'nav.browser' },
   { key: 'phone', labelKey: 'nav.phone' },
@@ -82,11 +88,14 @@ const NAV_TOOLS = ['browser', 'phone', 'plugins']
 
 // 手机底栏只放高频页，plugins/settings 折进「更多」，避免底栏拥挤（桌面侧栏仍展示全部）
 const MOBILE_NAV_KEYS = ['overview', 'projects', 'files']
-const MOBILE_MORE_KEYS = ['browser', 'phone', 'plugins', 'settings']
+// 「更多」sheet 里的两段：会话属于工作区主线，不归到工具下面
+const MOBILE_MORE_WORKSPACE = ['sessions']
+const MOBILE_MORE_TOOLS = ['browser', 'phone', 'plugins', 'settings']
+const MOBILE_MORE_KEYS = [...MOBILE_MORE_WORKSPACE, ...MOBILE_MORE_TOOLS]
 
 // 用 Canvas 容器查询排版的页面（见 index.css 的 .tt-canvas[data-cq]）。逐页开，
 // 不是全局开：container-type 会改变 fixed 后代的包含块。
-const CQ_PAGES = new Set(['overview'])
+const CQ_PAGES = new Set(['overview', 'sessions'])
 
 // 旧链接兼容：/#/env 重定向到 /#/settings
 function normalizeRoute(raw: string): string {
@@ -108,7 +117,7 @@ function setHashParams(params: Record<string, string>) {
   for (const [k, v] of Object.entries(params)) { if (v) sp.set(k, v) }
   const qs = sp.toString()
   const next = qs ? base + '?' + qs : base
-  if (h !== next) history.replaceState(null, '', next)
+  if (h !== next) history.replaceState(history.state, '', next)
 }
 
 // URL 上的终端标签参数（terms=打开的标签、active=当前标签）。
@@ -604,7 +613,8 @@ export default function App() {
   )
 
   const pages: any = {
-    overview: <OverviewPage openTerm={openTerm} renderSessions={() => <Sessions openTerm={openTerm} closeTerm={closeTerm} activeTerm={active} embedded />} />,
+    // 概览不再嵌会话列表：那是会话页的活（分工见 docs/design/web/13-mobile-responsive/ia.html）
+    overview: <OverviewPage openTerm={openTerm} />,
     swarm: <Swarm openTerm={openTerm} initialSwarm={swarmSub || undefined} onNav={(n) => { location.hash = n ? '#/swarm/' + encodeURIComponent(n) : '#/swarm' }} />,
     projects: <Projects openTerm={openTerm} closeTerm={closeTerm} initialKey={projectSub || undefined} activeTerm={active} />,
     sessions: <Sessions openTerm={openTerm} closeTerm={closeTerm} activeTerm={active} />,
@@ -730,10 +740,13 @@ export default function App() {
           // 不是组件树，终端因此不会在开合时被卸载重建。
           <Workspace
             mode={space.mode} canvas={canvasNode} dock={dockNode}
-            dockWidth={space.dockWidth} bounds={space.bounds} splitMax={space.splitMax}
+            dockWidth={space.dockRenderWidth} bounds={space.bounds} splitMax={space.splitMax}
             onResize={space.setDockWidth} onReset={space.resetDockWidth}
             onFocus={() => space.setFocus('dock')}
             onDismiss={() => space.setDockOpen(false)}
+            inspectorWidth={space.inspectorWidth} inspectorBounds={space.inspectorBounds}
+            inspectorOverlay={!space.splitCapable} canvasFitsInspector={space.canvasFitsInspector}
+            onInspectorResize={space.setInspectorWidth} onInspectorReset={space.resetInspectorWidth}
             capsule={space.overlayCapable && space.mode === 'page' ? (
               // 胶囊只有 320px，显示 sessionLabel 而不是 sessionDisplay——后者带
               // 「（会话 id）」后缀，在这个宽度下正好被截在 id 中间，什么也没说清。
@@ -747,7 +760,16 @@ export default function App() {
             ) : null}
           />
         ) : (
-          <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>{canvasNode}</div>
+          // 没有终端时不走 Workspace（不必为空 Dock 撑一套几何），但 Inspector 这一列
+          // 两边都要有——Git 面板在项目页也开得出来。
+          <div style={{ position: 'relative', display: 'flex', flex: 1, minHeight: 0 }}>
+            {canvasNode}
+            {hasSider && (
+              <InspectorColumn width={space.inspectorWidth} bounds={space.inspectorBounds}
+                overlay={!space.splitCapable} onResize={space.setInspectorWidth}
+                onReset={space.resetInspectorWidth} />
+            )}
+          </div>
         )}
       </Layout>
 
@@ -789,8 +811,14 @@ export default function App() {
 
       {isMobile && (
         <MobileSheet open={moreOpen} title={t('common.more')} onClose={() => setMoreOpen(false)}>
+          <SheetSection>{t('nav.groupWorkspace')}</SheetSection>
+          {MOBILE_MORE_WORKSPACE.map((key) => {
+            const n = NAV.find((x) => x.key === key)!
+            return <SheetRow key={n.key} icon={ICONS[n.key]} title={t(n.labelKey)}
+              onClick={() => { setMoreOpen(false); go(n.key) }} />
+          })}
           <SheetSection>{t('nav.groupTools')}</SheetSection>
-          {MOBILE_MORE_KEYS.map((key) => {
+          {MOBILE_MORE_TOOLS.map((key) => {
             const n = NAV.find((x) => x.key === key)!
             return <SheetRow key={n.key} icon={ICONS[n.key]} title={t(n.labelKey)}
               onClick={() => { setMoreOpen(false); go(n.key) }} />
@@ -812,7 +840,7 @@ export default function App() {
 
       {/* 手机/平板：全屏会话覆盖层（桌面用右侧停靠栏，不走这里）*/}
       {isMobile && overlay && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'var(--bg-term)', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 'var(--z-session)' as unknown as number, background: 'var(--bg-term)', display: 'flex', flexDirection: 'column' }}>
           {termPane}
         </div>
       )}
@@ -1019,6 +1047,7 @@ function TerminalPane(props: {
   // 编辑器多 tab / 打开的文件 / 拖拽调宽等都下沉到 <FileWorkspace>（左侧停靠时用），这里只保留 showFiles。
   const [showFiles, setShowFiles] = useState(fileDock === 'left')
   const [showGit, setShowGit] = useState(false)
+  const inspectorReserved = useInspectorReserved()
   const [cwd, setCwd] = useState('')
   // 文件栏与 Git 面板可并存：左侧停靠时文件走左栏、Git 走右抽屉，天然并列；
   // 右侧停靠时两者都是右抽屉，Git 抽屉在文件也开着时向左让位（见下方 right 偏移），并排显示而非互相覆盖。
@@ -1761,15 +1790,20 @@ function TerminalPane(props: {
         </div>
       )}
       {fileDock === 'right' && (
-        <FloatingFileDrawer open={showFiles}>
+        // 文件抽屉这一轮仍是浮层（P4 再收），但要按 Inspector 占掉的宽度往左让，
+        // 否则开着 Git 时它会盖住那一列
+        <FloatingFileDrawer open={showFiles} right={inspectorReserved}>
           <FileBrowser dir={cwd} accent="#58a6ff" layout="dock" onClose={() => setShowFiles(false)} />
         </FloatingFileDrawer>
       )}
-      <FloatingFileDrawer open={showGit} right={fileDock === 'right' && showFiles ? 'min(420px, 92vw)' : 0}>
+      {/* 手机走全屏二级页（13 §6）：420 的浮层在 360 屏上盖到 92vw，还压着底栏、不吃安全区。
+          桌面维持右缘浮动面板不变。layer="session" —— 这一层是从会话全屏(100)里唤起的。 */}
+      <AdaptivePanel open={showGit} layer="session" title={t('git.title')}
+        onClose={() => setShowGit(false)}>
         <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}><Spin /></div>}>
           <GitPanel dir={cwd} accent="#58a6ff" onClose={() => setShowGit(false)} />
         </Suspense>
-      </FloatingFileDrawer>
+      </AdaptivePanel>
       {paneCloseTarget && (
         <PaneCloseConfirm
           target={paneCloseTarget} busy={paneCloseBusy} error={paneCloseError}
@@ -2410,6 +2444,8 @@ function Sessions({ openTerm, closeTerm, activeTerm, embedded }: {
   const [wtDir, setWtDir] = useState<string | undefined>(undefined)
   // session→worktree 归属注解（cwd 现算的弱关联）：会话行 ⎇ Tag 的数据源
   const [wtAnn, setWtAnn] = useState<Record<string, any>>({})
+  // 会话→项目：桌面「项目」列的数据源。表是 App 那份轮询建的，这里只读（14 §6.3）
+  const sessProj = useSessionProjects()
   // 竞赛（W5/W6）：Race Service 业务数据，会话按竞赛聚组、组头进对比台
   const [races, setRaces] = useState<any[]>([])
   const [raceOpen, setRaceOpen] = useState(false)
@@ -2693,24 +2729,21 @@ function Sessions({ openTerm, closeTerm, activeTerm, embedded }: {
     // 不再套 Card：嵌在概览「会话」tab 里时，卡片边框 + 「会话 13」标题与外面的 tab
     // 完全重复——一层壳里套一层同名的壳。独立页则用与概览/项目同一套页头。
     <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-      {!embedded && (
-        <header className="tt-pagehead" style={{ marginBottom: 14 }}>
-          <div className="ttl">
-            <div className="kicker">{t('nav.groupWorkspace')}</div>
-            <h2>{t('nav.sessions')}</h2>
-            <p>{t('session.subtitle')}</p>
-          </div>
-          {!isPhone && <div className="acts">{sessionActions}</div>}
-        </header>
-      )}
-      {/* 手机才需要自己占一行（横向放不下）；桌面嵌入态并进下面搜索那一行，
+      {/* 手机才需要自己占一行（横向放不下）；桌面并进下面搜索那一行，
           否则「Worktree 管理 / ＋新建会话」白占一整行 */}
       {isPhone && (
         <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>{sessionActions}</div>
       )}
-      {/* 工具条：搜索 + 排序同一行，类型筛选另起一行 */}
+      {/* 工具条：页名 + 搜索 + 排序同一行，类型筛选另起一行。
+          页名并进这一行而不是单独的 .tt-pagehead（图纸 14-desktop-workspace/pagehead.html）：
+          眉标「工作区」+ 大标题「会话」+ 一句「所有会话，按 Agent、等待状态与最近响应筛选」
+          三层 91px，说的全是侧栏那条高亮导航项已经说完的事。 */}
       <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {!embedded && !isPhone && (<>
+            <span className="tt-pagename" title={t('session.subtitle')}>{t('nav.sessions')}</span>
+            <span className="tt-pagedivider" aria-hidden="true" />
+          </>)}
           <Input allowClear value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('session.searchPlaceholder')}
             style={{ flex: 1, minWidth: 0 }}
             prefix={svg(<><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></>)} />
@@ -2724,7 +2757,7 @@ function Sessions({ openTerm, closeTerm, activeTerm, embedded }: {
             title={sortAsc ? t('session.sortAsc') : t('session.sortDesc')}>
             {sortAsc ? '↑' : '↓'}
           </Button>
-          {embedded && !isPhone && sessionActions}
+          {!isPhone && sessionActions}
         </div>
         {/* 一律按内容宽：block 在手机上把 6 项等分成 ~60px、标签全截成「全部…」；
             在桌面上又把 6 个标签摊到 1200px，中间空出大片，读起来是散的。
@@ -2810,46 +2843,53 @@ function Sessions({ openTerm, closeTerm, activeTerm, embedded }: {
                   boxShadow: activeRow ? '0 0 0 1px rgba(88,166,255,.18), 0 0 18px rgba(31,111,235,.14)' : undefined,
                 }} onClick={() => openTerm(s.name)}>
                   {activeRow && <span aria-hidden style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: '#58a6ff' }} />}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', width: '100%', minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', minWidth: 0, flex: 1 }}>
-                      <i title={waiting ? t('prompt.confirmRequired') : connected ? t('terminal.status.connected') : t('terminal.status.idle')} style={{ width: 8, height: 8, borderRadius: '50%', flex: '0 0 8px', background: waiting ? '#d29922' : connected ? '#3fb950' : 'var(--text-dimmer)' }} />
-                      <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' }}>
-                          {en.fam && <Tooltip title={t('session.fork.childOf', { parent: s.parent })}><span style={{ color: '#a371f7', flex: '0 0 auto', fontSize: 13 }}>⑂</span></Tooltip>}
-                          <span style={{ fontWeight: 700, color: activeRow ? '#fff' : 'var(--text-bright)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${s.label || s.name}（${s.id || s.name}）`}>
-                            {s.label || s.name}
-                            {(s.id || s.name) !== (s.label || s.name) && <span style={{ opacity: .5, fontSize: 'var(--fs-meta)', marginLeft: 4, fontWeight: 400 }}>({s.id || s.name})</span>}
-                          </span>
-                          {(() => { // worktree 归属：⎇ 分支紧跟会话名(设计 W2)；外部 worktree 加 ⧉ 标识；手机端只显图标
-                            const ann = wtAnn[s.name]
-                            if (!ann?.primary?.linked) return null
-                            const tip = t('worktree.sessionTagTip', { path: ann.primary.worktree })
-                              + (ann.ambiguous ? ' · ' + t('worktree.sessionTagAmbiguous', { count: ann.matches?.length || 0 }) : '')
-                            return (<>
-                              <Tooltip title={tip}>
-                                <Tag color="cyan" style={{ margin: 0, flex: '0 0 auto', cursor: 'pointer', fontFamily: 'ui-monospace, monospace' }}
-                                  onClick={(e) => { e.stopPropagation(); setWtDir(ann.primary.repo); setWtOpen(true) }}>
-                                  {wide ? `⎇ ${ann.primary.branch}` : '⎇'}{ann.ambiguous ? ' +' : ''}
-                                </Tag>
-                              </Tooltip>
-                              {ann.primary.external && <Tag style={{ margin: 0, flex: '0 0 auto' }}>⧉ {wide ? t('worktree.external') : ''}</Tag>}
-                            </>)
-                          })()}
-                          {sw && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>{t('nav.swarm')}:{sw.swarm}{sw.role === 'leader' ? `·${t('swarm.master')}` : ''}</Tag>}
-                          {waiting && <Tag color="warning" style={{ margin: 0, flex: '0 0 auto' }}>{t('session.waiting')}</Tag>}
-                          {cc[s.name] && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>✳ Claude</Tag>}
-                          {cx[s.name] && <Tag color="green" style={{ margin: 0, flex: '0 0 auto' }}>✸ Codex</Tag>}
-                          {!sw && !agent && <Tag style={{ margin: 0, flex: '0 0 auto' }}>{connected ? t('terminal.status.connected') : t('terminal.status.idle')}</Tag>}
-                          <span style={{ color: 'var(--text-dim)', fontSize: 12, flex: '0 0 auto', whiteSpace: 'nowrap' }}>{t('session.windows', { count: s.windows })}</span>
-                        </div>
-                        <div style={{ color: 'var(--text-dimmer)', fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          <span title={absTime(s.created)}>{t('session.createdAt')} {relTime(s.created, t)}</span>
-                          <span style={{ margin: '0 6px' }}>·</span>
-                          <span title={absTime(s.last_activity)}>{t('session.lastActivity')} {relTime(s.last_activity, t)}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div onClick={(e) => e.stopPropagation()} style={{ marginLeft: 'auto', display: 'flex', gap: 'var(--sp-4)', alignItems: 'center', flex: '0 0 auto', whiteSpace: 'nowrap' }}>
+                  {/* 七个格子恒定：缺一个桌面上就整行错列，所以空的项目/位置格照样渲染（见 .tt-srow） */}
+                  <div className="tt-srow">
+                    <i title={waiting ? t('prompt.confirmRequired') : connected ? t('terminal.status.connected') : t('terminal.status.idle')} style={{ width: 8, height: 8, borderRadius: '50%', flex: '0 0 8px', background: waiting ? '#d29922' : connected ? '#3fb950' : 'var(--text-dimmer)' }} />
+                    <span className="nm" style={{ color: activeRow ? '#fff' : undefined }}
+                      title={`${s.label || s.name}（${s.id || s.name}）· ${t('session.createdAt')} ${absTime(s.created)}`}>
+                      {en.fam && <Tooltip title={t('session.fork.childOf', { parent: s.parent })}><span style={{ color: '#a371f7', fontSize: 13, marginRight: 6 }}>⑂</span></Tooltip>}
+                      {s.label || s.name}
+                      {/* 会话 ID 只留尾 4 位：全名与名字同权并排时，每行前半截都在念一串日期 */}
+                      {(s.id || s.name) !== (s.label || s.name) && <span className="id">{(s.id || s.name).slice(-4)}</span>}
+                    </span>
+                    <span className="pj">{sessProj[s.name]?.name}</span>
+                    {(() => { // 位置列：有 worktree 就是 ⎇ 分支（点开进 worktree 管理），否则是工作目录
+                      const ann = wtAnn[s.name]
+                      const loc = sessionLocation(ann, s.cwd, sessProj[s.name]?.dir)
+                      if (!loc.branch && !loc.path) return <span className="loc" />
+                      const tip = loc.branch
+                        ? t('worktree.sessionTagTip', { path: ann?.primary?.worktree || '' })
+                          + (ann?.ambiguous ? ' · ' + t('worktree.sessionTagAmbiguous', { count: ann.matches?.length || 0 }) : '')
+                        : loc.title
+                      return (
+                        <span className="loc" title={tip}
+                          onClick={ann?.primary?.linked ? (e) => { e.stopPropagation(); setWtDir(ann.primary.repo); setWtOpen(true) } : undefined}
+                          style={ann?.primary?.linked ? { cursor: 'pointer' } : undefined}>
+                          {loc.branch ? <span className="br">⎇ {loc.branch}{ann?.ambiguous ? ' +' : ''}</span> : loc.path}
+                        </span>
+                      )
+                    })()}
+                    <span className="tags">
+                      {(() => { // 窄档只留一枚 ⎇ 图标（桌面由位置列接管）；外部 worktree 加 ⧉
+                        const ann = wtAnn[s.name]
+                        if (!ann?.primary?.linked) return null
+                        return (<>
+                          <Tag className="wt" color="cyan" style={{ margin: 0, flex: '0 0 auto', cursor: 'pointer', fontFamily: 'ui-monospace, monospace' }}
+                            onClick={(e) => { e.stopPropagation(); setWtDir(ann.primary.repo); setWtOpen(true) }}>⎇</Tag>
+                          {ann.primary.external && <Tag className="wt" style={{ margin: 0, flex: '0 0 auto' }}>⧉</Tag>}
+                        </>)
+                      })()}
+                      {sw && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>{t('nav.swarm')}:{sw.swarm}{sw.role === 'leader' ? `·${t('swarm.master')}` : ''}</Tag>}
+                      {waiting && <Tag color="warning" style={{ margin: 0, flex: '0 0 auto' }}>{t('session.waiting')}</Tag>}
+                      {cc[s.name] && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>✳ Claude</Tag>}
+                      {cx[s.name] && <Tag color="green" style={{ margin: 0, flex: '0 0 auto' }}>✸ Codex</Tag>}
+                      {!sw && !agent && <Tag style={{ margin: 0, flex: '0 0 auto' }}>{connected ? t('terminal.status.connected') : t('terminal.status.idle')}</Tag>}
+                      {/* 窗口数 99% 的会话都是 1，常驻就是一列噪声——只在 >1 时说 */}
+                      {s.windows > 1 && <span style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap' }}>{t('session.windows', { count: s.windows })}</span>}
+                    </span>
+                    <span className="tm" title={absTime(s.last_activity)}>{relTime(s.last_activity, t)}</span>
+                    <span className="acts" onClick={(e) => e.stopPropagation()}>
                       {!sw && wide && <a onClick={() => setForking(s.name)}>{t('session.fork.entry')}</a>}
                       {sw && <a onClick={() => goSwarm(sw.swarm)}>{t('session.swarmPage')}</a>}
                       {sw ? (
@@ -2869,7 +2909,7 @@ function Sessions({ openTerm, closeTerm, activeTerm, embedded }: {
                           <a style={{ color: '#f85149' }} onClick={() => { if (confirmKill !== s.name) beginClose(s.name) }}>{t('session.close')}</a>
                         </Popconfirm>
                       )}
-                    </div>
+                    </span>
                   </div>
                 </List.Item>
               )

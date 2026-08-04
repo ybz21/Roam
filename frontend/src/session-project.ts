@@ -8,7 +8,7 @@
 // 会话胶囊、标签右键菜单）散在各处，数据源却只有 App 那一份轮询。
 import { useSyncExternalStore } from 'react'
 
-export type SessionProject = { key: string; name: string; branch?: string }
+export type SessionProject = { key: string; name: string; dir: string; branch?: string }
 
 let table: Record<string, SessionProject> = {}
 const listeners = new Set<() => void>()
@@ -29,6 +29,23 @@ export function sessionProject(name?: string | null): SessionProject | undefined
   return name ? table[name] : undefined
 }
 
+/**
+ * 会话的「位置」——桌面列表里那一列（图纸 14-desktop-workspace/desktop-ia.html §一）。
+ *
+ * 优先给 worktree 分支：同名会话散在两个 worktree 上时，分支是唯一能分辨它们的东西。
+ * 没有分支就给工作目录（只留末两段）。**与项目目录相同时返回空**：那一行左边的项目列
+ * 已经说过一遍，再写一次是重复不是信息。
+ */
+export function sessionLocation(ann: any, cwd?: string, projectDir?: string):
+  { branch?: string; path?: string; title?: string } {
+  const branch = ann?.primary?.branch
+  if (branch) return { branch, title: ann?.primary?.worktree || branch }
+  const dir = cwd || ann?.home || ''
+  if (!dir || dir === projectDir) return {}
+  const parts = dir.split('/').filter(Boolean)
+  return { path: (parts.length > 2 ? '…/' : '/') + parts.slice(-2).join('/'), title: dir }
+}
+
 function subscribe(fn: () => void) {
   listeners.add(fn)
   return () => listeners.delete(fn)
@@ -36,6 +53,11 @@ function subscribe(fn: () => void) {
 
 export function useSessionProject(name?: string | null): SessionProject | undefined {
   return useSyncExternalStore(subscribe, () => sessionProject(name), () => sessionProject(name))
+}
+
+/** 整张表——会话列表要按行取项目名，一个个 hook 取不现实。 */
+export function useSessionProjects(): Record<string, SessionProject> {
+  return useSyncExternalStore(subscribe, () => table, () => table)
 }
 
 /**
@@ -49,8 +71,8 @@ export function buildSessionProjects(
   projects: { key: string; name: string; dir: string; git: boolean; top?: { name: string }[] | null }[],
   annotations: Record<string, any>,
 ): Record<string, SessionProject> {
-  const byDir = new Map<string, { key: string; name: string }>()
-  for (const p of projects) if (p.git) byDir.set(p.dir, { key: p.key, name: p.name })
+  const byDir = new Map<string, { key: string; name: string; dir: string }>()
+  for (const p of projects) if (p.git) byDir.set(p.dir, { key: p.key, name: p.name, dir: p.dir })
 
   const out: Record<string, SessionProject> = {}
   for (const [session, ann] of Object.entries(annotations || {})) {
@@ -61,7 +83,7 @@ export function buildSessionProjects(
   // 非 git 项目兜底：已经有归属的不覆盖（annotation 比 top 名单准）
   for (const p of projects) {
     if (p.git) continue
-    for (const s of p.top || []) if (!out[s.name]) out[s.name] = { key: p.key, name: p.name }
+    for (const s of p.top || []) if (!out[s.name]) out[s.name] = { key: p.key, name: p.name, dir: p.dir }
   }
   return out
 }

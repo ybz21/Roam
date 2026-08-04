@@ -95,8 +95,10 @@
   --z-nav: 50;                    /* 底栏 / 导航轨 */
   --z-subpage: 90;                /* 全屏二级页 */
   --z-session: 100;               /* 会话全屏 */
+  --z-session-sub: 110;           /* 会话全屏里再开的二级页（Git/文件从终端里唤起） */
   --z-scrim: 900;                 /* 遮罩 */
   --z-sheet: 1000;                /* 底部 sheet / 抽屉 */
+  --z-panel: 1200;                /* 桌面右侧浮动面板：压过 sheet(1000)，低于 antd 弹层基座(1300) */
   --z-popup: 1300;                /* antd 弹层基座 */
   --z-toast: 1500;
   --z-drag: 9999;                 /* 拖拽幽灵 */
@@ -313,6 +315,8 @@ body {
 
 /* ── 页头（14 §5.1 / §6.1）：一级页面共用一套——眉标 + 标题 + 一句话说明 ──
    概览先做出来的这套，项目页照它对齐；再有新页面也照抄这三行，不要各写各的标题行。 */
+/* 页头：现在只剩概览在用——它的 h2 是内容（「早上好，今天有 N 件事需要你」）不是页名。
+   项目/会话的页名已并进各自的工具条（见下面的 .tt-pagename 与 pagehead.html）。 */
 .tt-pagehead { display: flex; align-items: flex-start; gap: var(--sp-4); flex-wrap: wrap; }
 .tt-pagehead .ttl { min-width: 0; flex: 1 1 320px; }
 .tt-pagehead .kicker {
@@ -336,6 +340,18 @@ html[data-size="compact"] .ov .tt-pagehead h2 { font-size: 20px; line-height: 1.
 html[data-size="compact"] .tt-pagehead { gap: var(--sp-2); }
 .tt-pagehead .acts { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
+/* 页名并进工具条（图纸 14-desktop-workspace/pagehead.html）。
+   项目页原来是眉标「工作区」+ 大标题「项目」+ 一句功能清单三层 91px，第一张卡片要到
+   y=203 才出现（900 高的屏 = 16% 首屏）；而左边侧栏此刻正高亮着「工作区 › 项目」——
+   这三件事它一次全说完了。
+   页名保留、只降到 19px 并入工具条：工具条是 sticky 的，滚下去之后屏幕上总得有个字
+   说明这是哪一页（项目卡与会话卡在余光里长得很像）。说明句进 title，鼠标停上去还在。
+   概览页不适用——它的 h2 是内容（「晚上好，今天有 N 件事需要你」），不是页名。 */
+.tt-pagename { flex: 0 0 auto; font-size: 19px; font-weight: 700; letter-spacing: -.01em; color: var(--text-bright); }
+.tt-pagedivider { flex: 0 0 auto; width: 1px; height: 18px; background: var(--border); }
+html[data-size="compact"] .tt-pagename,
+html[data-size="compact"] .tt-pagedivider { display: none; }
+
 /* ── 页面骨架：所有一级页面从同一个左上角起笔，卡片和工具区间距一致 ── */
 .tt-page {
   min-height: 100%;
@@ -354,6 +370,55 @@ html[data-size="compact"] .tt-pagehead { gap: var(--sp-2); }
 .tt-page-mobile.has-dock {
   padding-bottom: calc(126px + env(safe-area-inset-bottom));
 }
+
+/* ── 会话行（图纸 14-desktop-workspace/desktop-ia.html §三）──────────────
+   一条会话原来写两行 67px：第二行只有「创建 · 最后响应」，中间 697px 是空的，
+   而「这条会话属于哪个项目」概览都写了、这一页反而没有。
+   现在同一份 DOM 两种排法：窄档一行折行排；Canvas ≥900 排成七列，
+   空出来的宽度换成两列真信息（项目 / 位置），行高收到 40。 */
+/* 窄档是两行栅格而不是 flex 折行：靠 flex 折的话，行会按名字长短随机折成一行或两行，
+   「关闭」有时孤零零掉到第二行——列表于是没有一条稳定的基线。
+   这是**基础**排法而不是 compact 专属：桌面拉开终端分栏时 Canvas 同样会窄到 <900。 */
+.tt-srow { display: grid; align-items: center; width: 100%; min-width: 0;
+  row-gap: var(--sp-1); column-gap: var(--sp-2);
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  grid-template-areas: "dot nm acts" "dot tags tm"; }
+.tt-srow > * { min-width: 0; }
+.tt-srow > i { grid-area: dot; align-self: start; margin-top: 6px; }
+.tt-srow .nm { grid-area: nm; font-weight: 700; color: var(--text-bright);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-srow .nm .id { margin-left: 4px; font-weight: 400; font-size: var(--fs-meta); opacity: .5; }
+.tt-srow .pj, .tt-srow .loc { display: none; }
+.tt-srow .tags { grid-area: tags; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.tt-srow .tm { grid-area: tm; justify-self: end; font-size: var(--fs-meta);
+  color: var(--text-dimmer); white-space: nowrap; }
+.tt-srow .acts { grid-area: acts; justify-self: end; display: flex; align-items: center;
+  gap: var(--sp-4); white-space: nowrap; }
+
+@container canvas (min-width: 900px) {
+  .tt-srow { column-gap: var(--sp-3); row-gap: 0; grid-template-areas: none;
+    grid-template-columns: 8px minmax(180px, 1fr) 124px minmax(150px, 1.25fr) 132px 82px 92px; }
+  /* 七列按 DOM 顺序自动落位：● / 名称 / 项目 / 位置 / 标记 / 时间 / 操作 */
+  .tt-srow > i, .tt-srow .nm, .tt-srow .tags, .tt-srow .tm, .tt-srow .acts { grid-area: auto; }
+  .tt-srow > i { align-self: center; margin-top: 0; }
+  .tt-srow .pj { display: block; font-size: var(--fs-meta); color: var(--text-dimmer);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tt-srow .loc { display: block; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: var(--fs-meta); color: var(--text-dimmer); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tt-srow .loc .br { color: #7ed0d8; }
+  .tt-srow .tags { flex-wrap: nowrap; overflow: hidden; }
+  /* 位置列已经把分支写全了，行内那枚 ⎇ 标就是重复 */
+  .tt-srow .tags .wt { display: none; }
+  .tt-srow .tm { margin-left: 0; justify-self: end; }
+  /* 破坏性动作不常驻：12 行 12 个红色「关闭」是界面在冲用户喊。
+     :focus-within 一起写——只挂 hover 的话键盘用户永远够不着。 */
+  .tt-srow .acts { justify-self: end; opacity: 0; transition: opacity .14s; }
+  .ant-list-item:hover .tt-srow .acts,
+  .ant-list-item:focus-within .tt-srow .acts,
+  .tt-srow .acts:focus-within { opacity: 1; }
+}
+/* 手指档没有 hover，操作必须常驻 */
+html[data-pointer="coarse"] .tt-srow .acts { opacity: 1; }
 
 .tt-seg-scroll { scrollbar-width: none; }
 .tt-seg-scroll::-webkit-scrollbar { height: 0; }
@@ -760,7 +825,10 @@ html[data-size="compact"] .ant-form-item-control-input-content > .ant-picker { w
 .tt-file-context-menu { width: max-content !important; min-width: 130px !important; }
 /* Git 分组标题上的操作按钮：平时半透明，hover 分组时变实 */
 .cc-git-section-act .cc-dl { opacity: .5; }
-.cc-git-section:hover .cc-git-section-act .cc-dl { opacity: 1; }
+.cc-git-section:hover .cc-git-section-act .cc-dl,
+.cc-git-section-act .cc-dl:focus-visible { opacity: 1; }
+/* 手指档没有 hover（13 §7） */
+html[data-pointer="coarse"] .cc-git-section-act .cc-dl { opacity: 1; }
 .cc-dl:hover { background: rgba(255, 255, 255, .08); color: var(--text-bright) !important; }
 .cc-filerow .ant-btn { color: var(--text-dim); }
 .cc-filerow .ant-btn:hover { color: var(--text-bright) !important; background: rgba(255, 255, 255, .06) !important; }

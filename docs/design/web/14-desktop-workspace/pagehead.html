@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>桌面页头：标题与工具条合并成一行</title>
+<style>
+:root{
+  --bg:#0d1117;--card:#161b22;--inset:#0b0f14;--line:#21262d;--line2:#30363d;
+  --tx:#e6edf3;--dim:#8b949e;--dimmer:#6e7681;
+  --acc:#58a6ff;--solid:#4e90dc;--soft:rgba(31,111,235,.14);--accb:rgba(88,166,255,.45);
+  --amber:#d29922;--green:#3fb950;--cyan:#39c5cf;--red:#f85149;
+  --micro:11px;--meta:12px;--sm:13px;--body:15px;--lg:16px;
+  --rp:999px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:#07090d;color:var(--tx);font:14px/1.6 Inter,-apple-system,"PingFang SC",sans-serif}
+.wrap{max-width:1120px;margin:0 auto;padding:30px 22px 80px}
+h1{font-size:22px;margin:0 0 8px}
+h2{font-size:var(--lg);margin:36px 0 6px;padding-top:22px;border-top:1px solid var(--line)}
+.lede{color:var(--dim);font-size:var(--sm);line-height:1.85;max-width:80ch;margin:0 0 14px}
+.lede b{color:var(--tx)}
+code{font:var(--meta)/1.4 ui-monospace,monospace;color:#c9d5e2;background:rgba(148,163,184,.1);padding:2px 6px;border-radius:4px}
+ul.meas{margin:0 0 20px;padding-left:19px;color:var(--dim);font-size:var(--sm);line-height:1.9;max-width:80ch}
+ul.meas b{color:#f2a6a0;font:600 var(--sm)/1 ui-monospace,monospace}
+ol.sr{margin:0;padding-left:20px;color:var(--dim);font-size:var(--sm);line-height:1.85;max-width:80ch}
+ol.sr li{margin-bottom:10px} ol.sr b{color:var(--tx)} ol.sr em{font-style:normal;color:#f2a6a0}
+.cap{display:flex;align-items:center;gap:8px;margin:18px 0 8px;font-size:var(--meta);color:var(--dim)}
+.cap b{color:var(--tx);font-size:var(--sm)}
+.tag{font-size:var(--micro);padding:1px 8px;border-radius:var(--rp);border:1px solid var(--line2);color:var(--dimmer)}
+.tag.bad{color:#f2a6a0;border-color:rgba(248,81,73,.42)}
+.tag.good{color:#7fd18f;border-color:rgba(63,185,80,.42)}
+.note{margin:10px 0 0;font-size:var(--meta);color:var(--dim);line-height:1.8;max-width:80ch}
+.note u{text-decoration:none;color:var(--tx)} .note em{font-style:normal;color:#f2a6a0}
+
+/* 画布：真实 1440 宽（侧栏 224 + Canvas 1216），缩到 .72 */
+.stage{overflow:hidden;border-radius:10px;border:1px solid var(--line2);background:var(--bg)}
+.dk{zoom:.72;width:1440px;display:flex}
+.side{flex:0 0 224px;background:var(--card);border-right:1px solid var(--line);padding:12px 10px}
+.side .lg{font-size:17px;font-weight:800;margin-bottom:10px}
+.side .grp{font-size:11px;color:var(--dimmer);margin:10px 0 4px;padding-left:8px}
+.side i{display:block;font-style:normal;font-size:14px;color:var(--dim);padding:8px 10px;border-radius:8px}
+.side i.on{color:var(--acc);background:var(--soft);position:relative}
+.side i.on::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:2px;background:var(--acc)}
+.cv{flex:1;min-width:0;padding:16px}
+
+.kick{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--dimmer);font-weight:700}
+.ttl{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:4px 0 0}
+.sub{font-size:13px;color:var(--dim);margin:7px 0 0}
+.bar{display:flex;align-items:center;gap:9px;height:44px;margin-top:14px}
+.bar .sp{flex:1}
+.srch{height:30px;flex:0 0 200px;border:1px solid var(--line2);border-radius:10px;background:var(--card);
+  display:flex;align-items:center;padding:0 11px;color:var(--dimmer);font-size:12px;gap:7px}
+.chip{height:28px;padding:0 13px;border-radius:var(--rp);border:1px solid var(--line2);
+  display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--dim);white-space:nowrap}
+.chip.on{color:var(--acc);border-color:var(--accb);background:var(--soft)}
+.chip .n{font:11px/1 ui-monospace,monospace;color:var(--dimmer)}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:16px}
+.pc{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px 14px}
+.pc b{font-size:15px}
+.pc .p{font:11px/1.3 ui-monospace,monospace;color:var(--dimmer);margin-top:4px}
+.pc .m{font-size:12px;color:var(--dim);margin-top:8px}
+.pc .t{background:var(--inset);border-radius:6px;padding:7px 9px;margin-top:9px;display:flex;align-items:center;gap:8px;font-size:13px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--green);flex:0 0 auto}
+.pc .t .tm{margin-left:auto;font-size:12px;color:var(--dimmer)}
+
+/* 一行式页头 */
+.head1{display:flex;align-items:center;gap:12px;height:44px}
+.head1 .h{font-size:19px;font-weight:700;letter-spacing:-.01em;flex:0 0 auto}
+.head1 .cnt{font:12px/1 ui-monospace,monospace;color:var(--dimmer)}
+.head1 .div{width:1px;height:18px;background:var(--line2);flex:0 0 auto}
+.head1 .sp{flex:1}
+
+.void{background:repeating-linear-gradient(45deg,rgba(248,81,73,.14),rgba(248,81,73,.14) 6px,transparent 6px,transparent 13px);
+  border:1px dashed rgba(248,81,73,.6);border-radius:5px;display:grid;place-items:center;
+  font:12px/1.35 ui-monospace,monospace;color:#f2a6a0;text-align:center}
+.ok{border:1px dashed rgba(63,185,80,.55);border-radius:5px;background:rgba(63,185,80,.07);
+  display:grid;place-items:center;font:12px/1.35 ui-monospace,monospace;color:#7fd18f}
+table.tt{border-collapse:collapse;width:100%;font-size:var(--sm);margin:8px 0 18px}
+table.tt th,table.tt td{text-align:left;padding:8px 11px;border-bottom:1px solid var(--line);vertical-align:top}
+table.tt th{color:var(--dimmer);font-size:var(--meta);font-weight:600}
+table.tt td{color:var(--dim)} table.tt td b{color:var(--tx)}
+</style></head><body><div class="wrap">
+
+<h1>桌面页头：标题与工具条合并成一行</h1>
+<p class="lede">
+项目页在第一张卡片之前要花掉 <b>147px</b>，而这段里绝大部分在重复左边侧栏刚说过的话——
+侧栏此刻正高亮着<b>「工作区 › 项目」</b>，页面又写一遍眉标「工作区」、大标题「项目」，
+再加一句功能清单。1440×900 实测：
+</p>
+<ul class="meas">
+  <li>页头（眉标 + 标题 + 说明）<b>91px</b>；工具条 <b>44px</b>；第一张卡片在 <b>y=203</b></li>
+  <li>视口 900 高 → <b>16%</b> 的首屏在说「你在项目页」，而侧栏已经用高亮说过了</li>
+  <li>工具条自己也空：搜索 200px 贴左（x=240），排序甩到 x≈1330，中间 <b>≈700px</b> 什么都没有</li>
+</ul>
+
+<h2>一、现状</h2>
+<p class="cap"><b>项目页</b><span class="tag bad">147px chrome · 三层重复 · 工具条中间空 700</span></p>
+<div class="stage"><div class="dk">
+  <div class="side">
+    <div class="lg">Roam</div>
+    <div class="grp">工作区</div>
+    <i>概览</i><i class="on">项目</i><i>会话</i><i>文件</i>
+    <div class="grp">工具</div><i>浏览器</i>
+  </div>
+  <div class="cv">
+    <div style="display:flex;gap:10px;align-items:flex-start">
+      <div style="flex:1;min-width:0">
+        <div class="kick">工作区</div>
+        <div class="ttl">项目</div>
+        <div class="sub">从仓库进入任务、文件、Git、Worktree 与蜂群</div>
+      </div>
+      <div class="void" style="width:210px;height:74px">侧栏已经写着<br>「工作区 › 项目」</div>
+    </div>
+    <div class="bar">
+      <span class="srch">⌕ 搜索项目或路径</span>
+      <span class="chip on">全部 <span class="n">12</span></span>
+      <span class="chip">活跃 <span class="n">8</span></span>
+      <span class="chip">待收尾 <span class="n">0</span></span>
+      <span class="void" style="flex:1;height:22px;margin:0 8px">≈700px</span>
+      <span class="chip">最近活跃 ⌄</span>
+    </div>
+    <div class="cards">
+      <div class="pc"><b>blade-oauth</b><div class="p">/home/ai/codes/blade-oauth</div>
+        <div class="m"><b>1</b> 任务 · <b>4</b> worktree</div>
+        <div class="t"><i class="dot"></i>auth接入第三方<span class="tm">7 分钟前</span></div></div>
+      <div class="pc"><b>roam</b><div class="p">/home/ai/codes/ttmux</div>
+        <div class="m"><b>2</b> 任务 · <b>1</b> worktree</div>
+        <div class="t"><i class="dot"></i>桌面版页面也出一版<span class="tm">刚刚</span></div></div>
+      <div class="pc"><b>临时</b><div class="p">/home/ai/codes/tmp</div>
+        <div class="m"><b>2</b> 任务</div>
+        <div class="t"><i class="dot"></i>ds4双机部署<span class="tm">4 分钟前</span></div></div>
+    </div>
+  </div>
+</div></div>
+<p class="note">
+三层各自看都没错，<u>叠在一起才是问题</u>：眉标说分组、标题说页名、说明句列功能——
+而这三件事左边那条高亮的导航项一次全说完了。说明句尤其：
+「从仓库进入任务、文件、Git、Worktree 与蜂群」是功能清单，<b>第二次打开这一页就不再需要</b>。
+</p>
+
+<h2>二、新版：一行页头</h2>
+<p class="cap"><b>项目页（新）</b><span class="tag good">147 → 60px · 首屏多出 143px</span></p>
+<div class="stage"><div class="dk">
+  <div class="side">
+    <div class="lg">Roam</div>
+    <div class="grp">工作区</div>
+    <i>概览</i><i class="on">项目</i><i>会话</i><i>文件</i>
+    <div class="grp">工具</div><i>浏览器</i>
+  </div>
+  <div class="cv">
+    <div class="head1">
+      <span class="h">项目</span>
+      <span class="div"></span>
+      <span class="chip on">全部 <span class="n">12</span></span>
+      <span class="chip">活跃 <span class="n">8</span></span>
+      <span class="chip">待收尾 <span class="n">0</span></span>
+      <span class="sp"></span>
+      <span class="srch">⌕ 搜索项目或路径</span>
+      <span class="chip">最近活跃 ⌄</span>
+    </div>
+    <div class="cards" style="margin-top:14px">
+      <div class="pc"><b>blade-oauth</b><div class="p">/home/ai/codes/blade-oauth</div>
+        <div class="m"><b>1</b> 任务 · <b>4</b> worktree</div>
+        <div class="t"><i class="dot"></i>auth接入第三方<span class="tm">7 分钟前</span></div></div>
+      <div class="pc"><b>roam</b><div class="p">/home/ai/codes/ttmux</div>
+        <div class="m"><b>2</b> 任务 · <b>1</b> worktree</div>
+        <div class="t"><i class="dot"></i>桌面版页面也出一版<span class="tm">刚刚</span></div>
+        <div class="t"><i class="dot"></i>roam-bug修复<span class="tm">11 小时前</span></div></div>
+      <div class="pc"><b>临时</b><div class="p">/home/ai/codes/tmp</div>
+        <div class="m"><b>2</b> 任务</div>
+        <div class="t"><i class="dot"></i>ds4双机部署<span class="tm">4 分钟前</span></div>
+        <div class="t"><i class="dot"></i>你看看-jetson@192<span class="tm">12 小时前</span></div></div>
+    </div>
+    <div class="cards" style="margin-top:18px">
+      <div class="pc"><b>xiaohui-app</b><div class="p">/home/ai/codes/ybz/xh/XiaoHui</div>
+        <div class="m"><b>2</b> 任务 · <b>2</b> worktree</div></div>
+      <div class="pc"><b>blade-agent</b><div class="p">/home/ai/codes/blade-agent</div>
+        <div class="m"><b>1</b> 任务 · <b>1</b> worktree</div></div>
+      <div class="pc"><b>blade-service-deployer</b><div class="p">/home/ai/codes/…</div>
+        <div class="m"><b>1</b> 任务</div></div>
+    </div>
+  </div>
+</div></div>
+<p class="note">
+一行 44：<b>页名 + 总数 ｜ 筛选</b> 贴左，<b>搜索 + 排序</b> 贴右。<br>
+· 眉标删掉——侧栏的分组标题就是它；<br>
+· 说明句删掉——功能清单进 <code>title</code>，鼠标停在页名上还能看到；<br>
+· 页名保留但降到 19px：<u>它仍然是「我在哪」的锚点</u>，滚动时这条是 sticky 的，
+  只有它跟着走才知道这些卡片属于哪一页（会话页尤其，两页的卡片长得不一样但都是卡片）；<br>
+· 搜索从最左挪到最右，与排序作伴——<b>左端回答「看什么」，右端放「怎么找」</b>，
+  中间那 700px 的空白也就没有了。
+</p>
+
+<h2>三、概览页：另一个毛病</h2>
+<p class="lede">
+概览的 h2 是<b>内容</b>（「早上好，当前没有待处理事项」）不是页名，所以不并行——但它有另一处重复。
+1440 实测：眉标 <b>y=56</b>、标题 <b>y=78</b>、副句 <b>y=112</b>、状态条 <b>y=109</b>，内容从 <b>y=149</b> 开始。
+</p>
+<div class="cap"><b>现状</b><span class="tag bad">同一个「12」写两遍 · 中间空 800</span></div>
+<div class="stage"><div class="dk">
+  <div class="side">
+    <div class="lg">Roam</div><div class="grp">工作区</div>
+    <i class="on">概览</i><i>项目</i><i>会话</i><i>文件</i>
+  </div>
+  <div class="cv">
+    <div class="kick">8月4日星期二</div>
+    <div class="ttl" style="font-size:24px">早上好，当前没有待处理事项</div>
+    <div style="display:flex;align-items:center;margin-top:7px">
+      <div class="sub" style="margin:0"><b style="color:#f2a6a0">12</b> 个任务正在运行，最近一次活动在刚刚</div>
+      <div class="void" style="flex:1;height:20px;margin:0 10px">≈800px</div>
+      <div style="font-size:12px;color:var(--dim)"><i class="dot" style="display:inline-block"></i>
+        <b style="font-family:ui-monospace,monospace;color:#f2a6a0">12</b> 运行中</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:9px;margin-top:20px;font-size:13px;font-weight:600">最近会话
+      <span style="flex:1"></span><span style="color:var(--acc);font-weight:400;font-size:12px">全部会话 ›</span></div>
+    <div class="pc" style="margin-top:8px;background:none;border:0;padding:0">
+      <div class="t" style="background:none;border-bottom:1px solid var(--line);border-radius:0">
+        <i class="dot"></i><span style="color:var(--dimmer);font-size:12px">blade-oauth</span>
+        <b style="font-size:13px">auth接入第三方</b><span class="tm">刚刚</span></div>
+    </div>
+  </div>
+</div></div>
+<p class="note">
+副句里的「<b>12</b> 个任务正在运行」与右端状态条的「<b>12</b> 运行中」是<u>同一个数</u>——
+这正是手机版 IA 图纸自审里挑掉的那条，桌面这份没治。而且两者一左一右钉在同一条基线上，
+中间 800px 是空的。眉标是日期，单独占一行：日期有定位价值，<u>但不值一整行</u>。
+</p>
+
+<div class="cap"><b>新版</b><span class="tag good">三行 → 两行 · 数字只说一次</span></div>
+<div class="stage"><div class="dk">
+  <div class="side">
+    <div class="lg">Roam</div><div class="grp">工作区</div>
+    <i class="on">概览</i><i>项目</i><i>会话</i><i>文件</i>
+  </div>
+  <div class="cv">
+    <div style="display:flex;align-items:flex-end;gap:16px">
+      <div style="flex:1;min-width:0">
+        <div class="ttl" style="font-size:24px">早上好，当前没有待处理事项</div>
+        <div class="sub" style="margin-top:6px">8月4日星期二 · 最近活动 刚刚</div>
+      </div>
+      <div style="font-size:12px;color:var(--dim);display:flex;gap:18px;padding-bottom:3px">
+        <span><i class="dot" style="display:inline-block"></i>
+          <b style="font-family:ui-monospace,monospace;color:var(--tx)">12</b> 运行中</span>
+        <span><i class="dot" style="display:inline-block;background:var(--amber)"></i>
+          <b style="font-family:ui-monospace,monospace;color:var(--tx)">1</b> 待收尾</span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:9px;margin-top:18px;font-size:13px;font-weight:600">最近会话
+      <span style="flex:1"></span><span style="color:var(--acc);font-weight:400;font-size:12px">全部会话 ›</span></div>
+    <div class="pc" style="margin-top:8px;background:none;border:0;padding:0">
+      <div class="t" style="background:none;border-bottom:1px solid var(--line);border-radius:0">
+        <i class="dot"></i><span style="color:var(--dimmer);font-size:12px">blade-oauth</span>
+        <b style="font-size:13px">auth接入第三方</b><span class="tm">刚刚</span></div>
+      <div class="t" style="background:none;border-bottom:1px solid var(--line);border-radius:0">
+        <i class="dot"></i><span style="color:var(--dimmer);font-size:12px">roam</span>
+        <b style="font-size:13px">桌面版页面也出一版优化设计</b><span class="tm">刚刚</span></div>
+    </div>
+  </div>
+</div></div>
+<p class="note">
+① 副句里的计数删掉——<u>数字归状态条，一个数只说一次</u>；<br>
+② 眉标（日期）从标题<b>上方</b>挪到<b>下方</b>，与「最近活动 刚刚」合成一行小字：
+   先说事、再说时间；而且 项目/会话 的眉标这一稿已经删了，概览再单留一个上眉标就成了孤例；<br>
+③ 标题与状态条底对齐成一个块，中间那 800px 的空白随之消失。
+</p>
+
+<h2>四、哪些页面适用</h2>
+<table class="tt">
+  <tr><th style="width:90px">页面</th><th style="width:120px">页头</th><th>理由</th></tr>
+  <tr><td><b>项目</b></td><td>合并成一行</td><td>h2 就是页名，与侧栏高亮重复</td></tr>
+  <tr><td><b>会话</b></td><td>合并成一行</td><td>同上；「所有会话，按 Agent、等待状态与最近响应筛选」也是功能清单</td></tr>
+  <tr><td><b>概览</b></td><td>标题不动，<b>副句与眉标重排</b></td>
+      <td>它的 h2 是<u>内容</u>——「晚上好，今天有 1 件事需要你」，不是页名，所以不并进工具条。
+      但副句与状态条重复了同一个数，见 §三</td></tr>
+  <tr><td><b>手机档</b></td><td>本来就不渲染</td><td>13 §6 已经砍过一轮，这次只补桌面</td></tr>
+</table>
+
+<h2>五、自审</h2>
+<ol class="sr">
+  <li><b>页名到底留不留？</b>第一版我把「项目」也删了，只留筛选条——毕竟侧栏在高亮。
+      但工具条是 <code>sticky</code> 的，往下滚之后<u>屏幕上就再没有任何字说明这是哪一页</u>；
+      而项目卡和会话卡在余光里长得很像。<em>留，但降到 19px 并入同一行</em>——
+      它的作用从「标题」变成「sticky 的锚点」。</li>
+  <li><b>总数放在页名后面会不会和「全部 12」重复？</b>会，实测就是同一个数。
+      <em>去掉页名后面的计数</em>，「全部 12」那枚 chip 已经是它。（这一条在图纸里就改掉了。）</li>
+  <li><b>搜索挪到右边，会不会不好找？</b>桌面用户找搜索的顺序是「先看右上角工具区」，
+      而且 <code>⌘K</code> 全局搜索本来就在顶栏正中。左端留给筛选是因为
+      <u>筛选是「在看什么」，属于内容；搜索是「怎么找」，属于工具</u>。</li>
+  <li><b>说明句真的能删吗？</b>它对第一次打开的人有用。折中：<u>进页名的 title</u>，
+      鼠标悬停可见；真要做新手引导，那是引导的事，不该常驻占一行。</li>
+  <li><b>会不会和刚做完的 Inspector 抢宽度？</b>不会——页头是 Canvas 内部的一行，
+      Canvas 变窄时筛选 chip 先横向滚动（手机档已经是这个行为），
+      再窄就是 Canvas 让位，那时整页都不在了。</li>
+  <li><b>概览把日期挪到标题下面，会不会显得日期不重要了？</b>本来就不重要——
+      它是定位信息不是行动信息。真正的判据是：<u>删掉它用户会不会缺什么</u>。
+      答案是「大概不会，但保留成本只有半行」，所以合进 meta 行而不是删掉。</li>
+  <li><b>状态条全为零时，概览的 meta 行会不会变空？</b>会。所以 meta 行在没有任务时
+      退回「还没有任务在跑」那句（<code>overview.sublineIdle</code> 已有），
+      <em>不能只写个日期在那儿</em>——那时首屏就真的什么都没说。</li>
+</ol>
+
+</div></body></html>

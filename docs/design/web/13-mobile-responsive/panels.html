@@ -1,0 +1,500 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>手机二级页：Git / Worktree / 返回键</title>
+<style>
+:root{
+  --bg:#0d1117;--card:#161b22;--inset:#0b0f14;--line:#21262d;--line2:#30363d;
+  --tx:#e6edf3;--dim:#8b949e;--dimmer:#6e7681;
+  --acc:#58a6ff;--solid:#4e90dc;--soft:rgba(31,111,235,.14);--accb:rgba(88,166,255,.45);
+  --amber:#d29922;--green:#3fb950;--purple:#a371f7;--cyan:#39c5cf;--red:#f85149;
+  --micro:11px;--meta:12px;--sm:13px;--body:15px;--lg:16px;--title:22px;
+  --r1:6px;--r2:10px;--r3:14px;--rp:999px;--s1:4px;--s2:8px;--s3:12px;--s4:16px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:#07090d;color:var(--tx);
+  font:14px/1.6 Inter,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{max-width:1280px;margin:0 auto;padding:30px 22px 80px}
+h1{font-size:22px;margin:0 0 8px}
+h2{font-size:var(--lg);margin:38px 0 6px;padding-top:24px;border-top:1px solid var(--line)}
+.lede{color:var(--dim);font-size:var(--sm);line-height:1.85;max-width:80ch;margin:0 0 18px}
+.lede b{color:var(--tx)}
+code{font:var(--meta)/1.4 ui-monospace,monospace;color:#c9d5e2;background:rgba(148,163,184,.1);
+  padding:2px 6px;border-radius:4px}
+ul.pts{margin:0 0 20px;padding-left:19px;color:var(--dim);font-size:var(--sm);line-height:1.85;max-width:80ch}
+ul.pts b{color:var(--tx)}
+ul.pts em{font-style:normal;color:#f2a6a0}
+.row{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start}
+.cap{display:flex;align-items:center;gap:8px;margin:0 0 9px;font-size:var(--meta);color:var(--dim)}
+.cap b{color:var(--tx);font-size:var(--sm)}
+.tag{font-size:var(--micro);padding:1px 8px;border-radius:var(--rp);border:1px solid var(--line2);color:var(--dimmer)}
+.tag.bad{color:#f2a6a0;border-color:rgba(248,81,73,.42)}
+.tag.good{color:#7fd18f;border-color:rgba(63,185,80,.42)}
+.note{margin:10px 0 0;font-size:var(--meta);color:var(--dim);line-height:1.8;max-width:340px}
+.note u{text-decoration:none;color:var(--tx)}
+.note em{font-style:normal;color:#f2a6a0}
+
+/* 手机框 360×640 */
+.ph{position:relative;width:330px;height:600px;border-radius:26px;border:1px solid var(--line2);
+  background:var(--bg);overflow:hidden;display:flex;flex-direction:column}
+.ph .body{flex:1;min-height:0;overflow:hidden;position:relative}
+.ph .nav{flex:0 0 52px;display:flex;border-top:1px solid var(--line);background:var(--card);position:relative;z-index:1}
+.ph .nav i{flex:1;display:grid;place-items:center;font-size:var(--micro);color:var(--dimmer);font-style:normal}
+.ph .nav i.on{color:var(--acc)}
+.safe{position:absolute;left:0;right:0;bottom:0;height:14px;display:grid;place-items:center;z-index:2}
+.safe::after{content:"";width:110px;height:4px;border-radius:2px;background:rgba(230,237,243,.4)}
+
+/* 终端底 */
+.term{height:100%;padding:10px 12px;font:11px/1.65 ui-monospace,monospace;color:#7fd18f;background:#06090d}
+.term .u{color:#e6edf3}
+
+/* 覆盖层 */
+.over{position:absolute;top:0;bottom:0;right:0;background:var(--card);border-left:1px solid var(--line2);
+  box-shadow:-14px 0 34px rgba(0,0,0,.5);display:flex;flex-direction:column}
+.scrim{position:absolute;inset:0;background:rgba(1,4,9,.6)}
+.zbadge{position:absolute;top:6px;left:6px;font:10px/1 ui-monospace,monospace;color:#f2a6a0;
+  border:1px solid rgba(248,81,73,.5);border-radius:4px;padding:3px 5px;background:rgba(13,17,23,.9);z-index:5}
+.zbadge.ok{color:#7fd18f;border-color:rgba(63,185,80,.5)}
+.hatch{background:repeating-linear-gradient(45deg,rgba(248,81,73,.13),rgba(248,81,73,.13) 5px,transparent 5px,transparent 11px);
+  border:1px dashed rgba(248,81,73,.55);border-radius:4px;display:grid;place-items:center;
+  font:10px/1.3 ui-monospace,monospace;color:#f2a6a0;text-align:center;padding:2px}
+
+/* 二级页 */
+.subhd{flex:0 0 auto;display:flex;align-items:center;gap:2px;padding:6px 6px;border-bottom:1px solid var(--line);
+  background:var(--card)}
+.subhd .bk{width:44px;height:44px;display:grid;place-items:center;color:var(--tx);flex:0 0 auto}
+.subhd .ti{flex:1;min-width:0;font-size:var(--body);font-weight:600;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.subhd .ic{width:44px;height:44px;display:grid;place-items:center;color:var(--dim);flex:0 0 auto;font-size:15px}
+.subbody{flex:1;min-height:0;overflow:hidden;padding:10px 12px;display:flex;flex-direction:column;gap:9px}
+
+.chip{height:26px;padding:0 11px;border-radius:var(--rp);border:1px solid var(--line2);
+  display:inline-flex;align-items:center;gap:6px;font-size:var(--meta);color:var(--dim);white-space:nowrap}
+.chip.on{color:var(--acc);border-color:var(--accb);background:var(--soft)}
+.chip.br{font-family:ui-monospace,monospace;color:#7ed0d8;border-color:rgba(57,197,207,.4);background:rgba(57,197,207,.08)}
+.segs{display:flex;gap:2px;background:var(--inset);border-radius:var(--r2);padding:3px}
+.segs span{flex:1;text-align:center;padding:6px 0;font-size:var(--meta);color:var(--dim);border-radius:7px}
+.segs span.on{background:var(--solid);color:#fff}
+.frow{display:flex;align-items:center;gap:9px;min-height:40px;padding:0 6px;border-bottom:1px solid var(--line);font-size:var(--sm)}
+.frow .st{font:11px/1 ui-monospace,monospace;width:14px;flex:0 0 auto}
+.frow .st.m{color:var(--amber)} .frow .st.a{color:var(--green)} .frow .st.d{color:var(--red)}
+.frow .p{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,monospace;font-size:var(--meta)}
+.frow .n{font:11px/1 ui-monospace,monospace;color:var(--dimmer)}
+.commit{flex:0 0 auto;border:1px solid var(--line2);border-radius:var(--r2);background:var(--inset);padding:8px 9px}
+.commit .in{font-size:var(--meta);color:var(--dimmer)}
+.commit .btns{display:flex;gap:8px;margin-top:8px}
+.btn{height:32px;padding:0 14px;border-radius:var(--r2);display:inline-flex;align-items:center;
+  font-size:var(--meta);border:1px solid var(--line2);color:var(--dim)}
+.btn.pri{background:var(--solid);border-color:var(--solid);color:#fff}
+.kbd{position:absolute;left:0;right:0;bottom:0;height:210px;background:linear-gradient(180deg,#1b2027,#12161c);
+  border-top:1px solid var(--line2);display:grid;place-items:center;color:var(--dimmer);font-size:var(--meta);z-index:3}
+.diff{flex:1;min-height:0;overflow:hidden;border-radius:var(--r2);border:1px solid var(--line);background:var(--inset);
+  font:10.5px/1.6 ui-monospace,monospace;padding:8px}
+.diff .add{color:#7fd18f}.diff .del{color:#f2a6a0}.diff .hu{color:#7ed0d8}
+
+.wtcard{border:1px solid var(--line);border-radius:var(--r2);background:var(--inset);padding:9px 10px}
+.wtcard b{font:var(--sm)/1.4 ui-monospace,monospace;color:#7ed0d8}
+.wtcard .p{font:10.5px/1.4 ui-monospace,monospace;color:var(--dimmer);margin-top:3px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wtcard .r{display:flex;gap:14px;margin-top:8px;font-size:var(--meta);color:var(--acc)}
+
+/* sheet */
+.sheet{position:absolute;left:0;right:0;bottom:0;background:#1b2029;border-top:1px solid var(--line2);
+  border-radius:16px 16px 0 0;padding:8px 8px 14px;z-index:4;box-shadow:0 -18px 48px rgba(0,0,0,.45)}
+.sheet .grip{width:36px;height:4px;border-radius:2px;background:var(--line2);margin:0 auto 10px}
+.sheet .sec{padding:10px 10px 4px;font-size:10px;font-weight:700;letter-spacing:.1em;color:var(--dimmer)}
+.sheet .r{display:flex;align-items:center;gap:12px;min-height:48px;padding:0 10px;border-radius:12px;font-size:var(--body)}
+.sheet .r.on{background:var(--soft);color:var(--acc)}
+.sheet .r i{width:20px;flex:0 0 auto;color:var(--dim);font-style:normal;font-size:13px}
+.new{box-shadow:inset 0 0 0 1px rgba(63,185,80,.45);background:rgba(63,185,80,.07)}
+
+/* 平板/桌面框 */
+.tab{width:384px;height:512px}
+.dk{width:520px;height:330px;border-radius:12px;border:1px solid var(--line2);background:var(--bg);
+  overflow:hidden;position:relative;display:flex}
+.dk .side{flex:0 0 78px;border-right:1px solid var(--line);background:var(--card)}
+.dk .page{flex:1;min-width:0;padding:12px}
+.dk .panel{position:absolute;top:0;right:0;bottom:0;width:190px;background:var(--card);
+  border-left:1px solid var(--line2);box-shadow:-14px 0 34px rgba(0,0,0,.5);padding:10px}
+.dk h5{margin:0 0 8px;font-size:var(--sm)}
+
+/* 状态机 */
+pre.sm{background:var(--card);border:1px solid var(--line);border-radius:var(--r2);padding:14px 16px;
+  font:12px/1.75 ui-monospace,monospace;color:var(--dim);overflow-x:auto;max-width:900px}
+pre.sm b{color:var(--tx)}
+table.tt{border-collapse:collapse;width:100%;max-width:900px;font-size:var(--sm);margin:8px 0 20px}
+table.tt th,table.tt td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+table.tt th{color:var(--dimmer);font-size:var(--meta);font-weight:600}
+table.tt td{color:var(--dim)}
+table.tt td b{color:var(--tx)}
+ol.sr{margin:0;padding-left:20px;color:var(--dim);font-size:var(--sm);line-height:1.85;max-width:80ch}
+ol.sr li{margin-bottom:9px}
+ol.sr b{color:var(--tx)}
+</style></head><body><div class="wrap">
+
+<h1>手机二级页：Git / Worktree / 返回键</h1>
+<p class="lede">
+13 §6 的塌陷表里还剩两行没做：<b>Git 面板</b>与 <b>Worktree</b>。它们在手机上仍然是桌面抽屉——
+不是「窄了点」，是三个功能性故障：<em>盖住底栏</em>、<em>不吃安全区</em>、<em>按返回键没反应</em>。
+顺带两件事一起了：手机上没有任何导航入口能到会话列表页；四处 hover 才出现的操作在手指档摸不到。
+</p>
+<ul class="pts">
+  <li><b>同一个 Git 面板有两套壳。</b>会话页走 <code>FloatingFileDrawer</code>（<code>fixed; width:min(420px,92vw); z-index:1200</code>），
+      项目页是另一份手搓的 <code>zIndex:1000</code> 遮罩 + <code>min(520px,94vw)</code> 右侧面板。</li>
+  <li><b>Worktree 是 <code>Drawer width='100%'</code></b>——13 §4.3 点名的「既不是页也不是 sheet」：
+      从右横切进场、右上角一个 ×、底部不让安全区。</li>
+  <li><b>返回键没人接。</b><code>MobileSubPage</code> 没有任何 history 处理；<code>MobileSheet</code> 的注释写着
+      「接管返回」，实际只监听了 Escape——手机上没有 Escape 键。</li>
+</ul>
+
+<h2>一、现状</h2>
+<div class="row">
+
+  <div>
+    <p class="cap"><b>会话页 · Git</b><span class="tag bad">z=1200 盖住底栏</span></p>
+    <div class="ph">
+      <div class="body">
+        <div class="term"><span class="u">❯</span> git status<br>On branch feat/web-session-tokens<br>Changes not staged:<br>&nbsp;&nbsp;modified: src/App.tsx<br>&nbsp;&nbsp;modified: src/index.css</div>
+        <div class="over" style="width:300px">
+          <div style="display:flex;align-items:center;gap:8px;padding:9px 10px;border-bottom:1px solid var(--line)">
+            <b style="font-size:var(--sm)">Git</b><span class="chip br" style="height:22px">⎇ feat/web-session-tokens</span>
+            <span style="margin-left:auto;color:var(--dim)">×</span>
+          </div>
+          <div style="padding:9px 10px">
+            <div class="segs" style="margin-bottom:8px"><span class="on">改动 5</span><span>历史</span><span>分支</span></div>
+            <div class="frow"><span class="st m">M</span><span class="p">src/App.tsx</span><span class="n">+42 −8</span></div>
+            <div class="frow"><span class="st m">M</span><span class="p">src/index.css</span><span class="n">+31 −2</span></div>
+            <div class="frow"><span class="st a">A</span><span class="p">src/shell/AdaptivePanel.tsx</span><span class="n">+58</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="nav"><i>概览</i><i>项目</i><i>文件</i><i>更多</i></div>
+      <div class="hatch" style="position:absolute;left:30px;right:0;bottom:0;height:52px;z-index:6">面板压在底栏上 · 底栏还在响应点击</div>
+    </div>
+    <p class="note">420 的抽屉在 360 的屏上盖到 <code>92vw</code>，左边只剩 30px 的缝；
+    <u>它 top:0/bottom:0 铺满，但底栏还在下面接点击</u>，也不吃 <code>safe-area-inset-bottom</code>。</p>
+  </div>
+
+  <div>
+    <p class="cap"><b>项目页 · Git</b><span class="tag bad">手搓 scrim 1000 + 面板 520</span></p>
+    <div class="ph">
+      <div class="body">
+        <div style="padding:10px 12px">
+          <div style="font-size:var(--body);font-weight:700">roam</div>
+          <div style="font:10.5px/1.4 ui-monospace,monospace;color:var(--dimmer);margin-top:3px">/home/ai/codes/ttmux</div>
+        </div>
+        <div class="scrim"></div>
+        <div class="over" style="width:310px">
+          <div style="display:flex;align-items:center;gap:8px;padding:9px 10px;border-bottom:1px solid var(--line)">
+            <b style="font-size:var(--sm)">Git</b><span style="margin-left:auto;color:var(--dim)">×</span>
+          </div>
+          <div style="padding:9px 10px">
+            <div class="segs" style="margin-bottom:8px"><span class="on">改动 5</span><span>历史</span><span>分支</span></div>
+            <div class="frow"><span class="st m">M</span><span class="p">src/App.tsx</span><span class="n">+42 −8</span></div>
+            <div class="frow"><span class="st m">M</span><span class="p">src/Projects.tsx</span><span class="n">+19 −4</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="nav"><i>概览</i><i class="on">项目</i><i>文件</i><i>更多</i></div>
+    </div>
+    <p class="note">同一个 <code>&lt;GitPanel&gt;</code>，第二套容器：宽度、层级、有没有遮罩、有没有阴影<u>全都和会话页那套不一样</u>。</p>
+  </div>
+
+  <div>
+    <p class="cap"><b>Worktree</b><span class="tag bad">既不是页也不是 sheet</span></p>
+    <div class="ph">
+      <div class="body">
+        <div class="over" style="width:100%;border-left:0">
+          <div style="display:flex;align-items:center;padding:11px 12px;border-bottom:1px solid var(--line)">
+            <b style="font-size:var(--body)">Worktree</b><span style="margin-left:auto;color:var(--dim)">×</span>
+          </div>
+          <div style="padding:10px 12px;display:flex;flex-direction:column;gap:9px">
+            <div style="display:flex;gap:8px">
+              <span style="flex:1;height:30px;border:1px solid var(--line2);border-radius:var(--r2);
+                display:flex;align-items:center;padding:0 10px;color:var(--dimmer);font-size:var(--meta)">/home/ai/codes/ttmux</span>
+              <span class="btn" style="height:30px">＋</span><span class="btn" style="height:30px">↻</span>
+            </div>
+            <div class="wtcard"><b>⎇ feat/web-session-tokens</b><div class="p">/home/ai/codes/ttmux/.worktrees/task-1</div>
+              <div class="r"><span>进入</span><span>对比</span><span>收尾</span></div></div>
+            <div class="wtcard"><b>⎇ redesign/overview-vs-projects</b><div class="p">/home/ai/codes/ttmux/.worktrees/task-2</div>
+              <div class="r"><span>进入</span><span>对比</span><span>收尾</span></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="nav"><i>概览</i><i class="on">项目</i><i>文件</i><i>更多</i></div>
+      <div class="hatch" style="position:absolute;left:0;right:0;bottom:0;height:52px;z-index:6">同样盖住底栏 · 按返回键直接退出路由</div>
+    </div>
+    <p class="note">全宽的 antd Drawer 看起来像页，但<u>从右横切进场、右上角是 ×、返回键不认它</u>——
+    用户按下返回，整个路由被退掉，Drawer 还留在屏幕上。</p>
+  </div>
+</div>
+
+<h2>二、新版：Git 二级页</h2>
+<div class="row">
+
+  <div>
+    <p class="cap"><b>Git · 二级页</b><span class="tag good">z: --z-session-sub</span></p>
+    <div class="ph">
+      <div class="body">
+        <div class="over" style="width:100%;border-left:0;background:var(--bg)">
+          <div class="subhd">
+            <span class="bk"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></span>
+            <span class="ti">Git</span>
+            <span class="ic">↻</span><span class="ic">⋯</span>
+          </div>
+          <div class="subbody">
+            <span class="chip br" style="align-self:flex-start">⎇ feat/web-session-tokens</span>
+            <div class="segs"><span class="on">改动 5</span><span>历史</span><span>分支</span><span>base</span></div>
+            <div style="flex:1;min-height:0;overflow:hidden">
+              <div class="frow"><span class="st m">M</span><span class="p">src/App.tsx</span><span class="n">+42 −8</span></div>
+              <div class="frow"><span class="st m">M</span><span class="p">src/index.css</span><span class="n">+31 −2</span></div>
+              <div class="frow"><span class="st a">A</span><span class="p">src/shell/AdaptivePanel.tsx</span><span class="n">+58</span></div>
+              <div class="frow"><span class="st a">A</span><span class="p">src/shell/useBackDismiss.ts</span><span class="n">+96</span></div>
+              <div class="frow"><span class="st d">D</span><span class="p">src/FloatingFileDrawer.tsx</span><span class="n">−28</span></div>
+            </div>
+            <div class="commit">
+              <div class="in">提交信息…</div>
+              <div class="btns"><span class="btn pri">提交</span><span class="btn">全部暂存</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="safe"></div>
+    </div>
+    <p class="note">底栏<u>不再出现在下面</u>——二级页是整页，不是浮在页上的抽屉。
+    提交区钉在底部、上方留 <code>max(var(--kb), var(--safe-b))</code>，手势条不会压住按钮。</p>
+  </div>
+
+  <div>
+    <p class="cap"><b>键盘弹起</b><span class="tag good">提交区抬到键盘之上</span></p>
+    <div class="ph">
+      <div class="body">
+        <div class="over" style="width:100%;border-left:0;background:var(--bg)">
+          <div class="subhd">
+            <span class="bk"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></span>
+            <span class="ti">Git</span><span class="ic">↻</span><span class="ic">⋯</span>
+          </div>
+          <div class="subbody" style="padding-bottom:218px">
+            <span class="chip br" style="align-self:flex-start">⎇ feat/web-session-tokens</span>
+            <div style="flex:1;min-height:0;overflow:hidden">
+              <div class="frow"><span class="st m">M</span><span class="p">src/App.tsx</span><span class="n">+42 −8</span></div>
+              <div class="frow"><span class="st m">M</span><span class="p">src/index.css</span><span class="n">+31 −2</span></div>
+            </div>
+            <div class="commit" style="border-color:var(--accb)">
+              <div class="in" style="color:var(--tx)">fix(web): Git 面板在手机上改走二级页<span style="color:var(--acc)">▍</span></div>
+              <div class="btns"><span class="btn pri">提交</span><span class="btn">全部暂存</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="kbd">软键盘 210</div>
+      </div>
+    </div>
+    <p class="note"><code>--kb</code> 由 <code>useLayout()</code> 统一探（VirtualKeyboard API 优先、<code>visualViewport</code> 兜底）。
+    <u>iOS Safari 只有后者</u>，所以底部一律写 <code>max(var(--kb), var(--safe-b))</code>，
+    不直接用 <code>env(keyboard-inset-height)</code>。</p>
+  </div>
+
+  <div>
+    <p class="cap"><b>diff 详情：两级返回</b><span class="tag good">一次返回退一层</span></p>
+    <div class="ph">
+      <div class="body">
+        <div class="over" style="width:100%;border-left:0;background:var(--bg)">
+          <div class="subhd">
+            <span class="bk"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></span>
+            <span class="ti" style="font-family:ui-monospace,monospace;font-size:var(--sm)">src/App.tsx</span>
+            <span class="ic">⋯</span>
+          </div>
+          <div class="subbody">
+            <div style="display:flex;gap:8px"><span class="chip">+42</span><span class="chip">−8</span><span class="chip on">暂存此文件</span></div>
+            <div class="diff">
+              <span class="hu">@@ -1738,7 +1738,12 @@</span><br>
+              <span class="del">- &lt;FloatingFileDrawer open={showGit} right={…}&gt;</span><br>
+              <span class="add">+ &lt;AdaptivePanel</span><br>
+              <span class="add">+&nbsp;&nbsp;&nbsp;desktop="floating"</span><br>
+              <span class="add">+&nbsp;&nbsp;&nbsp;width="min(420px,92vw)"</span><br>
+              <span class="add">+&nbsp;&nbsp;&nbsp;layer="session"</span><br>
+              <span class="add">+&nbsp;&nbsp;&nbsp;title={t('git.title')}&gt;</span><br>
+              &nbsp;&nbsp;&nbsp;&lt;GitPanel dir={cwd} … /&gt;
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="safe"></div>
+    </div>
+    <p class="note">详情盖在 Git 二级页之上，各自压一条 history 记录：
+    <u>返回 → 关 diff（Git 还在）→ 再返回 → 关 Git → 再返回 → 才离开当前路由</u>。
+    栈是 LIFO，一次 <code>popstate</code> 只退一帧。</p>
+  </div>
+</div>
+
+<h2>三、新版：Worktree 二级页 / 会话入口</h2>
+<div class="row">
+
+  <div>
+    <p class="cap"><b>Worktree · 二级页</b><span class="tag good">工具行收成一行 44</span></p>
+    <div class="ph">
+      <div class="body">
+        <div class="over" style="width:100%;border-left:0;background:var(--bg)">
+          <div class="subhd">
+            <span class="bk"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></span>
+            <span class="ti">Worktree</span><span class="ic">＋</span><span class="ic">↻</span>
+          </div>
+          <div class="subbody">
+            <span style="height:34px;border:1px solid var(--line2);border-radius:var(--r2);display:flex;align-items:center;
+              padding:0 11px;color:var(--dimmer);font:var(--meta)/1 ui-monospace,monospace">/home/ai/codes/ttmux</span>
+            <div style="display:flex;gap:7px"><span class="chip on">全部 4</span><span class="chip">在跑 2</span><span class="chip">可清理 1</span></div>
+            <div class="wtcard"><b>⎇ feat/web-session-tokens</b><div class="p">…/.worktrees/task-1</div>
+              <div class="r"><span>进入</span><span>对比</span><span>收尾</span></div></div>
+            <div class="wtcard"><b>⎇ redesign/overview-vs-projects</b><div class="p">…/.worktrees/task-2</div>
+              <div class="r"><span>进入</span><span>对比</span><span>收尾</span></div></div>
+            <div class="wtcard" style="opacity:.7"><b>⎇ docs/ba-prompt-analysis</b><div class="p">…/.worktrees/task-3</div>
+              <div class="r"><span style="color:var(--green)">✓ 已合并，可清理</span></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="safe"></div>
+    </div>
+    <p class="note">目录框 + ＋ + ↻ 原来是并排三件套挤在 360 上；＋/↻ 上提到页头当 44 图标，
+    目录框独占一行。<u>卡片内的操作行本来就有 <code>!wide</code> 分支，不用动。</u></p>
+  </div>
+
+  <div>
+    <p class="cap"><b>更多 sheet：会话入口</b><span class="tag good">不加第五格</span></p>
+    <div class="ph">
+      <div class="body">
+        <div style="padding:10px 12px;opacity:.35">
+          <div style="font-size:var(--body);font-weight:700">晚上好</div>
+        </div>
+        <div class="scrim"></div>
+        <div class="sheet">
+          <div class="grip"></div>
+          <div class="sec new">工作区</div>
+          <div class="r new"><i>▤</i>会话</div>
+          <div class="sec">工具</div>
+          <div class="r"><i>◱</i>浏览器</div>
+          <div class="r"><i>▯</i>手机</div>
+          <div class="r"><i>⬡</i>插件</div>
+          <div class="r"><i>⚙</i>设置</div>
+          <div class="sec">账户</div>
+          <div class="r"><i>◐</i>主题</div>
+        </div>
+      </div>
+      <div class="nav"><i>概览</i><i>项目</i><i>文件</i><i class="on">更多</i></div>
+    </div>
+    <p class="note">13 §4.1 算过底栏四格在 360 上每格 90px，<u>加到五格就回到 72</u>——
+    等于推翻已经定过的结论。会话进「更多」，并且<b>单开一段「工作区」</b>，不归到「工具」下面。
+    会话坞的切换 sheet 末尾也加一行「全部会话」。</p>
+  </div>
+
+  <div>
+    <p class="cap"><b>768 平板（medium）</b><span class="tag">这一档要拍板</span></p>
+    <div class="ph tab">
+      <div class="body">
+        <div class="over" style="width:100%;border-left:0;background:var(--bg)">
+          <div class="subhd">
+            <span class="bk"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></span>
+            <span class="ti">Git</span><span class="ic">↻</span><span class="ic">⋯</span>
+          </div>
+          <div class="subbody">
+            <span class="chip br" style="align-self:flex-start">⎇ feat/web-session-tokens</span>
+            <div class="segs" style="max-width:420px"><span class="on">改动 5</span><span>历史</span><span>分支</span><span>base</span></div>
+            <div style="flex:1;min-height:0">
+              <div class="frow"><span class="st m">M</span><span class="p">src/App.tsx</span><span class="n">+42 −8</span></div>
+              <div class="frow"><span class="st m">M</span><span class="p">src/index.css</span><span class="n">+31 −2</span></div>
+              <div class="frow"><span class="st a">A</span><span class="p">src/shell/AdaptivePanel.tsx</span><span class="n">+58</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="nav"><i>概览</i><i class="on">项目</i><i>文件</i><i>更多</i></div>
+    </div>
+    <p class="note"><b>取 <code>phone</code>（compact + medium）而不是只 compact。</b>
+    理由：Worktree 在 768 上今天本来就是 <code>width:'100%'</code>（<code>wide</code> 是 ≥905），medium 不会有损失；
+    而且 GitPanel 内部的详情覆盖层判的也是同一个 <code>!wide</code>，容器与内部保持一致。
+    <u>这一档如果要保留桌面抽屉，这里就是否决点。</u></p>
+  </div>
+</div>
+
+<h2>四、桌面回归基线：不动</h2>
+<div class="row">
+  <div>
+    <p class="cap"><b>1280 · 会话页 Git</b><span class="tag good">仍是 420 浮动面板</span></p>
+    <div class="dk">
+      <div class="side"></div>
+      <div class="page"><h5>终端</h5>
+        <div style="font:10.5px/1.7 ui-monospace,monospace;color:#7fd18f">❯ git status<br>On branch main</div></div>
+      <div class="panel"><h5>Git</h5>
+        <div class="frow" style="font-size:var(--meta)"><span class="st m">M</span><span class="p">src/App.tsx</span></div>
+        <div class="frow" style="font-size:var(--meta)"><span class="st a">A</span><span class="p">AdaptivePanel.tsx</span></div>
+      </div>
+      <div class="zbadge ok" style="left:auto;right:8px;top:auto;bottom:8px">z: var(--z-panel) = 1200（值不变）</div>
+    </div>
+    <p class="note" style="max-width:520px">桌面三条路径全部保持今天的样子：会话页 = 420 浮动面板，
+    项目页 = 520 面板 + 遮罩，Worktree = antd Drawer(1300)。<u>唯一有意的桌面变化是 ⌘K 面板里多一条「会话」</u>
+    ——会话页此前不在 <code>NAV</code> 里，所以命令面板也搜不到它。</p>
+  </div>
+</div>
+
+<h2>五、返回键：一个共享 hook</h2>
+<pre class="sm">
+<b>useBackDismiss(enabled, onDismiss) → depth</b>
+
+打开            pushState(history.state, '', location.href)   ← URL 不变，路由收不到 hashchange
+                push { id, onDismiss, closing:false }
+
+UI 关闭         onClose()            ← 先同步关，无延迟
+（← / × / 遮罩）  frame.closing = true
+                history.back()       ← <b>必须退掉这条记录</b>，否则留下死记录：
+                                        用户按一次返回没反应、再按一次直接退出
+
+返回键          popstate → 弹栈顶一帧
+                closing === true  ⇒ 吞掉（是我们自己发的）
+                closing === false ⇒ onDismiss()
+                一次 popstate 只退一帧 ⇒ diff → Git → sheet 按一次退一层
+
+打开态卸载       同 UI 关闭，但不调 onDismiss；不是栈顶就只摘帧、不碰 history
+
+兜底            栈非空时发生 hashchange（路由变了）
+                ⇒ 对所有存活帧调 onDismiss 并清栈——覆盖层在路由变化后一定是过期的
+</pre>
+<p class="note" style="max-width:80ch">
+<b>不要</b>往 <code>history.state</code> 里塞标记再读回来：<code>App.tsx</code> 的 <code>setHashParams</code>
+每次开关终端标签都跑一次 <code>replaceState</code>，会把标记抹掉。<u>模块级 LIFO 栈是唯一事实来源。</u><br>
+只在手机档启用——劫持桌面浏览器的返回键是行为变更；桌面继续走 Escape。
+</p>
+
+<h2>六、自审：画完之后自己挑的毛病</h2>
+<ol class="sr">
+  <li><b>第一版 Git 二级页头我放了「Git · roam」两段。</b>但页头下面第一行就是分支 chip，
+      项目名在项目页进来时是废话（你就在那个项目里）、在会话页进来时又不如分支准确。
+      <u>删掉，只留「Git」+ 分支 chip。</u></li>
+  <li><b>差点把 ＋/↻ 留在 Worktree 的目录行里。</b>那行原本是「目录框 + ＋ + ↻」三件套，
+      360 上目录框会被挤到 180px、路径几乎全截。<u>＋/↻ 上提到页头当 44 图标，目录框独占一行。</u>
+      顺带这也让页头的图标位有了统一用途（Git 是 ↻/⋯，Worktree 是 ＋/↻）。</li>
+  <li><b>diff 详情页最初画了「← Git」。</b>返回标签写上一层的名字看着贴心，实际会误导：
+      用户以为点它回 Git 列表，其实两层都可能被返回键退掉。<u>返回箭头不带文字，标题写当前文件名。</u></li>
+  <li><b>「会话」放进「工具」段是错的。</b>工具段是浏览器/手机/插件/设置——外围能力；
+      会话是工作区主线，和概览/项目/文件同级。<u>单开一段「工作区」，排在工具之前。</u></li>
+  <li><b>键盘态那帧提醒了一件事：提交区不能只靠 <code>--kb</code> 抬起。</b>
+      iOS Safari 没有 VirtualKeyboard API，<code>--kb</code> 只能从 <code>visualViewport</code> 推，有 30px 噪声底；
+      所以写 <code>max(var(--kb), var(--safe-b))</code> 而不是 <code>var(--kb)</code>——键盘收起时至少还有安全区。</li>
+  <li><b>桌面帧一开始没画。</b>但这次改的是三个调用点的容器，最大的风险恰恰是「手机修好了、桌面变了」。
+      <u>补一帧标「不动」，并把项目页 Git 会继承浮动面板的阴影这件事写进风险</u>——
+      那是唯一一处桌面视觉可能变化的地方，要么明示接受，要么给个开关。</li>
+  <li><b>返回键的状态机里，最容易漏的是「UI 关闭也要 <code>history.back()</code>」。</b>
+      漏了它每开关一次就留一条死记录，用户按返回「第一次没反应」。
+      这条单独画进状态机，不是写在注释里。</li>
+</ol>
+
+<h2>七、落地后的两处修正</h2>
+<ol class="sr">
+  <li><b>Git 的 ⋯/↻ 最终落在分支行右端，不是页头。</b>图纸把它们画进了二级页页头，
+      但页头是 <code>MobileSubPage</code> 的、图标却属于 <code>GitPanel</code> 内部状态（⋯ 是带菜单的
+      Dropdown），跨component 传上去要给二级页开一个 <code>actions</code> 插槽、再把面板内部的
+      JSX 挪出去。实测把标题行整行去掉、两枚图标并进下面的分支行，效果一样（内容还往上提了 62px），
+      改动只在 GitPanel 内部。<u>Worktree 的 ＋/↻ 同理，保留在它自己的目录行里。</u></li>
+  <li><b>StrictMode 会把返回键的 push/back 打乱。</b>开发态 mount→unmount→mount 是同步跑完的，
+      退帧发出的 <code>history.back()</code> 却是异步落地，中间第二次 mount 又 push 了一条——
+      两者交错会把当前位置挪到别人的记录上，<em>表现为「按一次返回退了两页」</em>（实测复现）。
+      解法：退帧的 back 延到微任务再发，<u>同一 tick 内又压帧就直接复用那条记录</u>，
+      双挂载的净效果变成 0 次 history 操作。这条写进了 <code>useBackDismiss</code> 的单测。</li>
+</ol>
+
+</div></body></html>

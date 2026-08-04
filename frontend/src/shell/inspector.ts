@@ -1,0 +1,89 @@
+// Inspector 槽位（14 桌面面板稿 panels-desktop.html）。
+//
+// Git / Worktree 这些右侧面板此前是 `position:fixed` 浮层，**不参与 Shell 的尺寸契约**——
+// 浮层只会「盖」，不会「让」。实测 1440 上会话页开 Git：终端从 605 被盖到只剩 185。
+// 现在它们成为 Shell 的第三列，和 Dock 同级。
+//
+// 难点是「谁来渲染」：Git 面板挂在 TerminalPane 里（Dock 深处）、项目页那份挂在页面里，
+// 而列要由 Workspace 画。与其把内容一路 prop 提上去，不如沿用本仓库已有的
+// 模块级小表 + useSyncExternalStore 套路（session-label / session-project / intents）：
+//   · Workspace 提供槽位 DOM，登记到这里；
+//   · AdaptivePanel 在桌面档把自己 portal 进槽位；
+//   · Workspace 订阅「有没有人占用」，决定列的宽度与那条 rail。
+//
+// 栈而不是单值：从 Git 面板里还能唤起 Worktree（GitPanel 内部就渲染着 WorktreePanel）。
+// 只有栈顶那个真正渲染，**关掉栈顶会自然露出下面那个**——「从 Git 跳 Worktree 再回来」
+// 因此是免费的，不需要额外做返回箭头。
+import { useSyncExternalStore } from 'react'
+
+let slot: HTMLElement | null = null
+/** 登记顺序即栈序；只有最后一个渲染 */
+let stack: number[] = []
+let seq = 0
+const listeners = new Set<() => void>()
+
+function emit() { listeners.forEach((fn) => fn()) }
+function subscribe(fn: () => void) {
+  listeners.add(fn)
+  return () => listeners.delete(fn)
+}
+
+/** Workspace 挂载/卸载槽位 DOM */
+export function setInspectorSlot(el: HTMLElement | null) {
+  if (slot === el) return
+  slot = el
+  emit()
+}
+
+export function claimInspector(): number {
+  const id = ++seq
+  stack.push(id)
+  emit()
+  return id
+}
+
+export function releaseInspector(id: number) {
+  const next = stack.filter((x) => x !== id)
+  if (next.length === stack.length) return
+  stack = next
+  emit()
+}
+
+/** 这一列当前实际占掉的宽度（覆盖态算 0）——文件抽屉那类仍然浮着的层要避开它 */
+let reserved = 0
+export function setInspectorReserved(px: number) {
+  if (reserved === px) return
+  reserved = px
+  emit()
+}
+export function useInspectorReserved(): number {
+  return useSyncExternalStore(subscribe, () => reserved, () => 0)
+}
+
+type Snapshot = { slot: HTMLElement | null; top: number }
+let snap: Snapshot = { slot: null, top: 0 }
+function read(): Snapshot {
+  const top = stack.length ? stack[stack.length - 1] : 0
+  if (snap.slot !== slot || snap.top !== top) snap = { slot, top }
+  return snap
+}
+
+/** 面板侧：拿槽位 + 自己是不是栈顶 */
+export function useInspectorSlot(id: number): { slot: HTMLElement | null; isTop: boolean } {
+  const s = useSyncExternalStore(subscribe, read, read)
+  return { slot: s.slot, isTop: s.top === id }
+}
+
+/** Shell 侧：有没有人占着 */
+export function useInspectorOpen(): boolean {
+  return useSyncExternalStore(subscribe, () => stack.length > 0, () => false)
+}
+
+/** 仅供测试 */
+export function resetInspector() {
+  slot = null
+  stack = []
+  seq = 0
+  reserved = 0
+  snap = { slot: null, top: 0 }
+}

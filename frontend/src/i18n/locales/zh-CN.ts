@@ -46,6 +46,7 @@ const zhCN = {
   'nav.thisDevice': '当前设备',
   'nav.terminal': '终端',
   'workspace.resizeDock': '调整终端宽度',
+  'workspace.resizeInspector': '拖动调整面板宽度',
   'workspace.focusDock': '终端聚焦',
   'workspace.terminalPanel': '终端面板',
   'workspace.exitFocus': '返回分栏',
@@ -1322,6 +1323,8 @@ const zhCN = {
   'project.unpin': '取消置顶',
   'project.tasks': '任务',
   'project.loose': '散会话',
+  'project.quietSection': '其他项目',
+  'project.quietHint': '没有会话在跑',
   'project.enter': '进入',
   'project.forkTask': '派生',
   'project.notFound': '项目不存在或已退场',
@@ -1484,6 +1487,8 @@ const zhCN = {
   'overview.goFinish': '去收尾',
   'overview.gotoProjects': '进入项目页',
   'overview.inactiveRest': '其余 {count} 个项目无活动 —— 在「项目」页查看全部',
+  'overview.recentSessions': '最近会话',
+  'overview.allSessions': '全部会话',
   'overview.recentActivity': '最近活动',
   'overview.moreTasks': '+{count} 更多',
   // 概览问候区（14 §5.1）：第一句话回答「今天有几件事需要你」
@@ -1495,6 +1500,7 @@ const zhCN = {
   'overview.headlineQuiet': '当前没有待处理事项',
   'overview.sublineRunning': '{count} 个任务正在运行，最近一次活动在{time}',
   'overview.sublineIdle': '没有正在运行的任务，随时可以开始新的工作',
+  'overview.metaActivity': '最近活动 {time}',
   // 状态概况的四个数（14 §5.1）
   'overview.sumRunning': '运行中',
   'overview.sumWaiting': '等待输入',

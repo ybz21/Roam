@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>桌面版：概览 / 项目 / 会话</title>
+<style>
+:root{
+  --bg:#0d1117;--card:#161b22;--inset:#0b0f14;--line:#21262d;--line2:#30363d;
+  --tx:#e6edf3;--dim:#8b949e;--dimmer:#6e7681;
+  --acc:#58a6ff;--solid:#4e90dc;--soft:rgba(31,111,235,.14);--accb:rgba(88,166,255,.45);
+  --amber:#d29922;--green:#3fb950;--purple:#a371f7;--cyan:#39c5cf;--red:#f85149;
+  --micro:11px;--meta:12px;--sm:13px;--body:15px;--lg:16px;--title:22px;
+  --r1:6px;--r2:10px;--r3:14px;--rp:999px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:#07090d;color:var(--tx);
+  font:14px/1.55 Inter,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{max-width:1060px;margin:0 auto;padding:30px 24px 80px}
+h1{font-size:22px;margin:0 0 8px;letter-spacing:-.01em}
+h2{font-size:var(--lg);margin:36px 0 6px;padding-top:24px;border-top:1px solid var(--line)}
+.lede{color:var(--dim);font-size:var(--sm);line-height:1.85;max-width:80ch;margin:0 0 16px}
+.lede b{color:var(--tx);font-weight:600}
+code{font:var(--meta)/1.4 ui-monospace,monospace;color:#c9d5e2;background:rgba(148,163,184,.1);
+  padding:2px 6px;border-radius:4px}
+ul.meas{margin:0 0 22px;padding-left:19px;max-width:80ch;color:var(--dim);font-size:var(--sm);line-height:1.9}
+ul.meas b{color:#f2a6a0;font:600 var(--sm)/1 ui-monospace,monospace}
+ol.rules{margin:0 0 8px;padding-left:20px;max-width:80ch;color:var(--dim);font-size:var(--sm);line-height:1.85}
+ol.rules li{margin-bottom:8px}
+ol.rules b{color:var(--tx)}
+
+.cap{display:flex;align-items:center;gap:9px;margin:22px 0 9px;font-size:var(--meta);color:var(--dim)}
+.cap b{color:var(--tx);font-size:var(--sm)}
+.tag{font-size:var(--micro);padding:1px 8px;border-radius:var(--rp);border:1px solid var(--line2);color:var(--dimmer)}
+.tag.bad{color:#f2a6a0;border-color:rgba(248,81,73,.42)}
+.tag.good{color:#7fd18f;border-color:rgba(63,185,80,.42)}
+.note{margin:11px 0 0;font-size:var(--meta);color:var(--dim);line-height:1.85;max-width:80ch}
+.note u{text-decoration:none;color:var(--tx)}
+.note em{font-style:normal;color:#f2a6a0}
+.legend{display:flex;gap:16px;font-size:var(--micro);color:var(--dimmer);margin:8px 0 0}
+.legend i{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-2px;margin-right:5px}
+.legend i.v{border:1px dashed rgba(248,81,73,.55);background:rgba(248,81,73,.09)}
+.legend i.n{border:1px dashed rgba(63,185,80,.5);background:rgba(63,185,80,.09)}
+
+/* 桌面框：真实 1216 宽的画布，zoom 缩到 .78（zoom 参与布局，框高自动贴合内容） */
+.stage{overflow:hidden;border-radius:12px;border:1px solid var(--line2);background:var(--bg)}
+.dk{zoom:.78;width:1216px;padding-bottom:18px}
+
+.ph{padding:20px 24px 0}
+.kick{font-size:var(--micro);letter-spacing:.14em;text-transform:uppercase;color:var(--dimmer);font-weight:700}
+.ph h3{margin:5px 0 0;font-size:26px;letter-spacing:-.02em}
+.ph p{margin:8px 0 0;font-size:var(--sm);color:var(--dim)}
+.phrow{display:flex;align-items:flex-end;gap:20px}
+.phrow .sp{flex:1}
+
+.sum{display:flex;align-items:center;gap:22px;height:40px;padding:0 13px;border-radius:var(--r2);
+  background:var(--card);font-size:var(--meta);color:var(--dim);margin:16px 24px 0}
+.sum b,.sumi b{font:700 var(--sm)/1 ui-monospace,monospace;color:var(--tx);margin-right:5px}
+.sum i,.sumi i{width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block;margin-right:7px}
+.sum i.a,.sumi i.a{background:var(--amber)}
+.sumi{display:flex;align-items:center;gap:20px;font-size:var(--meta);color:var(--dim);padding-bottom:5px}
+
+/* 空白量尺：写在结构里，不用绝对定位，永远对得上 */
+.void{flex:1;min-width:0;height:20px;margin:0 10px;border:1px dashed rgba(248,81,73,.5);border-radius:4px;
+  display:flex;align-items:center;justify-content:center;font:11px/1 ui-monospace,monospace;color:#f2a6a0;
+  background:repeating-linear-gradient(45deg,rgba(248,81,73,.1),rgba(248,81,73,.1) 5px,transparent 5px,transparent 11px)}
+.new{background:rgba(63,185,80,.07);box-shadow:inset 0 0 0 1px rgba(63,185,80,.28)}
+
+.sect{display:flex;align-items:center;gap:9px;font-size:var(--sm);font-weight:600;margin:22px 24px 9px}
+.sect .ln{flex:1}
+.sect .go{font-size:var(--meta);font-weight:400;color:var(--acc)}
+.body{padding:0 24px}
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:20px;align-items:start;padding:0 24px}
+
+.old{display:flex;align-items:center;gap:9px;height:44px;padding:0 8px;border-bottom:1px solid var(--line)}
+.old .pj{color:var(--dimmer);font-size:var(--meta)}
+.old .nm{font-size:var(--sm);font-weight:600}
+.old .tm{font-size:var(--meta);color:var(--dimmer)}
+.ag{padding:1px 7px;border-radius:var(--rp);font-size:var(--micro);color:#9ccaff;background:var(--soft)}
+.ag.cx{color:#7fd18f;background:rgba(63,185,80,.12)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--green);flex:0 0 auto}
+.dot.a{background:var(--amber)} .dot.z{background:var(--dimmer)}
+
+.tbl{display:grid;grid-template-columns:8px 128px minmax(170px,1fr) 60px 260px 74px;
+  align-items:center;column-gap:14px;padding:0 8px}
+.tbl .c{height:40px;display:flex;align-items:center;min-width:0;border-bottom:1px solid var(--line)}
+.tbl .c.pj{color:var(--dimmer);font-size:var(--meta);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.tbl .c.nm{font-size:var(--sm);font-weight:600;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.tbl .c.loc{font:var(--meta)/1 ui-monospace,monospace;color:var(--dimmer);overflow:hidden;white-space:nowrap;
+  padding-left:8px;margin-left:-8px}
+.tbl .c.loc .br{color:#7ed0d8}
+.tbl .c.tm{font-size:var(--meta);color:var(--dimmer);justify-content:flex-end}
+
+.pgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;padding:0 24px;align-items:start}
+.pcard{background:var(--card);border:1px solid var(--line);border-radius:var(--r3);padding:14px 15px}
+.pcard.empty{border-style:dashed;border-color:rgba(248,81,73,.45)}
+.pcard h4{margin:0;font-size:var(--body)}
+.pcard .p{font:var(--micro)/1.3 ui-monospace,monospace;color:var(--dimmer);margin-top:4px}
+.pcard .m{font-size:var(--meta);color:var(--dim);margin-top:8px}
+.pcard .m b{color:var(--tx);font-family:ui-monospace,monospace}
+.pcard .hollow{height:44px;margin-top:9px;border-radius:var(--r1);
+  background:repeating-linear-gradient(45deg,rgba(248,81,73,.09),rgba(248,81,73,.09) 5px,transparent 5px,transparent 11px)}
+.task{background:var(--inset);border-radius:var(--r1);padding:8px 10px;margin-top:9px;
+  display:flex;align-items:center;gap:9px;font-size:var(--sm)}
+.task .t{margin-left:auto;font-size:var(--meta);color:var(--dimmer)}
+.chip{height:28px;padding:0 13px;border-radius:var(--rp);border:1px solid var(--line2);
+  display:inline-flex;align-items:center;gap:7px;font-size:var(--meta);color:var(--dim)}
+.chip.on{color:var(--acc);border-color:var(--accb);background:var(--soft)}
+.chip .n{font:var(--micro)/1 ui-monospace,monospace;color:var(--dimmer)}
+.bar{display:flex;align-items:center;gap:9px;padding:0 24px;margin:18px 0}
+.bar .sp{flex:1}
+.solid{background:var(--solid);color:#fff;border-radius:var(--r1);padding:5px 11px;font-size:var(--meta)}
+.plain{color:var(--dim);font-size:var(--meta);padding:5px 9px}
+.srch{height:30px;flex:0 0 240px;border:1px solid var(--line2);border-radius:var(--r2);background:var(--card);
+  display:flex;align-items:center;padding:0 11px;color:var(--dimmer);font-size:var(--meta)}
+.rest{padding:0 24px}
+.rrow{display:grid;grid-template-columns:150px minmax(0,1fr) 92px;align-items:center;column-gap:14px;
+  height:36px;border-bottom:1px solid var(--line);font-size:var(--sm)}
+.rrow .p{font:var(--meta)/1 ui-monospace,monospace;color:var(--dimmer);overflow:hidden;white-space:nowrap}
+.rrow .k{font-size:var(--micro);color:#7fd18f;justify-self:end}
+
+.slist .row{display:grid;grid-template-columns:8px minmax(180px,1fr) 124px minmax(160px,1.25fr) 120px 82px 92px;
+  align-items:center;column-gap:14px;height:40px;padding:0 10px;border-bottom:1px solid var(--line)}
+.slist .row .id{color:var(--dimmer);font-size:var(--meta);font-weight:400;margin-left:5px}
+.slist .row .nm{font-size:var(--sm);font-weight:600;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;min-width:0}
+.slist .row .pj{font-size:var(--meta);color:var(--dimmer);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.slist .row .br{font:var(--meta)/1 ui-monospace,monospace;color:#7ed0d8;overflow:hidden;white-space:nowrap}
+.slist .row .tm{font-size:var(--meta);color:var(--dimmer);text-align:right}
+.slist .row .act{font-size:var(--meta);color:var(--acc);text-align:right;opacity:0}
+.slist .row.hov{background:var(--card);border-radius:var(--r1)}
+.slist .row.hov .act{opacity:1}
+.slist .newcol{background:rgba(63,185,80,.07);box-shadow:inset 0 0 0 1px rgba(63,185,80,.22);
+  border-radius:3px;padding:3px 6px;margin:0 -6px}
+.old2{padding:9px 10px;border-bottom:1px solid var(--line)}
+.old2 .l1{display:flex;align-items:center;gap:9px}
+.old2 .l2{margin:5px 0 0 17px;font-size:var(--meta);color:var(--dimmer)}
+.old2 .nm{font-size:var(--sm);font-weight:700}
+.old2 .id{color:var(--dimmer);font-size:var(--meta);font-weight:400}
+.tg{font-size:var(--micro);padding:1px 7px;border-radius:var(--r1);border:1px solid var(--line2);color:var(--dim)}
+.tg.b{color:#9ccaff;border-color:rgba(88,166,255,.4);background:var(--soft)}
+.tg.g{color:#7fd18f;border-color:rgba(63,185,80,.4);background:rgba(63,185,80,.1)}
+.tg.c{color:#7ed0d8;border-color:rgba(57,197,207,.4);background:rgba(57,197,207,.08);font-family:ui-monospace,monospace}
+.acts{display:flex;gap:18px;font-size:var(--sm)}
+.acts a{color:var(--acc)}
+.acts .kill{color:var(--red)}
+.rail{background:var(--card);border-radius:var(--r3);padding:14px}
+.rail h4{margin:0 0 12px;font-size:var(--sm)}
+.ev{position:relative;padding-left:18px;margin-bottom:15px}
+.ev::before{content:"";position:absolute;left:1px;top:4px;width:7px;height:7px;border-radius:50%;background:var(--cyan)}
+.ev b{display:block;font-size:var(--meta)}
+.ev p{margin:3px 0 0;font-size:var(--meta);color:var(--dim);line-height:1.5}
+.ev time{display:block;margin-top:3px;font-size:var(--micro);color:var(--dimmer)}
+table.tt{border-collapse:collapse;width:100%;font-size:var(--sm);margin:8px 0 20px}
+table.tt th,table.tt td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+table.tt th{color:var(--dimmer);font-size:var(--meta);font-weight:600}
+table.tt td{color:var(--dim)}
+table.tt td b{color:var(--tx)}
+</style></head><body><div class="wrap">
+
+<h1>桌面版：概览 / 项目 / 会话</h1>
+<p class="lede">
+手机版刚把三页的分工定完（<b>概览＝时间 · 项目＝空间 · 会话＝全集</b>），但桌面沿用的是同一批组件，
+于是<b>桌面成了「更宽的手机」</b>：列表被拉到 1174，内容还贴在左边，时间还贴在右边，中间是空的。
+1440×900（侧栏 224）实测：
+</p>
+<ul class="meas">
+  <li>概览会话行宽 838，名称右缘到时间左缘 <b>570px</b> 是空的（占行宽 68%）</li>
+  <li>状态条宽 1174，里面只有 <b>82px</b> 内容——<b>1092px</b> 是一枚空胶囊</li>
+  <li>会话页每行内容右缘 x=636，操作区起点 x=1333，中间 <b>697px</b> 是空的</li>
+  <li>概览左栏内容到 y=590 就结束，视口 900——下方 <b>310px</b> 空着，右轨却排到 992</li>
+  <li>项目页 4 个 0 任务的项目，占掉 <b>467px</b> 的卡片网格</li>
+</ul>
+<p class="lede" style="margin-bottom:8px">宽度没有变成信息，变成了空气。</p>
+
+<h2>桌面四条原则</h2>
+<ol class="rules">
+  <li><b>对齐成列。</b>同类信息落在同一个 x 上，眼睛竖着扫一列；现在是每行左右横跳 570–700px。</li>
+  <li><b>中间那段宽度要给信息，不给空气。</b>桌面每行比手机多一列——<b>「它在哪」</b>（⎇ 分支 / 工作目录）。
+      这是手机放不下、桌面放得下的东西，也是桌面版存在的理由。</li>
+  <li><b>破坏性动作不常驻。</b><em>关闭</em> 只在 hover 该行时出现（仅 <code>data-pointer:fine</code>）；
+      12 行 12 个红字，是界面在冲用户喊。</li>
+  <li><b>桌面行高 36–40，一屏放得下更多。</b>44 是粗指针的命中下限、不是桌面的目标值；
+      会话条数手机 8 条、桌面 12 条。</li>
+</ol>
+<p class="legend"><span><i class="v"></i>红斜线＝量出来的空白</span><span><i class="n"></i>绿底＝桌面新增的信息列</span></p>
+
+<h2>一、概览</h2>
+
+<p class="cap"><b>现状</b><span class="tag bad">570 / 1092 / 310 三处空白</span></p>
+<div class="stage">
+  <div class="dk">
+    <div class="ph"><div class="kick">8月3日星期一</div>
+      <h3>晚上好，当前没有待处理事项</h3>
+      <p>12 个任务正在运行，最近一次活动在刚刚</p></div>
+    <div class="sum"><span style="flex:0 0 auto"><i></i><b>12</b>运行中</span>
+      <span class="void">状态条里 1092px 什么都没有</span></div>
+    <div class="grid2" style="margin-top:22px">
+      <div>
+        <div class="sect" style="margin:0 0 9px"><span>最近会话</span><span class="ln"></span><span class="go">全部会话 ›</span></div>
+        <div class="old"><i class="dot"></i><span class="pj">roam ·</span><span class="nm">桌面版页面也出一版优化设计</span><span class="ag">Claude</span>
+          <span class="void">570px</span><span class="tm">刚刚</span></div>
+        <div class="old"><i class="dot"></i><span class="pj">blade-agent ·</span><span class="nm">blade-agent-/tmp</span><span class="ag">Claude</span>
+          <span class="void"></span><span class="tm">6 分钟前</span></div>
+        <div class="old"><i class="dot"></i><span class="pj">blade-oauth ·</span><span class="nm">auth接入第三方</span><span class="ag">Claude</span>
+          <span class="void"></span><span class="tm">6 分钟前</span></div>
+        <div class="old"><i class="dot"></i><span class="pj">roam ·</span><span class="nm">roam-bug修复</span><span class="ag">Claude</span>
+          <span class="void"></span><span class="tm">6 分钟前</span></div>
+        <div class="old"><i class="dot"></i><span class="pj">xiaohui-app ·</span><span class="nm">有个tv改进的worktree</span><span class="ag">Claude</span>
+          <span class="void"></span><span class="tm">6 分钟前</span></div>
+        <div class="old"><i class="dot"></i><span class="pj">临时 ·</span><span class="nm">你看看-jetson@192</span><span class="ag cx">Codex</span>
+          <span class="void"></span><span class="tm">29 分钟前</span></div>
+        <div style="height:120px;border:1px dashed rgba(248,81,73,.5);border-radius:6px;margin-top:14px;
+          display:flex;align-items:center;justify-content:center;font:11px/1 ui-monospace,monospace;color:#f2a6a0;
+          background:repeating-linear-gradient(45deg,rgba(248,81,73,.1),rgba(248,81,73,.1) 5px,transparent 5px,transparent 11px)">
+          左栏到这里就没了，右轨还在往下排 —— 310px</div>
+      </div>
+      <div class="rail">
+        <h4>最近活动</h4>
+        <div class="ev"><b>242d840 · roam</b><p>refactor(web): 概览不再复制项目页和会话页</p><time>7 分钟前</time></div>
+        <div class="ev"><b>83af9a4 · blade-agent</b><p>squash: merge docs/ba-prompt-analysis into main</p><time>14 分钟前</time></div>
+        <div class="ev"><b>8b1d45c · roam</b><p>fix(web): 对话态外壳 + 手机顶部 chrome 重设计</p><time>34 分钟前</time></div>
+        <div class="ev"><b>cac4fb9 · roam</b><p>feat(web): 方向簇只在 TUI 里出现</p><time>39 分钟前</time></div>
+        <div class="ev" style="margin-bottom:0"><b>0dd3454 · blade-oauth</b><p>feat(auth): web 登录改签落库的会话令牌</p><time>3 小时前</time></div>
+      </div>
+    </div>
+  </div>
+</div>
+<p class="note">
+状态条只剩一项时仍然撑满 1174；会话行是手机那行直接拉宽，名称与时间之间什么都没有；
+左栏比右轨短一大截，页面下半截是空的。三处都是同一个毛病：<u>宽度没换成信息</u>。
+</p>
+
+<p class="cap"><b>新版</b><span class="tag good">状态条并进页头 · 会话六列 · 桌面 12 条</span></p>
+<div class="stage">
+  <div class="dk">
+    <div class="ph"><div class="phrow">
+      <div><div class="kick">8月3日星期一</div>
+        <h3>晚上好，当前没有待处理事项</h3>
+        <p>12 个任务正在运行，最近一次活动在刚刚</p></div>
+      <div class="sp"></div>
+      <div class="sumi"><span><i></i><b>12</b>运行中</span><span><i class="a"></i><b>1</b>待收尾</span></div>
+    </div></div>
+    <div class="grid2" style="margin-top:20px">
+      <div>
+        <div class="sect" style="margin:0 0 6px"><span>最近会话</span><span class="ln"></span><span class="go">全部会话 ›</span></div>
+        <div class="tbl">
+          <div class="c"><i class="dot"></i></div><div class="c pj">roam</div><div class="c nm">桌面版页面也出一版优化设计</div><div class="c"><span class="ag">Claude</span></div><div class="c loc new"><span class="br">⎇ redesign/overview-vs-projects</span></div><div class="c tm">刚刚</div>
+          <div class="c"><i class="dot"></i></div><div class="c pj">blade-agent</div><div class="c nm">blade-agent-/tmp</div><div class="c"><span class="ag">Claude</span></div><div class="c loc new">~/codes/blade-agent</div><div class="c tm">6 分钟前</div>
+          <div class="c"><i class="dot"></i></div><div class="c pj">blade-oauth</div><div class="c nm">auth接入第三方</div><div class="c"><span class="ag">Claude</span></div><div class="c loc new"><span class="br">⎇ feat/web-session-tokens</span></div><div class="c tm">6 分钟前</div>
+          <div class="c"><i class="dot"></i></div><div class="c pj">roam</div><div class="c nm">roam-bug修复</div><div class="c"><span class="ag">Claude</span></div><div class="c loc new"><span class="br">⎇ main</span></div><div class="c tm">6 分钟前</div>
+          <div class="c"><i class="dot"></i></div><div class="c pj">xiaohui-app</div><div class="c nm">有个tv改进的worktree</div><div class="c"><span class="ag">Claude</span></div><div class="c loc new"><span class="br">⎇ feat/tv-live-fullscreen</span></div><div class="c tm">6 分钟前</div>
+          <div class="c"><i class="dot"></i></div><div class="c pj">blade-service-deployer</div><div class="c nm">blade-os图标配置</div><div class="c"><span class="ag cx">Codex</span></div><div class="c loc new">~/codes/blade-service-deployer</div><div class="c tm">29 分钟前</div>
+          <div class="c"><i class="dot"></i></div><div class="c pj">临时</div><div class="c nm">你看看-jetson@192</div><div class="c"><span class="ag cx">Codex</span></div><div class="c loc new">~/codes/tmp</div><div class="c tm">29 分钟前</div>
+          <div class="c"><i class="dot"></i></div><div class="c pj">线上问题排查</div><div class="c nm">响应布局</div><div class="c"><span class="ag cx">Codex</span></div><div class="c loc new">~/codes</div><div class="c tm">29 分钟前</div>
+          <div class="c"><i class="dot z"></i></div><div class="c pj">xiaohui</div><div class="c nm">app-音乐feed</div><div class="c"><span class="ag">Claude</span></div><div class="c loc new"><span class="br">⎇ feat/dev-music-telemetry</span></div><div class="c tm">34 分钟前</div>
+          <div class="c"><i class="dot z"></i></div><div class="c pj">临时</div><div class="c nm">ds4双机部署</div><div class="c"><span class="ag cx">Codex</span></div><div class="c loc new">~/codes/tmp</div><div class="c tm">1 小时前</div>
+          <div class="c"><i class="dot z"></i></div><div class="c pj">skills</div><div class="c nm">ssh-ai@192</div><div class="c"><span class="ag cx">Codex</span></div><div class="c loc new">~/codes/skills</div><div class="c tm">30 分钟前</div>
+          <div class="c" style="border:0"><i class="dot z"></i></div><div class="c pj" style="border:0">roam</div><div class="c nm" style="border:0">代码提交</div><div class="c" style="border:0"></div><div class="c loc new" style="border:0">~/codes/ttmux</div><div class="c tm" style="border:0">2 天前</div>
+        </div>
+      </div>
+      <div class="rail">
+        <h4>最近活动</h4>
+        <div class="ev"><b>242d840 · roam</b><p>refactor(web): 概览不再复制项目页和会话页</p><time>7 分钟前</time></div>
+        <div class="ev"><b>83af9a4 · blade-agent</b><p>squash: merge docs/ba-prompt-analysis into main</p><time>14 分钟前</time></div>
+        <div class="ev"><b>8b1d45c · roam</b><p>fix(web): 对话态外壳 + 手机顶部 chrome 重设计</p><time>34 分钟前</time></div>
+        <div class="ev"><b>cac4fb9 · roam</b><p>feat(web): 方向簇只在 TUI 里出现</p><time>39 分钟前</time></div>
+        <div class="ev"><b>0dd3454 · blade-oauth</b><p>feat(auth): web 登录改签落库的会话令牌</p><time>3 小时前</time></div>
+        <div class="ev" style="margin-bottom:0"><b>1dbf59d · roam</b><p>fix(web): 终端底部快捷键条被顶出可视区</p><time>5 小时前</time></div>
+      </div>
+    </div>
+  </div>
+</div>
+<p class="note">
+① <u>状态条并进页头右端</u>——省掉一整行，也不会再出现「一枚数字 + 1092px 空白」的胶囊；<br>
+② 会话流变六列：<u>● / 项目 / 名称 / Agent / 位置 / 时间</u>。中间那段宽度交给<b>位置</b>——
+有 worktree 就是 <span style="color:#7ed0d8;font-family:ui-monospace,monospace">⎇ 分支</span>，否则是工作目录；
+数据来自已经在拉的 <code>/sessions/annotations</code>，<u>零新接口</u>；<br>
+③ 桌面 12 条（手机 8 条），左栏与右轨终于等长。
+</p>
+<p class="note">
+<u>为什么「位置」列不是「它正在输出什么」？</u>抓屏最后一行实测是
+<code>⏵⏵ bypass permissions on (shift+tab to cycle) · ← for agents</code> 或整行制表符边框——
+TUI 的末行几乎永远是状态栏，不是内容。放上去只会得到一列噪声。
+</p>
+
+<h2>二、项目</h2>
+
+<p class="cap"><b>现状</b><span class="tag bad">4 个空项目占 467px · 两套控件语言</span></p>
+<div class="stage">
+  <div class="dk">
+    <div class="bar" style="margin-top:16px">
+      <span class="srch">搜索项目或路径</span>
+      <span class="chip on">全部 <span class="n">12</span></span>
+      <span class="chip">活跃 <span class="n">8</span></span>
+      <span class="chip">待收尾 <span class="n">0</span></span>
+      <span class="sp"></span>
+      <span class="plain">名称</span><span class="plain">创建时间</span><span class="solid">最近活跃</span>
+    </div>
+    <div class="pgrid">
+      <div class="pcard"><h4>roam</h4><div class="p">/home/ai/codes/ttmux</div>
+        <div class="m"><b>2</b> 任务 · <b>1</b> worktree</div>
+        <div class="task"><i class="dot"></i>桌面版页面也出一版优化设计<span class="t">刚刚</span></div>
+        <div class="task"><i class="dot"></i>roam-bug修复<span class="t">7 分钟前</span></div></div>
+      <div class="pcard"><h4>blade-agent</h4><div class="p">/home/ai/codes/blade-agent</div>
+        <div class="m"><b>1</b> 任务 · <b>1</b> worktree</div>
+        <div class="task"><i class="dot"></i>blade-agent-/tmp<span class="t">7 分钟前</span></div>
+        <div class="hollow"></div></div>
+      <div class="pcard empty"><h4>llm-gateway</h4><div class="p">/home/ai/codes/llm-gateway</div>
+        <div class="m"><b>0</b> 任务 · <b>2</b> worktree</div>
+        <div class="hollow" style="height:96px"></div></div>
+      <div class="pcard empty"><h4>blade-quant</h4><div class="p">/home/ai/codes/blade-quant</div>
+        <div class="m"><b>0</b> 任务 · <b>1</b> worktree</div></div>
+      <div class="pcard empty"><h4>skills</h4><div class="p">/home/ai/codes/skills</div>
+        <div class="m"><b>0</b> 任务 · <b>0</b> worktree</div></div>
+      <div class="pcard empty"><h4>swarm</h4><div class="p">/home/ai/codes/swarm</div>
+        <div class="m"><b>0</b> 任务</div></div>
+    </div>
+  </div>
+</div>
+<p class="note">
+0 任务的项目和正在跑 2 个任务的项目<u>占同样大的卡</u>，还被同一行最高的卡撑到 167px（红斜线就是撑出来的空）；
+页面下三分之一全是空卡。右上角排序是「两个裸文字 + 一个实心蓝块」，与左边的 pill 筛选<u>不是同一套控件语言</u>。
+</p>
+
+<p class="cap"><b>新版</b><span class="tag good">空项目折成一行 · 排序统一成 pill</span></p>
+<div class="stage">
+  <div class="dk">
+    <div class="bar" style="margin-top:16px">
+      <span class="srch">搜索项目或路径</span>
+      <span class="chip on">全部 <span class="n">12</span></span>
+      <span class="chip">活跃 <span class="n">8</span></span>
+      <span class="chip">待收尾 <span class="n">0</span></span>
+      <span class="sp"></span>
+      <span class="chip">最近活跃 ⌄</span>
+    </div>
+    <div class="pgrid">
+      <div class="pcard"><h4>roam</h4><div class="p">/home/ai/codes/ttmux</div>
+        <div class="m"><b>2</b> 任务 · <b>1</b> worktree</div>
+        <div class="task"><i class="dot"></i>桌面版页面也出一版优化设计<span class="t">刚刚</span></div>
+        <div class="task"><i class="dot"></i>roam-bug修复<span class="t">7 分钟前</span></div></div>
+      <div class="pcard"><h4>blade-agent</h4><div class="p">/home/ai/codes/blade-agent</div>
+        <div class="m"><b>1</b> 任务 · <b>1</b> worktree</div>
+        <div class="task"><i class="dot"></i>blade-agent-/tmp<span class="t">7 分钟前</span></div></div>
+      <div class="pcard"><h4>blade-oauth</h4><div class="p">/home/ai/codes/blade-oauth</div>
+        <div class="m"><b>1</b> 任务 · <b>4</b> worktree</div>
+        <div class="task"><i class="dot"></i>auth接入第三方<span class="t">7 分钟前</span></div></div>
+      <div class="pcard"><h4>xiaohui-app</h4><div class="p">/home/ai/codes/ybz/xh/XiaoHui</div>
+        <div class="m"><b>2</b> 任务 · <b>2</b> worktree</div>
+        <div class="task"><i class="dot"></i>有个tv改进的worktree<span class="t">7 分钟前</span></div>
+        <div class="task"><i class="dot z"></i>代码提交<span class="t">2 天前</span></div></div>
+      <div class="pcard"><h4>临时</h4><div class="p">/home/ai/codes/tmp</div>
+        <div class="m"><b>2</b> 任务</div>
+        <div class="task"><i class="dot"></i>你看看-jetson@192<span class="t">30 分钟前</span></div>
+        <div class="task"><i class="dot z"></i>ds4双机部署<span class="t">1 小时前</span></div></div>
+      <div class="pcard"><h4>线上问题排查</h4><div class="p">/home/ai/codes</div>
+        <div class="m"><b>2</b> 任务</div>
+        <div class="task"><i class="dot"></i>响应布局<span class="t">30 分钟前</span></div>
+        <div class="task"><i class="dot"></i>ssh-ai@192<span class="t">30 分钟前</span></div></div>
+    </div>
+    <div class="sect" style="margin:24px 24px 6px"><span>其他项目</span>
+      <span style="font-size:var(--meta);font-weight:400;color:var(--dimmer)">没有会话在跑</span><span class="ln"></span></div>
+    <div class="rest">
+      <div class="rrow"><span>llm-gateway</span><span class="p">/home/ai/codes/llm-gateway</span><span class="k">✓ 1 可清理</span></div>
+      <div class="rrow"><span>blade-quant</span><span class="p">/home/ai/codes/blade-quant</span><span class="k">✓ 1 可清理</span></div>
+      <div class="rrow"><span>skills</span><span class="p">/home/ai/codes/skills</span><span></span></div>
+      <div class="rrow" style="border:0"><span>swarm</span><span class="p">/home/ai/codes/swarm</span><span></span></div>
+    </div>
+  </div>
+</div>
+<p class="note">
+没有会话在跑的项目<u>不值一张卡</u>：折成页尾一行一个——名字 + 路径 + 可清理标，点开照样进项目页。
+卡片网格于是只留真正在动的项目，同样的高度里从 6 个项目变成 <u>6 张有内容的卡 + 4 行</u>。
+排序从三个裸文字换成一枚 pill，与左侧筛选同一套语言。
+</p>
+
+<h2>三、会话</h2>
+
+<p class="cap"><b>现状</b><span class="tag bad">每行 67px · 697px 空白 · 12 个常驻红字</span></p>
+<div class="stage">
+  <div class="dk">
+    <div class="body" style="padding-top:16px">
+      <div class="old2"><div class="l1"><i class="dot"></i><span class="nm">桌面版页面也出一版优化设计</span>
+        <span class="id">(2026-0730-1521-000v)</span><span class="tg c">⎇ redesign/overview-vs-projects</span>
+        <span class="tg b">✳ Claude</span><span style="font-size:var(--meta);color:var(--dim)">1 窗口</span>
+        <span class="void">697px</span>
+        <span class="acts"><a>派生</a><a class="kill">关闭</a></span></div>
+        <div class="l2">创建 4 天前 · 最后响应 刚刚</div></div>
+      <div class="old2"><div class="l1"><i class="dot"></i><span class="nm">roam-bug修复</span>
+        <span class="id">(2026-0729-1100-0005)</span><span class="tg b">✳ Claude</span>
+        <span style="font-size:var(--meta);color:var(--dim)">1 窗口</span>
+        <span class="void"></span>
+        <span class="acts"><a>派生</a><a class="kill">关闭</a></span></div>
+        <div class="l2">创建 5 天前 · 最后响应 7 分钟前</div></div>
+      <div class="old2"><div class="l1"><i class="dot"></i><span class="nm">blade-agent-/tmp</span>
+        <span class="id">(2026-0801-1720-001a)</span><span class="tg b">✳ Claude</span>
+        <span style="font-size:var(--meta);color:var(--dim)">1 窗口</span>
+        <span class="void"></span>
+        <span class="acts"><a>派生</a><a class="kill">关闭</a></span></div>
+        <div class="l2">创建 2 天前 · 最后响应 7 分钟前</div></div>
+      <div class="old2"><div class="l1"><i class="dot a"></i><span class="nm">auth接入第三方</span>
+        <span class="id">(2026-0803-1004-001c)</span><span class="tg c">⎇ feat/web-session-tokens</span>
+        <span class="tg b">✳ Claude</span><span style="font-size:var(--meta);color:var(--dim)">1 窗口</span>
+        <span class="void"></span>
+        <span class="acts"><a>派生</a><a class="kill">关闭</a></span></div>
+        <div class="l2">创建 12 小时前 · 最后响应 7 分钟前</div></div>
+      <div class="old2" style="border:0"><div class="l1"><i class="dot z"></i><span class="nm">blade-os图标配置</span>
+        <span class="id">(2026-0730-1040-000t)</span><span class="tg g">✸ Codex</span>
+        <span style="font-size:var(--meta);color:var(--dim)">1 窗口</span>
+        <span class="void"></span>
+        <span class="acts"><a>派生</a><a class="kill">关闭</a></span></div>
+        <div class="l2">创建 4 天前 · 最后响应 30 分钟前</div></div>
+    </div>
+  </div>
+</div>
+<p class="note">
+一条会话写成两行 67px，第二行只有「创建 · 最后响应」；中间 697px 空着，
+而<u>这条会话属于哪个项目</u>——概览都写了——这一页反而没有。会话 ID 与名字同权并排，
+每行还常驻一个红色「关闭」。
+</p>
+
+<p class="cap"><b>新版</b><span class="tag good">一行 40px · 补上项目列 · 关闭随 hover</span></p>
+<div class="stage">
+  <div class="dk">
+    <div class="body slist" style="padding-top:16px">
+      <div class="row hov"><i class="dot"></i>
+        <span class="nm">桌面版页面也出一版优化设计<span class="id">000v</span></span>
+        <span class="pj newcol">roam</span>
+        <span class="br newcol">⎇ redesign/overview-vs-projects</span>
+        <span><span class="tg b">Claude</span></span>
+        <span class="tm">刚刚</span><span class="act">派生 · 关闭</span></div>
+      <div class="row"><i class="dot"></i>
+        <span class="nm">roam-bug修复<span class="id">0005</span></span>
+        <span class="pj newcol">roam</span>
+        <span class="br newcol">⎇ main</span>
+        <span><span class="tg b">Claude</span></span>
+        <span class="tm">7 分钟前</span><span class="act">派生 · 关闭</span></div>
+      <div class="row"><i class="dot"></i>
+        <span class="nm">blade-agent-/tmp<span class="id">001a</span></span>
+        <span class="pj newcol">blade-agent</span>
+        <span class="br newcol">~/codes/blade-agent</span>
+        <span><span class="tg b">Claude</span></span>
+        <span class="tm">7 分钟前</span><span class="act">派生 · 关闭</span></div>
+      <div class="row"><i class="dot a"></i>
+        <span class="nm">auth接入第三方<span class="id">001c</span></span>
+        <span class="pj newcol">blade-oauth</span>
+        <span class="br newcol">⎇ feat/web-session-tokens</span>
+        <span style="display:flex;gap:6px;min-width:0"><span class="tg" style="color:#e3b341;border-color:rgba(210,153,34,.45);background:rgba(210,153,34,.1)">待确认</span><span class="tg b">Claude</span></span>
+        <span class="tm">7 分钟前</span><span class="act">派生 · 关闭</span></div>
+      <div class="row"><i class="dot"></i>
+        <span class="nm">有个tv改进的worktree<span class="id">001h</span></span>
+        <span class="pj newcol">xiaohui-app</span>
+        <span class="br newcol">⎇ feat/tv-live-fullscreen</span>
+        <span><span class="tg b">Claude</span></span>
+        <span class="tm">7 分钟前</span><span class="act">派生 · 关闭</span></div>
+      <div class="row"><i class="dot z"></i>
+        <span class="nm">blade-os图标配置<span class="id">000t</span></span>
+        <span class="pj newcol">blade-service-deployer</span>
+        <span class="br newcol">~/codes/blade-service-deployer</span>
+        <span><span class="tg g">Codex</span></span>
+        <span class="tm">30 分钟前</span><span class="act">派生 · 关闭</span></div>
+      <div class="row" style="border:0"><i class="dot z"></i>
+        <span class="nm">你看看-jetson@192<span class="id">0006</span></span>
+        <span class="pj newcol">临时</span>
+        <span class="br newcol">~/codes/tmp</span>
+        <span><span class="tg g">Codex</span></span>
+        <span class="tm">30 分钟前</span><span class="act">派生 · 关闭</span></div>
+    </div>
+  </div>
+</div>
+<p class="note">
+两行压成一行 40：<u>12 条从 799px 收到 480px</u>，一屏放得下整份列表。中间的空白换成两列真信息——
+<b>项目</b>（这一页原本没有）和<b>位置</b>（⎇ 分支 / 目录）；「创建 4 天前」不再占一行，移进名称的 title；
+会话 ID 只留尾 4 位、灰度降一档，要全名 hover 就有。<em>派生 / 关闭 只在 hover 该行时出现</em>——
+上面第一行就是 hover 态；粗指针档（平板）保持常驻。
+</p>
+
+<h2>四、自审：画完之后自己挑的毛病</h2>
+<ol class="rules">
+  <li><b>会话页把「1 窗口」和「创建时间」删了，得说清规则。</b>窗口数 99% 的会话都是 1，常驻就是一列噪声——
+      <u>只在 &gt;1 时才显示</u>；创建时间进名称的 <code>title</code>，列表里只留「最后响应」（排序默认也是它）。</li>
+  <li><b>名称列吃掉了全部富余，项目列前面又空出 150px。</b>初版名称列是 <code>1.3fr</code>、位置列 <code>1fr</code>，
+      富余全落在名称右边——正是刚批评过的毛病换了个地方。改成名称 <code>1fr</code> / 位置 <code>1.25fr</code>：
+      <u>富余给等宽字体的路径</u>，它多一点就能少截一截。</li>
+  <li><b>概览「位置」列原本定死 296。</b>只有 <code>~/codes</code> 的行会空出一大截。收到 260，
+      多出来的给名称。列内偶尔短是列对齐的成本，可以接受；<u>但不能宽到看着像空列</u>。</li>
+  <li><b>「其他项目」在筛选态下必须整块消失。</b>用户点了「活跃 8」，页尾还挂着 4 个不活跃项目就是自相矛盾——
+      它只在「全部」下出现。</li>
+  <li><b>状态数字挪进页头后，别看着像装饰。</b>它们现在仍然是导航入口（点进项目页），
+      所以 hover 态、手型、44 命中区一个都不能少——挪位置不等于降级成统计文本。</li>
+  <li><b>hover 才出现的操作对键盘用户是隐身的。</b>除了 <code>:hover</code> 还要 <code>:focus-within</code>，
+      Tab 到那一行时同样浮出来；粗指针档（平板）保持常驻，那里没有 hover。</li>
+  <li><b>会话页的标记列要装得下两枚标。</b>「待确认 + Claude」是最常见的组合，
+      74px 只够一枚——放宽到 132，超出的（蜂群）折进名称行的 title。</li>
+  <li><b>落地时才发现的：位置列会和项目列说同一句话。</b>非 git 项目的会话没有分支，
+      位置只能写工作目录，而那个目录<u>就是左边项目列那个项目的目录</u>——两列念同一件事。
+      规则改成：有分支写分支；没有分支且工作目录 ≠ 项目目录才写目录；<b>相同就留空</b>。
+      于是这一列只在「它确实在别处」时才出声。</li>
+  <li><b>落地时才发现的：两行排法不是「手机专属」，是「窄 Canvas 专属」。</b>
+      桌面拉开终端分栏后 Canvas 同样会窄到 900 以下。所以两行栅格写成<u>基础排法</u>、
+      七列写成 <code>@container</code> 覆盖——按视口档位写就会在分栏态露馅。</li>
+</ol>
+
+<h2>五、与手机版的对照</h2>
+<table class="tt">
+  <tr><th style="width:88px">区块</th><th style="width:230px">手机 compact</th><th>桌面 expanded / large</th></tr>
+  <tr><td><b>状态条</b></td><td>独占一行，零值项不渲染</td><td>并进页头右端，不再单独占一行</td></tr>
+  <tr><td><b>最近会话</b></td><td>一行 44：● 项目 · 名称 Agent 时间</td>
+      <td>六列 40：● / 项目 / 名称 / Agent / <b>位置</b> / 时间；8 条 → 12 条</td></tr>
+  <tr><td><b>项目列表</b></td><td>单列卡片；空项目同样折到页尾</td><td>2–3 列卡片 + 页尾「其他项目」紧凑行</td></tr>
+  <tr><td><b>会话列表</b></td><td>两行卡，操作常驻（拇指够得着优先）</td><td>一行 40 六列，操作随 hover</td></tr>
+</table>
+<p class="note" style="max-width:80ch">
+断点仍然只有 <code>useLayout()</code> 一个入口；这里的差异全是<b>纯样式</b>——走 <code>@container canvas</code> 与
+<code>html[data-pointer]</code>，不新增 JS 分支。唯一带 JS 的是「桌面 12 条 / 手机 8 条」，
+读的是已有的档位。
+</p>
+
+</div></body></html>

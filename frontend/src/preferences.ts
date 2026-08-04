@@ -32,6 +32,7 @@ export interface WorkspacePreference {
   navCollapsed: boolean // 桌面侧栏收成 64px 轨
   dockOpen: boolean // 终端区是否展开
   dockWidth: number // 终端区宽度 px；恢复时按当前视口钳制，旧大屏宽度不挤爆新窗口
+  inspectorWidth: number // Git/Worktree 列宽 px；同样按当前几何钳制
   workspaceFocus: 'none' | 'page' | 'dock' // 单区聚焦
   density: 'cozy' | 'compact' // 信息密度，与窗口档正交
   dpadOn: boolean // 手机方向簇
@@ -43,6 +44,7 @@ const WORKSPACE_DEFAULTS: WorkspacePreference = {
   navCollapsed: false,
   dockOpen: true,
   dockWidth: 0, // 0 = 还没拖过，用该档默认（clamp(480, 42vw, 880)）
+  inspectorWidth: 0, // 0 = 还没拖过，用 INSPECTOR_DEFAULT
   workspaceFocus: 'none',
   density: 'cozy',
   dpadOn: true,
