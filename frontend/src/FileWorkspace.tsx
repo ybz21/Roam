@@ -10,6 +10,7 @@ import { useI18n } from './i18n'
 import { PointerResizeShield, usePointerResize } from './PointerResize'
 import { useLayout } from './layout'
 import { CloseIcon } from './icons'
+import { INTENT_EVENT, OPEN_FILE_INTENT, takeIntentData } from './intents'
 
 type Group = 'A' | 'B'
 const TAB_MIME = 'application/x-ttmux-tab'
@@ -113,6 +114,20 @@ export default function FileWorkspace({
     setActiveOf(g, p); setFocus(g)
   }
   const openFileTab = (p: string) => openInGroup(p, split ? focus : 'A')
+  // ⌘K 搜到文件 → 切到文件页 → 这里把它开成标签页。挂载时也取一次：从别的页面
+  // 点过来时，意图早在本组件存在之前就发完了（见 intents.ts）。
+  const openFileRef = useRef(openFileTab)
+  openFileRef.current = openFileTab
+  useEffect(() => {
+    const on = () => {
+      const data = takeIntentData<{ path?: string }>(OPEN_FILE_INTENT)
+      const p = data && data !== true ? data.path : ''
+      if (p) openFileRef.current(p)
+    }
+    on()
+    window.addEventListener(INTENT_EVENT, on)
+    return () => window.removeEventListener(INTENT_EVENT, on)
+  }, [])
   // VSCode「侧栏打开预览」：把该 markdown 的渲染预览开到另一栏（预览 tab 用前缀区分，可与源码同时存在）
   const openPreviewToSide = (fromGroup: Group, p: string) => {
     const to: Group = fromGroup === 'A' ? 'B' : 'A'

@@ -207,6 +207,10 @@ func New(cfg Config) *gin.Engine {
 		g.GET("/projects/:key/activity", h.ProjectActivity) // 活动流（全部分支近 30 天）
 		g.PATCH("/projects/:key/prefs", h.ProjectPrefs)     // 置顶/显示名/默认 agent/base
 
+		// ── 全局搜索（⌘K）：一个查询打项目/会话/项目文件三张表；全文另走一条 ──
+		g.GET("/search", h.Search)
+		g.GET("/search/content", h.SearchContent)
+
 		g.GET("/sessions", h.Sessions)
 		g.POST("/sessions", h.NewSession)
 		g.PATCH("/sessions/:name", h.RenameSession)

@@ -314,6 +314,104 @@ body {
 
 .tt-top-create:hover { border-color: var(--accent-border); color: var(--accent); }
 
+/* ── 顶栏搜索框 ──
+   实底（比顶栏亮一档）+ 32 高，不是描边框。旧版与顶栏同色、只有一圈 1px 边，
+   在一条本就低对比的横条上根本读不出「这里能搜」；有人用了半年不知道有 ⌘K。 */
+.tt-topsearch {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  width: min(520px, 40%); height: 32px; padding: 0 var(--sp-3);
+  display: flex; align-items: center; gap: var(--sp-2);
+  border: 1px solid var(--border); border-radius: var(--r-xs);
+  background: var(--bg-elevated); color: var(--text-dim);
+  font-size: var(--fs-meta); cursor: pointer;
+  transition: border-color .12s, color .12s;
+}
+.tt-topsearch:hover { border-color: var(--accent-border); color: var(--text-bright); }
+.tt-topsearch .ph { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-topsearch kbd {
+  margin-left: auto; flex: 0 0 auto; padding: 1px 5px;
+  border: 1px solid var(--border); border-radius: 5px;
+  background: var(--bg-base); color: var(--text-dim); font-size: var(--fs-micro);
+}
+
+/* ── ⌘K 搜索面板（shell/CommandPalette.tsx）── */
+.tt-palette {
+  position: fixed; left: 50%; top: 88px; transform: translateX(-50%); z-index: var(--z-sheet);
+  width: min(620px, calc(100vw - 32px)); max-height: 66vh;
+  display: flex; flex-direction: column; overflow: hidden;
+  border: 1px solid var(--border); border-radius: var(--r-card);
+  background: var(--bg-elevated); box-shadow: var(--elevated-shadow);
+}
+/* 窄屏：顶到接近满屏——手机上 88px 的上边距会把本就不多的可见行数再砍掉两行 */
+html[data-size="compact"] .tt-palette {
+  top: var(--sp-3); width: calc(100vw - 2 * var(--sp-3)); max-height: 78vh;
+}
+.tt-palette-head {
+  display: flex; align-items: center; gap: var(--sp-3);
+  height: 52px; padding: 0 var(--sp-4);
+  border-bottom: 1px solid var(--border-subtle); color: var(--text-dim);
+}
+.tt-palette-head input {
+  flex: 1; min-width: 0; border: 0; outline: 0; background: transparent;
+  color: var(--text-bright); font-size: var(--fs-body);
+}
+.tt-palette-head kbd { color: var(--text-dimmer); font-size: var(--fs-micro); }
+.tt-palette-spin {
+  flex: 0 0 auto; width: 12px; height: 12px; border-radius: 50%;
+  border: 2px solid var(--border); border-top-color: var(--accent);
+  animation: tt-palette-spin .7s linear infinite;
+}
+@keyframes tt-palette-spin { to { transform: rotate(360deg); } }
+.tt-palette-list { flex: 1; min-height: 0; overflow-y: auto; padding: var(--sp-2); }
+.tt-palette-empty { padding: 18px 10px; color: var(--text-dim); font-size: var(--fs-sm); }
+.tt-palette-note { padding: var(--sp-2) 10px; color: var(--text-dimmer); font-size: var(--fs-micro); }
+.tt-palette-group {
+  padding: 10px var(--sp-2) var(--sp-1);
+  color: var(--text-dimmer); font-size: var(--fs-micro); font-weight: 700; letter-spacing: .1em;
+}
+.tt-palette-row {
+  width: 100%; min-height: 40px; padding: 6px 9px;
+  display: flex; align-items: center; gap: 10px; text-align: left;
+  border: 0; border-radius: var(--r-sm); background: transparent;
+  color: var(--text-bright); cursor: pointer;
+}
+.tt-palette-row.on { background: var(--accent-soft); }
+.tt-palette-row .ic { flex: 0 0 18px; display: grid; place-items: center; color: var(--text-dim); }
+.tt-palette-row.on .ic { color: var(--accent); }
+.tt-palette-row .tx { min-width: 0; flex: 1; }
+.tt-palette-row .t1 {
+  display: block; font-size: var(--fs-sm);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* 命中的字符加粗上色：结果里不标出「为什么它匹配」，用户只能靠猜 */
+.tt-palette-row .t1 b { color: var(--accent); font-weight: 700; }
+.tt-palette-row .t2 {
+  display: block; margin-top: 1px; color: var(--text-dim); font-size: var(--fs-micro);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tt-palette-row .tag {
+  flex: 0 0 auto; padding: 1px 7px; border-radius: var(--r-pill);
+  background: var(--accent-soft); color: var(--accent); font-size: var(--fs-micro);
+}
+.tt-palette-row .go { flex: 0 0 auto; display: flex; color: var(--text-dimmer); }
+.tt-palette-foot {
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border-top: 1px solid var(--border-subtle); background: var(--bg-container);
+}
+.tt-palette-foot button {
+  display: inline-flex; align-items: center; gap: var(--sp-2);
+  min-height: 26px; padding: 3px 9px;
+  border: 1px solid var(--border); border-radius: var(--r-xs);
+  background: var(--bg-elevated); color: var(--text-dim);
+  font-size: var(--fs-micro); cursor: pointer;
+  max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tt-palette-foot button:hover:not(:disabled) { border-color: var(--accent-border); color: var(--accent); }
+.tt-palette-foot button:disabled { opacity: .5; cursor: default; }
+.tt-palette-foot kbd { color: var(--text-dimmer); }
+.tt-palette-foot .hint { margin-left: auto; color: var(--text-dimmer); font-size: var(--fs-micro); }
+
 /* ── Canvas 容器查询（14 §5.3 / §5.4）──
    概览的列数、活动侧轨要跟「Canvas 实际有多宽」走，不跟 viewport 走：终端开合只
    改 Canvas，1920 开着 768 的 Dock 时可用宽只有 920，此时还按 viewport 排三列必挤。

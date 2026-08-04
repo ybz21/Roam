@@ -5,9 +5,12 @@ export function setUnauthorizedHandler(f: () => void) {
   onUnauth = f
 }
 
-export async function api(method: string, path: string, body?: any): Promise<any> {
+// opts.signal 给「打字时连着问」的接口（⌘K 搜索）用：下一次请求发出前先掐掉上一次，
+// 否则慢的那条后回来会把新结果盖掉。
+export async function api(method: string, path: string, body?: any, opts?: { signal?: AbortSignal }): Promise<any> {
   const r = await fetch('/api' + path, {
     method,
+    signal: opts?.signal,
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
     // 移动端(Safari/WebView)会对无 Cache-Control 的 GET 做启发式缓存，导致文件实时重载

@@ -99,6 +99,14 @@ export const ReadIcon = ({ size = 13 }: P) => line(
 export const PencilIcon = ({ size = 13 }: P) => line(<><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7.5 18.5 3 20l1.5-4.5Z" /><path d="m14.5 5.5 3 3" /></>, size)
 export const NotebookIcon = ({ size = 13 }: P) => line(<><rect x="5" y="3" width="15" height="18" rx="2" /><path d="M9 3v18" /><path d="M13 8h3" /><path d="M13 12h3" /></>, size)
 export const SearchIcon = ({ size = 13 }: P) => line(<><circle cx="11" cy="11" r="7" /><path d="m20 20-3.6-3.6" /></>, size)
+// 搜索结果里区分「这是个文件夹/项目」还是「这是个文件」。按类型细分的文件图标在
+// file-icons.tsx，那是文件列表的活；这里只要一个中性的通用件。
+export const PlugIcon = ({ size = 13 }: P) => line(
+  <><path d="M9 3v5" /><path d="M15 3v5" /><path d="M6.5 8h11v3.5a5.5 5.5 0 0 1-11 0Z" /><path d="M12 17v4" /></>, size)
+export const FolderIcon = ({ size = 13 }: P) => line(
+  <path d="M3.5 6.5A1.5 1.5 0 0 1 5 5h3.6l1.8 2.2H19a1.5 1.5 0 0 1 1.5 1.5v8.8A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5Z" />, size)
+export const FileTextIcon = ({ size = 13 }: P) => line(
+  <><path d="M13.5 3.5H7A1.5 1.5 0 0 0 5.5 5v14A1.5 1.5 0 0 0 7 20.5h10a1.5 1.5 0 0 0 1.5-1.5V8.5Z" /><path d="M13.5 3.5v5h5" /><path d="M9 13h6" /><path d="M9 16.5h4" /></>, size)
 export const GlobeIcon = ({ size = 13 }: P) => line(<><circle cx="12" cy="12" r="9" /><path d="M3.3 9h17.4" /><path d="M3.3 15h17.4" /><path d="M12 3a15 15 0 0 1 0 18" /><path d="M12 3a15 15 0 0 0 0 18" /></>, size)
 export const GearIcon = ({ size = 13 }: P) => line(
   <><circle cx="12" cy="12" r="3" /><path d="M19.4 14.5a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1v.3a2 2 0 1 1-4 0v-.2a1.6 1.6 0 0 0-2.8-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7h-.3a2 2 0 1 1 0-4h.2a1.6 1.6 0 0 0 1.1-2.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 2.7-1.1v-.3a2 2 0 1 1 4 0v.2a1.6 1.6 0 0 0 2.8 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7h.3a2 2 0 1 1 0 4h-.2a1.6 1.6 0 0 0-1.4 1Z" /></>, size)

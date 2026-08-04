@@ -44,12 +44,13 @@ import { useWorkspaceLayout, NAV_WIDTH, NAV_RAIL } from './shell/useWorkspaceLay
 import { Workspace, SessionCapsule } from './shell/Workspace'
 import { Navigation } from './shell/Navigation'
 import { reorderTabs } from './shell/tabs'
-import { requestIntent } from './intents'
+import { requestIntent, takeIntentData, INTENT_EVENT, OPEN_FILE_INTENT } from './intents'
 import { SessionDock, SessionSwitchSheet } from './shell/SessionDock'
 import { DPad } from './shell/DPad'
 import { sessionProject, setSessionProjects, buildSessionProjects, useSessionProjects, sessionLocation } from './session-project'
 import { MobileSheet, SheetRow, SheetSection } from './shell/MobileSheet'
-import { WorkspaceTopbar, type PaletteItem } from './shell/WorkspaceTopbar'
+import { WorkspaceTopbar, type PaletteActions, type PaletteItem } from './shell/WorkspaceTopbar'
+import { GlobalSearch, openPalette } from './shell/palette'
 import { copyText } from './chat/blocks'
 import { SessionTitle, TabName, setSessionLabels, updateSessionLabel, useSessionLabel, sessionLabel, sessionDisplay } from './session-label'
 import { VoiceInput } from './chat/VoiceInput'
@@ -241,6 +242,19 @@ function FilesPage({ openTerm }: { openTerm: (name: string) => void }) {
   // 桌面仍是 FileWorkspace(文件树 dock + 多 tab 编辑)。
   const { phone: isMobile } = useLayout()
   const [mobileFile, setMobileFile] = useState<string | null>(null)
+  // 搜到文件 → 切到本页 → 打开它。桌面那条路径在 FileWorkspace 里（开成标签页），
+  // 手机这里是二级全屏页，所以各接各的。
+  useEffect(() => {
+    if (!isMobile) return
+    const on = () => {
+      const data = takeIntentData<{ path?: string }>(OPEN_FILE_INTENT)
+      const p = data && data !== true ? data.path : ''
+      if (p) setMobileFile(p)
+    }
+    on()
+    window.addEventListener(INTENT_EVENT, on)
+    return () => window.removeEventListener(INTENT_EVENT, on)
+  }, [isMobile])
   const openAgent = async (kind: 'claude' | 'codex', file: string) => {
     const base = pathBasename(file).replace(/[^a-zA-Z0-9_.-]+/g, '-').slice(0, 28) || 'file'
     const name = `${kind}-${base}-${Date.now().toString(36).slice(-5)}`
@@ -632,12 +646,15 @@ export default function App() {
   // 浏览器页不再全幅特例：与 文件/手机 同走 tt-page 满高容器，五页左上角起点统一 (16,16)
   const pageNode = <div className={`tt-page tt-page-${tab}${isMobile ? ' tt-page-mobile' : ''}${isMobile && terms.length ? ' has-dock' : ''}`}>{page}</div>
   // Canvas 与 Dock 各包一层：两者在 Page / Split / Focus 三态间只改宽度，不改挂载
-  // ⌘K 面板的条目：页面导航 + 已打开的会话。项目/文件两段要等页面把数据提上来，
-  // 没有就不放——面板里出现点了没反应的条目比没有这一段更糟。
+  // ⌘K 面板的**本地**条目：页面导航 + 已打开的会话——这两样数据就在内存里，打字即出。
+  // 项目 / 全部会话 / 项目文件走后端 /search（见 shell/palette），不在这里凑。
+  // 这一段在 authed / soloName 那几个提前 return 之后，**不能用 hook**——
+  // useMemo 放这里就是条件调用，React 直接抛 #310（踩过一次）。所以这两个值每次
+  // 渲染重算；面板那边的合并是纯函数，重算一次的代价远小于把整块状态提上来。
   const paletteItems: PaletteItem[] = [
     ...NAV.map((n) => ({
       key: `page:${n.key}`, group: t('workspace.groupPages'), title: t(n.labelKey),
-      icon: ICONS[n.key], run: () => go(n.key),
+      keywords: n.key, icon: ICONS[n.key], run: () => go(n.key),
     })),
     ...terms.map((name) => ({
       key: `term:${name}`, group: t('workspace.groupSessions'),
@@ -645,6 +662,14 @@ export default function App() {
       run: () => { setActive(name); space.setDockOpen(true); if (isMobile) setOverlay(true) },
     })),
   ]
+
+  // 面板选中结果后要做的事。三类各自一条路径：项目→详情页深链，会话→开终端，
+  // 文件→切文件页并留下「打开这个文件」的意图（见 intents.ts，文件工作区接手）。
+  const paletteActions: PaletteActions = {
+    openRoute: (hash: string) => { location.hash = hash },
+    openSession: (name: string) => openTerm(name),
+    openFile: (path: string) => { go('files'); requestIntent(OPEN_FILE_INTENT, { path }) },
+  }
 
   const canvasNode = (
     <Content className="tt-canvas" data-cq={CQ_PAGES.has(tab) ? 'on' : undefined} style={{
@@ -727,7 +752,7 @@ export default function App() {
       <Layout style={{ background: 'var(--bg-base)', minWidth: 0 }}>
         {hasSider && (
           <WorkspaceTopbar
-            items={paletteItems} online={online} modKey={modKeyLabel}
+            online={online} modKey={modKeyLabel}
             dockCount={terms.length} dockOpen={space.dockVisible}
             onToggleDock={() => { space.setFocus('none'); space.toggleDock() }}
             // 切到项目页并留下「要新建」的意图，由那一页挂载后消费（见 intents.ts）。
@@ -811,6 +836,11 @@ export default function App() {
 
       {isMobile && (
         <MobileSheet open={moreOpen} title={t('common.more')} onClose={() => setMoreOpen(false)}>
+          {/* 手机没有顶栏，⌘K 也按不出来——全局搜索在这里给一个入口，否则手机上
+              根本到不了它（同一个面板，见 shell/palette）。 */}
+          <SheetRow icon={<SearchIcon size={16} />} title={t('workspace.search')}
+            desc={t('workspace.searchPlaceholder')}
+            onClick={() => { setMoreOpen(false); openPalette() }} />
           <SheetSection>{t('nav.groupWorkspace')}</SheetSection>
           {MOBILE_MORE_WORKSPACE.map((key) => {
             const n = NAV.find((x) => x.key === key)!
@@ -837,6 +867,11 @@ export default function App() {
             onClick={() => { setMoreOpen(false); Modal.confirm({ title: t('common.logoutConfirm'), okText: t('common.logout'), cancelText: t('common.cancel'), okButtonProps: { danger: true }, onOk: logout }) }} />
         </MobileSheet>
       )}
+
+      {/* 全局搜索挂在这里而不是顶栏里：手机没有顶栏、终端聚焦时 xterm 会吃掉按键，
+          都得靠这一处（见 shell/palette/GlobalSearch）。入口另给：顶栏那枚框、
+          手机「更多」里那一行、以及 ⌘K / Ctrl+K。 */}
+      <GlobalSearch items={paletteItems} actions={paletteActions} dir={sessionProject(active)?.dir} />
 
       {/* 手机/平板：全屏会话覆盖层（桌面用右侧停靠栏，不走这里）*/}
       {isMobile && overlay && (
@@ -881,8 +916,18 @@ function SoloTerminal({ name }: { name: string }) {
     return () => { stop = true; clearInterval(t) }
   }, [name])
 
+  // 独立页也要能搜（⌘K）。这页没有侧栏也没有顶栏，本地条目就只有「当前这个会话」；
+  // 结果照样从后端来。打开方式换成同一个标签内换 hash——独立页本身就是同一个 SPA，
+  // 所以「打开文件」的意图（intents）也照常能被文件页接住。
+  const paletteActions: PaletteActions = {
+    openRoute: (hash: string) => { location.hash = hash },
+    openSession: (n: string) => { location.hash = '#/term/' + encodeURIComponent(n) },
+    openFile: (path: string) => { location.hash = '#/files'; requestIntent(OPEN_FILE_INTENT, { path }) },
+  }
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'var(--bg-term)', display: 'flex', flexDirection: 'column' }}>
+      <GlobalSearch items={[]} actions={paletteActions} />
       <TerminalPane
         terms={[name]} active={name} setActive={() => {}} closeTerm={() => window.close()}
         fontSize={fontSize} setFontSize={setFontSize}
@@ -1985,7 +2030,7 @@ function Tasks({ openTerm }: { openTerm: (n: string) => void }) {
 // ── 服务器目录选择器 ──
 // 最近用过的工作目录（服务端偏好 + localStorage 兜底），作为目录选择器的快捷候选
 import { getPreferences } from './preferences'
-import { ArrowDown, ArrowUp, BotIcon, CheckIcon, ChevronDown, ChevronRight, CloseIcon, Disclosure, HomeIcon, KeyboardIcon, MoonIcon, PlusIcon, SunIcon, TerminalIcon, WindowsIcon } from './icons'
+import { ArrowDown, ArrowUp, BotIcon, CheckIcon, ChevronDown, ChevronRight, CloseIcon, Disclosure, HomeIcon, KeyboardIcon, MoonIcon, PlusIcon, SearchIcon, SunIcon, TerminalIcon, WindowsIcon } from './icons'
 import { BranchIcon } from './git/parts'
 const RECENT_DIRS_KEY = 'ttmux_recent_dirs'
 export function recentDirs(): string[] {
