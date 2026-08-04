@@ -1834,7 +1834,7 @@ function Login({ onOk }: { onOk: () => void }) {
 
   const Brand = (
     <div style={{ textAlign: 'center', marginBottom: 18 }}>
-      <img src="/logo-mark.svg" width={64} height={64} alt="Roam" style={{ borderRadius: 14 }} />
+      <img src="/logo-mark.svg" width={64} height={64} alt="Roam" />
       <div style={{
         fontSize: 30, fontWeight: 800, letterSpacing: 1, marginTop: 12,
         background: 'var(--brand-grad)',
@@ -3327,8 +3327,7 @@ function AboutPage() {
   return (
     <Card style={{ maxWidth: 520, margin: '0 auto' }}>
       <Space direction="vertical" size={18} align="center" style={{ width: '100%', padding: '28px 0' }}>
-        <img src="/logo-mark.svg" width={72} height={72} alt="Roam"
-          style={{ borderRadius: 16, boxShadow: '0 2px 8px rgba(0,0,0,.5)' }} />
+        <img src="/logo-mark.svg" width={72} height={72} alt="Roam" />
         <div style={{
           fontWeight: 800, fontSize: 28, letterSpacing: 0.5,
           background: 'var(--brand-grad)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent',

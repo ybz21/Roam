@@ -247,7 +247,8 @@ body {
   padding: 18px 10px 14px;
 }
 .tt-nav.rail .tt-nav-brand { justify-content: center; padding: 18px 0 14px; }
-.tt-nav-brand img { flex: 0 0 auto; border-radius: 10px; box-shadow: 0 1px 3px rgba(0, 0, 0, .5); }
+/* 标是透明底的，别再给它圆角和投影——那是当年方形底板留下的两笔 */
+.tt-nav-brand img { flex: 0 0 auto; }
 .tt-nav-brand .wd { min-width: 0; line-height: 1.15; }
 .tt-nav-brand .wd strong {
   display: block; font-size: 19px; font-weight: 800; letter-spacing: .5px;
