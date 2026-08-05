@@ -77,7 +77,16 @@ const OV_CSS = `
 .ov-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--sp-3);align-items:start}
 .ov-proj{min-width:0;background:var(--bg-container);border:1px solid var(--border-subtle);border-radius:var(--r-card);
   padding:var(--sp-3) var(--sp-3) var(--sp-2);display:flex;flex-direction:column;gap:var(--sp-1);transition:border-color .15s}
-.ov-proj:hover{border-color:rgba(88,166,255,.35)}
+.ov-proj{cursor:pointer}
+.ov-proj:hover{border-color:rgba(88,166,255,.35);background:var(--bg-elevated)}
+.ov-proj:focus-visible{outline:1px solid var(--accent-border);outline-offset:2px}
+/* 指针落在会话行/卡内链接上时，把卡片自己的 hover 收回去：
+   高亮要指明「点下去会中哪个」，两层同时亮等于没说 */
+.ov-proj:has(.ov-trow:hover),.ov-proj:has(.ov-foot a:hover){background:var(--bg-container)}
+.ov-proj:has(.ov-trow:hover) .hd .go,.ov-proj:has(.ov-foot a:hover) .hd .go{color:var(--text-dimmer);transform:none}
+/* 右上角只留一枚箭头当方向暗示：整张卡都能点，再写一遍「进入项目」是废话 */
+.ov-proj .hd .go{flex:0 0 auto;display:inline-flex;color:var(--text-dimmer);transition:color .15s,transform .15s}
+.ov-proj:hover .hd .go{color:var(--accent);transform:translateX(2px)}
 .ov-proj .hd{display:flex;align-items:center;gap:8px}
 .ov-ico{width:28px;height:28px;flex:0 0 auto;display:grid;place-items:center;border-radius:var(--r-sm);
   font-size:12px;font-weight:800}
@@ -86,7 +95,7 @@ const OV_CSS = `
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ov-proj .nm span{display:block;margin-top:2px;font:var(--fs-micro)/1.3 ui-monospace,monospace;color:var(--text-dimmer);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ov-proj .hd a{flex:0 0 auto;font-size:var(--fs-meta)}
+
 .ov-trow{display:flex;align-items:center;gap:var(--sp-2);min-height:32px;padding:var(--sp-1) var(--sp-2);
   border-radius:var(--r-xs);font-size:var(--fs-sm);cursor:pointer;transition:background .14s}
 .ov-trow:first-of-type{margin-top:6px}
@@ -497,20 +506,27 @@ export default function Overview({ openTerm }: { openTerm: (n: string) => void }
                   const projSwarms = swarms.filter((sw) => sw.projKey === p.key)
                   const [fg, bg] = icoOf(p.key)
                   return (
-                    <div key={p.key} className="ov-proj ov-in" style={{ animationDelay: `${Math.min(i, 6) * 40}ms` }}>
+                    // 整张卡就是「进入项目」的按钮——原来右上角那条「进入项目 ›」是全卡唯一的入口，
+                    // 卡片其余部分点了没反应，等于把一个 300px 宽的目标缩成一个 60px 的小链接。
+                    // 卡内的会话行/看板/去收尾各自 stopPropagation，点它们不会顺带进项目。
+                    <div key={p.key} className="ov-proj ov-in" role="button" tabIndex={0}
+                      title={t('overview.enterProject')}
+                      onClick={() => goProject(p.key)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); goProject(p.key) } }}
+                      style={{ animationDelay: `${Math.min(i, 6) * 40}ms` }}>
                       <div className="hd">
                         <span className="ov-ico" style={{ color: fg, background: bg }}>{(p.name[0] || '?').toUpperCase()}</span>
                         <span className="nm">
                           <b title={p.name}>{p.name}</b>
                           <span title={p.dir}>{p.dir}</span>
                         </span>
-                        <a onClick={() => goProject(p.key)}>{t('overview.enterProject')}<Go /></a>
+                        <span className="go" aria-hidden><Go /></span>
                       </div>
                       {shown.map((s) => {
                         const w = waiting[s.name]
                         const r = running(s.name)
                         return (
-                          <div key={s.name} className="ov-trow" onClick={() => openTerm(s.name)}>
+                          <div key={s.name} className="ov-trow" onClick={(e) => { e.stopPropagation(); openTerm(s.name) }}>
                             {dot(false, w ? '#d29922' : r ? 'var(--ok)' : undefined)}
                             <span className="t" title={`${s.label || s.name}（${s.id || s.name}）`}>{s.label || s.name}</span>
                             {ann[s.name]?.primary?.linked && <Tag color="cyan" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px', padding: '0 5px' }}><BranchIcon size={11} /></Tag>}
@@ -525,12 +541,12 @@ export default function Overview({ openTerm }: { openTerm: (n: string) => void }
                         <div key={sw.name} className="ov-foot">
                           <SwarmIcon size={12} /><b>{sw.name}</b>
                           <span style={{ color: 'var(--text-dimmer)' }}>{t('project.swarm.members', { mine: sw.inProj, total: sw.total })}</span>
-                          <a onClick={() => goSwarm(sw.name)}>{t('project.swarm.board')}<Go /></a>
+                          <a onClick={(e) => { e.stopPropagation(); goSwarm(sw.name) }}>{t('project.swarm.board')}<Go /></a>
                         </div>
                       ))}
                       {p.unfinished > 0 && (
                         <div className="ov-foot w"><FlagIcon size={12} />{t('overview.unfinishedN', { count: p.unfinished })}
-                          <a onClick={() => goProject(p.key)}>{t('overview.goFinish')}<Go /></a>
+                          <a onClick={(e) => { e.stopPropagation(); goProject(p.key) }}>{t('overview.goFinish')}<Go /></a>
                         </div>
                       )}
                     </div>

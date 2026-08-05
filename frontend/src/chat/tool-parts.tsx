@@ -162,10 +162,15 @@ export function CommandRow({ command, description, output, isError, status, labe
 }
 
 // 可折叠卡片：Edit / Write / apply_patch / TodoWrite / 子代理 / 计划这些有内容可看的。
-export function ToolCard({ icon, label, title, tone = 'neutral', status, defaultOpen, raw, children }: {
+// 给了 path 时标题就是**可点的文件名**：点它在右栏打开这个文件，展开/收起交给左边的箭头。
+// 不这么分的话，Edit 卡片上唯一像链接的东西（文件名）点下去只会把卡片展开，
+// 而人点文件名的意图从来都是「打开它」。
+export function ToolCard({ icon, label, title, path, line, tone = 'neutral', status, defaultOpen, raw, children }: {
   icon?: ReactNode
   label: string
   title?: string
+  path?: string
+  line?: number
   tone?: Tone
   status?: ToolStatus
   defaultOpen?: boolean
@@ -173,17 +178,27 @@ export function ToolCard({ icon, label, title, tone = 'neutral', status, default
   children?: ReactNode
 }) {
   const { t } = useI18n()
+  const { openFile } = useChatActions()
   const [open, setOpen] = useState(!!defaultOpen)
   const [rawOpen, setRawOpen] = useState(false)
+  const toggle = () => setOpen((v) => !v)
+  // 标题能点开文件时，展开就只交给箭头/标签那半边——否则点文件名会同时开文件又展开卡片
+  const linked = !!(path && openFile)
   return (
     <div className="cc-toolcard" style={{ borderLeft: `2px solid ${TONE[tone].line}` }}>
-      <div className="cc-toolcard-head" role="button" tabIndex={0} aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen((v) => !v) } }}>
-        <span className="cc-cmd-chev" style={{ transform: open ? 'rotate(90deg)' : 'none' }}><ChevronRight size={12} /></span>
-        {icon && <span style={{ flex: '0 0 auto', color: TONE[tone].line, display: 'flex' }}>{icon}</span>}
-        <span style={{ flex: '0 0 auto', color: 'var(--text-dim)' }}>{label}</span>
-        {title && <span className="cc-toolval" style={{ fontFamily: MONO }} title={title}>{title}</span>}
+      <div className="cc-toolcard-head" role={linked ? undefined : 'button'} tabIndex={linked ? undefined : 0}
+        aria-expanded={linked ? undefined : open}
+        onClick={linked ? undefined : toggle}
+        onKeyDown={linked ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle() } }}>
+        <button type="button" className="cc-toolcard-toggle" aria-expanded={open} aria-label={open ? t('common.collapse') : t('common.expand')}
+          onClick={linked ? toggle : undefined} disabled={!linked} tabIndex={linked ? 0 : -1}>
+          <span className="cc-cmd-chev" style={{ transform: open ? 'rotate(90deg)' : 'none' }}><ChevronRight size={12} /></span>
+          {icon && <span style={{ flex: '0 0 auto', color: TONE[tone].line, display: 'flex' }}>{icon}</span>}
+          <span style={{ flex: '0 0 auto', color: 'var(--text-dim)' }}>{label}</span>
+        </button>
+        {title && (linked
+          ? <PathLink path={path!} line={line} text={title} />
+          : <span className="cc-toolval" style={{ fontFamily: MONO }} title={title}>{title}</span>)}
         {!title && <span style={{ flex: 1 }} />}
         <StatusChip status={status} />
       </div>

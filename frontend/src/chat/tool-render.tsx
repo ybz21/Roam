@@ -166,7 +166,7 @@ const edit: Renderer = (c) => {
   const oldText = isNew ? '' : s(c.o?.old_string ?? c.o?.old_str)
   const newText = isNew ? s(c.o?.content) : s(c.o?.new_string ?? c.o?.new_str ?? c.o?.new_source)
   return withError(c, (
-    <ToolCard icon={<PencilIcon />} label={c.name} title={shortPath(path, c.keep)} tone="warn" status={c.status}>
+    <ToolCard icon={<PencilIcon />} label={c.name} title={shortPath(path, c.keep)} path={path} tone="warn" status={c.status}>
       <DiffPane oldText={oldText} newText={newText} path={path}
         badge={isNew ? c.t('chat.diffNew') : c.t('chat.diffEdit')} badgeTone={isNew ? 'ok' : 'warn'} />
     </ToolCard>
@@ -177,7 +177,7 @@ const multiEdit: Renderer = (c) => {
   const path = s(c.o?.file_path)
   const edits: any[] = Array.isArray(c.o?.edits) ? c.o.edits : []
   return withError(c, (
-    <ToolCard icon={<PencilIcon />} label={c.name} title={`${shortPath(path, c.keep)} · ${edits.length}`} tone="warn" status={c.status}>
+    <ToolCard icon={<PencilIcon />} label={c.name} title={`${shortPath(path, c.keep)} · ${edits.length}`} path={path} tone="warn" status={c.status}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)' }}>
         {edits.map((e, i) => (
           <DiffPane key={i} oldText={s(e?.old_string)} newText={s(e?.new_string)} path={path}

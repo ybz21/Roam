@@ -1905,6 +1905,22 @@ html[data-pointer="coarse"] .cc-git-section-act .cc-dl { opacity: 1; }
   outline: none;
 }
 .cc-toolcard-head:hover { background: var(--list-hover); }
+/* 标题变成文件链接之后，展开/收起收在左半边这颗（箭头 + 图标 + 工具名）。
+   它不是 linked 时禁用并让出 tab 焦点——那时整行本身就是按钮。 */
+.cc-toolcard-toggle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+  cursor: pointer;
+}
+.cc-toolcard-toggle:disabled { cursor: inherit; }
+.cc-toolcard-toggle:focus-visible { outline: 1px solid var(--accent-border); outline-offset: 2px; border-radius: var(--r-xs); }
 .cc-toolcard-head:focus-visible { box-shadow: inset 0 0 0 1px var(--accent-border); }
 .cc-toolcard-body { padding: var(--sp-1) 0 var(--sp-2) 20px; }
 .cc-toolraw {
