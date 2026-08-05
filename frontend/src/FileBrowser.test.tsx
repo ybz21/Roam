@@ -228,3 +228,65 @@ describe('FileBrowser dock 预览不弹模态框', () => {
     expect(document.querySelector('.ant-modal')).toBeNull()
   })
 })
+
+// 抽屉够宽时「文件夹 / 文件」并排两栏，中间可拖；窄了自动退回单栏。
+// jsdom 不排版，所以用 getBoundingClientRect 桩来喂宽度。
+describe('FileBrowser dock 两栏与分界拖动', () => {
+  let panelWidth = 800
+  let nativeRect: typeof Element.prototype.getBoundingClientRect
+
+  beforeEach(() => {
+    localStorage.clear()
+    localStorage.setItem('ttmux-locale', 'zh-CN')
+    class RO {
+      constructor(private cb: () => void) {}
+      observe() { this.cb() }
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal('ResizeObserver', RO)
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
+      matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+      addListener: vi.fn(), removeListener: vi.fn(),
+    }))
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/files?')) {
+        const dir = new URL(url, 'http://x').searchParams.get('path') || ''
+        return jsonResponse({ data: { path: dir || '/workspace', parent: '/', entries: [] } })
+      }
+      if (url.includes('/api/file?')) return jsonResponse({ data: { content: 'hello', truncated: false } })
+      return jsonResponse({ data: {} })
+    }))
+    nativeRect = Element.prototype.getBoundingClientRect
+    Element.prototype.getBoundingClientRect = function () {
+      return { width: panelWidth, height: 600, top: 0, left: 0, right: panelWidth, bottom: 600, x: 0, y: 0, toJSON: () => ({}) } as DOMRect
+    }
+  })
+  afterEach(() => {
+    Element.prototype.getBoundingClientRect = nativeRect
+    cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals()
+  })
+
+  const renderDock = () => render(
+    <I18nProvider><AntApp>
+      <div style={{ display: 'flex', flexDirection: 'column', height: 600 }}>
+        <FileBrowser dir="/workspace" layout="dock" openRequest={{ path: '/workspace/a.md', nonce: 1 }} />
+      </div>
+    </AntApp></I18nProvider>,
+  )
+
+  it('够宽时并排两栏，中间有可拖的分界', async () => {
+    panelWidth = 800
+    const { container } = renderDock()
+    await waitFor(() => expect(container.querySelector('[data-resize-handle="filetree"]')).not.toBeNull())
+    expect(document.querySelector('.ant-modal')).toBeNull()
+  })
+
+  it('窄到放不下两栏时退回单栏——宁可少一栏，也不要两栏都残', async () => {
+    panelWidth = 420
+    const { container } = renderDock()
+    await waitFor(() => expect(container.textContent || '').toContain('a.md'))
+    expect(container.querySelector('[data-resize-handle="filetree"]')).toBeNull()
+  })
+})
