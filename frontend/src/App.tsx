@@ -1103,12 +1103,20 @@ function TerminalPane(props: {
   // 对话页里点工具行的文件路径 → 在文件面板打开（带行号就跳到那一行）。
   // 左侧停靠时 <FileWorkspace> 已挂载在同一页，直接发意图即可开成对话旁边的标签页；
   // 否则先切到文件页再发，跟 ⌘K 搜索结果打开文件是同一条路（见 intents.ts）。
-  // 手机上不给：文件面板是全屏二级页，从对话里跳过去会丢上下文且回不到原滚动位置，
-  // 所以窄屏干脆不传 onOpenFile，路径退化成普通文字（见 15 设计 §9）。
+  // 从对话里点 Read/Edit 的文件名。两种停靠各走各的路，**都不离开会话页**：
+  //   左停靠：FileWorkspace 分栏 → 开到右栏（side），对话留在左栏
+  //   右停靠：右侧「文件管理」抽屉 → 打开抽屉并在里面预览这个文件
+  // 之前右停靠走的是 `location.hash = '#/files'`，直接把人跳去文件页——
+  // 那正是「点了跑到左边栏去」的由来。
+  // 手机上不给：文件面板是全屏二级页，跳过去会丢上下文且回不到原滚动位置（见 15 设计 §9）。
+  const [dockFileReq, setDockFileReq] = useState<{ path: string; nonce: number } | null>(null)
   const openFileFromChat = (path: string, line?: number) => {
-    if (fileDock !== 'left') location.hash = '#/files'
-    // side：开到右栏，别把左栏正在看的对话顶掉（FileWorkspace 只在 A 栏有首 tab 时才照办）
-    requestIntent(OPEN_FILE_INTENT, { path, line, side: fileDock === 'left' })
+    if (fileDock === 'left') {
+      requestIntent(OPEN_FILE_INTENT, { path, line, side: true })
+      return
+    }
+    setShowFiles(true)
+    setDockFileReq((prev) => ({ path, nonce: (prev?.nonce || 0) + 1 }))
   }
 
   // 标签条是单行横向滑动（见 index.css .tt-tabs）：窄栏/手机上会话一多，当前标签会滑出视口，
@@ -1861,7 +1869,8 @@ function TerminalPane(props: {
       {fileDock === 'right' && (
         <AdaptivePanel open={showFiles} layer="session" title={t('nav.files')}
           onClose={() => setShowFiles(false)}>
-          <FileBrowser dir={cwd} accent="var(--accent)" layout="dock" onClose={() => setShowFiles(false)} />
+          <FileBrowser dir={cwd} accent="var(--accent)" layout="dock" onClose={() => setShowFiles(false)}
+            openRequest={dockFileReq || undefined} />
         </AdaptivePanel>
       )}
       {/* 手机走全屏二级页（13 §6）：420 的浮层在 360 屏上盖到 92vw，还压着底栏、不吃安全区。
