@@ -4,13 +4,14 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Button, Input, App as AntApp } from 'antd'
 import { api, upload, makeClipboardImageFile } from '../api'
-import { PromptPanel, detectPrompt } from '../prompt'
+import { PromptPanel } from '../prompt'
 import { usePreferences } from '../preferences'
 import { useI18n } from '../i18n'
 import { VoiceInput } from './VoiceInput'
 import type { Block, Msg } from './types'
 import { groupRuns } from './runs'
 import { ToolRun } from './ToolRun'
+import { LiveTail } from './LiveTail'
 import { useLayout } from '../layout'
 import { ArrowToBottom, ArrowUp, FileTextIcon, PaperclipIcon, StopIcon } from '../icons'
 import { ChatActionsProvider } from './actions'
@@ -119,6 +120,14 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
     }
   }
 
+  // TUI 会把用户刚发的那句回显在框里，实时回显要按它去重
+  const lastUserText = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') return messages[i].blocks.map((b) => b.text || '').join('\n').trim()
+    }
+    return ''
+  }, [messages])
+
   const hidden = Math.max(0, messages.length - limit)
   const visible = hidden > 0 ? messages.slice(-limit) : messages
   // 连着的同族工具调用并成运行组（设计 16）。分组只能在这一层做：Claude 每次工具调用
@@ -226,8 +235,9 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
                 ? <ToolRun key={it.run.key} run={it.run} isLast={i === items.length - 1} />
                 : renderMessage(it.msg, it.index)))
               : visible.map(renderMessage)}
-            {pending}
-            {busy && <LiveTail name={name} />}
+            {/* 实时回显自带「正在生成」那颗脉冲点，扒不到东西时才退回省略号气泡——
+                两个都画等于同一件事说两遍（见截图里那块重复） */}
+            {busy ? <LiveTail name={name} accent={accent} idle={pending} lastUser={lastUserText} /> : pending}
           </div>
           {/* 「回到底部」已并进下方状态条（带未读数）；状态条一个字段都没有时（刚进页面、
               转录还没扫出状态）才退回这颗悬浮钮，免得离底了没处点。 */}
@@ -287,52 +297,5 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
       </div>
     </div>
     </ChatActionsProvider>
-  )
-}
-
-// 把终端实况(capture)清洗成「干净的实时回复」：去掉方框线、底部输入框/提示、spinner 行，
-// 只留正在生成的正文尾部。启发式、随 TUI 版本可能要微调，但作为实时预览足够。
-const LEAD_BOX = /^[\s│┃|╎┆┊╭╰├╞┝─━═>❯]+/u
-const TAIL_BOX = /[\s│┃|╎┆┊╮╯┤╡┥─━═]+$/u
-const BOX_ONLY = /^[\s─━═│┃╭╮╰╯├┤┬┴┼╞╡╪.·]*$/u
-const NOISE = /(esc to interrupt|esc to cancel|enter to select|tab\/arrow|to navigate|\? for shortcuts|ctrl\+|shift\+tab|bypass permissions|↑↓|tokens?\b|⧉|auto-?accept|for newline)/i
-const SPINNER = /^[\s]*[●○◯⏺✶✳✻∗*•·✢✦✧✺✷+✽][\s]*$/u
-
-function cleanTail(raw: string): string {
-  const out: string[] = []
-  for (let l of String(raw).replace(/\r/g, '').split('\n')) {
-    l = l.replace(LEAD_BOX, '').replace(TAIL_BOX, '').replace(/^[●○◯⏺✶✳✻∗•·]\s?/u, '')
-    if (!l.trim() || BOX_ONLY.test(l) || SPINNER.test(l) || NOISE.test(l)) continue
-    out.push(l)
-  }
-  return out.slice(-10).join('\n')
-}
-
-function LiveTail({ name }: { name: string }) {
-  const { t } = useI18n()
-  const [text, setText] = useState('')
-  useEffect(() => {
-    let stop = false
-    const poll = async () => {
-      try {
-        const r = await api('GET', `/sessions/${encodeURIComponent(name)}/capture?lines=40`)
-        const raw = r.data || ''
-        // 交互式选择框交给 PromptPanel 专门渲染，这里不再重复显示（避免被截断/错乱）
-        if (!stop) setText(detectPrompt(raw) ? '' : cleanTail(raw))
-      } catch {}
-    }
-    poll()
-    const t = setInterval(poll, 800)
-    return () => { stop = true; clearInterval(t) }
-  }, [name])
-  if (!text) return null
-  return (
-    <div style={{ margin: '4px 0', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg-base)', overflow: 'hidden' }}>
-      <div style={{ fontSize: 11, color: 'var(--text-dim)', padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span className="cc-pulse" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--ok)', display: 'inline-block' }} />
-        {t('chat.liveTerminalOutput')}
-      </div>
-      <pre style={{ margin: 0, padding: '0 8px 8px', maxHeight: 160, overflow: 'auto', fontFamily: 'ui-monospace, monospace', fontSize: 11.5, lineHeight: 1.45, color: 'var(--text-dim)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{text}</pre>
-    </div>
   )
 }

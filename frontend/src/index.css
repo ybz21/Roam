@@ -2096,6 +2096,50 @@ html[data-size="compact"] .cc-cmd-desc-inline { display: none; }
 html[data-size="compact"] .cc-run-slot { width: auto; }
 @media (min-width: 900px) { .cc-run-slot { min-width: 46px; } }
 
+/* 实时回显（chat/LiveTail.tsx）：跟运行组同一套外壳，只是脊是强调色、身子铺终端底。
+   它是「当下正在发生」的那块，所以底色比历史区重一档——但外壳不能是第三种长相。 */
+.cc-live {
+  margin: var(--sp-2) 0;
+  border-left: 2px solid var(--accent);
+  border-radius: 0 var(--r-xs) var(--r-xs) 0;
+  background: color-mix(in srgb, var(--bg-container) 55%, transparent);
+  overflow: hidden;
+}
+.cc-live-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  padding: 4px var(--sp-2) 4px 7px;
+  font-size: var(--fs-meta);
+  color: var(--text-dim);
+  cursor: pointer;
+  outline: none;
+}
+.cc-live-head:hover { background: var(--list-hover); }
+.cc-live-head:focus-visible { box-shadow: inset 0 0 0 1px var(--accent-border); }
+.cc-live-body {
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-term);
+  padding: var(--sp-2) var(--sp-2) var(--sp-2) 7px;
+  max-height: 200px;
+  overflow: auto;
+}
+.cc-live-line { display: flex; align-items: flex-start; gap: 6px; min-width: 0; }
+.cc-live-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--fs-meta);
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+.cc-live-line.is-cmd .cc-live-text { color: var(--text-bright); }
+.cc-live-line.is-action .cc-live-text { color: var(--text-dimmer); }
+@media (pointer: coarse) { .cc-live-head { min-height: 44px; } }
+
 /* 粗指针命中区（设计系统 §「粗指针下命中区 ≥44」）。
    这里**不能**用「伪元素往外撑、不撑视觉尺寸」那套：工具行是连排的，行距只有 1~2px，
    44 的伪元素会往上下各溢出 10px 压到邻行，而后面的兄弟节点画在上层——
