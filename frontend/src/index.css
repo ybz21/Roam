@@ -2096,6 +2096,30 @@ html[data-size="compact"] .cc-cmd-desc-inline { display: none; }
 html[data-size="compact"] .cc-run-slot { width: auto; }
 @media (min-width: 900px) { .cc-run-slot { min-width: 46px; } }
 
+/* 手机底栏的一格（App.tsx）。六格并排时每格只有 60px：图标 + 一行 11px 标签，
+   标签单行截断——`min-width:0` 是必须的，flex 子项默认 min-width:auto，中文标签
+   会把格子撑开，六格挤成横向滚动。 */
+.tt-bottomnav-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: var(--tap);
+  border: 0;
+  background: none;
+  padding: 8px 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--fs-micro);
+  cursor: pointer;
+}
+.tt-bottomnav-btn > span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* 实时回显（chat/LiveTail.tsx）：跟运行组同一套外壳，只是脊是强调色、身子铺终端底。
    它是「当下正在发生」的那块，所以底色比历史区重一档——但外壳不能是第三种长相。 */
 .cc-live {
