@@ -3,12 +3,13 @@
 //   收 二进制帧 [w:u16][h:u16][seq:u16][jpeg...] | {type:'pong'|'error'|'level'}
 //   发 {type:'ack',n} | {type:'ping',t} | {type:'tap'|'swipe'|'text'|'key'}
 import { useEffect, useRef, useState } from 'react'
-import { Button, Select, App as AntApp } from 'antd'
+import { Dropdown, Input, App as AntApp } from 'antd'
+import type { MenuProps } from 'antd'
 import { api } from './api'
 import { useI18n } from './i18n'
 import { connect, type DuplexTransport } from './p2p/transport'
-import { AppLaunchIcon, PhoneAssistIcon, PhoneBackIcon, PhoneHomeIcon, PhoneRecentsIcon, PowerIcon } from './icons'
-import { MirrorHead, StreamControl, type Quality } from './mirror'
+import { AppsIcon, DeviceIcon, PhoneAssistIcon, PhoneBackIcon, PhoneHomeIcon, PhoneRecentsIcon, PowerIcon, RefreshIcon, SearchIcon } from './icons'
+import { fmtRate, IconBtn, MirrorChrome, MirrorMenu, Omnibox, StatusChip, StreamControl, useShelf, type Quality } from './mirror'
 
 interface PhoneApp { id: string; name?: string }
 
@@ -34,6 +35,13 @@ export default function PhoneView() {
   })
   const [levelName, setLevelName] = useState('') // 自适应当前档名（auto 时显示）
   const [apps, setApps] = useState<PhoneApp[]>([])
+  const [appsOpen, setAppsOpen] = useState(false)
+  const [appQuery, setAppQuery] = useState('')
+  // 设备身份：型号 + 系统 + 分辨率。devbox 只显示，不可编辑——它是身份不是输入（设计 17 §6）
+  const [devName, setDevName] = useState('')
+  const [devOs, setDevOs] = useState('')
+  const [shelf, shelfRef] = useShelf()
+  const [reconnectKey, setReconnectKey] = useState(0)
   const [platform, setPlatform] = useState<'android' | 'ios'>('android')
   const [latency, setLatency] = useState<number | null>(null)
   const [bw, setBw] = useState(0)
@@ -118,6 +126,9 @@ export default function PhoneView() {
     api('GET', '/phone/health').then((r) => {
       const p = r?.data?.platform
       if (p === 'ios' || p === 'android') setPlatform(p)
+      // 型号/系统后端给什么用什么，都没有就退回平台名——devbox 永远有话说
+      setDevName(String(r?.data?.model || r?.data?.device || r?.data?.serial || ''))
+      setDevOs(String(r?.data?.release ? `Android ${r.data.release}` : r?.data?.version || ''))
     }).catch(() => {})
     api('GET', '/phone/config').then((r) => {
       if (r?.data?.platform === 'ios') setPlatform('ios')
@@ -189,36 +200,93 @@ export default function PhoneView() {
       tp?.close()
       if (tpRef.current === tp) tpRef.current = null
     }
-  }, [quality])
+  }, [quality, reconnectKey])
 
   const changeQuality = (v: Quality) => { setQuality(v); try { localStorage.setItem(QKEY, String(v)) } catch {} }
 
+  // ⋯ 菜单：低频动作。Android 的锁屏/唤醒不在三键里，收在这儿正好。
+  const menuItems: MenuProps['items'] = [
+    ...(platform === 'ios' ? [] : [
+      { key: 'lock', icon: <PowerIcon size={14} />, label: t('phone.lock'), onClick: () => pressKey('lock') },
+    ]),
+    { key: 'reconnect', icon: <RefreshIcon size={14} />, label: t('phone.reconnect'), onClick: () => setReconnectKey((n) => n + 1) },
+  ]
+
+  // 设备按键：Android=返回/主屏/多任务；iOS=主屏/锁屏/Siri（iOS 无系统返回键）。
+  // 桌面浮在画面底部——竖屏画面两侧本来就是大片黑边，按键条不该再占一整条；
+  // 窄档反过来贴底成实条，浮层会压住已经顶到边的画面。
+  const deviceKeys = (
+    <div className={`mc-keys${shelf === 'narrow' ? '' : ' is-float'}`}>
+      {platform === 'ios' ? (
+        <>
+          <IconBtn icon={<PhoneHomeIcon />} label={t('phone.home')} onClick={() => pressKey('home')} />
+          <IconBtn icon={<PowerIcon />} label={t('phone.lock')} onClick={() => pressKey('lock')} />
+          <IconBtn icon={<PhoneAssistIcon />} label={t('phone.siri')} onClick={() => pressKey('siri')} />
+        </>
+      ) : (
+        <>
+          <IconBtn icon={<PhoneBackIcon />} label={t('phone.back')} onClick={() => pressKey('back')} />
+          <IconBtn icon={<PhoneHomeIcon />} label={t('phone.home')} onClick={() => pressKey('home')} />
+          <IconBtn icon={<PhoneRecentsIcon />} label={t('phone.recents')} onClick={() => pressKey('recents')} />
+        </>
+      )}
+    </div>
+  )
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* 页头：页名 + 连接与画质 + 启动应用，一行装下（与浏览器页同一套壳，见 mirror.tsx）。
-          「已连接」和四档清晰度现在是**一个**部件（StreamControl），不再一个贴左一个贴右。
-          原来是两行：清晰度/状态一行，「启动应用」独占第二行且自垫了 10px 左内边距——
-          跟第一行的左沿对不齐，两行毛边。舞台的高度比这一行值钱。 */}
-      <MirrorHead name={t('nav.phone')} hint={t('phone.subtitle')}>
-        <StreamControl
-          connected={connected} label={connected ? t('phone.connected') : t('phone.disconnected')}
-          quality={quality} onQuality={changeQuality}
-          level={quality === 'auto' ? levelName : undefined}
-          latency={latency} bytesPerSec={bw} fps={fps} />
-        <Select
-          size="small"
-          showSearch
-          placeholder={t('phone.launchApp')}
-          className="pv-applaunch"
-          style={{ width: 160 }}
-          value={null}
-          onChange={launch}
-          suffixIcon={<AppLaunchIcon />}
-          onDropdownVisibleChange={(open) => { if (open) loadApps() }}
-          filterOption={(input, opt) => String(opt?.value || '').toLowerCase().includes(input.toLowerCase())}
-          options={apps.map((a) => ({ value: a.id, label: a.name || a.id }))}
-        />
-      </MirrorHead>
+      {/* 页头（设计 17 §6）：与浏览器页同一套语法，只是主角从「地址」换成「设备」。
+          devbox 只读——它是身份不是输入；换设备走状态芯片，不为了跟 omnibox 对称硬做成输入框。 */}
+      <MirrorChrome
+        chromeRef={shelfRef}
+        main={<>
+          <Omnibox
+            readOnly
+            value={devName || t('nav.phone')}
+            sub={[devOs, `${sizeRef.current.w}×${sizeRef.current.h}`].filter(Boolean).join(' · ')}
+            lead={<StreamControl
+              connected={connected} label={connected ? t('phone.connected') : t('phone.disconnected')}
+              quality={quality} onQuality={changeQuality}
+              level={quality === 'auto' ? levelName : undefined}
+              latency={latency} bytesPerSec={bw} fps={fps}
+              variant="badge" showLabel={shelf !== 'narrow'} />}
+            trailing={shelf === 'wide'
+              ? <span className="mc-omni-num">{`${latency == null ? '—' : latency + 'ms'} · ${fmtRate(bw)} · ${fps}fps`}</span>
+              : undefined}
+          />
+          {shelf !== 'narrow' && <StatusChip icon={<DeviceIcon />} text={platform === 'ios' ? 'iOS' : 'Android'} />}
+          {/* 应用启动器：从前是个 160px 的 Select，窄屏上要独占一整行 */}
+          <Dropdown trigger={['click']} placement="bottomRight" open={appsOpen} onOpenChange={(v) => { setAppsOpen(v); if (v) loadApps() }}
+            popupRender={() => (
+              <div className="mc-menu mc-applauncher">
+                <Input size="small" prefix={<SearchIcon size={12} />} placeholder={t('phone.searchApp')}
+                  value={appQuery} onChange={(e) => setAppQuery(e.target.value)} allowClear />
+                <div className="mc-applist">
+                  {apps
+                    .filter((a) => !appQuery || `${a.name || ''} ${a.id}`.toLowerCase().includes(appQuery.toLowerCase()))
+                    .slice(0, 60)
+                    .map((a) => (
+                      <button key={a.id} type="button" className="mc-appitem"
+                        onClick={() => { launch(a.id); setAppsOpen(false) }}>
+                        <span className="ic" aria-hidden>{(a.name || a.id).slice(0, 1).toUpperCase()}</span>
+                        <span className="nm">{a.name || a.id}</span>
+                      </button>
+                    ))}
+                </div>
+                <div className="mc-appcount">{t('phone.appCount', { count: apps.length })}</div>
+              </div>
+            )}>
+            <button type="button" className="mc-ib" title={t('phone.launchApp')} aria-label={t('phone.launchApp')}>
+              <AppsIcon />
+            </button>
+          </Dropdown>
+          <MirrorMenu label={t('common.more')} items={menuItems} />
+        </>}
+        chips={shelf === 'narrow' ? <>
+          <StatusChip icon={<DeviceIcon />} text={platform === 'ios' ? 'iOS' : 'Android'} />
+          {!!devOs && <StatusChip text={devOs} />}
+        </> : undefined}
+      />
 
       <style>{`
         .pv-ripple{position:absolute;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;
@@ -255,24 +323,11 @@ export default function PhoneView() {
             </div>
           </div>
         )}
+        {shelf !== 'narrow' && deviceKeys}
       </div>
+      {/* 窄档贴底成实条：392 的屏上画面已经顶到边，浮层会压住内容 */}
+      {shelf === 'narrow' && deviceKeys}
 
-      {/* 底部导航键：Android=返回/主屏/多任务；iOS=主屏/锁屏/Siri（iOS 无系统返回键） */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 28, padding: '8px 0', flex: '0 0 auto', borderTop: '1px solid var(--border-subtle)' }}>
-        {platform === 'ios' ? (
-          <>
-            <Button shape="circle" onClick={() => pressKey('home')} title={t('phone.home')} icon={<PhoneHomeIcon />} />
-            <Button shape="circle" onClick={() => pressKey('lock')} title={t('phone.lock')} icon={<PowerIcon />} />
-            <Button shape="circle" onClick={() => pressKey('siri')} title={t('phone.siri')} icon={<PhoneAssistIcon />} />
-          </>
-        ) : (
-          <>
-            <Button shape="circle" onClick={() => pressKey('back')} title={t('phone.back')} icon={<PhoneBackIcon />} />
-            <Button shape="circle" onClick={() => pressKey('home')} title={t('phone.home')} icon={<PhoneHomeIcon />} />
-            <Button shape="circle" onClick={() => pressKey('recents')} title={t('phone.recents')} icon={<PhoneRecentsIcon />} />
-          </>
-        )}
-      </div>
     </div>
   )
 }

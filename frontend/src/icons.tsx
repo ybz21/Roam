@@ -121,6 +121,14 @@ export const SunIcon = ({ size = 13 }: P) => line(
   <><circle cx="12" cy="12" r="4" /><path d="M12 2.5v2" /><path d="M12 19.5v2" /><path d="M2.5 12h2" /><path d="M19.5 12h2" /><path d="m5.3 5.3 1.4 1.4" /><path d="m17.3 17.3 1.4 1.4" /><path d="m18.7 5.3-1.4 1.4" /><path d="m6.7 17.3-1.4 1.4" /></>, size)
 
 // ── 手机遥控（PhoneView）：安卓/iOS 的系统键，原来用 ○ ◉ ◁ ▭ 四个字符凑 ──
+// 镜像两页页头用（设计 17）：标签数字钮的方框、设备芯片的机身、应用启动器的九宫格
+export const TabsIcon = ({ size = 18 }: P) => line(<rect x="3" y="3" width="18" height="18" rx="3" />, size, 1.7)
+export const DeviceIcon = ({ size = 13 }: P) => line(
+  <><rect x="7" y="3" width="10" height="18" rx="2" /><path d="M11 18.5h2" /></>, size)
+export const AppsIcon = ({ size = 16 }: P) => line(
+  <><rect x="3.5" y="3.5" width="7" height="7" rx="1.6" /><rect x="13.5" y="3.5" width="7" height="7" rx="1.6" />
+    <rect x="3.5" y="13.5" width="7" height="7" rx="1.6" /><rect x="13.5" y="13.5" width="7" height="7" rx="1.6" /></>, size, 1.7)
+
 export const PhoneHomeIcon = ({ size = 16 }: P) => line(<circle cx="12" cy="12" r="8" />, size, 2)
 export const PhoneBackIcon = ({ size = 16 }: P) => line(<path d="M15 5 7 12l8 7Z" />, size, 2)
 export const PhoneRecentsIcon = ({ size = 16 }: P) => line(<rect x="5" y="6" width="14" height="12" rx="2" />, size, 2)

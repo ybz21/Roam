@@ -2,55 +2,21 @@
 // 协议见 backend/browser/screencast.go：
 //   收 {type:'frame', data, w, h} | {type:'pong', t} | {type:'error', msg}
 //   发 {type:'nav', url} | {type:'ping', t} | {type:'mouse'|'wheel'|'key', ...}（输入仅 control=1 生效）
-import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Button, Dropdown, Input, Select, App as AntApp } from 'antd'
+import { useEffect, useRef, useState } from 'react'
+import { Dropdown, App as AntApp } from 'antd'
+import type { MenuProps } from 'antd'
 import { api } from './api'
 import { useI18n } from './i18n'
 import { usePreferences, savePreferences } from './preferences'
 import { connect, type DuplexTransport } from './p2p/transport'
 import {
-  BotIcon, ChevronLeft, ChevronRight, CloseIcon, CodeIcon, HomeIcon, MoreIcon, OpenInIcon,
-  PlusIcon, RefreshIcon, RotateScreenIcon, UserIcon,
+  BotIcon, ChevronLeft, ChevronRight, CodeIcon, DeviceIcon, HomeIcon, OpenInIcon,
+  PlusIcon, RefreshIcon, RotateScreenIcon, TabsIcon, UserIcon,
 } from './icons'
-import { MirrorHead, StreamControl, type Quality } from './mirror'
-import { useLayout } from './layout'
-
-interface TabInfo { id: string; title: string; url: string }
-
-// 单个标签：固定宽度 + 关闭按钮常驻（active 仅改颜色，不改尺寸 → 切换不回流/不易位）
-function BrowserTab({ tab, active, onSelect, onClose }: {
-  tab: TabInfo; active: boolean; onSelect: () => void; onClose: () => void
-}) {
-  return (
-    <div onClick={onSelect} title={tab.url} className={`bv-tab${active ? ' on' : ''}`}>
-      <span className="ttl">{tab.title || tab.url || 'about:blank'}</span>
-      <span className="x" onClick={(e) => { e.stopPropagation(); onClose() }} onMouseDown={(e) => e.stopPropagation()}>
-        <CloseIcon size={12} />
-      </span>
-    </div>
-  )
-}
-
-// 标签栏：页名 + 可横向滚动的标签 + 新建，右=固定区域(extra)。两侧宽度独立，互不挤占。
-function TabBar({ tabs, active, onSelect, onClose, onAdd, extra }: {
-  tabs: TabInfo[]; active: string
-  onSelect: (id: string) => void; onClose: (id: string) => void; onAdd: () => void; extra: ReactNode
-}) {
-  const { t } = useI18n()
-  return (
-    // 全站统一：工具页首行贴 tt-page 的 (16,16)，不再自垫横向内边距
-    <MirrorHead name={t('nav.browser')} hint={t('browser.subtitle')}>
-      <div className="bv-tabs">
-        {tabs.map((tb) => (
-          <BrowserTab key={tb.id} tab={tb} active={tb.id === active} onSelect={() => onSelect(tb.id)} onClose={() => onClose(tb.id)} />
-        ))}
-        <Button size="small" type="text" onClick={onAdd} title={t('browser.newTab')} icon={<PlusIcon />}
-          style={{ flex: '0 0 auto' }} />
-      </div>
-      <span className="end">{extra}</span>
-    </MirrorHead>
-  )
-}
+import {
+  fmtRate, IconBtn, MirrorChrome, MirrorMenu, Omnibox, StatusChip, StreamControl, useShelf, type Quality,
+} from './mirror'
+import { TabSheet, TabStrip, type TabInfo } from './browser-tabs'
 
 // 清晰度档位与手机页共用（mirror.tsx 的 QUALITY_OPTS），这里只有存盘的 key 不同
 const QKEY = 'ttmux.browser.quality'
@@ -104,8 +70,10 @@ function mergeTabs(prev: TabInfo[], incoming: TabInfo[]): TabInfo[] {
 export default function BrowserView() {
   const { message } = AntApp.useApp()
   const { t } = useI18n()
-  // 断点只走 useLayout()：这里换的是结构（低频钮收进「更多」、模式钮换行落位），不是样式
-  const { phone: isPhone } = useLayout()
+  // 收纳档位按**容器**宽度算（不是窗口）：这一页会被塞进分栏，那时窗口很宽而容器很窄。
+  // ≥1100 全平铺 / 900–1100 收指标 / <900 等同手机形态（设计 17 §5.5）
+  const [shelf, shelfRef] = useShelf()
+  const [tabsOpen, setTabsOpen] = useState(false)
   const [prefs] = usePreferences()
   const imgRef = useRef<HTMLImageElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
@@ -644,105 +612,97 @@ export default function BrowserView() {
     send({ type: 'key', sub: 'up', key: e.key, modifiers: mods(e) })
   }
 
-  {/* 常驻的模式切换：智能体模式(面板跟着 agent 的标签走，高亮) / 手动模式(用户已接管，
-      不高亮)。双向切换：手动模式下点它切回智能体模式；智能体模式下点它主动切到手动模式，
-      不用非得去画面里点一下才能接管。
-      高亮态交给 antd 的 primary——照抄 --accent-solid 再补一圈辉光，画出来必然比 antd
-      自己按 seed 推的那档差一点（darkAlgorithm 会再推一层）。
-      桌面挂在标签条右端，手机挂到第三行控制条——标签条在窄屏本来就要横滑，
-      右端再挂一枚带文字的按钮，标签就只剩一枚的位置了。 */}
-  const followBtn = (
-    <Button
-      size="small"
-      onClick={() => (followPaused ? resumeFollow() : pauseFollow())}
-      title={followPaused ? t('browser.followModeHumanTitle') : t('browser.followModeAgentTitle')}
-      icon={followPaused ? <UserIcon size={13} /> : <BotIcon size={13} />}
-      type={followPaused ? 'default' : 'primary'}
-    >
-      {followPaused ? t('browser.followModeHuman') : t('browser.followModeAgent')}
-    </Button>
+  // ⋯ 菜单：低频动作一律进这里，主行永远只有四个目标（设计 17 §3）。
+  // 窄档下把「前进 / 主页」也收进来——它们是次高频，后退才是必须留在外面的那一枚。
+  const menuItems: MenuProps['items'] = [
+    ...(shelf === 'narrow' ? [
+      { key: 'forward', icon: <ChevronRight />, label: t('file.forward'), onClick: () => act('forward') },
+      { key: 'home', icon: <HomeIcon size={15} />, label: t('browser.home'), onClick: () => act('navigate', { url: home }) },
+      { type: 'divider' as const, key: 'd1' },
+    ] : []),
+    { key: 'rotate', icon: <RotateScreenIcon />, label: rotation ? `${t('browser.rotateTitle')} ${rotation}°` : t('browser.rotateTitle'), onClick: rotate },
+    { key: 'devtools', icon: <CodeIcon />, label: t('browser.devtoolsTitle'), onClick: openDevtools },
+    { key: 'external', icon: <OpenInIcon size={15} />, label: t('browser.openExternalTitle'), onClick: openExternal },
+    { type: 'divider' as const, key: 'd2' },
+    { key: 'newtab', icon: <PlusIcon />, label: t('browser.newTab'), onClick: newTab },
+  ]
+
+  const deviceName = device ? t(DEVICES.find((d) => d.key === device)?.nameKey || 'browser.device.desktop') : t('browser.device.desktop')
+
+  // 连接与画质：omnibox 的左徽标。真浏览器的锁图标就在这个位置——它天然是
+  // 「这条连接怎么样」的位置，不该另做一枚按钮排在旁边。
+  const streamBadge = (
+    <StreamControl
+      connected={connected} label={connected ? t('browser.connected') : t('browser.disconnected')}
+      quality={quality} onQuality={changeQuality}
+      level={quality === 'auto' ? levelName : undefined}
+      latency={latency} bytesPerSec={bw} fps={fps}
+      variant="badge" showLabel={shelf !== 'narrow'} />
+  )
+
+  const deviceChip = (
+    <Dropdown trigger={['click']} placement="bottomRight" menu={{
+      selectedKeys: [device],
+      items: [
+        { key: '', label: t('browser.device.desktop'), onClick: () => changeDevice('') },
+        ...DEVICES.map((d) => ({ key: d.key, label: t(d.nameKey), onClick: () => changeDevice(d.key) })),
+      ],
+    }}>
+      <span><StatusChip icon={<DeviceIcon />} text={deviceName} active={!!device} onClick={() => {}} /></span>
+    </Dropdown>
   )
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* 页头三行（手机同款，只是每行装的东西按档位收放）：
-            ① 标签条          —— 这块屏幕是哪个页面
-            ② 导航 + 地址     —— 去哪儿
-            ③ 控制条          —— 怎么看：模式 / 连接与画质 / 设备 / 其余收进「更多」
-          从前是五行：模式与流状态跟着标签条换行成一条、清晰度另起一条、
-          「外部打开」还被挤到第五行独占一整行。手机上正文开始前先滚过 250px 的工具条。 */}
-      <TabBar
-        tabs={tabs}
-        active={target}
-        onSelect={switchTab}
-        onClose={closeTab}
-        onAdd={newTab}
-        extra={isPhone ? undefined : followBtn}
+      {/* 页头（设计 17）：桌面＝标签条 + 工具行；窄档＝一条主行 + 状态芯片条。
+          从前是五行散装控件——「前往」实心按钮比地址栏还抢戏、四档清晰度常驻一整行、
+          「外部打开」被挤成第五行的孤儿。现在只有一个主角：omnibox。 */}
+      {shelf !== 'narrow' && (
+        <TabStrip tabs={tabs} active={target} onSelect={switchTab} onClose={closeTab} onAdd={newTab}
+          extra={<StatusChip icon={followPaused ? <UserIcon size={12} /> : <BotIcon size={12} />}
+            strong={followPaused ? t('browser.followModeHuman') : t('browser.followModeAgent')}
+            active={!followPaused} onClick={() => (followPaused ? resumeFollow() : pauseFollow())} />} />
+      )}
+      <MirrorChrome
+        chromeRef={shelfRef}
+        main={<>
+          <IconBtn icon={<ChevronLeft size={17} />} label={t('file.back')} onClick={() => act('back')} />
+          {shelf !== 'narrow' && <>
+            <IconBtn icon={<ChevronRight size={17} />} label={t('file.forward')} onClick={() => act('forward')} />
+            <IconBtn icon={<RefreshIcon size={16} />} label={t('common.refresh')} onClick={() => act('reload')} />
+            <IconBtn icon={<HomeIcon size={16} />} label={t('browser.home')} onClick={() => act('navigate', { url: home })} />
+          </>}
+          <Omnibox
+            value={url}
+            onChange={setUrl}
+            onSubmit={navigate}
+            onFocusChange={(f) => { addrFocused.current = f }}
+            placeholder={t('browser.urlPlaceholder')}
+            goLabel={t('browser.go')}
+            lead={streamBadge}
+            trailing={shelf === 'narrow'
+              ? <IconBtn icon={<RefreshIcon size={15} />} label={t('common.refresh')} onClick={() => act('reload')} />
+              : shelf === 'wide'
+                ? <span className="mc-omni-num">{`${latency == null ? '—' : latency + 'ms'} · ${fmtRate(bw)} · ${fps}fps`}</span>
+                : undefined}
+          />
+          {shelf === 'narrow' && (
+            <IconBtn icon={<TabsIcon />} label={t('browser.tabs')} badge={tabs.length} onClick={() => setTabsOpen(true)} />
+          )}
+          {shelf !== 'narrow' && deviceChip}
+          <MirrorMenu items={menuItems} label={t('common.more')} />
+        </>}
+        chips={shelf === 'narrow' ? <>
+          <StatusChip icon={followPaused ? <UserIcon size={12} /> : <BotIcon size={12} />}
+            strong={followPaused ? t('browser.followModeHuman') : t('browser.followModeAgent')}
+            active={!followPaused} onClick={() => (followPaused ? resumeFollow() : pauseFollow())} />
+          {deviceChip}
+        </> : undefined}
       />
-      <div className="bv-bar">
-        <Button.Group size="small">
-          <Button onClick={() => act('back')} title={t('file.back')} icon={<ChevronLeft />} />
-          <Button onClick={() => act('forward')} title={t('file.forward')} icon={<ChevronRight />} />
-          <Button onClick={() => act('reload')} title={t('common.refresh')} icon={<RefreshIcon size={15} />} />
-          {!isPhone && <Button onClick={() => act('navigate', { url: home })} title={t('browser.home')} icon={<HomeIcon size={15} />} />}
-        </Button.Group>
-        <Input
-          size="small"
-          placeholder={t('browser.urlPlaceholder')}
-          value={url}
-          style={{ flex: 1, minWidth: 120 }}
-          onChange={(e) => setUrl(e.target.value)}
-          onFocus={() => { addrFocused.current = true }}
-          onBlur={() => { addrFocused.current = false }}
-          onPressEnter={navigate}
-        />
-        <Button size="small" type="primary" onClick={navigate}>{t('browser.go')}</Button>
-      </div>
-      <div className="bv-bar is-ctl">
-        {isPhone && followBtn}
-        <StreamControl
-          connected={connected} label={connected ? t('browser.connected') : t('browser.disconnected')}
-          quality={quality} onQuality={changeQuality}
-          level={quality === 'auto' ? levelName : undefined}
-          latency={latency} bytesPerSec={bw} fps={fps} />
-        {/* 手机模式：选机型即模拟移动视口（持久化、重连生效） */}
-        <Select
-          size="small"
-          value={device}
-          onChange={changeDevice}
-          title={t('browser.deviceTitle')}
-          style={{ width: 96, flex: '0 0 auto' }}
-          options={[
-            { value: '', label: t('browser.device.desktop') },
-            ...DEVICES.map((d) => ({ value: d.key, label: t(d.nameKey) })),
-          ]}
-        />
-        <span style={{ flex: 1 }} />
-        {/* 旋转 / 调试 / 外部打开：桌面平铺，手机收进「更多」——三枚低频钮不值得在
-            360 的屏上再占一行（从前它们正是把工具条撑到第四、第五行的那几个）。 */}
-        {isPhone ? (
-          <Dropdown trigger={['click']} placement="bottomRight" menu={{
-            items: [
-              { key: 'home', icon: <HomeIcon size={15} />, label: t('browser.home'), onClick: () => act('navigate', { url: home }) },
-              { key: 'rotate', icon: <RotateScreenIcon />, label: rotation ? `${t('browser.rotateTitle')} ${rotation}°` : t('browser.rotateTitle'), onClick: rotate },
-              { key: 'devtools', icon: <CodeIcon />, label: t('browser.devtoolsTitle'), onClick: openDevtools },
-              { key: 'external', icon: <OpenInIcon size={15} />, label: t('browser.openExternalTitle'), onClick: openExternal },
-            ],
-          }}>
-            <Button size="small" icon={<MoreIcon size={15} />} aria-label={t('common.more')} />
-          </Dropdown>
-        ) : (
-          <>
-            {/* 旋转：激活态由 antd 的 primary 给，不再照抄十六进制 + 一圈辉光 */}
-            <Button size="small" onClick={rotate} title={t('browser.rotateTitle')}
-              type={rotation ? 'primary' : 'default'} icon={<RotateScreenIcon />}>
-              {rotation ? `${rotation}°` : null}
-            </Button>
-            <Button size="small" onClick={openDevtools} title={t('browser.devtoolsTitle')} icon={<CodeIcon />} />
-            <Button size="small" onClick={openExternal} title={t('browser.openExternalTitle')} icon={<OpenInIcon size={15} />} />
-          </>
-        )}
-      </div>
+      {/* 手机标签：横条在 360 上放不下第三枚，换成「⧉N + 抽屉」（设计 17 §4） */}
+      <TabSheet open={tabsOpen} tabs={tabs} active={target} onClose={() => setTabsOpen(false)}
+        onSelect={(id) => { switchTab(id); setTabsOpen(false) }}
+        onCloseTab={closeTab} onAdd={() => { newTab(); setTabsOpen(false) }} />
       <style>{`
         .bv-ripple{position:absolute;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;
           border:2px solid var(--accent);pointer-events:none;animation:bvRip .45s ease-out forwards;}
