@@ -1,8 +1,9 @@
 // 文件侧栏 —— 在 Claude / Codex 对话页右侧浏览工作目录、查看文件内容（类似 codex 右侧边栏）。
 // 单层可导航列表：目录在前可进入、↑ 回上级、点文件在弹层里查看正文。
-import { type ReactNode, Fragment, createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { type PointerEvent as ReactPointerEvent, type ReactNode, Fragment, createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { AutoComplete, Button, ConfigProvider, Dropdown, Input, Modal, Spin, App as AntApp, Tooltip, type MenuProps } from 'antd'
 import { api, upload } from './api'
+import { usePointerResize } from './PointerResize'
 import { useI18n } from './i18n'
 import { download as p2pDownload } from './p2p/download'
 import { pathLabelKey, type P2PPathLabel } from './p2p/labels'
@@ -328,6 +329,13 @@ function FileTree({
 
   return <>{renderLevel(root, rootEntries, 0)}</>
 }
+
+// 「文件夹 / 文件」两栏的尺寸契约（dock 布局用）
+const TREE_MIN = 180        // 树再窄就只剩省略号
+const TREE_MAX = 480
+const TREE_DEFAULT = 260
+const PREVIEW_MIN = 280     // 预览再窄读不了代码
+const SPLIT_MIN = TREE_MIN + PREVIEW_MIN + 5   // 面板窄于此只显示一栏
 
 export default function FileBrowser({
   dir,
@@ -711,9 +719,40 @@ export default function FileBrowser({
     }
   }
 
+  // 「文件夹 / 文件」两栏的分界：可拖，记 localStorage。
+  const dockRef = useRef<HTMLDivElement>(null)
+  const [dockW, setDockW] = useState(0)
+  useEffect(() => {
+    const el = dockRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => setDockW(el.getBoundingClientRect().width))
+    ro.observe(el)
+    setDockW(el.getBoundingClientRect().width)
+    return () => ro.disconnect()
+  }, [])
+  const [treeW, setTreeW] = useState(() => {
+    const v = Number(localStorage.getItem('ttmux.fileTreeW'))
+    return v >= TREE_MIN && v <= TREE_MAX ? v : TREE_DEFAULT
+  })
+  const treeWRef = useRef(treeW)
+  treeWRef.current = treeW
+  const dockResize = usePointerResize()
+  const startTreeResize = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const startX = e.clientX
+    const startW = treeW
+    // 预览至少留 PREVIEW_MIN：拖到把预览挤没了，这个分栏就白做了
+    const cap = Math.max(TREE_MIN, Math.min(TREE_MAX, (dockRef.current?.getBoundingClientRect().width || TREE_MAX) - PREVIEW_MIN))
+    dockResize.start(e, {
+      onMove: (ev) => setTreeW(Math.min(cap, Math.max(TREE_MIN, startW + ev.clientX - startX))),
+      onEnd: () => localStorage.setItem('ttmux.fileTreeW', String(treeWRef.current)),
+    })
+  }
+
   // 对话里点了文件名 → 在这个浏览器里打开它：先把树导航到它所在目录，再开预览。
   // 走 openPath 而不是直接 setView：不 navigate 的话左边的树还停在别处，
   // 你看到的是「一个文件凭空出现」，不知道它在哪。
+  // 两栏并排的下限：窄于这个宽度就只显示一栏。420 的抽屉硬塞两栏，
+  // 树只剩 160、预览只剩 250，两边都没法看——宁可少一栏，也不要两栏都残。
   const openReqRef = useRef(0)
   useEffect(() => {
     if (!openRequest?.path || openRequest.nonce === openReqRef.current) return
@@ -1027,17 +1066,33 @@ export default function FileBrowser({
     )
   }
 
-  // 停靠布局（右侧「文件管理」抽屉 / 新标签左侧栏）：预览**就在抽屉里铺开**，不弹模态框。
-  // 之前用 Modal：抽屉本来就是一块常驻的侧栏，从里面再弹一个居中浮层，
-  // 等于把你刚打开的那个面板整个盖住——而你点开文件恰恰是想跟左边的对话对着看。
-  // 浏览器那半不卸载（保住树的展开态与滚动位置），预览盖在它上面，关掉即回。
+  // 停靠布局（右侧「文件管理」抽屉 / 新标签左侧栏）：**树和文件两栏并排，中间可拖**，
+  // 而且不弹模态框——抽屉本来就是一块常驻侧栏，从里面再弹个居中浮层等于把它整个盖住，
+  // 而你点开文件恰恰是想「一边看树、一边看文件、还一边看左边的对话」。
+  //
+  // 面板窄到放不下两栏时（< SPLIT_MIN）自动退回单栏：预览盖住树，左上角给返回。
+  // 420 宽硬塞两栏的结果是两边都没法看——宁可少一栏，也不要两栏都残。
   if (layout === 'dock') {
+    const twoPane = !!view && dockW >= SPLIT_MIN
     return (
-      <div style={{ position: 'relative', flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        {browserPane}
+      <div ref={dockRef} style={{ position: 'relative', flex: 1, minWidth: 0, minHeight: 0, display: 'flex' }}>
+        <div style={{
+          flex: twoPane ? `0 0 ${treeW}px` : '1 1 auto',
+          minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column',
+        }}>
+          {browserPane}
+        </div>
+        {twoPane && (
+          <div data-resize-handle="filetree" onPointerDown={startTreeResize}
+            title={t('file.dragResize')} className="tt-split-rail"
+            style={{ flex: '0 0 5px', cursor: 'col-resize', background: 'var(--border)', touchAction: 'none' }} />
+        )}
         {view && (
-          <div style={{ position: 'absolute', inset: 0, zIndex: 2, display: 'flex', background: 'var(--bg-base)' }}>
-            <Viewer path={view} accent={accent} inline onBack={() => setView(null)} onClose={() => setView(null)}
+          <div style={twoPane
+            ? { flex: '1 1 auto', minWidth: 0, minHeight: 0, display: 'flex' }
+            : { position: 'absolute', inset: 0, zIndex: 2, display: 'flex', background: 'var(--bg-base)' }}>
+            <Viewer path={view} accent={accent} inline
+              onBack={twoPane ? undefined : () => setView(null)} onClose={() => setView(null)}
               onOpenPath={openPath} onOpenAgent={onOpenAgent} />
           </div>
         )}
