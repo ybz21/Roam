@@ -1108,7 +1108,9 @@ function TerminalPane(props: {
   //   右停靠：右侧「文件管理」抽屉 → 打开抽屉并在里面预览这个文件
   // 之前右停靠走的是 `location.hash = '#/files'`，直接把人跳去文件页——
   // 那正是「点了跑到左边栏去」的由来。
-  // 手机上不给：文件面板是全屏二级页，跳过去会丢上下文且回不到原滚动位置（见 15 设计 §9）。
+  // 手机同样走右停靠这条：AdaptivePanel 在手机档换成 MobileSubPage（覆盖在会话之上的
+  // 全屏二级页，带 ← 和物理返回键），返回就回到原会话原滚动位置——**不是**跳走。
+  // 早先这里按 isPhone 把 onOpenFile 置空，结果手机上工具行里的路径根本点不动。
   const [dockFileReq, setDockFileReq] = useState<{ path: string; nonce: number } | null>(null)
   const openFileFromChat = (path: string, line?: number) => {
     if (fileDock === 'left') {
@@ -1725,12 +1727,12 @@ function TerminalPane(props: {
               onImagePaste={(files) => { setActive(termName); pasteImage(termName, files) }} />
             {claudeView[termName] && claudeMap[termName]?.running && (
               <div style={{ position: 'absolute', inset: 0 }}>
-                <ClaudeChat name={termName} file={claudeMap[termName].file} onOpenFile={isPhone ? undefined : openFileFromChat} onOpenGit={() => setShowGit(true)} />
+                <ClaudeChat name={termName} file={claudeMap[termName].file} onOpenFile={openFileFromChat} onOpenGit={() => setShowGit(true)} />
               </div>
             )}
             {codexView[termName] && codexMap[termName]?.running && (
               <div style={{ position: 'absolute', inset: 0 }}>
-                <CodexChat name={termName} file={codexMap[termName].file} onOpenFile={isPhone ? undefined : openFileFromChat} onOpenGit={() => setShowGit(true)} />
+                <CodexChat name={termName} file={codexMap[termName].file} onOpenFile={openFileFromChat} onOpenGit={() => setShowGit(true)} />
               </div>
             )}
             {showVoice && !claudeView[termName] && !codexView[termName] && (

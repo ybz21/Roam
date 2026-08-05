@@ -2,7 +2,7 @@
 // 参考 claudecodeui（siteboon，AGPL-3.0）的 tools/components 分层：一屏里绝大多数工具
 // 只值一行，值得展开的才给卡片——原先每个工具都套一张描边卡，十几次 Read 就把正文淹了。
 // 这里按本仓库的令牌体系重写（无 Tailwind），颜色一律走 --accent / --ok / --warn / --danger。
-import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createContext, memo, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useI18n } from '../i18n'
 import { cachedDiff, parsePatch } from './diff'
 import { CheckIcon, ChevronRight, CircleIcon, ClockIcon, CopyIcon, WarnIcon } from '../icons'
@@ -21,6 +21,28 @@ const TONE: Record<Tone, { line: string; soft: string; border: string }> = {
 }
 
 export type ToolStatus = 'running' | 'ok' | 'error' | 'denied'
+
+// ── 运行组给下面这些件的两个开关（设计 16）────────────────────────────────
+// dense：这一条是画在运行组里的——描边、外边距、底色都由组统一给，自己别再来一份。
+// RowSlot：手机上「同组同时只展开一条」，由组来协调，所以展开态可以被外面接管。
+const DenseCtx = createContext(false)
+export const useDense = () => useContext(DenseCtx)
+export function DenseProvider({ children }: { children: ReactNode }) {
+  return <DenseCtx.Provider value={true}>{children}</DenseCtx.Provider>
+}
+
+export type RowCtl = { open: boolean; toggle: () => void }
+const RowCtx = createContext<RowCtl | undefined>(undefined)
+export function RowSlot({ ctl, children }: { ctl?: RowCtl; children: ReactNode }) {
+  return <RowCtx.Provider value={ctl}>{children}</RowCtx.Provider>
+}
+/** 受控展开态：组接管时用组给的，否则自己管自己。第三个返回值＝是否被接管 */
+function useOpenState(initial = false): [boolean, (v: boolean | ((p: boolean) => boolean)) => void, boolean] {
+  const ctl = useContext(RowCtx)
+  const [own, setOwn] = useState(initial)
+  if (!ctl) return [own, setOwn, false]
+  return [ctl.open, (v) => { const next = typeof v === 'function' ? v(ctl.open) : v; if (next !== ctl.open) ctl.toggle() }, true]
+}
 
 // ── 小件 ────────────────────────────────────────────────────────────────
 
@@ -120,15 +142,19 @@ export function CommandRow({ command, description, output, isError, status, labe
   label?: string
 }) {
   const { t } = useI18n()
+  const dense = useDense()
   const text = (output || '').replace(/\s+$/, '')
   const has = text.length > 0
   const lines = has ? text.split('\n').length : 0
-  const [open, setOpen] = useState(false)
+  const [open, setOpen, controlled] = useOpenState(false)
   // 出错默认展开一次：红边只说明「失败了」，人下一步一定是想看为什么。
+  // 被组接管时不自己开——组已经把展开位给了第一条失败的，这里再开一次会互相抢。
   const auto = useRef(false)
   useEffect(() => {
+    if (controlled) return
     if (!auto.current && has && isError) { auto.current = true; setOpen(true) }
-  }, [has, isError])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [has, isError, controlled])
   // 多行命令（heredoc / 换行管道）折叠态只给首行：整段塞进一行既读不出内容，
   // 又因为 white-space:nowrap 变成一条望不到头的长线。展开才铺全文。
   const nl = command.indexOf('\n')
@@ -139,13 +165,15 @@ export function CommandRow({ command, description, output, isError, status, labe
   const canOpen = has || multi
   const toggle = () => { if (canOpen) setOpen((v) => !v) }
   return (
-    <div className={`cc-cmd${isError ? ' is-err' : ''}${open ? ' is-open' : ''}`}>
+    <div className={`cc-cmd${isError ? ' is-err' : ''}${open ? ' is-open' : ''}${dense ? ' is-dense' : ''}`}>
       <div className={`cc-cmd-head${canOpen ? ' is-clickable' : ''}`} role={canOpen ? 'button' : undefined} tabIndex={canOpen ? 0 : undefined}
         aria-expanded={canOpen ? open : undefined} onClick={toggle}
         onKeyDown={(e) => { if (canOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggle() } }}>
         <span className="cc-cmd-chev" style={{ opacity: canOpen ? 1 : 0, transform: open ? 'rotate(90deg)' : 'none' }}><ChevronRight size={12} /></span>
         <span style={{ flex: '0 0 auto', color: 'var(--ok)', fontFamily: MONO, fontWeight: 600, userSelect: 'none' }}>{label || '$'}</span>
         <span className={open ? 'cc-cmd-text is-open' : 'cc-cmd-text'} style={{ fontFamily: MONO }}>{open ? command : firstLine}</span>
+        {/* 组里：描述缩到行尾灰字，不再独占一行（窄屏 CSS 直接把它藏掉） */}
+        {dense && !open && description && <span className="cc-cmd-desc-inline">{description}</span>}
         {!open && multi && <span className="cc-cmd-lines">{t('chat.moreLines', { count: cmdLines })}</span>}
         <StatusChip status={status} />
         {!open && has && status !== 'running' && (
@@ -153,7 +181,7 @@ export function CommandRow({ command, description, output, isError, status, labe
         )}
         <CopyBtn text={command} />
       </div>
-      {description && <div className="cc-cmd-desc">{description}</div>}
+      {description && (!dense || open) && <div className="cc-cmd-desc">{description}</div>}
       {open && has && (
         <pre className="cc-cmd-out" style={isError ? { color: 'var(--danger)' } : undefined}>{text}</pre>
       )}
@@ -179,7 +207,7 @@ export function ToolCard({ icon, label, title, path, line, tone = 'neutral', sta
 }) {
   const { t } = useI18n()
   const { openFile } = useChatActions()
-  const [open, setOpen] = useState(!!defaultOpen)
+  const [open, setOpen] = useOpenState(!!defaultOpen)
   const [rawOpen, setRawOpen] = useState(false)
   const toggle = () => setOpen((v) => !v)
   // 标题能点开文件时，展开就只交给箭头/标签那半边——否则点文件名会同时开文件又展开卡片

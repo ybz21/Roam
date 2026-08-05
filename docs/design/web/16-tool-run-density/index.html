@@ -1,0 +1,1042 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Roam · 连续工具调用的篇幅压缩（运行组）</title>
+<style>
+/* ── 令牌：直接取 frontend/src/theme.tsx 的真值，稿子和成品同源 ───────────── */
+:root {
+  --bg-base:#0d1117; --bg-container:#161b22; --bg-elevated:#1b222b; --bg-term:#06090d;
+  --border:#30363d; --border-subtle:#21262d;
+  --text-bright:#e6edf3; --text-dim:#8b949e; --text-dimmer:#6e7681;
+  --accent:#58a6ff; --accent-solid:#1f6feb; --accent-soft:rgba(31,111,235,.14); --accent-border:rgba(88,166,255,.45);
+  --ok:#3fb950; --ok-solid:#238636; --ok-soft:rgba(63,185,80,.14); --ok-border:rgba(63,185,80,.42);
+  --danger:#f85149; --danger-soft:rgba(248,81,73,.12); --danger-border:rgba(248,81,73,.40);
+  --warn:#d29922; --warn-soft:rgba(210,153,34,.12); --warn-border:rgba(210,153,34,.40);
+  --list-hover:rgba(255,255,255,.025);
+
+  --fs-micro:11px; --fs-meta:12px; --fs-sm:13px; --fs-body:14px; --fs-lg:16px; --fs-title:22px;
+  --r-xs:6px; --r-sm:10px; --r-card:14px; --r-pill:999px;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+html[data-theme="light"] {
+  --bg-base:#f6f8fa; --bg-container:#ffffff; --bg-elevated:#ffffff; --bg-term:#ffffff;
+  --border:#d0d7de; --border-subtle:#e6e9ec;
+  --text-bright:#1f2328; --text-dim:#57606a; --text-dimmer:#8c959f;
+  --accent:#0969da; --accent-solid:#1f6feb; --accent-soft:rgba(31,111,235,.10); --accent-border:rgba(31,111,235,.40);
+  --ok:#1a7f37; --ok-solid:#1f883d; --ok-soft:rgba(31,136,61,.10); --ok-border:rgba(31,136,61,.40);
+  --danger:#cf222e; --danger-soft:rgba(207,34,46,.09); --danger-border:rgba(207,34,46,.35);
+  --warn:#9a6700; --warn-soft:rgba(154,103,0,.10); --warn-border:rgba(154,103,0,.35);
+  --list-hover:rgba(27,31,36,.04);
+}
+
+* { box-sizing:border-box; }
+html { background:#07090d; }
+html[data-theme="light"] { background:#eef1f5; }
+body {
+  margin:0; color:var(--text-bright);
+  font:var(--fs-body)/1.6 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+svg { display:block; }
+button { font:inherit; cursor:pointer; }
+
+.top {
+  position:sticky; top:0; z-index:20;
+  display:flex; align-items:center; gap:var(--sp-3);
+  padding:10px clamp(16px,3vw,40px);
+  background:color-mix(in srgb, var(--bg-base) 84%, transparent);
+  border-bottom:1px solid var(--border-subtle); backdrop-filter:blur(18px);
+}
+.top .kicker { font-size:var(--fs-micro); letter-spacing:.14em; text-transform:uppercase; color:var(--text-dimmer); }
+.top h1 { margin:0; font-size:var(--fs-sm); font-weight:600; }
+.top .sp { flex:1; }
+.tbtn {
+  border:1px solid var(--border); background:var(--bg-container); color:var(--text-dim);
+  border-radius:var(--r-pill); padding:5px 14px; font-size:var(--fs-meta);
+}
+.tbtn:hover { color:var(--text-bright); border-color:var(--accent-border); }
+
+.wrap { max-width:1080px; margin:0 auto; padding:34px clamp(16px,3vw,40px) 100px; }
+h2 { margin:52px 0 6px; padding-top:26px; font-size:var(--fs-lg); font-weight:600; border-top:1px solid var(--border-subtle); }
+h2:first-of-type { margin-top:8px; border-top:0; padding-top:0; }
+h3 { margin:26px 0 8px; font-size:var(--fs-sm); font-weight:600; color:var(--text-bright); }
+.lede { max-width:78ch; margin:0 0 18px; color:var(--text-dim); font-size:var(--fs-sm); line-height:1.9; }
+.lede b { color:var(--text-bright); font-weight:600; }
+.lede code, p code, li code, td code {
+  font:var(--fs-meta)/1.4 var(--mono); background:var(--list-hover);
+  border:1px solid var(--border-subtle); border-radius:4px; padding:1px 5px; color:var(--text-bright);
+}
+ul.pts { max-width:78ch; margin:0 0 18px; padding-left:20px; color:var(--text-dim); font-size:var(--fs-sm); line-height:1.9; }
+ul.pts b { color:var(--text-bright); }
+ol.pts { max-width:78ch; margin:0 0 18px; padding-left:20px; color:var(--text-dim); font-size:var(--fs-sm); line-height:1.9; }
+ol.pts b { color:var(--text-bright); }
+
+table { width:100%; border-collapse:collapse; margin:6px 0 20px; font-size:var(--fs-meta); }
+th, td { text-align:left; padding:7px 10px; border-bottom:1px solid var(--border-subtle); vertical-align:top; }
+th { color:var(--text-dimmer); font-weight:600; font-size:var(--fs-micro); text-transform:uppercase; letter-spacing:.08em; }
+td { color:var(--text-dim); }
+td b { color:var(--text-bright); font-weight:600; }
+td.num { text-align:right; font-variant-numeric:tabular-nums; font-family:var(--mono); }
+tr.sum td { border-top:1px solid var(--border); color:var(--text-bright); font-weight:600; }
+.win { color:var(--ok); font-variant-numeric:tabular-nums; }
+.lose { color:var(--danger); font-variant-numeric:tabular-nums; }
+
+.cap { display:flex; align-items:center; gap:var(--sp-2); margin:20px 0 8px; font-size:var(--fs-meta); color:var(--text-dimmer); }
+.cap b { color:var(--text-bright); font-size:var(--fs-sm); font-weight:600; }
+.pill { font-size:var(--fs-micro); padding:1px 8px; border-radius:var(--r-pill); border:1px solid var(--border); color:var(--text-dimmer); }
+.pill.bad { color:var(--danger); border-color:var(--danger-border); background:var(--danger-soft); }
+.pill.good { color:var(--ok); border-color:var(--ok-border); background:var(--ok-soft); }
+.pill.warn { color:var(--warn); border-color:var(--warn-border); background:var(--warn-soft); }
+
+.stage { background:var(--bg-term); border:1px solid var(--border); border-radius:var(--r-card); padding:var(--sp-3); overflow:hidden; }
+.cols { display:grid; grid-template-columns:1fr 1fr; gap:var(--sp-3); align-items:start; }
+@media (max-width:900px) { .cols { grid-template-columns:1fr; } }
+.colhd { display:flex; align-items:center; gap:var(--sp-2); margin-bottom:6px; font-size:var(--fs-meta); color:var(--text-dim); }
+.colhd b { color:var(--text-bright); }
+.ruler { margin-left:auto; font-family:var(--mono); font-size:var(--fs-micro); color:var(--text-dimmer); }
+
+.note { border-left:2px solid var(--accent); background:var(--accent-soft); padding:10px 14px; border-radius:0 var(--r-xs) var(--r-xs) 0; color:var(--text-dim); font-size:var(--fs-meta); line-height:1.8; max-width:78ch; margin:14px 0 20px; }
+.note b { color:var(--text-bright); }
+.note.warn { border-left-color:var(--warn); background:var(--warn-soft); }
+.note.bad { border-left-color:var(--danger); background:var(--danger-soft); }
+
+pre.code {
+  margin:8px 0 20px; padding:14px 16px; overflow:auto;
+  border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-base);
+  font:var(--fs-meta)/1.7 var(--mono); color:var(--text-dim);
+}
+pre.code b { color:var(--text-bright); font-weight:600; }
+pre.code i { color:var(--accent); font-style:normal; }
+pre.code u { color:var(--warn); text-decoration:none; }
+pre.code s { color:var(--text-dimmer); text-decoration:none; }
+pre.code em { color:var(--ok); font-style:normal; }
+
+/* ══ 现状（对照组）：与 frontend/src/index.css 现行 .cc-cmd 一一对应 ══════ */
+.old-cmd {
+  position:relative; margin:var(--sp-2) 0;
+  border:1px solid var(--border); border-left:2px solid var(--ok);
+  border-radius:var(--r-xs); background:var(--bg-term); overflow:hidden;
+}
+.old-cmd.err { border-left-color:var(--danger); background:color-mix(in srgb, var(--bg-term) 92%, var(--danger)); }
+.old-head { display:flex; align-items:center; gap:var(--sp-2); min-width:0; padding:5px var(--sp-2) 5px 7px; font-size:var(--fs-meta); }
+.old-head .chev { flex:0 0 auto; display:inline-flex; color:var(--text-dimmer); }
+.old-head .dollar { flex:0 0 auto; color:var(--ok); font-family:var(--mono); font-weight:600; }
+.old-head .txt { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-bright); font-family:var(--mono); }
+.old-lines { flex:0 0 auto; padding:1px 6px; border-radius:var(--r-pill); background:var(--list-hover); color:var(--text-dimmer); font-size:var(--fs-micro); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.old-desc { padding:0 var(--sp-2) 5px 29px; color:var(--text-dimmer); font-size:var(--fs-micro); line-height:1.5; }
+.old-copy { flex:0 0 auto; display:inline-flex; color:var(--text-dimmer); opacity:.55; }
+/* 粗指针下的真实高度：index.css 里 .cc-cmd-head.is-clickable { min-height:44px } */
+.coarse .old-head { min-height:44px; }
+.coarse .rrow.click, .coarse .run-head { min-height:44px; }
+
+/* ══ 新版：运行组 ════════════════════════════════════════════════════════ */
+.run {
+  margin:var(--sp-2) 0; border-left:2px solid var(--tone,var(--border));
+  border-radius:0 var(--r-xs) var(--r-xs) 0;
+  background:color-mix(in srgb, var(--bg-container) 55%, transparent);
+}
+.run.t-ok   { --tone:var(--ok); }
+.run.t-warn { --tone:var(--warn); }
+.run.t-acc  { --tone:var(--accent); }
+.run.t-bad  { --tone:var(--danger); }
+
+.run-head {
+  display:flex; align-items:center; gap:var(--sp-2); min-width:0;
+  padding:4px var(--sp-2) 4px 7px; font-size:var(--fs-meta); cursor:pointer;
+  border-radius:0 var(--r-xs) 0 0;
+}
+.run-head:hover { background:var(--list-hover); }
+.run-head .chev { flex:0 0 auto; display:inline-flex; color:var(--text-dimmer); transition:transform .15s ease; }
+.run-head.open .chev { transform:rotate(90deg); }
+.run-head .ico { flex:0 0 auto; display:inline-flex; color:var(--tone); }
+.run-head .nm { flex:0 0 auto; color:var(--text-dim); }
+.run-head .cnt {
+  flex:0 0 auto; padding:0 6px; border-radius:var(--r-pill); background:var(--list-hover);
+  color:var(--text-dim); font-size:var(--fs-micro); font-variant-numeric:tabular-nums;
+}
+.run-head .last { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-dimmer); font-family:var(--mono); }
+.run-head .slot { flex:0 0 auto; color:var(--text-dimmer); font-size:var(--fs-micro); font-variant-numeric:tabular-nums; }
+.run-body { border-top:1px solid var(--border-subtle); }
+
+/* 组内的一行 */
+.rrow {
+  display:flex; align-items:center; gap:var(--sp-2); min-width:0;
+  padding:3px var(--sp-2) 3px 7px; font-size:var(--fs-meta); line-height:1.6;
+}
+.rrow.click { cursor:pointer; }
+.rrow.click:hover { background:var(--list-hover); }
+.rrow + .rrow { border-top:1px solid color-mix(in srgb, var(--border-subtle) 55%, transparent); }
+.rrow .chev { flex:0 0 auto; display:inline-flex; color:var(--text-dimmer); transition:transform .15s ease; }
+.rrow.open .chev { transform:rotate(90deg); }
+.rrow .dollar { flex:0 0 auto; color:var(--ok); font-family:var(--mono); font-weight:600; user-select:none; }
+.rrow .ico { flex:0 0 auto; display:inline-flex; color:var(--text-dimmer); }
+.rrow .cmd { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-bright); font-family:var(--mono); }
+.rrow .cmd.plain { font-family:inherit; }
+.rrow .desc {
+  flex:0 1 auto; min-width:0; max-width:34%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  color:var(--text-dimmer); font-size:var(--fs-micro);
+}
+.rrow .slot { flex:0 0 auto; width:52px; text-align:right; color:var(--text-dimmer); font-size:var(--fs-micro); font-variant-numeric:tabular-nums; }
+.rrow .slot.plus { color:var(--ok); }
+.rrow .slot.minus { color:var(--danger); }
+.rrow.bad { background:var(--danger-soft); box-shadow:inset 2px 0 0 var(--danger); }
+.rrow.bad .cmd { color:var(--danger); }
+.rrow.deny { background:var(--warn-soft); box-shadow:inset 2px 0 0 var(--warn); }
+.rrow .link { color:var(--accent); font-family:var(--mono); border:0; background:transparent; padding:0; }
+.rrow .link:hover { text-decoration:underline; }
+.rout {
+  margin:0; padding:var(--sp-2) var(--sp-2) var(--sp-2) 28px;
+  background:var(--bg-term); border-top:1px solid var(--border-subtle);
+  white-space:pre-wrap; overflow-wrap:anywhere; max-height:190px; overflow:auto;
+  font:var(--fs-meta)/1.55 var(--mono); color:var(--text-dim);
+}
+.rout.err { color:var(--danger); }
+.cc-spin { flex:0 0 auto; width:11px; height:11px; border-radius:50%; border:1.5px solid var(--border); border-top-color:var(--accent); animation:cc-spin 700ms linear infinite; }
+@keyframes cc-spin { to { transform:rotate(360deg); } }
+.chip { flex:0 0 auto; font-size:var(--fs-micro); padding:1px 6px; border-radius:var(--r-pill); white-space:nowrap; }
+.chip.err { color:var(--danger); background:var(--danger-soft); }
+.chip.deny { color:var(--warn); background:var(--warn-soft); }
+.chip.live { color:var(--accent); background:var(--accent-soft); }
+
+/* 合并 diff */
+.mdiff { margin:var(--sp-1) var(--sp-2) var(--sp-2) 20px; border:1px solid var(--border); border-radius:var(--r-xs); overflow:hidden; background:var(--bg-base); }
+.mdiff-hunk { display:flex; align-items:center; gap:var(--sp-2); padding:2px var(--sp-2); background:var(--bg-container); border-bottom:1px solid var(--border-subtle); font-size:var(--fs-micro); color:var(--text-dimmer); }
+.mdiff-hunk + .dline { border-top:0; }
+.mdiff-hunk .sp { flex:1; }
+.dline { display:flex; min-width:0; font:var(--fs-meta)/1.55 var(--mono); }
+.dnum { flex:0 0 auto; width:42px; padding-right:var(--sp-1); text-align:right; user-select:none; color:var(--text-dimmer); font-variant-numeric:tabular-nums; }
+.dsign { flex:0 0 auto; width:14px; text-align:center; user-select:none; }
+.dtext { flex:1 1 auto; min-width:0; padding-right:var(--sp-2); white-space:pre-wrap; overflow-wrap:anywhere; }
+.dline.add { background:var(--ok-soft); } .dline.add .dsign, .dline.add .dtext { color:var(--ok); }
+.dline.del { background:var(--danger-soft); } .dline.del .dsign, .dline.del .dtext { color:var(--danger); }
+
+/* 气泡 / 消息 */
+.bubble { background:var(--bg-container); border:1px solid var(--border); border-radius:var(--r-card); padding:var(--sp-2) var(--sp-3); color:var(--text-bright); font-size:var(--fs-body); line-height:1.7; }
+.bubble.user { align-self:flex-end; max-width:86%; background:var(--accent-solid); color:#fff; border-color:transparent; margin-left:auto; }
+.foot { display:inline-flex; align-items:center; gap:var(--sp-2); font-size:var(--fs-micro); color:var(--text-dimmer); padding:0 var(--sp-1); }
+
+/* 手机机身 */
+.phones { display:flex; flex-wrap:wrap; gap:var(--sp-5); justify-content:center; margin:10px 0 8px; }
+.phone { width:340px; flex:0 0 auto; border:8px solid #1b222b; border-radius:30px; overflow:hidden; background:var(--bg-term); box-shadow:0 18px 48px rgba(1,4,9,.5); }
+html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px rgba(140,149,159,.28); }
+.phone-notch { height:22px; background:var(--bg-container); display:flex; align-items:center; justify-content:center; }
+.phone-notch i { width:64px; height:5px; border-radius:var(--r-pill); background:var(--border); display:block; }
+.phone-head { display:flex; align-items:center; gap:var(--sp-2); padding:8px var(--sp-3); border-bottom:1px solid var(--border); background:var(--bg-container); font-size:var(--fs-sm); }
+.phone-head .nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-bright); font-weight:600; }
+.phone-head .ib { display:inline-flex; color:var(--text-dim); }
+.phone-body { padding:var(--sp-2); height:430px; overflow:hidden; position:relative; }
+.phone-body.scrolled::after {
+  content:''; position:absolute; left:0; right:0; bottom:0; height:34px;
+  background:linear-gradient(to bottom, transparent, var(--bg-term));
+}
+.phone-foot { padding:var(--sp-1) var(--sp-2) 0; border-top:1px solid var(--border); background:var(--bg-base); }
+.phone-safe { height:18px; background:var(--bg-base); display:flex; align-items:center; justify-content:center; }
+.phone-safe i { width:100px; height:4px; border-radius:var(--r-pill); background:var(--border); display:block; }
+.phone-tag { text-align:center; margin-top:var(--sp-2); font-size:var(--fs-meta); color:var(--text-dim); }
+.phone-tag b { color:var(--text-bright); }
+
+/* 桌面整屏 */
+.screen { border:1px solid var(--border); border-radius:var(--r-card); overflow:hidden; background:var(--bg-term); }
+.screen-tabs { display:flex; align-items:stretch; background:var(--bg-container); border-bottom:1px solid var(--border); font-size:var(--fs-meta); }
+.screen-tabs .tab { display:flex; align-items:center; gap:6px; padding:6px 14px; color:var(--text-dim); border-top:2px solid transparent; }
+.screen-tabs .tab.on { color:var(--text-bright); background:var(--bg-base); border-top-color:var(--accent); }
+.screen-tabs .sp { flex:1; }
+.screen-body { padding:var(--sp-3); }
+.screen-foot { padding:var(--sp-2) var(--sp-3) var(--sp-3); border-top:1px solid var(--border); background:var(--bg-base); }
+.fakeinput { display:flex; align-items:center; gap:var(--sp-2); margin-top:var(--sp-1); border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-container); padding:var(--sp-2) var(--sp-3); color:var(--text-dimmer); font-size:var(--fs-sm); }
+.statusbar { display:flex; align-items:center; gap:var(--sp-3); padding:var(--sp-1) var(--sp-2); font-size:var(--fs-meta); color:var(--text-dim); }
+.statusbar .it { display:inline-flex; align-items:center; gap:5px; }
+
+/* 命中区示意 */
+.tapnote { position:relative; }
+.tapnote::after {
+  content:''; position:absolute; left:-4px; right:-4px; top:50%; height:44px; transform:translateY(-50%);
+  border:1px dashed var(--accent-border); border-radius:var(--r-xs); pointer-events:none; opacity:.5;
+}
+.swatches { display:flex; flex-wrap:wrap; gap:var(--sp-2); margin:8px 0 18px; }
+.sw { display:flex; align-items:center; gap:var(--sp-2); border:1px solid var(--border); border-radius:var(--r-sm); padding:6px 12px 6px 8px; font-size:var(--fs-meta); color:var(--text-dim); background:var(--bg-container); }
+.sw i { width:3px; height:22px; border-radius:2px; display:block; }
+.sw b { color:var(--text-bright); font-weight:600; }
+.bars { margin:10px 0 22px; }
+.bar { display:flex; align-items:center; gap:var(--sp-3); margin:6px 0; font-size:var(--fs-meta); }
+.bar .lb { flex:0 0 132px; color:var(--text-dim); }
+.bar .tr { flex:1 1 auto; height:16px; border-radius:var(--r-pill); background:var(--list-hover); overflow:hidden; }
+.bar .tr i { display:block; height:100%; border-radius:var(--r-pill); }
+.bar .vl { flex:0 0 92px; text-align:right; font-family:var(--mono); font-size:var(--fs-micro); color:var(--text-dimmer); }
+
+/* 三种宽度对照：同一份 DOM，只是容器不同 */
+.widths { display:flex; flex-direction:column; gap:var(--sp-3); margin:10px 0 20px; }
+.wcol { width:100%; }
+/* 手机档把 description 让出去——成品里由 [data-size="compact"] 管，这里手写模拟 */
+.hide-compact { display:none; }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div>
+    <div class="kicker">Roam · Web 设计 16</div>
+    <h1>连续工具调用的篇幅压缩 — 运行组</h1>
+  </div>
+  <span class="sp"></span>
+  <button class="tbtn" id="theme">切到浅色</button>
+</div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <g id="i-chev"><path d="m9 18 6-6-6-6"/></g>
+  <g id="i-term"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3"/><path d="M13 15h4"/></g>
+  <g id="i-pencil"><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7.5 18.5 3 20l1.5-4.5Z"/><path d="m14.5 5.5 3 3"/></g>
+  <g id="i-read"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H10a2 2 0 0 1 2 2v13a2 2 0 0 0-2-2H5.5A1.5 1.5 0 0 1 4 15.5Z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H14a2 2 0 0 0-2 2v13a2 2 0 0 1 2-2h4.5a1.5 1.5 0 0 0 1.5-1.5Z"/></g>
+  <g id="i-search"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></g>
+  <g id="i-warn"><path d="M10.3 4.3 2.6 17.5A2 2 0 0 0 4.3 20.5h15.4a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0Z"/><path d="M12 9.5v4"/><path d="M12 17h.01"/></g>
+  <g id="i-copy"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5.5A2.5 2.5 0 0 0 12.5 4H6a2 2 0 0 0-2 2v6.5A2.5 2.5 0 0 0 6.5 15"/></g>
+  <g id="i-check"><path d="m5 12.5 4.5 4.5L19 7"/></g>
+  <g id="i-back"><path d="M15 18l-6-6 6-6"/></g>
+  <g id="i-more"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></g>
+</defs></svg>
+
+<div class="wrap">
+
+<p class="lede">
+真机上连着跑五条 <code>Bash</code>，<b>一屏就没了</b>——每条都是一张独立描边卡：上下 8px 外边距、
+1px 描边、终端底色、一行命令、再加一行 description。信息量是「跑了 5 条命令、68 行输出」，
+篇幅却是 430px。这一稿把连续的同族工具收成<b>运行组（ToolRun）</b>：
+<b>一组共用一条左脊、一个组头</b>；<b>跑完且全成功的组自动折成一行</b>；
+<b>失败与被拒的行永远留在外面</b>。目标是「历史像索引、当下像现场」。
+</p>
+
+<div class="note">
+  <b>这一稿只改「排版密度与分组」，不改任何解析。</b>
+  工具怎么认、diff 怎么算、错误怎么判，全部沿用
+  <a href="../15-chat-render/README.md" style="color:var(--accent)">设计 15</a> 已落地的那套；
+  这里新增的是消息列表层的一次分组，和 <code>CommandRow</code> / <code>ToolCard</code> 的一套「行模式」。
+</div>
+
+<h2>1 · 篇幅账：430px 是怎么来的</h2>
+
+<p class="lede">
+截图里五条命令占满整个对话可视区。逐项拆开看，<b>真正承载信息的只有 20px（那行命令）</b>，
+其余 66px 都是外壳与复述。</p>
+
+<table>
+  <thead><tr><th>构成</th><th>来源</th><th style="text-align:right">手机 (粗指针)</th><th style="text-align:right">桌面</th></tr></thead>
+  <tbody>
+    <tr><td><b>卡片上下外边距 + 行间距</b></td><td><code>.cc-cmd { margin: var(--sp-2) 0 }</code> + 列表 <code>gap:2</code></td><td class="num">18</td><td class="num">18</td></tr>
+    <tr><td><b>上下描边</b></td><td><code>border: 1px</code></td><td class="num">2</td><td class="num">2</td></tr>
+    <tr><td>命令行本体</td><td><code>.cc-cmd-head</code>（粗指针 <code>min-height:44</code>）</td><td class="num">44</td><td class="num">29</td></tr>
+    <tr><td><b>description 独占一行</b></td><td><code>.cc-cmd-desc</code>（11px × 1.5 + 5 padding）</td><td class="num">22</td><td class="num">22</td></tr>
+    <tr class="sum"><td>单条命令合计</td><td>—</td><td class="num">86</td><td class="num">71</td></tr>
+    <tr class="sum"><td>× 5 条</td><td>截图实测约 430px，与算出来的一致</td><td class="num">430</td><td class="num">355</td></tr>
+  </tbody>
+</table>
+
+<ul class="pts">
+  <li><b>卡壳是最大的一笔。</b>外边距 + 描边 = 20px，占单条的 23%。五张卡并排时，
+      这些边框之间互相「隔断」，读起来是五件不相干的事，其实是同一次动作的五步。</li>
+  <li><b>description 是复述，不是信息。</b><code>Test the two-pane split and narrow fallback</code>
+      跟命令本身说的是一回事，却按满一整行的价钱收费。</li>
+  <li><b>粗指针把命令行从 29px 顶到 44px</b>——这条不能省（设计系统硬规则），
+      但可以让<b>需要 44 的行变少</b>：跑完收成一行，五个命中区变一个。</li>
+  <li><b>终端底色 <code>--bg-term</code> 铺满每张卡</b>，在深色主题下五块黑砖压在页面上，
+      视觉重量远超它承载的信息。底色应该只属于<b>输出</b>，不属于<b>命令</b>。</li>
+</ul>
+
+<div class="cap"><b>现状</b><span class="pill bad">5 条命令 = 430px</span><span>——就是截图里那一屏</span></div>
+<div class="stage coarse">
+  <div class="old-cmd">
+    <div class="old-head"><span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+      <span class="dollar">$</span><span class="txt">cat &gt;&gt; src/FileBrowse…</span>
+      <span class="old-lines">+64 行</span><span class="old-lines">9 行</span>
+      <span class="old-copy"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-copy"/></svg></span></div>
+    <div class="old-desc">Test the two-pane split and narrow fallback</div>
+  </div>
+  <div class="old-cmd">
+    <div class="old-head"><span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+      <span class="dollar">$</span><span class="txt">npm run typecheck 2&gt;&amp;1|tail -…</span>
+      <span class="old-lines">6 行</span>
+      <span class="old-copy"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-copy"/></svg></span></div>
+    <div class="old-desc">Full verification</div>
+  </div>
+  <div class="old-cmd">
+    <div class="old-head"><span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+      <span class="dollar">$</span><span class="txt">cd /home/ai/codes/tt…</span>
+      <span class="old-lines">+21 行</span><span class="old-lines">68 行</span>
+      <span class="old-copy"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-copy"/></svg></span></div>
+    <div class="old-desc">Commit and push the split layout</div>
+  </div>
+  <div style="text-align:center; color:var(--text-dimmer); font-size:var(--fs-micro); padding:6px 0">⋯ 还有 2 条，同样每条 86px ⋯</div>
+</div>
+
+<h2>2 · 设计总纲：四条规则</h2>
+
+<table>
+  <thead><tr><th style="width:14%">规则</th><th>说明</th><th style="width:30%">解决的问题</th></tr></thead>
+  <tbody>
+    <tr><td><b>① 成组</b></td><td>相邻的工具调用（<b>跨消息</b>，中间没有正文）并成一个<b>运行组</b>：共用一条左脊、一个组头，行与行之间没有外边距、没有描边。</td><td>五张卡的边框与间距 → 一个外壳</td></tr>
+    <tr><td><b>② 跑完就收</b></td><td>组内全部有结果、且<b>全部成功</b>时，自动折成<b>一行摘要</b>：<code>终端 · 5 条 · 68 行</code>。正在跑的组保持展开。</td><td>历史区从 430px → 44px</td></tr>
+    <tr><td><b>③ 失败不折</b></td><td>失败 / 被拒的行<b>提到组头下面单独列出</b>，不参与折叠，红条永远第一眼可见。</td><td>「跑完就收」不能把报错也收走</td></tr>
+    <tr><td><b>④ 行只留信息</b></td><td>去掉每行的描边与终端底；description 并到同一行行尾（灰字，窄屏不显示）；量感（<code>68 行</code> / <code>+64 −9</code>）收进右侧<b>定宽槽</b>，一列对齐。</td><td>单行 86px → 44/26px</td></tr>
+  </tbody>
+</table>
+
+<div class="note warn">
+  <b>为什么分组必须发生在「消息列表层」而不是消息内。</b>
+  截图里那五条命令是<b>五条独立的助手消息</b>（Claude 每次工具调用单独成条）。
+  <code>Message.tsx</code> 里现有的 <code>segments()</code> 只在<b>一条消息内部</b>把工具块并段——
+  对这个场景一点用都没有。分组要在 <code>ChatShell</code> 渲染消息数组时做：
+  <b>连续的「纯工具消息」（没有 text/thinking 块）合并成一个 run</b>。
+</div>
+
+<div class="swatches">
+  <span class="sw"><i style="background:var(--ok)"></i><b>终端组</b> Bash / shell / exec_command</span>
+  <span class="sw"><i style="background:var(--warn)"></i><b>改文件组</b> Edit / Write / apply_patch</span>
+  <span class="sw"><i style="background:var(--accent)"></i><b>读查组</b> Read / Grep / Glob / WebFetch</span>
+  <span class="sw"><i style="background:var(--danger)"></i><b>失败行</b> 任何组里出错的那条</span>
+</div>
+
+<h2>3 · 运行组的四种状态</h2>
+
+<h3>3.1 收起态 —— 跑完且全成功（默认）</h3>
+<p class="lede">这是历史区 99% 的样子：<b>一行</b>。左脊说明这是哪一族，组头给出「几条 + 总量 + 最后一条」，
+最后一条命令的文本留在行里，因为人回看时找的往往就是<b>「刚才那条命令是什么」</b>。</p>
+
+<div class="stage coarse">
+  <div class="run t-ok">
+    <div class="run-head">
+      <span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+      <span class="ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-term"/></svg></span>
+      <span class="nm">终端</span><span class="cnt">5</span>
+      <span class="last">until [ "$(gh api repos/ybz21/Roam…</span>
+      <span class="slot">68 行</span>
+    </div>
+  </div>
+</div>
+
+<h3>3.2 展开态 —— 点组头，行铺开</h3>
+<p class="lede">每条命令一行：<code>$ 命令</code> 占主宽，description 缩到行尾灰字，输出行数在最右的定宽槽里对齐成一列。
+再点某一行才展开它的输出。<b>命令与输出之间没有第三层卡片</b>——输出直接接在行下面，用终端底色区分。</p>
+
+<div class="stage coarse">
+  <div class="run t-ok">
+    <div class="run-head open">
+      <span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+      <span class="ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-term"/></svg></span>
+      <span class="nm">终端</span><span class="cnt">5</span>
+      <span class="last" style="color:var(--text-dimmer)">收起</span>
+      <span class="slot">68 行</span>
+    </div>
+    <div class="run-body">
+      <div class="rrow click">
+        <span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+        <span class="dollar">$</span><span class="cmd">cat &gt;&gt; src/FileBrowser.test.tsx</span>
+        <span class="desc">两栏分割与窄屏回退</span><span class="slot">9 行</span>
+      </div>
+      <div class="rrow click">
+        <span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+        <span class="dollar">$</span><span class="cmd">npm run typecheck 2&gt;&amp;1 | tail -20</span>
+        <span class="desc">全量校验</span><span class="slot">6 行</span>
+      </div>
+      <div class="rrow click open">
+        <span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+        <span class="dollar">$</span><span class="cmd">git commit -m "feat(web): 文件抽屉分两栏"</span>
+        <span class="desc">提交并推送</span><span class="slot">68 行</span>
+      </div>
+      <pre class="rout">[feat/file-dock-split de79a0c] feat(web): 文件抽屉分「文件夹 / 文件」两栏，中间可拖
+ 2 files changed, 126 insertions(+), 9 deletions(-)
+To github.com:ybz21/Roam.git
+   bf14b4e..de79a0c  feat/file-dock-split -> feat/file-dock-split</pre>
+      <div class="rrow click">
+        <span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+        <span class="dollar">$</span><span class="cmd">gh api repos/ybz21/Roam/pulls -f title=…</span>
+        <span class="desc">开 PR</span><span class="slot">2 行</span>
+      </div>
+      <div class="rrow click">
+        <span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+        <span class="dollar">$</span><span class="cmd">until [ "$(gh api …/check-runs)" ]; do sleep 20; done</span>
+        <span class="desc">等 CI</span><span class="slot">1 行</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h3>3.3 进行中 —— 组不折，最后一行是现场</h3>
+<p class="lede">只要组里还有没结果的调用，组就<b>强制展开</b>并顶到底：正在跑的那条给转圈 + 蓝色 <code>运行中</code>，
+它上面的已完成行照常收起。已经跑完的行不会因为组还开着而变吵——它们本来就只有一行。</p>
+
+<div class="stage coarse">
+  <div class="run t-ok">
+    <div class="run-head open">
+      <span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+      <span class="ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-term"/></svg></span>
+      <span class="nm">终端</span><span class="cnt">3</span>
+      <span class="last"></span>
+      <span class="chip live">运行中</span>
+    </div>
+    <div class="run-body">
+      <div class="rrow click"><span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+        <span class="dollar">$</span><span class="cmd">npm run typecheck</span><span class="desc">类型检查</span><span class="slot">3 行</span></div>
+      <div class="rrow click"><span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+        <span class="dollar">$</span><span class="cmd">npm run i18n:check</span><span class="desc">文案审计</span><span class="slot">2 行</span></div>
+      <div class="rrow"><span class="cc-spin" style="margin-left:1px"></span>
+        <span class="dollar">$</span><span class="cmd">npx vitest run</span><span class="desc">单元测试</span><span class="slot" style="width:auto"></span></div>
+    </div>
+  </div>
+</div>
+
+<h3>3.4 有失败 —— 组照收，红行留外面</h3>
+<p class="lede">这是「跑完就收」<b>唯一的例外</b>，也是规则③的全部意义：
+成功的四条折回组头，失败的那条<b>提到组头下方</b>，默认<b>展开着输出</b>。
+左脊转红，组头计数写成 <code>4 成功 · 1 失败</code>。人扫一眼就知道「这一串里有一处炸了，炸的是这条」。</p>
+
+<div class="stage coarse">
+  <div class="run t-bad">
+    <div class="run-head">
+      <span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+      <span class="ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-term"/></svg></span>
+      <span class="nm">终端</span><span class="cnt">5</span>
+      <span class="last">4 成功 · 1 失败</span>
+      <span class="chip err">失败</span>
+    </div>
+    <div class="run-body">
+      <div class="rrow bad click open">
+        <span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+        <span class="dollar" style="color:var(--danger)">$</span><span class="cmd">npx vitest run</span>
+        <span class="desc">单元测试</span><span class="slot">12 行</span>
+      </div>
+      <pre class="rout err"> FAIL  src/FileBrowser.test.tsx &gt; dock 两栏 &gt; 宽面板出现分界条
+ AssertionError: expected null not to be null
+   ❯ src/FileBrowser.test.tsx:118:44
+ Tests  1 failed | 185 passed (186)</pre>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <b>被拒 / 被中断</b>（<code>user doesn't want…</code> / <code>Request interrupted</code>）同理提到外面，
+  但用黄色而不是红色——它不是「炸了」，是「你没让它干」。这套判定沿用设计 15 里已经落地的
+  <code>toolStatus()</code>，本稿不重复定义。
+</div>
+
+<h2>4 · 连续改同一个文件：合并成一张 diff</h2>
+
+<p class="lede">
+「改文件组」比终端组还费篇幅：现在每次 <code>Edit</code> 都是一张卡 + 一张 diff 面板，
+连改同一个文件三处就是三张。合并规则：<b>同一个运行组内、同一路径的连续 Edit/Write，
+并成一张 diff 卡</b>，标题写 <code>×3</code>，展开后三处变动<b>顺序拼接</b>，段间一条细分隔线标「第 N 处」。
+统计合并成一份 <code>+64 −9</code>——这也正是人下一句要问的「这个文件到底改了多少」。</p>
+
+<div class="cols">
+  <div>
+    <div class="colhd"><b>现状</b><span class="pill bad">3 张卡</span><span class="ruler">≈ 3 × 卡壳</span></div>
+    <div class="stage coarse">
+      <div class="old-cmd" style="border-left-color:var(--warn); background:var(--bg-base)">
+        <div class="old-head"><span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+          <span class="ico" style="color:var(--warn); display:inline-flex"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-pencil"/></svg></span>
+          <span class="txt" style="color:var(--accent)">…/src/FileBrowser.tsx</span></div>
+      </div>
+      <div class="old-cmd" style="border-left-color:var(--warn); background:var(--bg-base)">
+        <div class="old-head"><span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+          <span class="ico" style="color:var(--warn); display:inline-flex"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-pencil"/></svg></span>
+          <span class="txt" style="color:var(--accent)">…/src/FileBrowser.tsx</span></div>
+      </div>
+      <div class="old-cmd" style="border-left-color:var(--warn); background:var(--bg-base)">
+        <div class="old-head"><span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+          <span class="ico" style="color:var(--warn); display:inline-flex"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-pencil"/></svg></span>
+          <span class="txt" style="color:var(--accent)">…/src/FileBrowser.tsx</span></div>
+      </div>
+      <div style="color:var(--text-dimmer); font-size:var(--fs-micro); text-align:center; padding-top:4px">同一个文件，说了三遍</div>
+    </div>
+  </div>
+  <div>
+    <div class="colhd"><b>新版</b><span class="pill good">1 张卡</span><span class="ruler">量感合并</span></div>
+    <div class="stage coarse">
+      <div class="run t-warn">
+        <div class="run-head open">
+          <span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+          <span class="ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-pencil"/></svg></span>
+          <span class="nm">改文件</span><span class="cnt">×3</span>
+          <button class="link" style="flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left">…/src/FileBrowser.tsx</button>
+          <span class="slot plus">+64</span><span class="slot minus">−9</span>
+        </div>
+        <div class="run-body">
+          <div class="mdiff">
+            <div class="mdiff-hunk">第 1 处 · 第 42 行<span class="sp"></span>+3 −1</div>
+            <div class="dline del"><span class="dnum">42</span><span class="dsign">-</span><span class="dtext">const TREE_DEFAULT = 240</span></div>
+            <div class="dline add"><span class="dnum">42</span><span class="dsign">+</span><span class="dtext">const TREE_MIN = 180, TREE_MAX = 480, TREE_DEFAULT = 260</span></div>
+            <div class="dline add"><span class="dnum">43</span><span class="dsign">+</span><span class="dtext">const PREVIEW_MIN = 280</span></div>
+            <div class="mdiff-hunk" style="border-top:1px solid var(--border)">第 2 处 · 第 118 行<span class="sp"></span>+2 −0</div>
+            <div class="dline add"><span class="dnum">118</span><span class="dsign">+</span><span class="dtext">const twoPane = !!view &amp;&amp; dockW &gt;= SPLIT_MIN</span></div>
+            <div class="dline add"><span class="dnum">119</span><span class="dsign">+</span><span class="dtext">const [treeW, setTreeW] = useState(TREE_DEFAULT)</span></div>
+            <div class="mdiff-hunk" style="border-top:1px solid var(--border)">第 3 处 · 第 204 行<span class="sp"></span>+1 −1</div>
+            <div class="dline del"><span class="dnum">204</span><span class="dsign">-</span><span class="dtext">&lt;Viewer path={view} accent={accent} /&gt;</span></div>
+            <div class="dline add"><span class="dnum">204</span><span class="dsign">+</span><span class="dtext">&lt;Viewer path={view} accent={accent} inline /&gt;</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<ul class="pts">
+  <li><b>合并只按路径，不按内容。</b>三次 Edit 的 <code>old_string</code> 各改各的位置，
+      逐次算 LCS 再按行号排序拼接就行——不要试图把它们合成「一次改动」，那会算错。</li>
+  <li><b>文件名还是可点的</b>（点开右栏那个文件，行为不变），展开/收起交给左边箭头，
+      沿用 <code>ToolCard</code> 已经定下的分工。</li>
+  <li><b>不同路径不合并</b>：改 3 个文件就是 3 行，每行一个路径 + 各自的 <code>+N −M</code>，
+      组头写总量 <code>3 个文件 +102 −31</code>。</li>
+</ul>
+
+<h2>5 · 读 / 查组：本来就一行，但同样要收</h2>
+
+<p class="lede">
+<code>Read</code> / <code>Grep</code> / <code>Glob</code> 现在已经是一行式，问题不在单行高度，
+在<b>数量</b>——一次探索十几个 Read 铺下去，正文被推到屏幕外。同一套规则照用：
+跑完折成 <code>读查 · 12 个文件</code> 一行，展开是文件名列表（可点开）。</p>
+
+<div class="cols">
+  <div>
+    <div class="colhd"><b>收起</b><span class="ruler">26px</span></div>
+    <div class="stage">
+      <div class="run t-acc">
+        <div class="run-head">
+          <span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+          <span class="ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-read"/></svg></span>
+          <span class="nm">读查</span><span class="cnt">12</span>
+          <span class="last">…/src/chat/tool-parts.tsx</span>
+          <span class="slot">4 处搜索</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="colhd"><b>展开</b><span class="ruler">每行 26px</span></div>
+    <div class="stage">
+      <div class="run t-acc">
+        <div class="run-head open">
+          <span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+          <span class="ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-read"/></svg></span>
+          <span class="nm">读查</span><span class="cnt">12</span><span class="last"></span>
+        </div>
+        <div class="run-body">
+          <div class="rrow"><span class="ico"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-read"/></svg></span>
+            <button class="link cmd" style="text-align:left">…/src/chat/tool-parts.tsx</button><span class="slot">382 行</span></div>
+          <div class="rrow"><span class="ico"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-read"/></svg></span>
+            <button class="link cmd" style="text-align:left">…/src/chat/Message.tsx</button><span class="slot">148 行</span></div>
+          <div class="rrow click"><span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+            <span class="ico"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-search"/></svg></span>
+            <span class="cmd plain">cc-cmd|cc-toolrow</span><span class="desc">frontend/src</span><span class="slot">27 处</span></div>
+          <div style="text-align:center; color:var(--text-dimmer); font-size:var(--fs-micro); padding:4px 0">⋯ 还有 9 条 ⋯</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2>6 · 折叠时机：一台很小的状态机</h2>
+
+<p class="lede">
+「自动折叠」最容易做坏的地方是<b>跟用户抢方向盘</b>：人刚展开看输出，一次轮询回来又给收了。
+规则写死成三条，任何时候都不许违反。</p>
+
+<pre class="code">run.state =
+  <b>live</b>     ← 组里还有 tool_use 没配到 result
+  <b>settled</b>  ← 全部有结果
+
+渲染时的 open：
+  <i>userToggled.has(run.key)</i>  → 用用户那次的值，<u>永远优先</u>
+  state === <b>live</b>            → 展开（跟着现场走）
+  state === <b>settled</b> && 全成功 → <b>收起</b>
+  state === <b>settled</b> && 有失败 → 收起，但<em>失败行提到组头下面，单独展开</em>
+
+run.key = 组内第一条 tool_use 的 id      <s>// 不用下标：轮询插入新消息会整体位移</s>
+userToggled: Map&lt;string, boolean&gt;       <s>// 存在 ChatShell，随会话切换清空</s></pre>
+
+<ul class="pts">
+  <li><b>用户开过的组，此后永不自动收</b>。哪怕组从 live 变成 settled，也只按用户那次的值走。</li>
+  <li><b>live → settled 的那一刻会「塌」一下</b>：正在看的组突然收起是很讨厌的。
+      所以只在<b>该组不在视口内</b>时立刻收；在视口内则等到<b>有新消息追加到它下面</b>再收，
+      塌陷发生在视线之外。</li>
+  <li><b>状态条的「跳到错误」要能穿透折叠</b>：<code>StatusBar</code> 现在按 <code>data-msg-id</code>
+      滚过去，如果那条被折进组里就滚了个寂寞——跳转前先把目标所在的组置为展开
+      （写进 <code>userToggled</code>），再 <code>scrollIntoView</code>。</li>
+  <li><b>浏览器 Ctrl+F 搜不到被折起的内容</b>，这是折叠的固有代价。缓解：组头摘要里带最后一条命令原文；
+      真要全文找走会话搜索（⌘K），那本来就是搜转录全文的。<b>不做</b>「搜索时自动展开全部」——
+      那等于随机把 430px 还回来。</li>
+</ul>
+
+<h2>7 · 手机：同样 5 条命令，两台机对照</h2>
+
+<p class="lede">左边是今天的真机（截图那一屏），右边是新版。同一段对话、同一个可视高度（430px）。</p>
+
+<div class="phones">
+  <div>
+    <div class="phone">
+      <div class="phone-notch"><i></i></div>
+      <div class="phone-head">
+        <span class="ib"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-back"/></svg></span>
+        <span class="nm">roam-bug修复</span>
+        <span class="ib"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-more"/></svg></span>
+      </div>
+      <div class="phone-body coarse scrolled">
+        <div class="old-cmd"><div class="old-head"><span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span><span class="dollar">$</span><span class="txt">cat &gt;&gt; src/FileBrowse…</span><span class="old-lines">9 行</span></div><div class="old-desc">Test the two-pane split</div></div>
+        <div class="old-cmd"><div class="old-head"><span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span><span class="dollar">$</span><span class="txt">npm run typecheck 2&gt;…</span><span class="old-lines">6 行</span></div><div class="old-desc">Full verification</div></div>
+        <div class="old-cmd"><div class="old-head"><span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span><span class="dollar">$</span><span class="txt">cd /home/ai/codes/tt…</span><span class="old-lines">68 行</span></div><div class="old-desc">Commit and push</div></div>
+        <div class="old-cmd"><div class="old-head"><span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span><span class="dollar">$</span><span class="txt">cat &gt; /tmp/claude-100…</span><span class="old-lines">2 行</span></div><div class="old-desc">Open the PR</div></div>
+        <div class="old-cmd"><div class="old-head"><span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span><span class="dollar">$</span><span class="txt">until [ "$(gh api rep…</span><span class="old-lines">1 行</span></div><div class="old-desc">Wait for CI</div></div>
+      </div>
+      <div class="phone-foot">
+        <div class="statusbar"><span class="it" style="color:var(--warn)">跳过确认</span><span class="it" style="color:var(--accent)">4.6%</span><span class="it">8/9</span><span class="it">main</span></div>
+        <div class="fakeinput">给 Claude 发消息</div>
+      </div>
+      <div class="phone-safe"><i></i></div>
+    </div>
+    <div class="phone-tag"><b>现状</b> · 5 条命令占满一屏，<span style="color:var(--danger)">正文一个字都看不见</span></div>
+  </div>
+
+  <div>
+    <div class="phone">
+      <div class="phone-notch"><i></i></div>
+      <div class="phone-head">
+        <span class="ib"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-back"/></svg></span>
+        <span class="nm">roam-bug修复</span>
+        <span class="ib"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-more"/></svg></span>
+      </div>
+      <div class="phone-body coarse">
+        <div class="bubble user" style="font-size:var(--fs-sm)">文件抽屉也要分文件夹、文件两层，可以左右拖</div>
+        <div class="foot" style="float:right">14:21</div>
+        <div style="clear:both"></div>
+        <div class="bubble" style="font-size:var(--fs-sm); margin-top:var(--sp-2)">
+          分界条复用 <code style="font:var(--fs-meta)/1.4 var(--mono); background:var(--list-hover); padding:1px 4px; border-radius:4px">usePointerResize</code>，
+          跟 FileWorkspace 那个分栏把手是同一个。窄于 465 回退成单栏浮层。
+        </div>
+        <div class="run t-warn">
+          <div class="run-head">
+            <span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+            <span class="ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-pencil"/></svg></span>
+            <span class="nm">改文件</span><span class="cnt">×3</span><span class="last">FileBrowser.tsx</span>
+            <span class="slot plus" style="width:auto">+64</span><span class="slot minus" style="width:auto">−9</span>
+          </div>
+        </div>
+        <div class="run t-ok">
+          <div class="run-head">
+            <span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+            <span class="ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-term"/></svg></span>
+            <span class="nm">终端</span><span class="cnt">5</span><span class="last">until [ "$(gh api…</span>
+            <span class="slot">68 行</span>
+          </div>
+        </div>
+        <div class="bubble" style="font-size:var(--fs-sm); margin-top:var(--sp-2)">
+          PR <span style="color:var(--accent)">#169</span> 已开，CI 三项全绿。等你发话合入。
+        </div>
+        <div class="foot">14:42 · 复制</div>
+      </div>
+      <div class="phone-foot">
+        <div class="statusbar"><span class="it" style="color:var(--warn)">跳过确认</span><span class="it" style="color:var(--accent)">4.6%</span><span class="it">8/9</span><span class="it">main</span></div>
+        <div class="fakeinput">给 Claude 发消息</div>
+      </div>
+      <div class="phone-safe"><i></i></div>
+    </div>
+    <div class="phone-tag"><b>新版</b> · 同一段对话：<span style="color:var(--ok)">问题、结论、两个组</span>全在一屏</div>
+  </div>
+</div>
+
+<div class="bars">
+  <div class="bar"><span class="lb">现状 · 5 条命令</span><span class="tr"><i style="width:100%; background:var(--danger)"></i></span><span class="vl">430px</span></div>
+  <div class="bar"><span class="lb">新版 · 展开态</span><span class="tr"><i style="width:65%; background:var(--warn)"></i></span><span class="vl">280px −35%</span></div>
+  <div class="bar"><span class="lb">新版 · 收起态</span><span class="tr"><i style="width:14%; background:var(--ok)"></i></span><span class="vl">60px −86%</span></div>
+</div>
+
+<table>
+  <thead><tr><th>形态</th><th>手机（粗指针）</th><th>桌面</th><th>算法</th></tr></thead>
+  <tbody>
+    <tr><td>现状 5 条</td><td class="num lose">430</td><td class="num lose">355</td><td>86 / 71 × 5</td></tr>
+    <tr><td>新版 · 收起</td><td class="num win">60</td><td class="num win">42</td><td>组头 44/26 + 组外边距 16</td></tr>
+    <tr><td>新版 · 展开</td><td class="num win">280</td><td class="num win">172</td><td>组头 + 行 44/26 × 5 + 16</td></tr>
+    <tr><td>新版 · 展开且看一条输出</td><td class="num">≈ 400</td><td class="num">≈ 290</td><td>再加一段 <code>max-height:190</code> 的输出</td></tr>
+  </tbody>
+</table>
+
+<h2>8 · 桌面整屏</h2>
+
+<p class="lede">桌面上密度收益同样明显，但更重要的是<b>节奏</b>：正文气泡之间夹着的不再是五块黑砖，
+而是一条条细线，眼睛能顺着正文往下读。</p>
+
+<div class="screen">
+  <div class="screen-tabs">
+    <div class="tab on"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-term"/></svg> Claude</div>
+    <div class="tab">终端</div><div class="tab">文件</div><div class="tab">Git</div>
+    <span class="sp"></span>
+  </div>
+  <div class="screen-body">
+    <div class="bubble user">文件抽屉也要弹出文件夹、文件两层，且可以左右拖动</div>
+    <div style="height:var(--sp-2)"></div>
+    <div class="bubble">先看现在的 dock 布局是怎么摆的，再决定分界条挂在哪一层。</div>
+
+    <div class="run t-acc">
+      <div class="run-head">
+        <span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+        <span class="ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-read"/></svg></span>
+        <span class="nm">读查</span><span class="cnt">6</span>
+        <span class="last">…/src/FileBrowser.tsx</span><span class="slot">2 处搜索</span>
+      </div>
+    </div>
+
+    <div class="run t-warn">
+      <div class="run-head open">
+        <span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+        <span class="ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-pencil"/></svg></span>
+        <span class="nm">改文件</span><span class="cnt">2 个文件</span><span class="last"></span>
+        <span class="slot plus">+126</span><span class="slot minus">−9</span>
+      </div>
+      <div class="run-body">
+        <div class="rrow click"><span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+          <span class="ico" style="color:var(--warn)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-pencil"/></svg></span>
+          <button class="link cmd" style="text-align:left">…/src/FileBrowser.tsx</button><span class="desc">×3 处</span>
+          <span class="slot plus">+64</span><span class="slot minus">−9</span></div>
+        <div class="rrow click"><span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+          <span class="ico" style="color:var(--ok)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-pencil"/></svg></span>
+          <button class="link cmd" style="text-align:left">…/src/FileBrowser.test.tsx</button><span class="desc">新建</span>
+          <span class="slot plus">+62</span><span class="slot"></span></div>
+      </div>
+    </div>
+
+    <div class="run t-ok">
+      <div class="run-head">
+        <span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+        <span class="ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-term"/></svg></span>
+        <span class="nm">终端</span><span class="cnt">5</span>
+        <span class="last">until [ "$(gh api repos/ybz21/Roam/commits/…</span><span class="slot">68 行</span>
+      </div>
+    </div>
+
+    <div class="bubble" style="margin-top:var(--sp-2)">
+      抽屉里现在是<b>文件夹 / 文件两栏并排，中间可拖</b>。分界条复用 <code style="font:var(--fs-meta)/1.4 var(--mono); background:var(--list-hover); padding:1px 5px; border-radius:4px">usePointerResize</code>，
+      窄于 465px 回退成单栏浮层。PR #169 CI 三项全绿。
+    </div>
+    <div class="foot">14:42 · 复制</div>
+  </div>
+  <div class="screen-foot">
+    <div class="statusbar">
+      <span class="it" style="color:var(--warn)">跳过确认</span>
+      <span class="it" style="color:var(--accent)">4.6%</span>
+      <span class="it">8/9</span><span class="it">main</span><span class="it">21h 29m</span>
+    </div>
+    <div class="fakeinput">给 Claude 发消息（Enter 发送，Shift+Enter 换行）</div>
+  </div>
+</div>
+
+<h2>9 · 一套结构，两端适配</h2>
+
+<p class="lede">
+手机与桌面<b>不是两套设计</b>，是同一份 DOM 在两种密度下的两种落法：
+组头、行、输出三层结构完全一致，组件也只有一套（<code>ToolRun</code> + <code>RunRow</code>）。
+差异全部靠 <code>&lt;html&gt;</code> 上的 <code>data-size</code> / <code>data-pointer</code> 走 CSS，
+<b>组件里一个分支都不写</b>（设计系统硬规则：断点只有 <code>useLayout()</code> 一个入口，
+纯样式差异不进 JS）。</p>
+
+<table>
+  <thead><tr><th style="width:26%">维度</th><th>手机 <code>data-size="compact"</code></th><th>桌面 <code>regular / large</code></th><th style="width:20%">怎么实现</th></tr></thead>
+  <tbody>
+    <tr><td><b>结构</b></td><td colspan="2" style="text-align:center; color:var(--ok)">完全相同：左脊 → 组头 → 行 → 输出</td><td>同一份 JSX</td></tr>
+    <tr><td><b>可点行高</b></td><td>44px（<code>data-pointer="coarse"</code>）</td><td>26px</td><td><code>@media (pointer:coarse)</code></td></tr>
+    <tr><td><b>纯展示行高</b></td><td colspan="2" style="text-align:center">26px —— 不是按钮就不受 44 约束</td><td>不加 <code>.is-clickable</code></td></tr>
+    <tr><td><b>行尾 description</b></td><td>隐藏（挤掉命令本身不值）</td><td>显示，最宽 34%</td><td><code>[data-size=compact] .cc-run-desc{display:none}</code></td></tr>
+    <tr><td><b>组头「最后一条」</b></td><td>显示，但让位给量感槽</td><td>显示全宽</td><td>同一条 <code>flex:1 1 auto</code> + <code>min-width:0</code>，自动让位</td></tr>
+    <tr><td><b>量感槽</b></td><td>宽度自适应，只留一项（<code>68 行</code> 或 <code>+64</code>）</td><td>定宽 52px，<code>+N</code> <code>−M</code> 两列对齐</td><td>桌面加 <code>width:52px</code>，手机 <code>width:auto</code></td></tr>
+    <tr><td><b>展开输出</b></td><td>手风琴：同组同时只开一条</td><td>不限制</td><td><code>useLayout().size</code> 传一个 <code>accordion</code> 布尔</td></tr>
+    <tr><td><b>输出最大高</b></td><td>190px</td><td>320px（沿用现有 <code>.cc-cmd-out</code>）</td><td>CSS 变量 <code>--run-out-max</code></td></tr>
+    <tr><td><b>复制按钮</b></td><td>常驻 <code>opacity:.55</code></td><td>hover 出现</td><td>现有 <code>.cc-toolcopy</code> 规则，不改</td></tr>
+    <tr><td><b>折叠规则</b></td><td colspan="2" style="text-align:center; color:var(--ok)">完全相同（§6 那台状态机，与视口无关）</td><td>纯逻辑</td></tr>
+  </tbody>
+</table>
+
+<div class="note">
+  <b>唯一进 JS 的那一处是手风琴</b>，因为它是行为不是样式。走
+  <code>const { size } = useLayout()</code> 拿一个 <code>accordion = size === 'compact'</code> 布尔传进
+  <code>ToolRun</code>——<b>不读 <code>window.innerWidth</code>，不自己 <code>matchMedia</code></b>。
+  其余全是 CSS，改断点时不用碰组件。
+</div>
+
+<h3>同一段内容，三种宽度</h3>
+<p class="lede">下面三块是<b>同一份 DOM</b>（同一个终端组、同一条展开的命令），只是容器宽度不同。
+注意行内元素的让位顺序：<b>description 先走，其次是组头的「最后一条」，命令本身永远不让</b>。</p>
+
+<div class="widths">
+  <div class="wcol" style="max-width:340px">
+    <div class="colhd"><b>手机</b><span class="pill">340px · coarse</span></div>
+    <div class="stage coarse" style="padding:var(--sp-2)">
+      <div class="run t-ok">
+        <div class="run-head open">
+          <span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+          <span class="ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-term"/></svg></span>
+          <span class="nm">终端</span><span class="cnt">5</span><span class="last">git commit -m…</span>
+          <span class="slot" style="width:auto">68 行</span>
+        </div>
+        <div class="run-body">
+          <div class="rrow click"><span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+            <span class="dollar">$</span><span class="cmd">npm run typecheck</span>
+            <span class="desc hide-compact">全量校验</span><span class="slot" style="width:auto">6 行</span></div>
+          <div class="rrow click open"><span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+            <span class="dollar">$</span><span class="cmd">git commit -m "feat(web): …"</span>
+            <span class="desc hide-compact">提交并推送</span><span class="slot" style="width:auto">68 行</span></div>
+          <pre class="rout" style="max-height:76px">[feat/file-dock-split de79a0c]
+ 2 files changed, 126 insertions(+)
+To github.com:ybz21/Roam.git</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="wcol" style="max-width:520px">
+    <div class="colhd"><b>平板 / 窄桌面</b><span class="pill">520px</span></div>
+    <div class="stage" style="padding:var(--sp-2)">
+      <div class="run t-ok">
+        <div class="run-head open">
+          <span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+          <span class="ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-term"/></svg></span>
+          <span class="nm">终端</span><span class="cnt">5</span><span class="last">git commit -m "feat(web): 文件抽屉…</span>
+          <span class="slot">68 行</span>
+        </div>
+        <div class="run-body">
+          <div class="rrow click"><span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+            <span class="dollar">$</span><span class="cmd">npm run typecheck</span>
+            <span class="desc">全量校验</span><span class="slot">6 行</span></div>
+          <div class="rrow click open"><span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+            <span class="dollar">$</span><span class="cmd">git commit -m "feat(web): 文件抽屉分两栏"</span>
+            <span class="desc">提交并推送</span><span class="slot">68 行</span></div>
+          <pre class="rout" style="max-height:76px">[feat/file-dock-split de79a0c] feat(web): 文件抽屉分两栏
+ 2 files changed, 126 insertions(+), 9 deletions(-)
+To github.com:ybz21/Roam.git</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="wcol">
+    <div class="colhd"><b>桌面</b><span class="pill">≥ 900px · fine</span></div>
+    <div class="stage" style="padding:var(--sp-2)">
+      <div class="run t-ok">
+        <div class="run-head open">
+          <span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+          <span class="ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-term"/></svg></span>
+          <span class="nm">终端</span><span class="cnt">5</span><span class="last">git commit -m "feat(web): 文件抽屉分「文件夹 / 文件」两栏，中间可拖"</span>
+          <span class="slot">68 行</span>
+        </div>
+        <div class="run-body">
+          <div class="rrow click"><span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+            <span class="dollar">$</span><span class="cmd">npm run typecheck 2&gt;&amp;1 | tail -20</span>
+            <span class="desc">全量校验</span><span class="slot">6 行</span></div>
+          <div class="rrow click open"><span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg></span>
+            <span class="dollar">$</span><span class="cmd">git commit -m "feat(web): 文件抽屉分「文件夹 / 文件」两栏，中间可拖"</span>
+            <span class="desc">提交并推送</span><span class="slot">68 行</span></div>
+          <pre class="rout" style="max-height:76px">[feat/file-dock-split de79a0c] feat(web): 文件抽屉分「文件夹 / 文件」两栏，中间可拖
+ 2 files changed, 126 insertions(+), 9 deletions(-)
+To github.com:ybz21/Roam.git
+   bf14b4e..de79a0c  feat/file-dock-split -&gt; feat/file-dock-split</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note warn">
+  <b>让位顺序是设计的一部分，不是浏览器随手截的。</b>
+  三段文本都设 <code>min-width:0</code> 才会真的收缩；优先级用 <code>flex-shrink</code> 排：
+  <code>desc</code> 最先（<code>flex:0 1 auto</code> + <code>max-width:34%</code>），
+  组头的 <code>last</code> 其次，<code>cmd</code> 给 <code>flex:1 1 auto</code> 且永远保留省略号。
+  量感槽与图标一律 <code>flex:0 0 auto</code>——<b>数字被挤掉等于这一行白排</b>。
+</div>
+
+<h2>10 · 交互与可达性</h2>
+
+<table>
+  <thead><tr><th style="width:22%">项</th><th>规则</th></tr></thead>
+  <tbody>
+    <tr><td><b>命中区</b></td><td>粗指针下<b>可点的行</b>（组头、可展开的命令行）自身 <code>min-height:44px</code>；
+      <b>纯展示行</b>（成功的 Read、没有输出的命令）不是按钮，不受 44 约束，保持 26px。
+      <b>不用伪元素撑命中区</b>——设计 15 试过，44px 伪元素在 1px 间距的行之间会溢出 ±10px，
+      后面的兄弟节点盖在上面，点谁都不准。</td></tr>
+    <tr><td><b>手风琴</b></td><td>手机（<code>data-size="compact"</code>）下<b>同一组内同时只展开一条输出</b>：
+      展开第二条时自动收起第一条。桌面不限制。理由：手机上展开三段输出等于把刚省下的 430px 又还回去。</td></tr>
+    <tr><td><b>键盘</b></td><td>组头与行都是 <code>role="button" tabIndex=0</code>，
+      <kbd>Enter</kbd>/<kbd>Space</kbd> 切换；<code>aria-expanded</code> 如实给。
+      组头的 <code>aria-label</code> 要念得出内容：「终端组，5 条命令，68 行输出，已折叠」。</td></tr>
+    <tr><td><b>复制</b></td><td>复制按钮跟到行上（hover 出现 / 粗指针常驻 .55 透明度）。
+      <b>组头也给一颗</b>：复制整组命令，一行一条——这是「把刚才那串命令抄下来」最常见的用法。</td></tr>
+    <tr><td><b>动效</b></td><td>折叠只做 <code>height</code> 过渡 120ms，
+      <code>prefers-reduced-motion</code> 下直接切。<b>不做</b>逐行淡入，长列表上会掉帧。</td></tr>
+  </tbody>
+</table>
+
+<h2>11 · 实现拆解</h2>
+
+<pre class="code"><b>L-list  ChatShell.tsx</b>          ← <i>新增：groupRuns(msgs)</i> 把连续「纯工具消息」并成 run
+   │                              run = { key, family, blocks[], state }
+   ├─ <b>chat/ToolRun.tsx</b>  <i>新文件</i>    组壳：左脊 + 组头 + 折叠 + userToggled
+   │     └─ <b>chat/tool-render.tsx</b>     <s>不动</s> 现有 TOOLS 注册表原样复用
+   │           └─ <b>tool-parts.tsx</b>     <i>改：CommandRow / ToolCard 加 dense 行模式</i>
+   └─ <b>chat/Message.tsx</b>               <s>不动</s> 单条消息内的分段逻辑保持
+
+<b>分组函数（纯函数，单测好写）</b>
+  groupRuns(msgs: Msg[]): (Msg | Run)[]
+    · 只并<em>相邻</em>且<em>只含 tool_use / tool_result</em> 的助手消息
+    · 家族不同不并（终端 / 改文件 / 读查各自成组）
+    · <u>少于 2 条不成组</u>，原样平铺——单独一条命令套个组头是净亏
+    · 中间夹着正文、思考、用户消息 → 断组
+
+<b>合并 diff（tool-parts.tsx）</b>
+  mergeEdits(uses: Block[]): { path, hunks: DiffLine[][], plus, minus }
+    · 同 path 连续的 Edit/Write 才并；逐次 cachedDiff 后按行号排序拼接
+    · 复用已有的 cachedDiff / LRU，不新写 diff 算法</pre>
+
+<table>
+  <thead><tr><th style="width:30%">改动</th><th>量</th><th>风险</th></tr></thead>
+  <tbody>
+    <tr><td><code>chat/runs.ts</code> — <code>groupRuns</code> + <code>runSummary</code></td><td>新文件，约 90 行纯函数</td><td class="win">低，纯函数全单测</td></tr>
+    <tr><td><code>chat/ToolRun.tsx</code> — 组壳 + 折叠状态机</td><td>新文件，约 120 行</td><td class="win">低</td></tr>
+    <tr><td><code>tool-parts.tsx</code> — <code>CommandRow</code> / <code>ToolCard</code> 加 <code>dense</code></td><td>改 2 个组件，各 ~20 行</td><td class="win">低，默认值保持现状</td></tr>
+    <tr><td><code>ChatShell.tsx</code> — 渲染前过一道 <code>groupRuns</code></td><td>~15 行</td><td class="win">中，会话滚动锚点要跟着 run 走</td></tr>
+    <tr><td><code>index.css</code> — <code>.cc-run*</code> 一节</td><td>~120 行，全令牌</td><td class="win">低</td></tr>
+    <tr><td>i18n：<code>chat.runTerminal</code> / <code>runEdit</code> / <code>runRead</code> / <code>runCount</code> / <code>runOkFail</code> / <code>runHunk</code> / <code>copyAllCommands</code></td><td>7 个 key × 2 语言</td><td class="win">低</td></tr>
+  </tbody>
+</table>
+
+<h2>12 · 不做</h2>
+
+<ul class="pts">
+  <li><b>不做「全部展开 / 全部收起」总开关。</b>看起来很省事，实际上人只想看某一处；
+      给了总开关就会有人一键全开，然后回到 430px。</li>
+  <li><b>不把正文也折进组里。</b>组只装工具。助手说的话永远平铺——那是这一页真正的主体。</li>
+  <li><b>不做跨用户回合的分组。</b>一次用户提问到下次提问之间才可能成组；
+      跨回合合并会让「这一步是回应哪句话」彻底丢失。</li>
+  <li><b>不改任何解析、判定与 diff 算法</b>，全部沿用设计 15 已落地的实现。</li>
+  <li><b>不做虚拟滚动</b>。密度做完之后，一屏的 DOM 量已经降一个量级；虚拟滚动会跟
+      「跳到错误」「保持底部」两处现有逻辑打架，收益不抵成本。</li>
+</ul>
+
+<h2>13 · 验收</h2>
+
+<ol class="pts">
+  <li><code>npm run typecheck &amp;&amp; npm run i18n:check &amp;&amp; npx vitest run &amp;&amp; npm run build</code> 四件套全绿。</li>
+  <li>新增单测：<code>runs.test.ts</code>（相邻纯工具消息成组、正文断组、单条不成组、家族不混）；
+      <code>ToolRun.test.tsx</code>（settled 全成功默认收起、有失败时红行在外、用户展开后不被自动收）。</li>
+  <li>真机（adb + CDP，见 <code>docs/development/web-ui-checklist.md</code>）：
+      <b>就用截图里那段会话</b>，量一次实际像素——目标是 5 条命令收起态 ≤ 64px；
+      再逐行点一遍，确认 44 命中区没有互相偷点击；深浅两套主题各一遍。</li>
+</ol>
+
+</div>
+
+<script>
+  const btn = document.getElementById('theme')
+  btn.addEventListener('click', () => {
+    const light = document.documentElement.getAttribute('data-theme') === 'light'
+    document.documentElement.setAttribute('data-theme', light ? 'dark' : 'light')
+    btn.textContent = light ? '切到浅色' : '切到深色'
+  })
+</script>
+</body>
+</html>
