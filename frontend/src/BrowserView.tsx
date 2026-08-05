@@ -3,16 +3,17 @@
 //   收 {type:'frame', data, w, h} | {type:'pong', t} | {type:'error', msg}
 //   发 {type:'nav', url} | {type:'ping', t} | {type:'mouse'|'wheel'|'key', ...}（输入仅 control=1 生效）
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Button, Input, Select, App as AntApp } from 'antd'
+import { Button, Dropdown, Input, Select, App as AntApp } from 'antd'
 import { api } from './api'
 import { useI18n } from './i18n'
 import { usePreferences, savePreferences } from './preferences'
 import { connect, type DuplexTransport } from './p2p/transport'
 import {
-  BotIcon, ChevronLeft, ChevronRight, CloseIcon, CodeIcon, HomeIcon, OpenInIcon,
+  BotIcon, ChevronLeft, ChevronRight, CloseIcon, CodeIcon, HomeIcon, MoreIcon, OpenInIcon,
   PlusIcon, RefreshIcon, RotateScreenIcon, UserIcon,
 } from './icons'
-import { MirrorHead, QualityPicker, StreamStat, type Quality } from './mirror'
+import { MirrorHead, StreamControl, type Quality } from './mirror'
+import { useLayout } from './layout'
 
 interface TabInfo { id: string; title: string; url: string }
 
@@ -103,6 +104,8 @@ function mergeTabs(prev: TabInfo[], incoming: TabInfo[]): TabInfo[] {
 export default function BrowserView() {
   const { message } = AntApp.useApp()
   const { t } = useI18n()
+  // 断点只走 useLayout()：这里换的是结构（低频钮收进「更多」、模式钮换行落位），不是样式
+  const { phone: isPhone } = useLayout()
   const [prefs] = usePreferences()
   const imgRef = useRef<HTMLImageElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
@@ -641,46 +644,47 @@ export default function BrowserView() {
     send({ type: 'key', sub: 'up', key: e.key, modifiers: mods(e) })
   }
 
+  {/* 常驻的模式切换：智能体模式(面板跟着 agent 的标签走，高亮) / 手动模式(用户已接管，
+      不高亮)。双向切换：手动模式下点它切回智能体模式；智能体模式下点它主动切到手动模式，
+      不用非得去画面里点一下才能接管。
+      高亮态交给 antd 的 primary——照抄 --accent-solid 再补一圈辉光，画出来必然比 antd
+      自己按 seed 推的那档差一点（darkAlgorithm 会再推一层）。
+      桌面挂在标签条右端，手机挂到第三行控制条——标签条在窄屏本来就要横滑，
+      右端再挂一枚带文字的按钮，标签就只剩一枚的位置了。 */}
+  const followBtn = (
+    <Button
+      size="small"
+      onClick={() => (followPaused ? resumeFollow() : pauseFollow())}
+      title={followPaused ? t('browser.followModeHumanTitle') : t('browser.followModeAgentTitle')}
+      icon={followPaused ? <UserIcon size={13} /> : <BotIcon size={13} />}
+      type={followPaused ? 'default' : 'primary'}
+    >
+      {followPaused ? t('browser.followModeHuman') : t('browser.followModeAgent')}
+    </Button>
+  )
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* 第一行 = 这块屏幕本身：页名 + 标签页 + 跟随 + 流状态。
-          清晰度/旋转/设备是「怎么看」，挪到第二行地址栏尾部与导航同处一条，
-          否则第一行右半边被四枚清晰度按钮 + 旋转 + 状态标签占满，标签页没地方长。 */}
+      {/* 页头三行（手机同款，只是每行装的东西按档位收放）：
+            ① 标签条          —— 这块屏幕是哪个页面
+            ② 导航 + 地址     —— 去哪儿
+            ③ 控制条          —— 怎么看：模式 / 连接与画质 / 设备 / 其余收进「更多」
+          从前是五行：模式与流状态跟着标签条换行成一条、清晰度另起一条、
+          「外部打开」还被挤到第五行独占一整行。手机上正文开始前先滚过 250px 的工具条。 */}
       <TabBar
         tabs={tabs}
         active={target}
         onSelect={switchTab}
         onClose={closeTab}
         onAdd={newTab}
-        extra={<>
-          {/* 常驻的模式切换：智能体模式(面板跟着 agent 的标签走，高亮) / 手动模式(用户
-              已接管，不高亮)。双向切换：手动模式下点它切回智能体模式；智能体模式下点它
-              主动切到手动模式，不用非得去画面里点一下才能接管。
-              高亮态交给 antd 的 primary——照抄 --accent-solid 再补一圈辉光，画出来必然
-              比 antd 自己按 seed 推的那档差一点（darkAlgorithm 会再推一层）。 */}
-          <Button
-            size="small"
-            onClick={() => (followPaused ? resumeFollow() : pauseFollow())}
-            title={followPaused ? t('browser.followModeHumanTitle') : t('browser.followModeAgentTitle')}
-            icon={followPaused ? <UserIcon size={13} /> : <BotIcon size={13} />}
-            type={followPaused ? 'default' : 'primary'}
-          >
-            {followPaused ? t('browser.followModeHuman') : t('browser.followModeAgent')}
-          </Button>
-          <StreamStat connected={connected} label={connected ? t('browser.connected') : t('browser.disconnected')}
-            level={quality === 'auto' ? levelName : undefined}
-            latency={latency} bytesPerSec={bw} fps={fps} />
-        </>}
+        extra={isPhone ? undefined : followBtn}
       />
-      {/* 第二行 = 导航与看法：前进后退 / 地址 / 前往，然后是清晰度、旋转、设备、调试、外部打开。
-          后四个原来是文字按钮（前往·调试·外部打开）+ 一枚自画的实心旋转 SVG，
-          三段文字挤在地址栏右边、图标粗细还各不相同；现在统一成线性图标 + tooltip。 */}
       <div className="bv-bar">
         <Button.Group size="small">
           <Button onClick={() => act('back')} title={t('file.back')} icon={<ChevronLeft />} />
           <Button onClick={() => act('forward')} title={t('file.forward')} icon={<ChevronRight />} />
           <Button onClick={() => act('reload')} title={t('common.refresh')} icon={<RefreshIcon size={15} />} />
-          <Button onClick={() => act('navigate', { url: home })} title={t('browser.home')} icon={<HomeIcon size={15} />} />
+          {!isPhone && <Button onClick={() => act('navigate', { url: home })} title={t('browser.home')} icon={<HomeIcon size={15} />} />}
         </Button.Group>
         <Input
           size="small"
@@ -693,13 +697,14 @@ export default function BrowserView() {
           onPressEnter={navigate}
         />
         <Button size="small" type="primary" onClick={navigate}>{t('browser.go')}</Button>
-        <span className="tt-pagedivider" aria-hidden="true" />
-        <QualityPicker value={quality} onChange={changeQuality} />
-        {/* 旋转：激活态由 antd 的 primary 给，不再照抄十六进制 + 一圈辉光 */}
-        <Button size="small" onClick={rotate} title={t('browser.rotateTitle')}
-          type={rotation ? 'primary' : 'default'} icon={<RotateScreenIcon />}>
-          {rotation ? `${rotation}°` : null}
-        </Button>
+      </div>
+      <div className="bv-bar is-ctl">
+        {isPhone && followBtn}
+        <StreamControl
+          connected={connected} label={connected ? t('browser.connected') : t('browser.disconnected')}
+          quality={quality} onQuality={changeQuality}
+          level={quality === 'auto' ? levelName : undefined}
+          latency={latency} bytesPerSec={bw} fps={fps} />
         {/* 手机模式：选机型即模拟移动视口（持久化、重连生效） */}
         <Select
           size="small"
@@ -712,8 +717,31 @@ export default function BrowserView() {
             ...DEVICES.map((d) => ({ value: d.key, label: t(d.nameKey) })),
           ]}
         />
-        <Button size="small" onClick={openDevtools} title={t('browser.devtoolsTitle')} icon={<CodeIcon />} />
-        <Button size="small" onClick={openExternal} title={t('browser.openExternalTitle')} icon={<OpenInIcon size={15} />} />
+        <span style={{ flex: 1 }} />
+        {/* 旋转 / 调试 / 外部打开：桌面平铺，手机收进「更多」——三枚低频钮不值得在
+            360 的屏上再占一行（从前它们正是把工具条撑到第四、第五行的那几个）。 */}
+        {isPhone ? (
+          <Dropdown trigger={['click']} placement="bottomRight" menu={{
+            items: [
+              { key: 'home', icon: <HomeIcon size={15} />, label: t('browser.home'), onClick: () => act('navigate', { url: home }) },
+              { key: 'rotate', icon: <RotateScreenIcon />, label: rotation ? `${t('browser.rotateTitle')} ${rotation}°` : t('browser.rotateTitle'), onClick: rotate },
+              { key: 'devtools', icon: <CodeIcon />, label: t('browser.devtoolsTitle'), onClick: openDevtools },
+              { key: 'external', icon: <OpenInIcon size={15} />, label: t('browser.openExternalTitle'), onClick: openExternal },
+            ],
+          }}>
+            <Button size="small" icon={<MoreIcon size={15} />} aria-label={t('common.more')} />
+          </Dropdown>
+        ) : (
+          <>
+            {/* 旋转：激活态由 antd 的 primary 给，不再照抄十六进制 + 一圈辉光 */}
+            <Button size="small" onClick={rotate} title={t('browser.rotateTitle')}
+              type={rotation ? 'primary' : 'default'} icon={<RotateScreenIcon />}>
+              {rotation ? `${rotation}°` : null}
+            </Button>
+            <Button size="small" onClick={openDevtools} title={t('browser.devtoolsTitle')} icon={<CodeIcon />} />
+            <Button size="small" onClick={openExternal} title={t('browser.openExternalTitle')} icon={<OpenInIcon size={15} />} />
+          </>
+        )}
       </div>
       <style>{`
         .bv-ripple{position:absolute;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;

@@ -8,7 +8,7 @@ import { api } from './api'
 import { useI18n } from './i18n'
 import { connect, type DuplexTransport } from './p2p/transport'
 import { AppLaunchIcon, PhoneAssistIcon, PhoneBackIcon, PhoneHomeIcon, PhoneRecentsIcon, PowerIcon } from './icons'
-import { MirrorHead, QualityPicker, StreamStat, type Quality } from './mirror'
+import { MirrorHead, StreamControl, type Quality } from './mirror'
 
 interface PhoneApp { id: string; name?: string }
 
@@ -195,11 +195,16 @@ export default function PhoneView() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* 页头：页名 + 清晰度 + 启动应用 + 流状态，一行装下（与浏览器页同一套壳，见 mirror.tsx）。
+      {/* 页头：页名 + 连接与画质 + 启动应用，一行装下（与浏览器页同一套壳，见 mirror.tsx）。
+          「已连接」和四档清晰度现在是**一个**部件（StreamControl），不再一个贴左一个贴右。
           原来是两行：清晰度/状态一行，「启动应用」独占第二行且自垫了 10px 左内边距——
           跟第一行的左沿对不齐，两行毛边。舞台的高度比这一行值钱。 */}
       <MirrorHead name={t('nav.phone')} hint={t('phone.subtitle')}>
-        <QualityPicker value={quality} onChange={changeQuality} />
+        <StreamControl
+          connected={connected} label={connected ? t('phone.connected') : t('phone.disconnected')}
+          quality={quality} onQuality={changeQuality}
+          level={quality === 'auto' ? levelName : undefined}
+          latency={latency} bytesPerSec={bw} fps={fps} />
         <Select
           size="small"
           showSearch
@@ -213,11 +218,6 @@ export default function PhoneView() {
           filterOption={(input, opt) => String(opt?.value || '').toLowerCase().includes(input.toLowerCase())}
           options={apps.map((a) => ({ value: a.id, label: a.name || a.id }))}
         />
-        <span className="end">
-          <StreamStat connected={connected} label={connected ? t('phone.connected') : t('phone.disconnected')}
-            level={quality === 'auto' ? levelName : undefined}
-            latency={latency} bytesPerSec={bw} fps={fps} />
-        </span>
       </MirrorHead>
 
       <style>{`

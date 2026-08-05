@@ -503,37 +503,58 @@ html[data-size="compact"] .tt-pagedivider { display: none; }
 }
 /* 右端的「贴边」槽：控件贴左、状态贴右，中间那段空白由它撑开 */
 .tt-mirror-head .end { margin-left: auto; display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
-/* 清晰度四档在窄屏会把整条撑破——档位本身不缩，让它自己横滑。
-   底槽要自己给：antd 深色档把 Segmented 的轨道色取成 colorBgLayout，在这套主题里
-   正好等于 --bg-base，于是轨道与页面同色、四个档位像散落的文字。
-   描边走 inset ring 而不是 border——border 会把 24 的控件高顶成 26，跟旁边的小按钮错半档。 */
-.tt-mirror-quality {
-  max-width: 100%; overflow-x: auto; scrollbar-width: none;
+/* 连接 + 画质：一个部件（mirror.tsx 的 StreamControl），三段共用一圈描边。
+   从前是分开的两件，「已连接·超清」在一行右端、「自动 标清 高清 超清」在另一行左端，
+   「超清」这个词在屏幕上出现两次——谁也说不清哪个是状态、哪个是开关。
+   描边走 inset ring 而不是 border：border 会把 24 的控件顶成 26，跟旁边的小按钮错半档。 */
+.tt-stream {
+  display: inline-flex; align-items: stretch; flex: 0 0 auto;
+  height: 24px; border-radius: var(--r-xs);
   background: var(--bg-container);
   box-shadow: inset 0 0 0 1px var(--border-subtle);
-}
-.tt-mirror-quality::-webkit-scrollbar { display: none; }
-
-/* 流状态：状态点 + 文案 + 三个定宽数字槽。数值每秒都在跳，定宽才不会带着整条抖 */
-.tt-mirror-stat {
-  display: inline-flex; align-items: center; gap: var(--sp-1);
   font-size: var(--fs-meta); color: var(--text-dim); white-space: nowrap;
 }
-.tt-mirror-stat > i {
+.tt-stream-sec { display: inline-flex; align-items: center; gap: var(--sp-1); padding: 0 var(--sp-2); }
+.tt-stream-sec + .tt-stream-sec { border-left: 1px solid var(--border-subtle); }
+.tt-stream-sec.is-seg { padding: 0; }
+.tt-stream-sec.is-stat { color: var(--text-dim); }
+.tt-stream.on .tt-stream-sec.is-stat { color: var(--text-bright); }
+/* 状态点是画出来的圆（border-radius:50%），不是 ● 字符 */
+.tt-stream i {
   flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%;
   background: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft);
 }
-.tt-mirror-stat.on > i { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
-.tt-mirror-stat .lbl { color: var(--text-dim); margin-right: var(--sp-1); }
-.tt-mirror-stat.on .lbl { color: var(--text-bright); }
-.tt-mirror-stat .lvl { color: var(--accent); }
-.tt-mirror-stat .num {
+.tt-stream.on i { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
+/* 三个数值每秒都在跳，定宽 + 等宽数字，整条才不跟着抖 */
+.tt-stream .num {
   display: inline-block; text-align: right; font-variant-numeric: tabular-nums;
   color: var(--text-dimmer);
 }
-/* 手机档只留状态点与档位名：392 的屏上「已连接 · 32ms · 1.2 MB/s · 24fps」要 190px，
-   把地址栏挤成一条缝。延迟/带宽/帧率是调试信息，桌面看即可。 */
-html[data-size="compact"] .tt-mirror-stat .num { display: none; }
+/* 壳已经给了底与描边，Segmented 自己那层要让开，否则是「框里又一个框」 */
+.tt-stream .tt-stream-seg { background: transparent; box-shadow: none; }
+.tt-stream .tt-stream-seg .ant-segmented-item { min-height: 22px; line-height: 22px; }
+
+/* 手机：收成一枚 chip（连没连上 + 现在哪一档），点开才给档位与指标。
+   392 的屏上「已连接 · 32ms · 1.2 MB/s · 24fps」加四档要 360px，一行就没了。 */
+.tt-stream.is-chip {
+  align-items: center; gap: var(--sp-1); padding: 0 var(--sp-2);
+  border: 0; cursor: pointer; color: var(--text-dim);
+  min-height: var(--tap);
+}
+.tt-stream.is-chip .lvl { color: var(--text-bright); }
+.tt-stream-pop { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 220px; }
+.tt-stream-popstat {
+  display: flex; align-items: center; gap: var(--sp-2);
+  font-size: var(--fs-meta); color: var(--text-dim);
+}
+.tt-stream-popstat > i {
+  flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft);
+}
+.tt-stream-popstat.on > i { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
+.tt-stream-popstat .num { font-variant-numeric: tabular-nums; color: var(--text-dimmer); }
+.tt-stream-pop .tt-stream-seg { width: 100%; }
+.tt-stream-pop .tt-stream-seg .ant-segmented-item { flex: 1; }
 
 /* 手机页的「启动应用」：392 的屏上四档清晰度 172 + 状态 100 已经吃掉大半，
    这枚下拉挤不进同一行。与其让它半死不活地缩到 80，不如整条换行铺满——
@@ -563,6 +584,8 @@ html[data-size="compact"] .pv-applaunch { order: 2; flex: 1 0 100%; width: auto 
   display: flex; align-items: center; gap: var(--sp-1);
   padding: var(--sp-2) 0; flex: 0 0 auto; flex-wrap: wrap;
 }
+/* 第三行（控制条）紧跟地址栏：两行之间只留一档间距，不是上下各一档 */
+.bv-bar.is-ctl { padding-top: 0; }
 
 /* ── 页面骨架：所有一级页面从同一个左上角起笔，卡片和工具区间距一致 ── */
 .tt-page {
