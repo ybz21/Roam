@@ -720,6 +720,13 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
   const [wtsAll, setWtsAll] = useState<any[]>([])
   const [wtPath, setWtPath] = useState('')
   const [defBranch, setDefBranch] = useState('')
+  // composer 就是完整表单（不再有「完整表单 ›」弹窗入口）：会话名、基于哪个分支、
+  // 自动互审这三样从前只在弹窗里，于是「填全」必须先点一下——多一次点击、两套代码。
+  const [name, setName] = useState('')
+  const [base, setBase] = useState('')
+  const [branches, setBranches] = useState<string[]>([])
+  const [remoteBranches, setRemoteBranches] = useState<{ remote: string; name: string }[]>([])
+  const [autoReview, setAutoReview] = useState(false)
   const [sessions, setSessions] = useState<any[]>([])
   const [ann, setAnn] = useState<Record<string, any>>({})
   const [cc, setCc] = useState<Record<string, boolean>>({})
@@ -749,7 +756,6 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
   const [gitOpen, setGitOpen] = useState(false)
   const [gitAt, setGitAt] = useState<{ dir: string; tab: 'changes' | 'base' } | null>(null) // Git 面板落点（分叉图「对比 base」用）
   const [mergingWt, setMergingWt] = useState('')
-  const [fullForm, setFullForm] = useState(false)
   const [forking, setForking] = useState<string | null>(null)
   const [closing, setClosing] = useState<{ name: string; st: any } | null>(null)
   const [raceOpen, setRaceOpen] = useState(false)
@@ -771,8 +777,14 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
   }, [dir, isGit])
   useEffect(() => {
     if (!dir || !isGit) return
-    api('GET', `/git/branches?dir=${encodeURIComponent(dir)}`)
-      .then((r) => setDefBranch(r?.data?.default || '')).catch(() => {})
+    api('GET', `/git/branches?dir=${encodeURIComponent(dir)}`).then((r) => {
+      const def = r?.data?.default || ''
+      setDefBranch(def)
+      setBranches(r?.data?.branches || [])
+      setRemoteBranches(r?.data?.remotes || [])
+      // 「基于」默认跟主干走；用户选过就不再被覆盖
+      setBase((prev) => prev || def)
+    }).catch(() => {})
   }, [dir, isGit])
   // 远端轻量同步（10 §3 驻留档）：进项目页即同步一次，驻留期间每 5 分钟一次；
   // 失败静默（判定退回本地），worktree 轮询自然吃到新判定。
@@ -986,8 +998,8 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
   // composer 提交：与 NewSessionModal 完全同款的派生/编排/命名约定（W1 修订 2/3/4）
   const goCreate = async () => {
     if (!dir || creating) return
-    if (!prompt.trim()) { message.error(t('session.promptOrNameRequired')); return }
-    let finalName = taskNameFromPrompt(prompt).slice(0, 16).replace(/[-，。,.\s]+$/g, '')
+    if (!prompt.trim() && !name.trim()) { message.error(t('session.promptOrNameRequired')); return }
+    let finalName = name.trim() || taskNameFromPrompt(prompt).slice(0, 16).replace(/[-，。,.\s]+$/g, '')
     if (!finalName) {
       const d = new Date()
       finalName = 'task-' + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0') + '-' + String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0')
@@ -996,20 +1008,39 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
       setCreating(true)
       let actual: string
       const wantWt = isGit && wtMode === 'new'
+      let sessionDir = dir
       if (wantWt) {
-        const res = await api('POST', '/worktree-sessions', { name: finalName, dir })
+        // 「基于」：本地分支存裸名，远端分支编码成 remote:<remote>:<branch>（冒号在 ref 名里非法，
+        // 无歧义），提交前拆回 {base, remote}——与 NewSessionModal 同一套约定
+        let baseReq: { base?: string; remote?: string } = base && base !== defBranch ? { base } : {}
+        if (base.startsWith('remote:')) {
+          const rest = base.slice('remote:'.length)
+          const sep = rest.indexOf(':')
+          baseReq = { base: rest.slice(sep + 1), remote: rest.slice(0, sep) }
+        }
+        const res = await api('POST', '/worktree-sessions', { name: finalName, dir, ...baseReq })
         actual = res.name || res.data?.session || finalName
+        sessionDir = res.data?.path || dir
       } else {
-        const sessionDir = isGit && wtMode === 'existing' && wtPath ? wtPath : dir
+        sessionDir = isGit && wtMode === 'existing' && wtPath ? wtPath : dir
         const res = await api('POST', '/sessions', { name: finalName, dir: sessionDir })
         actual = res.name || finalName
       }
       if (agent !== 'none') {
         const cmd = agent === 'claude' ? (prefs.claudeCommand || 'claude') : (prefs.codexCommand || 'codex')
-        const naming = wantWt ? t('session.wt.namingHint') + '\n\n' : ''
-        await api('POST', '/tasks/_/send', { sess: actual, msg: `${cmd} ${shq(naming + prompt.trim())}` })
+        // 前置约定按工作区形态分两版：Roam 已建 worktree 的只要改分支名；
+        // 在主仓库/已有 worktree 里干活的，得让 agent 自己开分支——否则一堆任务全提交在主干上。
+        const naming = t(wantWt ? 'session.wt.namingHint' : 'session.wt.namingHintRepo') + '\n\n'
+        await api('POST', '/tasks/_/send', { sess: actual, msg: prompt.trim() ? `${cmd} ${shq(naming + prompt.trim())}` : cmd })
+        // 自动互审：登记跟踪并拉起 review-<会话> 监控会话，对话空闲即互审、意见回灌
+        if (autoReview) {
+          await api('POST', '/plugin/track', {
+            session: actual,
+            labels: { 'review:auto': 'true', role: 'author', workdir: sessionDir },
+          }).catch((e: any) => message.warning(t('session.autoReviewTrackFailed') + ': ' + e.message))
+        }
       }
-      setPrompt(''); message.success(t('session.created')); openTerm(actual); refresh()
+      setPrompt(''); setName(''); message.success(t('session.created')); openTerm(actual); refresh()
     } catch (e: any) { message.error(e.message) }
     finally { setCreating(false) }
   }
@@ -1325,15 +1356,35 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
                 <Select size="small" style={{ minWidth: 160 }} value={wtPath} onChange={setWtPath}
                   options={wts.map((w: any) => ({ value: w.path, label: w.branch || w.path.split('/').pop() }))} />
               )}
-              {wtMode === 'new' && <span className="prj-mono" style={{ fontSize: 'var(--fs-micro)', color: 'var(--text-dimmer)' }}>{defBranch ? t('project.basedOn', { base: defBranch }) : t('project.baseDefault')}</span>}
+              {/* 「基于」从前只是一行灰字（写死主干），要换基点必须去弹窗。现在就地可选，含远端分支 */}
+              {wtMode === 'new' && (
+                <Select size="small" style={{ minWidth: 150 }} value={base || defBranch || undefined}
+                  onChange={setBase} placeholder={t('project.baseDefault')} showSearch
+                  title={t('session.wt.base')}
+                  options={[
+                    ...(branches.length ? [{ label: t('session.wt.localBranches'), options: branches.map((b) => ({ value: b, label: b })) }] : []),
+                    ...(remoteBranches.length ? [{
+                      label: t('session.wt.remoteBranches'),
+                      options: remoteBranches.map((r) => ({ value: `remote:${r.remote}:${r.name}`, label: `${r.remote}/${r.name}` })),
+                    }] : []),
+                  ]} />
+              )}
               <span style={{ width: 1, height: 16, background: 'var(--border)' }} />
             </>)}
             <span className={`prj-pill${agent === 'claude' ? ' on' : ''}`} onClick={() => setAgent('claude')}>Claude</span>
             <span className={`prj-pill${agent === 'codex' ? ' on' : ''}`} onClick={() => setAgent('codex')}>Codex</span>
             <span className={`prj-pill${agent === 'none' ? ' on' : ''}`} onClick={() => setAgent('none')}>{t('project.agent.none')}</span>
             {/* 尾组 marginLeft:auto：换行后整组靠右成独立一行，窄屏不散架 */}
-            <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 'var(--sp-3)' }}>
-              <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)', whiteSpace: 'nowrap' }}>{t('project.autoName')} · <a style={{ fontSize: 'var(--fs-meta)' }} onClick={() => setFullForm(true)}>{t('project.fullForm')} ›</a></span>
+            {/* 自动互审：从前只在弹窗里，于是「顺手开一下」得先点开完整表单 */}
+            {agent !== 'none' && (
+              <span className={`prj-pill${autoReview ? ' on' : ''}`} title={t('session.autoReviewTip')}
+                onClick={() => setAutoReview((v) => !v)}>{t('session.autoReview')}</span>
+            )}
+            {/* 尾组 marginLeft:auto：换行后整组靠右成独立一行，窄屏不散架 */}
+            <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
+              {/* 会话名就地可填（留空仍按需求自动起名）——这是最后一个还需要开弹窗的字段 */}
+              <Input size="small" style={{ width: 148 }} value={name} onChange={(e) => setName(e.target.value)}
+                placeholder={t('project.autoName')} title={t('session.nameLabel')} />
               <Button type="primary" size="small" loading={creating} onClick={goCreate}>{t('project.go')}</Button>
             </span>
           </div>
@@ -1763,9 +1814,10 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
           )}
           {compareRace && <RaceComparePanel race={compareRace} onClose={() => setCompareRace(null)} openTerm={openTerm} onChanged={refresh} />}
         </Suspense>
-        {/* 完整表单（W1 弹窗）与 派生（parent 固定）复用同一张表单；收尾走 W7 三选一 */}
-        <NewSessionModal open={fullForm || !!forking} parent={forking}
-          onClose={() => { setFullForm(false); setForking(null) }}
+        {/* 弹窗只剩「派生」在用（parent 固定）：新建的全部字段已经在 composer 里就地填完；
+            收尾走 W7 三选一 */}
+        <NewSessionModal open={!!forking} parent={forking}
+          onClose={() => setForking(null)}
           onDone={(n) => { openTerm(n); refresh() }} />
         <CloseWorktreeModal info={closing} onClose={() => setClosing(null)} onDone={(name) => { closeTerm(name); setClosing(null); refresh() }} />
         <FinishModal w={finishing} base={defBranch} onClose={() => setFinishing(null)}

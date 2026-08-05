@@ -102,6 +102,7 @@ const zhCN = {
   'common.move': '移动',
   'common.copied': '已复制',
   'common.copyFailed': '复制失败',
+  'common.clear': '清空',
   'common.close': '关闭',
   'common.back': '返回',
   'common.refresh': '刷新',
@@ -532,6 +533,7 @@ const zhCN = {
   'git.sync': '同步（先拉取后推送）',
   'git.opDone': '{op} 完成',
   'browser.subtitle': '把后端那台 Chrome 的画面实时镜像到这里：可接管键鼠、切标签、模拟移动设备',
+  'browser.tabs': '标签页',
   'browser.newTab': '新建标签',
   'browser.quality.auto': '自动',
   'browser.quality.standard': '标清',
@@ -568,6 +570,9 @@ const zhCN = {
   'phone.connected': '已连接',
   'phone.disconnected': '未连接',
   'phone.unavailable': '无可用手机',
+  'phone.searchApp': '搜索应用',
+  'phone.appCount': '共 {count} 个应用',
+  'phone.reconnect': '重新连接',
   'phone.launchApp': '启动应用…',
   'phone.back': '返回',
   'phone.home': '主屏',
@@ -1004,7 +1009,11 @@ const zhCN = {
   'session.promptPlaceholder': '需求 / 任务:用自然语言描述要干什么,将作为第一条指令发给 Agent…',
   'session.promptOrNameRequired': '写点要干什么,或给个会话名',
   'session.nameLabel': '会话名',
-  'session.wt.namingHint': '开工前先给当前分支起个语义化名字(git branch -m <简短英文kebab-case>,前缀 feat/fix 等由你定),然后开始下面的任务。',
+  // 开工前置约定。三件事：分支/工作区、会话名、然后才是任务。
+  // 分两版：Roam 已经把 worktree 建好时只要改名；在主仓库/已有 worktree 里干活时
+  // 得让 agent 自己开分支——否则一堆任务全提交在 main 上（真发生过）。
+  'session.wt.namingHint': '开工前先做三件事，做完再开始下面的任务：\n1. 你已经在一个独立 worktree 里，把占位分支改成语义化名字（git branch -m <简短英文kebab-case>，前缀 feat/fix 等由你定）；\n2. 初始化工作区：拉一下最新代码，需要装依赖就装（按仓库自己的约定来）；\n3. 把这个会话重命名成能一眼认出的短名字：ttmux rename <当前会话名> <新名字>。',
+  'session.wt.namingHintRepo': '开工前先做三件事，做完再开始下面的任务：\n1. 从主干切一个语义化分支（git checkout -b <简短英文kebab-case>，前缀 feat/fix 等由你定）——别直接在主干上改；任务大到需要隔离就自己开 worktree；\n2. 初始化工作区：拉一下最新代码，需要装依赖就装（按仓库自己的约定来）；\n3. 把这个会话重命名成能一眼认出的短名字：ttmux rename <当前会话名> <新名字>。',
   'session.namePlaceholder2': '会话名(短,留空则从需求自动起名)',
   'session.wt.where': '在哪干活',
   'session.wt.mainRepo': '主仓库',

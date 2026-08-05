@@ -494,75 +494,217 @@ html[data-size="compact"] .tt-pagehead { gap: var(--sp-2); }
 html[data-size="compact"] .tt-pagename,
 html[data-size="compact"] .tt-pagedivider { display: none; }
 
-/* ── 镜像页头（浏览器 / 手机，见 mirror.tsx）────────────────────────────────
-   两页的工具条此前各写各的：清晰度是四枚手工上色的按钮、连接状态是 antd 的
-   Tag color="green"、指标一页有等宽数字槽一页没有。这里给它们同一套壳。 */
-.tt-mirror-head {
-  display: flex; align-items: center; gap: var(--sp-2);
-  flex: 0 0 auto; min-width: 0; flex-wrap: wrap;
-}
-/* 右端的「贴边」槽：控件贴左、状态贴右，中间那段空白由它撑开 */
-.tt-mirror-head .end { margin-left: auto; display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
-/* 清晰度四档在窄屏会把整条撑破——档位本身不缩，让它自己横滑。
-   底槽要自己给：antd 深色档把 Segmented 的轨道色取成 colorBgLayout，在这套主题里
-   正好等于 --bg-base，于是轨道与页面同色、四个档位像散落的文字。
-   描边走 inset ring 而不是 border——border 会把 24 的控件高顶成 26，跟旁边的小按钮错半档。 */
-.tt-mirror-quality {
-  max-width: 100%; overflow-x: auto; scrollbar-width: none;
+/* ── 镜像两页的页头（浏览器 / 手机，见 mirror.tsx，设计 17）────────────────
+   这两页在做同一件事，页头就只该有一套语法：
+     主行  = [图标钮…] [主角 omnibox/devbox] [图标钮…]
+     芯片条 = 状态（只读一眼，点开才是面板），可横滑，**永不换行**
+   整页只有两档圆角：胶囊（omnibox / chip）与 --r-sm（图标钮 / 卡片 / 菜单）。
+   高度只有一档 --ctl-h：从前这一行并排着六七种 antd 控件，各有各的「small」，
+   排下来高低错半档，比单个控件丑得多。 */
+.mc {
+  flex: 0 0 auto;
   background: var(--bg-container);
-  box-shadow: inset 0 0 0 1px var(--border-subtle);
+  border-bottom: 1px solid var(--border);
+  --ctl-h: 32px;
 }
-.tt-mirror-quality::-webkit-scrollbar { display: none; }
+html[data-pointer="coarse"] .mc { --ctl-h: 36px; }
+.mc-row { display: flex; align-items: center; gap: var(--sp-1); padding: 6px var(--sp-2); min-width: 0; }
 
-/* 流状态：状态点 + 文案 + 三个定宽数字槽。数值每秒都在跳，定宽才不会带着整条抖 */
-.tt-mirror-stat {
-  display: inline-flex; align-items: center; gap: var(--sp-1);
-  font-size: var(--fs-meta); color: var(--text-dim); white-space: nowrap;
-}
-.tt-mirror-stat > i {
-  flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%;
-  background: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft);
-}
-.tt-mirror-stat.on > i { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
-.tt-mirror-stat .lbl { color: var(--text-dim); margin-right: var(--sp-1); }
-.tt-mirror-stat.on .lbl { color: var(--text-bright); }
-.tt-mirror-stat .lvl { color: var(--accent); }
-.tt-mirror-stat .num {
-  display: inline-block; text-align: right; font-variant-numeric: tabular-nums;
-  color: var(--text-dimmer);
-}
-/* 手机档只留状态点与档位名：392 的屏上「已连接 · 32ms · 1.2 MB/s · 24fps」要 190px，
-   把地址栏挤成一条缝。延迟/带宽/帧率是调试信息，桌面看即可。 */
-html[data-size="compact"] .tt-mirror-stat .num { display: none; }
-
-/* 手机页的「启动应用」：392 的屏上四档清晰度 172 + 状态 100 已经吃掉大半，
-   这枚下拉挤不进同一行。与其让它半死不活地缩到 80，不如整条换行铺满——
-   顺带成了个够大的触控目标。桌面档不动（order 归零、宽度还是 160）。 */
-html[data-size="compact"] .pv-applaunch { order: 2; flex: 1 0 100%; width: auto !important; }
-
-/* 浏览器页的标签条与地址栏。原来标签的底色/边框/文字是三个手抄的十六进制
-   （#283039 / #3d444d / #9aa4ae），换主题就散架；新建标签还是个 16px 的 `+` 字符。 */
-.bv-tabs { display: flex; align-items: center; gap: var(--sp-1); flex: 1 1 auto; min-width: 0; overflow-x: auto; }
-.bv-tab {
-  display: flex; align-items: center; gap: var(--sp-1);
-  width: 150px; flex: 0 0 auto; height: 28px; padding: 0 var(--sp-2);
-  border-radius: var(--r-xs); border: 1px solid transparent;
-  font-size: var(--fs-meta); color: var(--text-dim);
-  cursor: pointer; user-select: none;
+/* 图标钮：正方形、无边框，hover 才有底。全站这一行只有它一种按钮长相。 */
+.mc-ib {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: var(--ctl-h); height: var(--ctl-h);
+  border: 0; border-radius: var(--r-sm); background: transparent;
+  color: var(--text-dim); cursor: pointer;
   transition: background .12s, color .12s;
 }
-.bv-tab:hover { background: var(--list-hover); color: var(--text-bright); }
-.bv-tab.on { background: var(--bg-elevated); border-color: var(--border); color: var(--text-bright); }
-.bv-tab .ttl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bv-tab .x {
-  flex: 0 0 auto; width: 16px; height: 16px; display: grid; place-items: center;
-  border-radius: var(--r-xs); color: var(--text-dimmer);
+.mc-ib:hover { background: var(--list-hover); color: var(--text-bright); }
+.mc-ib:focus-visible { outline: 1px solid var(--accent-border); outline-offset: -1px; }
+.mc-ib.is-dim { color: var(--text-dimmer); }
+.mc-ib.is-on { color: var(--accent); }
+.mc-ib-badge {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; pointer-events: none;
 }
-.bv-tab .x:hover { background: var(--danger-soft); color: var(--danger); }
-.bv-bar {
-  display: flex; align-items: center; gap: var(--sp-1);
-  padding: var(--sp-2) 0; flex: 0 0 auto; flex-wrap: wrap;
+
+/* 主角：胶囊，撑满剩余宽度。这一页唯一被强调的东西。 */
+.mc-omni {
+  flex: 1 1 auto; min-width: 140px;
+  display: flex; align-items: center; gap: var(--sp-2);
+  height: var(--ctl-h); padding: 0 var(--sp-1) 0 var(--sp-2);
+  border-radius: var(--r-pill); background: var(--bg-base);
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
+  transition: box-shadow .12s, background .12s;
 }
+.mc-omni:hover { box-shadow: inset 0 0 0 1px var(--border); }
+.mc-omni.is-focus { background: var(--bg-elevated); box-shadow: inset 0 0 0 2px var(--accent-border); }
+.mc-omni.is-readonly { cursor: default; }
+/* 失焦态：域名亮、其余灰——不聚焦时人只需要认出「这是哪个站」，协议和路径是噪音 */
+.mc-omni-txt {
+  flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  border: 0; background: transparent; padding: 0; text-align: left; cursor: text;
+  font-size: var(--fs-sm); color: var(--text-bright);
+}
+.mc-omni-txt .path { color: var(--text-dimmer); }
+.mc-omni-txt .ph { color: var(--text-dimmer); }
+.mc-omni-sub, .mc-omni-num {
+  flex: 0 0 auto; color: var(--text-dimmer); font-size: var(--fs-micro);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums; white-space: nowrap; padding-right: 6px;
+}
+.mc-omni-input {
+  flex: 1 1 auto; min-width: 0; border: 0; outline: none; background: transparent;
+  color: var(--text-bright); font-size: var(--fs-sm);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.mc-omni-x {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border: 0; border-radius: 50%; background: transparent;
+  color: var(--text-dimmer); cursor: pointer;
+}
+.mc-omni-x:hover { background: var(--list-hover); color: var(--text-bright); }
+.mc-omni-go {
+  flex: 0 0 auto; border: 0; background: transparent; cursor: pointer;
+  padding: 0 var(--sp-2); color: var(--accent); font-size: var(--fs-sm); font-weight: 600;
+}
+/* 左徽标：真浏览器的锁图标就在这个位置——它天然是「这条连接怎么样」的位置 */
+.mc-lead {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px;
+  height: calc(var(--ctl-h) - 8px); padding: 0 7px 0 6px;
+  border: 0; border-radius: var(--r-pill); background: var(--list-hover);
+  color: var(--text-dim); font-size: var(--fs-micro); cursor: pointer; white-space: nowrap;
+}
+.mc-lead:hover { color: var(--text-bright); }
+.mc-lead b { color: var(--text-bright); font-weight: 600; }
+/* 状态点是画出来的圆，不是 ● 字符 */
+.mc-dot {
+  flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; display: block;
+  background: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft);
+}
+.mc-dot.is-on { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
+
+/* 状态芯片条：可横滑，永不换行——换行正是这一页从前丑的起点 */
+.mc-chips {
+  display: flex; align-items: center; gap: 6px; min-width: 0;
+  padding: 0 var(--sp-2) 7px; overflow-x: auto; scrollbar-width: none;
+}
+.mc-chips::-webkit-scrollbar { display: none; }
+.mc-chip {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px;
+  height: 26px; padding: 0 9px; border: 0; border-radius: var(--r-pill);
+  background: var(--bg-base); box-shadow: inset 0 0 0 1px var(--border-subtle);
+  color: var(--text-dim); font-size: var(--fs-micro); white-space: nowrap;
+}
+.mc-chip b { color: var(--text-bright); font-weight: 600; }
+.mc-chip.is-btn { cursor: pointer; }
+.mc-chip.is-btn:hover { color: var(--text-bright); box-shadow: inset 0 0 0 1px var(--border); }
+.mc-chip.is-on { background: var(--accent-soft); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent-border); }
+.mc-chip.is-on b { color: var(--accent); }
+@media (pointer: coarse) { .mc-chip { min-height: 36px; } }
+
+/* 画质面板（omnibox 徽标 / 状态芯片 点开的都是它） */
+.mc-pop { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 236px; }
+.mc-pop-h { display: flex; align-items: center; gap: 6px; font-size: var(--fs-meta); color: var(--text-dim); }
+.mc-pop-h.is-on { color: var(--text-bright); }
+.mc-pop-h .sp { flex: 1; }
+.mc-pop-h .num {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--fs-micro); color: var(--text-dimmer); font-variant-numeric: tabular-nums;
+}
+.mc-seg { width: 100%; }
+.mc-seg .ant-segmented-item { flex: 1; }
+
+/* 桌面标签条：激活那枚底色提到 --bg-container，与下面的工具行连成一片 */
+.mc-tabs {
+  flex: 0 0 auto; display: flex; align-items: flex-end; gap: var(--sp-2);
+  padding: 6px var(--sp-2) 0; background: var(--bg-base);
+  border-bottom: 1px solid var(--border);
+}
+.mc-tabs-strip { display: flex; align-items: flex-end; gap: 2px; flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.mc-tabs-strip::-webkit-scrollbar { display: none; }
+.mc-tabs-end { flex: 0 0 auto; padding-bottom: 5px; }
+.mc-tab {
+  display: flex; align-items: center; gap: 7px;
+  flex: 0 1 190px; min-width: 110px; height: 32px; padding: 0 10px;
+  border-radius: var(--r-xs) var(--r-xs) 0 0;
+  color: var(--text-dim); font-size: var(--fs-meta); cursor: pointer; user-select: none;
+}
+.mc-tab:hover { background: var(--list-hover); color: var(--text-bright); }
+.mc-tab.is-on { background: var(--bg-container); color: var(--text-bright); }
+.mc-tab-fav { flex: 0 0 auto; width: 14px; height: 14px; border-radius: 4px; background: var(--bg-elevated); }
+.mc-tab.is-on .mc-tab-fav { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); border-radius: 50%; width: 7px; height: 7px; margin: 0 3px; }
+.mc-tab-t { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 关闭钮只在悬停/激活时出现：一排 ✕ 常驻会抢注意力 */
+.mc-tab-x {
+  flex: 0 0 auto; display: grid; place-items: center; width: 18px; height: 18px;
+  border-radius: var(--r-xs); color: var(--text-dimmer); opacity: 0;
+}
+.mc-tab:hover .mc-tab-x, .mc-tab.is-on .mc-tab-x { opacity: 1; }
+.mc-tab-x:hover { background: var(--danger-soft); color: var(--danger); }
+.mc-tab-add { width: 28px; height: 28px; margin-bottom: 3px; }
+@media (pointer: coarse) { .mc-tab-x { opacity: 1; } }
+
+/* 窄档标签抽屉里的卡片 */
+.mc-tabcard {
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: 9px 10px; margin-bottom: 6px; min-height: 48px;
+  border-radius: var(--r-sm); background: var(--bg-base);
+  box-shadow: inset 0 0 0 1px var(--border-subtle); cursor: pointer;
+}
+.mc-tabcard.is-on { background: var(--accent-soft); box-shadow: inset 0 0 0 2px var(--accent-border); }
+.mc-tabcard-fav {
+  flex: 0 0 auto; width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center;
+  background: var(--bg-elevated); color: var(--text-dimmer); font-size: var(--fs-micro); font-weight: 700;
+}
+.mc-tabcard-meta { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.mc-tabcard-meta .t { font-size: var(--fs-sm); color: var(--text-bright); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-tabcard-meta .u {
+  font-size: var(--fs-micro); color: var(--text-dimmer); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.mc-newtab {
+  display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%;
+  min-height: 44px; margin-top: 2px; border: 1px dashed var(--border); border-radius: var(--r-sm);
+  background: transparent; color: var(--text-dim); font-size: var(--fs-sm); cursor: pointer;
+}
+.mc-newtab:hover { color: var(--text-bright); border-color: var(--accent-border); }
+
+/* 应用启动器（手机镜像页）：搜索 + 列表，替掉那个 160px 的 Select */
+.mc-menu {
+  border-radius: var(--r-sm); background: var(--bg-elevated);
+  box-shadow: 0 12px 32px rgba(1, 4, 9, .5), inset 0 0 0 1px var(--border); padding: 8px;
+}
+.mc-applauncher { width: 258px; display: flex; flex-direction: column; gap: 6px; }
+.mc-applist { max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; }
+.mc-appitem {
+  display: flex; align-items: center; gap: var(--sp-2); min-height: 40px; padding: 0 6px;
+  border: 0; border-radius: var(--r-xs); background: transparent; color: var(--text-bright);
+  font-size: var(--fs-sm); cursor: pointer; text-align: left;
+}
+.mc-appitem:hover { background: var(--list-hover); }
+.mc-appitem .ic {
+  flex: 0 0 auto; width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center;
+  background: var(--bg-base); color: var(--text-dimmer); font-size: var(--fs-micro); font-weight: 700;
+}
+.mc-appitem .nm { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-appcount { padding: 4px 6px 0; color: var(--text-dimmer); font-size: var(--fs-micro); }
+
+/* 设备按键：手机贴底成实条；桌面浮在画面底部——竖屏画面两侧本来就是大片黑边，
+   按键条不该再占一整条。浮层容器不吃事件，否则画面底部会多出一条点不到的死区。 */
+.mc-keys {
+  flex: 0 0 auto; display: flex; align-items: center; justify-content: center; gap: var(--sp-3);
+  padding: 6px 0; border-top: 1px solid var(--border-subtle); background: var(--bg-container);
+}
+.mc-keys.is-float {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+  gap: var(--sp-2); padding: 5px; border: 0; border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--bg-base) 72%, transparent);
+  box-shadow: inset 0 0 0 1px var(--border), 0 10px 28px rgba(1, 4, 9, .45);
+  backdrop-filter: blur(14px);
+}
+.mc-keys.is-float .mc-ib { border-radius: var(--r-pill); }
 
 /* ── 页面骨架：所有一级页面从同一个左上角起笔，卡片和工具区间距一致 ── */
 .tt-page {
@@ -2095,6 +2237,30 @@ html[data-pointer="coarse"] .cc-git-section-act .cc-dl { opacity: 1; }
 html[data-size="compact"] .cc-cmd-desc-inline { display: none; }
 html[data-size="compact"] .cc-run-slot { width: auto; }
 @media (min-width: 900px) { .cc-run-slot { min-width: 46px; } }
+
+/* 手机底栏的一格（App.tsx）。六格并排时每格只有 60px：图标 + 一行 11px 标签，
+   标签单行截断——`min-width:0` 是必须的，flex 子项默认 min-width:auto，中文标签
+   会把格子撑开，六格挤成横向滚动。 */
+.tt-bottomnav-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: var(--tap);
+  border: 0;
+  background: none;
+  padding: 8px 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--fs-micro);
+  cursor: pointer;
+}
+.tt-bottomnav-btn > span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* 实时回显（chat/LiveTail.tsx）：跟运行组同一套外壳，只是脊是强调色、身子铺终端底。
    它是「当下正在发生」的那块，所以底色比历史区重一档——但外壳不能是第三种长相。 */

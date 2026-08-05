@@ -26,6 +26,7 @@
 | 14 | [14-desktop-workspace.md](./14-desktop-workspace.md) | **桌面工作区优化** — Workspace Shell、Page / Split / Focus、概览优先级、超宽屏与键盘调度 |
 | 15 | [15-chat-render/](./15-chat-render/README.md) | **Claude / Codex 对话渲染重做** — 四层架构与数据契约、工具三档密度、LCS 行对齐 diff、适配层收敛 provider 差异、会话状态条与多问题选择框 |
 | 16 | [16-tool-run-density/](./16-tool-run-density/index.html) | **连续工具调用的篇幅压缩** — 相邻工具并成「运行组」、跑完即折成一行、失败行永不折叠、同文件连续 Edit 合并成一张 diff；一套 DOM 两端适配（手机 5 条命令 430px → 60px） |
+| 17 | [17-browser-chrome/](./17-browser-chrome/index.html) | **镜像两页页头重做** — 一个 omnibox 当主角、主行只留四个可点目标、标签换「数字 + 抽屉」、Roam 专有状态收成可点芯片条；桌面标签条/分区/三档收纳/键盘，手机镜像页共用同一套语法（devbox + 应用启动器 + 按键条）|
 
 > 13 与 14 是同一套壳的两端：**断点、密度与全局令牌以 13 为准，`large ≥ 1280` 之内的桌面形态以 14 为准**。
 

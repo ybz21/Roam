@@ -1,0 +1,917 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Roam · 浏览器页头重做（像个浏览器）</title>
+<style>
+/* ── 令牌：直接取 frontend/src/theme.tsx 的真值，稿子和成品同源 ───────────── */
+:root {
+  --bg-base:#0d1117; --bg-container:#161b22; --bg-elevated:#1b222b; --bg-term:#06090d;
+  --border:#30363d; --border-subtle:#21262d;
+  --text-bright:#e6edf3; --text-dim:#8b949e; --text-dimmer:#6e7681;
+  --accent:#58a6ff; --accent-solid:#1f6feb; --accent-soft:rgba(31,111,235,.14); --accent-border:rgba(88,166,255,.45);
+  --ok:#3fb950; --ok-solid:#238636; --ok-soft:rgba(63,185,80,.14); --ok-border:rgba(63,185,80,.42);
+  --danger:#f85149; --danger-soft:rgba(248,81,73,.12); --danger-border:rgba(248,81,73,.40);
+  --warn:#d29922; --warn-soft:rgba(210,153,34,.12); --warn-border:rgba(210,153,34,.40);
+  --list-hover:rgba(255,255,255,.025);
+  --fs-micro:11px; --fs-meta:12px; --fs-sm:13px; --fs-body:14px; --fs-lg:16px; --fs-title:22px;
+  --r-xs:6px; --r-sm:10px; --r-card:14px; --r-pill:999px;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+html[data-theme="light"] {
+  --bg-base:#f6f8fa; --bg-container:#ffffff; --bg-elevated:#ffffff; --bg-term:#ffffff;
+  --border:#d0d7de; --border-subtle:#e6e9ec;
+  --text-bright:#1f2328; --text-dim:#57606a; --text-dimmer:#8c959f;
+  --accent:#0969da; --accent-solid:#1f6feb; --accent-soft:rgba(31,111,235,.10); --accent-border:rgba(31,111,235,.40);
+  --ok:#1a7f37; --ok-solid:#1f883d; --ok-soft:rgba(31,136,61,.10); --ok-border:rgba(31,136,61,.40);
+  --danger:#cf222e; --danger-soft:rgba(207,34,46,.09); --danger-border:rgba(207,34,46,.35);
+  --warn:#9a6700; --warn-soft:rgba(154,103,0,.10); --warn-border:rgba(154,103,0,.35);
+  --list-hover:rgba(27,31,36,.04);
+}
+* { box-sizing:border-box; }
+html { background:#07090d; }
+html[data-theme="light"] { background:#eef1f5; }
+body {
+  margin:0; color:var(--text-bright);
+  font:var(--fs-body)/1.6 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+svg { display:block; }
+button { font:inherit; cursor:pointer; }
+
+.top {
+  position:sticky; top:0; z-index:20;
+  display:flex; align-items:center; gap:var(--sp-3);
+  padding:10px clamp(16px,3vw,40px);
+  background:color-mix(in srgb, var(--bg-base) 84%, transparent);
+  border-bottom:1px solid var(--border-subtle); backdrop-filter:blur(18px);
+}
+.top .kicker { font-size:var(--fs-micro); letter-spacing:.14em; text-transform:uppercase; color:var(--text-dimmer); }
+.top h1 { margin:0; font-size:var(--fs-sm); font-weight:600; }
+.top .sp { flex:1; }
+.tbtn {
+  border:1px solid var(--border); background:var(--bg-container); color:var(--text-dim);
+  border-radius:var(--r-pill); padding:5px 14px; font-size:var(--fs-meta);
+}
+.tbtn:hover { color:var(--text-bright); border-color:var(--accent-border); }
+
+.wrap { max-width:1080px; margin:0 auto; padding:34px clamp(16px,3vw,40px) 100px; }
+h2 { margin:52px 0 6px; padding-top:26px; font-size:var(--fs-lg); font-weight:600; border-top:1px solid var(--border-subtle); }
+h2:first-of-type { margin-top:8px; border-top:0; padding-top:0; }
+h3 { margin:26px 0 8px; font-size:var(--fs-sm); font-weight:600; color:var(--text-bright); }
+.lede { max-width:78ch; margin:0 0 18px; color:var(--text-dim); font-size:var(--fs-sm); line-height:1.9; }
+.lede b { color:var(--text-bright); font-weight:600; }
+.lede code, li code, td code, p code {
+  font:var(--fs-meta)/1.4 var(--mono); background:var(--list-hover);
+  border:1px solid var(--border-subtle); border-radius:4px; padding:1px 5px; color:var(--text-bright);
+}
+ul.pts, ol.pts { max-width:78ch; margin:0 0 18px; padding-left:20px; color:var(--text-dim); font-size:var(--fs-sm); line-height:1.9; }
+ul.pts b, ol.pts b { color:var(--text-bright); }
+table { width:100%; border-collapse:collapse; margin:6px 0 20px; font-size:var(--fs-meta); }
+th, td { text-align:left; padding:7px 10px; border-bottom:1px solid var(--border-subtle); vertical-align:top; }
+th { color:var(--text-dimmer); font-weight:600; font-size:var(--fs-micro); text-transform:uppercase; letter-spacing:.08em; }
+td { color:var(--text-dim); } td b { color:var(--text-bright); font-weight:600; }
+.cap { display:flex; align-items:center; gap:var(--sp-2); margin:22px 0 8px; font-size:var(--fs-meta); color:var(--text-dimmer); }
+.cap b { color:var(--text-bright); font-size:var(--fs-sm); font-weight:600; }
+.pill { font-size:var(--fs-micro); padding:1px 8px; border-radius:var(--r-pill); border:1px solid var(--border); color:var(--text-dimmer); }
+.pill.bad { color:var(--danger); border-color:var(--danger-border); background:var(--danger-soft); }
+.pill.good { color:var(--ok); border-color:var(--ok-border); background:var(--ok-soft); }
+.note { border-left:2px solid var(--accent); background:var(--accent-soft); padding:10px 14px; border-radius:0 var(--r-xs) var(--r-xs) 0; color:var(--text-dim); font-size:var(--fs-meta); line-height:1.8; max-width:78ch; margin:14px 0 20px; }
+.note b { color:var(--text-bright); }
+.note.warn { border-left-color:var(--warn); background:var(--warn-soft); }
+pre.code {
+  margin:8px 0 20px; padding:14px 16px; overflow:auto;
+  border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-base);
+  font:var(--fs-meta)/1.7 var(--mono); color:var(--text-dim);
+}
+pre.code b { color:var(--text-bright); } pre.code i { color:var(--accent); font-style:normal; }
+pre.code s { color:var(--text-dimmer); text-decoration:none; }
+
+/* ══ 手机机身 ══════════════════════════════════════════════════════════ */
+.phones { display:flex; flex-wrap:wrap; gap:var(--sp-5); justify-content:center; margin:12px 0 8px; }
+.phone { width:340px; flex:0 0 auto; border:8px solid #1b222b; border-radius:30px; overflow:hidden; background:var(--bg-term); box-shadow:0 18px 48px rgba(1,4,9,.5); }
+html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px rgba(140,149,159,.28); }
+.phone-notch { height:20px; background:var(--bg-container); display:flex; align-items:center; justify-content:center; }
+.phone-notch i { width:60px; height:5px; border-radius:var(--r-pill); background:var(--border); display:block; }
+.phone-stage { position:relative; height:300px; background:linear-gradient(150deg,#0a1a2e,#08243f 45%,#061523); overflow:hidden; }
+.phone-stage .fake { position:absolute; inset:0; display:grid; place-items:center; color:rgba(255,255,255,.10); font-size:78px; font-weight:800; }
+.phone-tag { text-align:center; margin-top:var(--sp-2); font-size:var(--fs-meta); color:var(--text-dim); }
+.phone-tag b { color:var(--text-bright); }
+.phone-bottomnav { display:flex; border-top:1px solid var(--border); background:var(--bg-container); }
+.phone-bottomnav span { flex:1; text-align:center; padding:7px 0 9px; font-size:var(--fs-micro); color:var(--text-dimmer); }
+.phone-bottomnav span.on { color:var(--accent); }
+.phone-bottomnav i { display:block; margin:0 auto 3px; width:16px; height:16px; border-radius:4px; border:1.6px solid currentColor; }
+
+/* ══ 现状（对照组）：五行散装控件 ═════════════════════════════════════ */
+.old { background:var(--bg-base); padding:var(--sp-2); display:flex; flex-direction:column; gap:6px; }
+.old-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.oc { display:inline-flex; align-items:center; justify-content:center; gap:5px; height:26px; padding:0 8px; border:1px solid var(--border); border-radius:var(--r-xs); background:var(--bg-container); color:var(--text-dim); font-size:var(--fs-meta); white-space:nowrap; }
+.oc.tall { height:30px; } .oc.short { height:22px; }
+.oc.pri { background:var(--accent-solid); border-color:transparent; color:#fff; }
+.oc.seg { padding:0; overflow:hidden; }
+.oc.seg span { padding:0 8px; line-height:28px; }
+.oc.seg span.on { background:var(--accent-solid); color:#fff; }
+.oc.input { flex:1; min-width:80px; justify-content:flex-start; color:var(--text-bright); font-family:var(--mono); font-size:var(--fs-micro); }
+.oc.tab { width:120px; justify-content:space-between; }
+.old-txt { font-size:var(--fs-meta); color:var(--text-dim); }
+.old-txt .dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--ok); margin-right:5px; }
+
+/* ══ 新版：浏览器 chrome ═══════════════════════════════════════════════ */
+.bc { background:var(--bg-container); border-bottom:1px solid var(--border); }
+.bc-row { display:flex; align-items:center; gap:var(--sp-1); padding:6px var(--sp-2); }
+.ib {
+  flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center;
+  width:36px; height:36px; border-radius:var(--r-sm); border:0; background:transparent; color:var(--text-dim);
+}
+.ib:hover { background:var(--list-hover); color:var(--text-bright); }
+.ib.dim { color:var(--text-dimmer); }
+.ib .cnt {
+  position:absolute; font-size:10px; font-weight:700; color:var(--text-bright);
+}
+.tabbtn { position:relative; }
+.tabbtn b { position:absolute; inset:0; display:grid; place-items:center; font-size:11px; font-weight:700; color:var(--text-dim); }
+
+/* omnibox：这一页唯一的主角 */
+.omni {
+  flex:1 1 auto; min-width:0; display:flex; align-items:center; gap:var(--sp-2);
+  height:36px; padding:0 var(--sp-1) 0 var(--sp-2);
+  border-radius:var(--r-pill); background:var(--bg-base);
+  box-shadow:inset 0 0 0 1px var(--border-subtle);
+}
+.omni:hover { box-shadow:inset 0 0 0 1px var(--border); }
+.omni.focus { background:var(--bg-elevated); box-shadow:inset 0 0 0 2px var(--accent-border); }
+.omni .lead {
+  flex:0 0 auto; display:inline-flex; align-items:center; gap:5px; height:26px; padding:0 7px 0 5px;
+  border-radius:var(--r-pill); background:var(--list-hover); color:var(--text-dim); font-size:var(--fs-micro);
+}
+.omni .lead i { width:7px; height:7px; border-radius:50%; background:var(--ok); box-shadow:0 0 0 3px var(--ok-soft); display:block; }
+.omni .lead.off i { background:var(--danger); box-shadow:0 0 0 3px var(--danger-soft); }
+.omni .txt { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:var(--fs-sm); color:var(--text-bright); }
+.omni .txt .host { color:var(--text-bright); }
+.omni .txt .path { color:var(--text-dimmer); }
+.omni .txt.ph { color:var(--text-dimmer); font-family:var(--mono); font-size:var(--fs-meta); }
+.omni .caret { display:inline-block; width:1.5px; height:15px; background:var(--accent); vertical-align:-3px; animation:blink 1.1s steps(1,end) infinite; }
+@keyframes blink { 50% { opacity:0; } }
+.omni .ib { width:28px; height:28px; }
+
+/* 状态条：模式 / 连接与画质 / 设备。都是可点的 chip，各自开自己的浮层 */
+.bc-status { display:flex; align-items:center; gap:6px; padding:0 var(--sp-2) 7px; overflow-x:auto; scrollbar-width:none; }
+.bc-status::-webkit-scrollbar { display:none; }
+.chip {
+  flex:0 0 auto; display:inline-flex; align-items:center; gap:5px; height:26px; padding:0 9px;
+  border-radius:var(--r-pill); background:var(--bg-base); color:var(--text-dim);
+  box-shadow:inset 0 0 0 1px var(--border-subtle); font-size:var(--fs-micro); white-space:nowrap;
+}
+.chip b { color:var(--text-bright); font-weight:600; }
+.chip.on { background:var(--accent-soft); color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent-border); }
+.chip.on b { color:var(--accent); }
+.chip i.dot { width:7px; height:7px; border-radius:50%; background:var(--ok); box-shadow:0 0 0 3px var(--ok-soft); display:block; }
+.chip i.dot.off { background:var(--danger); box-shadow:0 0 0 3px var(--danger-soft); }
+.chip svg { opacity:.8; }
+
+/* 标签抽屉 */
+.sheet { border-top:1px solid var(--border); background:var(--bg-container); }
+.sheet-head { display:flex; align-items:center; gap:var(--sp-2); padding:10px var(--sp-3) 6px; font-size:var(--fs-sm); color:var(--text-bright); font-weight:600; }
+.sheet-head .sp { flex:1; }
+.tabcard {
+  display:flex; align-items:center; gap:var(--sp-2); margin:6px var(--sp-3);
+  padding:9px 10px; border-radius:var(--r-sm); background:var(--bg-base);
+  box-shadow:inset 0 0 0 1px var(--border-subtle);
+}
+.tabcard.on { box-shadow:inset 0 0 0 2px var(--accent-border); background:var(--accent-soft); }
+.tabcard .fav { flex:0 0 auto; width:22px; height:22px; border-radius:6px; background:var(--bg-elevated); display:grid; place-items:center; color:var(--text-dimmer); font-size:10px; }
+.tabcard .meta { flex:1 1 auto; min-width:0; }
+.tabcard .t { font-size:var(--fs-sm); color:var(--text-bright); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tabcard .u { font-size:var(--fs-micro); color:var(--text-dimmer); font-family:var(--mono); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.newtab { display:flex; align-items:center; justify-content:center; gap:6px; margin:8px var(--sp-3) 12px; padding:9px; border-radius:var(--r-sm); border:1px dashed var(--border); color:var(--text-dim); font-size:var(--fs-sm); }
+
+/* 菜单 */
+.menu { width:212px; border-radius:var(--r-sm); background:var(--bg-elevated); box-shadow:0 12px 32px rgba(1,4,9,.5), inset 0 0 0 1px var(--border); padding:6px; }
+html[data-theme="light"] .menu { box-shadow:0 12px 32px rgba(140,149,159,.28), inset 0 0 0 1px var(--border); }
+.menu .mi { display:flex; align-items:center; gap:var(--sp-2); padding:8px 10px; border-radius:var(--r-xs); font-size:var(--fs-sm); color:var(--text-dim); }
+.menu .mi:hover { background:var(--list-hover); color:var(--text-bright); }
+.menu .mi .sp { flex:1; }
+.menu .mi .k { font-size:var(--fs-micro); color:var(--text-dimmer); font-family:var(--mono); }
+.menu .sep { height:1px; margin:5px 8px; background:var(--border-subtle); }
+.pop { width:250px; border-radius:var(--r-sm); background:var(--bg-elevated); box-shadow:0 12px 32px rgba(1,4,9,.5), inset 0 0 0 1px var(--border); padding:12px; }
+html[data-theme="light"] .pop { box-shadow:0 12px 32px rgba(140,149,159,.28), inset 0 0 0 1px var(--border); }
+.pop-h { display:flex; align-items:center; gap:6px; font-size:var(--fs-meta); color:var(--text-dim); margin-bottom:10px; }
+.pop-h .sp { flex:1; }
+.pop-h .num { font-family:var(--mono); font-size:var(--fs-micro); color:var(--text-dimmer); font-variant-numeric:tabular-nums; }
+.segfull { display:flex; border-radius:var(--r-xs); background:var(--bg-base); box-shadow:inset 0 0 0 1px var(--border-subtle); overflow:hidden; }
+.segfull span { flex:1; text-align:center; padding:7px 0; font-size:var(--fs-meta); color:var(--text-dim); }
+.segfull span.on { background:var(--accent-solid); color:#fff; }
+.popbox { display:flex; justify-content:center; margin:14px 0 6px; }
+
+/* 桌面整屏 */
+.screen { border:1px solid var(--border); border-radius:var(--r-card); overflow:hidden; background:var(--bg-term); }
+.dt-tabs { display:flex; align-items:flex-end; gap:2px; padding:6px var(--sp-2) 0; background:var(--bg-base); }
+.dt-tab {
+  display:flex; align-items:center; gap:7px; width:190px; height:32px; padding:0 10px;
+  border-radius:var(--r-xs) var(--r-xs) 0 0; color:var(--text-dim); font-size:var(--fs-meta);
+}
+.dt-tab .t { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dt-tab.on { background:var(--bg-container); color:var(--text-bright); }
+.dt-tab .fav { width:14px; height:14px; border-radius:4px; background:var(--bg-elevated); flex:0 0 auto; }
+.dt-sp { flex:1; }
+.dt-right { display:flex; align-items:center; gap:6px; padding-bottom:5px; }
+.dt-stage { height:250px; background:linear-gradient(150deg,#0a1a2e,#08243f 45%,#061523); display:grid; place-items:center; color:rgba(255,255,255,.10); font-size:64px; font-weight:800; }
+.desk .omni { height:32px; } .desk .ib { width:32px; height:32px; }
+.desk .chip { height:26px; }
+
+/* 分区标注 */
+.zones { display:flex; gap:2px; margin:6px 0 18px; font-size:var(--fs-micro); }
+.zone { padding:5px 8px; border-radius:var(--r-xs); background:var(--bg-container); color:var(--text-dimmer); box-shadow:inset 0 0 0 1px var(--border-subtle); text-align:center; }
+.zone b { display:block; color:var(--text-bright); font-size:var(--fs-meta); font-weight:600; margin-bottom:2px; }
+.zone.grow { flex:1; }
+
+/* 标签解剖 */
+.anat { display:flex; flex-wrap:wrap; gap:var(--sp-3); align-items:flex-start; margin:10px 0 18px; }
+.anat-box { background:var(--bg-base); border:1px solid var(--border); border-radius:var(--r-sm); padding:var(--sp-3); }
+.dt-tab.hover { background:var(--list-hover); color:var(--text-bright); }
+.dt-tab .live { width:7px; height:7px; border-radius:50%; background:var(--ok); box-shadow:0 0 0 3px var(--ok-soft); flex:0 0 auto; }
+.dt-tab.loading .fav { border-radius:50%; border:1.6px solid var(--border); border-top-color:var(--accent); background:transparent; animation:spin 700ms linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.legend { display:flex; flex-direction:column; gap:6px; font-size:var(--fs-meta); color:var(--text-dim); max-width:420px; }
+.legend div b { color:var(--text-bright); }
+
+/* 窄桌面演示 */
+.widths { display:flex; flex-direction:column; gap:var(--sp-3); margin:10px 0 20px; }
+.wbox { border:1px solid var(--border); border-radius:var(--r-sm); overflow:hidden; background:var(--bg-container); }
+.wbox .hd { display:flex; align-items:center; gap:var(--sp-2); padding:4px var(--sp-2); background:var(--bg-base); font-size:var(--fs-micro); color:var(--text-dimmer); border-bottom:1px solid var(--border-subtle); }
+.wbox .hd b { color:var(--text-bright); font-size:var(--fs-meta); }
+
+/* 键盘 */
+kbd { font:var(--fs-micro)/1.4 var(--mono); border:1px solid var(--border); border-bottom-width:2px; border-radius:4px; padding:1px 5px; color:var(--text-dim); background:var(--bg-container); }
+
+/* 手机镜像页：设备头 + 按键条 */
+.devbox {
+  flex:1 1 auto; min-width:0; display:flex; align-items:center; gap:var(--sp-2);
+  height:36px; padding:0 var(--sp-2); border-radius:var(--r-pill);
+  background:var(--bg-base); box-shadow:inset 0 0 0 1px var(--border-subtle);
+}
+.devbox .nm { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:var(--fs-sm); color:var(--text-bright); }
+.devbox .sub { color:var(--text-dimmer); font-size:var(--fs-micro); font-family:var(--mono); flex:0 0 auto; white-space:nowrap; }
+.keybar { display:flex; align-items:center; justify-content:center; gap:var(--sp-3); padding:8px 0 10px; border-top:1px solid var(--border-subtle); background:var(--bg-container); }
+.keybar .k { width:44px; height:36px; border-radius:var(--r-sm); display:grid; place-items:center; color:var(--text-dim); background:var(--bg-base); box-shadow:inset 0 0 0 1px var(--border-subtle); }
+.keybar .k:hover { color:var(--text-bright); background:var(--list-hover); }
+.keyfloat {
+  position:absolute; left:50%; bottom:12px; transform:translateX(-50%);
+  display:flex; gap:var(--sp-2); padding:6px; border-radius:var(--r-pill);
+  background:rgba(13,17,23,.72); box-shadow:inset 0 0 0 1px var(--border), 0 10px 28px rgba(1,4,9,.5);
+  backdrop-filter:blur(14px);
+}
+.keyfloat .k { width:40px; height:32px; border-radius:var(--r-pill); display:grid; place-items:center; color:var(--text-dim); }
+.keyfloat .k:hover { color:var(--text-bright); background:var(--list-hover); }
+.pstage { position:relative; height:250px; background:#000; display:grid; place-items:center; }
+.pscreen { width:118px; height:230px; border-radius:14px; background:linear-gradient(160deg,#132b3f,#0b1a27); box-shadow:inset 0 0 0 1px rgba(255,255,255,.08); display:grid; place-items:center; color:rgba(255,255,255,.14); font-size:30px; font-weight:800; }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div>
+    <div class="kicker">Roam · Web 设计 17</div>
+    <h1>浏览器页头重做 —— 让它像个浏览器</h1>
+  </div>
+  <span class="sp"></span>
+  <button class="tbtn" id="theme">切到浅色</button>
+</div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <g id="i-back"><path d="M15 18l-6-6 6-6"/></g>
+  <g id="i-fwd"><path d="m9 18 6-6-6-6"/></g>
+  <g id="i-reload"><path d="M21 12a9 9 0 0 1-15 6.7"/><path d="M3 12A9 9 0 0 1 18 5.3"/><path d="M18 2v4h-4"/><path d="M6 22v-4h4"/></g>
+  <g id="i-home"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1Z"/></g>
+  <g id="i-more"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></g>
+  <g id="i-tabs"><rect x="3" y="3" width="18" height="18" rx="3"/></g>
+  <g id="i-x"><path d="M6 6l12 12M18 6 6 18"/></g>
+  <g id="i-plus"><path d="M12 5v14M5 12h14"/></g>
+  <g id="i-bot"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 4v4"/><circle cx="9" cy="14" r="1"/><circle cx="15" cy="14" r="1"/></g>
+  <g id="i-user"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></g>
+  <g id="i-gauge"><path d="M4 18a8 8 0 1 1 16 0"/><path d="M12 14l4-3"/></g>
+  <g id="i-device"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18.5h2"/></g>
+  <g id="i-rotate"><path d="M4 8h11a5 5 0 0 1 0 10H9"/><path d="m7 15-3 3 3 3"/></g>
+  <g id="i-code"><path d="m9 8-5 4 5 4"/><path d="m15 8 5 4-5 4"/></g>
+  <g id="i-open"><path d="M14 4h6v6"/><path d="M20 4 10 14"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></g>
+  <g id="i-chev"><path d="m6 9 6 6 6-6"/></g>
+  <g id="i-apps"><rect x="3.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.6"/></g>
+  <g id="i-key-back"><path d="M15 5 8 12l7 7"/></g>
+  <g id="i-key-home"><circle cx="12" cy="12" r="7.5"/></g>
+  <g id="i-key-recent"><rect x="5" y="5" width="14" height="14" rx="2"/></g>
+  <g id="i-power"><path d="M12 3v9"/><path d="M6.5 6.8a8 8 0 1 0 11 0"/></g>
+  <g id="i-shot"><rect x="3" y="6" width="18" height="13" rx="2.5"/><circle cx="12" cy="12.5" r="3.4"/></g>
+  <g id="i-shield"><path d="M12 3.5 5 6v5.5c0 4.3 3 8.2 7 9.5 4-1.3 7-5.2 7-9.5V6Z"/></g>
+</defs></svg>
+
+<div class="wrap">
+
+<p class="lede">
+现在的浏览器页头是<b>一堆控件排排坐</b>，不是一个浏览器：五种 antd 控件五种语言，
+「前往」是个实心蓝按钮抢走了地址栏的注意力，四枚清晰度按钮平铺在第四行，
+「外部打开」被挤到第五行独占一整行。它没有<b>主角</b>——而浏览器的主角只有一个：<b>地址栏</b>。
+这一稿按真浏览器的做法重排：<b>一个 omnibox 当主角，其余全部退成图标或收进菜单</b>，
+手机上标签条换成「标签数字 + 抽屉」，Roam 特有的状态（智能体模式 / 连接与画质 / 设备）
+收成一条<b>可点的状态芯片条</b>。
+</p>
+
+<h2>1 · 现在为什么丑</h2>
+
+<div class="cap"><b>现状</b><span class="pill bad">五行，392px 屏</span></div>
+<div class="phones">
+  <div>
+    <div class="phone">
+      <div class="phone-notch"><i></i></div>
+      <div class="old">
+        <div class="old-row">
+          <span class="oc tab">Blade OS <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-x"/></svg></span>
+          <span class="oc" style="width:26px; padding:0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-plus"/></svg></span>
+        </div>
+        <div class="old-row" style="justify-content:flex-end">
+          <span class="oc pri tall">智能体模式</span>
+          <span class="old-txt"><i class="dot"></i>已连接</span>
+          <span class="old-txt" style="color:var(--accent)">超清</span>
+        </div>
+        <div class="old-row">
+          <span class="oc" style="width:26px;padding:0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-back"/></svg></span>
+          <span class="oc" style="width:26px;padding:0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-fwd"/></svg></span>
+          <span class="oc" style="width:26px;padding:0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-reload"/></svg></span>
+          <span class="oc" style="width:26px;padding:0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-home"/></svg></span>
+          <span class="oc input">http://127.0.0.1:18077/</span>
+          <span class="oc pri">前往</span>
+        </div>
+        <div class="old-row">
+          <span class="oc seg tall"><span class="on">自动</span><span>标清</span><span>高清</span><span>超清</span></span>
+          <span class="oc short" style="width:24px;padding:0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-rotate"/></svg></span>
+          <span class="oc" style="width:86px; justify-content:space-between">桌面 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-chev"/></svg></span>
+          <span class="oc short" style="width:24px;padding:0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-code"/></svg></span>
+        </div>
+        <div class="old-row">
+          <span class="oc" style="width:26px;padding:0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-open"/></svg></span>
+        </div>
+      </div>
+      <div class="phone-stage"><span class="fake">▟</span></div>
+    </div>
+    <div class="phone-tag"><b>现状</b> · 五行工具条 ≈ 170px，正文从屏幕一半开始</div>
+  </div>
+
+  <div style="flex:1; min-width:280px; max-width:430px">
+    <table style="margin-top:0">
+      <thead><tr><th>毛病</th><th>为什么难看</th></tr></thead>
+      <tbody>
+        <tr><td><b>没有主角</b></td><td>地址栏和旁边七个控件长得一样重，眼睛没有落点。真浏览器里地址栏是唯一的主角。</td></tr>
+        <tr><td><b>「前往」抢戏</b></td><td>一枚实心蓝按钮，比地址栏本身还显眼。回车就能走的动作，不该配全页面最重的颜色。</td></tr>
+        <tr><td><b>五种控件五种语言</b></td><td>Button / Button.Group / Input / Select / Segmented 各有各的圆角、边框与高度。</td></tr>
+        <tr><td><b>档位平铺</b></td><td>四枚清晰度按钮常驻一整行——一天调不了两次的东西，占了 15% 的屏幕。</td></tr>
+        <tr><td><b>孤儿行</b></td><td>「外部打开」被挤到第五行独占一整行，像掉下来的。</td></tr>
+        <tr><td><b>标签条挤</b></td><td>150px 一枚的标签条要横滑，三个标签以上就找不着人。</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<h2>2 · 真浏览器是怎么排的</h2>
+
+<ul class="pts">
+  <li><b>一个 omnibox 独大</b>：胶囊形、占满整行剩余宽度，左侧一枚状态徽标（锁 / 安全信息），
+      右侧一枚就地操作（刷新 / 停止）。<b>没有「前往」按钮</b>——回车就是前往。</li>
+  <li><b>标签变成一个数字</b>：Chrome / Safari 手机版都是「⧉ 3」一枚方框数字，点开是<b>整页的标签卡片</b>，
+      不是挤在顶上的横条。</li>
+  <li><b>低频动作全在 ⋯ 里</b>：桌面版、开发者工具、分享、书签……手机浏览器的顶栏永远只有
+      <b>四个可点目标</b>：后退 / 地址栏 / 标签 / 菜单。</li>
+  <li><b>状态不占控件位</b>：连接、证书、翻译提示都是地址栏内部或下方的小徽标，不做成按钮排在旁边。</li>
+</ul>
+
+<div class="note">
+  <b>Roam 比真浏览器多三样东西</b>，它们不能塞进 ⋯ 里藏起来，因为它们是<b>状态</b>不是<b>动作</b>——
+  人需要一眼看见「现在是谁在开车、连没连上、画面多清楚、模拟的是哪种设备」：
+  <b>智能体模式 / 连接与画质 / 设备</b>。所以主行之下加一条 26px 的<b>状态芯片条</b>：
+  它们平时是三枚小 chip（只读一眼），点开才是控制面板。
+</div>
+
+<h2>3 · 新版 · 手机</h2>
+
+<div class="phones">
+  <div>
+    <div class="phone">
+      <div class="phone-notch"><i></i></div>
+      <div class="bc">
+        <div class="bc-row">
+          <button class="ib"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><use href="#i-back"/></svg></button>
+          <div class="omni">
+            <span class="lead"><i></i>超清</span>
+            <span class="txt"><span class="host">127.0.0.1:18077</span><span class="path">/home</span></span>
+            <button class="ib"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><use href="#i-reload"/></svg></button>
+          </div>
+          <button class="ib tabbtn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><use href="#i-tabs"/></svg><b>2</b></button>
+          <button class="ib"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="bc-status">
+          <span class="chip on"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-bot"/></svg><b>智能体</b></span>
+          <span class="chip"><i class="dot"></i>已连接<b>超清</b></span>
+          <span class="chip"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-device"/></svg>桌面</span>
+        </div>
+      </div>
+      <div class="phone-stage"><span class="fake">▟</span></div>
+      <div class="phone-bottomnav">
+        <span><i></i>概览</span><span><i></i>项目</span><span><i></i>文件</span>
+        <span class="on"><i></i>浏览器</span><span><i></i>手机</span><span><i></i>更多</span>
+      </div>
+    </div>
+    <div class="phone-tag"><b>新版</b> · 主行 44 + 状态条 26 ≈ <span style="color:var(--ok)">78px</span>（原 170px）</div>
+  </div>
+
+  <div>
+    <div class="phone">
+      <div class="phone-notch"><i></i></div>
+      <div class="bc">
+        <div class="bc-row">
+          <button class="ib dim"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><use href="#i-back"/></svg></button>
+          <div class="omni focus">
+            <span class="txt ph">http://127.0.0.1:18077/home<span class="caret"></span></span>
+            <button class="ib"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><use href="#i-x"/></svg></button>
+          </div>
+          <button class="ib" style="color:var(--accent); font-size:var(--fs-sm); width:auto; padding:0 10px">前往</button>
+        </div>
+        <div class="bc-status">
+          <span class="chip"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-home"/></svg>主页</span>
+          <span class="chip"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><use href="#i-shield"/></svg>127.0.0.1:18077</span>
+          <span class="chip">roam.local:13579</span>
+        </div>
+      </div>
+      <div class="phone-stage" style="opacity:.35"><span class="fake">▟</span></div>
+      <div class="phone-bottomnav">
+        <span><i></i>概览</span><span><i></i>项目</span><span><i></i>文件</span>
+        <span class="on"><i></i>浏览器</span><span><i></i>手机</span><span><i></i>更多</span>
+      </div>
+    </div>
+    <div class="phone-tag"><b>地址栏聚焦</b> · 全选、给 ✕ 清空、状态条临时换成候选地址</div>
+  </div>
+</div>
+
+<h3>主行只有四个可点目标</h3>
+<table>
+  <thead><tr><th style="width:20%">位置</th><th>是什么</th><th style="width:34%">为什么在这儿</th></tr></thead>
+  <tbody>
+    <tr><td><b>最左 ←</b></td><td>后退。长按出历史列表。</td><td>浏览页面时最高频的动作，拇指最容易够到的左下弧。<b>前进</b>是次高频，进 ⋯ 菜单。</td></tr>
+    <tr><td><b>omnibox 左徽标</b></td><td>连接与画质：一枚状态点 + 当前档位。点开是画质面板（自动/标清/高清/超清 + 延迟/带宽/帧率）。</td><td>真浏览器的锁图标就在这儿——它天然是「这条连接怎么样」的位置。</td></tr>
+    <tr><td><b>omnibox 正文</b></td><td>失焦：<b>域名亮 + 路径灰</b>；聚焦：全选整条 URL、给 ✕ 清空、右侧出「前往」。</td><td>不聚焦时人只需要认出「这是哪个站」，一整条带协议的 URL 是噪音。</td></tr>
+    <tr><td><b>omnibox 右</b></td><td>刷新 / 加载中变停止。</td><td>就地操作跟着地址走，不再单独占一枚外部按钮。</td></tr>
+    <tr><td><b>⧉ N</b></td><td>标签数字，点开标签抽屉。</td><td>横向标签条在 360px 上放不下第三个标签。</td></tr>
+    <tr><td><b>⋯</b></td><td>前进 / 主页 / 旋转 / 开发者工具 / 在本机浏览器打开 / 新建标签。</td><td>低频动作一律进菜单，顶栏永远只有四个目标。</td></tr>
+  </tbody>
+</table>
+
+<h3>状态芯片条（Roam 专有的那三样）</h3>
+<table>
+  <thead><tr><th style="width:22%">芯片</th><th>只读时显示</th><th style="width:38%">点开</th></tr></thead>
+  <tbody>
+    <tr><td><b>智能体 / 手动</b></td><td>高亮＝智能体在开车（面板跟着它的标签走）；灰＝你已接管。</td><td>直接切换，不弹层。这是全页最需要一眼看清的状态，所以给强调色。</td></tr>
+    <tr><td><b>连接与画质</b></td><td>状态点 + 当前档位（自适应时显示后端实际选中的那档）。</td><td>画质面板：四档 + 延迟/带宽/帧率。<b>与 omnibox 左徽标是同一个部件</b>，点哪儿都开它。</td></tr>
+    <tr><td><b>设备</b></td><td>桌面 / iPhone / Pixel / iPad。</td><td>机型列表 + 旋转开关——「模拟成什么」是一件事，收在一处。</td></tr>
+  </tbody>
+</table>
+
+<div class="note warn">
+  <b>状态条可横滑，但永远不换行。</b>三枚 chip 在 360px 上正好排满；将来再加（比如「已录制」）
+  也只是往右长，绝不允许它折成第二行——那正是今天这一页丑的起点。
+</div>
+
+<h2>4 · 标签抽屉（⧉ N 点开）</h2>
+
+<div class="phones">
+  <div>
+    <div class="phone">
+      <div class="phone-notch"><i></i></div>
+      <div class="bc">
+        <div class="bc-row">
+          <button class="ib"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><use href="#i-back"/></svg></button>
+          <div class="omni">
+            <span class="lead"><i></i>超清</span>
+            <span class="txt"><span class="host">127.0.0.1:18077</span><span class="path">/home</span></span>
+          </div>
+          <button class="ib tabbtn" style="color:var(--accent)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><use href="#i-tabs"/></svg><b style="color:var(--accent)">2</b></button>
+          <button class="ib"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><use href="#i-more"/></svg></button>
+        </div>
+      </div>
+      <div class="sheet">
+        <div class="sheet-head">标签页<span class="sp"></span><span style="font-size:var(--fs-micro); color:var(--text-dimmer); font-weight:400">2 个</span></div>
+        <div class="tabcard on">
+          <span class="fav">B</span>
+          <span class="meta"><span class="t">Blade OS</span><span class="u">127.0.0.1:18077/home</span></span>
+          <button class="ib" style="width:28px;height:28px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><use href="#i-x"/></svg></button>
+        </div>
+        <div class="tabcard">
+          <span class="fav">R</span>
+          <span class="meta"><span class="t">Roam · Code anywhere</span><span class="u">roam.local:13579/#/overview</span></span>
+          <button class="ib" style="width:28px;height:28px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><use href="#i-x"/></svg></button>
+        </div>
+        <div class="newtab"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><use href="#i-plus"/></svg>新建标签页</div>
+      </div>
+      <div class="phone-stage" style="height:120px; opacity:.3"><span class="fake" style="font-size:44px">▟</span></div>
+    </div>
+    <div class="phone-tag"><b>标签抽屉</b> · 标题 + 地址两行，48px 一张，够手指点</div>
+  </div>
+
+  <div>
+    <div class="popbox" style="flex-direction:column; gap:var(--sp-4); align-items:center">
+      <div>
+        <div class="cap"><b>⋯ 菜单</b></div>
+        <div class="menu">
+          <div class="mi"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-fwd"/></svg>前进</div>
+          <div class="mi"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-home"/></svg>主页</div>
+          <div class="sep"></div>
+          <div class="mi"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-rotate"/></svg>旋转画面<span class="sp"></span><span class="k">90°</span></div>
+          <div class="mi"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-code"/></svg>开发者工具</div>
+          <div class="mi"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-open"/></svg>在本机浏览器打开</div>
+        </div>
+      </div>
+      <div>
+        <div class="cap"><b>连接与画质</b><span class="pill">omnibox 徽标 / 状态芯片 同一个</span></div>
+        <div class="pop">
+          <div class="pop-h"><i class="dot" style="width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px var(--ok-soft);display:block"></i>已连接<span class="sp"></span><span class="num">32ms · 1.2MB/s · 24fps</span></div>
+          <div class="segfull"><span>自动</span><span>标清</span><span>高清</span><span class="on">超清</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2>5 · 新版 · 桌面</h2>
+
+<p class="lede">
+桌面不是「手机版拉宽」。横向有余量，就把手机上收起来的东西<b>平铺回去</b>：前进、主页、
+指标数字、标签条全部露出来；但<b>语法一个字都不改</b>——还是那个 omnibox 当主角、
+状态还是那几枚芯片、低频动作还是那个 ⋯ 菜单。两端的区别只有「谁露在外面」。
+</p>
+
+<h3>5.1 桌面现在也乱</h3>
+
+<p class="lede">桌面这两行看着比手机整齐，只是因为宽度掩盖了问题——毛病一模一样：
+<b>「前往」抢戏</b>、<b>四档常驻</b>、<b>三枚孤立图标钮吊在右边</b>、
+<b>「已连接 · 超清」漂在标签条右端</b>，跟第二行那组清晰度按钮说的是同一件事。</p>
+
+<div class="screen desk" style="margin-bottom:10px">
+  <div class="dt-tabs" style="padding-bottom:6px; align-items:center">
+    <span class="oc tab" style="height:28px">Blade OS <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-x"/></svg></span>
+    <span class="oc" style="width:26px;height:26px;padding:0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-plus"/></svg></span>
+    <span class="dt-sp"></span>
+    <span class="oc pri tall">智能体模式</span>
+    <span class="old-txt" style="margin:0 8px"><i class="dot"></i>已连接 <span style="color:var(--accent)">超清</span> <span style="font-family:var(--mono); color:var(--text-dimmer); font-size:var(--fs-micro)">32ms 1.2MB/s 24fps</span></span>
+  </div>
+  <div class="old" style="padding:6px var(--sp-2)">
+    <div class="old-row">
+      <span class="oc" style="width:26px;padding:0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-back"/></svg></span>
+      <span class="oc" style="width:26px;padding:0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-fwd"/></svg></span>
+      <span class="oc" style="width:26px;padding:0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-reload"/></svg></span>
+      <span class="oc" style="width:26px;padding:0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-home"/></svg></span>
+      <span class="oc input">http://127.0.0.1:18077/home</span>
+      <span class="oc pri">前往</span>
+      <span style="width:1px;height:20px;background:var(--border)"></span>
+      <span class="oc seg tall"><span class="on">自动</span><span>标清</span><span>高清</span><span>超清</span></span>
+      <span class="oc short" style="width:24px;padding:0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-rotate"/></svg></span>
+      <span class="oc" style="width:86px; justify-content:space-between">桌面 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-chev"/></svg></span>
+      <span class="oc short" style="width:24px;padding:0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-code"/></svg></span>
+      <span class="oc short" style="width:24px;padding:0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-open"/></svg></span>
+    </div>
+  </div>
+  <div class="dt-stage" style="height:120px; font-size:44px">▟</div>
+</div>
+<div class="cap"><span class="pill bad">现状</span><span>一行里 11 个可点目标，四种高度，两处在说同一件事</span></div>
+
+<h3>5.2 新版整屏</h3>
+
+<div class="screen desk">
+  <div class="dt-tabs">
+    <div class="dt-tab on"><span class="live"></span><span class="t">Blade OS</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><use href="#i-x"/></svg></div>
+    <div class="dt-tab"><span class="fav"></span><span class="t">Roam · Code anywhere</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><use href="#i-x"/></svg></div>
+    <button class="ib" style="width:28px;height:28px;margin-bottom:4px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><use href="#i-plus"/></svg></button>
+    <span class="dt-sp"></span>
+    <div class="dt-right">
+      <span class="chip on"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-bot"/></svg><b>智能体模式</b></span>
+    </div>
+  </div>
+  <div class="bc" style="background:var(--bg-container)">
+    <div class="bc-row">
+      <button class="ib"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><use href="#i-back"/></svg></button>
+      <button class="ib dim"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><use href="#i-fwd"/></svg></button>
+      <button class="ib"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><use href="#i-reload"/></svg></button>
+      <button class="ib"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><use href="#i-home"/></svg></button>
+      <div class="omni">
+        <span class="lead"><i></i>已连接 · 超清</span>
+        <span class="txt"><span class="host">127.0.0.1:18077</span><span class="path">/home</span></span>
+        <span class="num" style="font-family:var(--mono); font-size:var(--fs-micro); color:var(--text-dimmer); padding-right:6px">32ms · 1.2MB/s · 24fps</span>
+      </div>
+      <span class="chip"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-device"/></svg>桌面</span>
+      <button class="ib"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><use href="#i-more"/></svg></button>
+    </div>
+  </div>
+  <div class="dt-stage">▟</div>
+</div>
+<div class="cap"><span class="pill good">新版</span><span>两行：标签条 32 + 工具行 40。可点目标从 11 降到 8，全部同高</span></div>
+
+<h3>5.3 工具行分四区</h3>
+
+<p class="lede">桌面工具行从左到右是四段，段与段之间只靠<b>间距</b>分开，不画分隔线——
+今天那根 <code>tt-pagedivider</code> 竖线是在替布局擦屁股。</p>
+
+<div class="zones">
+  <div class="zone" style="width:158px"><b>导航簇</b>← → ⟳ ⌂<br>四枚 32 图标钮</div>
+  <div class="zone grow"><b>omnibox</b>左徽标（连接与画质）· 域名/路径 · 右指标数字<br>撑满剩余宽度，最小 240</div>
+  <div class="zone" style="width:96px"><b>状态</b>设备芯片<br>（窄了先收它）</div>
+  <div class="zone" style="width:56px"><b>菜单</b>⋯</div>
+</div>
+
+<ul class="pts">
+  <li><b>导航簇不用 Button.Group。</b>四枚连体按钮是 90 年代工具栏语言，跟这一页别的圆角对不上；
+      改成四枚独立的 32×32 图标钮，间距 4，靠 hover 底色分组。</li>
+  <li><b>omnibox 最小 240</b>：再窄就先收指标数字、再收设备芯片（见 5.5），<b>永远不收 omnibox 本身</b>。</li>
+  <li><b>指标数字常驻桌面</b>：<code>32ms · 1.2MB/s · 24fps</code> 定宽等宽，跳动不带动整行回流。
+      手机上它们在画质面板里——桌面有位置就露出来，这是两端唯一的信息量差别。</li>
+</ul>
+
+<h3>5.4 标签条：梯形、活体标记、按宽度伸缩</h3>
+
+<div class="anat">
+  <div class="anat-box">
+    <div class="dt-tabs" style="background:transparent; padding:0">
+      <div class="dt-tab on"><span class="live"></span><span class="t">Blade OS</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><use href="#i-x"/></svg></div>
+      <div class="dt-tab hover"><span class="fav"></span><span class="t">Roam · Code anywhere</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><use href="#i-x"/></svg></div>
+      <div class="dt-tab"><span class="fav"></span><span class="t">未命名标签页</span></div>
+      <div class="dt-tab loading"><span class="fav"></span><span class="t">正在打开…</span></div>
+    </div>
+  </div>
+  <div class="legend">
+    <div><b>激活</b> — 底色提到 <code>--bg-container</code>，与下面的工具行连成一片（真浏览器的「标签长在页面上」）</div>
+    <div><b>悬停</b> — 只加 <code>--list-hover</code>，不加边框：加边框会让宽度跳 2px，一排标签跟着抖</div>
+    <div><b>普通</b> — 无底色；关闭钮<b>只在悬停/激活时出现</b>，避免一排 ✕ 抢注意力</div>
+    <div><b>载入中</b> — favicon 位置换成转圈，不再另加一行进度条</div>
+    <div><span class="live" style="display:inline-block;vertical-align:-1px"></span> <b>活体点</b> — 这一枚就是智能体正在操作的标签（面板跟着它走）</div>
+  </div>
+</div>
+
+<table>
+  <thead><tr><th style="width:22%">规则</th><th>怎么定</th></tr></thead>
+  <tbody>
+    <tr><td><b>宽度</b></td><td><code>flex: 0 1 190px; min-width: 110px</code> —— 标签多了一起变窄，窄到 110 就不再让，改成整条横向滚动（两侧渐隐提示，同 <code>.tt-tabs</code> 已有做法）。</td></tr>
+    <tr><td><b>标题</b></td><td>取页面 title，空则取域名；单行截断。<b>不显示完整 URL</b>——那是 omnibox 的活。</td></tr>
+    <tr><td><b>新建</b></td><td>末尾一枚 <code>+</code>；标签条空白处双击也新建（浏览器通用手势）。</td></tr>
+    <tr><td><b>关闭</b></td><td>悬停出 ✕；中键点击关闭；关闭后激活右邻，没有右邻则左邻。</td></tr>
+    <tr><td><b>重排</b></td><td>拖拽换位。顺序本来就由前端维持（<code>mergeTabs</code> 已经在做稳定排序），拖拽只是把它交给人。</td></tr>
+  </tbody>
+</table>
+
+<h3>5.5 窄桌面与分栏：三档收纳</h3>
+
+<p class="lede">浏览器页会被塞进分栏（会话页右栏、Focus 布局），容器可能只有 700–900。
+按<b>容器宽度</b>收，不是按窗口——分栏里窗口很宽但容器很窄，读 <code>innerWidth</code> 必然判错。</p>
+
+<div class="widths">
+  <div class="wbox">
+    <div class="hd"><b>≥ 1100</b> 全平铺</div>
+    <div class="bc" style="border:0"><div class="bc-row">
+      <button class="ib"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><use href="#i-back"/></svg></button>
+      <button class="ib dim"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><use href="#i-fwd"/></svg></button>
+      <button class="ib"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><use href="#i-reload"/></svg></button>
+      <button class="ib"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><use href="#i-home"/></svg></button>
+      <div class="omni"><span class="lead"><i></i>已连接 · 超清</span><span class="txt"><span class="host">127.0.0.1:18077</span><span class="path">/home</span></span><span style="font-family:var(--mono); font-size:var(--fs-micro); color:var(--text-dimmer); padding-right:6px">32ms · 1.2MB/s · 24fps</span></div>
+      <span class="chip"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-device"/></svg>桌面</span>
+      <button class="ib"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><use href="#i-more"/></svg></button>
+    </div></div>
+  </div>
+  <div class="wbox" style="max-width:640px">
+    <div class="hd"><b>900 – 1100</b> 收指标数字（它最不影响操作）</div>
+    <div class="bc" style="border:0"><div class="bc-row">
+      <button class="ib"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><use href="#i-back"/></svg></button>
+      <button class="ib dim"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><use href="#i-fwd"/></svg></button>
+      <button class="ib"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><use href="#i-reload"/></svg></button>
+      <button class="ib"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><use href="#i-home"/></svg></button>
+      <div class="omni"><span class="lead"><i></i>超清</span><span class="txt"><span class="host">127.0.0.1:18077</span><span class="path">/home</span></span></div>
+      <span class="chip"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-device"/></svg>桌面</span>
+      <button class="ib"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><use href="#i-more"/></svg></button>
+    </div></div>
+  </div>
+  <div class="wbox" style="max-width:420px">
+    <div class="hd"><b>&lt; 900</b> 前进 / 主页 / 设备进 ⋯，剩四个目标（＝手机形态）</div>
+    <div class="bc" style="border:0"><div class="bc-row">
+      <button class="ib"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><use href="#i-back"/></svg></button>
+      <div class="omni"><span class="lead"><i></i>超清</span><span class="txt"><span class="host">127.0.0.1:18077</span><span class="path">/home</span></span><button class="ib"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><use href="#i-reload"/></svg></button></div>
+      <button class="ib tabbtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><use href="#i-tabs"/></svg><b>2</b></button>
+      <button class="ib"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><use href="#i-more"/></svg></button>
+    </div></div>
+  </div>
+</div>
+
+<div class="note">
+  <b>收纳顺序是设计的一部分</b>：指标数字 → 设备芯片 → 主页 → 前进 → 标签条换成 ⧉N。
+  <b>永远不收</b>：后退、omnibox、⋯。这条顺序两端共用一份，写在 <code>useContainerWidth</code>
+  返回的档位里，不在组件里各判各的。
+</div>
+
+<h3>5.6 键盘</h3>
+
+<table>
+  <thead><tr><th style="width:26%">键</th><th>动作</th><th style="width:34%">为什么</th></tr></thead>
+  <tbody>
+    <tr><td><kbd>⌘</kbd><kbd>L</kbd></td><td>聚焦 omnibox 并全选</td><td>浏览器通用肌肉记忆；这一页有地址栏就该有它</td></tr>
+    <tr><td><kbd>⌘</kbd><kbd>T</kbd> / <kbd>⌘</kbd><kbd>W</kbd></td><td>新建 / 关闭当前标签</td><td>标签条存在的意义</td></tr>
+    <tr><td><kbd>⌘</kbd><kbd>R</kbd></td><td>刷新镜像页（不是刷新 Roam 自己）</td><td>需要在舞台聚焦时拦截，否则整个 SPA 会重载</td></tr>
+    <tr><td><kbd>⌥</kbd><kbd>←</kbd> / <kbd>⌥</kbd><kbd>→</kbd></td><td>后退 / 前进</td><td>与真浏览器一致</td></tr>
+    <tr><td><kbd>Esc</kbd></td><td>omnibox 聚焦时还原原地址并失焦</td><td>改了一半不想去了，不该留半截脏值</td></tr>
+  </tbody>
+</table>
+
+<div class="note warn">
+  <b>快捷键只在浏览器页可见时挂载</b>，且舞台聚焦时才拦截 <kbd>⌘R</kbd>——这一页嵌在 Roam 里，
+  抢全局快捷键会把人锁在这一页出不去。
+</div>
+
+<h2>6 · 手机镜像页 —— 同一套语法</h2>
+
+<p class="lede">
+「浏览器」和「手机」是同一件事的两个宾语：都是<b>把一块远端屏幕画到本地 + 一条工具条</b>。
+所以两页共用同一套语法，只是<b>主角从「地址」换成「设备」</b>：
+</p>
+
+<table>
+  <thead><tr><th style="width:26%">位置</th><th>浏览器页</th><th>手机镜像页</th></tr></thead>
+  <tbody>
+    <tr><td><b>主行左</b></td><td>后退</td><td>—（设备的返回键在下面的按键条上，跟真手机一致）</td></tr>
+    <tr><td><b>主角</b></td><td>omnibox：域名 + 路径</td><td><b>devbox</b>：设备名 + 系统/分辨率</td></tr>
+    <tr><td><b>主角左徽标</b></td><td colspan="2" style="color:var(--text-bright)">同一个部件：连接与画质（状态点 + 当前档，点开画质面板）</td></tr>
+    <tr><td><b>主行右</b></td><td>⧉ 标签数 · ⋯</td><td><b>⊞ 应用</b>（启动器）· ⋯</td></tr>
+    <tr><td><b>状态芯片条</b></td><td>智能体 / 连接画质 / 设备</td><td>连接画质 / 设备（哪台）/ 方向</td></tr>
+    <tr><td><b>⋯ 菜单</b></td><td>前进 / 主页 / 旋转 / DevTools / 外部打开</td><td>旋转 / 截屏 / 重连 / 唤醒·锁屏</td></tr>
+  </tbody>
+</table>
+
+<h3>6.1 手机上的手机镜像页</h3>
+
+<div class="phones">
+  <div>
+    <div class="phone">
+      <div class="phone-notch"><i></i></div>
+      <div class="bc">
+        <div class="bc-row">
+          <div class="devbox">
+            <span class="lead"><i></i>超清</span>
+            <span class="nm">Pixel 7</span>
+            <span class="sub">1080×2400</span>
+          </div>
+          <button class="ib"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-apps"/></svg></button>
+          <button class="ib"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="bc-status">
+          <span class="chip"><i class="dot"></i>已连接<b>超清</b></span>
+          <span class="chip"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-device"/></svg>redroid</span>
+          <span class="chip"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-rotate"/></svg>竖屏</span>
+        </div>
+      </div>
+      <div class="pstage" style="height:270px"><div class="pscreen" style="width:132px;height:250px">▟</div></div>
+      <div class="keybar">
+        <span class="k"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><use href="#i-key-back"/></svg></span>
+        <span class="k"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><use href="#i-key-home"/></svg></span>
+        <span class="k"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><use href="#i-key-recent"/></svg></span>
+      </div>
+      <div class="phone-bottomnav">
+        <span><i></i>概览</span><span><i></i>项目</span><span><i></i>文件</span>
+        <span><i></i>浏览器</span><span class="on"><i></i>手机</span><span><i></i>更多</span>
+      </div>
+    </div>
+    <div class="phone-tag"><b>手机 · 新版</b> · 主行 44 + 芯片条 26；按键条贴底成实条</div>
+  </div>
+
+  <div>
+    <div class="cap"><b>⊞ 应用启动器</b><span class="pill">今天是个 160px 的 Select</span></div>
+    <div class="menu" style="width:250px">
+      <div class="omni" style="height:32px; margin-bottom:6px">
+        <span class="txt ph" style="font-family:inherit; font-size:var(--fs-meta)">搜索应用<span class="caret"></span></span>
+      </div>
+      <div class="mi"><span class="fav" style="width:20px;height:20px;border-radius:6px;background:var(--bg-base);display:grid;place-items:center;font-size:10px;color:var(--text-dimmer)">微</span>微信<span class="sp"></span><span class="k">最近</span></div>
+      <div class="mi"><span class="fav" style="width:20px;height:20px;border-radius:6px;background:var(--bg-base);display:grid;place-items:center;font-size:10px;color:var(--text-dimmer)">设</span>设置</div>
+      <div class="mi"><span class="fav" style="width:20px;height:20px;border-radius:6px;background:var(--bg-base);display:grid;place-items:center;font-size:10px;color:var(--text-dimmer)">C</span>Chrome</div>
+      <div class="sep"></div>
+      <div class="mi" style="color:var(--text-dimmer)">共 84 个应用</div>
+    </div>
+
+    <div class="cap" style="margin-top:20px"><b>⋯ 菜单（设备）</b></div>
+    <div class="menu">
+      <div class="mi"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-rotate"/></svg>旋转画面<span class="sp"></span><span class="k">90°</span></div>
+      <div class="mi"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-shot"/></svg>截屏</div>
+      <div class="mi"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-power"/></svg>唤醒 / 锁屏</div>
+      <div class="sep"></div>
+      <div class="mi"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-reload"/></svg>重新连接</div>
+    </div>
+  </div>
+</div>
+
+<h3>6.2 桌面上的手机镜像页</h3>
+
+<p class="lede">桌面上舞台两侧本来就是大片黑边（竖屏画面 + 横向容器）。<b>按键条不再占一整条</b>，
+改成<b>浮在画面底部的胶囊</b>——跟着设备走，而不是跟着页面走；黑边还给画面。</p>
+
+<div class="screen desk">
+  <div class="bc" style="background:var(--bg-container)">
+    <div class="bc-row">
+      <div class="devbox" style="height:32px">
+        <span class="lead"><i></i>已连接 · 超清</span>
+        <span class="nm">Pixel 7</span>
+        <span class="sub">Android 14 · 1080×2400</span>
+        <span class="sub" style="margin-left:auto">32ms · 1.2MB/s · 24fps</span>
+      </div>
+      <span class="chip"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-device"/></svg>redroid</span>
+      <button class="ib"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-apps"/></svg></button>
+      <button class="ib"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><use href="#i-more"/></svg></button>
+    </div>
+  </div>
+  <div class="pstage">
+    <div class="pscreen">▟</div>
+    <div class="keyfloat">
+      <span class="k"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><use href="#i-key-back"/></svg></span>
+      <span class="k"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><use href="#i-key-home"/></svg></span>
+      <span class="k"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><use href="#i-key-recent"/></svg></span>
+    </div>
+  </div>
+</div>
+
+<ul class="pts">
+  <li><b>按键条随平台换</b>：Android 三键（返回 / 主屏 / 多任务）、iOS 三键（主屏 / 锁屏 / Siri，
+      iOS 没有系统返回键）。今天已经是这么分的，形态跟着改就行。</li>
+  <li><b>浮层不吃画面事件</b>：胶囊本身 <code>pointer-events:auto</code>，容器 <code>none</code>——
+      否则底部一条 40px 的死区，点不到画面里的东西（xterm 那个透明层坑的同款）。</li>
+  <li><b>手机档贴底成实条</b>：392 的屏上画面已经顶到边，浮层会压住内容；实条 + 安全区内边距更稳。</li>
+  <li><b>devbox 不可编辑</b>——它是身份不是输入。想换设备走状态芯片里的「设备」，
+      跟浏览器页换 URL 是两回事，别为了对称硬做成输入框。</li>
+</ul>
+
+<h2>7 · 尺寸与令牌</h2>
+
+<table>
+  <thead><tr><th>项</th><th>手机（粗指针）</th><th>桌面</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>主行高</td><td>44</td><td>40</td><td>行内图标钮 36 / 32，正方形</td></tr>
+    <tr><td>omnibox</td><td>36 高，<code>--r-pill</code></td><td>32 高</td><td>底 <code>--bg-base</code>，1px inset ring；聚焦换 2px <code>--accent-border</code></td></tr>
+    <tr><td>状态芯片</td><td>26 高，<code>--r-pill</code></td><td>26</td><td>只读态灰、激活态 <code>--accent-soft</code></td></tr>
+    <tr><td>标签卡（抽屉）</td><td>48</td><td>—</td><td>标题 <code>--fs-sm</code> + 地址 <code>--fs-micro</code> 等宽</td></tr>
+    <tr><td>devbox（手机镜像页）</td><td>36 高，<code>--r-pill</code></td><td>32 高</td><td>与 omnibox 同一套壳，只是内容不可编辑</td></tr>
+    <tr><td>设备按键</td><td>44×36 实条贴底</td><td>40×32 浮在画面底部</td><td>浮层容器 <code>pointer-events:none</code>，只有胶囊本身收事件</td></tr>
+    <tr><td>标签（桌面）</td><td>—</td><td>32 高，<code>flex:0 1 190px; min-width:110</code></td><td>关闭钮只在悬停/激活时出现</td></tr>
+    <tr><td>圆角</td><td colspan="2"><code>--r-pill</code>（omnibox / chip）、<code>--r-sm</code>（图标钮、标签卡、菜单）</td><td>整页只有这两档</td></tr>
+    <tr><td>颜色</td><td colspan="2">全部走令牌；强调色只有 <code>--accent</code> 一支，绿只在状态点</td><td>不出现第二支蓝</td></tr>
+  </tbody>
+</table>
+
+<div class="note">
+  <b>命中区</b>：主行图标钮 36 视觉 + 44 命中（伪元素往外撑，这一行是横排、上下没有邻行，
+  不会出现设计 15 里那种「偷点击」）。状态芯片 26 视觉 + 36 命中（沿用状态条那档）。
+</div>
+
+<h2>8 · 落地</h2>
+
+<pre class="code"><b>mirror.tsx</b>  两页共用的语法层（这一稿的重点：<i>两页只有一套页头</i>）
+  ├─ <i>MirrorChrome.tsx</i>  新：主行 + 状态芯片条的壳（两页都塞进它）
+  ├─ <i>Omnibox.tsx</i>       新：胶囊主角。<b>浏览器页</b>=可编辑地址（失焦域名亮/路径灰，
+  │                          聚焦全选+✕+前往）；<b>手机页</b>=只读 devbox（设备名+系统）
+  ├─ <i>StatusChips.tsx</i>   新：智能体 / 连接画质 / 设备 / 方向，可横滑绝不换行
+  ├─ <i>MirrorMenu.tsx</i>    新：⋯ 菜单，两页各给自己的条目
+  └─ <b>StreamControl</b>     改：加 <i>variant="badge"</i>（omnibox 左徽标形态）
+                          —— 仍是同一个部件，第三种密度而已
+
+<b>BrowserView.tsx</b>
+  ├─ <i>TabStrip.tsx</i>      改：桌面梯形标签（活体点/悬停出 ✕/拖拽重排/伸缩+滚动）
+  └─ <i>TabSheet.tsx</i>      新：手机标签抽屉（复用 shell/MobileSheet）
+
+<b>PhoneView.tsx</b>
+  ├─ <i>AppLauncher.tsx</i>   新：⊞ 应用启动器（搜索 + 最近），替掉 160px 的 Select
+  └─ <i>DeviceKeys.tsx</i>    新：按键条。桌面浮在画面底部，手机贴底成实条
+
+<b>收纳档位</b>：<i>useContainerWidth</i>（容器查询，不是 innerWidth——分栏里窗口宽容器窄）
+  ≥1100 全平铺 · 900–1100 收指标 · &lt;900 收设备/主页/前进，标签换 ⧉N
+
+<s>删掉</s>：「前往」实心按钮、平铺的四档 Segmented、横向标签条（手机）、
+      孤零零的旋转/DevTools/外部打开三枚钮、tt-pagedivider 那根竖线</pre>
+
+<ol class="pts">
+  <li><b>第一批</b>：omnibox + 主行四目标 + ⋯ 菜单（手机与桌面同时改，不留中间态）。</li>
+  <li><b>第二批</b>：标签抽屉（手机）与桌面标签条的梯形化。</li>
+  <li><b>第三批</b>：状态芯片条 + 画质面板收口（StreamControl 第三种形态）。</li>
+  <li><b>第四批</b>：手机镜像页换上同一套壳 —— devbox、⊞ 应用启动器、按键条（桌面浮层 / 手机实条）。
+      这一批不动镜像协议，只换页头与按键的形态。</li>
+  <li>每批照旧 <code>typecheck / i18n:check / vitest / build</code>，并补 <code>Omnibox.test.tsx</code>
+      （域名/路径拆分、聚焦全选、回车导航、加载中变停止）。</li>
+</ol>
+
+</div>
+
+<script>
+  const btn = document.getElementById('theme')
+  btn.addEventListener('click', () => {
+    const light = document.documentElement.getAttribute('data-theme') === 'light'
+    document.documentElement.setAttribute('data-theme', light ? 'dark' : 'light')
+    btn.textContent = light ? '切到浅色' : '切到深色'
+  })
+</script>
+</body>
+</html>

@@ -85,11 +85,13 @@ const NAV = [
 const NAV_WORKSPACE = ['overview', 'projects', 'files']
 const NAV_TOOLS = ['browser', 'phone', 'plugins']
 
-// 手机底栏只放高频页，plugins/settings 折进「更多」，避免底栏拥挤（桌面侧栏仍展示全部）
-const MOBILE_NAV_KEYS = ['overview', 'projects', 'files']
+// 手机底栏。13 §4.1 当初把「浏览器/手机镜像」折进「更多」，理由是低频且窄屏下几乎不可用
+// （地址栏固定 150、设备选择器固定 240）——那两处固定宽度后来都改成自适应了，而这两页
+// 恰恰是本机最常用的两个工具，藏在二级 sheet 里每次要点两下。现在放回底栏。
+const MOBILE_NAV_KEYS = ['overview', 'projects', 'files', 'browser', 'phone']
 // 「更多」sheet 里的两段：会话属于工作区主线，不归到工具下面
 const MOBILE_MORE_WORKSPACE = ['sessions']
-const MOBILE_MORE_TOOLS = ['browser', 'phone', 'plugins', 'settings']
+const MOBILE_MORE_TOOLS = ['plugins', 'settings']
 const MOBILE_MORE_KEYS = [...MOBILE_MORE_WORKSPACE, ...MOBILE_MORE_TOOLS]
 
 // 用 Canvas 容器查询排版的页面（见 index.css 的 .tt-canvas[data-cq]）。逐页开，
@@ -798,9 +800,10 @@ export default function App() {
         )}
       </Layout>
 
-      {/* 底栏 4 格 + 会话坞（13 §4.1/§4.2）：浏览器/手机镜像这类"用手机看手机"的低频页
-          进「更多」sheet，不占底栏。sheet 内部分「工具 / 账户」两段——退出登录和浏览器
-          并排时误触代价差了几个数量级，所以它收在账户行的二级里。*/}
+      {/* 底栏 6 格 + 会话坞（13 §4.1/§4.2）：概览/项目/文件/浏览器/手机 + 更多。
+          360px 下每格 60px，标签 11px 单行截断——所以格数到此为止，再加就只剩图标了。
+          「更多」sheet 仍分「工具 / 账户」两段：退出登录和功能页并排时误触代价差了几个
+          数量级，所以它收在账户行的二级里。*/}
       {isMobile && (
         <div style={{
           position: 'fixed', bottom: 0, left: 0, right: 0,
@@ -820,15 +823,15 @@ export default function App() {
           {MOBILE_NAV_KEYS.map((key) => {
             const n = NAV.find((x) => x.key === key)!
             return (
-              <button key={n.key} onClick={() => go(n.key)}
-                style={{ flex: 1, minHeight: 'var(--tap)', border: 0, background: 'none', color: tab === n.key ? 'var(--accent)' : 'var(--text-dim)', padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11 }}>
-                {ICONS[n.key]}{t(n.labelKey)}
+              <button key={n.key} onClick={() => go(n.key)} className="tt-bottomnav-btn"
+                style={{ color: tab === n.key ? 'var(--accent)' : 'var(--text-dim)' }}>
+                {ICONS[n.key]}<span>{t(n.labelKey)}</span>
               </button>
             )
           })}
-          <button onClick={() => setMoreOpen(true)}
-            style={{ flex: 1, minHeight: 'var(--tap)', border: 0, background: 'none', color: MOBILE_MORE_KEYS.includes(tab) ? 'var(--accent)' : 'var(--text-dim)', padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11 }}>
-            {svg(<><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></>)}{t('common.more')}
+          <button onClick={() => setMoreOpen(true)} className="tt-bottomnav-btn"
+            style={{ color: MOBILE_MORE_KEYS.includes(tab) ? 'var(--accent)' : 'var(--text-dim)' }}>
+            {svg(<><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></>)}<span>{t('common.more')}</span>
           </button>
         </nav>
         </div>
@@ -2255,7 +2258,7 @@ export function NewSessionModal({ open, parent, onClose, onDone }: { open: boole
         if (prompt.trim()) {
           // prompt 作为 CLI 参数随启动一次带入；新建 worktree 时前置命名约定：
           // 让 agent 开工前 git branch -m 一个语义化分支名（占位分支来自后端）
-          const naming = wtMode === 'new' ? t('session.wt.namingHint') + '\n\n' : ''
+          const naming = t(wtMode === 'new' ? 'session.wt.namingHint' : 'session.wt.namingHintRepo') + '\n\n'
           launch = `${cmd} ${shq(naming + prompt.trim())}`
         }
         await api('POST', '/tasks/_/send', { sess: actual, msg: launch })
