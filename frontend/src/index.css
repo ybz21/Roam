@@ -509,7 +509,7 @@ html[data-size="compact"] .tt-pagedivider { display: none; }
    描边走 inset ring 而不是 border：border 会把 24 的控件顶成 26，跟旁边的小按钮错半档。 */
 .tt-stream {
   display: inline-flex; align-items: stretch; flex: 0 0 auto;
-  height: 24px; border-radius: var(--r-xs);
+  height: var(--ctl-h, 28px); border-radius: var(--r-xs);
   background: var(--bg-container);
   box-shadow: inset 0 0 0 1px var(--border-subtle);
   font-size: var(--fs-meta); color: var(--text-dim); white-space: nowrap;
@@ -532,14 +532,13 @@ html[data-size="compact"] .tt-pagedivider { display: none; }
 }
 /* 壳已经给了底与描边，Segmented 自己那层要让开，否则是「框里又一个框」 */
 .tt-stream .tt-stream-seg { background: transparent; box-shadow: none; }
-.tt-stream .tt-stream-seg .ant-segmented-item { min-height: 22px; line-height: 22px; }
+.tt-stream .tt-stream-seg .ant-segmented-item { min-height: calc(var(--ctl-h, 28px) - 6px); }
 
 /* 手机：收成一枚 chip（连没连上 + 现在哪一档），点开才给档位与指标。
    392 的屏上「已连接 · 32ms · 1.2 MB/s · 24fps」加四档要 360px，一行就没了。 */
 .tt-stream.is-chip {
   align-items: center; gap: var(--sp-1); padding: 0 var(--sp-2);
   border: 0; cursor: pointer; color: var(--text-dim);
-  min-height: var(--tap);
 }
 .tt-stream.is-chip .lvl { color: var(--text-bright); }
 .tt-stream-pop { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 220px; }
@@ -566,7 +565,7 @@ html[data-size="compact"] .pv-applaunch { order: 2; flex: 1 0 100%; width: auto 
 .bv-tabs { display: flex; align-items: center; gap: var(--sp-1); flex: 1 1 auto; min-width: 0; overflow-x: auto; }
 .bv-tab {
   display: flex; align-items: center; gap: var(--sp-1);
-  width: 150px; flex: 0 0 auto; height: 28px; padding: 0 var(--sp-2);
+  width: 150px; flex: 0 0 auto; padding: 0 var(--sp-2);
   border-radius: var(--r-xs); border: 1px solid transparent;
   font-size: var(--fs-meta); color: var(--text-dim);
   cursor: pointer; user-select: none;
@@ -586,6 +585,57 @@ html[data-size="compact"] .pv-applaunch { order: 2; flex: 1 0 100%; width: auto 
 }
 /* 第三行（控制条）紧跟地址栏：两行之间只留一档间距，不是上下各一档 */
 .bv-bar.is-ctl { padding-top: 0; }
+
+/* ── 镜像两页工具条：所有控件同高 ────────────────────────────────────────
+   这两条工具条上并排着六七种 antd 控件（Button / Button.Group / Input / Select /
+   Segmented）外加自画的 .tt-stream。它们各有各的「small」：Button 24、Segmented 连
+   内圈 26、Select 的 selector 24 但外面还有一层、自画的壳又是另一个数——一行排下来
+   高低不齐，比单个控件丑得多。这里给一条统一的控件高度，谁也别自作主张。
+
+   粗指针下 36：设计系统要 ≥44 的是**命中区**，这里沿用状态条那档已有的做法
+   （.cc-st-pill 也是 36）——三行工具条全按 44 会在 392 的屏上吃掉 150px。
+   图标钮做成正方形，宽度也跟着 --ctl-h，一行看过去才是等距的方格。 */
+.tt-mirror-head, .bv-bar { --ctl-h: 28px; }
+html[data-pointer="coarse"] .tt-mirror-head,
+html[data-pointer="coarse"] .bv-bar { --ctl-h: 36px; }
+
+/* antd v5 的样式是运行时注入 <head> 的，同权重下它排在这张表后面会赢——
+   所以这几条高度用 !important 咬死，不然「统一高度」只在部分控件上生效，更难看。 */
+.tt-mirror-head .ant-btn,
+.tt-mirror-head .ant-input,
+.tt-mirror-head .ant-input-affix-wrapper,
+.tt-mirror-head .ant-segmented,
+.bv-bar .ant-btn,
+.bv-bar .ant-input,
+.bv-bar .ant-input-affix-wrapper,
+.bv-bar .ant-segmented {
+  height: var(--ctl-h) !important;
+  min-height: var(--ctl-h);
+}
+/* Select 是三层壳（.ant-select > .ant-select-selector > .ant-select-selection-item），
+   只改最外层不会动，行高不跟上文字就贴着上沿 */
+.tt-mirror-head .ant-select,
+.bv-bar .ant-select { height: var(--ctl-h); }
+.tt-mirror-head .ant-select .ant-select-selector,
+.bv-bar .ant-select .ant-select-selector { height: var(--ctl-h) !important; }
+.tt-mirror-head .ant-select .ant-select-selection-item,
+.tt-mirror-head .ant-select .ant-select-selection-placeholder,
+.bv-bar .ant-select .ant-select-selection-item,
+.bv-bar .ant-select .ant-select-selection-placeholder { line-height: calc(var(--ctl-h) - 2px) !important; }
+/* 图标钮：正方形 */
+.tt-mirror-head .ant-btn.ant-btn-icon-only,
+.bv-bar .ant-btn.ant-btn-icon-only { width: var(--ctl-h) !important; }
+/* Segmented 的选中块比外框矮 6，两侧各留 3 的呼吸 */
+.tt-mirror-head .ant-segmented-item,
+.bv-bar .ant-segmented-item { min-height: calc(var(--ctl-h) - 6px); }
+.tt-mirror-head .ant-segmented-item-label,
+.bv-bar .ant-segmented-item-label,
+.tt-stream .ant-segmented-item-label {
+  display: flex; align-items: center; justify-content: center;
+  min-height: calc(var(--ctl-h, 28px) - 6px); line-height: 1;
+}
+/* 标签页也吃同一档：标签条与下面两行是同一套节奏 */
+.bv-tab { height: var(--ctl-h); }
 
 /* ── 页面骨架：所有一级页面从同一个左上角起笔，卡片和工具区间距一致 ── */
 .tt-page {
