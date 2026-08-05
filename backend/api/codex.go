@@ -271,6 +271,79 @@ func parseCodexLine(line string) *cMsg {
 	return nil
 }
 
+// scanCodexStatus 从一行 rollout 里更新会话状态。
+// Codex 比 Claude 大方：token_count 事件直接把 model_context_window 给出来，
+// 不用按模型 id 猜；还额外给了套餐额度（rate_limits），Claude 侧没有这项。
+func scanCodexStatus(line string, st cStatus, quota *float64) cStatus {
+	var raw struct {
+		Type    string          `json:"type"`
+		Payload json.RawMessage `json:"payload"`
+	}
+	if json.Unmarshal([]byte(line), &raw) != nil {
+		return st
+	}
+	switch raw.Type {
+	case "turn_context":
+		var p struct {
+			Model          string `json:"model"`
+			ApprovalPolicy string `json:"approval_policy"`
+			SandboxPolicy  struct {
+				Type string `json:"type"`
+			} `json:"sandbox_policy"`
+			CollaborationMode struct {
+				Mode     string `json:"mode"`
+				Settings struct {
+					ReasoningEffort string `json:"reasoning_effort"`
+				} `json:"settings"`
+			} `json:"collaboration_mode"`
+		}
+		if json.Unmarshal(raw.Payload, &p) != nil {
+			return st
+		}
+		if p.Model != "" {
+			st.Model = p.Model
+		}
+		if e := p.CollaborationMode.Settings.ReasoningEffort; e != "" {
+			st.Effort = e
+		}
+		// 模式取「协作模式」为主（default / plan）；没有就退回沙箱策略，
+		// 那至少能回答「它现在能不能动我的盘」这个更要紧的问题。
+		if m := p.CollaborationMode.Mode; m != "" {
+			st.Mode = m
+		} else if p.SandboxPolicy.Type != "" {
+			st.Mode = p.SandboxPolicy.Type
+		}
+	case "event_msg":
+		var p struct {
+			Type string `json:"type"`
+			Info struct {
+				Total struct {
+					TotalTokens int `json:"total_tokens"`
+				} `json:"total_token_usage"`
+				Window int `json:"model_context_window"`
+			} `json:"info"`
+			RateLimits struct {
+				Primary struct {
+					UsedPercent float64 `json:"used_percent"`
+				} `json:"primary"`
+			} `json:"rate_limits"`
+		}
+		if json.Unmarshal(raw.Payload, &p) != nil || p.Type != "token_count" {
+			return st
+		}
+		if p.Info.Total.TotalTokens > 0 {
+			st.Used = p.Info.Total.TotalTokens
+		}
+		if p.Info.Window > 0 {
+			st.Window = p.Info.Window
+		}
+		if p.RateLimits.Primary.UsedPercent > 0 {
+			*quota = p.RateLimits.Primary.UsedPercent
+		}
+	}
+	return st
+}
+
 // CodexTranscript GET /sessions/:name/codex-transcript?file=...&offset=N
 // 与 ClaudeTranscript 同构：offset 为已消费物理行数，仅返回其后新内容（供增量轮询）。
 func (a *API) CodexTranscript(c *gin.Context) {
@@ -297,6 +370,8 @@ func (a *API) CodexTranscript(c *gin.Context) {
 	defer f.Close()
 
 	msgs := []cMsg{}
+	st := cStatus{}
+	quota := 0.0
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 1024*1024), 8*1024*1024)
 	n := 0
@@ -305,12 +380,18 @@ func (a *API) CodexTranscript(c *gin.Context) {
 		if n <= offset {
 			continue
 		}
-		if m := parseCodexLine(sc.Text()); m != nil {
+		line := sc.Text()
+		st = scanCodexStatus(line, st, &quota)
+		if m := parseCodexLine(line); m != nil {
 			if m.ID == "" { // 行号作稳定 key（前端窗口化/折叠态持久化用）
 				m.ID = strconv.Itoa(n)
 			}
 			msgs = append(msgs, *m)
 		}
 	}
-	c.JSON(http.StatusOK, gin.H{"data": gin.H{"messages": msgs, "nextOffset": n, "file": file}})
+	data := gin.H{"messages": msgs, "nextOffset": n, "file": file, "status": st}
+	if quota > 0 {
+		data["quota"] = quota
+	}
+	c.JSON(http.StatusOK, gin.H{"data": data})
 }

@@ -185,13 +185,22 @@ export type ToolOutcome = {
 
 ```ts
 export type AgentStatus = {
-  mode?:    { id: string; label: string; tone: Tone }
+  mode?:    { id: string; tone: ModeTone }
   model?:   string
   effort?:  string
-  context?: { used: number; window: number }
-  quota?:   { percent: number; resetsAt?: number }
+  context?: { used: number; window: number; percent: number }
+  quota?:   number
+  tasks?:   { done: number; total: number; doing?: string }   // 来自 §6.8 的任务索引
 }
 ```
+
+**任务进度也进状态条**：`done/total` 取自 §6.8 的 `TaskIndex`，不是后端给的——
+「一共几件事、做到哪了」是长会话里最想一眼看到的东西，比模型名有用得多。
+`doing` 挂在 title 上，悬停/长按能看到正在做哪一件。
+
+**「回到底部」并进状态条**并带上未读数：它原本是右下角的悬浮圆钮，跟状态条位置重复，
+合并后少一个浮层。上滚离底才计数，贴底恒为 0（看得见就不叫未读）。
+状态条一个字段都没有时（刚进页面、转录还没扫出状态）才退回那颗悬浮钮。
 
 渲染层只判断「有没有 `quota`」，**不判断「是不是 Codex」**。
 

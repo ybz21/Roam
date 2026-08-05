@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractCommand, toolStatus } from './tool-render'
+import { commandFromRaw, extractCommand, toolStatus } from './tool-render'
 import { shortPath } from './tool-parts'
 import type { Block } from './types'
 
@@ -29,6 +29,25 @@ describe('extractCommand', () => {
   it('拿不到就给空串，不抛', () => {
     expect(extractCommand(null)).toBe('')
     expect(extractCommand({})).toBe('')
+  })
+})
+
+describe('commandFromRaw（后端截断了 JSON 时的兜底）', () => {
+  it('JSON 被 clip 截断后照样抠得出命令，不再渲染成裸 JSON', () => {
+    // 后端 clip() 在 6000 字处硬切，尾巴上的引号/括号全没了
+    const truncated = '{"command":"cat > /tmp/pr.md <<\'EOF\'\\n一屏对话里工具调用占了大半'
+    expect(JSON.parse.bind(null, truncated)).toThrow()   // 先确认它确实解析不了
+    expect(commandFromRaw(truncated)).toBe("cat > /tmp/pr.md <<'EOF'\n一屏对话里工具调用占了大半")
+  })
+
+  it('转义序列还原：\\n \\t \\" \\\\ 与 \\uXXXX', () => {
+    expect(commandFromRaw('{"command":"a\\nb\\tc \\"q\\" \\\\ \\u0041"}')).toBe('a\nb\tc "q" \\ A')
+  })
+
+  it('认 cmd 别名；没有命令字段就返回空串交给下一层兜底', () => {
+    expect(commandFromRaw('{"cmd":"pwd"}')).toBe('pwd')
+    expect(commandFromRaw('{"file_path":"/a"}')).toBe('')
+    expect(commandFromRaw('not json at all')).toBe('')
   })
 })
 

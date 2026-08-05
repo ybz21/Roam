@@ -1989,6 +1989,80 @@ html[data-pointer="coarse"] .cc-git-section-act .cc-dl { opacity: 1; }
   opacity: .8;
 }
 
+/* ── 会话状态条（chat/StatusBar.tsx，15 设计 §11）──────────────────────────
+   输入框正上方一行 28px：模式 · 推理档 · 上下文占用 · 任务进度 · 未读回底。
+   手机上这 28px 是从终端行数里借的，所以窄屏只留三件（模型名/推理档收进点击浮层）。 */
+.cc-statusbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  padding: var(--sp-1) var(--sp-3);
+  font-size: var(--fs-micro);
+  color: var(--text-dim);
+  border-top: 1px solid var(--border-subtle);
+}
+.cc-st-pill {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: var(--bg-container);
+  padding: 2px 9px;
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.cc-st-pill:hover { border-color: var(--accent-border); }
+.cc-st-pill i { width: 6px; height: 6px; border-radius: 50%; display: block; }
+.cc-st-item { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.cc-st-jump {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  border-radius: var(--r-pill);
+  color: #fff;
+  padding: 3px 10px 3px 8px;
+  font: inherit;
+  cursor: pointer;
+}
+.cc-st-jump b { font-variant-numeric: tabular-nums; }
+/* 展开的详情：模型 / 推理档 / 上下文绝对值 / 在做什么，浮在状态条之上 */
+.cc-st-detail {
+  position: absolute;
+  left: var(--sp-3);
+  bottom: calc(100% + var(--sp-1));
+  z-index: var(--z-fab);
+  min-width: 200px;
+  max-width: min(320px, calc(100vw - var(--sp-5)));
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg-elevated);
+  box-shadow: var(--elevated-shadow);
+  font-size: var(--fs-meta);
+}
+.cc-st-detail > div { display: flex; align-items: baseline; gap: var(--sp-2); min-width: 0; }
+.cc-st-detail span { flex: 0 0 auto; color: var(--text-dimmer); }
+.cc-st-detail b {
+  flex: 1 1 auto; min-width: 0; text-align: right;
+  color: var(--text-bright); font-weight: 500;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+@media (pointer: coarse) {
+  .cc-st-pill, .cc-st-jump { min-height: 28px; }
+}
+
 /* ── 语法高亮（highlight.js 类 → 主题变量；不引外部 CSS，随黑白主题切换） ── */
 .hljs { color: var(--text-bright); background: transparent; }
 .hljs-comment, .hljs-quote { color: var(--hl-comment); font-style: italic; }
