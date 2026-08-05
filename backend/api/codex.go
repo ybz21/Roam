@@ -286,6 +286,7 @@ func scanCodexStatus(line string, st cStatus, quota *float64) cStatus {
 	case "turn_context":
 		var p struct {
 			Model          string `json:"model"`
+			Cwd            string `json:"cwd"`
 			ApprovalPolicy string `json:"approval_policy"`
 			SandboxPolicy  struct {
 				Type string `json:"type"`
@@ -302,6 +303,9 @@ func scanCodexStatus(line string, st cStatus, quota *float64) cStatus {
 		}
 		if p.Model != "" {
 			st.Model = p.Model
+		}
+		if p.Cwd != "" {
+			st.Cwd = p.Cwd
 		}
 		if e := p.CollaborationMode.Settings.ReasoningEffort; e != "" {
 			st.Effort = e

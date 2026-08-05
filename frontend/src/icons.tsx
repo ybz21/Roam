@@ -112,7 +112,6 @@ export const ImageIcon = ({ size = 13 }: P) => line(<><rect x="3" y="5" width="1
 export const GlobeIcon = ({ size = 13 }: P) => line(<><circle cx="12" cy="12" r="9" /><path d="M3.3 9h17.4" /><path d="M3.3 15h17.4" /><path d="M12 3a15 15 0 0 1 0 18" /><path d="M12 3a15 15 0 0 0 0 18" /></>, size)
 export const GearIcon = ({ size = 13 }: P) => line(
   <><circle cx="12" cy="12" r="3" /><path d="M19.4 14.5a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1v.3a2 2 0 1 1-4 0v-.2a1.6 1.6 0 0 0-2.8-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7h-.3a2 2 0 1 1 0-4h.2a1.6 1.6 0 0 0 1.1-2.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 2.7-1.1v-.3a2 2 0 1 1 4 0v.2a1.6 1.6 0 0 0 2.8 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7h.3a2 2 0 1 1 0 4h-.2a1.6 1.6 0 0 0-1.4 1Z" /></>, size)
-export const BrainIcon = ({ size = 13 }: P) => line(<><path d="M9.5 3.5a3 3 0 0 0-3 3 3 3 0 0 0-1.5 5.4A3 3 0 0 0 6.6 17a3 3 0 0 0 2.9 3.5Z" /><path d="M14.5 3.5a3 3 0 0 1 3 3 3 3 0 0 1 1.5 5.4A3 3 0 0 1 17.4 17a3 3 0 0 1-2.9 3.5Z" /></>, size)
 export const ChecklistIcon = ({ size = 13 }: P) => line(<><path d="m3 6 2 2 3-3" /><path d="m3 14 2 2 3-3" /><path d="M12 7h9" /><path d="M12 15h9" /></>, size)
 export const KeyboardIcon = ({ size = 13 }: P) => line(
   <><rect x="2.5" y="6" width="19" height="12" rx="2" /><path d="M7 10h.01" /><path d="M11 10h.01" /><path d="M15 10h.01" /><path d="M8 14h8" /></>, size)

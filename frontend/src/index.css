@@ -1792,26 +1792,36 @@ html[data-pointer="coarse"] .cc-git-section-act .cc-dl { opacity: 1; }
 @keyframes cc-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .cc-spin { animation-duration: 2.4s; } }
 
-/* 命令行 */
+/* 命令行：一屏里最该一眼认出来的东西。
+   给它一条绿色左脊 + 终端色内底，跟一行式（细色条、无底）和卡片（有折叠头）
+   三者远看就分得开——密度做完之后，剩下的问题是「这三档长得太像」。 */
 .cc-cmd {
-  margin: var(--sp-1) 0;
+  position: relative;
+  margin: var(--sp-2) 0;
   border: 1px solid var(--border);
+  border-left: 2px solid var(--ok);
   border-radius: var(--r-xs);
-  background: var(--bg-base);
+  background: var(--bg-term);
   overflow: hidden;
+  transition: border-color .15s ease, box-shadow .15s ease;
 }
+.cc-cmd:hover { border-color: color-mix(in srgb, var(--ok) 45%, var(--border)); }
+.cc-cmd.is-open { box-shadow: 0 1px 0 rgba(0, 0, 0, .18); }
 .cc-cmd-head {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
   min-width: 0;
-  padding: var(--sp-1) var(--sp-2);
+  padding: 5px var(--sp-2) 5px 7px;
   font-size: var(--fs-meta);
   outline: none;
 }
 .cc-cmd-head.is-clickable { cursor: pointer; }
 .cc-cmd-head.is-clickable:hover { background: var(--list-hover); }
 .cc-cmd-head:focus-visible { box-shadow: inset 0 0 0 1px var(--accent-border); }
+/* 出错的那条：左脊转红，整块底色也带一点，不用再靠人去读文字 */
+.cc-cmd.is-err { border-left-color: var(--danger); background: color-mix(in srgb, var(--bg-term) 92%, var(--danger)); }
+.cc-cmd.is-err:hover { border-color: var(--danger-border); }
 .cc-cmd-chev {
   flex: 0 0 auto;
   display: inline-flex;
@@ -1827,21 +1837,40 @@ html[data-pointer="coarse"] .cc-git-section-act .cc-dl { opacity: 1; }
   white-space: nowrap;
 }
 .cc-cmd-text.is-open { white-space: pre-wrap; overflow-wrap: anywhere; }
-.cc-cmd-lines { flex: 0 0 auto; color: var(--text-dimmer); font-size: var(--fs-micro); font-variant-numeric: tabular-nums; }
-.cc-cmd-desc { padding: 0 var(--sp-2) var(--sp-1) 28px; color: var(--text-dimmer); font-size: var(--fs-micro); }
+/* 行数/「+N 行」这类量感：做成淡底小胶囊，跟命令正文（等宽亮色）拉开层次，
+   否则一串灰字挤在行尾会被读成命令的一部分 */
+.cc-cmd-lines {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  background: var(--list-hover);
+  color: var(--text-dimmer);
+  font-size: var(--fs-micro);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.cc-cmd-desc {
+  padding: 0 var(--sp-2) 5px 29px;
+  color: var(--text-dimmer);
+  font-size: var(--fs-micro);
+  line-height: 1.5;
+}
 .cc-cmd-out {
   margin: 0;
-  padding: var(--sp-2);
+  padding: var(--sp-2) var(--sp-2) var(--sp-2) 29px;
   border-top: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-base) 60%, transparent);
   max-height: 320px;
   overflow: auto;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: var(--fs-meta);
-  line-height: 1.5;
+  line-height: 1.55;
   color: var(--text-dim);
 }
+/* 输出与命令对齐到同一条竖线上（29 = chev 12 + gap 8 + $ 约 9），
+   读起来是「这条命令 → 它的输出」，不是两块并排的东西 */
 
 /* 可折叠卡片 */
 .cc-toolcard { margin: 1px 0; padding-left: var(--sp-2); }
@@ -2018,7 +2047,44 @@ html[data-pointer="coarse"] .cc-git-section-act .cc-dl { opacity: 1; }
 }
 .cc-st-pill:hover { border-color: var(--accent-border); }
 .cc-st-pill i { width: 6px; height: 6px; border-radius: 50%; display: block; }
-.cc-st-item { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.cc-st-item {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 2px 4px;
+  border-radius: var(--r-xs);
+}
+.cc-st-item.is-btn { cursor: pointer; }
+.cc-st-item.is-btn:hover { background: var(--list-hover); }
+.cc-st-chev { display: inline-flex; color: var(--text-dimmer); transition: transform .15s ease; }
+.cc-st-ellip { max-width: 12ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cc-st-item:disabled { cursor: default; }
+.cc-st-pill.is-btn { cursor: pointer; }
+.cc-st-pill:disabled { cursor: default; }
+.cc-st-act {
+  margin-top: var(--sp-1);
+  border: 1px solid var(--warn-border);
+  border-radius: var(--r-xs);
+  background: var(--warn-soft);
+  color: var(--warn);
+  padding: 4px 10px;
+  font: inherit;
+  cursor: pointer;
+}
+.cc-st-act:hover { background: color-mix(in srgb, var(--warn) 22%, transparent); }
+/* 跳到某条消息后闪一下：一屏里可能有好几条红，得指明是「这一条」 */
+.cc-flash { animation: cc-flash 1.2s ease-out; border-radius: var(--r-sm); }
+@keyframes cc-flash {
+  0%, 40% { background: var(--warn-soft); }
+  100% { background: transparent; }
+}
+@media (prefers-reduced-motion: reduce) { .cc-flash { animation: none; outline: 2px solid var(--warn-border); } }
 .cc-st-jump {
   position: relative;
   flex: 0 0 auto;
@@ -2033,8 +2099,8 @@ html[data-pointer="coarse"] .cc-git-section-act .cc-dl { opacity: 1; }
   cursor: pointer;
 }
 .cc-st-jump b { font-variant-numeric: tabular-nums; }
-/* 展开的详情：模型 / 推理档 / 上下文绝对值 / 在做什么，浮在状态条之上 */
-.cc-st-detail {
+/* 展开层：任务清单 / 会话详情共用这一层浮层，浮在状态条之上 */
+.cc-st-panel {
   position: absolute;
   left: var(--sp-3);
   bottom: calc(100% + var(--sp-1));
@@ -2051,9 +2117,10 @@ html[data-pointer="coarse"] .cc-git-section-act .cc-dl { opacity: 1; }
   box-shadow: var(--elevated-shadow);
   font-size: var(--fs-meta);
 }
-.cc-st-detail > div { display: flex; align-items: baseline; gap: var(--sp-2); min-width: 0; }
-.cc-st-detail span { flex: 0 0 auto; color: var(--text-dimmer); }
-.cc-st-detail b {
+.cc-st-panel { max-height: 40vh; overflow: auto; }
+.cc-st-panel.is-info > div { display: flex; align-items: baseline; gap: var(--sp-2); min-width: 0; }
+.cc-st-panel.is-info > div > span { flex: 0 0 auto; color: var(--text-dimmer); }
+.cc-st-panel.is-info > div > b {
   flex: 1 1 auto; min-width: 0; text-align: right;
   color: var(--text-bright); font-weight: 500;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;

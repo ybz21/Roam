@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { toAgentStatus, fmtTokens, modeKey } from './status'
+import { toAgentStatus, fmtTokens, modeKey, fitWindow } from './status'
 import type { TaskIndex } from './tasks'
 
 describe('toAgentStatus', () => {
@@ -37,8 +37,10 @@ describe('toAgentStatus', () => {
     expect(toAgentStatus({ window: 200000 }).context).toBeUndefined()
   })
 
-  it('百分比封顶 100：压缩前一瞬可能超窗口，不该画出满溢的环', () => {
-    expect(toAgentStatus({ used: 300000, window: 200000 }).context!.percent).toBe(100)
+  it('用量超过后端给的窗口 → 自动升档，而不是钉在 100%', () => {
+    const st = toAgentStatus({ used: 652_321, window: 200_000 })
+    expect(st.context!.window).toBe(1_000_000)
+    expect(st.context!.percent).toBeCloseTo(65.2, 1)
   })
 
   it('任务进度取自转录归拢出的清单，含「正在做哪件」', () => {
@@ -48,12 +50,38 @@ describe('toAgentStatus', () => {
       '3': { id: '3', subject: 'c', status: 'pending' },
       '4': { id: '4', subject: 'd', status: 'deleted' },
     }
-    expect(toAgentStatus({}, tasks).tasks).toEqual({ done: 1, total: 3, doing: '做状态条' })
+    const got = toAgentStatus({}, tasks).tasks!
+    expect(got.done).toBe(1)
+    expect(got.total).toBe(3)
+    expect(got.doing).toBe('做状态条')
+    // list 供点开逐条看进度；已删除的不在里面
+    expect(got.list.map((x) => x.id)).toEqual(['1', '2', '3'])
   })
 
   it('没有任务就不出这一项', () => {
     expect(toAgentStatus({}, {}).tasks).toBeUndefined()
     expect(toAgentStatus({}).tasks).toBeUndefined()
+  })
+})
+
+describe('fitWindow（后端窗口偏小时兜底升档）', () => {
+  it('用量没超窗口就原样', () => {
+    expect(fitWindow(120_000, 200_000)).toBe(200_000)
+  })
+
+  it('实测踩过的那个坑：1M 会话被当成 200k，只会画出 100% 却还在涨', () => {
+    // 转录里 message.model 恒为 "claude-opus-5"（[1m] 标记被剥掉），
+    // 本机 12 个会话里 11 个用量超 200k，最高 999,263
+    expect(fitWindow(652_321, 200_000)).toBe(1_000_000)
+    expect(fitWindow(999_263, 200_000)).toBe(1_000_000)
+  })
+
+  it('超过已知最大档就用实际用量当分母，也就是恰好 100%，不会溢出', () => {
+    expect(fitWindow(3_000_000, 200_000)).toBe(3_000_000)
+  })
+
+  it('窗口为 0（后端没给）时不硬凑', () => {
+    expect(fitWindow(100, 0)).toBe(0)
   })
 })
 

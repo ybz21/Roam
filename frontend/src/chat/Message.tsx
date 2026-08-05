@@ -92,7 +92,7 @@ function UserMessage({ m, accent }: { m: Msg; accent: string }) {
   const reminders = extras.flatMap((p) => p.reminders)
   const hasBubble = m.blocks.some((b, i) => (parsed[i] ? !!(parsed[i]!.body || parsed[i]!.command) : !!b.text))
   return (
-    <div className="cc-msg" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', margin: 'var(--sp-1) 0', gap: 2 }}>
+    <div className="cc-msg" data-msg-id={m.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', margin: 'var(--sp-1) 0', gap: 2 }}>
       {hasBubble && (
         <div style={{ maxWidth: '86%', background: accent, borderRadius: 'var(--r-card)', padding: 'var(--sp-2) var(--sp-3)', color: '#fff', display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)' }}>
           {m.blocks.map((b, i) => {
@@ -128,7 +128,7 @@ export const ChatMessage = memo(function ChatMessage({ m, results, side }: { m: 
   const segs = segments(m.blocks)
   const hasProse = segs.some((sg) => !sg.tool)
   return (
-    <div className="cc-msg" style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', margin: 'var(--sp-1) 0', gap: 'var(--sp-1)' }}>
+    <div className="cc-msg" data-msg-id={m.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', margin: 'var(--sp-1) 0', gap: 'var(--sp-1)' }}>
       {segs.map((sg, i) => (sg.tool ? (
         <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {sg.blocks.map((b, j): ReactNode => (

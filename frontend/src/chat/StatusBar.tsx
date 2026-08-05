@@ -1,12 +1,22 @@
-// 会话状态条：输入框正上方一行 28px —— 当前模式 · 推理档 · 上下文占用 · 任务进度 · 未读回底。
+// 会话状态条：输入框正上方一行 —— 模式 · 上下文 · 任务 · 失败 · 分支 · 用时 · 未读回底。
 //
 // 数据全都已经躺在转录里（见 15 设计 §11），搭 /transcript 现有轮询的车，不额外开端点。
-// 手机上这 28px 是从终端行数里借的，所以窄屏只留「模式 · 环 · 未读」，模型名与推理档收起来。
+// 条上只放**会变的**东西；模型名、推理档这类一整个会话都不动的收进详情，
+// 常驻在条上只是占位置。
+//
+// 每一格都能点，而且点了要做**这一格自己那件事**——不是统一弹同一个面板：
+//   模式 → 轮换权限模式（注入 Shift+Tab，跟在 TUI 里按是同一个动作）
+//   上下文 → 详情（绝对值 / 模型 / 推理档）；快满了给「压缩」
+//   任务 → 展开逐条进度
+//   失败 → 跳到最近一次失败那条
+//   分支 → 打开 Git 面板
+//   用时 → 详情
 import { useState } from 'react'
 import { useI18n } from '../i18n'
-import { useLayout } from '../layout'
-import { ArrowToBottom, BrainIcon, ChecklistIcon } from '../icons'
-import { fmtTokens, modeKey, type AgentStatus, type ModeTone } from './status'
+import { ArrowToBottom, ChecklistIcon, ChevronRight, ClockIcon, WarnIcon } from '../icons'
+import { BranchIcon } from '../git/parts'
+import { fmtElapsed, fmtTokens, modeKey, type AgentStatus, type ModeTone } from './status'
+import { TodoPane } from './tool-parts'
 
 const TONE: Record<ModeTone, string> = {
   accent: 'var(--accent)',
@@ -15,7 +25,7 @@ const TONE: Record<ModeTone, string> = {
   neutral: 'var(--text-dim)',
 }
 
-// 占用环。用 stroke-dasharray 画：18px 的图形上，一根描边比任何数字都快读。
+// 占用环。用 stroke-dasharray 画：16px 的图形上，一根描边比任何数字都快读。
 function Ring({ percent, color, size = 16 }: { percent: number; color: string; size?: number }) {
   const r = 15
   const c = 2 * Math.PI * r
@@ -28,58 +38,113 @@ function Ring({ percent, color, size = 16 }: { percent: number; color: string; s
   )
 }
 
-export function StatusBar({ status, accent, unread, onJump }: {
+function Chip({ onClick, title, tone, expanded, children }: {
+  onClick?: () => void
+  title?: string
+  tone?: string
+  expanded?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <button type="button" className={`cc-st-item${onClick ? ' is-btn' : ''}`} style={tone ? { color: tone } : undefined}
+      aria-expanded={expanded} title={title} onClick={onClick} disabled={!onClick}>
+      {children}
+    </button>
+  )
+}
+
+type Panel = 'none' | 'info' | 'tasks'
+
+export type StatusActions = {
+  /** 轮换权限模式：向会话注入 Shift+Tab */
+  onCycleMode?: () => void
+  /** 跳到最近一次失败的工具调用 */
+  onJumpError?: () => void
+  /** 打开 Git 面板 */
+  onOpenGit?: () => void
+  /** 让 Agent 压缩上下文（发 /compact） */
+  onCompact?: () => void
+}
+
+export function StatusBar({ status, accent, unread, onJump, actions = {} }: {
   status: AgentStatus
   accent: string
   unread: number
   onJump?: () => void
+  actions?: StatusActions
 }) {
   const { t } = useI18n()
-  const { phone } = useLayout()
-  const [detail, setDetail] = useState(false)
+  const [panel, setPanel] = useState<Panel>('none')
+  const toggle = (p: Panel) => setPanel((cur) => (cur === p ? 'none' : p))
 
   const ctx = status.context
   // 上下文接近满了要变色：85% 起黄，95% 起红。这是唯一会「越用越糟」的指标。
-  const ctxColor = !ctx ? accent : ctx.percent >= 95 ? 'var(--danger)' : ctx.percent >= 85 ? 'var(--warn)' : accent
-  const hasAny = status.mode || ctx || status.tasks || status.quota || unread > 0
+  const tight = !!ctx && ctx.percent >= 85
+  const ctxColor = !ctx ? accent : ctx.percent >= 95 ? 'var(--danger)' : tight ? 'var(--warn)' : accent
+  const hasAny = status.mode || ctx || status.tasks || status.quota || status.branch || status.errors || unread > 0
   if (!hasAny) return null
 
   const modeLabel = status.mode ? t(modeKey(status.mode.id)) : ''
   // 认不出的模式 id 直接显示原文：新模式先出现在 CLI 里是常态，不该显示成 key
   const modeText = modeLabel.startsWith('chat.mode.') ? status.mode!.id : modeLabel
+  // 小数位只在 10% 以下给一位：两位数还带小数会一直跳，看不出真的在涨
+  const pct = ctx ? ctx.percent.toFixed(ctx.percent < 10 ? 1 : 0) : ''
 
   return (
     <div className="cc-statusbar">
       {status.mode && (
-        <button type="button" className="cc-st-pill" style={{ color: TONE[status.mode.tone] }}
-          onClick={() => setDetail((v) => !v)} title={t('chat.statusDetail')}>
+        <button type="button" className={`cc-st-pill${actions.onCycleMode ? ' is-btn' : ''}`}
+          style={{ color: TONE[status.mode.tone] }} disabled={!actions.onCycleMode}
+          onClick={actions.onCycleMode} title={actions.onCycleMode ? t('chat.modeCycle') : modeText}>
           <i style={{ background: TONE[status.mode.tone] }} />{modeText}
         </button>
       )}
 
-      {!phone && status.effort && (
-        <span className="cc-st-item" title={t('chat.effort')}><BrainIcon size={13} />{status.effort}</span>
-      )}
-
       {ctx && (
-        <span className="cc-st-item" title={`${fmtTokens(ctx.used)} / ${fmtTokens(ctx.window)}`}>
+        <Chip onClick={() => toggle('info')} expanded={panel === 'info'}
+          title={`${fmtTokens(ctx.used)} / ${fmtTokens(ctx.window)}`}>
           <Ring percent={ctx.percent} color={ctxColor} />
-          <span style={{ color: ctxColor, fontVariantNumeric: 'tabular-nums' }}>{ctx.percent.toFixed(ctx.percent < 10 ? 1 : 0)}%</span>
-        </span>
+          <span style={{ color: ctxColor, fontVariantNumeric: 'tabular-nums' }}>{pct}%</span>
+        </Chip>
       )}
 
       {status.quota != null && (
-        <span className="cc-st-item" title={t('chat.quotaTitle')}>
+        <Chip title={t('chat.quotaTitle')}>
           <Ring percent={status.quota} color="var(--warn)" />
           <span style={{ color: 'var(--text-dim)', fontVariantNumeric: 'tabular-nums' }}>{Math.round(status.quota)}%</span>
-        </span>
+        </Chip>
       )}
 
       {status.tasks && (
-        <span className="cc-st-item" title={status.tasks.doing || t('chat.taskPanel')}>
+        <Chip onClick={() => toggle('tasks')} expanded={panel === 'tasks'} title={status.tasks.doing || t('chat.taskPanel')}>
           <ChecklistIcon size={13} />
           <span style={{ fontVariantNumeric: 'tabular-nums' }}>{status.tasks.done}/{status.tasks.total}</span>
-        </span>
+          <span className="cc-st-chev" style={{ transform: panel === 'tasks' ? 'rotate(-90deg)' : 'rotate(90deg)' }}>
+            <ChevronRight size={11} />
+          </span>
+        </Chip>
+      )}
+
+      {/* 失败数：整条里唯一的红。点了跳到最近一次——「哪儿挂了」是看到这个数字后的下一个问题 */}
+      {!!status.errors && (
+        <Chip onClick={actions.onJumpError} tone="var(--danger)" title={t('chat.errorsTitle', { count: status.errors })}>
+          <WarnIcon size={12} />
+          <span style={{ fontVariantNumeric: 'tabular-nums' }}>{status.errors}</span>
+        </Chip>
+      )}
+
+      {status.branch && (
+        <Chip onClick={actions.onOpenGit} title={status.cwd || status.branch}>
+          <BranchIcon size={12} />
+          <span className="cc-st-ellip">{status.branch}</span>
+        </Chip>
+      )}
+
+      {status.elapsed != null && (
+        <Chip onClick={() => toggle('info')} expanded={panel === 'info'} title={t('chat.elapsedTitle')}>
+          <ClockIcon size={12} />
+          <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtElapsed(status.elapsed)}</span>
+        </Chip>
       )}
 
       <span style={{ flex: 1 }} />
@@ -93,12 +158,28 @@ export function StatusBar({ status, accent, unread, onJump }: {
         </button>
       )}
 
-      {detail && (
-        <div className="cc-st-detail">
+      {/* 任务展开：逐条列出来看进度。复用工具渲染里那套待办件，
+          状态点是画的不是字符，跟对话里的 TodoWrite 长一个样。 */}
+      {panel === 'tasks' && status.tasks && (
+        <div className="cc-st-panel">
+          <TodoPane items={status.tasks.list.map((x) => ({ id: x.id, content: x.subject, status: x.status }))} />
+        </div>
+      )}
+
+      {panel === 'info' && (
+        <div className="cc-st-panel is-info">
           {status.model && <div><span>{t('chat.model')}</span><b>{status.model}</b></div>}
           {status.effort && <div><span>{t('chat.effort')}</span><b>{status.effort}</b></div>}
           {ctx && <div><span>{t('chat.context')}</span><b>{fmtTokens(ctx.used)} / {fmtTokens(ctx.window)}</b></div>}
-          {status.tasks?.doing && <div><span>{t('chat.taskPanel')}</span><b>{status.tasks.doing}</b></div>}
+          {status.mode && <div><span>{t('chat.modeLabel')}</span><b>{modeText}</b></div>}
+          {status.elapsed != null && <div><span>{t('chat.elapsed')}</span><b>{fmtElapsed(status.elapsed)}</b></div>}
+          {status.cwd && <div><span>{t('chat.cwd')}</span><b>{status.cwd}</b></div>}
+          {/* 快满了才给「压缩」：平时摆在那儿是个误触源，它会真的往会话里发一条命令 */}
+          {tight && actions.onCompact && (
+            <button type="button" className="cc-st-act" onClick={() => { setPanel('none'); actions.onCompact!() }}>
+              {t('chat.compact')}
+            </button>
+          )}
         </div>
       )}
     </div>
