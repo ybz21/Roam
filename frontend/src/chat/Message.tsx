@@ -5,7 +5,7 @@
 // 工具本来就不是「说的话」，塞进气泡里等于给每次 Read 描一道框，一屏十几次就全是框。
 import { memo, type ReactNode } from 'react'
 import Markdown from '../Markdown'
-import { Collapsible, copyText, fmtTs, MONO } from './blocks'
+import { Collapsible, copyText, fmtTs, localizeSentinels, MONO } from './blocks'
 import { useI18n } from '../i18n'
 import type { Block, Msg } from './types'
 import { LooseResult, ToolView } from './tool-render'
@@ -73,10 +73,10 @@ function Prose({ blocks, accent, side }: { blocks: Block[]; accent: string; side
     <>
       {blocks.map((b, i) => {
         if (b.kind === 'thinking') {
-          const text = b.text === REDACTED_THINKING ? t('chat.thinkingRedacted') : b.text
+          const text = b.text === REDACTED_THINKING ? t('chat.thinkingRedacted') : localizeSentinels(b.text || '', t)
           return <Collapsible key={i} label={thinkLabel} text={text} color="var(--text-dim)" />
         }
-        return <Markdown key={i} accent={accent}>{b.text || ''}</Markdown>
+        return <Markdown key={i} accent={accent}>{localizeSentinels(b.text || '', t)}</Markdown>
       })}
     </>
   )

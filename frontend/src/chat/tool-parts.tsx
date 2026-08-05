@@ -129,15 +129,24 @@ export function CommandRow({ command, description, output, isError, status, labe
   useEffect(() => {
     if (!auto.current && has && isError) { auto.current = true; setOpen(true) }
   }, [has, isError])
-  const toggle = () => { if (has) setOpen((v) => !v) }
+  // 多行命令（heredoc / 换行管道）折叠态只给首行：整段塞进一行既读不出内容，
+  // 又因为 white-space:nowrap 变成一条望不到头的长线。展开才铺全文。
+  const nl = command.indexOf('\n')
+  const multi = nl >= 0
+  const firstLine = multi ? command.slice(0, nl) : command
+  const cmdLines = multi ? command.split('\n').length - 1 : 0
+  // 有输出、或本身就是多行 → 整行可展开
+  const canOpen = has || multi
+  const toggle = () => { if (canOpen) setOpen((v) => !v) }
   return (
     <div className="cc-cmd" style={{ borderColor: isError ? 'var(--danger-border)' : 'var(--border)' }}>
-      <div className={`cc-cmd-head${has ? ' is-clickable' : ''}`} role={has ? 'button' : undefined} tabIndex={has ? 0 : undefined}
-        aria-expanded={has ? open : undefined} onClick={toggle}
-        onKeyDown={(e) => { if (has && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggle() } }}>
-        <span className="cc-cmd-chev" style={{ opacity: has ? 1 : 0, transform: open ? 'rotate(90deg)' : 'none' }}><ChevronRight size={12} /></span>
+      <div className={`cc-cmd-head${canOpen ? ' is-clickable' : ''}`} role={canOpen ? 'button' : undefined} tabIndex={canOpen ? 0 : undefined}
+        aria-expanded={canOpen ? open : undefined} onClick={toggle}
+        onKeyDown={(e) => { if (canOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggle() } }}>
+        <span className="cc-cmd-chev" style={{ opacity: canOpen ? 1 : 0, transform: open ? 'rotate(90deg)' : 'none' }}><ChevronRight size={12} /></span>
         <span style={{ flex: '0 0 auto', color: 'var(--ok)', fontFamily: MONO, fontWeight: 600, userSelect: 'none' }}>{label || '$'}</span>
-        <span className={open ? 'cc-cmd-text is-open' : 'cc-cmd-text'} style={{ fontFamily: MONO }}>{command}</span>
+        <span className={open ? 'cc-cmd-text is-open' : 'cc-cmd-text'} style={{ fontFamily: MONO }}>{open ? command : firstLine}</span>
+        {!open && multi && <span className="cc-cmd-lines">{t('chat.moreLines', { count: cmdLines })}</span>}
         <StatusChip status={status} />
         {!open && has && status !== 'running' && (
           <span className="cc-cmd-lines">{t('chat.outputLines', { count: lines })}</span>

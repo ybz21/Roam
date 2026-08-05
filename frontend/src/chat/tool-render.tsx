@@ -21,7 +21,7 @@ import {
   BotIcon, ChecklistIcon, FlagIcon, GearIcon, GlobeIcon, ImageIcon, PencilIcon,
   PlugIcon, QuestionIcon, ReadIcon, SearchIcon, TerminalIcon,
 } from '../icons'
-import { CodeBox, MONO } from './blocks'
+import { CodeBox, localizeSentinels, MONO } from './blocks'
 
 type T = (key: string, vars?: Record<string, string | number>) => string
 
@@ -41,8 +41,7 @@ type Ctx = {
 const s = (v: any) => (v == null ? '' : String(v))
 const clip = (v: string, n = 160) => (v.length > n ? v.slice(0, n) + '…' : v)
 
-// 后端对图片块只给哨兵 [image]（不写死中文，见 backend/api/claude.go），文案在这里出
-const resultText = (c: Ctx) => s(c.result?.text).replace(/^\[image\]$/gm, c.t('chat.imageBlock'))
+const resultText = (c: Ctx) => localizeSentinels(s(c.result?.text), c.t)
 
 // Grep 的内容模式结果是 path:line:match —— 抠出行号，点开就能跳到那一行
 const GREP_HIT = /^(.+?):(\d+):/
@@ -77,6 +76,19 @@ export function extractCommand(o: any): string {
   return s(v)
 }
 
+// 后端把单块文本截到 6000 字（backend/api/claude.go 的 clip），heredoc 那类长命令
+// 一截 JSON 就废了 → JSON.parse 失败 → 整行渲染成裸 `{"command":"cat > …`。
+// 所以解析不出对象时再用正则从原文里把命令抠出来：截断的 JSON 也照样能读出前半截。
+const CMD_IN_RAW = /"(?:command|cmd)"\s*:\s*"((?:[^"\\]|\\.)*)/
+const JSON_ESC: Record<string, string> = { n: '\n', t: '\t', r: '\r', '"': '"', '\\': '\\', '/': '/', b: '\b', f: '\f' }
+
+export function commandFromRaw(raw: string): string {
+  const m = CMD_IN_RAW.exec(raw)
+  if (!m) return ''
+  return m[1].replace(/\\(u[0-9a-fA-F]{4}|.)/g, (_, e: string) =>
+    e[0] === 'u' ? String.fromCharCode(parseInt(e.slice(1), 16)) : (JSON_ESC[e] ?? e))
+}
+
 // 结果文本看着像「一行一个路径」就当文件列表画；path:line: 形式的顺带带上行号
 export type Hit = { path: string; line?: number; text: string }
 
@@ -106,7 +118,7 @@ type Renderer = (c: Ctx) => ReactNode
 // 命令类：Claude 的 Bash、Codex 的 shell / exec_command 都走这里。
 const command: Renderer = (c) => (
   <CommandRow
-    command={extractCommand(c.o) || clip(c.raw, 400)}
+    command={extractCommand(c.o) || commandFromRaw(c.raw) || clip(c.raw, 400)}
     description={s(c.o?.description) || undefined}
     output={resultText(c)}
     isError={c.result?.isError}

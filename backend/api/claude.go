@@ -223,9 +223,13 @@ type cMsg struct {
 
 const blockCap = 6000 // 单块文本上限，避免巨大 tool 输出撑爆响应
 
+// 截断标记用哨兵而非中文：这条会直接进 API 响应给前端展示，文案必须由前端出译文
+// （docs/development/i18n.md「会被前端直接展示的后端 API 消息」）。
+const clipMark = "\n…[truncated]"
+
 func clip(s string) string {
 	if len(s) > blockCap {
-		return s[:blockCap] + "\n…(已截断)"
+		return s[:blockCap] + clipMark
 	}
 	return s
 }
@@ -332,6 +336,62 @@ func parseLine(line string) *cMsg {
 	return &cMsg{Role: role, Ts: raw.Ts, ID: raw.UUID, Blocks: blocks}
 }
 
+// cStatus：会话的「当前状态」，随转录响应一起回给前端画状态条。
+// 这些字段本来就躺在同一份 JSONL 里，只是此前 parseLine 一律返回 nil 丢掉了——
+// 顺手在同一次扫描里捡出来，不额外开端点、不额外读一遍文件（见 15 设计 §11）。
+type cStatus struct {
+	Mode   string `json:"mode,omitempty"`   // default | plan | acceptEdits | bypassPermissions
+	Model  string `json:"model,omitempty"`  // claude-opus-5 …
+	Effort string `json:"effort,omitempty"` // 推理档
+	Used   int    `json:"used,omitempty"`   // 已占上下文 token
+	Window int    `json:"window,omitempty"` // 上下文窗口
+}
+
+// 模型 id → 上下文窗口。Codex 会把窗口直接给出来，Claude 只给 id，只能按 id 查。
+// 认不出就按 200k 保守算（宁可百分比显示偏高，也不要让人以为还很空）。
+func claudeWindow(model string) int {
+	if strings.Contains(model, "[1m]") || strings.Contains(model, "-1m") {
+		return 1000000
+	}
+	return 200000
+}
+
+// scanStatus 从一行 JSONL 里更新状态；不是状态行就原样返回。
+func scanStatus(line string, st cStatus) cStatus {
+	var raw struct {
+		Type           string `json:"type"`
+		PermissionMode string `json:"permissionMode"`
+		Effort         string `json:"effort"`
+		Message        struct {
+			Model string `json:"model"`
+			Usage struct {
+				Input      int `json:"input_tokens"`
+				CacheRead  int `json:"cache_read_input_tokens"`
+				CacheWrite int `json:"cache_creation_input_tokens"`
+			} `json:"usage"`
+		} `json:"message"`
+	}
+	if json.Unmarshal([]byte(line), &raw) != nil {
+		return st
+	}
+	if raw.PermissionMode != "" {
+		st.Mode = raw.PermissionMode
+	}
+	if raw.Effort != "" {
+		st.Effort = raw.Effort
+	}
+	if raw.Type == "assistant" && raw.Message.Model != "" {
+		st.Model = raw.Message.Model
+		st.Window = claudeWindow(raw.Message.Model)
+		// 上下文占用 = 本轮真正喂进去的量（新增 + 命中缓存 + 写入缓存）。
+		// 压缩后 cache_read 归零重来，百分比自然回落，不用特殊处理。
+		if u := raw.Message.Usage; u.Input+u.CacheRead+u.CacheWrite > 0 {
+			st.Used = u.Input + u.CacheRead + u.CacheWrite
+		}
+	}
+	return st
+}
+
 // ClaudeTranscript GET /sessions/:name/transcript?file=...&offset=N
 // 解析 JSONL 为对话；offset 为已消费的物理行数，仅返回其后的新内容（供前端增量轮询）。
 func (a *API) ClaudeTranscript(c *gin.Context) {
@@ -360,6 +420,7 @@ func (a *API) ClaudeTranscript(c *gin.Context) {
 	defer f.Close()
 
 	msgs := []cMsg{}
+	st := cStatus{}
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 1024*1024), 8*1024*1024) // 容纳长行
 	n := 0
@@ -368,12 +429,15 @@ func (a *API) ClaudeTranscript(c *gin.Context) {
 		if n <= offset {
 			continue
 		}
-		if m := parseLine(sc.Text()); m != nil {
+		line := sc.Text()
+		st = scanStatus(line, st)
+		if m := parseLine(line); m != nil {
 			if m.ID == "" { // uuid 缺失时用行号兜底，保证稳定 key
 				m.ID = strconv.Itoa(n)
 			}
 			msgs = append(msgs, *m)
 		}
 	}
-	c.JSON(http.StatusOK, gin.H{"data": gin.H{"messages": msgs, "nextOffset": n, "file": file}})
+	// 这一轮没扫到新行时 status 是空的；前端 sticky 保留上一次的值。
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"messages": msgs, "nextOffset": n, "file": file, "status": st}})
 }

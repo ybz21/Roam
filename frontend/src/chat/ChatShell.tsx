@@ -13,8 +13,10 @@ import { useLayout } from '../layout'
 import { ArrowToBottom, ArrowUp, FileTextIcon, PaperclipIcon, StopIcon } from '../icons'
 import { ChatActionsProvider } from './actions'
 import type { TaskIndex } from './tasks'
+import { StatusBar } from './StatusBar'
+import type { AgentStatus } from './status'
 
-export function ChatShell({ name, accent, placeholder, messages, renderMessage, pending, busy, error, onOpenFile, tasks }: {
+export function ChatShell({ name, accent, placeholder, messages, renderMessage, pending, busy, error, onOpenFile, tasks, status }: {
   name: string
   accent: string
   placeholder: string
@@ -25,11 +27,15 @@ export function ChatShell({ name, accent, placeholder, messages, renderMessage, 
   error?: string
   onOpenFile?: (path: string, line?: number) => void
   tasks?: TaskIndex
+  status?: AgentStatus
 }) {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [sendErr, setSendErr] = useState('')
   const [showJump, setShowJump] = useState(false)
+  // 未读：上滚离底之后新来了几条。贴底时恒为 0（看得见就不叫未读）。
+  const [unread, setUnread] = useState(0)
+  const seenCount = useRef(0)
   const [limit, setLimit] = useState(200) // 只渲染最近 N 条，超长转录不卡
   const [dragOver, setDragOver] = useState(false)
   const [dropMode, setDropMode] = useState<'upload' | 'path'>('upload')
@@ -110,9 +116,15 @@ export function ChatShell({ name, accent, placeholder, messages, renderMessage, 
   const hidden = Math.max(0, messages.length - limit)
   const visible = hidden > 0 ? messages.slice(-limit) : messages
 
-  // 贴底时自动跟随新消息；用户上滚后不打扰
+  // 贴底时自动跟随新消息；用户上滚后不打扰，改成累计未读
   useEffect(() => {
-    if (atBottom.current && boxRef.current) boxRef.current.scrollTop = boxRef.current.scrollHeight
+    if (atBottom.current) {
+      if (boxRef.current) boxRef.current.scrollTop = boxRef.current.scrollHeight
+      seenCount.current = messages.length
+      setUnread(0)
+    } else {
+      setUnread(Math.max(0, messages.length - seenCount.current))
+    }
   }, [messages, pending])
 
   const onScroll = () => {
@@ -120,10 +132,12 @@ export function ChatShell({ name, accent, placeholder, messages, renderMessage, 
     if (!el) return
     atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
     setShowJump(!atBottom.current)
+    if (atBottom.current) { seenCount.current = messages.length; setUnread(0) }
   }
 
   const jump = () => {
     atBottom.current = true; setShowJump(false)
+    seenCount.current = messages.length; setUnread(0)
     if (boxRef.current) boxRef.current.scrollTop = boxRef.current.scrollHeight
   }
 
@@ -142,6 +156,7 @@ export function ChatShell({ name, accent, placeholder, messages, renderMessage, 
   const errMsg = sendErr || error
   // 工具行里的路径要能点开：用 context 送到最里层，不然要一路穿过工具注册表
   const actions = useMemo(() => ({ openFile: onOpenFile, tasks }), [onOpenFile, tasks])
+  const hasStatus = !!(status && (status.mode || status.context || status.tasks || status.quota != null))
 
   return (
     <ChatActionsProvider value={actions}>
@@ -183,7 +198,9 @@ export function ChatShell({ name, accent, placeholder, messages, renderMessage, 
             {pending}
             {busy && <LiveTail name={name} />}
           </div>
-          {showJump && (
+          {/* 「回到底部」已并进下方状态条（带未读数）；状态条一个字段都没有时（刚进页面、
+              转录还没扫出状态）才退回这颗悬浮钮，免得离底了没处点。 */}
+          {showJump && !hasStatus && (
             <button onClick={jump} title={t('chat.jumpToBottom')}
               style={{ position: 'absolute', right: 14, bottom: 12, width: 34, height: 34, borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--bg-container)', color: accent, cursor: 'pointer', boxShadow: 'var(--card-hover-shadow)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <ArrowToBottom size={16} />
@@ -195,6 +212,10 @@ export function ChatShell({ name, accent, placeholder, messages, renderMessage, 
               与 bottom:12 的「回到底部」钮天然错开。手机端不走这里，已内联到按钮行。 */}
           {!isMobile && showVoice && <VoiceInput accent={accent} onResult={appendText} />}
         </div>
+        {/* 状态条在选择框之上：选择框要人立刻动手，得离输入框更近 */}
+        {(hasStatus || unread > 0) && (
+          <StatusBar status={status || {}} accent={accent} unread={unread} onJump={jump} />
+        )}
         {/* 交互式选择框（权限确认/选项菜单）：检测到才显示，可点选 */}
         <PromptPanel name={name} accent={accent} />
         {errMsg && <div style={{ color: '#f85149', fontSize: 12, padding: '2px 12px' }}>{errMsg}</div>}

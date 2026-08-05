@@ -5,6 +5,15 @@ import { CheckIcon, Disclosure } from '../icons'
 
 export const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
 
+// 后端对「超长被截断」「图片块」只给哨兵，不写死中文（见 backend/api/claude.go 的 clip
+// 与 rawContentText）；文案统一在这里出译文。转录正文与工具输出共用。
+export function localizeSentinels(text: string, t: (key: string) => string): string {
+  if (!text) return text
+  return text
+    .replace(/\n?…\[truncated\]$/, `\n${t('chat.truncated')}`)
+    .replace(/^\[image\]$/gm, t('chat.imageBlock'))
+}
+
 // 时间戳 → HH:MM（解析失败返回空）
 export function fmtTs(ts?: string): string {
   const locale = document.documentElement.lang || 'zh-CN'
