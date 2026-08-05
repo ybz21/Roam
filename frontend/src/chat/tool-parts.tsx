@@ -139,7 +139,7 @@ export function CommandRow({ command, description, output, isError, status, labe
   const canOpen = has || multi
   const toggle = () => { if (canOpen) setOpen((v) => !v) }
   return (
-    <div className="cc-cmd" style={{ borderColor: isError ? 'var(--danger-border)' : 'var(--border)' }}>
+    <div className={`cc-cmd${isError ? ' is-err' : ''}${open ? ' is-open' : ''}`}>
       <div className={`cc-cmd-head${canOpen ? ' is-clickable' : ''}`} role={canOpen ? 'button' : undefined} tabIndex={canOpen ? 0 : undefined}
         aria-expanded={canOpen ? open : undefined} onClick={toggle}
         onKeyDown={(e) => { if (canOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggle() } }}>
@@ -155,7 +155,7 @@ export function CommandRow({ command, description, output, isError, status, labe
       </div>
       {description && <div className="cc-cmd-desc">{description}</div>}
       {open && has && (
-        <pre className="cc-cmd-out" style={{ color: isError ? 'var(--danger)' : 'var(--text-dim)' }}>{text}</pre>
+        <pre className="cc-cmd-out" style={isError ? { color: 'var(--danger)' } : undefined}>{text}</pre>
       )}
     </div>
   )

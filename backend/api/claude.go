@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 )
@@ -345,15 +346,65 @@ type cStatus struct {
 	Effort string `json:"effort,omitempty"` // 推理档
 	Used   int    `json:"used,omitempty"`   // 已占上下文 token
 	Window int    `json:"window,omitempty"` // 上下文窗口
+	Branch string `json:"branch,omitempty"` // 当前 git 分支
+	Cwd    string `json:"cwd,omitempty"`    // 工作目录
 }
 
-// 模型 id → 上下文窗口。Codex 会把窗口直接给出来，Claude 只给 id，只能按 id 查。
-// 认不出就按 200k 保守算（宁可百分比显示偏高，也不要让人以为还很空）。
-func claudeWindow(model string) int {
-	if strings.Contains(model, "[1m]") || strings.Contains(model, "-1m") {
-		return 1000000
+// 上下文窗口。**转录里的 message.model 靠不住**：它被剥成了 "claude-opus-5"，
+// 不带 [1m] 变体标记，据它猜必然把 1M 会话算成 200k——实测本机 12 个会话里 11 个
+// 的用量超过 200k（最高 999,263，顶在 1M 上但从没越过），全按 200k 算就是满屏 100%。
+//
+// 权威来源是 ~/.claude/settings.json 的 model 字段（形如 "opus[1m]"）。
+// 前端还有一道兜底：真实用量超过后端给的窗口时自动升档，保证不会画出「100% 却还在涨」。
+const defaultCtxWindow = 200000
+const largeCtxWindow = 1000000
+
+func hasOneM(model string) bool {
+	return strings.Contains(model, "[1m]") || strings.Contains(model, "-1m")
+}
+
+// settings.json 每次请求都读一遍太浪费（对话页 1.5s 一轮），按 mtime 缓存。
+var (
+	settingsMu    sync.Mutex
+	settingsModel string
+	settingsMod   int64
+)
+
+func claudeSettingsModel() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
 	}
-	return 200000
+	path := filepath.Join(home, ".claude", "settings.json")
+	fi, err := os.Stat(path)
+	if err != nil {
+		return ""
+	}
+	mod := fi.ModTime().UnixNano()
+	settingsMu.Lock()
+	defer settingsMu.Unlock()
+	if mod == settingsMod {
+		return settingsModel
+	}
+	settingsMod, settingsModel = mod, ""
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	var cfg struct {
+		Model string `json:"model"`
+	}
+	if json.Unmarshal(b, &cfg) == nil {
+		settingsModel = cfg.Model
+	}
+	return settingsModel
+}
+
+func claudeWindow(model string) int {
+	if hasOneM(model) || hasOneM(claudeSettingsModel()) {
+		return largeCtxWindow
+	}
+	return defaultCtxWindow
 }
 
 // scanStatus 从一行 JSONL 里更新状态；不是状态行就原样返回。
@@ -362,6 +413,8 @@ func scanStatus(line string, st cStatus) cStatus {
 		Type           string `json:"type"`
 		PermissionMode string `json:"permissionMode"`
 		Effort         string `json:"effort"`
+		GitBranch      string `json:"gitBranch"`
+		Cwd            string `json:"cwd"`
 		Message        struct {
 			Model string `json:"model"`
 			Usage struct {
@@ -379,6 +432,13 @@ func scanStatus(line string, st cStatus) cStatus {
 	}
 	if raw.Effort != "" {
 		st.Effort = raw.Effort
+	}
+	// 分支/工作目录挂在每条 user/assistant 行上，取最后一次即当前值
+	if raw.GitBranch != "" {
+		st.Branch = raw.GitBranch
+	}
+	if raw.Cwd != "" {
+		st.Cwd = raw.Cwd
 	}
 	if raw.Type == "assistant" && raw.Message.Model != "" {
 		st.Model = raw.Message.Model

@@ -26,8 +26,10 @@ func TestScanStatusClaude(t *testing.T) {
 	if want := 2 + 2634 + 269173; st.Used != want {
 		t.Errorf("used = %d, want %d", st.Used, want)
 	}
-	if st.Window != 200000 {
-		t.Errorf("window = %d, want 200000", st.Window)
+	// 窗口取决于本机 ~/.claude/settings.json（这台机器就是 opus[1m] → 1M），
+	// 所以这里只断言落在已知档位上，不把测试焊死在某台机器的配置上。
+	if st.Window != defaultCtxWindow && st.Window != largeCtxWindow {
+		t.Errorf("window = %d, want %d or %d", st.Window, defaultCtxWindow, largeCtxWindow)
 	}
 	// 后来的模式覆盖先前的
 	st = scanStatus(`{"type":"permission-mode","permissionMode":"bypassPermissions"}`, st)
@@ -47,18 +49,33 @@ func TestScanStatusClaude(t *testing.T) {
 	}
 }
 
-func TestClaudeWindow(t *testing.T) {
-	cases := map[string]int{
-		"claude-opus-5[1m]": 1000000,
-		"claude-opus-5-1m":  1000000,
-		"claude-opus-5":     200000,
-		"claude-sonnet-5":   200000,
-		"":                  200000, // 认不出按 200k 保守算：宁可百分比偏高
+func TestHasOneM(t *testing.T) {
+	// 转录里的 message.model 被剥成了 "claude-opus-5"，据它判必然漏——
+	// 真正带标记的是 ~/.claude/settings.json 的 model（形如 "opus[1m]"）。
+	cases := map[string]bool{
+		"opus[1m]":          true,
+		"claude-opus-5[1m]": true,
+		"claude-opus-5-1m":  true,
+		"claude-opus-5":     false,
+		"claude-sonnet-5":   false,
+		"":                  false,
 	}
 	for model, want := range cases {
-		if got := claudeWindow(model); got != want {
-			t.Errorf("claudeWindow(%q) = %d, want %d", model, got, want)
+		if got := hasOneM(model); got != want {
+			t.Errorf("hasOneM(%q) = %v, want %v", model, got, want)
 		}
+	}
+}
+
+func TestClaudeWindowFallsBackTo200k(t *testing.T) {
+	// 转录 model 不带标记时至少不会崩；具体取值还取决于本机 settings.json，
+	// 所以只断言落在已知档位上（前端另有 fitWindow 兜底升档，见 chat/status.ts）。
+	got := claudeWindow("claude-opus-5")
+	if got != defaultCtxWindow && got != largeCtxWindow {
+		t.Errorf("claudeWindow = %d, want %d or %d", got, defaultCtxWindow, largeCtxWindow)
+	}
+	if claudeWindow("claude-opus-5[1m]") != largeCtxWindow {
+		t.Errorf("带 [1m] 的必须给 1M")
 	}
 }
 

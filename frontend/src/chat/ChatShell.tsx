@@ -13,10 +13,10 @@ import { useLayout } from '../layout'
 import { ArrowToBottom, ArrowUp, FileTextIcon, PaperclipIcon, StopIcon } from '../icons'
 import { ChatActionsProvider } from './actions'
 import type { TaskIndex } from './tasks'
-import { StatusBar } from './StatusBar'
+import { StatusBar, type StatusActions } from './StatusBar'
 import type { AgentStatus } from './status'
 
-export function ChatShell({ name, accent, placeholder, messages, renderMessage, pending, busy, error, onOpenFile, tasks, status }: {
+export function ChatShell({ name, accent, placeholder, messages, renderMessage, pending, busy, error, onOpenFile, tasks, status, onOpenGit, lastErrorId }: {
   name: string
   accent: string
   placeholder: string
@@ -28,6 +28,8 @@ export function ChatShell({ name, accent, placeholder, messages, renderMessage, 
   onOpenFile?: (path: string, line?: number) => void
   tasks?: TaskIndex
   status?: AgentStatus
+  onOpenGit?: () => void
+  lastErrorId?: string
 }) {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -156,7 +158,25 @@ export function ChatShell({ name, accent, placeholder, messages, renderMessage, 
   const errMsg = sendErr || error
   // 工具行里的路径要能点开：用 context 送到最里层，不然要一路穿过工具注册表
   const actions = useMemo(() => ({ openFile: onOpenFile, tasks }), [onOpenFile, tasks])
-  const hasStatus = !!(status && (status.mode || status.context || status.tasks || status.quota != null))
+  const hasStatus = !!(status && (status.mode || status.context || status.tasks || status.quota != null || status.branch || status.errors))
+
+  // 状态条上每一格自己那件事。三件都落在这一层：这里既有会话名（能注入按键、能发消息），
+  // 又有滚动容器（能定位到某条消息），再往上传反而绕。
+  const statusActions: StatusActions = useMemo(() => ({
+    // 轮换权限模式＝在 TUI 里按 Shift+Tab，跟人手动按是同一个动作。
+    // 乐观更新没意义：下一轮转录会带回真实的 permission-mode 行，等它对账即可。
+    onCycleMode: () => { api('POST', `/sessions/${encodeURIComponent(name)}/keys`, { keys: ['BTab'] }).catch(() => {}) },
+    onOpenGit,
+    onJumpError: lastErrorId ? () => {
+      const el = boxRef.current?.querySelector<HTMLElement>(`[data-msg-id="${CSS.escape(lastErrorId)}"]`)
+      if (!el) return
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      // 闪一下：一屏里可能有好几条红，得指明是「这一条」
+      el.classList.add('cc-flash')
+      setTimeout(() => el.classList.remove('cc-flash'), 1200)
+    } : undefined,
+    onCompact: () => { api('POST', '/tasks/_/send', { sess: name, msg: '/compact' }).catch(() => {}) },
+  }), [name, onOpenGit, lastErrorId])
 
   return (
     <ChatActionsProvider value={actions}>
@@ -214,7 +234,7 @@ export function ChatShell({ name, accent, placeholder, messages, renderMessage, 
         </div>
         {/* 状态条在选择框之上：选择框要人立刻动手，得离输入框更近 */}
         {(hasStatus || unread > 0) && (
-          <StatusBar status={status || {}} accent={accent} unread={unread} onJump={jump} />
+          <StatusBar status={status || {}} accent={accent} unread={unread} onJump={jump} actions={statusActions} />
         )}
         {/* 交互式选择框（权限确认/选项菜单）：检测到才显示，可点选 */}
         <PromptPanel name={name} accent={accent} />

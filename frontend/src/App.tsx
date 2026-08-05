@@ -1712,12 +1712,12 @@ function TerminalPane(props: {
               onImagePaste={(files) => { setActive(termName); pasteImage(termName, files) }} />
             {claudeView[termName] && claudeMap[termName]?.running && (
               <div style={{ position: 'absolute', inset: 0 }}>
-                <ClaudeChat name={termName} file={claudeMap[termName].file} onOpenFile={isPhone ? undefined : openFileFromChat} />
+                <ClaudeChat name={termName} file={claudeMap[termName].file} onOpenFile={isPhone ? undefined : openFileFromChat} onOpenGit={() => setShowGit(true)} />
               </div>
             )}
             {codexView[termName] && codexMap[termName]?.running && (
               <div style={{ position: 'absolute', inset: 0 }}>
-                <CodexChat name={termName} file={codexMap[termName].file} onOpenFile={isPhone ? undefined : openFileFromChat} />
+                <CodexChat name={termName} file={codexMap[termName].file} onOpenFile={isPhone ? undefined : openFileFromChat} onOpenGit={() => setShowGit(true)} />
               </div>
             )}
             {showVoice && !claudeView[termName] && !codexView[termName] && (
