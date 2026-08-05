@@ -27,10 +27,13 @@
   --ok-solid: #238636;
   --ok-soft: rgba(63, 185, 80, .14);
   --ok-border: rgba(63, 185, 80, .42);
-  /* 危险/断开红：全站也只有这一组（见 theme.tsx） */
+  /* 危险/断开红、警示黄：各只有一组（见 theme.tsx） */
   --danger: #f85149;
   --danger-soft: rgba(248, 81, 73, .16);
   --danger-border: rgba(248, 81, 73, .45);
+  --warn: #d29922;
+  --warn-soft: rgba(210, 153, 34, .12);
+  --warn-border: rgba(210, 153, 34, .40);
   --list-hover: rgba(255, 255, 255, .025);
   --scroll-thumb: #2a313a;
   --scroll-thumb-hover: #3d444d;
@@ -651,11 +654,38 @@ html[data-pointer="coarse"] .tt-srow .acts { opacity: 1; }
   border: 1px solid var(--border-subtle); border-radius: 18px;
   background: var(--bg-base); color: var(--text-bright); font-size: var(--fs-meta); cursor: pointer;
 }
-.tt-sesshead .pill .d { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; }
+/* 名字吃掉所有余量 → 右侧那簇（状态角标 / 会话数 / 箭头）自然贴到胶囊右缘。
+   不给 grow 的话内容全挤在左边，胶囊右半截空着，看着像没画完。
+   名字再在这条余量里居中：短名字时左右留白对称，长名字撑满后居中自然失效（等同左对齐）。 */
+.tt-sesshead .pill .tt-name { flex: 1 1 auto; justify-content: center; }
+.tt-sesshead .pill .ca { flex: 0 0 auto; display: inline-flex; opacity: .55; }
+.tt-sesshead .pill .d { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; position: relative; }
+/* 有 Agent 在跑：状态点带一圈呼吸。静态点分不出「在干活」和「卡住了」。 */
+.tt-sesshead .pill .d.live::after {
+  content: ''; position: absolute; inset: -3px; border-radius: 50%;
+  border: 1px solid currentColor; color: inherit;
+  animation: tt-island-breathe 1.8s ease-out infinite;
+}
+@keyframes tt-island-breathe {
+  0% { opacity: .55; transform: scale(.7); }
+  70%, 100% { opacity: 0; transform: scale(1.5); }
+}
+@media (prefers-reduced-motion: reduce) { .tt-sesshead .pill .d.live::after { animation: none; opacity: .4; } }
+/* 待确认：整颗岛变黄 + 浮出文字。这是全屏唯一需要人立刻动手的状态，值得整块变色。 */
+.tt-sesshead .pill.wait {
+  border-color: var(--warn-border);
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.tt-sesshead .pill .tag {
+  flex: 0 0 auto; padding: 1px 7px; border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--warn) 22%, transparent);
+  color: var(--warn); font-size: var(--fs-micro); font-weight: 600; white-space: nowrap;
+}
 .tt-sesshead .pill .n {
   flex: 0 0 auto; min-width: 18px; height: 18px; padding: 0 5px;
   display: grid; place-items: center; border-radius: 9px;
-  background: var(--accent-solid); color: #fff; font: 600 10.5px/1 ui-monospace, monospace;
+  background: var(--accent-solid); color: #fff; font: 600 var(--fs-micro)/1 ui-monospace, monospace;
 }
 /* 溢出 sheet 里的「画面」一行四格图标 */
 .tt-sheet-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 4px 2px 8px; }
@@ -898,7 +928,7 @@ html[data-size="compact"] .ant-form-item-control-input-content > .ant-picker { w
 }
 .tt-tab:hover { background: var(--list-hover); color: var(--text-bright); }
 .tt-tab.on { color: var(--text-bright); font-weight: 600; }
-.tt-tab .tt-wait { flex: 0 0 auto; color: #d29922; font-weight: 600; }
+.tt-tab .tt-wait { flex: 0 0 auto; color: var(--warn); font-weight: 600; }
 /* 名字中间省略：头段收缩 + 尾段不收缩，省略号自然落在中间（见 session-label.tsx TabName） */
 /* 这几条对 .tt-name 通用——标签条和手机会话页胶囊共用同一个 TabName。
    之前只挂在 .tt-tab 下，胶囊里的标题就换行了，把 50px 的顶栏撑成两行。 */
@@ -1706,6 +1736,258 @@ html[data-pointer="coarse"] .cc-git-section-act .cc-dl { opacity: 1; }
 }
 .cc-msg:hover .cc-msg-copy, .cc-msg-copy:focus { opacity: 1; color: var(--text-dim); }
 @media (pointer: coarse) { .cc-msg-copy { opacity: 1; } }
+
+/* ── 工具调用渲染（chat/tool-parts.tsx）────────────────────────────────────
+   一屏对话里工具调用占了大半，密度是第一位的：一行式不描框只留一条 2px 色条，
+   值得展开的才用卡片。字号统一 --fs-meta，行高压到 1.5，连着十几次调用也不散。 */
+.cc-toolrow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  padding: 2px 0 2px var(--sp-2);
+  margin: 1px 0;
+  font-size: var(--fs-meta);
+  line-height: 1.6;
+}
+.cc-toolval {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-bright);
+}
+.cc-toolcopy {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--text-dimmer);
+  padding: 2px;
+  border-radius: var(--r-xs);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .15s ease, color .15s ease;
+}
+.cc-toolrow:hover .cc-toolcopy,
+.cc-cmd:hover .cc-toolcopy,
+.cc-diff:hover .cc-toolcopy,
+.cc-err:hover .cc-toolcopy,
+.cc-toolcopy:focus-visible { opacity: 1; }
+.cc-toolcopy:hover { color: var(--text-bright); background: var(--list-hover); }
+@media (pointer: coarse) { .cc-toolcopy { opacity: .55; } }
+
+/* 跑着的工具：转圈，不是一枚静态徽标——静态徽标看不出还在动 */
+.cc-spin {
+  flex: 0 0 auto;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  border-top-color: var(--accent);
+  animation: cc-spin 700ms linear infinite;
+}
+@keyframes cc-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .cc-spin { animation-duration: 2.4s; } }
+
+/* 命令行 */
+.cc-cmd {
+  margin: var(--sp-1) 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-xs);
+  background: var(--bg-base);
+  overflow: hidden;
+}
+.cc-cmd-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  padding: var(--sp-1) var(--sp-2);
+  font-size: var(--fs-meta);
+  outline: none;
+}
+.cc-cmd-head.is-clickable { cursor: pointer; }
+.cc-cmd-head.is-clickable:hover { background: var(--list-hover); }
+.cc-cmd-head:focus-visible { box-shadow: inset 0 0 0 1px var(--accent-border); }
+.cc-cmd-chev {
+  flex: 0 0 auto;
+  display: inline-flex;
+  color: var(--text-dimmer);
+  transition: transform .15s ease;
+}
+.cc-cmd-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text-bright);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cc-cmd-text.is-open { white-space: pre-wrap; overflow-wrap: anywhere; }
+.cc-cmd-lines { flex: 0 0 auto; color: var(--text-dimmer); font-size: var(--fs-micro); font-variant-numeric: tabular-nums; }
+.cc-cmd-desc { padding: 0 var(--sp-2) var(--sp-1) 28px; color: var(--text-dimmer); font-size: var(--fs-micro); }
+.cc-cmd-out {
+  margin: 0;
+  padding: var(--sp-2);
+  border-top: 1px solid var(--border-subtle);
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--fs-meta);
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+/* 可折叠卡片 */
+.cc-toolcard { margin: 1px 0; padding-left: var(--sp-2); }
+.cc-toolcard-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  padding: 2px 0;
+  font-size: var(--fs-meta);
+  line-height: 1.6;
+  cursor: pointer;
+  outline: none;
+}
+.cc-toolcard-head:hover { background: var(--list-hover); }
+.cc-toolcard-head:focus-visible { box-shadow: inset 0 0 0 1px var(--accent-border); }
+.cc-toolcard-body { padding: var(--sp-1) 0 var(--sp-2) 20px; }
+.cc-toolraw {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  color: var(--text-dim);
+  font-size: var(--fs-micro);
+  cursor: pointer;
+}
+.cc-toolraw-body {
+  margin: var(--sp-1) 0 0;
+  padding: var(--sp-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-xs);
+  background: var(--bg-base);
+  max-height: 260px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--fs-meta);
+  color: var(--text-dim);
+}
+
+/* 行对齐 diff */
+.cc-diff { border: 1px solid var(--border); border-radius: var(--r-xs); overflow: hidden; background: var(--bg-base); }
+.cc-diff-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  padding: var(--sp-1) var(--sp-2);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-container);
+  font-size: var(--fs-micro);
+}
+.cc-diff-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--text-dim);
+}
+.cc-diff-stat { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+.cc-diff-badge { flex: 0 0 auto; padding: 1px 6px; border-radius: var(--r-pill); }
+.cc-diff-body {
+  max-height: 360px;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--fs-meta);
+  line-height: 1.55;
+}
+.cc-diff-line { display: flex; min-width: 0; }
+.cc-diff-num {
+  flex: 0 0 auto;
+  width: 40px;
+  padding-right: var(--sp-1);
+  text-align: right;
+  user-select: none;
+  color: var(--text-dimmer);
+  font-variant-numeric: tabular-nums;
+}
+.cc-diff-sign { flex: 0 0 auto; width: 14px; text-align: center; user-select: none; }
+.cc-diff-text { flex: 1 1 auto; min-width: 0; padding-right: var(--sp-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* 搜索结果文件列表 */
+.cc-filelist {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-xs);
+  background: var(--bg-base);
+  max-height: 260px;
+  overflow: auto;
+}
+.cc-filelist-row {
+  padding: 2px var(--sp-2);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--fs-meta);
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cc-filelist-row.is-link { display: block; width: 100%; text-align: left; border: 0; background: transparent; cursor: pointer; }
+.cc-filelist-row:hover { background: var(--list-hover); color: var(--text-bright); }
+.cc-filelist-row.is-link:hover { color: var(--accent); }
+
+/* 可点路径：文件面板接得住才画成链接（接不住时 PathLink 渲染成普通文字） */
+.cc-pathlink { border: 0; background: transparent; padding: 0; text-align: left; color: var(--accent); cursor: pointer; }
+.cc-pathlink:hover { text-decoration: underline; }
+.cc-pathlink:focus-visible { outline: 1px solid var(--accent-border); outline-offset: 1px; border-radius: 2px; }
+
+/* 粗指针命中区（设计系统 §「粗指针下命中区 ≥44」）。
+   这里**不能**用「伪元素往外撑、不撑视觉尺寸」那套：工具行是连排的，行距只有 1~2px，
+   44 的伪元素会往上下各溢出 10px 压到邻行，而后面的兄弟节点画在上层——
+   于是点某一行的下缘会命中下一行，比命中区不够更糟（点了别的工具）。
+   所以这里让行本身长到 44：行距一撑开，行内那些小钮的伪元素才不会跨行打架。 */
+@media (pointer: coarse) {
+  .cc-cmd-head.is-clickable,
+  .cc-toolcard-head,
+  .cc-toolrow { min-height: 44px; }
+  /* 小钮的命中区靠伪元素补足——此时它已经被关在 44 高的行里，不会溢出到邻行 */
+  .cc-toolcopy, .cc-toolraw { position: relative; }
+  .cc-toolcopy::after, .cc-toolraw::after {
+    content: '';
+    position: absolute;
+    left: -8px; right: -8px; top: 50%;
+    height: 40px;
+    transform: translateY(-50%);
+  }
+}
+
+/* 错误行 */
+.cc-err {
+  margin: var(--sp-1) 0;
+  border: 1px solid var(--danger-border);
+  border-radius: var(--r-xs);
+  background: var(--danger-soft);
+  overflow: hidden;
+}
+.cc-err-peek {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--danger);
+  opacity: .8;
+}
 
 /* ── 语法高亮（highlight.js 类 → 主题变量；不引外部 CSS，随黑白主题切换） ── */
 .hljs { color: var(--text-bright); background: transparent; }

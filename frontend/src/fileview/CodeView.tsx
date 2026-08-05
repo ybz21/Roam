@@ -5,7 +5,7 @@ import { Spin } from 'antd'
 
 const CodeEditor = lazy(() => import('../CodeEditor'))
 
-export function CodeView({ value, language, dark, readOnly, tabbed, height, onChange, onSave }: {
+export function CodeView({ value, language, dark, readOnly, tabbed, height, onChange, onSave, revealLine }: {
   value: string
   language: string
   dark: boolean
@@ -14,11 +14,12 @@ export function CodeView({ value, language, dark, readOnly, tabbed, height, onCh
   height: string
   onChange: (v: string) => void
   onSave: () => void
+  revealLine?: { line: number; nonce: number }
 }) {
   return (
     <div style={{ height, border: tabbed ? 'none' : '1px solid var(--border-subtle)', borderRadius: tabbed ? 0 : 8, overflow: 'hidden' }}>
       <Suspense fallback={<div style={{ height: '100%', display: 'grid', placeItems: 'center' }}><Spin /></div>}>
-        <CodeEditor value={value} language={language} dark={dark} readOnly={readOnly} onChange={onChange} onSave={onSave} />
+        <CodeEditor value={value} language={language} dark={dark} readOnly={readOnly} onChange={onChange} onSave={onSave} revealLine={revealLine} />
       </Suspense>
     </div>
   )

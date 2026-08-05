@@ -1,6 +1,7 @@
 // Monaco 代码编辑器（VSCode 同款内核）：行号、语法高亮、编辑、查找、Ctrl+S 保存。
 // 依赖较重，仅由 FileBrowser 的 Viewer 懒加载引入，不进首屏包。
 // 用本地打包的 monaco（loader.config），不依赖 CDN，离线/局域网也能用。
+import { useEffect, useRef } from 'react'
 import Editor, { loader } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
@@ -22,7 +23,7 @@ import TsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
 loader.config({ monaco })
 
 export default function CodeEditor({
-  value, language, dark, readOnly, onChange, onSave,
+  value, language, dark, readOnly, onChange, onSave, revealLine,
 }: {
   value: string
   language: string
@@ -30,7 +31,19 @@ export default function CodeEditor({
   readOnly?: boolean
   onChange: (v: string) => void
   onSave: () => void
+  // 从对话页点「Grep 命中 path:line」跳过来时定位到那一行。
+  // 每次跳都换一个 nonce —— 同一文件已经开着时 value/language 都没变，
+  // 没有 nonce 就不会触发重新定位（第二次点同一处会毫无反应）。
+  revealLine?: { line: number; nonce: number }
 }) {
+  const edRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
+  useEffect(() => {
+    const ed = edRef.current
+    if (!ed || !revealLine?.line) return
+    ed.revealLineInCenter(revealLine.line)
+    ed.setPosition({ lineNumber: revealLine.line, column: 1 })
+    ed.focus()
+  }, [revealLine?.line, revealLine?.nonce, value])
   // 让编辑器背景/装订线/缩略图跟应用统一（用 --bg-base，避免 Monaco 默认灰底跟四周不一致）。
   const appBg = (typeof getComputedStyle !== 'undefined'
     ? getComputedStyle(document.documentElement).getPropertyValue('--bg-base').trim()
@@ -48,8 +61,10 @@ export default function CodeEditor({
       }}
       onChange={(v) => onChange(v ?? '')}
       onMount={(editor, m) => {
+        edRef.current = editor
         // Ctrl/Cmd+S 保存（onSave 读最新 draft，见 Viewer）
         editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, () => onSave())
+        if (revealLine?.line) { editor.revealLineInCenter(revealLine.line); editor.setPosition({ lineNumber: revealLine.line, column: 1 }) }
       }}
       options={{
         readOnly,
