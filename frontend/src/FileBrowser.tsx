@@ -338,6 +338,7 @@ export default function FileBrowser({
   onOpenAgent,
   onOpenFile,
   selectedPath,
+  openRequest,
 }: {
   dir?: string
   accent?: string
@@ -347,6 +348,9 @@ export default function FileBrowser({
   onOpenAgent?: (kind: 'claude' | 'codex', path: string) => void
   // dock 布局下由外层（编辑器 tab 区）接管文件打开：点文件不再弹内置预览，而是回调让外层开 tab。
   onOpenFile?: (path: string) => void
+  /** 外部要求打开某个路径（对话里点 Read/Edit 的文件名）。
+      nonce 自增才触发——同一个文件点第二次时 path 没变，没有 nonce 就毫无反应。 */
+  openRequest?: { path: string; nonce: number }
   // 外层当前激活的文件 tab，用于在浏览器里高亮选中项（覆盖内部 view）。
   selectedPath?: string | null
 }) {
@@ -707,6 +711,19 @@ export default function FileBrowser({
     }
   }
 
+  // 对话里点了文件名 → 在这个浏览器里打开它：先把树导航到它所在目录，再开预览。
+  // 走 openPath 而不是直接 setView：不 navigate 的话左边的树还停在别处，
+  // 你看到的是「一个文件凭空出现」，不知道它在哪。
+  const openReqRef = useRef(0)
+  useEffect(() => {
+    if (!openRequest?.path || openRequest.nonce === openReqRef.current) return
+    openReqRef.current = openRequest.nonce
+    const dirOf = openRequest.path.replace(/\/[^/]*$/, '') || '/'
+    navigate(dirOf)
+    openFile(openRequest.path)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openRequest?.path, openRequest?.nonce])
+
   const resolveTypedPath = (value: string): string => {
     const raw = value.trim()
     if (!raw) return cur || '/'
@@ -1010,15 +1027,21 @@ export default function FileBrowser({
     )
   }
 
-  // 停靠布局（新标签左侧栏）：只有文件面板本身，预览以 Modal 弹出（右边是终端，不占版面）。
+  // 停靠布局（右侧「文件管理」抽屉 / 新标签左侧栏）：预览**就在抽屉里铺开**，不弹模态框。
+  // 之前用 Modal：抽屉本来就是一块常驻的侧栏，从里面再弹一个居中浮层，
+  // 等于把你刚打开的那个面板整个盖住——而你点开文件恰恰是想跟左边的对话对着看。
+  // 浏览器那半不卸载（保住树的展开态与滚动位置），预览盖在它上面，关掉即回。
   if (layout === 'dock') {
     return (
-      <>
+      <div style={{ position: 'relative', flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {browserPane}
         {view && (
-          <Viewer path={view} accent={accent} onClose={() => setView(null)} onOpenPath={openPath} onOpenAgent={onOpenAgent} />
+          <div style={{ position: 'absolute', inset: 0, zIndex: 2, display: 'flex', background: 'var(--bg-base)' }}>
+            <Viewer path={view} accent={accent} inline onBack={() => setView(null)} onClose={() => setView(null)}
+              onOpenPath={openPath} onOpenAgent={onOpenAgent} />
+          </div>
         )}
-      </>
+      </div>
     )
   }
 

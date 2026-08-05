@@ -127,3 +127,104 @@ describe('FileBrowser folder context menu', () => {
     })
   })
 })
+
+// 对话里点 Read/Edit 的文件名 → 在这个浏览器里打开它。
+// 之前这条路走的是「跳去文件页」，人被带离会话页，看到的是文件页左边那棵树。
+describe('FileBrowser openRequest（对话里点文件名）', () => {
+  let seenDirs: string[] = []
+
+  beforeEach(() => {
+    localStorage.clear()
+    localStorage.setItem('ttmux-locale', 'zh-CN')
+    seenDirs = []
+    vi.stubGlobal('ResizeObserver', ResizeObserverStub)
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
+      matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+      addListener: vi.fn(), removeListener: vi.fn(),
+    }))
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/files?')) {
+        const dir = new URL(url, 'http://x').searchParams.get('path') || ''
+        seenDirs.push(dir)
+        return jsonResponse({ data: { path: dir || '/workspace', parent: '/', entries: [] } })
+      }
+      if (url.includes('/api/file?')) {
+        return jsonResponse({ data: { content: 'hello', truncated: false } })
+      }
+      return jsonResponse({ data: {} })
+    }))
+  })
+  afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
+
+  const renderWith = (openRequest?: { path: string; nonce: number }) => render(
+    <I18nProvider>
+      <AntApp>
+        <div style={{ display: 'flex', flexDirection: 'column', width: 420, height: 600 }}>
+          <FileBrowser dir="/workspace" layout="dock" openRequest={openRequest} />
+        </div>
+      </AntApp>
+    </I18nProvider>,
+  )
+
+  it('把树导航到文件所在目录，而不是让文件凭空出现', async () => {
+    renderWith({ path: '/workspace/frontend/src/App.tsx', nonce: 1 })
+    await waitFor(() => expect(seenDirs).toContain('/workspace/frontend/src'))
+  })
+
+  it('没有 openRequest 时不导航到别处（保持原有行为）', async () => {
+    renderWith()
+    await waitFor(() => expect(seenDirs.length).toBeGreaterThan(0))
+    expect(seenDirs.every((d) => !d.includes('/frontend/src'))).toBe(true)
+  })
+
+  it('同一文件再点一次：nonce 变了才重新打开', async () => {
+    const { rerender } = renderWith({ path: '/workspace/a.ts', nonce: 1 })
+    await waitFor(() => expect(seenDirs).toContain('/workspace'))
+    const before = seenDirs.length
+    // 同 nonce 重渲染：不该再跑一次
+    rerender(
+      <I18nProvider><AntApp>
+        <div><FileBrowser dir="/workspace" layout="dock" openRequest={{ path: '/workspace/a.ts', nonce: 1 }} /></div>
+      </AntApp></I18nProvider>,
+    )
+    expect(seenDirs.length).toBe(before)
+  })
+})
+
+// 抽屉里的预览必须**就地铺开**，不能弹模态框：
+// 抽屉本来就是一块常驻侧栏，从里面再弹一个居中浮层等于把它整个盖住。
+describe('FileBrowser dock 预览不弹模态框', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    localStorage.setItem('ttmux-locale', 'zh-CN')
+    vi.stubGlobal('ResizeObserver', ResizeObserverStub)
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
+      matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+      addListener: vi.fn(), removeListener: vi.fn(),
+    }))
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/files?')) {
+        const dir = new URL(url, 'http://x').searchParams.get('path') || ''
+        return jsonResponse({ data: { path: dir || '/workspace', parent: '/', entries: [] } })
+      }
+      if (url.includes('/api/file?')) return jsonResponse({ data: { content: 'hello', truncated: false } })
+      return jsonResponse({ data: {} })
+    }))
+  })
+  afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
+
+  it('打开文件后没有 .ant-modal，预览就在面板里', async () => {
+    const { container } = render(
+      <I18nProvider><AntApp>
+        <div style={{ display: 'flex', flexDirection: 'column', width: 420, height: 600 }}>
+          <FileBrowser dir="/workspace" layout="dock" openRequest={{ path: '/workspace/a.md', nonce: 1 }} />
+        </div>
+      </AntApp></I18nProvider>,
+    )
+    // 预览起来了（内容或加载态出现在面板内），且**没有**模态框
+    await waitFor(() => expect(container.textContent || '').toContain('a.md'))
+    expect(document.querySelector('.ant-modal')).toBeNull()
+  })
+})
