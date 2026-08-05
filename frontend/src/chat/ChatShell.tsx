@@ -8,7 +8,9 @@ import { PromptPanel, detectPrompt } from '../prompt'
 import { usePreferences } from '../preferences'
 import { useI18n } from '../i18n'
 import { VoiceInput } from './VoiceInput'
-import type { Msg } from './types'
+import type { Block, Msg } from './types'
+import { groupRuns } from './runs'
+import { ToolRun } from './ToolRun'
 import { useLayout } from '../layout'
 import { ArrowToBottom, ArrowUp, FileTextIcon, PaperclipIcon, StopIcon } from '../icons'
 import { ChatActionsProvider } from './actions'
@@ -16,11 +18,13 @@ import type { TaskIndex } from './tasks'
 import { StatusBar, type StatusActions } from './StatusBar'
 import type { AgentStatus } from './status'
 
-export function ChatShell({ name, accent, placeholder, messages, renderMessage, pending, busy, error, onOpenFile, tasks, status, onOpenGit, lastErrorId }: {
+export function ChatShell({ name, accent, placeholder, messages, results, renderMessage, pending, busy, error, onOpenFile, tasks, status, onOpenGit, lastErrorId }: {
   name: string
   accent: string
   placeholder: string
   messages: Msg[]
+  /** tool_use id → tool_result。给了就把相邻的同族工具并成运行组（设计 16） */
+  results?: Record<string, Block>
   renderMessage: (m: Msg, i: number) => ReactNode
   pending?: ReactNode
   busy?: boolean
@@ -117,6 +121,9 @@ export function ChatShell({ name, accent, placeholder, messages, renderMessage, 
 
   const hidden = Math.max(0, messages.length - limit)
   const visible = hidden > 0 ? messages.slice(-limit) : messages
+  // 连着的同族工具调用并成运行组（设计 16）。分组只能在这一层做：Claude 每次工具调用
+  // 单独成一条消息，一串 5 条命令就是 5 条消息，消息内部的分段对它无能为力。
+  const items = useMemo(() => (results ? groupRuns(visible, results) : null), [visible, results])
 
   // 贴底时自动跟随新消息；用户上滚后不打扰，改成累计未读
   useEffect(() => {
@@ -214,7 +221,11 @@ export function ChatShell({ name, accent, placeholder, messages, renderMessage, 
                 </a>
               </div>
             )}
-            {visible.map(renderMessage)}
+            {items
+              ? items.map((it, i) => (it.kind === 'run'
+                ? <ToolRun key={it.run.key} run={it.run} isLast={i === items.length - 1} />
+                : renderMessage(it.msg, it.index)))
+              : visible.map(renderMessage)}
             {pending}
             {busy && <LiveTail name={name} />}
           </div>

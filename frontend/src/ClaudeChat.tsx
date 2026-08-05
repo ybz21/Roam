@@ -25,7 +25,7 @@ export default function ClaudeChat({ name, file, onOpenFile, onOpenGit }: { name
     <ChatShell
       name={name} accent="var(--accent)" error={err} onOpenFile={onOpenFile} tasks={tasks} status={status} onOpenGit={onOpenGit} lastErrorId={derived.lastErrorId}
       placeholder={t('chat.claudePlaceholder')}
-      messages={view}
+      messages={view} results={results}
       renderMessage={(m, i) => <ChatMessage key={m.id || i} m={m} results={results} side="claude" />}
       pending={pending ? <Typing color="var(--accent)" /> : undefined}
       busy={pending}

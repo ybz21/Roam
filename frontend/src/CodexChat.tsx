@@ -25,7 +25,7 @@ export default function CodexChat({ name, file, onOpenFile, onOpenGit }: { name:
     <ChatShell
       name={name} accent={CODEX_ACCENT} error={err} onOpenFile={onOpenFile} tasks={tasks} status={status} onOpenGit={onOpenGit} lastErrorId={derived.lastErrorId}
       placeholder={t('chat.codexPlaceholder')}
-      messages={view}
+      messages={view} results={results}
       renderMessage={(m, i) => <ChatMessage key={m.id || i} m={m} results={results} side="codex" />}
       pending={pending ? <Typing color={CODEX_ACCENT} /> : undefined}
       busy={pending}

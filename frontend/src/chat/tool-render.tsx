@@ -159,12 +159,27 @@ const search: Renderer = (c) => {
   )
 }
 
+// 改文件的入参形状：Claude 的 Edit/Write、Codex 的同名工具都归到这三个字段上。
+// 运行组的组头要算「这一串一共 +N −M」，也得按同一套抠——所以抠法只写一份（设计 16 §4）。
+export type EditParts = { path: string; oldText: string; newText: string; isNew: boolean }
+
+export function editParts(name: string, o: any): EditParts | null {
+  if (!o) return null
+  const path = s(o.file_path ?? o.path ?? o.notebook_path)
+  const isNew = name === 'Write' || name === 'create_file'
+  const oldText = isNew ? '' : s(o.old_string ?? o.old_str)
+  const newText = isNew ? s(o.content) : s(o.new_string ?? o.new_str ?? o.new_source)
+  if (!path && !oldText && !newText) return null
+  return { path, oldText, newText, isNew }
+}
+
 // 改文件：新旧文本走 LCS 对齐，只列真正变动的行。
 const edit: Renderer = (c) => {
-  const path = s(c.o?.file_path ?? c.o?.path ?? c.o?.notebook_path)
-  const isNew = c.name === 'Write' || c.name === 'create_file'
-  const oldText = isNew ? '' : s(c.o?.old_string ?? c.o?.old_str)
-  const newText = isNew ? s(c.o?.content) : s(c.o?.new_string ?? c.o?.new_str ?? c.o?.new_source)
+  const p = editParts(c.name, c.o)
+  const path = p?.path || ''
+  const isNew = !!p?.isNew
+  const oldText = p?.oldText || ''
+  const newText = p?.newText || ''
   return withError(c, (
     <ToolCard icon={<PencilIcon />} label={c.name} title={shortPath(path, c.keep)} path={path} tone="warn" status={c.status}>
       <DiffPane oldText={oldText} newText={newText} path={path}

@@ -2015,6 +2015,87 @@ html[data-pointer="coarse"] .cc-git-section-act .cc-dl { opacity: 1; }
 .cc-pathlink:hover { text-decoration: underline; }
 .cc-pathlink:focus-visible { outline: 1px solid var(--accent-border); outline-offset: 1px; border-radius: 2px; }
 
+/* ── 运行组（chat/ToolRun.tsx，设计 16）───────────────────────────────────
+   连着五条 Bash 曾经是五张独立描边卡：每张 8px 外边距 + 1px 描边 + 终端底 + 一行描述，
+   手机上 86px 一条，五条就是一整屏。收成一组之后外壳只剩一层：
+   一条左脊 + 一个组头，组内每条只是一行——**密度不靠改每个工具，靠这里统一收敛**。 */
+.cc-run {
+  margin: var(--sp-2) 0;
+  border-left: 2px solid var(--border);
+  border-radius: 0 var(--r-xs) var(--r-xs) 0;
+  background: color-mix(in srgb, var(--bg-container) 55%, transparent);
+}
+.cc-run-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  padding: 4px var(--sp-2) 4px 7px;
+  font-size: var(--fs-meta);
+  cursor: pointer;
+  outline: none;
+}
+.cc-run-head:hover { background: var(--list-hover); }
+.cc-run-head:focus-visible { box-shadow: inset 0 0 0 1px var(--accent-border); }
+.cc-run-ico { flex: 0 0 auto; display: flex; }
+.cc-run-name { flex: 0 0 auto; color: var(--text-dim); }
+.cc-run-cnt {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border-radius: var(--r-pill);
+  background: var(--list-hover);
+  color: var(--text-dim);
+  font-size: var(--fs-micro);
+  font-variant-numeric: tabular-nums;
+}
+/* 让位顺序：desc 先走，其次组头这条「最后一条」，命令本身永远不让（设计 16 §9） */
+.cc-run-last {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dimmer);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.cc-run-slot {
+  flex: 0 0 auto;
+  color: var(--text-dimmer);
+  font-size: var(--fs-micro);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.cc-run-body { border-top: 1px solid var(--border-subtle); }
+.cc-run-hunk { color: var(--text-dimmer); font-size: var(--fs-micro); padding: 2px 0; }
+
+/* 组内的密度收敛：每条不再自带外壳，行与行之间只留一条极淡的分隔线 */
+.cc-run-body .cc-cmd.is-dense {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.cc-run-body .cc-cmd.is-dense.is-err { background: var(--danger-soft); box-shadow: inset 2px 0 0 var(--danger); }
+.cc-run-body > * + * .cc-cmd.is-dense,
+.cc-run-body > * + * > .cc-toolcard,
+.cc-run-body > * + * > .cc-toolrow { border-top: 1px solid color-mix(in srgb, var(--border-subtle) 55%, transparent); }
+/* 输出块自己带终端底：底色属于**输出**，不属于命令 */
+.cc-run-body .cc-cmd-out { background: var(--bg-term); }
+.cc-cmd-desc-inline {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 34%;
+  color: var(--text-dimmer);
+  font-size: var(--fs-micro);
+}
+/* 手机档：行尾描述让位给命令本身（设计 16 §9 的适配表） */
+html[data-size="compact"] .cc-cmd-desc-inline { display: none; }
+html[data-size="compact"] .cc-run-slot { width: auto; }
+@media (min-width: 900px) { .cc-run-slot { min-width: 46px; } }
+
 /* 粗指针命中区（设计系统 §「粗指针下命中区 ≥44」）。
    这里**不能**用「伪元素往外撑、不撑视觉尺寸」那套：工具行是连排的，行距只有 1~2px，
    44 的伪元素会往上下各溢出 10px 压到邻行，而后面的兄弟节点画在上层——
@@ -2023,7 +2104,14 @@ html[data-pointer="coarse"] .cc-git-section-act .cc-dl { opacity: 1; }
 @media (pointer: coarse) {
   .cc-cmd-head.is-clickable,
   .cc-toolcard-head,
+  .cc-run-head,
   .cc-toolrow { min-height: 44px; }
+  /* 组里**没有可点目标**的行（纯信息的一行式、没输出的命令）不是按钮，不受 44 约束——
+     密度就是这么省下来的：五个命中区收成一个组头。
+     带文件链接的行仍然是 44：那是真要用手指点的东西，省不得。 */
+  .cc-run-body .cc-toolrow { min-height: 0; }
+  .cc-run-body .cc-toolrow:has(.cc-pathlink) { min-height: 44px; }
+  .cc-run-body .cc-cmd-head:not(.is-clickable) { min-height: 0; }
   /* 小钮的命中区靠伪元素补足——此时它已经被关在 44 高的行里，不会溢出到邻行 */
   .cc-toolcopy, .cc-toolraw { position: relative; }
   .cc-toolcopy::after, .cc-toolraw::after {
