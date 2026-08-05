@@ -1107,7 +1107,8 @@ function TerminalPane(props: {
   // 所以窄屏干脆不传 onOpenFile，路径退化成普通文字（见 15 设计 §9）。
   const openFileFromChat = (path: string, line?: number) => {
     if (fileDock !== 'left') location.hash = '#/files'
-    requestIntent(OPEN_FILE_INTENT, { path, line })
+    // side：开到右栏，别把左栏正在看的对话顶掉（FileWorkspace 只在 A 栏有首 tab 时才照办）
+    requestIntent(OPEN_FILE_INTENT, { path, line, side: fileDock === 'left' })
   }
 
   // 标签条是单行横向滑动（见 index.css .tt-tabs）：窄栏/手机上会话一多，当前标签会滑出视口，
@@ -1546,9 +1547,13 @@ function TerminalPane(props: {
         <button type="button" className={`pill${activeNeedsInput ? ' wait' : ''}`} onClick={() => setSwitchOpen(true)}>
           <i className={`d${activeAgentLive && !activeNeedsInput ? ' live' : ''}`} style={{ background: dot }} />
           {active && <TabName name={active} project={false} />}
-          {activeNeedsInput && <span className="tag">{t('session.waiting')}</span>}
-          {terms.length > 1 && <span className="n">{terms.length}</span>}
-          <span className="ca">{TI.caret}</span>
+          {/* 右侧那簇裹成一个：名字要绝对居中，就得让流里只剩「左一个、右一个」，
+              否则 space-between 会把计数也均分到中间去 */}
+          <span className="ri">
+            {activeNeedsInput && <span className="tag">{t('session.waiting')}</span>}
+            {terms.length > 1 && <span className="n">{terms.length}</span>}
+            <span className="ca">{TI.caret}</span>
+          </span>
         </button>
         {active && claudeMap[active]?.running && (
           <button type="button" className={`ic${claudeView[active] ? ' on' : ''}`} aria-label="Claude"
