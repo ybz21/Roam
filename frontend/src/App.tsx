@@ -2258,7 +2258,7 @@ export function NewSessionModal({ open, parent, onClose, onDone }: { open: boole
         if (prompt.trim()) {
           // prompt 作为 CLI 参数随启动一次带入；新建 worktree 时前置命名约定：
           // 让 agent 开工前 git branch -m 一个语义化分支名（占位分支来自后端）
-          const naming = wtMode === 'new' ? t('session.wt.namingHint') + '\n\n' : ''
+          const naming = t(wtMode === 'new' ? 'session.wt.namingHint' : 'session.wt.namingHintRepo') + '\n\n'
           launch = `${cmd} ${shq(naming + prompt.trim())}`
         }
         await api('POST', '/tasks/_/send', { sess: actual, msg: launch })
