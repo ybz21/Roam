@@ -11,7 +11,7 @@
 //   失败 → 跳到最近一次失败那条
 //   分支 → 打开 Git 面板
 //   用时 → 详情
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useI18n } from '../i18n'
 import { ArrowToBottom, ChecklistIcon, ChevronRight, ClockIcon, WarnIcon } from '../icons'
 import { BranchIcon } from '../git/parts'
@@ -77,6 +77,26 @@ export function StatusBar({ status, accent, unread, onJump, actions = {} }: {
   const [panel, setPanel] = useState<Panel>('none')
   const toggle = (p: Panel) => setPanel((cur) => (cur === p ? 'none' : p))
 
+  // 手机上七八个 chip 一行放不下 → 横滑。两侧渐隐提示「这边还有」，
+  // 沿用快捷键条那套 data-l/data-r 约定（见 .tt-keyrow），不另发明一套。
+  const stripRef = useRef<HTMLDivElement>(null)
+  const [fade, setFade] = useState({ l: false, r: false })
+  const syncFade = useCallback(() => {
+    const el = stripRef.current
+    if (!el) return
+    setFade({ l: el.scrollLeft > 2, r: el.scrollLeft + el.clientWidth < el.scrollWidth - 2 })
+  }, [])
+  useEffect(() => {
+    const el = stripRef.current
+    if (!el) return
+    syncFade()
+    // chip 数量会随会话变（多出一个「失败」就可能从放得下变成放不下），用 RO 而不是只在挂载时量一次
+    const ro = new ResizeObserver(syncFade)
+    ro.observe(el)
+    for (const c of Array.from(el.children)) ro.observe(c)
+    return () => ro.disconnect()
+  }, [syncFade, status])
+
   const ctx = status.context
   // 上下文接近满了要变色：85% 起黄，95% 起红。这是唯一会「越用越糟」的指标。
   const tight = !!ctx && ctx.percent >= 85
@@ -92,65 +112,68 @@ export function StatusBar({ status, accent, unread, onJump, actions = {} }: {
 
   return (
     <div className="cc-statusbar">
-      {status.mode && (
-        <button type="button" className={`cc-st-pill${actions.onCycleMode ? ' is-btn' : ''}`}
-          style={{ color: TONE[status.mode.tone] }} disabled={!actions.onCycleMode}
-          onClick={actions.onCycleMode} title={actions.onCycleMode ? t('chat.modeCycle') : modeText}>
-          <i style={{ background: TONE[status.mode.tone] }} />{modeText}
-        </button>
-      )}
+      <div className="cc-st-scroll" ref={stripRef} onScroll={syncFade}
+        data-l={fade.l ? '' : undefined} data-r={fade.r ? '' : undefined}>
+        {status.mode && (
+          <button type="button" className={`cc-st-pill${actions.onCycleMode ? ' is-btn' : ''}`}
+            style={{ color: TONE[status.mode.tone] }} disabled={!actions.onCycleMode}
+            onClick={actions.onCycleMode} title={actions.onCycleMode ? t('chat.modeCycle') : modeText}>
+            <i style={{ background: TONE[status.mode.tone] }} />{modeText}
+          </button>
+        )}
 
-      {ctx && (
-        <Chip onClick={() => toggle('info')} expanded={panel === 'info'}
-          title={`${fmtTokens(ctx.used)} / ${fmtTokens(ctx.window)}`}>
-          <Ring percent={ctx.percent} color={ctxColor} />
-          <span style={{ color: ctxColor, fontVariantNumeric: 'tabular-nums' }}>{pct}%</span>
-        </Chip>
-      )}
+        {ctx && (
+          <Chip onClick={() => toggle('info')} expanded={panel === 'info'}
+            title={`${fmtTokens(ctx.used)} / ${fmtTokens(ctx.window)}`}>
+            <Ring percent={ctx.percent} color={ctxColor} />
+            <span style={{ color: ctxColor, fontVariantNumeric: 'tabular-nums' }}>{pct}%</span>
+          </Chip>
+        )}
 
-      {status.quota != null && (
-        <Chip title={t('chat.quotaTitle')}>
-          <Ring percent={status.quota} color="var(--warn)" />
-          <span style={{ color: 'var(--text-dim)', fontVariantNumeric: 'tabular-nums' }}>{Math.round(status.quota)}%</span>
-        </Chip>
-      )}
+        {status.quota != null && (
+          <Chip title={t('chat.quotaTitle')}>
+            <Ring percent={status.quota} color="var(--warn)" />
+            <span style={{ color: 'var(--text-dim)', fontVariantNumeric: 'tabular-nums' }}>{Math.round(status.quota)}%</span>
+          </Chip>
+        )}
 
-      {status.tasks && (
-        <Chip onClick={() => toggle('tasks')} expanded={panel === 'tasks'} title={status.tasks.doing || t('chat.taskPanel')}>
-          <ChecklistIcon size={13} />
-          <span style={{ fontVariantNumeric: 'tabular-nums' }}>{status.tasks.done}/{status.tasks.total}</span>
-          <span className="cc-st-chev" style={{ transform: panel === 'tasks' ? 'rotate(-90deg)' : 'rotate(90deg)' }}>
-            <ChevronRight size={11} />
-          </span>
-        </Chip>
-      )}
+        {status.tasks && (
+          <Chip onClick={() => toggle('tasks')} expanded={panel === 'tasks'} title={status.tasks.doing || t('chat.taskPanel')}>
+            <ChecklistIcon size={13} />
+            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{status.tasks.done}/{status.tasks.total}</span>
+            <span className="cc-st-chev" style={{ transform: panel === 'tasks' ? 'rotate(-90deg)' : 'rotate(90deg)' }}>
+              <ChevronRight size={11} />
+            </span>
+          </Chip>
+        )}
 
-      {/* 失败数：整条里唯一的红。点了跳到最近一次——「哪儿挂了」是看到这个数字后的下一个问题 */}
-      {!!status.errors && (
-        <Chip onClick={actions.onJumpError} tone="var(--danger)" title={t('chat.errorsTitle', { count: status.errors })}>
-          <WarnIcon size={12} />
-          <span style={{ fontVariantNumeric: 'tabular-nums' }}>{status.errors}</span>
-        </Chip>
-      )}
+        {/* 失败数：整条里唯一的红。点了跳到最近一次——「哪儿挂了」是看到这个数字后的下一个问题 */}
+        {!!status.errors && (
+          <Chip onClick={actions.onJumpError} tone="var(--danger)" title={t('chat.errorsTitle', { count: status.errors })}>
+            <WarnIcon size={12} />
+            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{status.errors}</span>
+          </Chip>
+        )}
 
-      {status.branch && (
-        <Chip onClick={actions.onOpenGit} title={status.cwd || status.branch}>
-          <BranchIcon size={12} />
-          <span className="cc-st-ellip">{status.branch}</span>
-        </Chip>
-      )}
+        {status.branch && (
+          <Chip onClick={actions.onOpenGit} title={status.cwd || status.branch}>
+            <BranchIcon size={12} />
+            <span className="cc-st-ellip">{status.branch}</span>
+          </Chip>
+        )}
 
-      {status.elapsed != null && (
-        <Chip onClick={() => toggle('info')} expanded={panel === 'info'} title={t('chat.elapsedTitle')}>
-          <ClockIcon size={12} />
-          <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtElapsed(status.elapsed)}</span>
-        </Chip>
-      )}
+        {status.elapsed != null && (
+          <Chip onClick={() => toggle('info')} expanded={panel === 'info'} title={t('chat.elapsedTitle')}>
+            <ClockIcon size={12} />
+            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtElapsed(status.elapsed)}</span>
+          </Chip>
+        )}
 
-      <span style={{ flex: 1 }} />
+      </div>
 
-      {/* 「回到底部」并进这条：它本来是右下角的悬浮圆钮，跟这里重复，合并后少一个浮层，
-          顺带把未读数带上——上滚离底之后，新消息有多少是这条唯一能回答的问题。 */}
+      {/* 「回到底部」钉在滚动条带**外面**——它是动作，不能被横滑滑走。
+          它原本是右下角的悬浮圆钮，跟这里重复；合并后少一个浮层，顺带带上未读数：
+          上滚离底之后「新消息有多少」是这条唯一能回答的问题。 */}
       {unread > 0 && (
         <button type="button" className="cc-st-jump" style={{ background: accent }} onClick={onJump} title={t('chat.jumpToBottom')}>
           <ArrowToBottom size={13} />

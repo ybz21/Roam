@@ -115,6 +115,18 @@ export default function FileWorkspace({
     setActiveOf(g, p); setFocus(g)
   }
   const openFileTab = (p: string) => openInGroup(p, split ? focus : 'A')
+  // 从对话里点 Read/Edit 的路径开文件：**一律开到右栏**，不占 A 栏。
+  // A 栏的首 tab 是会话（终端/对话）本身，开在那儿等于把你正在看的对话顶掉——
+  // 而你点这个路径的动机恰恰是「一边对着看」。已经在 A 栏开着的就挪过来，不留两份。
+  const openFileToSide = (p: string) => {
+    if (filesA.includes(p)) {
+      const nextA = filesA.filter((x) => x !== p)
+      setFilesA(nextA)
+      if (activeA === p) setActiveA(hasLeading ? null : (nextA[0] ?? null))
+    }
+    if (!filesB.includes(p)) setFilesB([...filesB, p])
+    setActiveB(p); setFocus('B')
+  }
   // 对话页点「Grep 命中 path:line」跳过来时要定位到那一行。按路径记，nonce 自增——
   // 同一文件已经开着时 FileView 的 props 不变，没有 nonce 第二次点同一处就毫无反应。
   const [reveal, setReveal] = useState<{ path: string; line: number; nonce: number } | null>(null)
@@ -122,18 +134,22 @@ export default function FileWorkspace({
   // 点过来时，意图早在本组件存在之前就发完了（见 intents.ts）。
   const openFileRef = useRef(openFileTab)
   openFileRef.current = openFileTab
+  const openSideRef = useRef(openFileToSide)
+  openSideRef.current = openFileToSide
   useEffect(() => {
     const on = () => {
-      const data = takeIntentData<{ path?: string; line?: number }>(OPEN_FILE_INTENT)
+      const data = takeIntentData<{ path?: string; line?: number; side?: boolean }>(OPEN_FILE_INTENT)
       if (!data || data === true || !data.path) return
-      openFileRef.current(data.path)
+      // side 只有「A 栏被会话占着」时才有意义（文件页没有首 tab，开哪栏都不挡事）
+      if (data.side && hasLeading) openSideRef.current(data.path)
+      else openFileRef.current(data.path)
       const line = Number(data.line)
       if (line > 0) setReveal((prev) => ({ path: data.path!, line, nonce: (prev?.nonce || 0) + 1 }))
     }
     on()
     window.addEventListener(INTENT_EVENT, on)
     return () => window.removeEventListener(INTENT_EVENT, on)
-  }, [])
+  }, [hasLeading])
   // VSCode「侧栏打开预览」：把该 markdown 的渲染预览开到另一栏（预览 tab 用前缀区分，可与源码同时存在）
   const openPreviewToSide = (fromGroup: Group, p: string) => {
     const to: Group = fromGroup === 'A' ? 'B' : 'A'

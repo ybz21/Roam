@@ -2032,6 +2032,28 @@ html[data-pointer="coarse"] .cc-git-section-act .cc-dl { opacity: 1; }
   color: var(--text-dim);
   border-top: 1px solid var(--border-subtle);
 }
+/* chip 条带：手机上七八个一行放不下 → 横滑。
+   两侧渐隐沿用快捷键条那套 data-l/data-r（见 .tt-keyrow），不另发明一套。
+   overscroll-behavior-x:contain 是必须的：不然横滑会冒泡成浏览器的「返回」手势，
+   在手机上表现为「想看后面几个 chip，结果整页退出去了」。 */
+.cc-st-scroll {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.cc-st-scroll::-webkit-scrollbar { height: 0; }
+.cc-st-scroll > * { flex: 0 0 auto; }
+.cc-st-scroll[data-l][data-r] { mask-image: linear-gradient(90deg, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%); }
+.cc-st-scroll[data-l]:not([data-r]) { mask-image: linear-gradient(90deg, transparent 0, #000 20px); }
+.cc-st-scroll[data-r]:not([data-l]) { mask-image: linear-gradient(90deg, #000 calc(100% - 20px), transparent 100%); }
 .cc-st-pill {
   flex: 0 0 auto;
   display: inline-flex;
@@ -2127,7 +2149,11 @@ html[data-pointer="coarse"] .cc-git-section-act .cc-dl { opacity: 1; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 @media (pointer: coarse) {
-  .cc-st-pill, .cc-st-jump { min-height: 28px; }
+  /* 命中区 ≥44：这条只有一行，撑到 44 只还一次 16px，
+     比工具行那种连排划算得多（那儿撑 44 的代价是每行都还）。 */
+  .cc-statusbar { min-height: 44px; }
+  .cc-st-pill, .cc-st-jump, .cc-st-item.is-btn { min-height: 36px; }
+  .cc-st-scroll { min-height: 36px; }
 }
 
 /* ── 语法高亮（highlight.js 类 → 主题变量；不引外部 CSS，随黑白主题切换） ── */

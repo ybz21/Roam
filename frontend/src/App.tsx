@@ -1107,7 +1107,8 @@ function TerminalPane(props: {
   // 所以窄屏干脆不传 onOpenFile，路径退化成普通文字（见 15 设计 §9）。
   const openFileFromChat = (path: string, line?: number) => {
     if (fileDock !== 'left') location.hash = '#/files'
-    requestIntent(OPEN_FILE_INTENT, { path, line })
+    // side：开到右栏，别把左栏正在看的对话顶掉（FileWorkspace 只在 A 栏有首 tab 时才照办）
+    requestIntent(OPEN_FILE_INTENT, { path, line, side: fileDock === 'left' })
   }
 
   // 标签条是单行横向滑动（见 index.css .tt-tabs）：窄栏/手机上会话一多，当前标签会滑出视口，
