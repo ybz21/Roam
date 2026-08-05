@@ -1547,9 +1547,13 @@ function TerminalPane(props: {
         <button type="button" className={`pill${activeNeedsInput ? ' wait' : ''}`} onClick={() => setSwitchOpen(true)}>
           <i className={`d${activeAgentLive && !activeNeedsInput ? ' live' : ''}`} style={{ background: dot }} />
           {active && <TabName name={active} project={false} />}
-          {activeNeedsInput && <span className="tag">{t('session.waiting')}</span>}
-          {terms.length > 1 && <span className="n">{terms.length}</span>}
-          <span className="ca">{TI.caret}</span>
+          {/* 右侧那簇裹成一个：名字要绝对居中，就得让流里只剩「左一个、右一个」，
+              否则 space-between 会把计数也均分到中间去 */}
+          <span className="ri">
+            {activeNeedsInput && <span className="tag">{t('session.waiting')}</span>}
+            {terms.length > 1 && <span className="n">{terms.length}</span>}
+            <span className="ca">{TI.caret}</span>
+          </span>
         </button>
         {active && claudeMap[active]?.running && (
           <button type="button" className={`ic${claudeView[active] ? ' on' : ''}`} aria-label="Claude"
