@@ -984,13 +984,18 @@ function TBtn({ icon, label, on, tone = 'accent', title, onClick, onMouseDown }:
   icon?: ReactNode; label?: ReactNode; on?: boolean; tone?: 'accent' | 'ok'; title?: ReactNode
   onClick?: () => void; onMouseDown?: (e: React.MouseEvent) => void
 }) {
+  const { coarse } = useLayout()
   const btn = (
     <button type="button" className={`tt-tbtn${on ? ' on' : ''}${tone === 'ok' ? ' ok' : ''}${label ? '' : ' tt-ico'}`}
-      onClick={onClick} onMouseDown={onMouseDown}>
+      onClick={onClick} onMouseDown={onMouseDown}
+      aria-label={typeof title === 'string' ? title : undefined}
+      title={coarse && typeof title === 'string' ? title : undefined}>
       {icon}{label != null && <span>{label}</span>}
     </button>
   )
-  return title ? <Tooltip title={title} mouseEnterDelay={0.35}>{btn}</Tooltip> : btn
+  // 粗指针不挂 Tooltip：触屏没有 mouseleave，浮层收不掉，而 .ant-tooltip 是
+  // pointer-events: auto，会把它盖住那片区域后续的点全吞掉（同 Projects 的 ActBtn）。
+  return title && !coarse ? <Tooltip title={title} mouseEnterDelay={0.35}>{btn}</Tooltip> : btn
 }
 
 // ── 终端面板（多标签 + 工具栏 + 快捷键栏），桌面右栏与手机覆盖层共用 ──

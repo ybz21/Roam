@@ -1142,8 +1142,9 @@ html[data-size="compact"] .ant-form-item-control-input-content > .ant-picker { w
   transition: background .14s ease, color .14s ease, box-shadow .14s ease;
 }
 .tt-tbtn.tt-ico { padding: 0 6px; }
-.tt-tbtn:hover { background: var(--list-hover); color: var(--text-bright); }
-.tt-tbtn:active { transform: translateY(.5px); }
+/* hover 只给细指针：触屏没有 mouseleave，:hover 会粘在最后点过的那枚上不走 */
+html[data-pointer="fine"] .tt-tbtn:hover { background: var(--list-hover); color: var(--text-bright); }
+.tt-tbtn:active { background: var(--list-hover); transform: translateY(.5px); }
 .tt-tbtn:focus-visible { outline: 2px solid var(--accent-border); outline-offset: 1px; }
 
 /* 开启态：软色底 + 主色字，**不描边**。原来是满强度的蓝色描边圈（行内拼色拼坏了，见
@@ -1151,10 +1152,10 @@ html[data-size="compact"] .ant-form-item-control-input-content > .ant-picker { w
    静态只留一层底色说「这个面板开着」；指到它时才浮出一道同色细内环当反馈——
    环只在 hover 出现、不常驻，一排按钮就不会被边框切碎。 */
 .tt-tbtn.on { background: var(--accent-soft); color: var(--accent); }
-.tt-tbtn.on:hover { background: var(--accent-soft); color: var(--accent);
-  box-shadow: inset 0 0 0 1px var(--accent-border); }
 .tt-tbtn.on.ok { background: var(--ok-soft); color: var(--ok); }
-.tt-tbtn.on.ok:hover { background: var(--ok-soft); color: var(--ok);
+html[data-pointer="fine"] .tt-tbtn.on:hover { background: var(--accent-soft); color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent-border); }
+html[data-pointer="fine"] .tt-tbtn.on.ok:hover { background: var(--ok-soft); color: var(--ok);
   box-shadow: inset 0 0 0 1px var(--ok-border); }
 
 /* 右侧只读工具（翻页 / 字号 / 重绘重连）收进分段组，视觉上跟左侧动作区分开 */
@@ -1225,17 +1226,26 @@ html[data-size="compact"] .ant-form-item-control-input-content > .ant-picker { w
   background: transparent; color: var(--text-dim);
   font: inherit; font-size: var(--fs-meta); line-height: 1; white-space: nowrap; cursor: pointer;
   transition: color .15s, border-color .15s, background .15s; }
-.tt-act:hover { color: var(--text-bright); border-color: var(--border); background: var(--list-hover); }
+/* hover 装饰只给细指针。触屏点完不会有 mouseleave，:hover 会一直粘在最后点过的那枚上，
+   点下一枚时上一枚才带着 .15s 过渡褪掉——一排按钮轮流亮灭，看着就是在抖。
+   手指档只留 :active 的按下反馈。 */
+html[data-pointer="fine"] .tt-act:hover { color: var(--text-bright); border-color: var(--border); background: var(--list-hover); }
+html[data-pointer="fine"] .tt-act.danger:hover { color: var(--danger); border-color: var(--danger-border); background: var(--danger-soft); }
+html[data-pointer="fine"] .tt-act.ok:hover { color: var(--ok); border-color: var(--ok-border); background: var(--ok-soft); }
+.tt-act:active { background: var(--list-hover); }
+.tt-act.danger:active { background: var(--danger-soft); color: var(--danger); }
+.tt-act.ok:active { background: var(--ok-soft); color: var(--ok); }
 .tt-act:focus-visible { outline: 1px solid var(--accent-border); outline-offset: 1px; }
-.tt-act.danger:hover { color: var(--danger); border-color: var(--danger-border); background: var(--danger-soft); }
-.tt-act.ok:hover { color: var(--ok); border-color: var(--ok-border); background: var(--ok-soft); }
 /* 图标钮：一行四五个动作写成汉字太吵，收成方钮，动作名走 Tooltip + aria-label
    （图标不写进文案，见图标硬规则——文案只写字，图标在调用处给） */
 .tt-act.ico { width: 26px; padding: 0; }
-/* 粗指针：视觉 36，命中区靠伪元素撑到 44（不撑视觉尺寸） */
+/* 粗指针：视觉 36，命中区靠伪元素撑到 44（不撑视觉尺寸）。
+   左右各外扩半个 gap（.acts 的 gap 是 6）：不桥接的话两枚钮之间就留着 6px 死区，
+   而 .acts 上挂着 stopPropagation——点进缝里按钮没触发、行也没打开，彻底没反应。
+   上下只补到 44 为止，且相邻两行的命中区不许叠（见 .acts 的 row-gap）。 */
 html[data-pointer="coarse"] .tt-act { height: 36px; padding: 0 14px; position: relative; }
 html[data-pointer="coarse"] .tt-act.ico { width: 36px; padding: 0; }
-html[data-pointer="coarse"] .tt-act::after { content: ''; position: absolute; left: 0; right: 0;
+html[data-pointer="coarse"] .tt-act::after { content: ''; position: absolute; left: -4px; right: -4px;
   top: 50%; height: var(--tap); transform: translateY(-50%); }
 
 /* 分支名片：以前是 antd 的青色 Tag（#39c5cf，全站唯一一支青，还不在令牌里）。
