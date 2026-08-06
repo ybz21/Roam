@@ -1418,6 +1418,7 @@ const enUS = {
   'project.where.repo': 'Main repo',
   'project.where.existing': 'Existing ({count})',
   'project.agent.none': 'None',
+  'project.basedOnShort': 'from',
   'project.baseDefault': 'Based on default branch',
   'project.fullForm': 'Full form',
   'project.go': 'Go ⏎',

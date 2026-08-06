@@ -1423,6 +1423,7 @@ const zhCN = {
   'project.where.repo': '主仓库',
   'project.where.existing': '已有 ({count})',
   'project.agent.none': '无',
+  'project.basedOnShort': '基于',
   'project.baseDefault': '基于主干（默认）',
   'project.fullForm': '完整表单',
   'project.go': '开干 ⏎',
