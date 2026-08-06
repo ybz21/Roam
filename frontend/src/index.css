@@ -17,6 +17,10 @@
   --text-dim: #8b949e;
   --text-dimmer: #6e7681;
   --brand-grad: linear-gradient(180deg, #f5f7fa 0%, #c3c9d1 46%, #9aa1ab 56%, #e7ebef 100%);
+  /* Agent 品牌标：用官方色，不许按我们的强调色重新上色。Claude 是陶土橙 #D97757；
+     OpenAI/Codex 的标官方就是单色（深底走白），所以跟前景色走。 */
+  --brand-claude: #d97757;
+  --brand-codex: var(--text-bright);
   /* 强调色：全站只有这一组，实心块用 --accent-solid，线/文字用 --accent（见 theme.tsx） */
   --accent: #58a6ff;
   --accent-solid: #1f6feb;
@@ -1060,7 +1064,7 @@ html[data-size="compact"] .ant-form-item-control-input-content > .ant-picker { w
 }
 .tt-tabs::-webkit-scrollbar, .tt-tbar::-webkit-scrollbar { height: 0; width: 0; }
 .tt-tabs > *, .tt-tbar > * { flex: 0 0 auto; }
-.tt-tabs { gap: 2px; padding: 6px 8px; background: var(--bg-container); border-bottom: 1px solid var(--border-subtle); }
+.tt-tabs { gap: 0; padding: 0; background: var(--bg-container); border-bottom: 1px solid var(--border-subtle); }
 .tt-tbar { gap: 3px; padding: 5px 8px; background: var(--bg-base); border-bottom: 1px solid var(--border-subtle); }
 
 /* 竖线断句：把「状态 / 会话动作 / 面板开关」隔开 */
@@ -1073,22 +1077,28 @@ html[data-size="compact"] .ant-form-item-control-input-content > .ant-picker { w
   background: var(--bg-container); border-bottom: 1px solid var(--border-subtle);
 }
 .tt-tabs-wrap > .tt-tabs { flex: 1 1 auto; min-width: 0; border-bottom: 0; }
-.tt-tabs-lead { flex: 0 0 auto; display: flex; align-items: center; padding-left: 8px; }
+.tt-tabs-lead { flex: 0 0 auto; display: flex; align-items: center; padding: 0 0 0 8px; }
 /* 渐隐用 mask 而不是叠一层渐变色块：底色是变量，叠色块在浅色主题下会露出接缝 */
 .tt-tabs[data-l][data-r] { mask-image: linear-gradient(90deg, transparent 0, #000 22px, #000 calc(100% - 22px), transparent 100%); }
 .tt-tabs[data-l]:not([data-r]) { mask-image: linear-gradient(90deg, transparent 0, #000 22px); }
 .tt-tabs[data-r]:not([data-l]) { mask-image: linear-gradient(90deg, #000 calc(100% - 22px), transparent 100%); }
 
-/* 会话标签：未选中不描边（原来每个都有框，很吵），选中才上强调色底 + 细框。
+/* 会话标签学 VSCode 的编辑器页签：矩形贴边、拿 1px 竖线断句、选中的那枚顶边一道强调色，
+   底色换成下面内容区的底色，视觉上跟内容连成一片。
+   原来是「圆角胶囊 + 2px 间距 + 选中只加粗」：一条挤满标签时既看不出边界在哪，
+   也说不清哪一枚跟下面的终端是同一个会话——加粗在深色小字上几乎读不出来。
    宽度 132–220（14 §7.1）：给下限是为了让标签宽度稳定，切换时不会因为名字长短乱跳。 */
 .tt-tab {
   position: relative;
   display: inline-flex; align-items: center; gap: 7px; min-width: 132px; max-width: 220px;
-  height: 28px; padding: 0 5px 0 10px; border: 1px solid transparent; border-radius: 8px;
-  color: var(--text-dim); font-size: 12.5px; line-height: 1; white-space: nowrap; cursor: pointer;
+  height: 34px; padding: 0 6px 0 10px;
+  border: 0; border-right: 1px solid var(--border-subtle); border-radius: 0; background: transparent;
+  color: var(--text-dim); font-size: var(--fs-meta); line-height: 1; white-space: nowrap; cursor: pointer;
+  transition: background .12s, color .12s;
 }
 .tt-tab:hover { background: var(--list-hover); color: var(--text-bright); }
-.tt-tab.on { color: var(--text-bright); font-weight: 600; }
+.tt-tab.on { background: var(--bg-base); color: var(--text-bright); font-weight: 600;
+  box-shadow: inset 0 2px 0 var(--accent); }
 .tt-tab .tt-wait { flex: 0 0 auto; color: var(--warn); font-weight: 600; }
 /* 名字中间省略：头段收缩 + 尾段不收缩，省略号自然落在中间（见 session-label.tsx TabName） */
 /* 这几条对 .tt-name 通用——标签条和手机会话页胶囊共用同一个 TabName。
@@ -1110,8 +1120,8 @@ html[data-size="compact"] .ant-form-item-control-input-content > .ant-picker { w
 .tt-tab.dragging { opacity: .45; }
 /* 插入位提示线：拖到哪个标签左边，线就画在哪 */
 .tt-tab.dropL::before {
-  content: ""; position: absolute; left: -2px; top: 3px; bottom: 3px;
-  width: 2px; border-radius: 2px; background: var(--accent);
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0;
+  width: 2px; background: var(--accent);
 }
 .tt-tab-tail { flex: 1 0 24px; align-self: stretch; }
 .tt-tab .tt-x {
@@ -1123,18 +1133,29 @@ html[data-size="compact"] .ant-form-item-control-input-content > .ant-picker { w
 /* 触屏没有 hover，关闭按钮常显 */
 @media (pointer: coarse) { .tt-tab .tt-x { opacity: 1; } }
 
-/* 工具条按钮：默认无框、hover 才浮起；开启态由行内 style 上强调色 */
+/* 工具条按钮：默认无框、hover 才浮起 */
 .tt-tbtn {
   display: inline-flex; align-items: center; gap: 6px; height: 27px; padding: 0 9px;
-  border: 1px solid transparent; border-radius: 7px; background: transparent;
-  color: var(--text-dim); font-size: 12.5px; font-family: inherit; line-height: 1;
+  border: 0; border-radius: 7px; background: transparent;
+  color: var(--text-dim); font-size: var(--fs-meta); font-family: inherit; line-height: 1;
   cursor: pointer; white-space: nowrap; -webkit-tap-highlight-color: transparent;
+  transition: background .14s ease, color .14s ease, box-shadow .14s ease;
 }
 .tt-tbtn.tt-ico { padding: 0 6px; }
 .tt-tbtn:hover { background: var(--list-hover); color: var(--text-bright); }
-.tt-tbtn.on:hover { filter: brightness(1.12); }
 .tt-tbtn:active { transform: translateY(.5px); }
-.tt-tbtn:focus-visible { outline: 2px solid rgba(88, 166, 255, .55); outline-offset: 1px; }
+.tt-tbtn:focus-visible { outline: 2px solid var(--accent-border); outline-offset: 1px; }
+
+/* 开启态：软色底 + 主色字，**不描边**。原来是满强度的蓝色描边圈（行内拼色拼坏了，见
+   App.tsx 的 TBtn），一排安静的扁平按钮里突然吊着一个圈，重得很。
+   静态只留一层底色说「这个面板开着」；指到它时才浮出一道同色细内环当反馈——
+   环只在 hover 出现、不常驻，一排按钮就不会被边框切碎。 */
+.tt-tbtn.on { background: var(--accent-soft); color: var(--accent); }
+.tt-tbtn.on:hover { background: var(--accent-soft); color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent-border); }
+.tt-tbtn.on.ok { background: var(--ok-soft); color: var(--ok); }
+.tt-tbtn.on.ok:hover { background: var(--ok-soft); color: var(--ok);
+  box-shadow: inset 0 0 0 1px var(--ok-border); }
 
 /* 右侧只读工具（翻页 / 字号 / 重绘重连）收进分段组，视觉上跟左侧动作区分开 */
 .tt-tgroup {
@@ -1146,7 +1167,7 @@ html[data-size="compact"] .ant-form-item-control-input-content > .ant-picker { w
 /* 连接状态：小圆点带一圈光晕，文字保持克制的次级灰 */
 .tt-status {
   display: inline-flex; align-items: center; gap: 7px; height: 27px; padding: 0 10px 0 8px;
-  color: var(--text-dim); font-size: 12.5px; line-height: 1; white-space: nowrap;
+  color: var(--text-dim); font-size: var(--fs-meta); line-height: 1; white-space: nowrap;
 }
 .tt-status i { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 7px; }
 
@@ -1190,6 +1211,51 @@ html[data-size="compact"] .ant-form-item-control-input-content > .ant-picker { w
 
 /* ── 标签：圆角更柔、字距收紧 ── */
 .ant-tag { border-radius: 6px; letter-spacing: .2px; }
+/* antd 的 icon 间距只认 .anticon（`.anticon + span`），我们传的是裸 <svg>（自家图标模块），
+   不补这一条图标就跟文字贴死。图标独占一枚标签时（无 span）不该有间距，所以只加在 span 上。 */
+.ant-tag > svg { vertical-align: -.15em; }
+.ant-tag > svg + span { margin-inline-start: 4px; }
+
+/* 行尾动作按钮：原来是一排裸文字链接（`进入 派生 关闭`），三个毛病——
+   看不出可点（跟旁边的时间、阶段文字长得一样）、没有命中区、`<a>` 没有 href
+   键盘根本聚不上焦。换成安静的幽灵按钮：静态只有一道细边，hover 才提亮，
+   破坏性动作 hover 才转红。用 <button>，聚焦和键盘激活都是白送的。 */
+.tt-act { display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  height: 26px; padding: 0 10px; border: 1px solid var(--border-subtle); border-radius: var(--r-xs);
+  background: transparent; color: var(--text-dim);
+  font: inherit; font-size: var(--fs-meta); line-height: 1; white-space: nowrap; cursor: pointer;
+  transition: color .15s, border-color .15s, background .15s; }
+.tt-act:hover { color: var(--text-bright); border-color: var(--border); background: var(--list-hover); }
+.tt-act:focus-visible { outline: 1px solid var(--accent-border); outline-offset: 1px; }
+.tt-act.danger:hover { color: var(--danger); border-color: var(--danger-border); background: var(--danger-soft); }
+.tt-act.ok:hover { color: var(--ok); border-color: var(--ok-border); background: var(--ok-soft); }
+/* 图标钮：一行四五个动作写成汉字太吵，收成方钮，动作名走 Tooltip + aria-label
+   （图标不写进文案，见图标硬规则——文案只写字，图标在调用处给） */
+.tt-act.ico { width: 26px; padding: 0; }
+/* 粗指针：视觉 36，命中区靠伪元素撑到 44（不撑视觉尺寸） */
+html[data-pointer="coarse"] .tt-act { height: 36px; padding: 0 14px; position: relative; }
+html[data-pointer="coarse"] .tt-act.ico { width: 36px; padding: 0; }
+html[data-pointer="coarse"] .tt-act::after { content: ''; position: absolute; left: 0; right: 0;
+  top: 50%; height: var(--tap); transform: translateY(-50%); }
+
+/* 分支名片：以前是 antd 的青色 Tag（#39c5cf，全站唯一一支青，还不在令牌里）。
+   分支是**标识**不是状态，给它一支专属色的结果是：一行里青(分支) + 蓝(选中/推送) +
+   绿(已合入) + 黄(有改动) + 紫(蜂群) + 橙(Claude 标) 六种色平起平坐，谁也不突出。
+   收成中性 mono 小片：颜色只留给真正有含义的东西。 */
+.tt-branch { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto;
+  max-width: 240px; height: 18px; padding: 0 6px;
+  border: 1px solid var(--border-subtle); border-radius: var(--r-xs); background: var(--bg-elevated);
+  font-family: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+  font-size: var(--fs-micro); line-height: 1; color: var(--text-dim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tt-branch > svg { color: var(--text-dimmer); flex: 0 0 auto; }
+.tt-branch.act { cursor: pointer; transition: color .15s, border-color .15s; }
+.tt-branch.act:hover { color: var(--text-bright); border-color: var(--border); }
+
+/* Agent 品牌标不套标签框：logo 本身就够认，外面再描一圈边框纯属噪声，
+   一行里跟 worktree/等待这些真·标签挤在一起还会打架。裸标 + 可选文字。 */
+.tt-agentmark { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto;
+  font-size: var(--fs-meta); color: var(--text-dim); white-space: nowrap; }
 
 /* ── 链接：默认偏中性，hover 才上主色 ── */
 .ant-typography a, a.ant-typography { color: var(--accent); }
