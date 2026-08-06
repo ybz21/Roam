@@ -136,6 +136,8 @@ const PRJ_CSS = `
 /* 动作区（.tt-act 幽灵按钮见 index.css）：按钮自带边框和命中区，不再靠
    「平时半透明、hover 才显形」——那对手指档等于不存在，键盘用户也摸不着。 */
 .prj-row .acts{display:flex;gap:6px;flex:0 0 auto;margin-top:2px;flex-wrap:wrap;justify-content:flex-end}
+/* 换行时行距给到 10：按钮视觉 36、命中区 44，行距不到 8 两行的命中区就会叠在一起 */
+html[data-pointer="coarse"] .prj-row .acts{row-gap:10px}
 .prj-row.warn{background:rgba(210,153,34,.05);border:1px solid rgba(210,153,34,.18);margin-bottom:4px}
 .prj-row.warn:hover{background:rgba(210,153,34,.09)}
 .prj-row.warn::before{display:none}
@@ -254,14 +256,21 @@ const CLI_KINDS = ['shell', 'claude', 'codex'] as const
 
 // 行尾动作钮：一行四五个动作写成汉字太吵，收成图标方钮。
 // 图标不写进文案（图标硬规则）：label 只给字，Tooltip 和 aria-label 都用它，图标在调用处传。
+//
+// 粗指针下**不挂 Tooltip**：触屏点一下就把浮层弹出来，之后没有 mouseleave 让它收，
+// 它就一直悬在按钮上方那一条；而 antd 的 .ant-tooltip 是 pointer-events: auto，
+// 于是它盖住的那块区域后续的点全被吞掉——表现就是「点了没有该有的动作」。
+// 手指档靠 aria-label + 原生 title 说明动作，不弹浮层。
 export const ActBtn = ({ icon, label, tone, onClick }: {
   icon: ReactNode; label: string; tone?: 'danger' | 'ok'; onClick?: () => void
-}) => (
-  <Tooltip title={label}>
+}) => {
+  const { coarse } = useLayout()
+  const btn = (
     <button type="button" className={`tt-act ico${tone ? ' ' + tone : ''}`} aria-label={label}
-      onClick={onClick}>{icon}</button>
-  </Tooltip>
-)
+      title={coarse ? label : undefined} onClick={onClick}>{icon}</button>
+  )
+  return coarse ? btn : <Tooltip title={label}>{btn}</Tooltip>
+}
 
 export const dot = (on: boolean, color?: string) => (
   <span style={{
