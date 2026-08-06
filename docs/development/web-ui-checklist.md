@@ -50,6 +50,17 @@ chrome goto https://127.0.0.1:13579/ && chrome eval "document.title"
 | 弹层是否被误关 | 触发后等 1.5s 再查节点是否还在 |
 | 布局是否溢出 | `document.documentElement.scrollWidth <= innerWidth` |
 
+## 1.4 「点了没反应 / 界面在抖」的四个惯犯
+
+这四条都不是「按钮坏了」，而是按钮**在被点的那一刻跑了或者被盖住了**。截图和 typecheck 全看不出来。
+
+| 现象 | 真因 | 验法 | 防线 |
+|---|---|---|---|
+| 上一次点过的按钮一直亮着，一排钮轮流亮灭 | 触屏没有 `mouseleave`，`:hover` 粘在最后点过的那枚上 | 手指档下 `getComputedStyle` 量点过的钮，背景不该变 | 所有 hover 写成 `:where(html[data-pointer="fine"]) X:hover`，`npm run hover:check` 守 |
+| 点一下没反应，再点才生效 | antd Tooltip 在触屏由「长按」触发，弹出后没有 mouseleave 收不回去，`pointer-events:auto` 的浮层停在按钮上方吃掉下一次点击 | `elementFromPoint(按钮中心)` 命中 `.ant-tooltip` | 手指档全局 `.ant-tooltip{display:none}`；图标钮的名字靠 `aria-label` |
+| 整条工作区连着终端面板横跳 ~10px，点击落到隔壁 | 文档溢出 1px → 冒出文档滚动条 → 可用宽少 10px → Canvas 与 Dock 一起重排（高分屏小数舍入下每来一段输出抖一次） | `document.body.style.minHeight='calc(100% + 1px)'` 前后量目标 rect.x，**不该动** | `html, body { overflow: hidden }`：外壳定高，滚动都在内部容器 |
+| 两枚图标钮之间的缝点不中 | 缝落在带 `stopPropagation` 的父节点上 | 沿按钮排横扫 `elementFromPoint`，每一列都要命中某枚钮 | 命中区伪元素左右各外扩 4px（真机 dpr 2.75 下 3px 不够） |
+
 ## 1.5 「花屏」先分类，再动手
 
 终端花屏有两类，长得一样但修法相反。**别靠截图猜**，用 `__roamTermDiag(true)` 把 xterm 的可视区
@@ -96,6 +107,13 @@ chrome goto https://127.0.0.1:13579/ && chrome eval "document.title"
 - [ ] **点终端空白处：弹框不消失**，且这一下点击落到终端（命中测试）。
 - [ ] 点选项能把按键注入会话；点右上角 × 只关这一条。
 - [ ] `.ant-modal-wrap` 的 `pointer-events` 必须是 `none`（否则整页点击被吃）。
+
+### C.5 指针档差异（手指 / 鼠标各跑一遍）
+
+- [ ] 手指档点过的按钮不留 hover 残留（点 A 再点 B，A 要回到静止态）。
+- [ ] 手指档 `.ant-tooltip` 不出现（`getComputedStyle(el).display === 'none'`）。
+- [ ] 行尾图标钮连排：逐列 `elementFromPoint` 都命中钮，缝里也不落到行本身。
+- [ ] 终端吐输出时整页不横移：量任一固定元素的 `rect.x`，连续采样 3s 不变。
 
 ### D. 手机专属
 

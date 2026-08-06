@@ -43,7 +43,30 @@ Reach for `<button type="button">` by default; `<a>` only when it really navigat
 `useLayout()` is the only way to read layout size. NEVER read `window.innerWidth` and never call
 `matchMedia` yourself. Pure style differences key off `data-size` / `data-pointer` on `<html>`.
 Under a coarse pointer, hit targets are ≥44px — grow the hit area with a pseudo-element, not the
-visual size.
+visual size, and overshoot the gap between neighbouring icon buttons by 4px (3px still misses at
+dpr 2.75).
+
+## Hover Belongs to the Mouse
+
+Every `:hover` rule is written `:where(html[data-pointer="fine"]) X:hover`. Touch has no
+`mouseleave`, so a bare `:hover` sticks to the last thing a finger touched: the previously tapped
+button stays lit and a row of buttons flickers as you work down it. `:where()` adds no
+specificity, so the gate changes nothing about the cascade. Anything hidden until hover
+(`opacity: 0` copy/close/download buttons) needs a coarse rule that keeps it visible, or the phone
+can never reach it. `npm run hover:check` (`frontend/scripts/hover-scope-audit.mjs`) enforces both
+halves and runs inside `npm run build`.
+
+Tooltips are mouse furniture too: under a coarse pointer `.ant-tooltip` is hidden site-wide,
+because a tooltip opened by a long press never gets a `mouseleave` and its overlay then eats the
+next tap. An icon-only button therefore carries its name in `aria-label`, not only in a Tooltip.
+
+## The Document Never Scrolls
+
+`html, body { overflow: hidden }` — the app is a fixed-height shell and every page scrolls inside
+its own container. One pixel of document overflow summons a 10px document scrollbar, which takes
+10px off the workspace and slides the canvas and the terminal dock sideways; on a 150%-scaled
+display the fractional rounding flips it back and forth with every burst of terminal output, and
+buttons move out from under the cursor between mousedown and mouseup.
 
 ## Icons: SVG Only
 
@@ -132,7 +155,7 @@ synthesis, not copy-mode) and for redraw quirks on narrow widths.
 - Run `scripts/dev/quality/check.sh full` before opening or updating a PR with runtime behavior
   changes.
 - Frontend changes must additionally pass
-  `npm run typecheck && npm run i18n:check && npx vitest run && npm run build`.
+  `npm run typecheck && npm run i18n:check && npm run hover:check && npx vitest run && npm run build`.
 - Install the tracked Git hooks with `bash scripts/dev/install-git-hooks.sh`; it sets
   `core.hooksPath=.githooks` and `commit.template=.gitmessage`.
 - Never commit `.env`, generated dependency folders, coverage output, or hard-coded secrets.

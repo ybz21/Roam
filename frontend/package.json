@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npm run i18n:check && vite build && node scripts/compress-dist.mjs",
+    "build": "npm run i18n:check && npm run hover:check && vite build && node scripts/compress-dist.mjs",
     "i18n:check": "node scripts/i18n-audit.mjs",
+    "hover:check": "node scripts/hover-scope-audit.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

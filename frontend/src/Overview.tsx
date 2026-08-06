@@ -31,13 +31,13 @@ const OV_CSS = `
 .ov-new{flex:0 0 auto;display:inline-flex;align-items:center;gap:var(--sp-2);height:34px;padding:0 var(--sp-4);
   border:0;border-radius:var(--r-sm);background:var(--accent-solid);color:#fff;
   font-size:var(--fs-sm);font-weight:600;cursor:pointer;transition:filter .15s}
-.ov-new:hover{filter:brightness(1.08)}
+:where(html[data-pointer="fine"]) .ov-new:hover{filter:brightness(1.08)}
 /* 窄档：状态条是页头下方的一条横条（它挂在页头的 .acts 槽里，靠 100% 宽换行成整条） */
 .ov .tt-pagehead .acts{width:100%;margin-left:0}
 .ov .tt-pagehead .acts>.ov-sum{flex:1}
 .ov-sum button{display:inline-flex;align-items:center;gap:var(--sp-2);padding:var(--sp-1);margin:calc(var(--sp-1) * -1);border:0;border-radius:var(--r-xs);
   background:none;color:var(--text-dim);font:inherit;cursor:pointer}
-.ov-sum button:hover{color:var(--text-bright);background:var(--list-hover)}
+:where(html[data-pointer="fine"]) .ov-sum button:hover{color:var(--text-bright);background:var(--list-hover)}
 .ov-sum b{font-family:ui-monospace,monospace;font-weight:700;font-size:var(--fs-sm);color:var(--text-bright)}
 .ov-sum .d{width:6px;height:6px;border-radius:50%;background:var(--ok);flex:0 0 auto}
 .ov-sum .d.a{background:#d29922}.ov-sum .d.p{background:#a371f7}
@@ -58,10 +58,10 @@ const OV_CSS = `
   background:radial-gradient(circle at 100% 0,rgba(210,153,34,.13),transparent 38%),
     linear-gradient(145deg,rgba(210,153,34,.09),rgba(210,153,34,.025));
   transition:border-color .15s,transform .15s}
-.ov-card:hover{border-color:rgba(210,153,34,.55);transform:translateY(-1px)}
+:where(html[data-pointer="fine"]) .ov-card:hover{border-color:rgba(210,153,34,.55);transform:translateY(-1px)}
 .ov-card.p{border-color:rgba(163,113,247,.28);
   background:radial-gradient(circle at 100% 0,rgba(163,113,247,.13),transparent 38%),rgba(163,113,247,.04)}
-.ov-card.p:hover{border-color:rgba(163,113,247,.55)}
+:where(html[data-pointer="fine"]) .ov-card.p:hover{border-color:rgba(163,113,247,.55)}
 .ov-card .ty{display:flex;align-items:center;gap:var(--sp-2);font-size:var(--fs-meta);font-weight:600;color:#e3b341}
 .ov-card.p .ty{color:#a371f7}
 .ov-card .ty .pj{color:var(--text-dimmer);font-weight:400}
@@ -78,15 +78,15 @@ const OV_CSS = `
 .ov-proj{min-width:0;background:var(--bg-container);border:1px solid var(--border-subtle);border-radius:var(--r-card);
   padding:var(--sp-3) var(--sp-3) var(--sp-2);display:flex;flex-direction:column;gap:var(--sp-1);transition:border-color .15s}
 .ov-proj{cursor:pointer}
-.ov-proj:hover{border-color:rgba(88,166,255,.35);background:var(--bg-elevated)}
+:where(html[data-pointer="fine"]) .ov-proj:hover{border-color:rgba(88,166,255,.35);background:var(--bg-elevated)}
 .ov-proj:focus-visible{outline:1px solid var(--accent-border);outline-offset:2px}
 /* 指针落在会话行/卡内链接上时，把卡片自己的 hover 收回去：
    高亮要指明「点下去会中哪个」，两层同时亮等于没说 */
-.ov-proj:has(.ov-trow:hover),.ov-proj:has(.ov-foot a:hover){background:var(--bg-container)}
-.ov-proj:has(.ov-trow:hover) .hd .go,.ov-proj:has(.ov-foot a:hover) .hd .go{color:var(--text-dimmer);transform:none}
+:where(html[data-pointer="fine"]) .ov-proj:has(.ov-trow:hover),:where(html[data-pointer="fine"]) .ov-proj:has(.ov-foot a:hover){background:var(--bg-container)}
+:where(html[data-pointer="fine"]) .ov-proj:has(.ov-trow:hover) .hd .go,:where(html[data-pointer="fine"]) .ov-proj:has(.ov-foot a:hover) .hd .go{color:var(--text-dimmer);transform:none}
 /* 右上角只留一枚箭头当方向暗示：整张卡都能点，再写一遍「进入项目」是废话 */
 .ov-proj .hd .go{flex:0 0 auto;display:inline-flex;color:var(--text-dimmer);transition:color .15s,transform .15s}
-.ov-proj:hover .hd .go{color:var(--accent);transform:translateX(2px)}
+:where(html[data-pointer="fine"]) .ov-proj:hover .hd .go{color:var(--accent);transform:translateX(2px)}
 .ov-proj .hd{display:flex;align-items:center;gap:8px}
 .ov-ico{width:28px;height:28px;flex:0 0 auto;display:grid;place-items:center;border-radius:var(--r-sm);
   font-size:12px;font-weight:800}
@@ -99,7 +99,7 @@ const OV_CSS = `
 .ov-trow{display:flex;align-items:center;gap:var(--sp-2);min-height:32px;padding:var(--sp-1) var(--sp-2);
   border-radius:var(--r-xs);font-size:var(--fs-sm);cursor:pointer;transition:background .14s}
 .ov-trow:first-of-type{margin-top:6px}
-.ov-trow:hover{background:var(--list-hover)}
+:where(html[data-pointer="fine"]) .ov-trow:hover{background:var(--list-hover)}
 .ov-trow .t{min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ov-trow .tm{margin-left:auto;flex:0 0 auto;font-size:var(--fs-meta);color:var(--text-dimmer);white-space:nowrap}
 .ov-foot{display:flex;align-items:center;gap:var(--sp-2);min-height:28px;margin-top:var(--sp-1);
@@ -109,12 +109,12 @@ const OV_CSS = `
 .ov-more{padding-left:var(--sp-2);font-size:var(--fs-meta);color:var(--text-dimmer)}
 .ov-rest{grid-column:1/-1;display:flex;align-items:center;justify-content:center;min-height:0;
   padding:var(--sp-2);cursor:pointer;font-size:var(--fs-meta);color:var(--text-dimmer)}
-.ov-rest:hover{color:var(--text-dim);border-color:rgba(88,166,255,.35)}
+:where(html[data-pointer="fine"]) .ov-rest:hover{color:var(--text-dim);border-color:rgba(88,166,255,.35)}
 
 .ov-loose{padding:var(--sp-3);border-radius:var(--r-card);background:var(--bg-container)}
 .ov-loose .row{display:flex;align-items:center;gap:var(--sp-2);min-height:32px;padding:var(--sp-1) 0;font-size:var(--fs-sm);
   color:var(--text-dim);cursor:pointer}
-.ov-loose .row:hover{color:var(--text-bright)}
+:where(html[data-pointer="fine"]) .ov-loose .row:hover{color:var(--text-bright)}
 .ov-loose .tm{margin-left:auto;flex:0 0 auto;font-size:var(--fs-meta);color:var(--text-dimmer)}
 
 /* 最近活动：≥1180 时是右侧 sticky 侧轨；窄于此它只是网格的第二行，自然落回页尾 */
@@ -134,7 +134,7 @@ const OV_CSS = `
 .ov-ev time{display:block;margin-top:var(--sp-1);font-size:var(--fs-micro);color:var(--text-dimmer)}
 
 .ov-go-i{margin-left:3px;vertical-align:-1px;opacity:.75}
-a:hover>.ov-go-i,button:hover>.ov-go-i,.ov-card:hover .ov-go-i{opacity:1}
+:where(html[data-pointer="fine"]) a:hover>.ov-go-i,:where(html[data-pointer="fine"]) button:hover>.ov-go-i,:where(html[data-pointer="fine"]) .ov-card:hover .ov-go-i{opacity:1}
 .ov-mono{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace}
 .ov-in{animation:ovIn .34s cubic-bezier(.2,.85,.3,1) backwards}
 @keyframes ovIn{from{opacity:0;transform:translateY(6px)}}
