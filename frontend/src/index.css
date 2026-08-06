@@ -4,6 +4,13 @@
    黑/白主题：ThemeProvider 从 theme.tsx 的 THEME_TOKENS 统一写入 CSS 变量。
    终端画布的颜色由 Terminal.tsx 读取同名变量并随主题切换。 */
 
+/* ── hover 一律写成 `:where(html[data-pointer="fine"]) X:hover`（全站硬约定）──
+   触屏没有 mouseleave：手指点过的那枚会一直带着 :hover 不走，于是「上一次点的按钮」
+   永远亮着，看起来像点错了；再叠上 :active 的位移，连点两下就是在抖。
+   `:where()` 不贡献特异性，加上这层前缀不改变任何层叠关系，只是把 hover 关进细指针。
+   代价：hover 里藏起来的东西（opacity:0 的复制/关闭/下载键）在手指档必须另给一条
+   常显规则，否则手机上永远够不着。scripts/hover-scope-audit.mjs 会守住这两条。 */
+
 /* 启动前 fallback。运行后由 ThemeProvider 按当前主题覆盖这些变量。 */
 :root {
   color-scheme: dark;
@@ -152,6 +159,11 @@ html[data-pointer="coarse"] { --ctl-h: max(var(--ctl-h), 40px); }
 html, body, #root { height: 100%; margin: 0; }
 /* 禁掉移动端「下拉刷新」与滚动链/边缘回弹：轻微下拉不再误触整页刷新 */
 html, body { overscroll-behavior: none; }
+/* 文档本身**不滚动**：这是个定高外壳，每一页的滚动都在内部容器里（实测五条路由
+   scrollHeight == clientHeight）。不写这条，任何一处溢出 1px 都会冒出 10px 宽的文档
+   滚动条，整条工作区连着右侧终端面板横跳 10px：150% 缩放的屏上小数高度来回舍入，
+   于是终端每吐一段输出就抖一次，按钮在按下和抬起之间跑掉，点击落到别处。 */
+html, body { overflow: hidden; }
 body {
   background: var(--bg-base);
   /* 精修字体栈：优先界面无衬线 + 中文黑体；数字等宽对齐更整齐 */
@@ -197,7 +209,7 @@ body {
   background: var(--border-subtle);
   transition: width .15s, background .15s;
 }
-.tt-split-rail:hover::after,
+:where(html[data-pointer="fine"]) .tt-split-rail:hover::after,
 .tt-split-rail:active::after,
 .tt-split-rail:focus-visible::after { width: 2px; background: var(--accent); }
 .tt-split-rail:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
@@ -243,7 +255,7 @@ body {
   cursor: pointer;
   transition: border-color .15s, transform .15s;
 }
-.tt-session-capsule:hover { border-color: var(--accent-border); transform: translateY(-1px); }
+:where(html[data-pointer="fine"]) .tt-session-capsule:hover { border-color: var(--accent-border); transform: translateY(-1px); }
 .tt-session-capsule .d { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--ok); }
 .tt-session-capsule .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tt-session-capsule .n {
@@ -291,7 +303,7 @@ body {
 .tt-nav.rail .tt-nav-item,
 .tt-nav.rail .tt-nav-account,
 .tt-nav.rail .tt-nav-collapse { justify-content: center; padding: 0; }
-.tt-nav-item:hover, .tt-nav-account:hover, .tt-nav-collapse:hover { background: var(--list-hover); color: var(--text-bright); }
+:where(html[data-pointer="fine"]) .tt-nav-item:hover, :where(html[data-pointer="fine"]) .tt-nav-account:hover, :where(html[data-pointer="fine"]) .tt-nav-collapse:hover { background: var(--list-hover); color: var(--text-bright); }
 /* 图标槽：导航项 / 终端开关 / 账户 / 收起 用同一个 20px 方槽，图标才在一条竖线上。
    账户那枚以前是「蓝底圆角块」，在一列裸图标里自成一格——同一列里不要两种图标语言。 */
 .tt-nav-item .ic, .tt-nav-account .av, .tt-nav-collapse .ic {
@@ -326,7 +338,7 @@ body {
 .tt-nav-foot { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; border-top: 1px solid var(--border-subtle); }
 .tt-nav-account .dots { margin-left: auto; flex: 0 0 auto; display: flex; color: var(--text-dimmer); }
 
-.tt-top-create:hover { border-color: var(--accent-border); color: var(--accent); }
+:where(html[data-pointer="fine"]) .tt-top-create:hover { border-color: var(--accent-border); color: var(--accent); }
 
 /* ── 顶栏搜索框 ──
    实底（比顶栏亮一档）+ 32 高，不是描边框。旧版与顶栏同色、只有一圈 1px 边，
@@ -340,7 +352,7 @@ body {
   font-size: var(--fs-meta); cursor: pointer;
   transition: border-color .12s, color .12s;
 }
-.tt-topsearch:hover { border-color: var(--accent-border); color: var(--text-bright); }
+:where(html[data-pointer="fine"]) .tt-topsearch:hover { border-color: var(--accent-border); color: var(--text-bright); }
 .tt-topsearch .ph { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tt-topsearch kbd {
   margin-left: auto; flex: 0 0 auto; padding: 1px 5px;
@@ -421,7 +433,7 @@ html[data-size="compact"] .tt-palette {
   font-size: var(--fs-micro); cursor: pointer;
   max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.tt-palette-foot button:hover:not(:disabled) { border-color: var(--accent-border); color: var(--accent); }
+:where(html[data-pointer="fine"]) .tt-palette-foot button:hover:not(:disabled) { border-color: var(--accent-border); color: var(--accent); }
 .tt-palette-foot button:disabled { opacity: .5; cursor: default; }
 .tt-palette-foot kbd { color: var(--text-dimmer); }
 .tt-palette-foot .hint { margin-left: auto; color: var(--text-dimmer); font-size: var(--fs-micro); }
@@ -524,7 +536,7 @@ html[data-pointer="coarse"] .mc { --ctl-h: 36px; }
   color: var(--text-dim); cursor: pointer;
   transition: background .12s, color .12s;
 }
-.mc-ib:hover { background: var(--list-hover); color: var(--text-bright); }
+:where(html[data-pointer="fine"]) .mc-ib:hover { background: var(--list-hover); color: var(--text-bright); }
 .mc-ib:focus-visible { outline: 1px solid var(--accent-border); outline-offset: -1px; }
 .mc-ib.is-dim { color: var(--text-dimmer); }
 .mc-ib.is-on { color: var(--accent); }
@@ -542,7 +554,7 @@ html[data-pointer="coarse"] .mc { --ctl-h: 36px; }
   box-shadow: inset 0 0 0 1px var(--border-subtle);
   transition: box-shadow .12s, background .12s;
 }
-.mc-omni:hover { box-shadow: inset 0 0 0 1px var(--border); }
+:where(html[data-pointer="fine"]) .mc-omni:hover { box-shadow: inset 0 0 0 1px var(--border); }
 .mc-omni.is-focus { background: var(--bg-elevated); box-shadow: inset 0 0 0 2px var(--accent-border); }
 .mc-omni.is-readonly { cursor: default; }
 /* 失焦态：域名亮、其余灰——不聚焦时人只需要认出「这是哪个站」，协议和路径是噪音 */
@@ -568,7 +580,7 @@ html[data-pointer="coarse"] .mc { --ctl-h: 36px; }
   width: 24px; height: 24px; border: 0; border-radius: 50%; background: transparent;
   color: var(--text-dimmer); cursor: pointer;
 }
-.mc-omni-x:hover { background: var(--list-hover); color: var(--text-bright); }
+:where(html[data-pointer="fine"]) .mc-omni-x:hover { background: var(--list-hover); color: var(--text-bright); }
 .mc-omni-go {
   flex: 0 0 auto; border: 0; background: transparent; cursor: pointer;
   padding: 0 var(--sp-2); color: var(--accent); font-size: var(--fs-sm); font-weight: 600;
@@ -580,7 +592,7 @@ html[data-pointer="coarse"] .mc { --ctl-h: 36px; }
   border: 0; border-radius: var(--r-pill); background: var(--list-hover);
   color: var(--text-dim); font-size: var(--fs-micro); cursor: pointer; white-space: nowrap;
 }
-.mc-lead:hover { color: var(--text-bright); }
+:where(html[data-pointer="fine"]) .mc-lead:hover { color: var(--text-bright); }
 .mc-lead b { color: var(--text-bright); font-weight: 600; }
 /* 状态点是画出来的圆，不是 ● 字符 */
 .mc-dot {
@@ -603,7 +615,7 @@ html[data-pointer="coarse"] .mc { --ctl-h: 36px; }
 }
 .mc-chip b { color: var(--text-bright); font-weight: 600; }
 .mc-chip.is-btn { cursor: pointer; }
-.mc-chip.is-btn:hover { color: var(--text-bright); box-shadow: inset 0 0 0 1px var(--border); }
+:where(html[data-pointer="fine"]) .mc-chip.is-btn:hover { color: var(--text-bright); box-shadow: inset 0 0 0 1px var(--border); }
 .mc-chip.is-on { background: var(--accent-soft); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent-border); }
 .mc-chip.is-on b { color: var(--accent); }
 @media (pointer: coarse) { .mc-chip { min-height: 36px; } }
@@ -635,7 +647,7 @@ html[data-pointer="coarse"] .mc { --ctl-h: 36px; }
   border-radius: var(--r-xs) var(--r-xs) 0 0;
   color: var(--text-dim); font-size: var(--fs-meta); cursor: pointer; user-select: none;
 }
-.mc-tab:hover { background: var(--list-hover); color: var(--text-bright); }
+:where(html[data-pointer="fine"]) .mc-tab:hover { background: var(--list-hover); color: var(--text-bright); }
 .mc-tab.is-on { background: var(--bg-container); color: var(--text-bright); }
 .mc-tab-fav { flex: 0 0 auto; width: 14px; height: 14px; border-radius: 4px; background: var(--bg-elevated); }
 .mc-tab.is-on .mc-tab-fav { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); border-radius: 50%; width: 7px; height: 7px; margin: 0 3px; }
@@ -645,8 +657,8 @@ html[data-pointer="coarse"] .mc { --ctl-h: 36px; }
   flex: 0 0 auto; display: grid; place-items: center; width: 18px; height: 18px;
   border-radius: var(--r-xs); color: var(--text-dimmer); opacity: 0;
 }
-.mc-tab:hover .mc-tab-x, .mc-tab.is-on .mc-tab-x { opacity: 1; }
-.mc-tab-x:hover { background: var(--danger-soft); color: var(--danger); }
+:where(html[data-pointer="fine"]) .mc-tab:hover .mc-tab-x, .mc-tab.is-on .mc-tab-x { opacity: 1; }
+:where(html[data-pointer="fine"]) .mc-tab-x:hover { background: var(--danger-soft); color: var(--danger); }
 .mc-tab-add { width: 28px; height: 28px; margin-bottom: 3px; }
 @media (pointer: coarse) { .mc-tab-x { opacity: 1; } }
 
@@ -673,7 +685,7 @@ html[data-pointer="coarse"] .mc { --ctl-h: 36px; }
   min-height: 44px; margin-top: 2px; border: 1px dashed var(--border); border-radius: var(--r-sm);
   background: transparent; color: var(--text-dim); font-size: var(--fs-sm); cursor: pointer;
 }
-.mc-newtab:hover { color: var(--text-bright); border-color: var(--accent-border); }
+:where(html[data-pointer="fine"]) .mc-newtab:hover { color: var(--text-bright); border-color: var(--accent-border); }
 
 /* 应用启动器（手机镜像页）：搜索 + 列表，替掉那个 160px 的 Select */
 .mc-menu {
@@ -687,7 +699,7 @@ html[data-pointer="coarse"] .mc { --ctl-h: 36px; }
   border: 0; border-radius: var(--r-xs); background: transparent; color: var(--text-bright);
   font-size: var(--fs-sm); cursor: pointer; text-align: left;
 }
-.mc-appitem:hover { background: var(--list-hover); }
+:where(html[data-pointer="fine"]) .mc-appitem:hover { background: var(--list-hover); }
 .mc-appitem .ic {
   flex: 0 0 auto; width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center;
   background: var(--bg-base); color: var(--text-dimmer); font-size: var(--fs-micro); font-weight: 700;
@@ -771,7 +783,7 @@ html[data-pointer="coarse"] .mc { --ctl-h: 36px; }
   /* 破坏性动作不常驻：12 行 12 个红色「关闭」是界面在冲用户喊。
      :focus-within 一起写——只挂 hover 的话键盘用户永远够不着。 */
   .tt-srow .acts { justify-self: end; opacity: 0; transition: opacity .14s; }
-  .ant-list-item:hover .tt-srow .acts,
+  :where(html[data-pointer="fine"]) .ant-list-item:hover .tt-srow .acts,
   .ant-list-item:focus-within .tt-srow .acts,
   .tt-srow .acts:focus-within { opacity: 1; }
 }
@@ -962,7 +974,7 @@ html[data-pointer="coarse"] .tt-srow .acts { opacity: 1; }
   border: 0; border-radius: 8px; background: transparent; color: var(--text-dimmer);
   font-size: 13px; cursor: pointer;
 }
-.tt-sessdock-x:hover { background: var(--danger-soft); color: var(--danger); }
+:where(html[data-pointer="fine"]) .tt-sessdock-x:hover { background: var(--danger-soft); color: var(--danger); }
 .tt-page > * {
   width: 100%;
   min-width: 0;
@@ -1045,7 +1057,7 @@ html[data-size="compact"] .ant-form-item-control-input-content > .ant-picker { w
   background: var(--scroll-thumb); border-radius: 8px;
   border: 2px solid transparent; background-clip: content-box;
 }
-*::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-hover); background-clip: content-box; }
+:where(html[data-pointer="fine"]) *::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-hover); background-clip: content-box; }
 *::-webkit-scrollbar-corner { background: transparent; }
 
 /* 会话工具栏：单行横向滑动（手机上原本换行占 3 行）；子项不收缩、隐藏滚动条 */
@@ -1096,7 +1108,7 @@ html[data-size="compact"] .ant-form-item-control-input-content > .ant-picker { w
   color: var(--text-dim); font-size: var(--fs-meta); line-height: 1; white-space: nowrap; cursor: pointer;
   transition: background .12s, color .12s;
 }
-.tt-tab:hover { background: var(--list-hover); color: var(--text-bright); }
+:where(html[data-pointer="fine"]) .tt-tab:hover { background: var(--list-hover); color: var(--text-bright); }
 .tt-tab.on { background: var(--bg-base); color: var(--text-bright); font-weight: 600;
   box-shadow: inset 0 2px 0 var(--accent); }
 .tt-tab .tt-wait { flex: 0 0 auto; color: var(--warn); font-weight: 600; }
@@ -1128,8 +1140,8 @@ html[data-size="compact"] .ant-form-item-control-input-content > .ant-picker { w
   display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px;
   border-radius: 5px; color: var(--text-dimmer); opacity: 0; transition: opacity .12s ease;
 }
-.tt-tab:hover .tt-x, .tt-tab.on .tt-x { opacity: 1; }
-.tt-tab .tt-x:hover { background: var(--danger-soft); color: var(--danger); }
+:where(html[data-pointer="fine"]) .tt-tab:hover .tt-x, .tt-tab.on .tt-x { opacity: 1; }
+:where(html[data-pointer="fine"]) .tt-tab .tt-x:hover { background: var(--danger-soft); color: var(--danger); }
 /* 触屏没有 hover，关闭按钮常显 */
 @media (pointer: coarse) { .tt-tab .tt-x { opacity: 1; } }
 
@@ -1142,8 +1154,7 @@ html[data-size="compact"] .ant-form-item-control-input-content > .ant-picker { w
   transition: background .14s ease, color .14s ease, box-shadow .14s ease;
 }
 .tt-tbtn.tt-ico { padding: 0 6px; }
-/* hover 只给细指针：触屏没有 mouseleave，:hover 会粘在最后点过的那枚上不走 */
-html[data-pointer="fine"] .tt-tbtn:hover { background: var(--list-hover); color: var(--text-bright); }
+:where(html[data-pointer="fine"]) .tt-tbtn:hover { background: var(--list-hover); color: var(--text-bright); }
 .tt-tbtn:active { background: var(--list-hover); transform: translateY(.5px); }
 .tt-tbtn:focus-visible { outline: 2px solid var(--accent-border); outline-offset: 1px; }
 
@@ -1153,9 +1164,9 @@ html[data-pointer="fine"] .tt-tbtn:hover { background: var(--list-hover); color:
    环只在 hover 出现、不常驻，一排按钮就不会被边框切碎。 */
 .tt-tbtn.on { background: var(--accent-soft); color: var(--accent); }
 .tt-tbtn.on.ok { background: var(--ok-soft); color: var(--ok); }
-html[data-pointer="fine"] .tt-tbtn.on:hover { background: var(--accent-soft); color: var(--accent);
+:where(html[data-pointer="fine"]) .tt-tbtn.on:hover { background: var(--accent-soft); color: var(--accent);
   box-shadow: inset 0 0 0 1px var(--accent-border); }
-html[data-pointer="fine"] .tt-tbtn.on.ok:hover { background: var(--ok-soft); color: var(--ok);
+:where(html[data-pointer="fine"]) .tt-tbtn.on.ok:hover { background: var(--ok-soft); color: var(--ok);
   box-shadow: inset 0 0 0 1px var(--ok-border); }
 
 /* 右侧只读工具（翻页 / 字号 / 重绘重连）收进分段组，视觉上跟左侧动作区分开 */
@@ -1185,7 +1196,7 @@ html[data-pointer="fine"] .tt-tbtn.on.ok:hover { background: var(--ok-soft); col
 /* ── 卡片：细边框 + 克制悬浮（边框微亮 + 极轻阴影，不位移） ── */
 .ant-card { border-color: var(--border-subtle); }
 .ant-card-bordered { border-color: var(--border-subtle); }
-.ant-card-hoverable:hover {
+:where(html[data-pointer="fine"]) .ant-card-hoverable:hover {
   border-color: var(--border);
   box-shadow: var(--card-hover-shadow);
   transform: translateY(-1px);
@@ -1202,7 +1213,13 @@ html[data-pointer="fine"] .tt-tbtn.on.ok:hover { background: var(--ok-soft); col
 /* ── 列表：行距舒展、分隔线更淡、hover 轻微提亮并圆角 ── */
 .ant-list-split .ant-list-item { border-block-end-color: var(--border-subtle); }
 .ant-list-item { border-radius: 8px; padding-inline: 8px; }
-.ant-list-item:hover { background: var(--list-hover); }
+:where(html[data-pointer="fine"]) .ant-list-item:hover { background: var(--list-hover); }
+
+/* ── Tooltip 在手指档整体不出现 ──
+   悬浮提示本来就是鼠标的东西：触屏上它由「按住」触发，弹出来又没有 mouseleave 收回，
+   于是一层 pointer-events:auto 的浮层就停在按钮上方，把接下来的点全吃了（表现为「点了没反应」）。
+   Tooltip 只承载补充说明，藏掉不丢功能；Popover / Popconfirm 是点开的，不在此列。 */
+html[data-pointer="coarse"] .ant-tooltip { display: none; }
 
 /* ── 输入框：聚焦细发光，克制 ── */
 .ant-input:focus, .ant-input-focused,
@@ -1226,12 +1243,10 @@ html[data-pointer="fine"] .tt-tbtn.on.ok:hover { background: var(--ok-soft); col
   background: transparent; color: var(--text-dim);
   font: inherit; font-size: var(--fs-meta); line-height: 1; white-space: nowrap; cursor: pointer;
   transition: color .15s, border-color .15s, background .15s; }
-/* hover 装饰只给细指针。触屏点完不会有 mouseleave，:hover 会一直粘在最后点过的那枚上，
-   点下一枚时上一枚才带着 .15s 过渡褪掉——一排按钮轮流亮灭，看着就是在抖。
-   手指档只留 :active 的按下反馈。 */
-html[data-pointer="fine"] .tt-act:hover { color: var(--text-bright); border-color: var(--border); background: var(--list-hover); }
-html[data-pointer="fine"] .tt-act.danger:hover { color: var(--danger); border-color: var(--danger-border); background: var(--danger-soft); }
-html[data-pointer="fine"] .tt-act.ok:hover { color: var(--ok); border-color: var(--ok-border); background: var(--ok-soft); }
+/* 手指档只留 :active 的按下反馈（hover 约定见文件头） */
+:where(html[data-pointer="fine"]) .tt-act:hover { color: var(--text-bright); border-color: var(--border); background: var(--list-hover); }
+:where(html[data-pointer="fine"]) .tt-act.danger:hover { color: var(--danger); border-color: var(--danger-border); background: var(--danger-soft); }
+:where(html[data-pointer="fine"]) .tt-act.ok:hover { color: var(--ok); border-color: var(--ok-border); background: var(--ok-soft); }
 .tt-act:active { background: var(--list-hover); }
 .tt-act.danger:active { background: var(--danger-soft); color: var(--danger); }
 .tt-act.ok:active { background: var(--ok-soft); color: var(--ok); }
@@ -1260,7 +1275,7 @@ html[data-pointer="coarse"] .tt-act::after { content: ''; position: absolute; le
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tt-branch > svg { color: var(--text-dimmer); flex: 0 0 auto; }
 .tt-branch.act { cursor: pointer; transition: color .15s, border-color .15s; }
-.tt-branch.act:hover { color: var(--text-bright); border-color: var(--border); }
+:where(html[data-pointer="fine"]) .tt-branch.act:hover { color: var(--text-bright); border-color: var(--border); }
 
 /* Agent 品牌标不套标签框：logo 本身就够认，外面再描一圈边框纯属噪声，
    一行里跟 worktree/等待这些真·标签挤在一起还会打架。裸标 + 可选文字。 */
@@ -1291,35 +1306,35 @@ html[data-pointer="coarse"] .tt-act::after { content: ''; position: absolute; le
 
 /* 文件行下载按钮：hover 行时浮现 */
 .cc-dl { opacity: 0; transition: opacity .15s ease; }
-.cc-filerow:hover .cc-dl, .cc-dl:focus { opacity: 1; }
+:where(html[data-pointer="fine"]) .cc-filerow:hover .cc-dl, .cc-dl:focus { opacity: 1; }
 @media (pointer: coarse) { .cc-dl { opacity: .6; } }
 .cc-filerow { border-radius: 6px; margin: 1px 4px; }
-.cc-filerow:hover { background: rgba(88, 166, 255, .08); }
+:where(html[data-pointer="fine"]) .cc-filerow:hover { background: rgba(88, 166, 255, .08); }
 /* 右键菜单打开期间保持目标行高亮；状态留在菜单组件内，避免重渲染整棵文件列表。 */
 .tt-file-context-open > .cc-filerow { background: var(--accent-soft); }
 /* 手动控制的右键菜单不要被整行触发器拉伸到文件抽屉宽度。 */
 .tt-file-context-menu { width: max-content !important; min-width: 130px !important; }
 /* Git 分组标题上的操作按钮：平时半透明，hover 分组时变实 */
 .cc-git-section-act .cc-dl { opacity: .5; }
-.cc-git-section:hover .cc-git-section-act .cc-dl,
+:where(html[data-pointer="fine"]) .cc-git-section:hover .cc-git-section-act .cc-dl,
 .cc-git-section-act .cc-dl:focus-visible { opacity: 1; }
 /* 手指档没有 hover（13 §7） */
 html[data-pointer="coarse"] .cc-git-section-act .cc-dl { opacity: 1; }
-.cc-dl:hover { background: rgba(255, 255, 255, .08); color: var(--text-bright) !important; }
+:where(html[data-pointer="fine"]) .cc-dl:hover { background: rgba(255, 255, 255, .08); color: var(--text-bright) !important; }
 .cc-filerow .ant-btn { color: var(--text-dim); }
-.cc-filerow .ant-btn:hover { color: var(--text-bright) !important; background: rgba(255, 255, 255, .06) !important; }
+:where(html[data-pointer="fine"]) .cc-filerow .ant-btn:hover { color: var(--text-bright) !important; background: rgba(255, 255, 255, .06) !important; }
 
 /* 编辑器文件 tab 的关闭键：干净常显 ×；脏文件平时显橙点、hover tab 时变 × 可关（VSCode 行为）。会话 tab 无此键 → 不可关。 */
 .cc-tabx { margin-left: 2px; padding: 0 3px; line-height: 1; border-radius: 4px; display: inline-flex; align-items: center; }
 /* 未保存点：以前是个 ● 字符，字号/基线跟着字体走。改成画出来的圆点，和关闭图标同槽 */
 .cc-tabx .dot { display: none; width: 8px; height: 8px; border-radius: 50%; background: #d29922; }
 .cc-tabx .x { display: inline-flex; width: 8px; height: 8px; align-items: center; justify-content: center; color: var(--text-dim); }
-.cc-filetab:hover .cc-tabx .x { color: var(--text-bright); }
-.cc-tabx:hover { background: rgba(255, 255, 255, .1); }
+:where(html[data-pointer="fine"]) .cc-filetab:hover .cc-tabx .x { color: var(--text-bright); }
+:where(html[data-pointer="fine"]) .cc-tabx:hover { background: rgba(255, 255, 255, .1); }
 .cc-filetab.dirty .cc-tabx .dot { display: block; }
 .cc-filetab.dirty .cc-tabx .x { display: none; }
-.cc-filetab.dirty:hover .cc-tabx .dot { display: none; }
-.cc-filetab.dirty:hover .cc-tabx .x { display: inline-flex; }
+:where(html[data-pointer="fine"]) .cc-filetab.dirty:hover .cc-tabx .dot { display: none; }
+:where(html[data-pointer="fine"]) .cc-filetab.dirty:hover .cc-tabx .x { display: inline-flex; }
 
 .tt-file-detail {
   transform: translateZ(0);
@@ -1349,7 +1364,7 @@ html[data-pointer="coarse"] .cc-git-section-act .cc-dl { opacity: 1; }
   transition: none !important;
   transform: none !important;
 }
-.tt-file-close:hover {
+:where(html[data-pointer="fine"]) .tt-file-close:hover {
   color: var(--text-bright);
   background: var(--list-hover);
 }
@@ -1366,7 +1381,7 @@ html[data-pointer="coarse"] .cc-git-section-act .cc-dl { opacity: 1; }
 .swarm-topology-node {
   transition: opacity .16s ease, filter .16s ease;
 }
-.swarm-topology-node:hover {
+:where(html[data-pointer="fine"]) .swarm-topology-node:hover {
   filter: drop-shadow(0 10px 22px rgba(1, 4, 9, .35));
 }
 .swarm-topology-pulse {
@@ -1958,7 +1973,7 @@ html[data-pointer="coarse"] .cc-git-section-act .cc-dl { opacity: 1; }
 
 /* 代码框复制按钮：默认淡出，hover 代码框时浮现 */
 .cc-copy { opacity: 0; transition: opacity .15s ease; }
-.cc-codebox:hover .cc-copy, .cc-copy:focus { opacity: 1; }
+:where(html[data-pointer="fine"]) .cc-codebox:hover .cc-copy, .cc-copy:focus { opacity: 1; }
 @media (pointer: coarse) { .cc-copy { opacity: .6; } }
 
 /* 对话气泡复制：靠近时间显示，桌面 hover 浮现，触屏常显。 */
@@ -1971,7 +1986,7 @@ html[data-pointer="coarse"] .cc-git-section-act .cc-dl { opacity: 1; }
   font: inherit;
   cursor: pointer;
 }
-.cc-msg:hover .cc-msg-copy, .cc-msg-copy:focus { opacity: 1; color: var(--text-dim); }
+:where(html[data-pointer="fine"]) .cc-msg:hover .cc-msg-copy, .cc-msg-copy:focus { opacity: 1; color: var(--text-dim); }
 @media (pointer: coarse) { .cc-msg-copy { opacity: 1; } }
 
 /* ── 工具调用渲染（chat/tool-parts.tsx）────────────────────────────────────
@@ -2008,12 +2023,12 @@ html[data-pointer="coarse"] .cc-git-section-act .cc-dl { opacity: 1; }
   opacity: 0;
   transition: opacity .15s ease, color .15s ease;
 }
-.cc-toolrow:hover .cc-toolcopy,
-.cc-cmd:hover .cc-toolcopy,
-.cc-diff:hover .cc-toolcopy,
-.cc-err:hover .cc-toolcopy,
+:where(html[data-pointer="fine"]) .cc-toolrow:hover .cc-toolcopy,
+:where(html[data-pointer="fine"]) .cc-cmd:hover .cc-toolcopy,
+:where(html[data-pointer="fine"]) .cc-diff:hover .cc-toolcopy,
+:where(html[data-pointer="fine"]) .cc-err:hover .cc-toolcopy,
 .cc-toolcopy:focus-visible { opacity: 1; }
-.cc-toolcopy:hover { color: var(--text-bright); background: var(--list-hover); }
+:where(html[data-pointer="fine"]) .cc-toolcopy:hover { color: var(--text-bright); background: var(--list-hover); }
 @media (pointer: coarse) { .cc-toolcopy { opacity: .55; } }
 
 /* 跑着的工具：转圈，不是一枚静态徽标——静态徽标看不出还在动 */
@@ -2042,7 +2057,7 @@ html[data-pointer="coarse"] .cc-git-section-act .cc-dl { opacity: 1; }
   overflow: hidden;
   transition: border-color .15s ease, box-shadow .15s ease;
 }
-.cc-cmd:hover { border-color: color-mix(in srgb, var(--ok) 45%, var(--border)); }
+:where(html[data-pointer="fine"]) .cc-cmd:hover { border-color: color-mix(in srgb, var(--ok) 45%, var(--border)); }
 .cc-cmd.is-open { box-shadow: 0 1px 0 rgba(0, 0, 0, .18); }
 .cc-cmd-head {
   display: flex;
@@ -2054,11 +2069,11 @@ html[data-pointer="coarse"] .cc-git-section-act .cc-dl { opacity: 1; }
   outline: none;
 }
 .cc-cmd-head.is-clickable { cursor: pointer; }
-.cc-cmd-head.is-clickable:hover { background: var(--list-hover); }
+:where(html[data-pointer="fine"]) .cc-cmd-head.is-clickable:hover { background: var(--list-hover); }
 .cc-cmd-head:focus-visible { box-shadow: inset 0 0 0 1px var(--accent-border); }
 /* 出错的那条：左脊转红，整块底色也带一点，不用再靠人去读文字 */
 .cc-cmd.is-err { border-left-color: var(--danger); background: color-mix(in srgb, var(--bg-term) 92%, var(--danger)); }
-.cc-cmd.is-err:hover { border-color: var(--danger-border); }
+:where(html[data-pointer="fine"]) .cc-cmd.is-err:hover { border-color: var(--danger-border); }
 .cc-cmd-chev {
   flex: 0 0 auto;
   display: inline-flex;
@@ -2122,7 +2137,7 @@ html[data-pointer="coarse"] .cc-git-section-act .cc-dl { opacity: 1; }
   cursor: pointer;
   outline: none;
 }
-.cc-toolcard-head:hover { background: var(--list-hover); }
+:where(html[data-pointer="fine"]) .cc-toolcard-head:hover { background: var(--list-hover); }
 /* 标题变成文件链接之后，展开/收起收在左半边这颗（箭头 + 图标 + 工具名）。
    它不是 linked 时禁用并让出 tab 焦点——那时整行本身就是按钮。 */
 .cc-toolcard-toggle {
@@ -2225,12 +2240,12 @@ html[data-pointer="coarse"] .cc-git-section-act .cc-dl { opacity: 1; }
   text-overflow: ellipsis;
 }
 .cc-filelist-row.is-link { display: block; width: 100%; text-align: left; border: 0; background: transparent; cursor: pointer; }
-.cc-filelist-row:hover { background: var(--list-hover); color: var(--text-bright); }
-.cc-filelist-row.is-link:hover { color: var(--accent); }
+:where(html[data-pointer="fine"]) .cc-filelist-row:hover { background: var(--list-hover); color: var(--text-bright); }
+:where(html[data-pointer="fine"]) .cc-filelist-row.is-link:hover { color: var(--accent); }
 
 /* 可点路径：文件面板接得住才画成链接（接不住时 PathLink 渲染成普通文字） */
 .cc-pathlink { border: 0; background: transparent; padding: 0; text-align: left; color: var(--accent); cursor: pointer; }
-.cc-pathlink:hover { text-decoration: underline; }
+:where(html[data-pointer="fine"]) .cc-pathlink:hover { text-decoration: underline; }
 .cc-pathlink:focus-visible { outline: 1px solid var(--accent-border); outline-offset: 1px; border-radius: 2px; }
 
 /* ── 运行组（chat/ToolRun.tsx，设计 16）───────────────────────────────────
@@ -2253,7 +2268,7 @@ html[data-pointer="coarse"] .cc-git-section-act .cc-dl { opacity: 1; }
   cursor: pointer;
   outline: none;
 }
-.cc-run-head:hover { background: var(--list-hover); }
+:where(html[data-pointer="fine"]) .cc-run-head:hover { background: var(--list-hover); }
 .cc-run-head:focus-visible { box-shadow: inset 0 0 0 1px var(--accent-border); }
 .cc-run-ico { flex: 0 0 auto; display: flex; }
 .cc-run-name { flex: 0 0 auto; color: var(--text-dim); }
@@ -2358,7 +2373,7 @@ html[data-size="compact"] .cc-run-slot { width: auto; }
   cursor: pointer;
   outline: none;
 }
-.cc-live-head:hover { background: var(--list-hover); }
+:where(html[data-pointer="fine"]) .cc-live-head:hover { background: var(--list-hover); }
 .cc-live-head:focus-visible { box-shadow: inset 0 0 0 1px var(--accent-border); }
 .cc-live-body {
   border-top: 1px solid var(--border-subtle);
@@ -2476,7 +2491,7 @@ html[data-size="compact"] .cc-run-slot { width: auto; }
   cursor: pointer;
   white-space: nowrap;
 }
-.cc-st-pill:hover { border-color: var(--accent-border); }
+:where(html[data-pointer="fine"]) .cc-st-pill:hover { border-color: var(--accent-border); }
 .cc-st-pill i { width: 6px; height: 6px; border-radius: 50%; display: block; }
 .cc-st-item {
   flex: 0 0 auto;
@@ -2492,7 +2507,7 @@ html[data-size="compact"] .cc-run-slot { width: auto; }
   border-radius: var(--r-xs);
 }
 .cc-st-item.is-btn { cursor: pointer; }
-.cc-st-item.is-btn:hover { background: var(--list-hover); }
+:where(html[data-pointer="fine"]) .cc-st-item.is-btn:hover { background: var(--list-hover); }
 .cc-st-chev { display: inline-flex; color: var(--text-dimmer); transition: transform .15s ease; }
 .cc-st-ellip { max-width: 12ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cc-st-item:disabled { cursor: default; }
@@ -2508,7 +2523,7 @@ html[data-size="compact"] .cc-run-slot { width: auto; }
   font: inherit;
   cursor: pointer;
 }
-.cc-st-act:hover { background: color-mix(in srgb, var(--warn) 22%, transparent); }
+:where(html[data-pointer="fine"]) .cc-st-act:hover { background: color-mix(in srgb, var(--warn) 22%, transparent); }
 /* 跳到某条消息后闪一下：一屏里可能有好几条红，得指明是「这一条」 */
 .cc-flash { animation: cc-flash 1.2s ease-out; border-radius: var(--r-sm); }
 @keyframes cc-flash {

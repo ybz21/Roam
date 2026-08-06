@@ -73,7 +73,7 @@ const PRJ_CSS = `
 .prj-composer{background:var(--bg-elevated);
   border:1px solid var(--border-subtle);border-radius:var(--r-card);
   transition:border-color .2s,box-shadow .2s;padding:4px 4px 10px}
-.prj-composer:hover{border-color:var(--border)}
+:where(html[data-pointer="fine"]) .prj-composer:hover{border-color:var(--border)}
 .prj-composer:focus-within{border-color:var(--accent-border);box-shadow:0 0 0 3px var(--accent-soft)}
 .prj-composer textarea{font-size:var(--fs-body) !important;line-height:1.75 !important;padding:10px 12px 4px !important}
 /* 控制条：组内 6、组间 16，分组只靠间距不画线（换行后竖线会孤零零吊在行尾）。
@@ -98,7 +98,7 @@ const PRJ_CSS = `
   font-size:var(--fs-meta);cursor:pointer;white-space:nowrap;user-select:none;color:var(--text-dim);
   border:1px solid var(--border);background:rgba(177,186,196,.03);
   transition:color .15s,border-color .15s,background .15s}
-.prj-pill:hover{color:var(--text-bright);border-color:var(--text-dim)}
+:where(html[data-pointer="fine"]) .prj-pill:hover{color:var(--text-bright);border-color:var(--text-dim)}
 .prj-pill.on{color:var(--accent);border-color:var(--accent-border);background:var(--accent-soft)}
 .prj-pill.dis{opacity:.4;cursor:not-allowed}
 
@@ -112,7 +112,7 @@ const PRJ_CSS = `
 .prj-tab{padding:8px 13px 9px;font-size:13px;color:var(--text-dim);cursor:pointer;user-select:none;
   display:inline-flex;align-items:center;gap:6px;border-bottom:2px solid transparent;margin-bottom:-1px;
   transition:color .15s}
-.prj-tab:hover{color:var(--text-bright)}
+:where(html[data-pointer="fine"]) .prj-tab:hover{color:var(--text-bright)}
 .prj-tab.on{color:var(--text-bright);border-bottom-color:var(--accent);font-weight:600}
 .prj-tab .n{font-size:10.5px;font-family:ui-monospace,monospace;color:var(--text-dimmer);
   background:rgba(177,186,196,.08);border-radius:999px;padding:1px 6px}
@@ -128,8 +128,8 @@ const PRJ_CSS = `
   border-radius:10px;cursor:pointer;transition:background .15s}
 .prj-row::before{content:'';position:absolute;left:0;top:9px;bottom:9px;width:2px;border-radius:2px;
   background:transparent;transition:background .15s}
-.prj-row:hover{background:var(--list-hover)}
-.prj-row:hover::before{background:rgba(88,166,255,.5)}
+:where(html[data-pointer="fine"]) .prj-row:hover{background:var(--list-hover)}
+:where(html[data-pointer="fine"]) .prj-row:hover::before{background:rgba(88,166,255,.5)}
 /* 选中行：细蓝边 + 淡底，和 hover 区分得开（14 §6.3.1） */
 .prj-row.on{background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent-border)}
 .prj-row.on::before{background:var(--accent)}
@@ -139,7 +139,7 @@ const PRJ_CSS = `
 /* 换行时行距给到 10：按钮视觉 36、命中区 44，行距不到 8 两行的命中区就会叠在一起 */
 html[data-pointer="coarse"] .prj-row .acts{row-gap:10px}
 .prj-row.warn{background:rgba(210,153,34,.05);border:1px solid rgba(210,153,34,.18);margin-bottom:4px}
-.prj-row.warn:hover{background:rgba(210,153,34,.09)}
+:where(html[data-pointer="fine"]) .prj-row.warn:hover{background:rgba(210,153,34,.09)}
 .prj-row.warn::before{display:none}
 
 /* sticky subheader（14 §6.1）：筛选与排序不该跟着列表滚走 */
@@ -173,7 +173,7 @@ html[data-size="compact"] .prj-subbar.searching .prj-iconbtn.find{display:none}
 .prj-chip{display:inline-flex;align-items:center;gap:var(--sp-2);height:28px;padding:0 var(--sp-3);border-radius:var(--r-pill);
   border:1px solid var(--border);background:transparent;color:var(--text-dim);font-size:12px;
   cursor:pointer;white-space:nowrap;transition:color .15s,border-color .15s,background .15s}
-.prj-chip:hover{color:var(--text-bright);border-color:#8b949e}
+:where(html[data-pointer="fine"]) .prj-chip:hover{color:var(--text-bright);border-color:#8b949e}
 .prj-chip.on{color:var(--accent);border-color:var(--accent-border);background:var(--accent-soft)}
 .prj-chip .n{font-family:ui-monospace,monospace;font-size:var(--fs-micro);color:var(--text-dimmer)}
 .prj-chip.on .n{color:var(--accent)}
@@ -189,7 +189,7 @@ html[data-size="compact"] .prj-subbar.searching .prj-iconbtn.find{display:none}
   gap:var(--sp-3);min-height:36px;padding:var(--sp-1) var(--sp-2);border-radius:var(--r-sm);
   cursor:pointer;transition:background .14s}
 .prj-quiet+.prj-quiet{border-top:1px solid var(--border-subtle)}
-.prj-quiet:hover{background:var(--list-hover)}
+:where(html[data-pointer="fine"]) .prj-quiet:hover{background:var(--list-hover)}
 .prj-quiet .nm{font-size:var(--fs-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .prj-quiet .p{font-family:ui-monospace,monospace;font-size:var(--fs-meta);color:var(--text-dimmer);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -199,12 +199,12 @@ html[data-size="compact"] .prj-quiet .p{display:none}
 .prj-card{background:var(--bg-container);border:1px solid var(--border-subtle);border-radius:var(--r-card);
   padding:var(--sp-3) var(--sp-4);cursor:pointer;display:flex;flex-direction:column;gap:8px;
   transition:border-color .18s,transform .18s,box-shadow .18s}
-.prj-card:hover{border-color:rgba(88,166,255,.45);transform:translateY(-1px);box-shadow:var(--card-hover-shadow)}
+:where(html[data-pointer="fine"]) .prj-card:hover{border-color:rgba(88,166,255,.45);transform:translateY(-1px);box-shadow:var(--card-hover-shadow)}
 .prj-card:focus-visible{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .prj-card .prj-acts{opacity:.25;transition:opacity .15s;display:inline-flex;gap:var(--sp-3);align-items:center}
 /* 次要操作 hover 才出现，但键盘走到时同样要看得见——否则纯键盘用户够不着（14 §6.1） */
 .prj-card:focus-within .prj-acts,.prj-card:focus-visible .prj-acts{opacity:1}
-.prj-card:hover .prj-acts{opacity:1}
+:where(html[data-pointer="fine"]) .prj-card:hover .prj-acts{opacity:1}
 html[data-pointer="coarse"] .prj-card .prj-acts{opacity:1}
 .prj-card .prj-acts .pinned{opacity:1}
 
@@ -212,14 +212,14 @@ html[data-pointer="coarse"] .prj-card .prj-acts{opacity:1}
 .prj-wtrow{padding:13px 16px}
 .prj-wtrow+.prj-wtrow{border-top:1px solid var(--border-subtle)}
 .prj-subrow{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;cursor:pointer;transition:background .14s}
-.prj-subrow:hover{background:var(--list-hover)}
+:where(html[data-pointer="fine"]) .prj-subrow:hover{background:var(--list-hover)}
 .prj-peek{flex:1;min-width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   font-family:ui-monospace,monospace;font-size:11px;color:var(--text-dimmer);
   background:var(--bg-term);border:1px solid var(--border-subtle);border-radius:6px;padding:3px 8px}
 .prj-addline{display:flex;align-items:center;gap:8px;padding:6px 10px;margin-top:2px;
   border:1px dashed var(--border);border-radius:8px;color:var(--text-dim);font-size:12.5px;
   transition:border-color .15s,color .15s}
-.prj-addline:hover{border-color:#8b949e;color:var(--text-bright)}
+:where(html[data-pointer="fine"]) .prj-addline:hover{border-color:#8b949e;color:var(--text-bright)}
 
 .prj-empty{color:var(--text-dimmer);font-size:12.5px;padding:14px 12px}
 
@@ -241,7 +241,7 @@ html[data-pointer="coarse"] .prj-card .prj-acts{opacity:1}
 .prj-fork .wt-ab{font-family:ui-monospace,monospace;font-size:12px;display:inline-flex;align-items:center;gap:1px}
 .prj-fork .wt-ab.up{color:var(--ok)} .prj-fork .wt-ab.dn{color:#d29922}
 .prj-fork .wt-acts{flex:0 0 auto;display:flex;gap:6px;align-items:center;opacity:.55;transition:opacity .15s}
-.prj-fork:hover .wt-acts,.prj-fork .wt-acts:focus-within{opacity:1}
+:where(html[data-pointer="fine"]) .prj-fork:hover .wt-acts,.prj-fork .wt-acts:focus-within{opacity:1}
 html[data-pointer="coarse"] .prj-fork .wt-acts{opacity:1}
 .prj-fork.merged .col,.prj-fork.ext .col{opacity:.75}
 `

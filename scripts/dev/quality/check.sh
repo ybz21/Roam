@@ -61,6 +61,7 @@ if [ ! -d frontend/node_modules ]; then
   exit 1
 fi
 (cd frontend && npm run i18n:check)
+(cd frontend && npm run hover:check)
 (cd frontend && npm run typecheck)
 
 if [ "$MODE" = "full" ]; then
