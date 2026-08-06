@@ -16,7 +16,7 @@ import { relTime } from './App'
 import { dot } from './Projects'
 import { useLayout } from './layout'
 import { requestIntent } from './intents'
-import { FlagIcon, MergeIcon, PlusIcon, SwarmIcon } from './icons'
+import { AgentLogo, FlagIcon, MergeIcon, PlusIcon, SwarmIcon } from './icons'
 import { BranchIcon } from './git/parts'
 
 const OV_CSS = `
@@ -124,7 +124,7 @@ const OV_CSS = `
 .ov-tl::before{content:"";position:absolute;left:4px;top:6px;bottom:6px;border-left:1px solid var(--border-subtle)}
 .ov-ev{position:relative;padding-left:18px}
 .ov-ev::before{content:"";position:absolute;left:1px;top:4px;width:7px;height:7px;border-radius:50%;
-  border:2px solid var(--bg-container);background:#39c5cf}
+  border:2px solid var(--bg-container);background:var(--accent)}
 .ov-ev.g::before{background:var(--ok)}.ov-ev.p::before{background:#a371f7}
 .ov-ev b{display:flex;align-items:center;gap:var(--sp-1);font-size:var(--fs-meta);color:var(--text-bright);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -529,9 +529,9 @@ export default function Overview({ openTerm }: { openTerm: (n: string) => void }
                           <div key={s.name} className="ov-trow" onClick={(e) => { e.stopPropagation(); openTerm(s.name) }}>
                             {dot(false, w ? '#d29922' : r ? 'var(--ok)' : undefined)}
                             <span className="t" title={`${s.label || s.name}（${s.id || s.name}）`}>{s.label || s.name}</span>
-                            {ann[s.name]?.primary?.linked && <Tag color="cyan" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px', padding: '0 5px' }}><BranchIcon size={11} /></Tag>}
-                            {cc[s.name] && <Tag color="blue" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px', padding: '0 5px' }}>Claude</Tag>}
-                            {cx[s.name] && <Tag color="green" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px', padding: '0 5px' }}>Codex</Tag>}
+                            {ann[s.name]?.primary?.linked && <span className="tt-branch"><BranchIcon size={11} /></span>}
+                            {cc[s.name] && <span className="tt-agentmark" title={t('session.runningClaude')}><AgentLogo kind="claude" size={12} /></span>}
+                            {cx[s.name] && <span className="tt-agentmark" title={t('session.runningCodex')}><AgentLogo kind="codex" size={12} /></span>}
                             <span className="tm">{relTime(s.last_activity, t)}</span>
                           </div>
                         )

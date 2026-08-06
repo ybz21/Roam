@@ -8,6 +8,7 @@
 // （渐变卡面 + focus 辉光环）、git 数据一律等宽字、行 hover 左导轨渐显、
 // 分区头沿用设计图纸体例、入场一次性 stagger。全部颜色走 index.css token。
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { App as AntApp, AutoComplete, Button, Dropdown, Input, Modal, Popconfirm, Segmented, Select, Space, Spin, Tag, Tooltip, Typography } from 'antd'
 import type { InputRef, MenuProps } from 'antd'
 import { sessionLabel } from './session-label'
@@ -22,7 +23,7 @@ import { useLayout } from './layout'
 import { detectPrompt } from './prompt'
 import { relTime, taskNameFromPrompt, shq, NewSessionModal, DirPicker, recentDirs, pushRecentDir, CloseWorktreeModal } from './App'
 import FileBrowser from './FileBrowser'
-import { ArrowDown, ArrowUp, CheckIcon, ChevronDown, CircleIcon, CloseIcon, MergeIcon, PaperclipIcon, PlusIcon, PushIcon, StarIcon, SwarmIcon, WarnIcon, WindowsIcon } from './icons'
+import { AgentLogo, ArchiveIcon, ArrowDown, ArrowUp, CheckIcon, ChevronDown, CircleIcon, CloseIcon, DiffIcon, ForkIcon, MergeIcon, PaperclipIcon, PlayIcon, PlusIcon, PushIcon, StarIcon, SwarmIcon, TerminalIcon, TrashIcon, WarnIcon, WindowsIcon } from './icons'
 import { BranchIcon } from './git/parts'
 
 const WorktreePanel = lazy(() => import('./WorktreePanel'))
@@ -66,13 +67,15 @@ const PRJ_CSS = `
 @keyframes prjIn{from{opacity:0;transform:translateY(6px)}}
 @keyframes projLifecPulse{0%,100%{opacity:1}50%{opacity:.35}}
 
-.prj-composer{background:linear-gradient(180deg,var(--bg-elevated),var(--bg-container));
-  border:1px solid var(--border);border-radius:14px;
-  box-shadow:0 1px 0 rgba(255,255,255,.04) inset,0 8px 28px rgba(1,4,9,.35);
+/* 输入卡不投影：深色底上打黑色投影（原来是 0 8px 28px rgba(1,4,9,.35)）只会在卡底下
+   糊出一圈脏边，看着像没渲染完；顶上那道 inset 白线在卡沿又切出一条高光缝。
+   深色界面的「浮起」本来就该靠底色比页面亮一档 + 一道细边来说，聚焦时才上强调色描边。 */
+.prj-composer{background:var(--bg-elevated);
+  border:1px solid var(--border-subtle);border-radius:var(--r-card);
   transition:border-color .2s,box-shadow .2s;padding:4px 4px 10px}
-.prj-composer:focus-within{border-color:rgba(88,166,255,.55);
-  box-shadow:0 0 0 3px rgba(31,111,235,.16),0 1px 0 rgba(255,255,255,.05) inset,0 8px 28px rgba(1,4,9,.35)}
-.prj-composer textarea{font-size:14.5px !important;line-height:1.75 !important;padding:10px 12px 4px !important}
+.prj-composer:hover{border-color:var(--border)}
+.prj-composer:focus-within{border-color:var(--accent-border);box-shadow:0 0 0 3px var(--accent-soft)}
+.prj-composer textarea{font-size:var(--fs-body) !important;line-height:1.75 !important;padding:10px 12px 4px !important}
 /* 控制条：组内 6、组间 16，分组只靠间距不画线（换行后竖线会孤零零吊在行尾）。
    一条工具条只有一种控件长相：全是 26 高的 pill，「基于」「已有」也做成 pill 形下拉。 */
 .prj-cbar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:8px 10px 0}
@@ -92,12 +95,11 @@ const PRJ_CSS = `
 }
 
 .prj-pill{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 11px;border-radius:999px;
-  font-size:12px;cursor:pointer;white-space:nowrap;user-select:none;color:var(--text-dim);
+  font-size:var(--fs-meta);cursor:pointer;white-space:nowrap;user-select:none;color:var(--text-dim);
   border:1px solid var(--border);background:rgba(177,186,196,.03);
   transition:color .15s,border-color .15s,background .15s}
-.prj-pill:hover{color:var(--text-bright);border-color:#8b949e}
+.prj-pill:hover{color:var(--text-bright);border-color:var(--text-dim)}
 .prj-pill.on{color:var(--accent);border-color:var(--accent-border);background:var(--accent-soft)}
-.prj-pill.on.cyan{color:#39c5cf;border-color:rgba(57,197,207,.5);background:rgba(57,197,207,.1)}
 .prj-pill.dis{opacity:.4;cursor:not-allowed}
 
 /* 项目头 64 / Tabs 40，两者 sticky（14 §6.2）：往下翻任务流时「我在哪个项目、
@@ -131,13 +133,9 @@ const PRJ_CSS = `
 /* 选中行：细蓝边 + 淡底，和 hover 区分得开（14 §6.3.1） */
 .prj-row.on{background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent-border)}
 .prj-row.on::before{background:var(--accent)}
-.prj-row .acts{opacity:.55;transition:opacity .15s;display:flex;gap:12px;font-size:12.5px;flex:0 0 auto;margin-top:3px}
-.prj-row:hover .acts,.prj-row .acts:focus-within{opacity:1}
-/* 手指档没有 hover：半透明的操作等于不存在（13 §7） */
-html[data-pointer="coarse"] .prj-row .acts{opacity:1}
-html[data-pointer="coarse"] .prj-row .acts a{position:relative}
-html[data-pointer="coarse"] .prj-row .acts a::after{content:'';position:absolute;left:-6px;right:-6px;
-  top:50%;height:var(--tap);transform:translateY(-50%)}
+/* 动作区（.tt-act 幽灵按钮见 index.css）：按钮自带边框和命中区，不再靠
+   「平时半透明、hover 才显形」——那对手指档等于不存在，键盘用户也摸不着。 */
+.prj-row .acts{display:flex;gap:6px;flex:0 0 auto;margin-top:2px;flex-wrap:wrap;justify-content:flex-end}
 .prj-row.warn{background:rgba(210,153,34,.05);border:1px solid rgba(210,153,34,.18);margin-bottom:4px}
 .prj-row.warn:hover{background:rgba(210,153,34,.09)}
 .prj-row.warn::before{display:none}
@@ -236,7 +234,7 @@ html[data-pointer="coarse"] .prj-card .prj-acts{opacity:1}
 .prj-fork .n1{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .prj-fork .n2{font-size:12px;color:var(--text-dimmer)}
 .prj-fork .wt-br{font-family:ui-monospace,'SF Mono','JetBrains Mono',Menlo,Consolas,monospace;
-  font-size:13.5px;font-weight:600;color:#39c5cf}
+  font-size:var(--fs-sm);font-weight:600;color:var(--text-bright)}
 .prj-fork .wt-br{display:inline-flex;align-items:center;gap:4px}
 .prj-fork .wt-ab{font-family:ui-monospace,monospace;font-size:12px;display:inline-flex;align-items:center;gap:1px}
 .prj-fork .wt-ab.up{color:var(--ok)} .prj-fork .wt-ab.dn{color:#d29922}
@@ -254,6 +252,17 @@ const FORK_COLOR: Record<string, string> = {
 }
 const CLI_KINDS = ['shell', 'claude', 'codex'] as const
 
+// 行尾动作钮：一行四五个动作写成汉字太吵，收成图标方钮。
+// 图标不写进文案（图标硬规则）：label 只给字，Tooltip 和 aria-label 都用它，图标在调用处传。
+export const ActBtn = ({ icon, label, tone, onClick }: {
+  icon: ReactNode; label: string; tone?: 'danger' | 'ok'; onClick?: () => void
+}) => (
+  <Tooltip title={label}>
+    <button type="button" className={`tt-act ico${tone ? ' ' + tone : ''}`} aria-label={label}
+      onClick={onClick}>{icon}</button>
+  </Tooltip>
+)
+
 export const dot = (on: boolean, color?: string) => (
   <span style={{
     width: 8, height: 8, borderRadius: '50%', flex: '0 0 8px', display: 'inline-block',
@@ -263,14 +272,16 @@ export const dot = (on: boolean, color?: string) => (
 )
 
 // ── 生命周期导轨（P2 图纸）：建→干→审→并，当前段呼吸 ──────
-const LIFEC_COLORS = ['#39c5cf', 'var(--ok)', '#d29922', '#a371f7']
+// 四段原来一段一个颜色（青/绿/黄/紫）。同一行里已经有分支片、状态标、agent 品牌标在说话，
+// 再摆一道四色阶梯就成了彩虹，而且颜色本身并不表达「进行到第几步」——长度才表达。
+// 改成单色进度条：走过/当前的段是强调色，没到的留灰，阶段名就在旁边写着。
 export function Lifec({ done, cur }: { done: number; cur?: number }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
       {[1, 2, 3, 4].map((i) => (
         <i key={i} style={{
           width: 11, height: 4, borderRadius: 2,
-          background: i <= done || i === cur ? LIFEC_COLORS[i - 1] : 'rgba(139,148,158,.25)',
+          background: i <= done || i === cur ? 'var(--accent)' : 'rgba(139,148,158,.25)',
           animation: i === cur ? 'projLifecPulse 1.6s ease-in-out infinite' : undefined,
         }} />
       ))}
@@ -472,7 +483,7 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
                     <div key={s.name} style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', minWidth: 0 }}>
                       {dot(false, s.waiting ? '#d29922' : s.running ? 'var(--ok)' : undefined)}
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.name}>{s.label || sessionLabel(s.name)}</span>
-                      {s.branch && <Tag color="cyan" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px', padding: '0 5px' }}><BranchIcon size={11} /></Tag>}
+                      {s.branch && <span className="tt-branch" title={s.branch}><BranchIcon size={11} /></span>}
                       <span style={{ marginLeft: 'auto', color: 'var(--text-dimmer)', fontSize: 'var(--fs-meta)', flex: '0 0 auto' }}>{relTime(s.lastActivity, t)}</span>
                     </div>
                   ))}
@@ -586,7 +597,7 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
                 <span style={{ fontWeight: 600 }} title={s.name}>{s.label || sessionLabel(s.name)}</span>
                 <span style={{ color: 'var(--text-dimmer)', fontSize: 'var(--fs-meta)', marginTop: 2 }}>{relTime(s.lastActivity, t)}</span>
                 <span style={{ flex: 1 }} />
-                <span className="acts"><a>{t('project.enter')}</a></span>
+                <span className="acts"><ActBtn icon={<TerminalIcon size={14} />} label={t('project.enter')} /></span>
               </div>
             ))}
           </>
@@ -659,7 +670,7 @@ function FinishModal({ w, base, onClose, onDone, onRevive }: {
   return (
     <Modal open onCancel={onClose} onOk={ok} okText={t('project.finish.ok')} confirmLoading={busy}
       okButtonProps={mode === 'discard' && !merged ? { danger: true } : undefined}
-      title={<span>{t('project.finish.title')} <Tag color="cyan" className="prj-mono" style={{ marginLeft: 4 }} icon={<BranchIcon size={10} />}>{w.branch}</Tag></span>} destroyOnClose>
+      title={<span>{t('project.finish.title')} <span className="tt-branch" style={{ marginLeft: 4 }}><BranchIcon size={10} />{w.branch}</span></span>} destroyOnClose>
       <Space direction="vertical" style={{ width: '100%' }} size={12}>
         <div className="prj-mono" style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-dim)', lineHeight: 1.8, padding: '9px 12px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-sm)', background: 'var(--bg-term)' }}>
           <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t('project.finish.kept', { path: w.path })}</div>
@@ -1262,13 +1273,13 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
         <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
             <span style={{ fontWeight: 700 }} title={s.name}>{s.label || sessionLabel(s.name)}</span>
-            {hit.linked && hit.branch && <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 'var(--fs-micro)' }} icon={<BranchIcon size={10} />}>{hit.branch}</Tag>}
+            {hit.linked && hit.branch && <span className="tt-branch" title={hit.branch}><BranchIcon size={10} />{hit.branch}</span>}
             {hit.external && hit.linked && <Tag style={{ margin: 0 }}><WindowsIcon size={11} /></Tag>}
             {swarmMap[s.name]?.role === 'leader' && <Tag color="purple" style={{ margin: 0 }}>{t('project.swarm.leaderTag')}</Tag>}
             {swarmMap[s.name]?.subrole && <Tag style={{ margin: 0 }}>{t(('swarm.subrole.' + swarmMap[s.name]!.subrole) as any) || swarmMap[s.name]!.subrole}</Tag>}
             {swarmMap[s.name]?.done && <Tag color="purple" style={{ margin: 0 }}>{t('project.swarm.integrate')}</Tag>}
-            {cc[s.name] && <Tag color="blue" style={{ margin: 0 }}>Claude</Tag>}
-            {cx[s.name] && <Tag color="green" style={{ margin: 0 }}>Codex</Tag>}
+            {cc[s.name] && <span className="tt-agentmark" title={t('session.runningClaude')}><AgentLogo kind="claude" size={13} /></span>}
+            {cx[s.name] && <span className="tt-agentmark" title={t('session.runningCodex')}><AgentLogo kind="codex" size={13} /></span>}
             {waiting && <Tag color="warning" style={{ margin: 0 }}>{t('session.waiting')}</Tag>}
             {a.ambiguous && (
               <Tooltip title={(a.matches || []).map((m: any) => m.worktree).join('\n')}>
@@ -1300,10 +1311,12 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
           </div>
         </div>
         <span className="acts" onClick={(e) => e.stopPropagation()}>
-          <a onClick={() => openTerm(s.name)}>{t('project.enter')}</a>
-          {hit.linked && <a onClick={() => setGitOpen(true)}>{t('project.compare')}</a>}
-          <a onClick={() => setForking(s.name)}>{t('project.forkTask')}</a>
-          <a style={{ color: '#f85149' }} onClick={() => beginClose(s.name)}>{hit.linked ? t('project.finish') : t('common.close')}</a>
+          <ActBtn icon={<TerminalIcon size={14} />} label={t('project.enter')} onClick={() => openTerm(s.name)} />
+          {hit.linked && <ActBtn icon={<DiffIcon size={14} />} label={t('project.compare')} onClick={() => setGitOpen(true)} />}
+          <ActBtn icon={<ForkIcon size={14} />} label={t('project.forkTask')} onClick={() => setForking(s.name)} />
+          {hit.linked
+            ? <ActBtn icon={<ArchiveIcon size={14} />} label={t('project.finish')} tone="danger" onClick={() => beginClose(s.name)} />
+            : <ActBtn icon={<CloseIcon size={14} />} label={t('common.close')} tone="danger" onClick={() => beginClose(s.name)} />}
         </span>
       </div>
     )
@@ -1335,7 +1348,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
             <div className="prj-mono" style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)' }}>
               <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={proj.dir}>
                 {proj.dir}
-                {isGit && defBranch && <span style={{ color: '#39c5cf', display: 'inline-flex', alignItems: 'center', gap: 4 }}> · <BranchIcon size={11} />{defBranch}{mainHead ? ` @ ${mainHead}` : ''}</span>}
+                {isGit && defBranch && <span style={{ color: 'var(--text-dim)', display: 'inline-flex', alignItems: 'center', gap: 4 }}> · <BranchIcon size={11} />{defBranch}{mainHead ? ` @ ${mainHead}` : ''}</span>}
               </span>
               {/* 项目 id（不可变，目录搬家也不变）：排障时对着日志/台账查同一个项目 */}
               <Tooltip title={t('project.copyId')}>
@@ -1380,7 +1393,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
           <div className="prj-cbar">
             {isGit && (
               <span className="prj-cgrp">
-                <span className={`prj-pill cyan${wtMode === 'new' ? ' on' : ''}`} onClick={() => setWtMode('new')}><BranchIcon size={11} />{t('project.where.new')}</span>
+                <span className={`prj-pill${wtMode === 'new' ? ' on' : ''}`} onClick={() => setWtMode('new')}><BranchIcon size={11} />{t('project.where.new')}</span>
                 <span className={`prj-pill${wtMode === 'repo' ? ' on' : ''}`} onClick={() => setWtMode('repo')}>{t('project.where.repo')}</span>
                 <span className={`prj-pill${wtMode === 'existing' ? ' on' : ''}${wts.length ? '' : ' dis'}`}
                   onClick={() => { if (wts.length) setWtMode('existing') }}>{t('project.where.existing', { count: wts.length })}</span>
@@ -1492,7 +1505,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
                 <span style={{ marginTop: 7, display: 'inline-flex' }}>{dot(false, 'var(--ok)')}</span>
                 <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
-                    <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 'var(--fs-micro)' }} icon={<BranchIcon size={10} />}>{w.branch}</Tag>
+                    <span className="tt-branch" title={w.branch}><BranchIcon size={10} />{w.branch}</span>
                     <Tooltip title={`${w.mergedInto} · ${w.mergedKind}`}>
                       <Tag color="success" style={{ margin: 0 }} icon={<CheckIcon size={11} />}>{t('project.mergedTag')}</Tag>
                     </Tooltip>
@@ -1504,9 +1517,9 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
                   </div>
                 </div>
                 <span className="acts">
-                  <a style={{ color: 'var(--ok)' }} onClick={() => cleanupMerged(w)}>{t('project.cleanup')}</a>
-                  <a onClick={() => newCli(w, 'shell')}>{t('project.revive')}</a>
-                  <a onClick={() => setGitOpen(true)}>{t('project.compare')}</a>
+                  <ActBtn icon={<TrashIcon size={14} />} label={t('project.cleanup')} tone="ok" onClick={() => cleanupMerged(w)} />
+                  <ActBtn icon={<PlayIcon size={13} />} label={t('project.revive')} onClick={() => newCli(w, 'shell')} />
+                  <ActBtn icon={<DiffIcon size={14} />} label={t('project.compare')} onClick={() => setGitOpen(true)} />
                 </span>
               </div>
             ))}
@@ -1519,7 +1532,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
                 <span style={{ marginTop: 7, display: 'inline-flex' }}>{dot(false, '#d29922')}</span>
                 <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
-                    <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 'var(--fs-micro)' }} icon={<BranchIcon size={10} />}>{w.branch}</Tag>
+                    <span className="tt-branch" title={w.branch}><BranchIcon size={10} />{w.branch}</span>
                     <Tag color="warning" style={{ margin: 0 }}>{t('project.sessionClosed')}</Tag>
                     {/* 已合入但还有未提交改动：绿标缓解焦虑，损失只剩 working tree */}
                     {w.mergedInto && (
@@ -1551,9 +1564,9 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
                   </div>
                 </div>
                 <span className="acts">
-                  <a style={{ color: '#d29922' }} onClick={() => setFinishing(w)}>{t('project.finish')}</a>
-                  <a onClick={() => newCli(w, 'shell')}>{t('project.revive')}</a>
-                  <a onClick={() => setGitOpen(true)}>{t('project.compare')}</a>
+                  <ActBtn icon={<ArchiveIcon size={14} />} label={t('project.finish')} tone="danger" onClick={() => setFinishing(w)} />
+                  <ActBtn icon={<PlayIcon size={13} />} label={t('project.revive')} onClick={() => newCli(w, 'shell')} />
+                  <ActBtn icon={<DiffIcon size={14} />} label={t('project.compare')} onClick={() => setGitOpen(true)} />
                 </span>
               </div>
             ))}
@@ -1566,7 +1579,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
                 <span style={{ marginTop: 7, display: 'inline-flex' }}>{dot(false, '#a371f7')}</span>
                 <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
-                    <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 'var(--fs-micro)' }} icon={<BranchIcon size={10} />}>{w.branch}</Tag>
+                    <span className="tt-branch" title={w.branch}><BranchIcon size={10} />{w.branch}</span>
                     <Tag color="purple" style={{ margin: 0 }} icon={<MergeIcon size={11} />}>{t('project.mergedClean')}</Tag>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)' }}>
@@ -1574,8 +1587,8 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
                   </div>
                 </div>
                 <span className="acts">
-                  <a onClick={() => newCli(w, 'shell')}>{t('project.revive')}</a>
-                  <a onClick={() => setWtOpen(true)}>{t('project.cleanup')}</a>
+                  <ActBtn icon={<PlayIcon size={13} />} label={t('project.revive')} onClick={() => newCli(w, 'shell')} />
+                  <ActBtn icon={<TrashIcon size={14} />} label={t('project.cleanup')} onClick={() => setWtOpen(true)} />
                 </span>
               </div>
             ))}
@@ -1603,7 +1616,9 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
                 <div className="col">
                   <div className="info">
                     <div className="n1">
-                      <span className="wt-br" style={{ color: FORK_TRUNK }}>{mainWt.branch || 'HEAD'}</span>
+                      {/* 分支名一律中性：状态由左边那颗节点的颜色说（主干蓝 / 绿在跑 / 琥珀待收尾），
+                          名字再各染一色，一列看下来就是三种蓝绿在跳 */}
+                      <span className="wt-br">{mainWt.branch || 'HEAD'}</span>
                       <Tag style={{ margin: 0 }}>{t('project.wt.mainTag')}</Tag>
                       <span className="prj-mono" style={{ fontSize: 'var(--fs-micro)', color: 'var(--text-dimmer)' }}>{(mainWt.head || '').slice(0, 7)}</span>
                     </div>
@@ -1678,8 +1693,8 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
                           <div key={ref.session} className="prj-subrow" onClick={() => openTerm(ref.session)}>
                             {dot(false, cc[ref.session] || cx[ref.session] ? 'var(--ok)' : undefined)}
                             <span style={{ fontWeight: 600, fontSize: 13 }} title={ref.session}>{sessionLabel(ref.session)}</span>
-                            {cc[ref.session] && <Tag color="blue" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px' }}>Claude</Tag>}
-                            {cx[ref.session] && <Tag color="green" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px' }}>Codex</Tag>}
+                            {cc[ref.session] && <span className="tt-agentmark" title={t('session.runningClaude')}><AgentLogo kind="claude" size={12} /></span>}
+                            {cx[ref.session] && <span className="tt-agentmark" title={t('session.runningCodex')}><AgentLogo kind="codex" size={12} /></span>}
                             <span className="prj-peek">{peeks[ref.session] || '…'}</span>
                             <a style={{ fontSize: 'var(--fs-meta)' }} onClick={(e) => { e.stopPropagation(); openTerm(ref.session) }}>{t('project.enter')}</a>
                           </div>
@@ -1754,7 +1769,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
                   {role === 'leader' && <Tag color="purple" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px' }}>{t('project.swarm.leaderTag')}</Tag>}
                   {subrole && <Tag style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px' }}>{t(('swarm.subrole.' + subrole) as any) || subrole}</Tag>}
                   {done && <Tag color="purple" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px' }}>{t('project.swarm.integrate')}</Tag>}
-                  {ann[session]?.primary?.linked && <Tag color="cyan" className="prj-mono" style={{ margin: 0, fontSize: 'var(--fs-micro)', lineHeight: '16px' }} icon={<BranchIcon size={10} />}>{ann[session].primary.branch}</Tag>}
+                  {ann[session]?.primary?.linked && <span className="tt-branch" title={ann[session].primary.branch}><BranchIcon size={10} />{ann[session].primary.branch}</span>}
                   <span style={{ flex: 1 }} />
                   {inProj
                     ? <a style={{ fontSize: 'var(--fs-meta)' }} onClick={(e) => { e.stopPropagation(); openTerm(session) }}>{t('project.enter')}</a>
@@ -1822,7 +1837,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
               </div>
             ) : (
               <div key={e.oid + e.at} className="prj-mono" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', fontSize: 'var(--fs-sm)' }}>
-                <span style={{ color: '#39c5cf', opacity: 0.8 }}>{e.oid}</span>
+                <span style={{ color: 'var(--text-dimmer)' }}>{e.oid}</span>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.subject}</span>
                 <span style={{ marginLeft: 'auto', color: 'var(--text-dimmer)', fontSize: 'var(--fs-meta)', flex: '0 0 auto' }}>
                   {e.refs ? `${String(e.refs).split(',')[0]} · ` : ''}{relTime(e.at, t)}

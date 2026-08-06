@@ -1,43 +1,153 @@
-# Agent Required Project Instructions
+# Agent Instructions
 
-These instructions apply to Codex, Claude Code, and other coding agents working in this repository.
+**This file is the single source of truth for agent rules in this repository** — Codex, Claude
+Code, and anything else editing this repo. They are requirements, not suggestions.
 
-## Must Read
+Codex reads `AGENTS.md` directly; Claude Code reads [`CLAUDE.md`](CLAUDE.md), which is a thin
+pointer that imports this file with `@AGENTS.md`. Add or change a rule **here**, never in a
+tool-specific copy — two copies drift, and then the two agents work from different rulebooks.
 
-- [docs/development/i18n.md](docs/development/i18n.md) is the mandatory internationalization standard.
-- [docs/development/ui-design-system.md](docs/development/ui-design-system.md) is the mandatory Web UI design system: type/radius/spacing/accent tokens, the single breakpoint entry point, touch-target rules, and the traps that keep recurring. Read it before any frontend UI change.
-- Frontend changes must follow [docs/design/web/04-frontend.md](docs/design/web/04-frontend.md) unless a newer implementation pattern exists in code.
+# Design System
 
-## Icon Gate
+All Web UI work — layout, color, typography, spacing, component selection, UX behavior — must
+follow [`docs/development/ui-design-system.md`](docs/development/ui-design-system.md). Use the
+tokens it defines (`--fs-*` type, `--r-*` radius, `--sp-*` spacing, `--accent*` / `--ok*` accents)
+and the existing antd/component patterns in `frontend/src/`. Don't invent a new color value, font
+size, radius, or spacing step when a documented one already covers the role. Frontend structure
+follows [`docs/design/web/04-frontend.md`](docs/design/web/04-frontend.md) unless a newer pattern
+already exists in code.
 
-UI icons are **SVG only**. Never add emoji (🔄 📎 🤖 …) or text symbols used as icons
-(`✕ × ✓ ▾ ▸ ← → ↑ ↓ ⏎ ■ ● ◆ ⚠ ⎇ ⧉ ＋ …`), and never draw a one-off inline SVG in a component.
-Take icons from `frontend/src/icons.tsx` (24×24 viewBox, `currentColor`, 1.8 stroke) — add new
-ones there; `file-icons.tsx` and `git/parts.tsx` hold the file-type and Git sets in the same style.
-The same action must use the same icon everywhere, and **icons must never be baked into i18n
-strings** (`'＋ Add task'`): copy holds words only, the call site passes `icon={<PlusIcon />}`.
-The only exceptions are keyboard-shortcut modifier glyphs (`⌘ ⇧ ⌃`) and the swarm office view's
-deliberate role-avatar emoji. Full rule: [CLAUDE.md](CLAUDE.md#图标硬规则不许-emoji不许文字符号).
+## Tokens Only: No Raw Values
 
-## Internationalization Gate
+The ladders are fixed: type `--fs-micro/meta/sm/body/lg/title`, radius `--r-xs/sm/card/pill`,
+spacing `--sp-1`…`--sp-5`, accent `--accent` / `--accent-solid` / `--accent-soft` /
+`--accent-border`, success `--ok` / `--ok-solid` / `--ok-soft` / `--ok-border`.
 
-All new user-facing product text must go through the project i18n layer. This includes labels, buttons, placeholders, tooltips, empty states, validation messages, toast/message/notification text, modal titles, table columns, navigation labels, status labels, browser page text, and fallback HTML.
+NEVER hardcode a design value that has a token. No `#58a6ff` / `#3fb950` in components — there is
+exactly one blue and one green site-wide, and antd's `darkAlgorithm` derives its own shade from
+the seed, so a copied hex is always a step off what antd draws next to it. No off-ramp font sizes
+(10.5 / 11.5 / 12.5), and nothing below 12px outside eyebrow/badge text.
 
-Allowed exceptions are listed in the i18n standard. If a change intentionally leaves user-facing text untranslated, document why in the PR or task summary.
+Top-level pages use `.tt-pagehead` (eyebrow + title + one line) for their header. Don't hand-roll
+a title row per page.
 
-## Quality Gate
+## Clickable Things Are Buttons
+
+An `<a onClick>` with no `href` is not keyboard-focusable and looks like text — it fails both
+discoverability and a11y. Row-end actions use the quiet ghost button `.tt-act` (bare border at
+rest, brightens on hover, `.danger` / `.ok` modifiers for destructive and confirming actions).
+Reach for `<button type="button">` by default; `<a>` only when it really navigates.
+
+## Breakpoints: One Entry Point
+
+`useLayout()` is the only way to read layout size. NEVER read `window.innerWidth` and never call
+`matchMedia` yourself. Pure style differences key off `data-size` / `data-pointer` on `<html>`.
+Under a coarse pointer, hit targets are ≥44px — grow the hit area with a pseudo-element, not the
+visual size.
+
+## Icons: SVG Only
+
+NEVER add an emoji (🔄 📎 🤖 …), NEVER use a text symbol as an icon
+(`✕ × ✓ ▾ ▸ ← → ↑ ↓ ⏎ ■ ● ◆ ⚠ ⎇ ⧉ ＋ …`), and NEVER draw a one-off inline SVG in a component.
+
+- Icons come from `frontend/src/icons.tsx` (24×24 viewBox, `currentColor`, 1.8 stroke, round
+  caps). `file-icons.tsx` and `git/parts.tsx` hold the file-type and Git sets in the same style;
+  new icons default to `icons.tsx`.
+- The same action uses the same icon everywhere. A close button that is `✕` in one place and `×`
+  in another is worse than an ugly icon.
+- Icons are NEVER baked into i18n strings (`'＋ Add task'`). Copy holds words only; the call site
+  passes `icon={<PlusIcon />}`.
+- Status dots and swatches are drawn (`border-radius:50%`, `<Swatch />`), not typed (`●`, `■`).
+- Brand marks (`AgentLogo`: the Claude and OpenAI/Codex logos) are the one place our icon rules
+  step aside. Use the official path data and the official color — `--brand-claude` /
+  `--brand-codex` — never redraw a logo and never re-tint one to our accent. A brand mark also
+  gets no chrome: render it bare (`.tt-agentmark`), not boxed in an `ant-tag`.
+- Exactly two exceptions: keyboard-shortcut modifier glyphs (`⌘ ⇧ ⌃`), and the swarm office
+  view's deliberate role-avatar emoji in `Swarm.tsx`.
+
+Self-check: grep `frontend/src` for emoji and the symbol list above before finishing (comments and
+TUI-output regexes don't count). A hit is something to fix.
+
+## Internationalization
+
+All new user-facing product text goes through the project i18n layer:
+[`docs/development/i18n.md`](docs/development/i18n.md) is the standard. This covers labels,
+buttons, placeholders, tooltips, empty states, validation messages, toast/message/notification
+text, modal titles, table columns, navigation labels, status labels, browser page text, and
+fallback HTML. Allowed exceptions are listed in the standard; if a change intentionally leaves
+user-facing text untranslated, say why in the PR or task summary.
+
+# Style
+
+## Concise, Non-obvious Comments Only
+
+- DO NOT be verbose, explain the obvious, or narrate the code. Comments say WHY, not HOW.
+- BE CONCISE. One line where one line does.
+
+## File and Module Naming
+
+Never name a file, folder, or module `helpers`, `utils`, `common`, `misc`, or `shared`. Name it
+after what it actually contains — the concrete domain concept (`session-identity.ts`,
+`terminal-orphan-cleanup.ts`) over the generic role (`session-helpers.ts`, `term-utils.ts`). If
+`helpers` feels right, the file probably has more than one responsibility.
+
+# Considerations
+
+## The Phone Is a First-Class Client
+
+Every UI change ships to a phone over LAN, not just a desktop browser. Typecheck is not
+acceptance: run the real-device pass in
+[`docs/development/web-ui-checklist.md`](docs/development/web-ui-checklist.md) before calling a
+frontend change done. Touch behavior, coarse-pointer hit areas, and the compact `data-size` layout
+are part of the change, not a follow-up.
+
+Serving over LAN also means a secure context: `start.sh` turns on self-signed HTTPS by default
+because microphone and clipboard access need it. Don't add a feature that silently degrades on
+plain HTTP without saying so.
+
+## tmux Is the Substrate
+
+Sessions are real tmux sessions, and tmux has sharp edges the Go CLI already works around — match
+the existing helpers instead of shelling out fresh:
+
+- **Target names are prefix-matched.** Always pass `-t "=" + name`. Without the `=`, a session
+  named `dev-review` keeps `dev` looking alive forever.
+- **Sending to a TUI agent is not `send-keys text C-m`.** That types without submitting. Use
+  `rt.SendPromptSubmit` (paste-buffer, then a separate Enter), which is also the only reliable
+  path for multi-line prompts and bracketed-paste apps.
+- **`send-keys` has a length limit.** Large prompts go to a file and in over stdin; if the send
+  fails, kill the session you just created rather than leaking an empty one.
+
+## Agent Panes Are Not Ours
+
+Claude Code and Codex render their own alternate-screen TUIs inside our panes. Anything that
+scrolls, resizes, or replays those panes has to account for alternate-screen mode (mouse-wheel
+synthesis, not copy-mode) and for redraw quirks on narrow widths.
+
+# Gates
+
+## Quality
 
 - Run `scripts/dev/quality/check.sh quick` before committing local changes.
-- Run `scripts/dev/quality/check.sh full` before opening or updating a PR with runtime behavior changes.
-- Install the tracked Git hooks with `bash scripts/dev/install-git-hooks.sh`; it sets `core.hooksPath=.githooks` and `commit.template=.gitmessage`.
-- Do not commit `.env`, generated dependency folders, coverage output, or hard-coded secrets.
+- Run `scripts/dev/quality/check.sh full` before opening or updating a PR with runtime behavior
+  changes.
+- Frontend changes must additionally pass
+  `npm run typecheck && npm run i18n:check && npx vitest run && npm run build`.
+- Install the tracked Git hooks with `bash scripts/dev/install-git-hooks.sh`; it sets
+  `core.hooksPath=.githooks` and `commit.template=.gitmessage`.
+- Never commit `.env`, generated dependency folders, coverage output, or hard-coded secrets.
 
 ## Commit Convention
 
-- Commit messages follow [Conventional Commits](docs/development/commit-convention.md): `<type>(<scope>): <描述>`.
-- The `commit-msg` hook enforces the format locally; PR titles must follow it too (squash merges turn the title into the final commit).
+- Commit messages follow [Conventional Commits](docs/development/commit-convention.md):
+  `<type>(<scope>): <描述>`.
+- The `commit-msg` hook enforces the format locally. PR titles must follow it too — squash merges
+  turn the title into the final commit.
 
 ## Code Review
 
-- PRs are reviewed by the **Codex GitHub App** (`chatgpt-codex-connector` bot). See [docs/development/codex-review.md](docs/development/codex-review.md) for how it is enabled and how to respond.
-- The `babysit-pr` skill (`skills/babysit-pr/`) automates polling, deciding fix-vs-skip, replying, and resolving Codex review threads.
+- PRs are reviewed by the **Codex GitHub App** (`chatgpt-codex-connector` bot). See
+  [docs/development/codex-review.md](docs/development/codex-review.md) for how it is enabled and
+  how to respond.
+- The `babysit-pr` skill (`skills/babysit-pr/`) automates polling, deciding fix-vs-skip, replying,
+  and resolving Codex review threads.

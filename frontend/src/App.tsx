@@ -975,30 +975,18 @@ const TI = {
   redraw: tIcon(<><path d="M20 12a8 8 0 1 1-2.6-5.9" /><path d="M20.5 4v5h-5" /></>),
   reconnect: tIcon(<><path d="M10.4 13.6a4.2 4.2 0 0 0 6 0l2.4-2.4a4.2 4.2 0 0 0-6-6l-1.4 1.4" /><path d="M13.6 10.4a4.2 4.2 0 0 0-6 0l-2.4 2.4a4.2 4.2 0 0 0 6 6l1.4-1.4" /></>),
 }
-// Claude / Codex 的会话标记：原来用 ✳ ✸ 两个字符，字重与基线都对不齐；改成同尺寸的品牌感 mark。
-function AgentMark({ kind, size = 13 }: { kind: 'claude' | 'codex'; size?: number }) {
-  return kind === 'claude'
-    ? (
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" aria-hidden>
-        <path d="M12 3.2v17.6" /><path d="m4.4 7.6 15.2 8.8" /><path d="M19.6 7.6 4.4 16.4" />
-      </svg>
-    )
-    : (
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" aria-hidden>
-        <circle cx="12" cy="12" r="7.6" /><circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none" />
-      </svg>
-    )
-}
-// 工具条按钮：默认安静（无框），开启态才由 tone 上强调色（会话蓝 / Codex 绿）。
-// tone 是 6 位十六进制，追加 alpha 后缀直接拿来做底色/描边，避免 color-mix 的兼容性问题。
-function TBtn({ icon, label, on, tone = 'var(--accent)', title, onClick, onMouseDown }: {
-  icon?: ReactNode; label?: ReactNode; on?: boolean; tone?: string; title?: ReactNode
+// 工具条按钮：默认安静（无框），开启态是「软色底 + 主色字」，样式全在 index.css 的 .tt-tbtn.on。
+// tone 只选哪一支强调色（会话蓝 / Codex 绿），不再由行内 style 拼颜色——
+// 原来写的是 `${tone}1f` / `${tone}59`，而 tone 传进来的是 `var(--accent)`：
+// 拼出来是无效值，底色被整个丢掉，border-color 反倒落成满强度实线，
+// 于是「开启」在界面上是一枚突兀的蓝色描边圈。
+function TBtn({ icon, label, on, tone = 'accent', title, onClick, onMouseDown }: {
+  icon?: ReactNode; label?: ReactNode; on?: boolean; tone?: 'accent' | 'ok'; title?: ReactNode
   onClick?: () => void; onMouseDown?: (e: React.MouseEvent) => void
 }) {
   const btn = (
-    <button type="button" className={`tt-tbtn${on ? ' on' : ''}${label ? '' : ' tt-ico'}`}
-      onClick={onClick} onMouseDown={onMouseDown}
-      style={on ? { color: tone, background: `${tone}1f`, borderColor: `${tone}59` } : undefined}>
+    <button type="button" className={`tt-tbtn${on ? ' on' : ''}${tone === 'ok' ? ' ok' : ''}${label ? '' : ' tt-ico'}`}
+      onClick={onClick} onMouseDown={onMouseDown}>
       {icon}{label != null && <span>{label}</span>}
     </button>
   )
@@ -1440,11 +1428,11 @@ function TerminalPane(props: {
   const statusDot = (color: string, size = 7) => (
     <i style={{ width: size, height: size, borderRadius: '50%', flex: `0 0 ${size}px`, background: color, boxShadow: `0 0 0 3px ${color}26` }} />
   )
-  // 标签内的会话标记：Claude 蓝 / Codex 绿，跟状态点同一行且同一光学尺寸
+  // 标签内的会话标记：官方品牌标，跟状态点同一行且同一光学尺寸（颜色由标自己带，见 AgentLogo）
   const agentMarks = (name: string) => (
     <>
-      {claudeMap[name]?.running && <span title={t('session.runningClaude')} style={{ display: 'inline-flex', color: 'var(--accent)' }}><AgentMark kind="claude" /></span>}
-      {codexMap[name]?.running && <span title={t('session.runningCodex')} style={{ display: 'inline-flex', color: 'var(--ok)' }}><AgentMark kind="codex" /></span>}
+      {claudeMap[name]?.running && <span title={t('session.runningClaude')} style={{ display: 'inline-flex' }}><AgentLogo kind="claude" /></span>}
+      {codexMap[name]?.running && <span title={t('session.runningCodex')} style={{ display: 'inline-flex' }}><AgentLogo kind="codex" /></span>}
     </>
   )
   const sessionTab = (
@@ -1571,13 +1559,13 @@ function TerminalPane(props: {
         {active && claudeMap[active]?.running && (
           <button type="button" className={`ic${claudeView[active] ? ' on' : ''}`} aria-label="Claude"
             onClick={() => setClaudeView((v) => ({ ...v, [active!]: !v[active!] }))}>
-            <AgentMark kind="claude" size={16} />
+            <AgentLogo kind="claude" size={16} />
           </button>
         )}
         {active && codexMap[active]?.running && (
           <button type="button" className={`ic${codexView[active] ? ' on' : ''}`} aria-label="Codex"
             onClick={() => setCodexView((v) => ({ ...v, [active!]: !v[active!] }))}>
-            <AgentMark kind="codex" size={16} />
+            <AgentLogo kind="codex" size={16} />
           </button>
         )}
         <button type="button" className="ic" aria-label={t('common.more')} onClick={() => setMoreSheet(true)}>
@@ -1627,11 +1615,11 @@ function TerminalPane(props: {
         {activeNeedsInput ? t('session.waiting') : st === 'connected' ? t('terminal.status.connected') : st === 'connecting' ? t('terminal.status.connecting') : t('terminal.status.disconnected')}
       </span>
       {active && claudeMap[active]?.running && (
-        <TBtn icon={<AgentMark kind="claude" size={14} />} label="Claude" tone="var(--accent)" on={!!claudeView[active]}
+        <TBtn icon={<AgentLogo kind="claude" size={14} />} label="Claude" on={!!claudeView[active]}
           title={t('chat.switchToClaude')} onClick={() => setClaudeView((v) => ({ ...v, [active!]: !v[active!] }))} />
       )}
       {active && codexMap[active]?.running && (
-        <TBtn icon={<AgentMark kind="codex" size={14} />} label="Codex" tone="var(--ok)" on={!!codexView[active]}
+        <TBtn icon={<AgentLogo kind="codex" size={14} />} label="Codex" tone="ok" on={!!codexView[active]}
           title={t('chat.switchToCodex')} onClick={() => setCodexView((v) => ({ ...v, [active!]: !v[active!] }))} />
       )}
       <span className="tt-sep" />
@@ -2066,7 +2054,7 @@ function Tasks({ openTerm }: { openTerm: (n: string) => void }) {
 // ── 服务器目录选择器 ──
 // 最近用过的工作目录（服务端偏好 + localStorage 兜底），作为目录选择器的快捷候选
 import { getPreferences } from './preferences'
-import { ArrowDown, ArrowUp, BotIcon, CheckIcon, ChevronDown, ChevronRight, CloseIcon, Disclosure, HomeIcon, KeyboardIcon, MoonIcon, PlusIcon, SearchIcon, SunIcon, TerminalIcon, WindowsIcon } from './icons'
+import { AgentLogo, ArrowDown, ArrowUp, BotIcon, CheckIcon, ChevronDown, ChevronRight, CloseIcon, Disclosure, HomeIcon, KeyboardIcon, MoonIcon, PlusIcon, SearchIcon, SunIcon, TerminalIcon, WindowsIcon } from './icons'
 import { BranchIcon } from './git/parts'
 const RECENT_DIRS_KEY = 'ttmux_recent_dirs'
 export function recentDirs(): string[] {
@@ -2961,15 +2949,15 @@ function Sessions({ openTerm, closeTerm, activeTerm, embedded }: {
                         const ann = wtAnn[s.name]
                         if (!ann?.primary?.linked) return null
                         return (<>
-                          <Tag className="wt" color="cyan" style={{ margin: 0, flex: '0 0 auto', cursor: 'pointer', fontFamily: 'ui-monospace, monospace' }}
-                            onClick={(e) => { e.stopPropagation(); setWtDir(ann.primary.repo); setWtOpen(true) }}><BranchIcon size={11} /></Tag>
+                          <span className="tt-branch act" title={ann.primary.repo}
+                            onClick={(e) => { e.stopPropagation(); setWtDir(ann.primary.repo); setWtOpen(true) }}><BranchIcon size={11} /></span>
                           {ann.primary.external && <Tag className="wt" style={{ margin: 0, flex: '0 0 auto' }}><WindowsIcon size={11} /></Tag>}
                         </>)
                       })()}
                       {sw && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>{t('nav.swarm')}:{sw.swarm}{sw.role === 'leader' ? `·${t('swarm.master')}` : ''}</Tag>}
                       {waiting && <Tag color="warning" style={{ margin: 0, flex: '0 0 auto' }}>{t('session.waiting')}</Tag>}
-                      {cc[s.name] && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }} icon={<AgentMark kind="claude" size={11} />}>Claude</Tag>}
-                      {cx[s.name] && <Tag color="green" style={{ margin: 0, flex: '0 0 auto' }} icon={<AgentMark kind="codex" size={11} />}>Codex</Tag>}
+                      {cc[s.name] && <span className="tt-agentmark"><AgentLogo kind="claude" size={12} />Claude</span>}
+                      {cx[s.name] && <span className="tt-agentmark"><AgentLogo kind="codex" size={12} />Codex</span>}
                       {!sw && !agent && <Tag style={{ margin: 0, flex: '0 0 auto' }}>{connected ? t('terminal.status.connected') : t('terminal.status.idle')}</Tag>}
                       {/* 窗口数 99% 的会话都是 1，常驻就是一列噪声——只在 >1 时说 */}
                       {s.windows > 1 && <span style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap' }}>{t('session.windows', { count: s.windows })}</span>}
