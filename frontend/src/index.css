@@ -275,13 +275,18 @@ body {
 .tt-nav.rail .tt-nav-brand { justify-content: center; padding: 18px 0 14px; }
 /* 标是透明底的，别再给它圆角和投影——那是当年方形底板留下的两笔 */
 .tt-nav-brand img { flex: 0 0 auto; }
-.tt-nav-brand .wd { min-width: 0; line-height: 1.15; }
-.tt-nav-brand .wd strong {
-  display: block; font-size: 19px; font-weight: 800; letter-spacing: .5px;
+/* 只有标 + 名，没有标语。
+   标语（ANYWHERE · ANYTIME）是 10px——比 --fs-micro 还小一档，掉在字号阶梯外面；
+   它也不承载信息：这一栏是导航，用户已经在应用里了，不需要再被介绍一遍产品。
+   名字随之从 19 提到 --fs-title：一行名压不住 34 的标，提一档才配得上；块高仍由标
+   决定（34 > 22×1.15），删掉一行不会让下面整列往上跳。 */
+.tt-nav-brand .wd {
+  min-width: 0; line-height: 1.15;
+  font-size: var(--fs-title); font-weight: 800; letter-spacing: .5px;
   background: var(--brand-grad); -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.tt-nav-brand .wd span { display: block; font-size: 10px; letter-spacing: 1.5px; color: var(--text-dimmer); }
 
 
 .tt-nav-list { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }

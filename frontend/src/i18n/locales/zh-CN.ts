@@ -1,5 +1,4 @@
 const zhCN = {
-  'app.tagline': 'ANYWHERE · ANYTIME',
   'p2p.connectedVia': '已直连（{path}）',
   'p2p.fellBackToHttp': '直连失败，已回退到 HTTP 下载',
   'p2p.downloadDone': '{name} 下载完成',
