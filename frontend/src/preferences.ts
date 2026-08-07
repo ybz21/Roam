@@ -74,7 +74,30 @@ const DEFAULTS: Preferences = {
   _migrated: false,
 }
 
-let cache: Preferences = { ...DEFAULTS }
+/**
+ * 工作区尺寸的**首帧镜像**。
+ *
+ * 偏好的权威在服务端，而那是一次异步 GET：首帧手里只有 DEFAULTS，分隔条先按
+ * 42vw 画一次，偏好回来再跳到用户拖出来的宽度——每刷新一次，分隔条当着面挪一次。
+ * 这里在本地留一份同样的值，首帧就拿它开画；服务端回来仍然是权威，值一致时
+ * 肉眼什么都看不到（只有换了台设备才会有一次修正）。尺寸本来也是最该按浏览器
+ * 记的东西：手机和桌面读的是同一份偏好，但画出来的从来不是同一个布局。
+ */
+const WORKSPACE_MIRROR = 'ttmux.workspace'
+
+function readWorkspaceMirror(): Partial<WorkspacePreference> {
+  try {
+    const raw = localStorage.getItem(WORKSPACE_MIRROR)
+    const v = raw ? JSON.parse(raw) : null
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : {}
+  } catch { return {} }
+}
+
+function writeWorkspaceMirror(ws: WorkspacePreference) {
+  try { localStorage.setItem(WORKSPACE_MIRROR, JSON.stringify(ws)) } catch {}
+}
+
+let cache: Preferences = { ...DEFAULTS, workspace: { ...WORKSPACE_DEFAULTS, ...readWorkspaceMirror() } }
 let listeners = new Set<() => void>()
 let loaded = false
 
@@ -118,6 +141,7 @@ export async function loadPreferences() {
     const r = await api('GET', '/preferences')
     // workspace 是嵌套对象：整体展开会让服务端存的旧结构缺字段变 undefined，单独深合一层
     cache = { ...DEFAULTS, ...r?.data, workspace: { ...WORKSPACE_DEFAULTS, ...r?.data?.workspace } }
+    writeWorkspaceMirror(cache.workspace)
     if (!cache._migrated) {
       migrateFromLocalStorage()
     }
@@ -132,6 +156,7 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null
 
 export function savePreferences(partial: Partial<Preferences>) {
   cache = { ...cache, ...partial }
+  if (partial.workspace) writeWorkspaceMirror(cache.workspace)
   notify()
   // debounce server writes to avoid rapid-fire PUTs
   if (saveTimer) clearTimeout(saveTimer)
