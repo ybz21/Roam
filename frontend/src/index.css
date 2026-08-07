@@ -1263,6 +1263,65 @@ html[data-pointer="coarse"] .tt-act.ico { width: 36px; padding: 0; }
 html[data-pointer="coarse"] .tt-act::after { content: ''; position: absolute; left: -4px; right: -4px;
   top: 50%; height: var(--tap); transform: translateY(-50%); }
 
+/* ── 输入卡（composer）──
+   项目页「下任务」和对话页「发消息」是同一件事的两处长相：一张卡，上面文本框，
+   下面一条控制条——左边是「怎么干」的选项，右边贴着动作。两页各写一套的结果是
+   同一个圆角、同一道聚焦环、同一颗发送键在两处差半级，所以词汇收在这里，谁用谁取。
+
+   卡片不投影：深色底上打黑投影只会在卡底糊出一圈脏边，看着像没渲染完。深色界面的
+   「浮起」靠底色亮一档 + 一道细边说，聚焦时才上强调色描边。 */
+.tt-composer { background: var(--bg-elevated); border: 1px solid var(--border-subtle);
+  border-radius: var(--r-card); padding: 4px 4px 10px;
+  transition: border-color .2s, box-shadow .2s; }
+:where(html[data-pointer="fine"]) .tt-composer:hover { border-color: var(--border); }
+.tt-composer:focus-within { border-color: var(--accent-border); box-shadow: 0 0 0 3px var(--accent-soft); }
+.tt-composer textarea { font-size: var(--fs-body) !important; line-height: 1.75 !important;
+  padding: 10px 12px 4px !important; }
+
+/* 控制条：组内 6、组间 16，分组只靠间距不画线——换行之后竖分隔线会孤零零吊在行尾。
+   一条工具条只有一种控件长相：全是 26 高的 pill，下拉也做成 pill 形。 */
+.tt-cbar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 8px 10px 0; }
+.tt-cgrp { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.tt-cend { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; }
+
+.tt-pill { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 11px;
+  border-radius: var(--r-pill); border: 1px solid var(--border); background: rgba(177, 186, 196, .03);
+  font: inherit; font-size: var(--fs-meta); line-height: 1; color: var(--text-dim);
+  white-space: nowrap; user-select: none; cursor: pointer;
+  transition: color .15s, border-color .15s, background .15s; }
+:where(html[data-pointer="fine"]) .tt-pill:hover { color: var(--text-bright); border-color: var(--text-dim); }
+.tt-pill:focus-visible { outline: 1px solid var(--accent-border); outline-offset: 1px; }
+.tt-pill.on { color: var(--accent); border-color: var(--accent-border); background: var(--accent-soft); }
+.tt-pill.danger { color: var(--danger); border-color: var(--danger-border); }
+.tt-pill:disabled, .tt-pill.dis { opacity: .4; cursor: not-allowed; }
+/* 图标钮：动作名走 aria-label，不写进文案（图标硬规则） */
+.tt-pill.ico { width: 26px; padding: 0; justify-content: center; }
+.tt-pill.sel { padding-right: 8px; }
+.tt-pill.sel b { color: var(--text-bright); font-weight: 600; max-width: 150px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-pill.on b { color: inherit; }
+
+/* 发送：一枚实心圆钮，控制条上唯一的实心块——「这是主动作」不用再写字说。 */
+.tt-send { width: 30px; height: 30px; border-radius: 50%; border: none; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--accent-solid); color: #fff; transition: opacity .15s, transform .12s; }
+.tt-send:disabled { opacity: .35; cursor: default; }
+:where(html[data-pointer="fine"]) .tt-send:not(:disabled):hover { transform: scale(1.06); }
+.tt-send:focus-visible { outline: 2px solid var(--accent-border); outline-offset: 2px; }
+
+/* 按住说话：静息就是控制条上一枚安静的 pill，按住时才亮成强调色。
+   `touch-action:none` 由组件给——长按说话要吃掉滚动手势。 */
+.tt-mic.rec { color: #fff; background: var(--accent-solid); border-color: var(--accent-solid); }
+
+/* 粗指针：视觉尺寸只到 36/40，命中区靠伪元素撑到 44（同 .tt-act 的做法）。
+   左右各外扩 4px 把相邻两枚之间的死区桥掉——3px 在 dpr 2.75 上还是点得空。 */
+html[data-pointer="coarse"] .tt-pill { height: 36px; padding: 0 14px; position: relative; }
+html[data-pointer="coarse"] .tt-pill.ico { width: 36px; padding: 0; }
+html[data-pointer="coarse"] .tt-send { width: 40px; height: 40px; position: relative; }
+html[data-pointer="coarse"] .tt-pill::after,
+html[data-pointer="coarse"] .tt-send::after { content: ''; position: absolute; left: -4px; right: -4px;
+  top: 50%; height: var(--tap); transform: translateY(-50%); }
+
 /* 分支名片：以前是 antd 的青色 Tag（#39c5cf，全站唯一一支青，还不在令牌里）。
    分支是**标识**不是状态，给它一支专属色的结果是：一行里青(分支) + 蓝(选中/推送) +
    绿(已合入) + 黄(有改动) + 紫(蜂群) + 橙(Claude 标) 六种色平起平坐，谁也不突出。

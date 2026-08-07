@@ -152,30 +152,34 @@ export function VoiceInput({ accent, onResult, inline = false }: { accent: strin
         </div>
       )}
       <button
+        type="button"
+        className={inline ? `tt-pill ico tt-mic${active ? ' rec' : ''}` : undefined}
         title={!micUsable ? micHint : configured ? t('voice.holdToTalk') : t('voice.notConfigured')}
+        aria-label={t('voice.holdToTalk')}
         disabled={phase === 'transcribing'}
         onContextMenu={(e) => e.preventDefault()}
         onPointerDown={(e) => { e.preventDefault(); (e.target as HTMLElement).setPointerCapture?.(e.pointerId); begin(e.clientY) }}
         onPointerMove={(e) => move(e.clientY)}
         onPointerUp={(e) => { e.preventDefault(); end() }}
         onPointerCancel={() => { cancelRef.current = true; end() }}
-        style={{
-          // 内联模式：作为输入行里的一枚普通圆钮（手机端，避免悬浮盖住发送键）；
-          // 悬浮模式：右下角「微信式」悬浮麦克风（桌面端）。
-          ...(inline
-            ? { position: 'relative', flex: '0 0 auto', width: 32, height: 32 } // 对齐 antd 默认按钮高度，与 📎/发送 成一排
+        style={inline
+          // 内联：控制条上的一枚 pill——静息时安静，按住说话才亮成强调色（.tt-mic.rec）。
+          // 从前它静息就是一整块实心强调色，跟旁边那颗实心发送键抢，一条控制条两个"主动作"。
+          ? { background: cancelArmed ? 'var(--danger)' : undefined, touchAction: 'none' }
+          : {
+            // 悬浮模式：右下角「微信式」麦克风。
             // bottom 用变量：手机上方向簇（13 §5.3）就落在这个角，不让开就会压住 ↓ / →
-            : { position: 'absolute', right: 18, bottom: 'var(--fab-bottom, 54px)', zIndex: 25, width: 54, height: 54 }),
-          borderRadius: '50%', cursor: 'pointer',
-          border: 'none', touchAction: 'none', userSelect: 'none',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: cancelArmed ? '#d23' : accent,
-          boxShadow: `0 4px 16px ${accent}66`,
-          transform: active ? 'scale(1.12)' : 'scale(1)', transition: 'transform .12s ease, background .12s ease, box-shadow .12s ease',
-          opacity: (configured && micUsable) ? 1 : 0.92,
-        }}>
+            position: 'absolute', right: 18, bottom: 'var(--fab-bottom, 54px)', zIndex: 25, width: 54, height: 54,
+            borderRadius: '50%', cursor: 'pointer',
+            border: 'none', touchAction: 'none', userSelect: 'none',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: cancelArmed ? '#d23' : accent,
+            boxShadow: `0 4px 16px ${accent}66`,
+            transform: active ? 'scale(1.12)' : 'scale(1)', transition: 'transform .12s ease, background .12s ease, box-shadow .12s ease',
+            opacity: (configured && micUsable) ? 1 : 0.92,
+          }}>
         <span className={(phase === 'recording' || phase === 'transcribing') ? 'cc-pulse' : undefined} style={{ display: 'inline-flex' }}>
-          <MicIcon size={inline ? 18 : 26} />
+          <MicIcon size={inline ? 15 : 26} silver={!inline || active} />
         </span>
       </button>
     </>
@@ -183,8 +187,9 @@ export function VoiceInput({ accent, onResult, inline = false }: { accent: strin
 }
 
 // 纯银色话筒图标（单一银色，无高光/暗部渐变，非 emoji）。
-function MicIcon({ size = 26 }: { size?: number }) {
-  const silver = '#c4c8d0'
+function MicIcon({ size = 26, silver: bright = true }: { size?: number; silver?: boolean }) {
+  // 悬浮那颗坐在实心强调色上，得用银色才看得清；控制条上那枚是安静 pill，跟着文字色走
+  const silver = bright ? '#c4c8d0' : 'currentColor'
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
       {/* 话筒头 */}

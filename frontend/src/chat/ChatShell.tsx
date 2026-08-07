@@ -262,11 +262,6 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
               <ArrowToBottom size={16} />
             </button>
           )}
-          {/* 桌面端悬浮语音按钮（长按说话，识别回填输入框）：挂在消息区这层而不是整页外壳——
-              它是 bottom:54 的绝对定位，挂外层时会压住底部输入行的「停止/发送」（输入框一涨到
-              两行以上尤其明显，点上去变成录音）和上方的选择框面板。挂这层就永远浮在输入区之上，
-              与 bottom:12 的「回到底部」钮天然错开。手机端不走这里，已内联到按钮行。 */}
-          {!isMobile && showVoice && <VoiceInput accent={accent} onResult={appendText} />}
         </div>
         {/* 状态条在选择框之上：选择框要人立刻动手，得离输入框更近 */}
         {(hasStatus || unread > 0) && (
@@ -275,39 +270,44 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
         {/* 交互式选择框（权限确认/选项菜单）：检测到才显示，可点选 */}
         <PromptPanel name={name} accent={accent} />
         {errMsg && <div style={{ color: '#f85149', fontSize: 12, padding: '2px 12px' }}>{errMsg}</div>}
-        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 8, padding: 10, borderTop: '1px solid var(--border)', alignItems: isMobile ? 'stretch' : 'flex-end' }}>
+        {/* 输入卡：与项目页「下任务」同一套词汇（.tt-composer / .tt-cbar / .tt-pill / .tt-send）。
+            手机和桌面是同一棵树，差的只有文本框最多长几行——两套 JSX 各写一遍的结果是
+            改一处忘一处（回车不挡输入法那个 bug 就在两份里各躺了一份）。
+            语音钮也收进这条控制条：桌面端原来是 bottom:54 的悬浮麦克风，输入框一涨到
+            两行就压住发送键，点上去变成录音。 */}
+        <div style={{ padding: 10, borderTop: '1px solid var(--border)' }}>
           <input ref={fileRef} type="file" multiple style={{ display: 'none' }}
             onChange={(e) => { const fs = e.target.files ? Array.from(e.target.files) : []; e.target.value = ''; if (fs.length) doUpload(fs) }} />
-          {isMobile ? (
-            // 手机端：文本框独占一行，操作钮（📎 / 语音 / 停止 / 发送）另起一行，语音钮内联进按钮行避免悬浮遮挡。
-            <>
-              <Input.TextArea
-                value={input} onChange={(e) => setInput(e.target.value)}
-                autoSize={{ minRows: 1, maxRows: 6 }} placeholder={placeholder}
-                onPressEnter={onEnter}
-                onPaste={onPaste}
-              />
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Button shape="circle" title={t('chat.uploadToCwd')} loading={uploading} onMouseDown={noBlur} onClick={() => fileRef.current?.click()} icon={<PaperclipIcon size={15} />} />
+          <div className="tt-composer">
+            <Input.TextArea
+              value={input} onChange={(e) => setInput(e.target.value)}
+              autoSize={{ minRows: 1, maxRows: isMobile ? 6 : 8 }} placeholder={placeholder}
+              variant="borderless"
+              onPressEnter={onEnter}
+              onPaste={onPaste}
+            />
+            <div className="tt-cbar">
+              <span className="tt-cgrp">
+                <button type="button" className="tt-pill ico" title={t('chat.uploadToCwd')} aria-label={t('chat.uploadToCwd')}
+                  disabled={uploading} onMouseDown={noBlur} onClick={() => fileRef.current?.click()}>
+                  <PaperclipIcon size={13} />
+                </button>
                 {showVoice && <VoiceInput inline accent={accent} onResult={appendText} />}
-                <span style={{ flex: 1 }} />
-                {busy && <Button danger title={t('chat.stopTitle')} onMouseDown={noBlur} onClick={stop} icon={<StopIcon size={11} />}>{t('chat.stop')}</Button>}
-                <Button type="primary" loading={sending} onMouseDown={noBlur} onClick={send} style={{ background: accent, borderColor: accent }}>{t('common.send')}</Button>
-              </div>
-            </>
-          ) : (
-            <>
-              <Button title={t('chat.uploadToCwd')} loading={uploading} onClick={() => fileRef.current?.click()} icon={<PaperclipIcon size={15} />} />
-              <Input.TextArea
-                value={input} onChange={(e) => setInput(e.target.value)}
-                autoSize={{ minRows: 1, maxRows: 5 }} placeholder={placeholder}
-                onPressEnter={onEnter}
-                onPaste={onPaste}
-              />
-              {busy && <Button danger title={t('chat.stopTitle')} onClick={stop} icon={<StopIcon size={11} />}>{t('chat.stop')}</Button>}
-              <Button type="primary" loading={sending} onClick={send} style={{ background: accent, borderColor: accent }}>{t('common.send')}</Button>
-            </>
-          )}
+              </span>
+              <span className="tt-cend">
+                {busy && (
+                  <button type="button" className="tt-pill danger" title={t('chat.stopTitle')}
+                    onMouseDown={noBlur} onClick={stop}>
+                    <StopIcon size={10} />{t('chat.stop')}
+                  </button>
+                )}
+                <button type="button" className="tt-send" aria-label={t('common.send')} title={t('common.send')}
+                  disabled={sending || !input.trim()} onMouseDown={noBlur} onClick={send}>
+                  <ArrowUp size={16} />
+                </button>
+              </span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
