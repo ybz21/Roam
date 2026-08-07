@@ -167,13 +167,38 @@ describe('Inspector 让位次序', () => {
       .toBe(605)
   })
 
-  it('Inspector 区间：下界 360、上界不越过 Dock 的地盘', () => {
+  it('Inspector 区间：下界 360、上界按终端让到 480 之后的余量算', () => {
     for (const viewport of [1280, 1440, 1920]) {
       const w = workspace(viewport)
-      const b = inspectorBounds({ workspaceWidth: w, dockWidth: defaultDockWidth(viewport, w), hasDock: true })
+      const b = inspectorBounds({ workspaceWidth: w, hasDock: true })
       expect(b.min).toBe(INSPECTOR_MIN)
       expect(b.max).toBeLessThanOrEqual(INSPECTOR_MAX)
       expect(b.max).toBeGreaterThanOrEqual(INSPECTOR_MIN)
+      // 上界拿满时终端刚好停在自己的下限，且不撑破工作区
+      const dock = effectiveDockWidth({ workspaceWidth: w, dockWidth: dockBounds(w).max, inspectorWidth: b.max, inspectorOpen: true })
+      expect(dock).toBeGreaterThanOrEqual(DOCK_MIN)
+      expect(dock + SPLIT_RAIL * 2 + b.max).toBeLessThanOrEqual(w)
     }
+  })
+
+  // 抽屉两层加起来能到一千出头（Git 的「改动列表 ｜ diff」、文件的「树 ｜ 预览」）。
+  // 终端一寸不让的话那个宽度永远只是愿望：上界把它钳回剩余空间，diff 永远挤在四五百里。
+  it('抽屉要得比剩余空间多时，终端让位——让到 480 为止，且不溢出', () => {
+    const w = workspace(1600, false) // 1536：会话页导航是收起的轨
+    const mine = dockBounds(w).max   // 用户把终端拖到了最宽
+    const want = 945                 // Git：列表 320 + 5 + diff 620
+
+    expect(inspectorBounds({ workspaceWidth: w, hasDock: true }).max).toBeGreaterThanOrEqual(want)
+    const dock = effectiveDockWidth({ workspaceWidth: w, dockWidth: mine, inspectorWidth: want, inspectorOpen: true })
+    expect(dock).toBeLessThan(mine)                       // 终端确实退了
+    expect(dock).toBeGreaterThanOrEqual(DOCK_MIN)         // 但不退过下限
+    expect(dock + SPLIT_RAIL * 2 + want).toBeLessThanOrEqual(w)
+  })
+
+  it('抽屉够放时终端一寸不动——退让只在真不够的时候发生', () => {
+    const w = workspace(1600, false)
+    const mine = 900
+    const dock = effectiveDockWidth({ workspaceWidth: w, dockWidth: mine, inspectorWidth: 552, inspectorOpen: true })
+    expect(dock).toBe(mine)
   })
 })

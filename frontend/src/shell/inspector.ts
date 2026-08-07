@@ -90,11 +90,24 @@ export function useInspectorWantWidth(): number {
   return useSyncExternalStore(subscribe, () => wantWidth, () => 0)
 }
 
+/**
+ * Shell 反过来告诉面板：你要的宽度我给不了，只给到这么多。
+ *
+ * 面板判断「用户是不是拖了外把手」靠的是量自己的宽度和请求值对不上（见 InspectorLayers
+ * 的 settle）。它分不清「用户拖窄的」和「Shell 钳窄的」——窗口缩小一次，钳出来的宽度
+ * 就被当成用户的新偏好存下来，窗口再拉宽也回不去了。钳到多少报回来，那一档就别当拖动。
+ * 0 = 没钳，要多少给多少。
+ */
+let cappedAt = 0
+export function reportInspectorCap(px: number) { cappedAt = Math.round(px) }
+export function inspectorCappedAt(): number { return cappedAt }
+
 /** 仅供测试 */
 export function resetInspector() {
   slot = null
   stack = []
   seq = 0
   wantWidth = 0
+  cappedAt = 0
   snap = { slot: null, top: 0 }
 }

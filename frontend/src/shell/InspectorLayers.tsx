@@ -18,9 +18,11 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useI18n } from '../i18n'
 import { usePointerResize } from '../PointerResize'
-import { requestInspectorWidth } from './inspector'
+import { inspectorCappedAt, requestInspectorWidth } from './inspector'
 
 export const LAYER_RAIL = 5
+/** 「请求的宽度落地了」的容差：槽位与面板各自的 1px 边框，再留一点余量 */
+const LAND_SLACK = 4
 
 /** 一层的尺寸契约：localStorage 键 + 上下限 + 默认宽 */
 export type LayerSize = { key: string; min: number; max: number; def: number }
@@ -112,8 +114,14 @@ export function InspectorLayers({ pinned, grown, pinnedSize, grownSize, handle }
   const settle = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
     if (!dockW || !askedRef.current) return
-    if (Math.abs(dockW - askedRef.current) <= 1) { matchedRef.current = true; return }
+    // 容差要能吃下边框：我们请求的是**槽位外宽**，量到的是自己这层的内宽，中间隔着
+    // 槽位和面板各自的 1px 左边框。差 2px 就判「还没落地」的话 matched 永远为 false，
+    // 外把手拖出来的宽度就再也收不进任何一层——Git 面板正是这么坏的（多一层边框）。
+    if (Math.abs(dockW - askedRef.current) <= LAND_SLACK) { matchedRef.current = true; return }
     if (!matchedRef.current) return
+    // 这一档是 Shell 钳出来的，不是用户拖的：收进来就等于把窗口缩小一次的后果
+    // 记成偏好，窗口再拉宽也回不去了。
+    if (Math.abs(dockW - inspectorCappedAt()) <= LAND_SLACK) return
     if (settle.current) clearTimeout(settle.current)
     settle.current = setTimeout(() => {
       if (open) {
