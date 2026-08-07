@@ -41,7 +41,12 @@ export interface WorkspacePreference {
 }
 
 const WORKSPACE_DEFAULTS: WorkspacePreference = {
-  navCollapsed: false,
+  // 默认成轨（VSCode 的活动栏本来就不带文字标签，名字在 tooltip 里）。
+  // 两个实在理由：① 展开态只在 large(≥1280) 存在，1280 以下强制成轨——默认展开的结果是
+  // 拖窗口跨过 1280 导航自己换一副样子；默认成轨，桌面各档同一个形状。
+  // ② 那 160px 在 1280 上是决定性的：展开时终端最宽 488，比它的下限 480 只多 8，等于顶死；
+  // 收成轨是 648。已经存过偏好的浏览器不受影响，这只是没拖过时给什么。
+  navCollapsed: true,
   dockOpen: true,
   dockWidth: 0, // 0 = 还没拖过，用该档默认（clamp(480, 42vw, 880)）
   inspectorWidth: 0, // 0 = 还没拖过，用 INSPECTOR_DEFAULT

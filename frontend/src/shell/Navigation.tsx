@@ -59,13 +59,9 @@ export function Navigation({
   return (
     <div className={`tt-nav${rail ? ' rail' : ''}`}>
       <div className="tt-nav-brand">
-        <img src="/logo-mark.svg" width={34} height={34} alt="Roam" />
-        {!rail && (
-          <div className="wd">
-            <strong>Roam</strong>
-            <span>{t('app.tagline')}</span>
-          </div>
-        )}
+        {/* 轨态下标是唯一的品牌元素，得由它报名字；展开时旁边就写着 Roam，再念一遍是重复 */}
+        <img src="/logo-mark.svg" width={34} height={34} alt={rail ? 'Roam' : ''} aria-hidden={rail ? undefined : true} />
+        {!rail && <strong className="wd">Roam</strong>}
       </div>
 
       {/* 这里原来还有一枚搜索入口。去掉了：顶栏 Command Center 的搜索横跨整个工作区、

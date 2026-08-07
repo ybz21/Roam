@@ -1,5 +1,4 @@
 const enUS = {
-  'app.tagline': 'ANYWHERE · ANYTIME',
   'p2p.connectedVia': 'Direct connection ({path})',
   'p2p.fellBackToHttp': 'Direct connection failed, fell back to HTTP download',
   'p2p.downloadDone': '{name} downloaded',
