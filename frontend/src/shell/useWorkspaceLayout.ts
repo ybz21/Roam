@@ -8,7 +8,7 @@
 // 挤破；空间不够就整体切 Focus，绝不横向溢出。
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLayout, type WindowSize } from '../layout'
-import { usePreferences, saveWorkspace } from '../preferences'
+import { usePreferences, preferencesLoaded, saveWorkspace } from '../preferences'
 import { useInspectorOpen } from './inspector'
 
 /** 尺寸契约，与 index.css 的 --canvas-min / --dock-* 同源（14 §8.2）。 */
@@ -198,16 +198,26 @@ export function useWorkspaceLayout(hasTerms: boolean): WorkspaceLayout {
   const [insWidth, setInsWidthLocal] = useState(ws.inspectorWidth || 0)
   const hydrated = useRef(false)
 
-  // 偏好从服务端到达后同步一次（首屏时 usePreferences 还是默认值）
+  /**
+   * 偏好从服务端到达后同步一次。
+   *
+   * 判「到达」必须问 `preferencesLoaded()`，不能拿"effect 跑过一次"充数：偏好是
+   * 异步 GET 的，mount 那一跑手里还是默认值，旧写法在那时就把 hydrated 置了位，
+   * 真正带着用户宽度的那一跑被 early-return 挡掉——**拖过的分隔条存了却从没读回来**，
+   * 每次刷新都弹回 42vw 默认位。
+   *
+   * 用户已经动过手（拖/收/聚焦）之后就不再回填：偏好 GET 与他的操作可能撞在一起，
+   * 那时候盖回去等于当着面把他刚拖的位置抹掉。
+   */
   useEffect(() => {
-    if (hydrated.current) return
+    if (hydrated.current || !preferencesLoaded()) return
     hydrated.current = true
     setDockOpenLocal(ws.dockOpen)
     setFocusLocal(ws.workspaceFocus)
     setNavCollapsedLocal(ws.navCollapsed)
     setWidthLocal(ws.dockWidth || 0)
     setInsWidthLocal(ws.inspectorWidth || 0)
-  }, [ws.dockOpen, ws.workspaceFocus, ws.navCollapsed, ws.dockWidth, ws.inspectorWidth])
+  }, [ws])
 
   const splitCapable = layout.size === 'large'
   const navWidth = splitCapable ? (navCollapsed ? NAV_RAIL : NAV_WIDTH) : NAV_RAIL
@@ -237,16 +247,19 @@ export function useWorkspaceLayout(hasTerms: boolean): WorkspaceLayout {
   }, [insWidth, insBounds])
 
   const setDockOpen = useCallback((open: boolean) => {
+    hydrated.current = true
     setDockOpenLocal(open)
     saveWorkspace({ dockOpen: open })
   }, [])
 
   const setFocus = useCallback((target: FocusTarget) => {
+    hydrated.current = true
     setFocusLocal(target)
     saveWorkspace({ workspaceFocus: target })
   }, [])
 
   const setDockWidth = useCallback((next: number) => {
+    hydrated.current = true
     const { min, max } = dockBounds(workspaceWidth)
     const clamped = Math.round(Math.max(min, Math.min(max, next)))
     setWidthLocal(clamped)
@@ -257,12 +270,14 @@ export function useWorkspaceLayout(hasTerms: boolean): WorkspaceLayout {
   const dockRenderWidth = effectiveDockWidth({ workspaceWidth, dockWidth, inspectorWidth, inspectorOpen: inspectorOpen && hasDock })
 
   const setInspectorWidth = useCallback((next: number) => {
+    hydrated.current = true
     const clamped = Math.round(Math.max(insBounds.min, Math.min(insBounds.max, next)))
     setInsWidthLocal(clamped)
     saveWorkspace({ inspectorWidth: clamped })
   }, [insBounds])
 
   const setNavCollapsed = useCallback((collapsed: boolean) => {
+    hydrated.current = true
     setNavCollapsedLocal(collapsed)
     saveWorkspace({ navCollapsed: collapsed })
   }, [])
@@ -280,13 +295,13 @@ export function useWorkspaceLayout(hasTerms: boolean): WorkspaceLayout {
     inspectorWidth,
     inspectorBounds: insBounds,
     setInspectorWidth,
-    resetInspectorWidth: () => { setInsWidthLocal(0); saveWorkspace({ inspectorWidth: 0 }) },
+    resetInspectorWidth: () => { hydrated.current = true; setInsWidthLocal(0); saveWorkspace({ inspectorWidth: 0 }) },
     canvasFitsInspector: canvasFitsWith({ workspaceWidth, inspectorWidth, hasDock }),
     dockRenderWidth,
     toggleDock: () => setDockOpen(!dockOpen),
     setDockOpen,
     setDockWidth,
-    resetDockWidth: () => { setWidthLocal(0); saveWorkspace({ dockWidth: 0 }) },
+    resetDockWidth: () => { hydrated.current = true; setWidthLocal(0); saveWorkspace({ dockWidth: 0 }) },
     setFocus,
     toggleFocus: () => setFocus(focus === 'dock' ? 'none' : 'dock'),
     setNavCollapsed,

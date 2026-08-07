@@ -147,6 +147,17 @@ Claude Code and Codex render their own alternate-screen TUIs inside our panes. A
 scrolls, resizes, or replays those panes has to account for alternate-screen mode (mouse-wheel
 synthesis, not copy-mode) and for redraw quirks on narrow widths.
 
+## Preferences Arrive Late
+
+`usePreferences()` serves defaults until the `/preferences` GET lands, so the first render of any
+component that seeds local state from a preference gets the *default*, not the stored value. Two
+rules follow. Gate the one-shot hydration on `preferencesLoaded()`, never on "the effect has run
+once" — that flag gets set on mount, before the real values exist, and the stored value is then
+silently discarded forever (a dragged splitter kept writing `dockWidth` to disk and kept snapping
+back to the default on every refresh). And for anything **visible** — widths, collapsed state —
+mirror it to `localStorage` so the first paint is already correct; the server value stays the
+authority, it just no longer moves the layout under the user a beat after load.
+
 # Gates
 
 ## Quality

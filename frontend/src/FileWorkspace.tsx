@@ -198,11 +198,19 @@ export default function FileWorkspace({
 
   // 两栏：宽度比(左栏占比，拖分隔条调整) + 左右易位
   const panesRef = useRef<HTMLDivElement>(null)
-  const [splitFrac, setSplitFrac] = useState(0.5)
+  // 占比同样记 localStorage：分隔条是用户拖出来的，刷新后自己挪回正中间就是把这次调整丢了
+  const clampFrac = (v: number) => Math.min(0.85, Math.max(0.15, v))
+  const [splitFrac, setSplitFrac] = useState(() => {
+    const s = Number(localStorage.getItem('ttmux.fileSplitFrac'))
+    return Number.isFinite(s) && s > 0 ? clampFrac(s) : 0.5
+  })
   const [swapped, setSwapped] = useState(false)
   const leftGroup: Group = swapped ? 'B' : 'A'
 
-  const clampFrac = (v: number) => Math.min(0.85, Math.max(0.15, v))
+  const fracRef = useRef(splitFrac)
+  fracRef.current = splitFrac
+  // 拖动期间每帧都写 localStorage 没必要，松手落一次盘就够
+  const saveFrac = (v: number) => localStorage.setItem('ttmux.fileSplitFrac', String(v))
   const startSplitResize = (e: React.PointerEvent<HTMLDivElement>) => {
     resize.start(e, {
       onMove: (ev) => {
@@ -210,6 +218,7 @@ export default function FileWorkspace({
         const r = el.getBoundingClientRect(); if (r.width <= 0) return
         setSplitFrac(clampFrac((ev.clientX - r.left) / r.width))
       },
+      onEnd: () => saveFrac(fracRef.current),
     })
   }
 
@@ -465,8 +474,12 @@ export default function FileWorkspace({
                   role="separator" aria-orientation="vertical" tabIndex={0}
                   aria-label={t('file.dragResize')} aria-valuemin={15} aria-valuemax={85} aria-valuenow={Math.round(splitFrac * 100)}
                   onPointerDown={startSplitResize} title={t('file.dragResize')}
-                  onDoubleClick={() => setSplitFrac(0.5)}
-                  onKeyDown={(e) => railKey(e, (dir, big) => setSplitFrac((f) => clampFrac(f + dir * (big ? 0.1 : 0.02))), () => setSplitFrac(0.5))} />
+                  onDoubleClick={() => { setSplitFrac(0.5); saveFrac(0.5) }}
+                  onKeyDown={(e) => railKey(
+                    e,
+                    (dir, big) => { const n = clampFrac(fracRef.current + dir * (big ? 0.1 : 0.02)); setSplitFrac(n); saveFrac(n) },
+                    () => { setSplitFrac(0.5); saveFrac(0.5) },
+                  )} />
               )}
               {pane(g as Group)}
             </Fragment>
