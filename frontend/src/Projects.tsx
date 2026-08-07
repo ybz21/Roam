@@ -67,40 +67,10 @@ const PRJ_CSS = `
 @keyframes prjIn{from{opacity:0;transform:translateY(6px)}}
 @keyframes projLifecPulse{0%,100%{opacity:1}50%{opacity:.35}}
 
-/* 输入卡不投影：深色底上打黑色投影（原来是 0 8px 28px rgba(1,4,9,.35)）只会在卡底下
-   糊出一圈脏边，看着像没渲染完；顶上那道 inset 白线在卡沿又切出一条高光缝。
-   深色界面的「浮起」本来就该靠底色比页面亮一档 + 一道细边来说，聚焦时才上强调色描边。 */
-.prj-composer{background:var(--bg-elevated);
-  border:1px solid var(--border-subtle);border-radius:var(--r-card);
-  transition:border-color .2s,box-shadow .2s;padding:4px 4px 10px}
-:where(html[data-pointer="fine"]) .prj-composer:hover{border-color:var(--border)}
-.prj-composer:focus-within{border-color:var(--accent-border);box-shadow:0 0 0 3px var(--accent-soft)}
-.prj-composer textarea{font-size:var(--fs-body) !important;line-height:1.75 !important;padding:10px 12px 4px !important}
-/* 控制条：组内 6、组间 16，分组只靠间距不画线（换行后竖线会孤零零吊在行尾）。
-   一条工具条只有一种控件长相：全是 26 高的 pill，「基于」「已有」也做成 pill 形下拉。 */
-.prj-cbar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:8px 10px 0}
-.prj-cgrp{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
-.prj-cend{margin-left:auto;display:inline-flex;align-items:center;gap:8px}
-.prj-pill.prj-sel{padding-right:8px}
-.prj-pill.prj-sel b{color:var(--text-bright);font-weight:600;max-width:150px;overflow:hidden;
-  text-overflow:ellipsis;white-space:nowrap}
-.prj-pill.prj-sel.on b,.prj-pill.on b{color:inherit}
-.prj-pill.prj-icon{width:26px;padding:0;justify-content:center}
-.prj-pill.prj-toggle{margin-left:6px}
-.prj-go{height:26px !important;border-radius:999px !important;padding:0 16px !important;font-weight:600}
-@media (pointer:coarse){
-  .prj-pill{height:36px;padding:0 14px}
-  .prj-pill.prj-icon{width:36px}
-  .prj-go{height:36px !important;padding:0 20px !important}
-}
-
-.prj-pill{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 11px;border-radius:999px;
-  font-size:var(--fs-meta);cursor:pointer;white-space:nowrap;user-select:none;color:var(--text-dim);
-  border:1px solid var(--border);background:rgba(177,186,196,.03);
-  transition:color .15s,border-color .15s,background .15s}
-:where(html[data-pointer="fine"]) .prj-pill:hover{color:var(--text-bright);border-color:var(--text-dim)}
-.prj-pill.on{color:var(--accent);border-color:var(--accent-border);background:var(--accent-soft)}
-.prj-pill.dis{opacity:.4;cursor:not-allowed}
+/* 「开干」是这张卡的主动作，但它得带着字——「发送一句话」看箭头就懂，
+   「按这些选项建一个会话」不写字没人知道按下去会发生什么。 */
+.prj-go{height:26px !important;border-radius:var(--r-pill) !important;padding:0 16px !important;font-weight:600}
+@media (pointer:coarse){ .prj-go{height:36px !important;padding:0 20px !important} }
 
 /* 项目头 64 / Tabs 40，两者 sticky（14 §6.2）：往下翻任务流时「我在哪个项目、
    要新建什么、在看哪个 tab」始终在手边 */
@@ -1387,7 +1357,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
         </div>
 
         {/* Composer（hero）：需求 ⏎ 开干 */}
-        <div ref={composerRef} className="prj-composer prj-in" style={{ animationDelay: '60ms' }}>
+        <div ref={composerRef} className="tt-composer prj-in" style={{ animationDelay: '60ms' }}>
           <Input.TextArea ref={promptRef} value={prompt} onChange={(e) => setPrompt(e.target.value)}
             placeholder={isGit ? t('project.composerPlaceholder') : t('project.composerPlain')} autoSize={{ minRows: 2, maxRows: 6 }} variant="borderless"
             onPaste={onPasteComposer}
@@ -1399,23 +1369,24 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
               分组一律用间距，不画线（设计 17 §5.3 同一条规矩）。
               「基于哪个分支」「已有 worktree」也做成 pill 形下拉：一条工具条只有一种
               控件长相，antd 的 Select 方框混在圆角 pill 里，高度和形状都对不上。 */}
-          <div className="prj-cbar">
+          <div className="tt-cbar">
             {isGit && (
-              <span className="prj-cgrp">
-                <span className={`prj-pill${wtMode === 'new' ? ' on' : ''}`} onClick={() => setWtMode('new')}><BranchIcon size={11} />{t('project.where.new')}</span>
-                <span className={`prj-pill${wtMode === 'repo' ? ' on' : ''}`} onClick={() => setWtMode('repo')}>{t('project.where.repo')}</span>
-                <span className={`prj-pill${wtMode === 'existing' ? ' on' : ''}${wts.length ? '' : ' dis'}`}
-                  onClick={() => { if (wts.length) setWtMode('existing') }}>{t('project.where.existing', { count: wts.length })}</span>
+              <span className="tt-cgrp">
+                {/* pill 一律是真按钮：<span onClick> 聚不上焦、键盘按不动，长得也不像能点 */}
+                <button type="button" className={`tt-pill${wtMode === 'new' ? ' on' : ''}`} aria-pressed={wtMode === 'new'} onClick={() => setWtMode('new')}><BranchIcon size={11} />{t('project.where.new')}</button>
+                <button type="button" className={`tt-pill${wtMode === 'repo' ? ' on' : ''}`} aria-pressed={wtMode === 'repo'} onClick={() => setWtMode('repo')}>{t('project.where.repo')}</button>
+                <button type="button" className={`tt-pill${wtMode === 'existing' ? ' on' : ''}`} aria-pressed={wtMode === 'existing'}
+                  disabled={!wts.length} onClick={() => setWtMode('existing')}>{t('project.where.existing', { count: wts.length })}</button>
                 {wtMode === 'existing' && (
                   <Dropdown trigger={['click']} menu={{
                     selectedKeys: [wtPath],
                     items: wts.map((w: any) => ({ key: w.path, label: w.branch || w.path.split('/').pop(), onClick: () => setWtPath(w.path) })),
                   }}>
-                    <span className="prj-pill prj-sel" title={t('session.wt.pickExisting')}>
+                    <button type="button" className="tt-pill sel" title={t('session.wt.pickExisting')}>
                       <BranchIcon size={11} />
                       <b>{wts.find((w: any) => w.path === wtPath)?.branch || wtPath.split('/').pop() || '—'}</b>
                       <ChevronDown size={10} />
-                    </span>
+                    </button>
                   </Dropdown>
                 )}
                 {/* 「基于」：本地 + 远端分支就地可选（远端编码成 remote:<remote>:<branch>） */}
@@ -1429,33 +1400,35 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
                         children: remoteBranches.map((r) => ({ key: `remote:${r.remote}:${r.name}`, label: `${r.remote}/${r.name}`, onClick: () => setBase(`remote:${r.remote}:${r.name}`) })) }] : []),
                     ],
                   }}>
-                    <span className="prj-pill prj-sel" title={t('session.wt.base')}>
+                    <button type="button" className="tt-pill sel" title={t('session.wt.base')}>
                       {t('project.basedOnShort')}
                       <b>{baseLabel}</b>
                       <ChevronDown size={10} />
-                    </span>
+                    </button>
                   </Dropdown>
                 )}
               </span>
             )}
-            <span className="prj-cgrp">
-              <span className={`prj-pill${agent === 'claude' ? ' on' : ''}`} onClick={() => setAgent('claude')}>Claude</span>
-              <span className={`prj-pill${agent === 'codex' ? ' on' : ''}`} onClick={() => setAgent('codex')}>Codex</span>
-              <span className={`prj-pill${agent === 'none' ? ' on' : ''}`} onClick={() => setAgent('none')}>{t('project.agent.none')}</span>
-              {/* 互审是开关不是三选一，跟 agent 组隔开一档 */}
-              {agent !== 'none' && (
-                <span className={`prj-pill prj-toggle${autoReview ? ' on' : ''}`} title={t('session.autoReviewTip')}
-                  onClick={() => setAutoReview((v) => !v)}>
-                  {autoReview ? <CheckIcon size={11} /> : <CircleIcon size={11} />}{t('session.autoReview')}
-                </span>
-              )}
+            <span className="tt-cgrp">
+              <button type="button" className={`tt-pill${agent === 'claude' ? ' on' : ''}`} aria-pressed={agent === 'claude'} onClick={() => setAgent('claude')}>Claude</button>
+              <button type="button" className={`tt-pill${agent === 'codex' ? ' on' : ''}`} aria-pressed={agent === 'codex'} onClick={() => setAgent('codex')}>Codex</button>
+              <button type="button" className={`tt-pill${agent === 'none' ? ' on' : ''}`} aria-pressed={agent === 'none'} onClick={() => setAgent('none')}>{t('project.agent.none')}</button>
             </span>
-            {/* 动作组贴右：📎 和「开干」都是动作，跟左边那些「怎么干」的选项分开 */}
-            <span className="prj-cend">
-              <span className="prj-pill prj-icon" title={t('project.attachImage')}
-                onClick={() => { if (!uploading) fileRef.current?.click() }}>
-                <PaperclipIcon size={13} />
+            {/* 互审是开关不是三选一，自成一组——组间 16 的间距就是那道"隔开一档" */}
+            {agent !== 'none' && (
+              <span className="tt-cgrp">
+                <button type="button" className={`tt-pill${autoReview ? ' on' : ''}`} title={t('session.autoReviewTip')}
+                  aria-pressed={autoReview} onClick={() => setAutoReview((v) => !v)}>
+                  {autoReview ? <CheckIcon size={11} /> : <CircleIcon size={11} />}{t('session.autoReview')}
+                </button>
               </span>
+            )}
+            {/* 动作组贴右：📎 和「开干」都是动作，跟左边那些「怎么干」的选项分开 */}
+            <span className="tt-cend">
+              <button type="button" className="tt-pill ico" title={t('project.attachImage')} aria-label={t('project.attachImage')}
+                disabled={uploading} onClick={() => fileRef.current?.click()}>
+                <PaperclipIcon size={13} />
+              </button>
               <Button type="primary" size="small" className="prj-go" loading={creating} onClick={goCreate}>{t('project.go')}</Button>
             </span>
           </div>
