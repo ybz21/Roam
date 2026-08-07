@@ -30,7 +30,9 @@ function walk(dir, out = []) {
     const path = join(dir, name)
     const st = statSync(path)
     if (st.isDirectory()) walk(path, out)
-    else if (/\.(ts|tsx)$/.test(name)) out.push(path)
+    // 测试里的中文是**被测数据**，不是要发布的界面文案：一条中文输入法的用例，
+    // 断言里必须有中文才测得动。把它们也算进来，等于逼着测试去演一遍英文。
+    else if (/\.(ts|tsx)$/.test(name) && !/\.test\.tsx?$/.test(name)) out.push(path)
   }
   return out
 }

@@ -168,6 +168,21 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
     finally { setSending(false) }
   }
 
+  /**
+   * 回车发送——但输入法正在组合时那记回车是「上屏候选词」，不是「发送」。
+   *
+   * 不挡的话：打一句中文按回车上屏，消息当场就发出去了，而且缺了还没上屏的那半截；
+   * send() 清的是 React 态，浏览器随后把组合前的值写回 DOM，于是刚粘贴的那段文件路径
+   * 又冒回输入框里（看着像"又粘了一遍"）。keyCode 229 是 Chrome 组合态的老写法，
+   * 跟 isComposing 一起判，两代浏览器都盖住。
+   */
+  const onEnter = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const ne = e.nativeEvent as KeyboardEvent
+    if (e.shiftKey || ne.isComposing || ne.keyCode === 229) return
+    e.preventDefault()
+    send()
+  }
+
   // 中断生成：向会话注入 Escape（Claude / Codex 都按 Esc 打断当前回合）
   const stop = () => { api('POST', `/sessions/${encodeURIComponent(name)}/keys`, { keys: ['Escape'] }).catch(() => {}) }
 
@@ -269,7 +284,7 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
               <Input.TextArea
                 value={input} onChange={(e) => setInput(e.target.value)}
                 autoSize={{ minRows: 1, maxRows: 6 }} placeholder={placeholder}
-                onPressEnter={(e) => { if (!e.shiftKey) { e.preventDefault(); send() } }}
+                onPressEnter={onEnter}
                 onPaste={onPaste}
               />
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -286,7 +301,7 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
               <Input.TextArea
                 value={input} onChange={(e) => setInput(e.target.value)}
                 autoSize={{ minRows: 1, maxRows: 5 }} placeholder={placeholder}
-                onPressEnter={(e) => { if (!e.shiftKey) { e.preventDefault(); send() } }}
+                onPressEnter={onEnter}
                 onPaste={onPaste}
               />
               {busy && <Button danger title={t('chat.stopTitle')} onClick={stop} icon={<StopIcon size={11} />}>{t('chat.stop')}</Button>}
