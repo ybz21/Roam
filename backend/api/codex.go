@@ -25,13 +25,7 @@ import (
 // cmdlineHasCodex 判断进程命令行是否是交互式 codex CLI。
 // 排除 codex-web（ttmux 自身）、mcp-server（Claude Code 会把 codex 当 MCP server 启动）、
 // app-server（Codex 桌面端/VS Code 插件的后台服务）。
-func cmdlineHasCodex(pid int) bool {
-	cl := processCmdline(pid)
-	return strings.Contains(cl, "codex") &&
-		!strings.Contains(cl, "codex-web") &&
-		!strings.Contains(cl, "mcp-server") &&
-		!strings.Contains(cl, "app-server")
-}
+func cmdlineHasCodex(pid int) bool { return argvIsCodex(processArgv(pid)) }
 
 func codexSessionsRoot() string {
 	home, _ := os.UserHomeDir()
