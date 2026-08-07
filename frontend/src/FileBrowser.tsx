@@ -17,6 +17,7 @@ import {
   FolderUpIcon, ForwardIcon, IconButton, ListIcon, NewFolderIcon, RefreshIcon, SearchIcon, SortIcon, TreeIcon, UploadIcon,
 } from './file-icons'
 import { Viewer } from './fileview'
+import { requestInspectorWidth } from './shell/inspector'
 import { ArrowUp } from './icons'
 
 interface Entry { name: string; dir: boolean; size: number; mtime: number; ctime: number }
@@ -335,6 +336,7 @@ const TREE_MIN = 180        // 树再窄就只剩省略号
 const TREE_MAX = 480
 const TREE_DEFAULT = 260
 const PREVIEW_MIN = 280     // 预览再窄读不了代码
+const PREVIEW_WANT = 560    // 「够读」的预览：80 列等宽正文 + 两侧留白，点开文件时按这个要列宽
 const SPLIT_MIN = TREE_MIN + PREVIEW_MIN + 5   // 面板窄于此只显示一栏
 
 export default function FileBrowser({
@@ -752,6 +754,17 @@ export default function FileBrowser({
       onEnd: () => localStorage.setItem('ttmux.fileTreeW', String(treeWRef.current)),
     })
   }
+
+  /**
+   * 点开文件就把这一列拉到「够读」——420 的默认列宽分完两栏只剩两百出头的预览，
+   * 分栏等于白做。只加宽不缩窄：用户自己拖出来的更宽值一直算数（见 inspector.ts）。
+   * 关掉预览把请求撤回（归 0），下次再开才会重新算。
+   */
+  useEffect(() => {
+    if (layout !== 'dock') return
+    requestInspectorWidth(view ? treeW + 5 + PREVIEW_WANT : 0)
+  }, [view, layout, treeW])
+  useEffect(() => () => requestInspectorWidth(0), [])
 
   // 对话里点了文件名 → 在这个浏览器里打开它：先把树导航到它所在目录，再开预览。
   // 走 openPath 而不是直接 setView：不 navigate 的话左边的树还停在别处，

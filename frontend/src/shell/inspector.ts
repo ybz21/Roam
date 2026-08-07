@@ -68,10 +68,33 @@ export function useInspectorOpen(): boolean {
   return useSyncExternalStore(subscribe, () => stack.length > 0, () => false)
 }
 
+/**
+ * 面板内部要求「这一列至少这么宽」。
+ *
+ * 文件抽屉里点开一个文件会分成两栏，而 420 的默认列宽分完只剩两百出头的预览——
+ * 读不了代码，等于这个分栏白做。面板自己知道要多宽，但列宽在 Shell 手里，
+ * 于是走这条与槽位同样的模块级小道（别为这一个数把 setInspectorWidth 一路 prop 下去）。
+ *
+ * 只加宽不缩窄：用户拖出来的更宽值一直算数，收起预览也不把列缩回去——
+ * 面板宽度是他的选择，不该被开合文件反复改。
+ */
+let wantWidth = 0
+export function requestInspectorWidth(px: number) {
+  const next = Math.max(0, Math.round(px))
+  if (wantWidth === next) return
+  wantWidth = next
+  emit()
+}
+
+export function useInspectorWantWidth(): number {
+  return useSyncExternalStore(subscribe, () => wantWidth, () => 0)
+}
+
 /** 仅供测试 */
 export function resetInspector() {
   slot = null
   stack = []
   seq = 0
+  wantWidth = 0
   snap = { slot: null, top: 0 }
 }

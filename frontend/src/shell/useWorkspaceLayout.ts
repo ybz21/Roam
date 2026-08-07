@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLayout, type WindowSize } from '../layout'
 import { usePreferences, preferencesLoaded, saveWorkspace } from '../preferences'
-import { useInspectorOpen } from './inspector'
+import { useInspectorOpen, useInspectorWantWidth } from './inspector'
 
 /** 尺寸契约，与 index.css 的 --canvas-min / --dock-* 同源（14 §8.2）。 */
 export const CANVAS_MIN = 560
@@ -275,6 +275,14 @@ export function useWorkspaceLayout(hasTerms: boolean): WorkspaceLayout {
     setInsWidthLocal(clamped)
     saveWorkspace({ inspectorWidth: clamped })
   }, [insBounds])
+
+  // 面板自己要求的最小列宽（文件抽屉展开预览时）：只加宽，不缩窄。
+  // 只在真有这一列的档位生效——手机走全屏二级页，没有列，不该被它改掉这份偏好。
+  const wantInspector = useInspectorWantWidth()
+  useEffect(() => {
+    if (!splitCapable) return
+    if (wantInspector > 0 && wantInspector > inspectorWidth) setInspectorWidth(wantInspector)
+  }, [wantInspector, inspectorWidth, setInspectorWidth, splitCapable])
 
   const setNavCollapsed = useCallback((collapsed: boolean) => {
     hydrated.current = true
