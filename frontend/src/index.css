@@ -1277,6 +1277,10 @@ html[data-pointer="coarse"] .tt-act::after { content: ''; position: absolute; le
 .tt-composer:focus-within { border-color: var(--accent-border); box-shadow: 0 0 0 3px var(--accent-soft); }
 .tt-composer textarea { font-size: var(--fs-body) !important; line-height: 1.75 !important;
   padding: 10px 12px 4px !important; }
+/* 卡片自己已经用 :focus-within 表示"焦点在这儿"了，里面那个框不许再画一道：
+   两道圆角环套在一起，浅色主题下就是输入区里凭空多出一条边（深色底下也糊着一层）。 */
+.tt-composer .ant-input, .tt-composer textarea {
+  background: transparent; border: none; box-shadow: none !important; }
 
 /* 控制条：组内 6、组间 16，分组只靠间距不画线——换行之后竖分隔线会孤零零吊在行尾。
    一条工具条只有一种控件长相：全是 26 高的 pill，下拉也做成 pill 形。 */
