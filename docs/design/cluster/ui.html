@@ -1,0 +1,888 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Roam · 多机管理（视觉设计 v0.2）</title>
+<style>
+/* ── 令牌：直接取 frontend/src/theme.tsx 的真值，稿子和成品同源 ───────────── */
+:root {
+  --bg-base:#0d1117; --bg-container:#161b22; --bg-elevated:#1b222b; --bg-term:#06090d;
+  --border:#30363d; --border-subtle:#21262d;
+  --text-bright:#e6edf3; --text-dim:#8b949e; --text-dimmer:#6e7681;
+  --accent:#58a6ff; --accent-solid:#1f6feb; --accent-soft:rgba(31,111,235,.14); --accent-border:rgba(88,166,255,.45);
+  --ok:#3fb950; --ok-solid:#238636; --ok-soft:rgba(63,185,80,.14); --ok-border:rgba(63,185,80,.42);
+  --danger:#f85149; --danger-soft:rgba(248,81,73,.12); --danger-border:rgba(248,81,73,.40);
+  --warn:#d29922; --warn-soft:rgba(210,153,34,.12); --warn-border:rgba(210,153,34,.40);
+  --list-hover:rgba(255,255,255,.025);
+  --fs-micro:11px; --fs-meta:12px; --fs-sm:13px; --fs-body:14px; --fs-lg:16px; --fs-title:22px;
+  --r-xs:6px; --r-sm:10px; --r-card:14px; --r-pill:999px;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+html[data-theme="light"] {
+  --bg-base:#f6f8fa; --bg-container:#ffffff; --bg-elevated:#ffffff; --bg-term:#ffffff;
+  --border:#d0d7de; --border-subtle:#e6e9ec;
+  --text-bright:#1f2328; --text-dim:#57606a; --text-dimmer:#8c959f;
+  --accent:#0969da; --accent-solid:#1f6feb; --accent-soft:rgba(31,111,235,.10); --accent-border:rgba(31,111,235,.40);
+  --ok:#1a7f37; --ok-solid:#1f883d; --ok-soft:rgba(31,136,61,.10); --ok-border:rgba(31,136,61,.40);
+  --danger:#cf222e; --danger-soft:rgba(207,34,46,.09); --danger-border:rgba(207,34,46,.35);
+  --warn:#9a6700; --warn-soft:rgba(154,103,0,.10); --warn-border:rgba(154,103,0,.35);
+  --list-hover:rgba(27,31,36,.04);
+}
+* { box-sizing:border-box; }
+html { background:#07090d; }
+html[data-theme="light"] { background:#eef1f5; }
+body {
+  margin:0; color:var(--text-bright);
+  font:var(--fs-body)/1.6 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+svg { display:block; }
+button { font:inherit; cursor:pointer; }
+
+.top {
+  position:sticky; top:0; z-index:20;
+  display:flex; align-items:center; gap:var(--sp-3);
+  padding:10px clamp(16px,3vw,40px);
+  background:color-mix(in srgb, var(--bg-base) 84%, transparent);
+  border-bottom:1px solid var(--border-subtle); backdrop-filter:blur(18px);
+}
+.top .kicker { font-size:var(--fs-micro); letter-spacing:.14em; text-transform:uppercase; color:var(--text-dimmer); }
+.top h1 { margin:0; font-size:var(--fs-sm); font-weight:600; }
+.top .sp { flex:1; }
+.tbtn {
+  border:1px solid var(--border); background:var(--bg-container); color:var(--text-dim);
+  border-radius:var(--r-pill); padding:5px 14px; font-size:var(--fs-meta);
+}
+.tbtn:hover { color:var(--text-bright); border-color:var(--accent-border); }
+
+.wrap { max-width:1080px; margin:0 auto; padding:34px clamp(16px,3vw,40px) 110px; }
+h2 { margin:56px 0 6px; padding-top:26px; font-size:var(--fs-lg); font-weight:600; border-top:1px solid var(--border-subtle); }
+h2:first-of-type { margin-top:8px; border-top:0; padding-top:0; }
+h3 { margin:28px 0 8px; font-size:var(--fs-sm); font-weight:600; color:var(--text-bright); }
+.lede { max-width:78ch; margin:0 0 18px; color:var(--text-dim); font-size:var(--fs-sm); line-height:1.9; }
+.lede b { color:var(--text-bright); font-weight:600; }
+.lede code, li code, td code, p code {
+  font:var(--fs-meta)/1.4 var(--mono); background:var(--list-hover);
+  border:1px solid var(--border-subtle); border-radius:4px; padding:1px 5px; color:var(--text-bright);
+}
+ul.pts, ol.pts { max-width:78ch; margin:0 0 18px; padding-left:20px; color:var(--text-dim); font-size:var(--fs-sm); line-height:1.9; }
+ul.pts b, ol.pts b { color:var(--text-bright); }
+table { width:100%; border-collapse:collapse; margin:6px 0 22px; font-size:var(--fs-meta); }
+th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border-subtle); vertical-align:top; }
+th { color:var(--text-dimmer); font-weight:600; font-size:var(--fs-micro); text-transform:uppercase; letter-spacing:.08em; }
+td { color:var(--text-dim); } td b { color:var(--text-bright); font-weight:600; }
+td code { white-space:nowrap; }
+.cap { display:flex; align-items:center; gap:var(--sp-2); margin:24px 0 8px; font-size:var(--fs-meta); color:var(--text-dimmer); }
+.cap b { color:var(--text-bright); font-size:var(--fs-sm); font-weight:600; }
+.pill { font-size:var(--fs-micro); padding:1px 8px; border-radius:var(--r-pill); border:1px solid var(--border); color:var(--text-dimmer); white-space:nowrap; }
+.pill.bad { color:var(--danger); border-color:var(--danger-border); background:var(--danger-soft); }
+.pill.good { color:var(--ok); border-color:var(--ok-border); background:var(--ok-soft); }
+.pill.new { color:var(--accent); border-color:var(--accent-border); background:var(--accent-soft); }
+.note { border-left:2px solid var(--accent); background:var(--accent-soft); padding:10px 14px; border-radius:0 var(--r-xs) var(--r-xs) 0; color:var(--text-dim); font-size:var(--fs-meta); line-height:1.8; max-width:78ch; margin:14px 0 22px; }
+.note b { color:var(--text-bright); }
+.note.warn { border-left-color:var(--warn); background:var(--warn-soft); }
+.note.ok { border-left-color:var(--ok); background:var(--ok-soft); }
+pre.code {
+  margin:8px 0 22px; padding:14px 16px; overflow:auto;
+  border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-base);
+  font:var(--fs-meta)/1.7 var(--mono); color:var(--text-dim);
+}
+pre.code b { color:var(--text-bright); } pre.code i { color:var(--accent); font-style:normal; }
+pre.code s { color:var(--text-dimmer); text-decoration:none; }
+pre.code u { color:var(--ok); text-decoration:none; }
+
+/* ══ 机器身份：双字母方章 + 三态点（本稿的核心构件） ═══════════════════ */
+.nmk {
+  display:inline-grid; place-items:center; flex:0 0 auto;
+  width:20px; height:20px; border-radius:var(--r-xs);
+  border:1px solid var(--border); background:var(--bg-elevated);
+  font:600 9px/1 var(--mono); color:var(--text-dim); letter-spacing:.02em;
+  white-space:nowrap; overflow:hidden;
+}
+/* 单个汉字撑得起整格，两个拉丁字母才需要缩到 9px —— 所以字号跟着内容走 */
+.nmk[data-cjk] { font:600 12px/1 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif; }
+.nmk.sm { width:16px; height:16px; border-radius:5px; font-size:8px; }
+.nmk.sm[data-cjk] { font-size:10px; }
+.nmk.lg { width:28px; height:28px; border-radius:var(--r-xs); font-size:12px; }
+.nmk.lg[data-cjk] { font-size:17px; }
+.nmk.cur { color:var(--accent); border-color:var(--accent-border); background:var(--accent-soft); }
+.nmk.off { color:var(--text-dimmer); border-style:dashed; background:transparent; }
+.dot { width:7px; height:7px; border-radius:50%; background:var(--ok); flex:0 0 auto; display:inline-block; }
+.dot.warn { background:var(--warn); } .dot.off { background:var(--text-dimmer); } .dot.bad { background:var(--danger); }
+
+/* ══ 通用「屏」外框 ══════════════════════════════════════════════════ */
+.screen { border:1px solid var(--border); border-radius:var(--r-sm); overflow:hidden; background:var(--bg-base); }
+.stack { display:flex; flex-wrap:wrap; gap:var(--sp-4); align-items:flex-start; }
+.stack > figure { margin:0; flex:1 1 320px; min-width:300px; }
+.stack figcaption { margin-top:var(--sp-2); font-size:var(--fs-meta); color:var(--text-dimmer); line-height:1.7; }
+.stack figcaption b { color:var(--text-bright); }
+
+/* ══ 桌面外壳线框 ═══════════════════════════════════════════════════ */
+.shell { display:flex; height:360px; font-size:var(--fs-meta); }
+.shell .rail { width:64px; flex:0 0 64px; border-right:1px solid var(--border-subtle); display:flex; flex-direction:column; align-items:center; padding:8px 0; gap:6px; }
+.shell .rail .logo { width:30px; height:30px; border-radius:8px; background:linear-gradient(135deg,#1f6feb,#3fb950); margin-bottom:6px; }
+.shell .rail .ic { width:34px; height:34px; border-radius:8px; display:grid; place-items:center; color:var(--text-dimmer); }
+.shell .rail .ic.on { color:var(--accent); background:var(--accent-soft); box-shadow:inset 2px 0 0 var(--accent); }
+.shell .rail .sp { flex:1; }
+.shell .main { flex:1; min-width:0; display:flex; flex-direction:column; }
+.shell .tbar { height:40px; flex:0 0 40px; border-bottom:1px solid var(--border-subtle); display:flex; align-items:center; gap:8px; padding:0 10px; }
+.shell .tbar .sbox { flex:0 1 320px; height:26px; border-radius:var(--r-xs); background:var(--bg-elevated); display:flex; align-items:center; gap:6px; padding:0 8px; color:var(--text-dimmer); font-size:var(--fs-micro); }
+.shell .tbar .grow { flex:1; }
+.shell .tbar .cbtn { height:26px; padding:0 10px; border-radius:var(--r-xs); background:var(--accent-solid); color:#fff; display:inline-flex; align-items:center; gap:5px; font-size:var(--fs-micro); }
+.shell .body { flex:1; display:flex; min-height:0; }
+.shell .canvas { flex:1; min-width:0; padding:12px; display:flex; flex-direction:column; gap:10px; }
+.shell .dock { width:180px; flex:0 0 180px; border-left:1px solid var(--border-subtle); background:var(--bg-term); display:flex; flex-direction:column; }
+.shell .ghost { border:1px dashed var(--border); border-radius:var(--r-sm); flex:1; display:grid; place-items:center; color:var(--text-dimmer); font-size:var(--fs-micro); }
+
+/* 侧栏底座（本稿改动点） */
+.foot { width:100%; padding:6px; display:flex; flex-direction:column; gap:4px; border-top:1px solid var(--border-subtle); }
+.navbtn { display:flex; align-items:center; gap:8px; width:100%; height:34px; padding:0 8px; border-radius:var(--r-sm); color:var(--text-dim); background:transparent; border:0; font-size:var(--fs-meta); text-align:left; }
+.navbtn .nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.navbtn.node { background:var(--bg-elevated); }
+.navbtn.node.hi { outline:1px solid var(--accent-border); }
+.navbtn .cnt { font-size:var(--fs-micro); color:var(--text-dimmer); }
+.railnode { position:relative; width:34px; height:34px; border-radius:8px; display:grid; place-items:center; background:var(--bg-elevated); }
+.railnode .dot { position:absolute; right:1px; bottom:1px; box-shadow:0 0 0 2px var(--bg-base); }
+
+/* 机器选择弹层（复用 ⌘K 面板的列表语言） */
+.pick { width:300px; border:1px solid var(--border); border-radius:var(--r-card); background:var(--bg-elevated); box-shadow:0 20px 48px rgba(1,4,9,.55); overflow:hidden; }
+html[data-theme="light"] .pick { box-shadow:0 20px 48px rgba(140,149,159,.28); }
+.pick .hd { display:flex; align-items:center; gap:8px; padding:9px 12px; border-bottom:1px solid var(--border-subtle); color:var(--text-dimmer); font-size:var(--fs-meta); }
+.pick .gl { padding:8px 12px 4px; font-size:var(--fs-micro); letter-spacing:.08em; text-transform:uppercase; color:var(--text-dimmer); }
+.pick .row { display:flex; align-items:center; gap:9px; padding:7px 12px; font-size:var(--fs-meta); color:var(--text-dim); }
+.pick .row .nm { flex:1; min-width:0; color:var(--text-bright); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pick .row .mt { font-size:var(--fs-micro); color:var(--text-dimmer); font-family:var(--mono); }
+.pick .row.on { background:var(--accent-soft); box-shadow:inset 2px 0 0 var(--accent); }
+.pick .row.dis { opacity:.5; }
+.pick .ft { display:flex; gap:6px; padding:8px 10px; border-top:1px solid var(--border-subtle); }
+.act { display:inline-flex; align-items:center; gap:5px; height:26px; padding:0 10px; border:1px solid var(--border); border-radius:var(--r-xs); background:transparent; color:var(--text-dim); font-size:var(--fs-micro); }
+.act.danger { color:var(--danger); border-color:var(--danger-border); }
+.act.pri { background:var(--accent-solid); border-color:transparent; color:#fff; }
+
+/* 页头 */
+.phead { padding:14px 16px 12px; border-bottom:1px solid var(--border-subtle); }
+.phead .kick { display:flex; align-items:center; gap:6px; font-size:var(--fs-micro); letter-spacing:.1em; text-transform:uppercase; color:var(--text-dimmer); margin-bottom:5px; }
+.phead .chip { display:inline-flex; align-items:center; gap:5px; padding:2px 7px 2px 4px; border:1px solid var(--border); border-radius:var(--r-pill); color:var(--text-dim); letter-spacing:0; text-transform:none; font-size:var(--fs-micro); }
+.phead .chip.warn { border-color:var(--warn-border); background:var(--warn-soft); color:var(--warn); }
+.phead h4 { margin:0; font-size:var(--fs-lg); font-weight:600; }
+.phead p { margin:3px 0 0; font-size:var(--fs-meta); color:var(--text-dim); }
+
+/* 终端标签条 */
+.tabs { display:flex; background:var(--bg-container); border-bottom:1px solid var(--border-subtle); overflow:hidden; }
+.tabs .tb { display:flex; align-items:center; gap:6px; padding:7px 10px; font-size:var(--fs-meta); color:var(--text-dim); border-right:1px solid var(--border-subtle); white-space:nowrap; }
+.tabs .tb.on { background:var(--bg-term); color:var(--text-bright); box-shadow:inset 0 -2px 0 var(--accent); }
+.tabs .tb .pj { color:var(--text-dimmer); }
+.termhd { display:flex; align-items:center; gap:8px; padding:6px 10px; background:var(--bg-term); border-bottom:1px solid var(--border-subtle); font-size:var(--fs-micro); color:var(--text-dim); }
+.termbody { background:var(--bg-term); padding:10px; font:var(--fs-micro)/1.7 var(--mono); color:var(--text-dimmer); }
+
+/* 机器卡片墙 */
+.grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:var(--sp-3); padding:var(--sp-3); }
+.ncard { border:1px solid var(--border); border-radius:var(--r-card); background:var(--bg-container); padding:12px; display:flex; flex-direction:column; gap:9px; }
+.ncard .hd { display:flex; align-items:center; gap:9px; }
+.ncard .hd .nm { flex:1; min-width:0; font-size:var(--fs-sm); font-weight:600; color:var(--text-bright); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ncard .sub { font-size:var(--fs-micro); color:var(--text-dimmer); font-family:var(--mono); }
+.ncard .mrow { display:flex; gap:14px; font-size:var(--fs-micro); color:var(--text-dim); }
+.ncard .mrow b { display:block; color:var(--text-bright); font-size:var(--fs-sm); font-weight:600; }
+.ncard .ops { display:flex; gap:6px; flex-wrap:wrap; padding-top:2px; }
+.ncard.offline { opacity:.62; }
+.ncard.self { border-color:var(--accent-border); }
+
+/* ⌘K 面板 */
+.pal { width:100%; border:1px solid var(--border); border-radius:var(--r-card); background:var(--bg-elevated); overflow:hidden; }
+.pal .in { display:flex; align-items:center; gap:9px; padding:11px 14px; border-bottom:1px solid var(--border-subtle); color:var(--text-bright); font-size:var(--fs-sm); }
+.pal .gl { padding:9px 14px 4px; font-size:var(--fs-micro); letter-spacing:.08em; text-transform:uppercase; color:var(--text-dimmer); }
+.pal .row { display:flex; align-items:center; gap:9px; padding:7px 14px; font-size:var(--fs-meta); color:var(--text-dim); }
+.pal .row .nm { flex:1; color:var(--text-bright); }
+.pal .row.on { background:var(--accent-soft); }
+.pal kbd { font:var(--fs-micro)/1 var(--mono); border:1px solid var(--border); border-radius:4px; padding:2px 5px; color:var(--text-dimmer); }
+
+/* 手机机身 */
+.phones { display:flex; flex-wrap:wrap; gap:var(--sp-5); justify-content:center; margin:14px 0 8px; }
+.phone { width:320px; flex:0 0 auto; border:8px solid #1b222b; border-radius:30px; overflow:hidden; background:var(--bg-base); box-shadow:0 18px 48px rgba(1,4,9,.5); }
+html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px rgba(140,149,159,.28); }
+.phone-notch { height:20px; background:var(--bg-container); display:flex; align-items:center; justify-content:center; }
+.phone-notch i { width:60px; height:5px; border-radius:var(--r-pill); background:var(--border); display:block; }
+.phone-stage { height:380px; display:flex; flex-direction:column; min-height:0; }
+.phone-tag { text-align:center; margin-top:var(--sp-2); font-size:var(--fs-meta); color:var(--text-dim); }
+.phone-tag b { color:var(--text-bright); }
+.pbody { flex:1; min-height:0; overflow:hidden; padding:10px; display:flex; flex-direction:column; gap:8px; }
+.pcard { border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-container); padding:9px 10px; font-size:var(--fs-meta); color:var(--text-dim); }
+.sessdock { display:flex; align-items:center; gap:7px; padding:8px 10px; border-top:1px solid var(--border); background:var(--bg-container); font-size:var(--fs-meta); color:var(--text-bright); }
+.bottomnav { display:flex; border-top:1px solid var(--border); background:var(--bg-container); }
+.bottomnav span { flex:1; text-align:center; padding:6px 0 8px; font-size:9px; color:var(--text-dimmer); }
+.bottomnav span.on { color:var(--accent); }
+.bottomnav i { display:block; margin:0 auto 3px; width:15px; height:15px; border-radius:4px; border:1.5px solid currentColor; }
+.sheet { border-top:1px solid var(--border); background:var(--bg-elevated); border-radius:var(--r-card) var(--r-card) 0 0; padding:8px 0 6px; }
+.sheet .gr { padding:8px 14px 4px; font-size:var(--fs-micro); text-transform:uppercase; letter-spacing:.08em; color:var(--text-dimmer); }
+.sheet .row { display:flex; align-items:center; gap:10px; padding:11px 14px; font-size:var(--fs-sm); color:var(--text-bright); }
+.sheet .row .mt { font-size:var(--fs-micro); color:var(--text-dimmer); font-family:var(--mono); }
+.sheet .row.on { background:var(--accent-soft); }
+.sheet .hd { display:flex; align-items:center; padding:4px 14px 8px; font-size:var(--fs-sm); font-weight:600; color:var(--text-bright); border-bottom:1px solid var(--border-subtle); }
+
+/* 对照：旧稿 vs 新稿 */
+.vs { display:grid; grid-template-columns:1fr 1fr; gap:var(--sp-4); }
+@media (max-width:760px) { .vs { grid-template-columns:1fr; } .shell { height:auto; } }
+.vs .h { display:flex; align-items:center; gap:8px; margin-bottom:var(--sp-2); font-size:var(--fs-meta); color:var(--text-dimmer); }
+.strike { text-decoration:line-through; text-decoration-color:var(--danger); }
+
+/* 弹窗 */
+.modal { width:100%; max-width:520px; border:1px solid var(--border); border-radius:var(--r-card); background:var(--bg-elevated); overflow:hidden; }
+.modal .hd { padding:12px 16px; border-bottom:1px solid var(--border-subtle); font-size:var(--fs-sm); font-weight:600; }
+.modal .bd { padding:14px 16px; font-size:var(--fs-meta); color:var(--text-dim); display:flex; flex-direction:column; gap:10px; }
+.modal .ft { padding:10px 16px; border-top:1px solid var(--border-subtle); display:flex; justify-content:flex-end; gap:8px; }
+.cmd { position:relative; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-base); padding:10px 12px; font:var(--fs-micro)/1.8 var(--mono); color:var(--text-dim); overflow:auto; }
+.cmd b { color:var(--text-bright); }
+.field { display:flex; flex-direction:column; gap:5px; }
+.field label { font-size:var(--fs-micro); color:var(--text-dimmer); }
+.field .box { height:30px; border:1px solid var(--border); border-radius:var(--r-xs); background:var(--bg-container); display:flex; align-items:center; padding:0 9px; font-size:var(--fs-meta); color:var(--text-bright); }
+
+/* 状态条 */
+.banner { display:flex; align-items:center; gap:9px; padding:8px 12px; font-size:var(--fs-meta); }
+.banner.warn { background:var(--warn-soft); border-bottom:1px solid var(--warn-border); color:var(--warn); }
+.banner .sp { flex:1; }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div>
+    <div class="kicker">Roam · Cluster · 视觉设计 v0.2</div>
+    <h1>多机管理 —— 一个入口管所有开发机</h1>
+  </div>
+  <span class="sp"></span>
+  <button class="tbtn" id="theme">切到浅色</button>
+</div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <g id="i-host" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8"/><path d="M12 16v4"/></g>
+  <g id="i-nodes" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/><path d="M7 6.5h.01M7 17.5h.01"/></g>
+  <g id="i-term" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="14" y1="4" x2="14" y2="20"/></g>
+  <g id="i-search" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></g>
+  <g id="i-plus" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></g>
+  <g id="i-chev" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></g>
+  <g id="i-grid" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></g>
+  <g id="i-folder" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></g>
+  <g id="i-globe" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 3 2.6 15 0 18M12 3c-2.6 3-2.6 15 0 18"/></g>
+  <g id="i-copy" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></g>
+  <g id="i-more" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></g>
+  <g id="i-warn" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/></g>
+</defs></svg>
+
+<div class="wrap">
+
+<h2>0. 一分钟看懂</h2>
+<p class="lede">
+  连了云端 Broker 之后，浏览器里多出一个 <b>当前机器</b> 的概念：左侧栏底座那枚「当前设备」按钮
+  变成机器切换器，页头的眉标行多一枚机器芯片，终端标签前面多一枚<b>机器方章</b>。
+  除此之外 <b>什么都没变</b>——没有新增顶栏、没有新增一层壳、没有第五支颜色。
+  没连 Broker 的单机用户，界面和今天像素级一致。
+</p>
+<ul class="pts">
+  <li><b>切机器 = 换浏览范围</b>：概览 / 项目 / 会话 / 文件 / Git / 浏览器 / 手机整体换到那台机器。</li>
+  <li><b>终端不跟着走</b>：已打开的终端各自钉在自己的机器上，带方章，切机器不关它们——那是正在跑的活。</li>
+  <li><b>机器身份只有两个锚点</b>：侧栏底座（我连着谁）和页头眉标（这一页是谁的）。多一处就是噪音，少一处就会误删。</li>
+</ul>
+
+<div class="note">
+  <b>本稿与 2026-07 那版（<code>docs/design/cluster/多机切换交互设计.md</code>）的关系</b>：
+  架构结论仍然有效，<b>界面结论全部作废</b>。那版写在 <code>App.tsx</code> 还是一个平铺 antd Menu、
+  手机还没有底栏六格、侧栏还没有轨态的时候；今天这三件都变了，照那版做会打架。
+  第 1 节逐条对照。
+</div>
+
+<h2>1. 旧稿的六条结论，为什么今天要重画</h2>
+<table>
+  <thead><tr><th style="width:22%">旧稿结论</th><th style="width:34%">今天的 UI 已经是什么样</th><th>新结论</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>切换器挂侧栏顶部</b>，Logo 正下方</td>
+      <td>侧栏<b>默认是 64px 轨态</b>（#182），顶部只剩一枚 34px 标；底座已经有一枚主机图标的
+        「当前设备」按钮（<code>shell/Navigation.tsx</code> 的 <code>.tt-nav-account</code>）</td>
+      <td><b>切换器就是底座那枚按钮</b>。它本来说的就是「你连着的这台机器」，多机后它终于有了名字。
+        顶部不动——那里是品牌，不是状态</td>
+    </tr>
+    <tr>
+      <td>手机加一条 <b>36px 常驻置顶细条</b></td>
+      <td>13 / 17 号设计<b>特意拆掉了手机顶栏</b>；底部已经是「六格 + 50px 会话坞」，
+        竖向空间是最贵的资源</td>
+      <td>不新增细条。机器进<b>页头眉标</b>（<code>.tt-pagehead .kicker</code>）成一枚可点芯片，
+        每页都有、一行不占</td>
+    </tr>
+    <tr>
+      <td>每台机器 <b>hash 出一个颜色</b>，标签左侧色点</td>
+      <td>AGENTS.md 硬规矩：<b>全站只有四支色</b>（蓝/绿/黄/红），且蓝绿各只有一支</td>
+      <td>机器<b>不给颜色</b>，给<b>机器方章</b>（<code>.tt-nodemark</code>，一个汉字或两个字母）。
+        颜色只留给状态：绿在线 / 黄降级 / 灰离线</td>
+    </tr>
+    <tr>
+      <td>标签文字 <code>公司·build</code></td>
+      <td>标签已经是两段式 <code>项目 · 会话</code>（<code>DockTitle</code>），
+        窄了先截项目名</td>
+      <td>不加第三段名字。<b>方章 + 原有两段</b>；机器全名进 <code>title</code> 和终端头部那一行</td>
+    </tr>
+    <tr>
+      <td><code>/nodes</code> 进常驻导航 <code>NAV</code></td>
+      <td>导航分「工作区 / 工具」两组；手机底栏六格已满，第七个只能落进「更多」</td>
+      <td><b>连了 Broker 才出现</b>在「工具」组；手机只在「更多」里。单机用户看不到这一项</td>
+    </tr>
+    <tr>
+      <td>跨机器总览留到 P3</td>
+      <td>概览页今天就是「战况页」（活跃项目作战卡）</td>
+      <td>概览加一个<b>「全部机器 / 当前机器」</b>切换（P2）——多机的价值一半在这一屏</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>2. 机器身份：一枚方章，三种状态</h2>
+<p class="lede">
+  多机界面最容易失控的地方是「给每台机器一个颜色」——四台机器四支色，
+  和状态色（绿在跑 / 黄等输入 / 红失败）在同一枚标签上打架，一眼分不清那个绿点说的是
+  「机器在线」还是「Agent 在跑」。所以本稿把两件事拆开：
+  <b>身份看形状（方章里的字），状态看颜色（点）</b>。
+</p>
+
+<div class="stack">
+  <figure>
+    <div class="screen" style="padding:16px;display:flex;flex-wrap:wrap;gap:18px;align-items:center;">
+      <span style="display:inline-flex;align-items:center;gap:7px"><span class="nmk cur" data-cjk>公</span><span style="font-size:var(--fs-meta);color:var(--text-dim)">当前</span></span>
+      <span style="display:inline-flex;align-items:center;gap:7px"><span class="nmk" data-cjk>家</span><span class="dot"></span></span>
+      <span style="display:inline-flex;align-items:center;gap:7px"><span class="nmk" data-cjk>云</span><span class="dot warn"></span></span>
+      <span style="display:inline-flex;align-items:center;gap:7px"><span class="nmk off" data-cjk>树</span><span class="dot off"></span></span>
+      <span style="display:inline-flex;align-items:center;gap:7px"><span class="nmk sm" data-cjk>公</span><span class="nmk" data-cjk>公</span><span class="nmk lg" data-cjk>公</span><span class="nmk lg">GB</span></span>
+    </div>
+    <figcaption><b>方章三档</b>：16（标签/会话坞）· 20（列表/页头）· 28（机器卡片）。
+      中文名取<b>第一个字</b>，拉丁名取<b>两个首字母</b>（<code>gpu-box</code> → <code>GB</code>）——
+      两个汉字在 16px 的格子里会换行，这是画出来才发现的。离线是虚线边 + 灰字，不是另一种颜色。</figcaption>
+  </figure>
+  <figure>
+    <div class="screen" style="padding:16px;">
+      <table style="margin:0">
+        <thead><tr><th>状态点</th><th>含义</th><th>令牌</th></tr></thead>
+        <tbody>
+          <tr><td><span class="dot"></span> 绿</td><td>在线，延迟正常（&lt; 150ms）</td><td><code>--ok</code></td></tr>
+          <tr><td><span class="dot warn"></span> 黄</td><td>降级：高延迟 / 正在重连 / 心跳超期</td><td><code>--warn</code></td></tr>
+          <tr><td><span class="dot off"></span> 灰</td><td>离线，不可选</td><td><code>--text-dimmer</code></td></tr>
+          <tr><td><span class="dot bad"></span> 红</td><td><b>只给「当前机器掉线」</b>这一种情况</td><td><code>--danger</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figcaption>四支色一支都没新增。红只在「你正在用的这台没了」时出现——
+      别的机器离线是灰，因为那不是一件需要你现在处理的事。</figcaption>
+  </figure>
+</div>
+
+<div class="note">
+  <b>为什么不用头像/图标区分机器</b>：机器数量是用户定的（2 台还是 20 台），
+  图标集不可能覆盖；而名字的头一个字是用户自己起的，认得最快，也永远够用。
+  重名（两台都叫「云…」）时在列表里追加 hostname 消歧，方章本身不去凑第二个字。
+  方章同时是 <code>/nodes</code> 卡片的图标、切换器的行首、终端标签的前缀——<b>同一个东西全站一个长相</b>。
+</div>
+
+<h2>3. 桌面：机器切换器长在侧栏底座</h2>
+<p class="lede">
+  底座今天从上到下是：P2P 链路状态 → 终端开关 → <b>当前设备</b> → 收起。
+  多机后「当前设备」这一行换成机器切换器：方章 + 名字 + 状态点，点开是机器列表。
+  设置 / 关于 / 主题 / 退出仍在同一个菜单的下半段——它们本来就挂在「这台设备」上。
+</p>
+
+<div class="cap"><b>整屏位置</b><span class="pill new">改动只在左下角那一枚</span></div>
+<div class="screen shell">
+  <div class="rail">
+    <div class="logo"></div>
+    <div class="ic on"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-grid"/></svg></div>
+    <div class="ic"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-folder"/></svg></div>
+    <div class="ic"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-term"/></svg></div>
+    <div class="ic"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-globe"/></svg></div>
+    <div class="ic"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-nodes"/></svg></div>
+    <div class="sp"></div>
+    <div class="foot" style="align-items:center">
+      <div class="railnode"><span class="nmk cur sm" data-cjk>公</span><span class="dot"></span></div>
+      <div class="navbtn" style="justify-content:center;padding:0"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-chev"/></svg></div>
+    </div>
+  </div>
+  <div class="main">
+    <div class="tbar">
+      <div class="sbox"><svg width="13" height="13" viewBox="0 0 24 24"><use href="#i-search"/></svg>搜索项目、会话、文件…</div>
+      <span class="grow"></span>
+      <span style="display:inline-flex;align-items:center;gap:6px;font-size:var(--fs-micro);color:var(--text-dim)"><span class="dot"></span>已连接</span>
+      <span class="cbtn"><svg width="12" height="12" viewBox="0 0 24 24"><use href="#i-plus"/></svg>新建</span>
+    </div>
+    <div class="body">
+      <div class="canvas">
+        <div class="phead" style="border:0;padding:0 0 10px">
+          <div class="kick"><span class="chip"><span class="nmk sm" data-cjk>公</span>公司工作站<svg width="11" height="11" viewBox="0 0 24 24"><use href="#i-chev"/></svg></span> · 工作区</div>
+          <h4>项目</h4>
+          <p>7 个项目 · 3 个待收尾</p>
+        </div>
+        <div class="ghost">项目卡片墙（内容随当前机器整体切换）</div>
+      </div>
+      <div class="dock">
+        <div class="tabs">
+          <div class="tb on"><span class="nmk sm" data-cjk>公</span><span class="pj">roam ·</span> build</div>
+          <div class="tb"><span class="nmk sm" data-cjk>云</span>train</div>
+        </div>
+        <div class="termhd"><span class="dot"></span>公司工作站 · roam · build</div>
+        <div class="termbody">$ npm run build<br>vite v5 building…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="stack" style="margin-top:26px">
+  <figure>
+    <div class="screen" style="width:224px;background:var(--bg-base)">
+      <div class="foot" style="border-top:0">
+        <div class="navbtn"><span class="dot"></span><span class="nm" style="font-size:var(--fs-micro)">直连 · 局域网</span></div>
+        <div class="navbtn"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-term"/></svg><span class="nm">终端</span><span class="cnt">2</span></div>
+        <div class="navbtn node hi"><span class="nmk cur" data-cjk>公</span><span class="nm" style="color:var(--text-bright)">公司工作站</span><span class="dot"></span><svg width="14" height="14" viewBox="0 0 24 24"><use href="#i-chev"/></svg></div>
+        <div class="navbtn"><svg width="18" height="18" viewBox="0 0 24 24" style="transform:rotate(180deg)"><use href="#i-chev"/></svg><span class="nm">收起</span></div>
+      </div>
+    </div>
+    <figcaption><b>展开态（224px）</b>：方章 + 全名 + 状态点 + 折角。
+      这一行替掉了原来的「当前设备 ⋯」。单机时它<b>原样保留</b>今天的长相（主机图标 + 「当前设备」）。</figcaption>
+  </figure>
+  <figure>
+    <div class="screen" style="width:64px;background:var(--bg-base)">
+      <div class="foot" style="border-top:0;align-items:center">
+        <div class="railnode" style="background:transparent"><span class="dot" style="position:static"></span></div>
+        <div class="railnode"><svg width="18" height="18" viewBox="0 0 24 24" style="color:var(--text-dim)"><use href="#i-term"/></svg><span class="dot" style="background:var(--accent)"></span></div>
+        <div class="railnode"><span class="nmk cur sm" data-cjk>公</span><span class="dot"></span></div>
+        <div class="railnode" style="background:transparent"><svg width="16" height="16" viewBox="0 0 24 24" style="color:var(--text-dimmer)"><use href="#i-chev"/></svg></div>
+      </div>
+    </div>
+    <figcaption><b>轨态（64px，今天的默认）</b>：方章直接当图标用，右下角叠状态点（外描 2px 底色，
+      免得点糊在方章边上）。Tooltip 给全名 + 延迟：<code>公司工作站 · 在线 12ms</code>。</figcaption>
+  </figure>
+</div>
+
+<div class="cap"><b>点开的机器选择弹层</b><span class="pill">复用 ⌘K 面板的列表语言，不是第二套下拉</span></div>
+<div class="stack">
+  <figure style="flex:0 0 auto">
+    <div class="pick">
+      <div class="hd"><svg width="13" height="13" viewBox="0 0 24 24"><use href="#i-search"/></svg>搜索机器…</div>
+      <div class="gl">机器 · 4</div>
+      <div class="row on"><span class="nmk cur" data-cjk>公</span><span class="nm">公司工作站</span><span class="mt">12ms</span><span class="dot"></span></div>
+      <div class="row"><span class="nmk" data-cjk>家</span><span class="nm">家里台式机</span><span class="mt">45ms</span><span class="dot"></span></div>
+      <div class="row"><span class="nmk" data-cjk>云</span><span class="nm">云 GPU 机</span><span class="mt">210ms</span><span class="dot warn"></span></div>
+      <div class="row dis"><span class="nmk off" data-cjk>树</span><span class="nm">树莓派</span><span class="mt">离线</span><span class="dot off"></span></div>
+      <div class="ft">
+        <span class="act"><svg width="12" height="12" viewBox="0 0 24 24"><use href="#i-nodes"/></svg>管理机器</span>
+        <span class="act"><svg width="12" height="12" viewBox="0 0 24 24"><use href="#i-plus"/></svg>添加</span>
+        <span style="flex:1"></span>
+        <span class="act"><svg width="12" height="12" viewBox="0 0 24 24"><use href="#i-more"/></svg></span>
+      </div>
+    </div>
+    <figcaption>行 = 方章 · 名字 · 延迟 · 状态点。延迟用等宽字体右对齐——
+      它是要横着比较的数，不是描述。离线行 <code>aria-disabled</code>，点了不换页只提示。</figcaption>
+  </figure>
+  <figure>
+    <ul class="pts" style="margin:0">
+      <li><b>超过 8 台就收</b>：只列最近用过的 6 台 + 「全部机器 →」，后者直接把 ⌘K 面板打开在
+        <code>&gt;机器</code> 过滤态。列表不做无限滚动——那是搜索的活。</li>
+      <li><b>底下三枚是操作不是导航</b>：用 <code>.tt-act</code> 幽灵钮，不是实心块。
+        整个弹层里没有实心块，因为「切到哪台」没有主次之分。</li>
+      <li><b>菜单下半段仍在</b>：设置 / 关于 / 主题 / 全屏 / 退出登录接在分隔线之下（退出保持 danger + 二次确认）。
+        它们本来就挂在「这台设备」上，位置一动不动，肌肉记忆不失效。</li>
+      <li><b>键盘</b>：<code>↑↓</code> 选，<code>Enter</code> 切，<code>Esc</code> 关；焦点回到触发按钮。</li>
+    </ul>
+  </figure>
+</div>
+
+<h2>4. 第二个锚点：页头眉标就是机器面包屑</h2>
+<p class="lede">
+  <code>.tt-pagehead</code> 的眉标行今天写的是「工作区」「工具」这类分组名——
+  信息量约等于零。多机后它变成 <b>机器芯片 · 分组名</b>：桌面手机同一个组件，
+  一次改动两端都有。这就是旧稿要为手机单独加一条 36px 细条的那个需求，
+  只是它其实已经有地方放了。
+</p>
+<div class="stack">
+  <figure>
+    <div class="screen"><div class="phead">
+      <div class="kick"><span class="chip"><span class="nmk sm" data-cjk>公</span>公司工作站<svg width="11" height="11" viewBox="0 0 24 24"><use href="#i-chev"/></svg></span> · 工作区</div>
+      <h4>文件</h4><p>/home/ai/codes/roam</p>
+    </div></div>
+    <figcaption>正常：芯片是 <code>&lt;button&gt;</code>，点开同一个机器选择弹层。</figcaption>
+  </figure>
+  <figure>
+    <div class="screen"><div class="phead">
+      <div class="kick"><span class="chip warn"><span class="nmk sm" style="border-color:var(--warn-border);color:var(--warn)" data-cjk>云</span>云 GPU 机 · 重连中<svg width="11" height="11" viewBox="0 0 24 24"><use href="#i-chev"/></svg></span> · 工作区</div>
+      <h4>文件</h4><p style="opacity:.5">/home/ai/data —— 数据已停在 3 分钟前</p>
+    </div></div>
+    <figcaption>降级：芯片转黄并把原因写进去；页面内容<b>不清空</b>，只置灰并禁写——
+      清空等于把你刚才看到的东西也抢走了。</figcaption>
+  </figure>
+</div>
+<div class="note">
+  <b>单机时这枚芯片不渲染</b>，眉标退回今天的「工作区 / 工具」。
+  这条对所有多机元素都成立：<b>没连 Broker 就当它不存在</b>，一处都不留。
+</div>
+
+<h2>5. ⌘K：搜索<b>一定</b>是跨机器的</h2>
+<p class="lede">
+  这一条是整份稿子里唯一一处「多机让功能变强」而不只是「变得能切」的地方，
+  所以它不是 P3 的加料，是 P1 的地基。
+  <b>单机时代 ⌘K 是「找到就跳过去」；多机后如果只搜当前机器，用户得先自己想起来
+  「那个文件在哪台机器上」——而这正是多机管理本该替他消灭的负担。</b>
+  一台机器上找不到就换一台再搜一遍，是把路由工作推给了人。
+</p>
+<div class="screen" style="max-width:600px">
+  <div class="pal">
+    <div class="in"><svg width="15" height="15" viewBox="0 0 24 24"><use href="#i-search"/></svg>train<span style="flex:1"></span><kbd>Esc</kbd></div>
+    <div class="gl">会话 · 本机</div>
+    <div class="row on"><svg width="15" height="15" viewBox="0 0 24 24" style="color:var(--text-dimmer)"><use href="#i-term"/></svg><span class="nm">train-data-prep</span><kbd>Enter</kbd></div>
+    <div class="gl"><span class="nmk sm" data-cjk>云</span> 云 GPU 机</div>
+    <div class="row"><svg width="15" height="15" viewBox="0 0 24 24" style="color:var(--text-dimmer)"><use href="#i-term"/></svg><span class="nm">train</span><span class="mt" style="font-size:var(--fs-micro);color:var(--text-dimmer)">会话 · 跑了 4 小时</span></div>
+    <div class="row"><svg width="15" height="15" viewBox="0 0 24 24" style="color:var(--text-dimmer)"><use href="#i-folder"/></svg><span class="nm">train.py</span><span class="mt" style="font-size:var(--fs-micro);color:var(--text-dimmer)">nn/src</span></div>
+    <div class="gl"><span class="nmk sm" data-cjk>家</span> 家里台式机</div>
+    <div class="row"><svg width="15" height="15" viewBox="0 0 24 24" style="color:var(--text-dimmer)"><use href="#i-folder"/></svg><span class="nm">train_old.ipynb</span></div>
+    <div class="gl">机器</div>
+    <div class="row"><span class="nmk" data-cjk>云</span><span class="nm">切到 云 GPU 机</span></div>
+    <div class="row" style="color:var(--text-dimmer);font-size:var(--fs-micro);border-top:1px solid var(--border-subtle);padding-top:8px">
+      <span style="flex:1">4 台机器 · <span style="color:var(--warn)">树莓派 未响应</span> · 1 台还在建索引</span>
+      <span class="act">在全部机器里搜内容</span>
+    </div>
+  </div>
+</div>
+<ul class="pts">
+  <li><b>按机器分组，不给远端结果降权。</b>如果给别台机器的命中乘一个 0.7，
+    「我明知道那东西在 GPU 机上」的搜索永远排在本机的噪音后面。
+    改成分组：本机一组在最前，其他机器各一组带方章段头——顺序上偏向本机，分数上不动它。</li>
+  <li><b>慢机器不许拖慢搜索框。</b>结果<b>逐台流式并进来</b>：本地条目先出（今天就是这样），
+    近的机器几十毫秒到，远的机器后到。一台 200ms 的机器不能让每次按键都等 200ms。</li>
+  <li><b>没搜到的机器要说出来。</b>底部状态行写「树莓派 未响应」——
+    静默丢弃比搜不到更糟：用户会以为那台机器上真没有。</li>
+  <li><b>名字搜索默认全机器；内容搜索（rg）默认只本机</b>，底部给一枚「在全部机器里搜内容」。
+    内容搜索比名字搜索贵一到两个数量级，扇出到 20 台机器等于同时点着 20 个 rg——
+    显式触发的心智今天已经有了（面板里的全文搜索本来就要手动点），沿用即可。</li>
+  <li><b>点开别台机器的结果 = 隐式切过去</b>：文件/项目类直接切并打开；
+    会话类走 §6 的弱联动气泡问一句。</li>
+</ul>
+<div class="note warn">
+  <b>这条决定了一件必须在 P1 就做对的事</b>：结果的 <code>id</code> 和 <code>action.target</code>
+  <b>都要带 nodeId</b>。今天 <code>rows.ts</code> 的 <code>dedupeByKey</code> 按
+  <code>kind + id</code> 去重——两台机器上都有 <code>build</code> 会话、都有
+  <code>~/codes/roam/README.md</code>，不带 nodeId 就会<b>被合成一条</b>，
+  而且合掉的那条无声无息。这和 §6 终端键的账是同一笔，一起还。
+</div>
+
+<h2>6. 终端：标签钉死在机器上</h2>
+<p class="lede">
+  终端是长活上下文，切机器<b>绝不能</b>关掉它们——瞄一眼另一台机器的状态就丢掉正在跑的
+  Claude 会话，这在实际使用里不可接受。所以标签各自带方章，跨切换保留。
+</p>
+<div class="stack">
+  <figure>
+    <div class="screen">
+      <div class="tabs">
+        <div class="tb on"><span class="nmk sm" data-cjk>公</span><span class="pj">roam ·</span> build</div>
+        <div class="tb"><span class="nmk sm" data-cjk>云</span><span class="pj">nn ·</span> train</div>
+        <div class="tb"><span class="nmk sm" data-cjk>公</span><span class="pj">roam ·</span> deploy</div>
+      </div>
+      <div class="termhd"><span class="dot"></span><span class="nmk sm" data-cjk>云</span>云 GPU 机 · nn · train<span style="flex:1"></span>已连接 · 210ms</div>
+      <div class="termbody">epoch 12/50  loss 0.318<br>…</div>
+    </div>
+    <figcaption><b>标签</b>=方章 + 现有两段名。空间不够时先截项目名，再截会话名，
+      <b>方章永不截</b>——它是「别在错的机器上按回车」的最后一道防线。
+      <b>终端头部</b>那一行写全名 + 延迟。</figcaption>
+  </figure>
+  <figure>
+    <div class="screen" style="padding:14px">
+      <div style="display:flex;align-items:flex-start;gap:10px">
+        <span class="nmk" data-cjk>云</span>
+        <div style="font-size:var(--fs-meta);color:var(--text-dim);line-height:1.8">
+          你点开的是 <b style="color:var(--text-bright)">云 GPU 机</b> 上的会话，<br>
+          当前浏览的是 公司工作站。
+          <div style="margin-top:9px;display:flex;gap:6px">
+            <span class="act pri">一起切过去</span>
+            <span class="act">只看终端</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <figcaption><b>弱联动</b>：点了别台机器的标签，气泡问一句要不要把浏览范围也切过去。
+      默认开、设置里可关。不问就会出现「看着 C 的终端、旁边文件页却是 B」的错位，
+      强制切又会打断「只是瞄一眼」。</figcaption>
+  </figure>
+</div>
+
+<h2>7. 机器页 <code>/nodes</code></h2>
+<p class="lede">
+  卡片墙，和项目页同一套构件：<code>.tt-pagehead</code> 页头 + 卡片 + <code>.tt-act</code> 幽灵钮。
+  这一页只在连了 Broker 时出现在「工具」组。
+</p>
+<div class="screen">
+  <div class="phead">
+    <div class="kick">工具</div>
+    <div style="display:flex;align-items:flex-end;gap:12px">
+      <div><h4>机器</h4><p>4 台 · 3 在线 · 共 6 个会话</p></div>
+      <span style="flex:1"></span>
+      <span class="act pri"><svg width="12" height="12" viewBox="0 0 24 24"><use href="#i-plus"/></svg>添加机器</span>
+    </div>
+  </div>
+  <div class="grid">
+    <div class="ncard self">
+      <div class="hd"><span class="nmk lg cur" data-cjk>公</span><span class="nm">公司工作站</span><span class="dot"></span></div>
+      <div class="sub">dev-ws-01 · Linux · v0.1.0-rc.2</div>
+      <div class="mrow"><span><b>3</b>会话</span><span><b>0.7</b>负载</span><span><b>12ms</b>延迟</span></div>
+      <div class="ops"><span class="act">重命名</span><span class="act">分组</span><span class="act">详情</span></div>
+    </div>
+    <div class="ncard">
+      <div class="hd"><span class="nmk lg" data-cjk>家</span><span class="nm">家里台式机</span><span class="dot"></span></div>
+      <div class="sub">home-pc · Linux · v0.1.0-rc.2</div>
+      <div class="mrow"><span><b>1</b>会话</span><span><b>0.2</b>负载</span><span><b>45ms</b>延迟</span></div>
+      <div class="ops"><span class="act">进入</span><span class="act">重命名</span><span class="act danger">移除</span></div>
+    </div>
+    <div class="ncard">
+      <div class="hd"><span class="nmk lg" data-cjk>云</span><span class="nm">云 GPU 机</span><span class="dot warn"></span></div>
+      <div class="sub">gpu-box · Linux · <span style="color:var(--warn)">v0.1.0-rc.1 可升级</span></div>
+      <div class="mrow"><span><b>2</b>会话</span><span><b>3.1</b>负载</span><span><b>210ms</b>延迟</span></div>
+      <div class="ops"><span class="act">进入</span><span class="act">重命名</span><span class="act danger">移除</span></div>
+    </div>
+    <div class="ncard offline">
+      <div class="hd"><span class="nmk lg off" data-cjk>树</span><span class="nm">树莓派</span><span class="dot off"></span></div>
+      <div class="sub">rpi4 · Linux · 心跳 2 天前</div>
+      <div class="mrow"><span><b>—</b>会话</span><span><b>—</b>负载</span><span><b>离线</b></span></div>
+      <div class="ops"><span class="act">接入命令</span><span class="act danger">移除</span></div>
+    </div>
+  </div>
+</div>
+<ul class="pts">
+  <li><b>当前机器那张卡不给「进入」</b>——你已经在上面了；给的是「重命名 / 分组 / 详情」。
+    按钮位置固定，只是当前那张少一枚，避免整排位移。</li>
+  <li><b>版本落后</b>用黄字写在副行，不做徽标——它不是要你现在处理的事，只是要你知道。</li>
+  <li><b>移除 / 重新签发 token</b> 二次确认（<code>Modal.confirm</code> + danger）。</li>
+  <li>分组多起来（&gt;8 台）再按 <code>group</code> 分区，每区一个小标题；八台以内不分。</li>
+</ul>
+
+<div class="cap"><b>添加机器</b><span class="pill">一次性 token，命令可一键复制</span></div>
+<div class="modal">
+  <div class="hd">添加机器</div>
+  <div class="bd">
+    <div class="field"><label>显示名（可选，默认取 hostname）</label><div class="box">公司工作站</div></div>
+    <div class="field"><label>分组（可选）</label><div class="box">工作</div></div>
+    <div>在目标机器上执行，10 分钟内有效：</div>
+    <div class="cmd">curl -fsSL <b>https://roam.example.com/install.sh</b> | bash -s -- \<br>
+      &nbsp;&nbsp;--broker <b>https://roam.example.com</b> --token <b>enr_7f3a…</b> --name <b>"公司工作站"</b></div>
+    <div style="display:flex;gap:6px"><span class="act"><svg width="12" height="12" viewBox="0 0 24 24"><use href="#i-copy"/></svg>复制命令</span><span class="act">已装过 Roam？只写配置</span></div>
+  </div>
+  <div class="ft"><span class="act">关闭</span><span class="act pri">等待接入…</span></div>
+</div>
+<div class="note">
+  弹窗<b>不关</b>，停在「等待接入」——机器一上线就地变成绿灯 + 「已接入」，
+  用户不用回列表页刷新确认。这是这一页唯一需要实时的地方，值得一条轮询。
+</div>
+
+<h2>8. 掉线、重连、误操作防护</h2>
+<div class="screen" style="margin-bottom:6px">
+  <div class="banner warn">
+    <svg width="14" height="14" viewBox="0 0 24 24"><use href="#i-warn"/></svg>
+    <span><b>云 GPU 机</b> 已离线，正在重连…（第 3 次，8 秒后重试）</span>
+    <span class="sp"></span>
+    <span class="act">切到别的机器</span><span class="act">重试</span>
+  </div>
+  <div style="padding:12px;opacity:.5;font-size:var(--fs-meta);color:var(--text-dim)">页面内容置灰保留，写操作禁用</div>
+</div>
+<table>
+  <thead><tr><th style="width:26%">情况</th><th>界面</th></tr></thead>
+  <tbody>
+    <tr><td><b>别台机器离线</b></td><td>切换器里灰显 + 虚线方章，不可选。<b>不弹任何提示</b>——那不是你现在的事</td></tr>
+    <tr><td><b>当前机器掉线</b></td><td>顶部黄条（上图）+ 页头芯片转黄 + 侧栏状态点转红；内容置灰保留、写操作禁用；
+      该机器的终端标签沿用现有断线重连提示</td></tr>
+    <tr><td><b>Broker 掉线</b></td><td>整个会话断——退回登录页/离线页，和今天后端挂掉的表现一致，不新增形态</td></tr>
+    <tr><td><b>切到离线机器（深链）</b></td><td>页面不空白：显示该机器的卡片 + 「接入命令」+ 「换一台」，
+      并把上一台记在 localStorage 里可一键退回</td></tr>
+    <tr><td><b>误操作防护</b></td><td>页头芯片（每页）+ 终端头部（每个终端）+ 侧栏底座（常驻）三处同时说明「你在操作哪台」。
+      删除类操作的确认弹窗标题里<b>带机器名</b>：「在 <b>云 GPU 机</b> 上删除 3 个文件？」</td></tr>
+  </tbody>
+</table>
+
+<h2>9. 手机：不加一层壳，全靠已有的三处</h2>
+<div class="phones">
+  <div>
+    <div class="phone">
+      <div class="phone-notch"><i></i></div>
+      <div class="phone-stage">
+        <div class="pbody">
+          <div class="phead" style="border:0;padding:0 0 8px">
+            <div class="kick"><span class="chip"><span class="nmk sm" data-cjk>公</span>公司工作站<svg width="11" height="11" viewBox="0 0 24 24"><use href="#i-chev"/></svg></span></div>
+            <h4 style="font-size:var(--fs-lg)">项目</h4>
+            <p>7 个项目 · 3 个待收尾</p>
+          </div>
+          <div class="pcard">roam · 2 会话 · 待收尾 1</div>
+          <div class="pcard">nn-train · 1 会话</div>
+          <div class="pcard" style="opacity:.6">blade · 无会话</div>
+        </div>
+        <div class="sessdock"><span class="nmk sm" data-cjk>云</span><span style="flex:1">nn · train</span><span class="dot warn"></span><span style="color:var(--text-dimmer);font-size:var(--fs-micro)">2</span></div>
+        <div class="bottomnav">
+          <span class="on"><i></i>概览</span><span><i></i>项目</span><span><i></i>文件</span><span><i></i>浏览</span><span><i></i>手机</span><span><i></i>更多</span>
+        </div>
+      </div>
+    </div>
+    <div class="phone-tag"><b>①</b> 页头眉标那枚芯片 = 机器切换器<br>会话坞里的方章说明「那个会话在别的机器上」</div>
+  </div>
+  <div>
+    <div class="phone">
+      <div class="phone-notch"><i></i></div>
+      <div class="phone-stage">
+        <div class="pbody" style="opacity:.35">
+          <div class="pcard">roam · 2 会话</div><div class="pcard">nn-train · 1 会话</div>
+        </div>
+        <div class="sheet">
+          <div class="hd">切换机器</div>
+          <div class="row on"><span class="nmk cur" data-cjk>公</span><span style="flex:1">公司工作站</span><span class="mt">12ms</span><span class="dot"></span></div>
+          <div class="row"><span class="nmk" data-cjk>家</span><span style="flex:1">家里台式机</span><span class="mt">45ms</span><span class="dot"></span></div>
+          <div class="row"><span class="nmk" data-cjk>云</span><span style="flex:1">云 GPU 机</span><span class="mt">210ms</span><span class="dot warn"></span></div>
+          <div class="row" style="opacity:.5"><span class="nmk off" data-cjk>树</span><span style="flex:1">树莓派</span><span class="mt">离线</span><span class="dot off"></span></div>
+          <div class="gr">管理</div>
+          <div class="row"><svg width="17" height="17" viewBox="0 0 24 24" style="color:var(--text-dimmer)"><use href="#i-nodes"/></svg><span style="flex:1">机器管理</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-tag"><b>②</b> 点芯片弹底部 sheet（现成的 <code>MobileSheet</code>）<br>行高 44，指头档命中区达标</div>
+  </div>
+  <div>
+    <div class="phone">
+      <div class="phone-notch"><i></i></div>
+      <div class="phone-stage">
+        <div class="pbody" style="opacity:.35"></div>
+        <div class="sheet">
+          <div class="hd">更多</div>
+          <div class="row"><svg width="17" height="17" viewBox="0 0 24 24" style="color:var(--text-dimmer)"><use href="#i-search"/></svg><span style="flex:1">搜索</span></div>
+          <div class="gr">当前机器</div>
+          <div class="row"><span class="nmk cur" data-cjk>公</span><span style="flex:1">公司工作站</span><span class="mt">12ms</span><span class="dot"></span></div>
+          <div class="gr">工作区</div>
+          <div class="row"><svg width="17" height="17" viewBox="0 0 24 24" style="color:var(--text-dimmer)"><use href="#i-term"/></svg><span style="flex:1">会话</span></div>
+          <div class="gr">工具</div>
+          <div class="row"><svg width="17" height="17" viewBox="0 0 24 24" style="color:var(--text-dimmer)"><use href="#i-nodes"/></svg><span style="flex:1">机器</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-tag"><b>③</b>「更多」里多一段「当前机器」<br>底栏六格<b>一格不动</b></div>
+  </div>
+</div>
+<ul class="pts">
+  <li><b>底栏不加「机器」格</b>：切机器是横切动作，不是一个页面；六格已经是 360px 下的极限
+    （每格 60px，标签 11px 单行）。</li>
+  <li><b>粗指针</b>：芯片视觉高 22，靠 <code>::after</code> 撑到 44；sheet 行本身就是 44。
+    芯片和旁边的分组名之间留 &gt;8px，避免误触（相邻图标钮的间隙规则同 AGENTS）。</li>
+  <li><b>Tooltip 在手机上是隐藏的</b>，所以芯片、方章都必须带 <code>aria-label</code>：
+    <code>切换机器，当前 公司工作站</code>。</li>
+</ul>
+
+<h2>10. 单机零变化（验收基线）</h2>
+<div class="vs">
+  <div>
+    <div class="h"><span class="pill good">单机（没连 Broker）</span>= 今天</div>
+    <div class="screen" style="width:224px;background:var(--bg-base)">
+      <div class="foot" style="border-top:0">
+        <div class="navbtn"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-term"/></svg><span class="nm">终端</span><span class="cnt">2</span></div>
+        <div class="navbtn"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-host"/></svg><span class="nm">当前设备</span><svg width="14" height="14" viewBox="0 0 24 24"><use href="#i-more"/></svg></div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="h"><span class="pill new">多机（连了 Broker）</span>= 同一个位置换了内容</div>
+    <div class="screen" style="width:224px;background:var(--bg-base)">
+      <div class="foot" style="border-top:0">
+        <div class="navbtn"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-term"/></svg><span class="nm">终端</span><span class="cnt">2</span></div>
+        <div class="navbtn node"><span class="nmk cur" data-cjk>公</span><span class="nm" style="color:var(--text-bright)">公司工作站</span><span class="dot"></span><svg width="14" height="14" viewBox="0 0 24 24"><use href="#i-chev"/></svg></div>
+      </div>
+    </div>
+  </div>
+</div>
+<p class="lede" style="margin-top:14px">
+  验收时逐条对照：单机模式下 <b>不渲染</b> 机器芯片、不渲染方章、
+  <code>/nodes</code> 不进导航、⌘K 无「机器」组、终端标签和今天字节级一致。
+  一个多机元素漏在单机界面上，就是这一期的 bug。
+</p>
+
+<h2>11. 文案（i18n 键）</h2>
+<p class="lede">全部走 <code>useI18n().t()</code>，两份 locale 同步加键；图标一律在调用处给，不焊进译文。</p>
+<pre class="code"><i>// 机器身份</i>
+'node.current'      : <b>'当前机器'</b>            / 'Current machine'
+'node.switch'       : <b>'切换机器'</b>            / 'Switch machine'
+'node.switchTo'     : <b>'切到 {name}'</b>         / 'Switch to {name}'
+'node.search'       : <b>'搜索机器…'</b>           / 'Search machines…'
+'node.online'       : <b>'在线'</b>   'node.offline' : <b>'离线'</b>   'node.degraded' : <b>'重连中'</b>
+'node.latencyMs'    : <b>'{ms}ms'</b>
+'node.sessionsN'    : <b>'{count} 会话'</b>        / '{count} sessions'
+'node.aria.switcher': <b>'切换机器，当前 {name}'</b>
+
+<i>// 机器页</i>
+'nav.nodes'         : <b>'机器'</b>               / 'Machines'
+'nodes.subtitle'    : <b>'{total} 台 · {online} 在线 · 共 {sessions} 个会话'</b>
+'nodes.add'         : <b>'添加机器'</b>            'nodes.manage' : <b>'管理机器'</b>
+'nodes.enterCmd'    : <b>'接入命令'</b>            'nodes.waiting' : <b>'等待接入…'</b>
+'nodes.joined'      : <b>'{name} 已接入'</b>
+'nodes.rename'      : <b>'重命名'</b>  'nodes.group' : <b>'分组'</b>  'nodes.remove' : <b>'移除'</b>
+'nodes.removeConfirm': <b>'移除 {name}？该机器会失去接入凭证，需重新添加。'</b>
+'nodes.versionBehind': <b>'{version} 可升级'</b>
+
+<i>// 掉线 / 防护</i>
+'node.reconnecting' : <b>'{name} 已离线，正在重连…（第 {n} 次，{sec} 秒后重试）'</b>
+'node.retry'        : <b>'重试'</b>   'node.switchAway' : <b>'切到别的机器'</b>
+'node.followTab'    : <b>'你点开的是 {name} 上的会话，一起切过去？'</b>
+'node.followYes'    : <b>'一起切过去'</b>  'node.followNo' : <b>'只看终端'</b>
+'node.dangerOn'     : <b>'在 {name} 上{action}？'</b>   <i>// 删除类确认标题统一带机器名</i></pre>
+
+<h2>12. 落地清单</h2>
+<table>
+  <thead><tr><th style="width:30%">改哪</th><th style="width:26%">文件</th><th>怎么改</th></tr></thead>
+  <tbody>
+    <tr><td><b>机器方章</b>（新构件）</td><td><code>frontend/src/cluster/NodeMark.tsx</code><br><code>index.css</code> 加 <code>.tt-nodemark</code></td><td>三档尺寸 + 离线态；名字→方章文字的取法（中文取首字 / 拉丁取双首字母）单独一个纯函数好测</td></tr>
+    <tr><td><b>侧栏底座切换器</b></td><td><code>shell/Navigation.tsx</code></td><td>给 <code>account</code> 加可选的 <code>node</code> 入参：有就渲染方章 + 名 + 点，没有就是今天的「当前设备」</td></tr>
+    <tr><td><b>机器选择弹层</b></td><td><code>cluster/NodePicker.tsx</code></td><td>桌面 Dropdown / 手机 <code>MobileSheet</code>，两端同一份数据同一份行渲染</td></tr>
+    <tr><td><b>页头芯片</b></td><td><code>index.css</code> <code>.tt-pagehead .kicker</code> + 各页头调用处</td><td>眉标从字符串变成 <code>ReactNode</code>；单机传原字符串</td></tr>
+    <tr><td><b>⌘K 跨机器搜索</b></td>
+      <td><code>search/client.ts</code>（<code>searchAll</code>）、<code>search/types.ts</code>、
+        <code>shell/palette/rows.ts</code>、<code>App.tsx</code> 的 <code>paletteItems</code></td>
+      <td><code>searchAll</code> 改读 Broker 的流式扇出；<code>SearchHit.id</code> / <code>action.target</code> 带 nodeId；
+        <code>dedupeByKey</code> 连 nodeId 一起算；<code>mergeRows</code> 按机器分组；再多一段「机器」组做切换动作</td></tr>
+    <tr><td><b>终端标签 / 头部</b></td><td><code>shell/SessionDock.tsx</code>（<code>DockTitle</code>）、<code>Terminal.tsx</code> 头部</td><td>名字前插方章；<code>title</code> 补机器全名</td></tr>
+    <tr><td><b>机器页</b></td><td><code>cluster/Nodes.tsx</code></td><td>卡片墙照抄项目页构件；添加弹窗 + 轮询接入状态</td></tr>
+    <tr><td><b>导航项</b></td><td><code>App.tsx</code> 的 <code>NAV</code> / <code>NAV_TOOLS</code> / <code>MOBILE_MORE_TOOLS</code></td><td>多机时才注入 <code>nodes</code> 项</td></tr>
+    <tr><td><b>掉线条</b></td><td><code>UpdateBanner.tsx</code> 同层新增 <code>NodeBanner.tsx</code></td><td>与更新提示同一条位置，不叠两条</td></tr>
+  </tbody>
+</table>
+
+<h3>分期</h3>
+<ol class="pts">
+  <li><b>P1 · 切得动 + 搜得全</b>：方章 + 侧栏切换器 + 页头芯片 + <code>/nodes</code> 基础页 + 终端标签方章
+    + <b>⌘K 名字搜索跨机器扇出</b>（结果按机器分组、逐台流式到达）。
+    验收＝在 A 机器开着终端，切到 B 看文件，A 的终端还在跑；
+    <b>在 B 上搜一个只存在于 A 的文件名，能搜到并一键跳过去</b>。</li>
+  <li><b>P2 · 好用</b>：弱联动气泡、掉线条与降级态、添加机器一键复制 + 等待接入、
+    概览的「全部机器 / 当前机器」、<b>内容搜索的跨机器显式扇出</b>。</li>
+  <li><b>P3 · 跨机</b>：跨机器 swarm 分派、机器分组/标签、跨机器文件对比。</li>
+</ol>
+
+<h2>13. 验收（这一页做完必须跑）</h2>
+<ul class="pts">
+  <li><code>npm run typecheck &amp;&amp; npm run i18n:check &amp;&amp; npm run hover:check &amp;&amp; npx vitest run &amp;&amp; npm run build</code></li>
+  <li><b>真机</b>：按 <code>docs/development/web-ui-checklist.md</code> 走一遍。
+    重点三条——芯片命中区 <code>document.elementFromPoint</code> 实测 ≥44、
+    sheet 打开时底栏不被顶走、切机器后会话坞的方章跟着变。</li>
+  <li><b>无 emoji / 无文字符号</b>：方章里是名字的字，不是 <code>■</code>；折角是 SVG，不是 <code>▾</code>。</li>
+  <li><b>单机基线</b>：把 <code>cluster.broker</code> 清空重启，截图与改动前逐像素比对。</li>
+</ul>
+
+<div class="note ok">
+  <b>配套技术稿</b>：<a href="./architecture.html" style="color:var(--accent)">architecture.html</a>
+  —— Broker / 节点 / 隧道、<code>/n/&lt;nodeId&gt;/…</code> 路径契约、前端请求入口全量盘点、
+  bootstrap 与首帧、PR #116 的复用与返工。
+</div>
+
+</div>
+
+<script>
+  const btn = document.getElementById('theme')
+  btn.addEventListener('click', () => {
+    const light = document.documentElement.getAttribute('data-theme') === 'light'
+    document.documentElement.setAttribute('data-theme', light ? 'dark' : 'light')
+    btn.textContent = light ? '切到浅色' : '切到深色'
+  })
+</script>
+</body>
+</html>

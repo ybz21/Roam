@@ -27,7 +27,9 @@
 
 **[web/](./design/web/)** — Web 控制台完整设计（总览 / 后端 / 认证 / 前端 / 逐页面 / 路线图）
 
-**[cluster/](./design/cluster/)** — [多节点跨网络管理设计](./design/cluster/多节点跨网络管理设计.md)
+**[cluster/](./design/cluster/)** — 多机管理（一个入口管所有开发机）：
+[ui.html](./design/cluster/ui.html) 视觉 ｜ [architecture.html](./design/cluster/architecture.html) 技术架构
+（2026-07 的三份 md 为历史存档）
 
 **[mockups/](./design/mockups/)** — 静态原型
 

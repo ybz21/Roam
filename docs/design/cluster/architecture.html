@@ -1,0 +1,776 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Roam · 多机管理（技术架构 v0.2）</title>
+<style>
+/* ── 令牌：直接取 frontend/src/theme.tsx 的真值 ─────────────────────────── */
+:root {
+  --bg-base:#0d1117; --bg-container:#161b22; --bg-elevated:#1b222b; --bg-term:#06090d;
+  --border:#30363d; --border-subtle:#21262d;
+  --text-bright:#e6edf3; --text-dim:#8b949e; --text-dimmer:#6e7681;
+  --accent:#58a6ff; --accent-solid:#1f6feb; --accent-soft:rgba(31,111,235,.14); --accent-border:rgba(88,166,255,.45);
+  --ok:#3fb950; --ok-solid:#238636; --ok-soft:rgba(63,185,80,.14); --ok-border:rgba(63,185,80,.42);
+  --danger:#f85149; --danger-soft:rgba(248,81,73,.12); --danger-border:rgba(248,81,73,.40);
+  --warn:#d29922; --warn-soft:rgba(210,153,34,.12); --warn-border:rgba(210,153,34,.40);
+  --list-hover:rgba(255,255,255,.025);
+  --fs-micro:11px; --fs-meta:12px; --fs-sm:13px; --fs-body:14px; --fs-lg:16px; --fs-title:22px;
+  --r-xs:6px; --r-sm:10px; --r-card:14px; --r-pill:999px;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+html[data-theme="light"] {
+  --bg-base:#f6f8fa; --bg-container:#ffffff; --bg-elevated:#ffffff; --bg-term:#ffffff;
+  --border:#d0d7de; --border-subtle:#e6e9ec;
+  --text-bright:#1f2328; --text-dim:#57606a; --text-dimmer:#8c959f;
+  --accent:#0969da; --accent-solid:#1f6feb; --accent-soft:rgba(31,111,235,.10); --accent-border:rgba(31,111,235,.40);
+  --ok:#1a7f37; --ok-solid:#1f883d; --ok-soft:rgba(31,136,61,.10); --ok-border:rgba(31,136,61,.40);
+  --danger:#cf222e; --danger-soft:rgba(207,34,46,.09); --danger-border:rgba(207,34,46,.35);
+  --warn:#9a6700; --warn-soft:rgba(154,103,0,.10); --warn-border:rgba(154,103,0,.35);
+  --list-hover:rgba(27,31,36,.04);
+}
+* { box-sizing:border-box; }
+html { background:#07090d; }
+html[data-theme="light"] { background:#eef1f5; }
+body {
+  margin:0; color:var(--text-bright);
+  font:var(--fs-body)/1.6 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+svg { display:block; }
+button { font:inherit; cursor:pointer; }
+
+.top {
+  position:sticky; top:0; z-index:20;
+  display:flex; align-items:center; gap:var(--sp-3);
+  padding:10px clamp(16px,3vw,40px);
+  background:color-mix(in srgb, var(--bg-base) 84%, transparent);
+  border-bottom:1px solid var(--border-subtle); backdrop-filter:blur(18px);
+}
+.top .kicker { font-size:var(--fs-micro); letter-spacing:.14em; text-transform:uppercase; color:var(--text-dimmer); }
+.top h1 { margin:0; font-size:var(--fs-sm); font-weight:600; }
+.top .sp { flex:1; }
+.tbtn { border:1px solid var(--border); background:var(--bg-container); color:var(--text-dim);
+  border-radius:var(--r-pill); padding:5px 14px; font-size:var(--fs-meta); }
+.tbtn:hover { color:var(--text-bright); border-color:var(--accent-border); }
+
+.wrap { max-width:1080px; margin:0 auto; padding:34px clamp(16px,3vw,40px) 110px; }
+h2 { margin:56px 0 6px; padding-top:26px; font-size:var(--fs-lg); font-weight:600; border-top:1px solid var(--border-subtle); }
+h2:first-of-type { margin-top:8px; border-top:0; padding-top:0; }
+h3 { margin:28px 0 8px; font-size:var(--fs-sm); font-weight:600; color:var(--text-bright); }
+.lede { max-width:80ch; margin:0 0 18px; color:var(--text-dim); font-size:var(--fs-sm); line-height:1.9; }
+.lede b { color:var(--text-bright); font-weight:600; }
+.lede code, li code, td code, p code, dd code {
+  font:var(--fs-meta)/1.4 var(--mono); background:var(--list-hover);
+  border:1px solid var(--border-subtle); border-radius:4px; padding:1px 5px; color:var(--text-bright); }
+ul.pts, ol.pts { max-width:80ch; margin:0 0 18px; padding-left:20px; color:var(--text-dim); font-size:var(--fs-sm); line-height:1.9; }
+ul.pts b, ol.pts b { color:var(--text-bright); }
+table { width:100%; border-collapse:collapse; margin:6px 0 22px; font-size:var(--fs-meta); }
+th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border-subtle); vertical-align:top; }
+th { color:var(--text-dimmer); font-weight:600; font-size:var(--fs-micro); text-transform:uppercase; letter-spacing:.08em; }
+td { color:var(--text-dim); } td b { color:var(--text-bright); font-weight:600; }
+.pill { font-size:var(--fs-micro); padding:1px 8px; border-radius:var(--r-pill); border:1px solid var(--border); color:var(--text-dimmer); white-space:nowrap; }
+.pill.bad { color:var(--danger); border-color:var(--danger-border); background:var(--danger-soft); }
+.pill.good { color:var(--ok); border-color:var(--ok-border); background:var(--ok-soft); }
+.pill.warn { color:var(--warn); border-color:var(--warn-border); background:var(--warn-soft); }
+.pill.new { color:var(--accent); border-color:var(--accent-border); background:var(--accent-soft); }
+.note { border-left:2px solid var(--accent); background:var(--accent-soft); padding:10px 14px; border-radius:0 var(--r-xs) var(--r-xs) 0; color:var(--text-dim); font-size:var(--fs-meta); line-height:1.85; max-width:80ch; margin:14px 0 22px; }
+.note b { color:var(--text-bright); }
+.note.warn { border-left-color:var(--warn); background:var(--warn-soft); }
+.note.bad { border-left-color:var(--danger); background:var(--danger-soft); }
+.note.ok { border-left-color:var(--ok); background:var(--ok-soft); }
+pre.code { margin:8px 0 22px; padding:14px 16px; overflow:auto;
+  border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-base);
+  font:var(--fs-meta)/1.7 var(--mono); color:var(--text-dim); }
+pre.code b { color:var(--text-bright); } pre.code i { color:var(--accent); font-style:normal; }
+pre.code s { color:var(--text-dimmer); text-decoration:none; }
+pre.code u { color:var(--ok); text-decoration:none; }
+pre.code em { color:var(--danger); font-style:normal; }
+.cap { display:flex; align-items:center; gap:var(--sp-2); margin:24px 0 8px; font-size:var(--fs-meta); color:var(--text-dimmer); }
+.cap b { color:var(--text-bright); font-size:var(--fs-sm); font-weight:600; }
+
+/* ══ 拓扑图 ═══════════════════════════════════════════════════════════ */
+.topo { border:1px solid var(--border); border-radius:var(--r-card); background:var(--bg-container); padding:var(--sp-4); margin:10px 0 22px; }
+.tier { display:flex; gap:var(--sp-3); justify-content:center; flex-wrap:wrap; }
+.box { border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-elevated); padding:10px 12px; min-width:150px; font-size:var(--fs-meta); color:var(--text-dim); }
+.box .t { font-size:var(--fs-sm); font-weight:600; color:var(--text-bright); margin-bottom:3px; display:flex; align-items:center; gap:6px; }
+.box .l { font-size:var(--fs-micro); line-height:1.7; }
+.box.brk { border-color:var(--accent-border); background:var(--accent-soft); }
+.box.node { border-color:var(--ok-border); }
+.box.off { opacity:.55; border-style:dashed; }
+.arrow { display:flex; align-items:center; justify-content:center; gap:8px; padding:10px 0; color:var(--text-dimmer); font-size:var(--fs-micro); font-family:var(--mono); }
+.arrow .ln { flex:1; max-width:120px; height:1px; background:var(--border); }
+.tag { font-size:var(--fs-micro); padding:1px 7px; border-radius:var(--r-pill); border:1px solid var(--border); color:var(--text-dimmer); font-family:var(--mono); }
+.tag.up { color:var(--ok); border-color:var(--ok-border); }
+.tag.p2p { color:var(--warn); border-color:var(--warn-border); }
+
+/* 请求路径条 */
+.hop { display:flex; align-items:stretch; gap:0; flex-wrap:wrap; border:1px solid var(--border); border-radius:var(--r-sm); overflow:hidden; margin:6px 0 8px; }
+.hop > div { flex:1 1 130px; min-width:120px; padding:9px 11px; font-size:var(--fs-micro); color:var(--text-dim); border-right:1px solid var(--border-subtle); background:var(--bg-container); }
+.hop > div:last-child { border-right:0; }
+.hop > div b { display:block; color:var(--text-bright); font-size:var(--fs-meta); margin-bottom:2px; }
+.hop > div.acc { background:var(--accent-soft); }
+.hop > div.okk { background:var(--ok-soft); }
+
+dl.q { max-width:80ch; margin:0 0 18px; font-size:var(--fs-sm); }
+dl.q dt { color:var(--text-bright); font-weight:600; margin-top:14px; }
+dl.q dd { margin:4px 0 0; color:var(--text-dim); line-height:1.85; }
+
+.grid2 { display:grid; grid-template-columns:1fr 1fr; gap:var(--sp-4); }
+@media (max-width:780px) { .grid2 { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div>
+    <div class="kicker">Roam · Cluster · 技术架构 v0.2</div>
+    <h1>多机管理 —— Broker / 节点 / 隧道 · 协议选型与带宽账</h1>
+  </div>
+  <span class="sp"></span>
+  <button class="tbtn" id="theme">切到浅色</button>
+</div>
+
+<div class="wrap">
+
+<h2>0. 一分钟看懂</h2>
+<p class="lede">
+  心智模型是 <b>frp</b>：云端 Broker ≈ <code>frps</code>（唯一公网入口，只转发不跑业务），
+  标准节点 ≈ <code>frpc</code>（在 NAT 后主动出站拨号注册进来）。
+  区别是把这套内建成产品能力——用户不用手配隧道，且能在<b>一个界面里切换</b>所有机器。
+  <b>同一个二进制两种模式</b>，角色由配置决定；默认 <code>standard</code> 且不填 broker 时，
+  行为与今天的单机完全一致。
+</p>
+<p class="lede">
+  后端主链路 <b>已经写完并有集成测试</b>（PR #116，1036 行）：配置、yamux over wss 隧道、
+  注册表、enrollment、反代、节点侧出站客户端、内部主体鉴权。
+  它<b>落后 main 93 个提交且已冲突</b>，且有三处硬伤要修（§3）。
+  <b>前端一行没写</b>——这一期真正的工作量在那边（§5、§6）。
+</p>
+<p class="lede">
+  <b>协议问题的结论（§10、§11）</b>：承载没有比「WebSocket + 复用」更稳的标准选择，
+  行业路径都是<b>先 TCP+复用跑通、再迁 QUIC</b>（frp / Cloudflare Tunnel 都走过这条），
+  所以 P1 不动、但要先抽出 <code>Transport</code> 接口并按流量分三条隧道（否则一次大下载会卡住终端）。
+  <b>搜索必须是跨机器的</b>（§12）——它是多机之后唯一「功能变强」的地方，
+  而且它反过来要求 <code>SearchHit.id</code> 在 P1 就带上 nodeId，晚做是全面返工。
+  <b>真正的带宽大头不在隧道协议上，在镜像</b>：今天浏览器与手机镜像都是<b>整帧 JPEG</b>，
+  一路标清 6 Mbps ≈ 2.7 GB/小时，换成视频编码能省 5–10×，这比换任何承载协议都值钱。
+</p>
+
+<h2>1. 形状：一个二进制，两种模式</h2>
+<table>
+  <thead><tr><th style="width:14%">模式</th><th style="width:26%">含义</th><th>谁跑业务</th><th>谁监听公网</th><th>frp 类比</th></tr></thead>
+  <tbody>
+    <tr><td><b>standard</b><br><span class="pill">默认</span></td>
+      <td>现在的 Roam，跑全套能力。<b>可选</b>填 <code>cluster.broker</code> → 额外出站注册进云端</td>
+      <td>本机</td><td>本机（局域网直连口保留）</td><td><code>frpc</code>（填了 broker 时）</td></tr>
+    <tr><td><b>cloud</b></td>
+      <td>云端 Broker：注册表 + 隧道 + 反代 + 控制台静态资源</td>
+      <td><b>不跑</b>（只转发）</td><td>是（唯一公网入口）</td><td><code>frps</code></td></tr>
+  </tbody>
+</table>
+<p class="lede">
+  <b>没有第三种「client 模式」</b>：一台开发机注册进云端后，它本身还是标准 Roam，
+  只是多连了一条到 Broker 的隧道，局域网直连照旧可用。
+  "Client" 只是「标准节点在云端视角下的身份」，不是一种部署形态。
+</p>
+<pre class="code"><i># 开发机（标准节点）~/.roam/config.yaml</i>
+cluster:
+  mode: standard                 <s># 默认，可省</s>
+  broker: https://roam.example.com   <b># 填了才上云；不填 = 纯单机，界面零变化</b>
+  token: enr_7f3a…               <s># 一次性接入令牌，注册后自动换长期凭证并回写</s>
+  name: 公司工作站                 <s># 可选，默认 hostname</s>
+  group: 工作                      <s># 可选</s>
+
+<i># 云端 Broker</i>
+cluster:
+  mode: cloud                    <b># 复用 web.password / web.totp_secret 做用户登录</b>
+                                 <i># 复用 web.tls / web.bind 做公网入口</i></pre>
+
+<h2>2. 拓扑与三条数据路径</h2>
+<div class="topo">
+  <div class="tier">
+    <div class="box"><div class="t">浏览器 · Console</div><div class="l">手机 / 平板 / 电脑<br>只认识一个地址</div></div>
+  </div>
+  <div class="arrow"><span class="ln"></span><span class="tag">HTTPS / wss · 用户会话 Cookie</span><span class="ln"></span></div>
+  <div class="tier">
+    <div class="box brk"><div class="t">云端 Broker <span class="pill new">cloud</span></div>
+      <div class="l">用户认证（复用 backend/auth）<br>节点注册表 / 心跳<br>/n/&lt;nodeId&gt;/* 反代<br>控制台静态资源 + install.sh</div></div>
+  </div>
+  <div class="arrow"><span class="ln"></span><span class="tag up">↑ 出站 · TLS + yamux 多路复用</span><span class="ln"></span></div>
+  <div class="tier">
+    <div class="box node"><div class="t">公司工作站</div><div class="l">NAT 后 · 全套能力<br>term/files/git/browser/phone/swarm</div></div>
+    <div class="box node"><div class="t">家里台式机</div><div class="l">NAT 后</div></div>
+    <div class="box node"><div class="t">云 GPU 机</div><div class="l">有公网也无妨</div></div>
+    <div class="box off"><div class="t">树莓派</div><div class="l">离线</div></div>
+  </div>
+  <div class="arrow"><span class="ln"></span><span class="tag p2p">P3：WebRTC 直连（大流量绕开 Broker，见 §10）</span><span class="ln"></span></div>
+</div>
+<p class="lede">
+  <b>所有箭头都是出站</b>：节点 → Broker、浏览器 → Broker。
+  没有任何一方需要主动连进 NAT 后的机器，因此被管理的开发机
+  <b>不需要公网 IP、不需要开入站端口、不需要手工配 frp</b>。
+</p>
+
+<div class="cap"><b>一次终端连接走过的路</b><span class="pill">pty 层零改动</span></div>
+<div class="hop">
+  <div class="acc"><b>浏览器</b>wss <code>/n/n_01/api/term/build</code></div>
+  <div class="acc"><b>Broker</b>校验用户会话 → 查注册表</div>
+  <div><b>yamux</b><code>sess.Open()</code> 开一条流</div>
+  <div><b>节点</b>从流里 Serve HTTP，打内部主体标记</div>
+  <div class="okk"><b>本机 Handler</b><code>/api/term/build</code> → pty → tmux attach</div>
+</div>
+<p class="lede">
+  文件 / git / browser / phone / swarm 同理：数据源从「本机」变成「当前选中节点」，
+  <b>业务 handler 一行不改</b>。这是整套方案风险最低的地方，也是它值得做的原因。
+</p>
+
+<h2>3. PR #116 盘点：留什么、改什么、缺什么</h2>
+<p class="lede">
+  分支 <code>feat/cluster-backend</code>，1 个提交，14 个文件，
+  <b>落后 main 93 个提交、<span class="pill bad">mergeable_state: dirty</span></b>。
+  代码本身质量可以，直接<b>重新起分支 cherry-pick + 修三处硬伤</b>，不要在旧分支上救。
+</p>
+<table>
+  <thead><tr><th style="width:30%">文件</th><th style="width:12%">处置</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td><code>cluster/tunnel/tunnel.go</code></td><td><span class="pill good">原样留</span></td>
+      <td>ws→net.Conn 适配 + yamux。gorilla 的「一读一写并发」正好匹配 yamux 的单读单写循环，这段最不容易写对，已经对了</td></tr>
+    <tr><td><code>cluster/broker/registry.go</code></td><td><span class="pill warn">补字段</span></td>
+      <td>Node / EnrollmentToken 存取、心跳判活。<b>缺 latency</b>（UI 要显示延迟）与 <code>lastSeenVersion</code> 比对</td></tr>
+    <tr><td><code>cluster/broker/broker.go</code></td><td><span class="pill bad">修硬伤</span></td>
+      <td>反代丢 <code>RawPath</code>（见下 ①）；<code>Bootstrap.recommended</code> 语义要改（见下 ②）</td></tr>
+    <tr><td><code>cluster/node/node.go</code>、<code>creds.go</code></td><td><span class="pill good">原样留</span></td>
+      <td>拨号 / 注册 / 指数退避重连 / 心跳 / <code>auth.WithInternal</code> 后交本机 Handler。凭证落盘 <code>~/.roam/node.json</code></td></tr>
+    <tr><td><code>auth/internal.go</code> + <code>auth.go</code></td><td><span class="pill good">原样留</span></td>
+      <td>typed transport principal：进程内 context 标记，<b>不可经线缆伪造</b>。这条是整套安全的地基</td></tr>
+    <tr><td><code>server/broker.go</code></td><td><span class="pill warn">补路由</span></td>
+      <td>cloud 装配。<b>缺 <code>/install.sh</code></b>（enroll 命令里已经引用了它）与 <code>/api/broker/preferences</code></td></tr>
+    <tr><td><code>server/server.go</code>、<code>cmd/main.go</code>、<code>config/config.go</code></td><td><span class="pill bad">重做</span></td>
+      <td>这三个文件 main 上已大改（+112 行），冲突就在这里。按今天的 main 重新拆 <code>mountPublic</code> / runtime 分流</td></tr>
+    <tr><td><code>broker/integration_test.go</code></td><td><span class="pill good">留 + 扩</span></td>
+      <td>enrollment → 隧道 → 反代 → 节点响应端到端。补 WS 升级、断线重连、离线 502 三个用例</td></tr>
+    <tr><td>前端</td><td><span class="pill bad">全缺</span></td>
+      <td>一行没有。§5–§7 是这一期的主要工作量</td></tr>
+  </tbody>
+</table>
+
+<h3>三处必须修的硬伤</h3>
+<dl class="q">
+  <dt>① 反代重写路径时丢掉了 <code>RawPath</code>，含特殊字符的文件路径会 404</dt>
+  <dd>
+    现在是 <code>c.Request.URL.Path = c.Param("path")</code>——<code>Param</code> 给的是<b>已解码</b>的值，
+    赋回 <code>Path</code> 后 <code>RawPath</code> 被清空，转发出去时按默认规则重新编码。
+    我们的 <code>/api/file/serve/*path</code> <b>把绝对路径塞进 URL</b>，文件名里的
+    <code>#</code> <code>?</code> <code>%</code> 空格全都会在这一跳变形，preview / 下载直接 404。
+    正确做法是<b>按前缀截断而不是重建</b>：
+    <pre class="code" style="margin:8px 0 0">prefix := "/n/" + <b>url.PathEscape</b>(id)
+r.URL.Path = <b>strings.TrimPrefix</b>(r.URL.Path, "/n/"+id)
+if r.URL.RawPath != "" { r.URL.RawPath = <b>strings.TrimPrefix</b>(r.URL.RawPath, prefix) }</pre>
+    并给这条加一个用例：文件名 <code>a b#c%d.txt</code> 经代理后仍能读到内容。
+  </dd>
+
+  <dt>② <code>bootstrap.recommended</code> 现在返回「第一个在线节点」，这不是用户想回到的那台</dt>
+  <dd>
+    用户想回到的是<b>上次用的那台</b>，而那个值只有浏览器知道。所以：<code>recommended</code>
+    只作为<b>兜底</b>（localStorage 为空或指向的节点已不存在时才用），并且把「上次用的」
+    存进 Broker 级偏好 <code>/api/broker/preferences</code> 以便跨浏览器同步（异步、失败不阻塞）。
+    详见 §7 的启动顺序。
+  </dd>
+
+  <dt>③ 没有延迟测量，而 UI 的每一处都要显示 <code>12ms</code></dt>
+  <dd>
+    心跳是节点<b>单向上报</b>（<code>{sessionCount, load}</code>），拿不到 RTT。
+    改成控制流上的 <b>ping/pong</b>：Broker 每 5s 在控制流发一个带序号的 ping，
+    节点原样回；Broker 记录 RTT 的 EWMA 写进注册表。
+    顺带解决心跳判活的方向问题——现在节点不上报就"看起来活着"直到超时，
+    有了 Broker 主动 ping，掉线在一个 ping 周期内就能发现。
+  </dd>
+</dl>
+
+<h2>4. 路径契约</h2>
+<p class="lede">
+  <b>只有一种寻址方式：稳定路径前缀 <code>/n/&lt;percent-encoded nodeId&gt;/…</code></b>。
+  它同时适用于封装请求和浏览器原生发起、加不了自定义 header 的资源请求
+  （<code>&lt;img src&gt;</code>、<code>&lt;iframe&gt;</code>、<code>&lt;a download&gt;</code>、<code>window.open</code>、WebSocket）。
+  <b>禁止靠 header 注入节点身份</b>——那条路在原生资源请求上根本走不通，
+  而且给了伪造的口子。
+</p>
+<table>
+  <thead><tr><th style="width:32%">路径</th><th style="width:14%">谁处理</th><th>内容</th></tr></thead>
+  <tbody>
+    <tr><td><code>/api/login</code> <code>/api/logout</code> <code>/api/pubconfig</code></td><td>Broker</td><td>用户认证入口，永不代理</td></tr>
+    <tr><td><code>/api/broker/nodes</code></td><td>Broker</td><td>节点列表（含 status / latency / sessionCount / version）</td></tr>
+    <tr><td><code>/api/broker/bootstrap</code></td><td>Broker</td><td>启动最小信息：可访问节点 + 兜底推荐 + Broker 级偏好</td></tr>
+    <tr><td><code>/api/broker/preferences</code></td><td>Broker</td><td><b>Broker 级</b>偏好（当前节点、弱联动开关）。<b>不是</b>节点业务偏好</td></tr>
+    <tr><td><code>/api/broker/enroll</code></td><td>Broker</td><td>签发一次性 token + 接入命令</td></tr>
+    <tr><td><code>/api/broker/search</code></td><td>Broker <b>扇出</b></td><td>把一次搜索打散到所有在线节点，逐台流式回推（§12）。<b>唯一一个 Broker 主动调节点的接口</b></td></tr>
+    <tr><td><code>/cluster/tunnel</code></td><td>Broker</td><td>节点出站拨号落点（token 鉴权，不走用户会话）</td></tr>
+    <tr><td><code>/install.sh</code></td><td>Broker</td><td>一键接入脚本（<b>PR #116 缺</b>，enroll 已经在引用它）</td></tr>
+    <tr><td><code>/n/&lt;id&gt;/api/**</code></td><td>→ 节点</td><td>全部业务 REST / multipart / WS / 原生资源，<b>原路径不变</b></td></tr>
+  </tbody>
+</table>
+<div class="note">
+  <b>nodeId 是不可变内部身份，显示名永不参与寻址。</b>名字可以重命名、可以重复，
+  参与寻址就等于给"删错机器"留了后门。路径里的 nodeId 逐段 percent-encode，
+  Broker 解码后<b>按精确 ID 查注册表，不做显示名回退</b>。
+</div>
+
+<h2>5. 前端要还的账：请求入口全量盘点</h2>
+<p class="lede">
+  最大的一条误判是「所有请求都走 <code>api.ts</code>，改一处就行」。
+  实际盘点今天的 <code>frontend/src</code>，<b>至少 12 类入口</b>，其中一半是浏览器原生发起的：
+</p>
+<table>
+  <thead><tr><th style="width:34%">入口</th><th style="width:22%">位置</th><th>形态</th></tr></thead>
+  <tbody>
+    <tr><td><code>api(method, path)</code></td><td><code>api.ts</code></td><td>fetch JSON，全站几百处调用——<b>唯一好改的一处</b></td></tr>
+    <tr><td><code>upload()</code> / <code>transcribe()</code></td><td><code>api.ts</code></td><td>multipart FormData</td></tr>
+    <tr><td><code>/api/file/raw</code></td><td><code>FileBrowser.tsx</code>、<code>fileview/FileView.tsx</code></td><td><code>&lt;img src&gt;</code> 原生 URL</td></tr>
+    <tr><td><code>/api/file/download</code></td><td><code>FileBrowser.tsx</code>、<code>p2p/download.ts</code></td><td><code>&lt;a download&gt;</code> / stream-saver</td></tr>
+    <tr><td><code>/api/file/serve/*path</code></td><td><code>fileview/FileView.tsx</code></td><td><code>&lt;iframe src&gt;</code>（HTML 预览，相对引用要能解析）</td></tr>
+    <tr><td><code>/api/file/preview</code></td><td><code>fileview/FileView.tsx</code>、<code>OfficePreviewers.tsx</code></td><td>Office→PDF，iframe / fetch 各一处</td></tr>
+    <tr><td><code>/api/plugin/install</code></td><td><code>PluginsPanel.tsx</code></td><td>multipart 上传</td></tr>
+    <tr><td><code>/api/update-check</code></td><td><code>UpdateBanner.tsx</code></td><td>裸 fetch</td></tr>
+    <tr><td><code>wss /api/term/:name</code></td><td><code>Terminal.tsx</code></td><td>WebSocket，<b>拼的是 <code>location.host</code></b></td></tr>
+    <tr><td><code>wss /api/browser/stream</code>、<code>/api/browser/cdp/*</code></td><td><code>BrowserView.tsx</code></td><td>WS + DevTools 反代（URL 里还套了一层 <code>wss=</code> 参数）</td></tr>
+    <tr><td><code>wss /api/phone/stream</code></td><td><code>PhoneView.tsx</code></td><td>WS 镜像 + 输入转发</td></tr>
+    <tr><td><code>wss /api/p2p/signal</code>、<code>/api/p2p/config|metric</code></td><td><code>p2p/*</code></td><td>WebRTC 信令与统计</td></tr>
+  </tbody>
+</table>
+
+<h3>收口：<code>frontend/src/cluster/node-url.ts</code></h3>
+<pre class="code"><i>// 单机与多机<b>同一份代码</b>：没有 currentNodeId 时返回今天的路径，一个字节都不差。
+// 这就是「单机零变化」在实现层面的保证——不是靠两条分支，是靠一个恒等式。</i>
+export function nodePath(path: string): string {
+  const id = <b>currentNodeId()</b>            <i>// null = 单机 / 直连节点</i>
+  return id ? <b>`/n/${encodeURIComponent(id)}${path}`</b> : path
+}
+export const nodeApi = (p: string) =&gt; nodePath('/api' + p)
+export function nodeWs(p: string): string {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+  return `${proto}://${location.host}${nodePath('/api' + p)}`
+}</pre>
+<div class="note warn">
+  <b>验收靠 lint，不靠自觉。</b>加一条 ESLint 规则（或复用 <code>hover:check</code> 那种脚本审计）：
+  <code>frontend/src</code> 里<b>不允许出现字面量 <code>'/api/'</code></b>，除了 <code>cluster/node-url.ts</code> 自己。
+  这类"盘点一遍改完"的任务，漏一处的表现是"某个文件预览在多机下 404"——
+  几个月后才有人踩到，那时候已经没人记得盘点表了。
+</div>
+
+<h2>6. 会话的键：从 <code>name</code> 变成 <code>(nodeId, name)</code></h2>
+<p class="lede">
+  这是前端唯一一处<b>数据模型</b>改动，也是最容易低估的一处。
+  今天 <code>App.tsx</code> 里终端就是一个 <code>terms: string[]</code>，
+  <code>statusMap</code> / <code>claudeMap</code> / <code>codexMap</code> 全部按会话名做键。
+  两台机器上都有 <code>build</code> 是<b>常态</b>（同一个项目在两台机器上开发），
+  不改键就会串台：A 的输出画进 B 的终端。
+</p>
+<pre class="code"><i>// 键做成不透明字符串，而不是到处传 {nodeId, name} 对象——
+// Map 的键、React 的 key、URL 参数都要它是字符串。</i>
+export type TermKey = string &amp; { __brand: 'TermKey' }
+export const termKey = (nodeId: string | null, name: string) =&gt;
+  (nodeId ? <b>`${nodeId} ${name}`</b> : name) as TermKey   <i>// 单机 = 裸会话名，向后兼容</i>
+
+<i>// URL 深链：不再拼 `公司·build`（中点和逗号都可能出现在会话名里），
+// terms/active 一律 base64url(JSON)。</i>
+?terms=<b>W3sibiI6Im5fMDEiLCJzIjoiYnVpbGQifV0</b>&amp;active=…
+   ↳ <b>[{"n":"n_01","s":"build"}]</b>
+
+<i>// 旧链接兼容：裸会话名 = 当前节点上的会话，一次性迁移后 replaceState 写回新格式。</i></pre>
+<ul class="pts">
+  <li><b>tmux 的老账在这里也要还一次</b>：会话存活判定一律 <code>-t "=" + name</code>
+    （前缀匹配坑，见 AGENTS.md）。多机后每台机器各判各的，Broker 不缓存存活状态。</li>
+  <li><b>切机器不关终端</b>是产品结论（见视觉稿 §6），实现上就是
+    <code>terms</code> 里同时存在多台机器的键，WS 各连各的 <code>/n/&lt;id&gt;/api/term/…</code>。</li>
+</ul>
+
+<h2>7. 启动顺序与首帧</h2>
+<p class="lede">
+  <code>currentNodeId</code> <b>绝不能</b>放进节点侧的 <code>/api/preferences</code>——
+  那会形成启动死循环：要读偏好得先知道去哪台机器读。它属于 Broker 级状态。
+</p>
+<pre class="code"><b>1.</b> 读 URL 的 <code>?nodeId=</code>            <i>// 深链优先，不发请求</i>
+<b>2.</b> 读 <code>localStorage['roam.node']</code>   <i>// 上次用的，不发请求 —— <u>首帧就用它渲染</u></i>
+<b>3.</b> 都没有 / 已失效 → <code>GET /api/broker/bootstrap</code>
+       → { nodes, recommended, prefs }         <i>// Broker-local，不依赖 current node</i>
+<b>4.</b> 定下来才允许发第一条 <code>/n/&lt;id&gt;/api/*</code>
+<b>5.</b> 异步 <code>PUT /api/broker/preferences</code> 同步「上次用的」，失败不阻塞</pre>
+<div class="note">
+  <b>第 2 步的 localStorage 镜像不是优化，是必需品。</b>项目在
+  <code>AGENTS.md 「Preferences Arrive Late」</code> 里已经写下这条账：
+  偏好是异步到的，任何用它做首帧的组件都会先拿到默认值。
+  当前机器要是走服务端偏好，用户每次刷新都会先看到<b>另一台机器</b>的项目列表、
+  半秒后整页跳变——比分隔条弹回去严重得多，因为那半秒里点下去的按钮作用在错的机器上。
+  <b>所以：本地镜像定首帧，Broker 值只用于跨浏览器同步，且到达后若与本地不同，
+  只提示不自动切。</b>
+</div>
+
+<h2>8. 认证：三段独立信任链</h2>
+<div class="grid2">
+  <div>
+    <table>
+      <thead><tr><th>段</th><th>凭证</th></tr></thead>
+      <tbody>
+        <tr><td><b>用户 → Broker</b></td><td>密码 + TOTP（复用 <code>backend/auth</code>），签发 <code>ttmux_session</code> cookie（HttpOnly / SameSite=Strict / 7 天）</td></tr>
+        <tr><td><b>节点 → Broker</b></td><td>一次性 enrollment token 换长期节点凭证，落盘 <code>~/.roam/node.json</code>；隧道全程 TLS（后续可上 mTLS）</td></tr>
+        <tr><td><b>Broker → 节点</b></td><td><b>不带用户 cookie</b>。节点认的是「这个请求是从已认证隧道里取出来的」——进程内 typed principal</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div>
+    <div class="note bad" style="margin-top:0">
+      <b>永远不要用 header 判定「来自隧道」。</b>
+      <code>X-Forwarded-*</code> / <code>X-Roam-Internal</code> 这类头，公网和局域网的任何客户端都能伪造，
+      而标准节点<b>本机端口是照常对局域网开着的</b>——一个伪造头就等于绕过登录。
+      PR #116 的 <code>auth.WithInternal(r)</code> 在 request context 上打进程内标记，
+      只有"已从可信隧道取出该请求"这条代码路径能设置它，线缆上不存在这个字段。
+    </div>
+    <ul class="pts">
+      <li>本机监听端口<b>始终</b>进 public handler（要登录），隧道请求进 internal 入口。两条路不共用中间件链。</li>
+      <li>审计日志里记 Broker 侧用户 + nodeId，否则多机之后"谁在哪台机器上删了什么"无从追。</li>
+      <li>Broker 掌握"哪个用户能访问哪些节点"的授权（近期单用户，为团队版预留）。</li>
+    </ul>
+  </div>
+</div>
+
+<h2>9. 隧道细节</h2>
+<table>
+  <thead><tr><th style="width:20%">话题</th><th>做法</th></tr></thead>
+  <tbody>
+    <tr><td><b>载体</b></td><td>WebSocket over TLS（443/wss，对企业防火墙最友好），复用已依赖的 <code>gorilla/websocket</code></td></tr>
+    <tr><td><b>多路复用</b></td><td><code>hashicorp/yamux</code>。一个终端会话 / 一次文件下载 / 一次 CDP 反代各占一条流，互不阻塞</td></tr>
+    <tr><td><b>控制流</b></td><td>节点 Accept 出来的第一条流；换行分隔 JSON。心跳 + <b>新增 ping/pong 测 RTT</b>（§3 ③）</td></tr>
+    <tr><td><b>重连</b></td><td>节点侧指数退避（1s → 30s 封顶）。重连用长期凭证，不再消耗 enrollment token</td></tr>
+    <tr><td><b>掉线</b></td><td>Broker 立刻标 <code>offline</code> 并拒绝路由，返回 <code>502 {code: NODE_OFFLINE}</code>——
+      前端据此显示降级条，而不是转圈到超时</td></tr>
+    <tr><td><b>背压</b></td><td>yamux 自带窗口；镜像另有自己的信用·ack 背压（<code>browser/screencast_ws.go</code>），两层不冲突</td></tr>
+    <tr><td><b>压缩</b></td><td><b>今天一处都没开</b>（五个 <code>websocket.Upgrader</code> 都没设 <code>EnableCompression</code>）。
+      终端是纯文本，这是白捡的 5–10×，见 §11</td></tr>
+    <tr><td><b>队头阻塞</b></td><td>单条 TCP 上的 yamux 会让一次大下载卡住终端。P1 就要按流量性质分三条隧道，见 §10</td></tr>
+    <tr><td><b>大帧</b></td><td>ws 帧上限与 <code>ReadBufferSize</code> 已设 4096；文件下载靠 yamux 分片，不需要调大</td></tr>
+  </tbody>
+</table>
+
+<h2>10. 传输协议选型：为什么是 WS + yamux，什么时候该换</h2>
+<p class="lede">
+  「有没有标准协议 / 更省带宽的协议」这个问题要拆成两问：
+  <b>①承载（把多条流塞进一条穿 NAT 的连接）</b>用什么，
+  <b>②每一路流量本身</b>怎么编码（§11）。两者独立，别混谈——
+  换承载省不了镜像的带宽，换编码也穿不了防火墙。
+</p>
+
+<h3>候选一览</h3>
+<table>
+  <thead><tr><th style="width:20%">方案</th><th style="width:13%">标准</th><th style="width:11%">穿透性</th><th style="width:12%">多路复用</th><th style="width:11%">队头阻塞</th><th>结论</th></tr></thead>
+  <tbody>
+    <tr><td><b>WebSocket + yamux</b><br><span class="pill">现在的选择</span></td>
+      <td>WS 是 RFC 6455；<b>yamux 不是标准</b>（HashiCorp 库）</td>
+      <td><b>最好</b>：443/wss 与普通 HTTPS 无异，企业代理放行</td><td>有（yamux）</td>
+      <td><b>有</b>（单条 TCP）</td>
+      <td><b>P1 就用它。</b>唯一能保证「哪都通」的组合，且已实现</td></tr>
+    <tr><td>HTTP/2 流 + 扩展 CONNECT</td><td>RFC 9113 / <b>RFC 8441</b></td><td>好</td><td>原生</td><td>有（单条 TCP）</td>
+      <td>H2 里<b>只有客户端能发起流</b>，Broker 无法反向开流进节点；要么 gRPC 双向流套一层、要么回到自定义帧——省不下 yamux 这层</td></tr>
+    <tr><td><b>HTTP/3 · QUIC</b></td><td>RFC 9000 / 9114</td><td>中：UDP/443 可能被封，须保 TCP 回退</td><td>原生</td>
+      <td><b>无</b></td>
+      <td><b>P3 的目标承载。</b>三个真收益：无 HOL、连接迁移（手机切 Wi-Fi/5G 不断线）、0-RTT 重连</td></tr>
+    <tr><td>MASQUE（CONNECT-UDP / CONNECT-IP）</td><td>RFC 9298 / 9484</td><td>中</td><td>原生（HTTP/3 之上）</td><td>无</td>
+      <td>IETF 给「在 HTTP 上开隧道」的标准答案（iCloud 私密代理用的就是它）。但那是 <b>L3/L4 隧道</b>，我们要的是<b>按 HTTP 请求路由到具体节点</b>，用不上这层抽象</td></tr>
+    <tr><td><b>WebTransport</b></td><td>W3C / over HTTP/3</td><td>中</td><td>原生（可靠流 + 不可靠数据报）</td><td>无</td>
+      <td>浏览器侧的标准多路复用 API，<b>镜像特别合适</b>（丢帧走数据报，不排队）。Safari/iOS 尚未支持 → 必须留 WS 回退</td></tr>
+    <tr><td>WebRTC DataChannel / RTP</td><td>RFC 8831 / 3550</td><td>中（需 STUN，打不通要 TURN）</td><td>有</td><td>可选无序</td>
+      <td><b>已经在用</b>（<code>backend/p2p</code>）。它的独门价值不是复用，是 <b>P2P 直连绕开 Broker</b>（§11）</td></tr>
+    <tr><td>SSH 远程转发</td><td>RFC 4254</td><td>中（22 端口常被封）</td><td>有（channel）</td><td>有</td>
+      <td>标准且成熟，但没有控制台、每台机器各配各的——正是我们要取代的散装用法</td></tr>
+    <tr><td>WireGuard 覆盖网<br>（Tailscale / Nebula）</td><td>非 IETF 标准但事实标准</td><td>好（UDP 打洞 + DERP 中转）</td><td>L3，不需要</td><td>无</td>
+      <td><b>带宽最省，但用不了</b>：浏览器不能当 WireGuard 端点。手机上打开网页就能用是本产品的前提，装客户端就废了这个前提</td></tr>
+  </tbody>
+</table>
+
+<div class="note">
+  <b>产品参照</b>：frp 走 TCP + 可选 QUIC/KCP，复用用 yamux——和我们 P1 的选择一样；
+  Cloudflare Tunnel 已经全面转 QUIC；ngrok 是 TCP 多路复用；Tailscale 是 WireGuard。
+  <b>整个行业的路径都是「先 TCP+复用跑通，再迁 QUIC」</b>，我们照着走就行，不必自研可靠 UDP。
+</div>
+
+<h3>P1 有一个必须现在就处理的坑：队头阻塞</h3>
+<p class="lede">
+  今天浏览器对一台机器是<b>四条独立 TCP</b>（终端 WS、镜像 WS、P2P 信令 WS、REST）。
+  上了 Broker，它们全被塞进<b>一条</b> yamux 隧道——
+  一次 2GB 下载丢个包，TCP 重传会把<b>终端一起卡住</b>，
+  而这在今天是不会发生的（各走各的连接）。这是「加了多机之后单机体验反而变差」的典型退化。
+</p>
+<pre class="code"><i>// 缓解：按流量性质开<b>多条</b>隧道连接，别指望一条扛所有（SSH 多路复用同思路）</i>
+tunnel[0] <b>control</b>   心跳 / ping / 注册            <i>// 小、必须准时</i>
+tunnel[1] <b>interactive</b> 终端、REST、信令            <i>// 小、要跟手</i>
+tunnel[2] <b>bulk</b>      文件下载 / 上传 / 镜像回退路径  <i>// 大、可以慢</i>
+<i>// 三条 wss 连接，各自一条 TCP；yamux 仍在每条之内复用同类请求。
+// 换 QUIC 之后这个分层可以退化成一条连接 + 流优先级。</i></pre>
+
+<h3>结论与迁移路径</h3>
+<ol class="pts">
+  <li><b>P1</b>：WS + yamux 保持不变，但把它抽成 <code>cluster/tunnel.Transport</code> 接口
+    （<code>Dial / Accept / OpenStream / Close</code>）。今天只有一个实现，
+    换承载时不动 broker / node 的任何调用方。<b>接口这一步现在就做，代价是零；等到 P3 再拆是几百行。</b></li>
+  <li><b>P1</b>：按上面三类开多条隧道，避免队头阻塞退化。</li>
+  <li><b>P3</b>：加 QUIC/WebTransport 实现，握手时协商（<code>Alt-Svc</code> 风格：先 WS 连上，
+    Broker 告知支持 h3，节点下次优先 QUIC），<b>失败自动回落 WS</b>。</li>
+  <li><b>不做</b>：自研可靠 UDP、L3 覆盖网、SSH 隧道。</li>
+</ol>
+
+<h2>11. 省带宽：四路流量各算各的账</h2>
+<p class="lede">
+  Broker 通常是一台按流量计费的公网小主机。先把账算清楚再谈优化——
+  <b>省错地方等于没省</b>：终端流量再压十倍，也抵不上镜像多开一分钟。
+</p>
+<table>
+  <thead><tr><th style="width:14%">流量</th><th style="width:24%">今天的实现</th><th style="width:15%">量级（实测/估算）</th><th>省法</th></tr></thead>
+  <tbody>
+    <tr><td><b>浏览器镜像</b></td>
+      <td>CDP screencast → <b>整帧 JPEG</b> over WS，六档自适应（<code>browser/screencast.go</code> 的 ladder：q28/960px 到 q90/4K）</td>
+      <td><b>4–8 Mbps</b>（标清档 1280×800 q52 ~9fps）<br>超清档可到 20+ Mbps</td>
+      <td><b>换视频编码</b>：VP8/H.264 走 WebRTC video track。同画质 <b>1–2 Mbps，省 5–10×</b>。
+        帧间预测正好吃掉「屏幕大部分不变」这个特性，而整帧 JPEG 每帧都从零编一遍</td></tr>
+    <tr><td><b>手机镜像</b></td>
+      <td><code>adb exec-out screencap -p</code> 出<b>整屏 PNG</b> 再转码 JPEG（<code>phone/android.go</code>）</td>
+      <td>同上，且<b>设备端 CPU 也在烧</b>（PNG 编码 + 传输 + 转码）</td>
+      <td><b>接 scrcpy 的路子</b>：设备端 MediaCodec 直出 H.264，<b>1–4 Mbps / 60fps</b>，
+        手机 CPU 反而更低。这是全项目单笔最大的带宽收益</td></tr>
+    <tr><td><b>终端</b></td>
+      <td>裸字节 over WS，<b>没有开压缩</b>（五个 <code>websocket.Upgrader</code> 都没设 <code>EnableCompression</code>）</td>
+      <td>常态几 KB/s，TUI 整屏重绘峰值几百 KB/s</td>
+      <td><b>permessage-deflate（RFC 7692）</b>，一行配置。注意 gorilla 的实现是
+        <b>no-context-takeover</b>（字典不跨消息保留，且官方标注 experimental），
+        小消息收益打折——整屏重绘那种大消息 <b>5–10×</b>，逐字回显 <b>2–3×</b>。
+        更狠的做法是在<b>隧道层</b>压一条 <b>zstd 流</b>：字典跨消息持续，还能给 ANSI/TUI 输出训一份字典</td></tr>
+    <tr><td><b>文件传输</b></td>
+      <td>HTTP 直传 / P2P DataChannel（<code>p2p/download.ts</code> + stream-saver）</td>
+      <td>与文件等大，<b>没有压缩空间</b>（多是已压缩格式）</td>
+      <td>唯一的解是<b>不过 Broker</b>：WebRTC P2P 直连（下方）+ Range 断点续传</td></tr>
+    <tr><td><b>REST / JSON</b></td>
+      <td>静态资源有预压缩 br/gz（<code>server.go</code>），<b>API 响应没压</b></td>
+      <td>小，但 <code>/git/graph</code>、<code>/search</code> 这类能到几百 KB</td>
+      <td>gin gzip 中间件 + <code>ETag</code>/<code>If-None-Match</code>。<b>顺手就做</b></td></tr>
+  </tbody>
+</table>
+
+<div class="note warn">
+  <b>算一笔账</b>：一路标清镜像 6 Mbps ≈ <b>2.7 GB/小时</b>。每天看 8 小时 ≈ 21 GB，
+  一个月 <b>640 GB</b>——一台 1TB/月流量的小主机<b>撑不住两个人</b>。
+  换成 H.264 之后同样时长约 90 GB，再叠加 P2P 直连则趋近 0。
+  这不是"优化"，这是这套架构能不能付得起的问题。
+</div>
+
+<h3>P2P 直连：让大流量根本不进 Broker</h3>
+<div class="hop">
+  <div class="acc"><b>信令</b>走 Broker 隧道<code>/n/&lt;id&gt;/api/p2p/signal</code></div>
+  <div class="okk"><b>媒体 / 文件</b>浏览器 ⇄ 节点 <b>直连</b>，不过 Broker</div>
+  <div><b>打不通时</b>自动落回隧道中转（现有 relay 语义，侧栏 <code>LinkStatus</code> 已经会显示）</div>
+</div>
+<ul class="pts">
+  <li>仓库里<b>已经有这套</b>：<code>backend/p2p/</code>（ICE / UPnP / DataChannel）+ <code>frontend/src/p2p/</code>（PR #121）。
+    多机场景下它从"锦上添花"变成"付得起账单的前提"。</li>
+  <li>这是相对「每台机器各配一条 frp」的<b>真实优势</b>：frp 的流量必然过中转机，我们能直连。</li>
+  <li>两端都在 NAT 后时成功率取决于 STUN/UPnP；打不通就中转，用户只在 <code>LinkStatus</code> 上看到「中转」。
+    <b>要不要自建 TURN 得等 P1/P2 把中转带宽实测出来再定</b>，不要提前买。</li>
+</ul>
+
+<h3>还有三条几乎白捡的</h3>
+<ol class="pts">
+  <li><b>页面不可见就停推流</b>：<code>document.visibilityState === 'hidden'</code> 时暂停镜像帧
+    （切到别的标签页 / 手机锁屏）。今天的信用背压会让它自然降速，但<b>不会归零</b>——
+    一个后台标签页可以持续烧几 Mbps。</li>
+  <li><b>切机器时断开旧机器的镜像</b>：多机之后很容易同时挂着两台机器的镜像流而不自知。
+    规则：镜像流<b>只跟当前机器</b>，终端才是跨机器常驻的。</li>
+  <li><b>自适应初始档降一级</b>：Broker 场景下的 RTT 天然比局域网高，
+    从「标清」起步会先冲高再回落，白烧一段。跨 Broker 时初始档改「流畅」。</li>
+</ol>
+
+<h2>12. 跨机器搜索：Broker 扇出</h2>
+<p class="lede">
+  <b>搜索是唯一一个天然横跨所有机器的功能</b>，也是多机之后唯一一个「功能变强」而不只是
+  「能切换」的地方。只搜当前机器等于把路由工作推回给人——用户得先想起来「那东西在哪台机器上」。
+  所以它进 P1，而且它<b>反过来约束数据形状</b>（见下 ③），晚做就是全面返工。
+</p>
+<pre class="code"><i>// Broker 扇出：一条请求打散成 N 条，逐台<b>流式</b>回推（NDJSON / SSE）</i>
+GET <b>/api/broker/search</b>?q=train&amp;limit=20&amp;scope=all
+  ├─ <u>/n/n_01/api/search</u>?q=train&amp;limit=20   → 12ms  9 条   <i>// 节点侧<b>零改动</b></i>
+  ├─ <u>/n/n_02/api/search</u>?q=train&amp;limit=20   → 45ms  3 条
+  ├─ <u>/n/n_03/api/search</u>?q=train&amp;limit=20   → 210ms 5 条
+  └─ n_04 离线 → 跳过，结果里留一条 <em>{"node":"n_04","error":"offline"}</em>
+
+<i>// 响应是一行一批，到一批推一批：</i>
+{"node":"n_01","hits":[…],"tookMs":12,"indexing":false}
+{"node":"n_02","hits":[…],"tookMs":45}
+{"node":"n_03","hits":[…],"tookMs":210,"truncated":true}
+{"done":true,"nodes":4,"failed":["n_04"]}</pre>
+<table>
+  <thead><tr><th style="width:22%">设计点</th><th>做法与理由</th></tr></thead>
+  <tbody>
+    <tr><td><b>① 必须增量返回</b></td>
+      <td>等最慢的节点 = 每次按键都等最慢的那台。一台 210ms 的云机器会让本机的 12ms 结果也变成 210ms。
+        前端本来就是「本地条目先出、后端结果并进来」的模式（<code>useSearchResults.ts</code>），
+        扇出只是把「后端」变成"多个后端逐个到"，UI 心智不变</td></tr>
+    <tr><td><b>② 不给远端降权</b></td>
+      <td>别用 <code>score × 0.7</code> 压别台机器的结果——「我明知道那个文件在 GPU 机上」的搜索
+        会永远排在本机噪音后面。改成<b>按机器分组</b>：本机组在最前，其他机器各一组。
+        顺序上偏向本机，分数上不动它</td></tr>
+    <tr><td><b>③ <code>id</code> 必须带 nodeId</b></td>
+      <td><span class="pill bad">最容易漏</span> <code>shell/palette/rows.ts</code> 的
+        <code>dedupeByKey</code> 按 <code>kind + id</code> 去重，而 <code>SearchHit.id</code> 今天是
+        「会话名 / 文件绝对路径」。两台机器上都有 <code>build</code>、都有
+        <code>~/codes/roam/README.md</code> —— 不带 nodeId 就会<b>被静默合成一条</b>。
+        <code>action.target</code> 同理（打开 = 切机器 + 打开）。与 §6 的 <code>TermKey</code> 同一笔账</td></tr>
+    <tr><td><b>④ 部分失败要显式</b></td>
+      <td>超时/离线的机器在结果里留一行「树莓派 未响应」。静默丢弃比搜不到更糟——
+        用户会据此认定"那台机器上没有"，然后去别处找半天</td></tr>
+    <tr><td><b>⑤ 超时与并发</b></td>
+      <td>名字搜索每节点硬超时 <b>1.5s</b>，内容搜索 <b>8s</b>；Broker 侧扇出并发上限 <b>8</b>，
+        20 台机器分批走。离线节点直接跳过不占并发</td></tr>
+    <tr><td><b>⑥ 内容搜索另算</b></td>
+      <td><code>/search/content</code> 走 rg，比名字搜索贵一到两个数量级。
+        <b>名字搜索默认全机器，内容搜索默认只本机</b> + 一枚显式的「在全部机器里搜」。
+        扇出 20 台 = 同时点着 20 个 rg，那是能把所有开发机一起拖慢的操作</td></tr>
+    <tr><td><b>⑦ 索引状态 per-node</b></td>
+      <td>节点各自建自己的文件索引（<code>indexing</code> 标志今天就有）。
+        UI 要能说「3 台里 1 台还在建索引，这批结果可能不全」，而不是笼统一句</td></tr>
+    <tr><td><b>⑧ 带宽</b></td>
+      <td>结果是小 JSON，扇出对带宽<b>无压力</b>（这是少数不用担心 §11 那笔账的地方）。
+        压力在各节点 CPU 和 Broker 的扇出并发上</td></tr>
+  </tbody>
+</table>
+<p class="lede">
+  <b>前端落点</b>：<code>search/client.ts</code> 的 <code>searchAll</code> 从「一次 fetch 拿 JSON」
+  改成「读一条流、每行 setState 一次」；<code>search/types.ts</code> 的 <code>SearchHit</code> 加
+  <code>nodeId</code> 并把它并进 <code>id</code>；<code>shell/palette/rows.ts</code> 的
+  <code>mergeRows</code> 加机器分组。<b>节点侧后端一行不改</b>——它只是被并发调用了 N 次。
+</p>
+
+<h2>13. 版本偏斜：控制台来自 Broker，API 来自节点</h2>
+<div class="note warn">
+  这是这套架构<b>独有</b>的新问题，单机时代不存在：浏览器加载的前端是
+  <b>Broker 上那一份</b>，但它调用的 API 在<b>各台节点</b>上，而节点是用户各自升级的。
+  一台没升级的节点 + 新前端 = 报错，而且报在业务页面上，用户会以为是那台机器坏了。
+</div>
+<ul class="pts">
+  <li>节点注册时上报 <code>version</code> 与 <code>capabilities</code>（PR #116 已经在报）。</li>
+  <li>Broker 记录自己的前端版本；<b>不兼容</b>时 <code>/nodes</code> 卡片给黄字「{version} 可升级」，
+    切到该节点时页头芯片转黄——<b>不阻断</b>，因为大部分接口是兼容的。</li>
+  <li>真正的破坏性变更要靠 <code>capabilities</code> 声明能力而不是比版本号：
+    前端按能力隐藏入口（老节点没有 <code>swarm</code> 就不显示蜂群页），这比版本区间判断稳。</li>
+  <li>升级路径：<code>/nodes</code> 卡片上给一键「升级命令」（同接入命令，复制到那台机器执行）。</li>
+</ul>
+
+<h2>14. 故障矩阵</h2>
+<table>
+  <thead><tr><th style="width:24%">情况</th><th style="width:32%">后端</th><th>前端</th></tr></thead>
+  <tbody>
+    <tr><td>节点掉线</td><td>心跳/ping 超时 → <code>offline</code>，路由返回 <code>502 NODE_OFFLINE</code></td><td>降级黄条 + 内容置灰禁写；终端走现有断线重连</td></tr>
+    <tr><td>节点重连</td><td>指数退避，长期凭证鉴权，注册表原地更新（<b>nodeId 不变</b>）</td><td>状态点自动转绿，不需要用户操作，不刷新页面</td></tr>
+    <tr><td>Broker 重启</td><td>注册表从磁盘恢复；所有节点重连（最长 30s）</td><td>会话 cookie 仍有效；期间请求 502，显示"正在恢复"</td></tr>
+    <tr><td>enrollment token 泄漏</td><td>一次性 + 有效期（默认 10 分钟），用过即废</td><td><code>/nodes</code> 可主动作废未使用的 token</td></tr>
+    <tr><td>两台机器同名</td><td>允许（名字只用于显示），nodeId 唯一</td><td>方章相同则在列表里追加 hostname 消歧</td></tr>
+    <tr><td>同名会话跨机</td><td>各自独立（tmux 在各自机器上）</td><td>键是 <code>(nodeId, name)</code>，见 §6。<b>不改这条就会串台</b>，搜索结果还会被静默去重掉（§12 ③）</td></tr>
+    <tr><td>搜索时某台超时</td><td>该节点的扇出请求 1.5s 后取消，不阻塞其余</td><td>结果里显式留一行「{name} 未响应」，不静默丢</td></tr>
+    <tr><td>节点时钟偏差</td><td>心跳时间戳以 <b>Broker 本地时间</b>为准，不信节点报的时间</td><td>"心跳 2s 前"是 Broker 算的</td></tr>
+    <tr><td>浏览器直连节点（局域网）</td><td>照常，public handler 要登录</td><td><code>nodePath()</code> 返回裸路径，界面回到单机形态</td></tr>
+  </tbody>
+</table>
+
+<h2>15. 数据模型与持久化</h2>
+<pre class="code">Node {
+  id            string    <i>// 稳定唯一 id，寻址只用它</i>
+  name          string    <i>// 可改显示名（方章取前两字）</i>
+  hostname, os, version   <i>// 节点上报</i>
+  capabilities  []string  <i>// term/files/git/browser/phone/swarm —— 前端按它隐藏入口</i>
+  group         string
+  tags          []string
+  status        enum      <i>// online | offline</i>
+  lastHeartbeat time      <i>// Broker 本地时间</i>
+  <b>latencyMs     int</b>       <i>// 新增：control ping RTT 的 EWMA</i>
+  sessionCount  int
+  load          float
+  credentialRef string    <i>// 长期凭证不明文入库</i>
+}
+EnrollmentToken { token, expiresAt, usedAt, presetName, presetGroup }
+BrokerPrefs     { lastNodeId, followTabSwitch bool }   <i>// 新增：Broker 级偏好</i></pre>
+<p class="lede">
+  持久化沿用 PR #116 的做法（<code>dataDir/cluster/nodes.json</code>）——注册表读多写少，
+  几十台以内 JSON 文件足够，和项目现有习惯一致。不引入 SQLite / bbolt。
+</p>
+
+<h2>16. 分期与验收</h2>
+<table>
+  <thead><tr><th style="width:12%">阶段</th><th style="width:44%">内容</th><th>验收</th></tr></thead>
+  <tbody>
+    <tr><td><b>P1 · 打通</b></td>
+      <td>重起分支 cherry-pick #116 + 修三处硬伤；<b><code>tunnel.Transport</code> 接口 + 按 control/interactive/bulk 分三条隧道</b>（§10）；
+        <code>node-url.ts</code> 收口 12 类入口；会话键改 <code>(nodeId, name)</code>；bootstrap + localStorage 镜像；
+        侧栏切换器 + 页头芯片 + <code>/nodes</code> 基础页；
+        <b>⌘K 名字搜索的 Broker 扇出</b>（流式 + 按机器分组 + <code>id</code> 带 nodeId，§12）</td>
+      <td>在 A 机器开着跑 Claude 的终端，切到 B 浏览文件、开 B 的终端，
+        <b>A 的终端还在跑且输出没串台</b>；含特殊字符的文件名能预览和下载；
+        <b>下大文件时终端不卡</b>（队头阻塞已隔离）；
+        <b>在 B 上搜一个只存在于 A 的文件名能搜到并跳过去，且慢机器不拖慢搜索框</b></td></tr>
+    <tr><td><b>P2 · 好用</b></td>
+      <td>延迟/负载展示、降级与重连 UI、⌘K 机器组、弱联动、接入命令一键复制 + 等待接入、
+        概览「全部机器」、版本偏斜提示、<b>内容搜索的跨机器显式扇出</b>；<b>省带宽第一批</b>：permessage-deflate（RFC 7692）、
+        REST gzip + ETag、页面不可见停推流、切机器断旧镜像、跨 Broker 初始画质降一档（§11）</td>
+      <td>拔掉一台机器的网线：黄条出现 &lt; 10s，恢复后自动转绿，全程不用刷新；
+        <b>终端整屏重绘流量实测降 5× 以上</b>，后台标签页镜像流量归零</td></tr>
+    <tr><td><b>P3 · 提速</b></td>
+      <td>P2P 直连（大流量绕开 Broker）、<b>镜像换视频编码</b>（浏览器 VP8/H.264 track、
+        手机接 scrcpy 的 MediaCodec H.264）、<b>QUIC / WebTransport 承载</b>（协商 + WS 回退）、
+        跨机器 swarm 分派、跨机器文件对比</td>
+      <td>2GB 文件下载不经过 Broker 出口（<code>LinkStatus</code> 显示「直连」）；
+        同画质镜像码率从 4–8 Mbps 降到 1–2 Mbps；手机换 Wi-Fi 不断线（QUIC 连接迁移）</td></tr>
+    <tr><td><b>P4 · 治理</b></td>
+      <td>多用户 + 按节点/分组授权、mTLS、审计日志</td>
+      <td>—</td></tr>
+  </tbody>
+</table>
+<p class="lede">
+  每一期照常过闸：<code>scripts/dev/quality/check.sh full</code>；前端另加
+  <code>typecheck / i18n:check / hover:check / vitest / build</code>。
+  <b>新增两条自动检查</b>：①「<code>src</code> 里不许出现字面量 <code>/api/</code>」（§5）；
+  ② 单机快照测试——<code>cluster.broker</code> 为空时渲染树里<b>不出现任何多机组件</b>。
+</p>
+
+<h2>17. 未决</h2>
+<ol class="pts">
+  <li><b>Broker 部署形态</b>：独立公网小主机（推荐，职责干净）还是和某台标准节点同机？
+    同机部署要注意那台机器既是 Broker 又是节点，<code>/n/&lt;自己&gt;/</code> 会绕一圈隧道回到本机——
+    要不要短路成直接调用（省一跳，但两条代码路径）。</li>
+  <li><b>install.sh 的分发</b>：Broker 要不要顺带托管二进制？不托管则节点得能访问 GitHub Release，
+    而"公司内网机器上不了外网"恰恰是这套方案的典型用户。倾向：<b>Broker 托管</b>，
+    它本来就有一份同版本二进制。</li>
+  <li><b>enrollment 有效期</b>：10 分钟够不够？跨时区手动粘贴命令的场景可能要 24 小时。</li>
+  <li><b>多用户</b>是否纳入近期范围，还是先"单用户管多机"、团队版后置。</li>
+  <li><b>扇出规模</b>：并发 8 / 超时 1.5s 是拍的，等真有 10+ 台机器再按实测调。
+    另一个没定的是「机器很多时要不要按分组缩小搜索范围」——20 台全搜可能大部分是噪音。</li>
+  <li><b>TURN 要不要自建</b>：P2P 打不通时的中转。先在 P1/P2 把实际中转流量测出来再决定——
+    自建 TURN 的带宽账和 Broker 中转是同一笔，提前买没意义。</li>
+  <li><b>镜像换视频编码的落点</b>：浏览器侧 CDP 只给 JPEG，要么在节点上把 JPEG 序列再编码（多一次转码，省带宽但费 CPU），
+    要么改用 <code>Page.startScreencast</code> 之外的路子（如 <code>chrome --remote-debugging</code> + WebRTC getDisplayMedia）。
+    手机侧则清晰得多：scrcpy 的做法是设备端 MediaCodec 直出，<b>不需要转码</b>。</li>
+</ol>
+
+<div class="note ok">
+  <b>配套视觉稿</b>：<a href="./ui.html" style="color:var(--accent)">ui.html</a>
+  —— 机器方章、侧栏底座切换器、页头芯片、终端标签、<code>/nodes</code> 卡片墙、
+  手机三屏、掉线态，以及旧稿六条界面结论为什么全部作废。
+</div>
+
+</div>
+
+<script>
+  const btn = document.getElementById('theme')
+  btn.addEventListener('click', () => {
+    const light = document.documentElement.getAttribute('data-theme') === 'light'
+    document.documentElement.setAttribute('data-theme', light ? 'dark' : 'light')
+    btn.textContent = light ? '切到浅色' : '切到深色'
+  })
+</script>
+</body>
+</html>
