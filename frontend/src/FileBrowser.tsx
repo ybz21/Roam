@@ -743,7 +743,12 @@ export default function FileBrowser({
     // 预览至少留 PREVIEW_MIN：拖到把预览挤没了，这个分栏就白做了
     const cap = Math.max(TREE_MIN, Math.min(TREE_MAX, (dockRef.current?.getBoundingClientRect().width || TREE_MAX) - PREVIEW_MIN))
     dockResize.start(e, {
-      onMove: (ev) => setTreeW(Math.min(cap, Math.max(TREE_MIN, startW + ev.clientX - startX))),
+      // 列表在把手**右边**，所以往右拖是把它推窄（符号跟着位置走，不是笔误）
+      onMove: (ev) => {
+        const w = Math.min(cap, Math.max(TREE_MIN, startW - (ev.clientX - startX)))
+        treeWRef.current = w // ref 不等下一次渲染：最后一次 move 与 up 落在同一帧时，onEnd 否则存的是上一个宽度
+        setTreeW(w)
+      },
       onEnd: () => localStorage.setItem('ttmux.fileTreeW', String(treeWRef.current)),
     })
   }
@@ -1072,21 +1077,14 @@ export default function FileBrowser({
   //
   // 面板窄到放不下两栏时（< SPLIT_MIN）自动退回单栏：预览盖住树，左上角给返回。
   // 420 宽硬塞两栏的结果是两边都没法看——宁可少一栏，也不要两栏都残。
+  //
+  // **列表靠右缘，文件内容往左展开。**这块面板是从屏幕右边拉出来的：列表原本铺满整个
+  // 面板、贴着右缘，一点开文件却被挤到左半边，等于你刚点的那一列自己跑了。现在列表钉在
+  // 右缘不动，内容从它左边长出来——新出现的东西占新地方，已经在看的那列不动。
   if (layout === 'dock') {
     const twoPane = !!view && dockW >= SPLIT_MIN
     return (
       <div ref={dockRef} style={{ position: 'relative', flex: 1, minWidth: 0, minHeight: 0, display: 'flex' }}>
-        <div style={{
-          flex: twoPane ? `0 0 ${treeW}px` : '1 1 auto',
-          minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column',
-        }}>
-          {browserPane}
-        </div>
-        {twoPane && (
-          <div data-resize-handle="filetree" onPointerDown={startTreeResize}
-            title={t('file.dragResize')} className="tt-split-rail"
-            style={{ flex: '0 0 5px', cursor: 'col-resize', background: 'var(--border)', touchAction: 'none' }} />
-        )}
         {view && (
           <div style={twoPane
             ? { flex: '1 1 auto', minWidth: 0, minHeight: 0, display: 'flex' }
@@ -1096,6 +1094,17 @@ export default function FileBrowser({
               onOpenPath={openPath} onOpenAgent={onOpenAgent} />
           </div>
         )}
+        {twoPane && (
+          <div data-resize-handle="filetree" onPointerDown={startTreeResize}
+            title={t('file.dragResize')} className="tt-split-rail"
+            style={{ flex: '0 0 5px', cursor: 'col-resize', background: 'var(--border)', touchAction: 'none' }} />
+        )}
+        <div style={{
+          flex: twoPane ? `0 0 ${treeW}px` : '1 1 auto',
+          minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column',
+        }}>
+          {browserPane}
+        </div>
       </div>
     )
   }

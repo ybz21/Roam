@@ -289,4 +289,21 @@ describe('FileBrowser dock 两栏与分界拖动', () => {
     await waitFor(() => expect(container.textContent || '').toContain('a.md'))
     expect(container.querySelector('[data-resize-handle="filetree"]')).toBeNull()
   })
+
+  // 面板是从屏幕右缘拉出来的：列表钉在右缘，文件内容往它左边长。
+  // 反过来的话，一点开文件，你刚点的那一列自己跑到左半边去了。
+  it('列表在右、内容在左', async () => {
+    panelWidth = 800
+    const { container } = renderDock()
+    const rail = await waitFor(() => {
+      const r = container.querySelector('[data-resize-handle="filetree"]')
+      if (!r) throw new Error('rail not ready')
+      return r
+    })
+    const cols = Array.from(rail.parentElement!.children)
+    const railAt = cols.indexOf(rail)
+    // 把手左边是预览（带文件名），右边是列表（带路径输入框）
+    expect(cols[railAt - 1].textContent || '').toContain('a.md')
+    expect(cols[railAt + 1].querySelector('input')).not.toBeNull()
+  })
 })
