@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-// 点开文件要能读：420 的默认 Inspector 列宽分成两栏后只剩两百出头的预览，
-// 分栏等于白做。面板自己知道要多宽，列宽却在 Shell 手里——这条小道把两边接上。
+// 文件抽屉是两层折叠：文件夹层 + 预览层，面板宽 = 两层之和。宽度由面板自己报，
+// Shell 照办——但只在报的值变化时办一次，否则用户拖外把手会被立刻弹回去（把手等于拖不动）。
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 
@@ -28,30 +28,34 @@ describe('文件预览要列宽', () => {
   })
   afterEach(() => { vi.unstubAllGlobals() })
 
-  it('要得比现在宽就加宽，收起预览不缩回去', async () => {
+  it('叠一层预览就加一层的宽，收起来又减回去', async () => {
     const m = await freshModules()
     const { result } = renderHook(() => m.useWorkspaceLayout(true))
     expect(result.current.inspectorWidth).toBe(m.INSPECTOR_DEFAULT)
 
-    m.requestInspectorWidth(825)
-    await waitFor(() => expect(result.current.inspectorWidth).toBe(825))
+    // 只有文件夹层
+    m.requestInspectorWidth(360)
+    await waitFor(() => expect(result.current.inspectorWidth).toBe(360))
 
-    // 关掉预览：请求撤回，但列不缩——面板多宽是用户的选择，不该被开合文件反复改
-    m.requestInspectorWidth(0)
-    await new Promise((r) => setTimeout(r, 50))
-    expect(result.current.inspectorWidth).toBe(825)
+    // 点开文件 → 左边叠一层预览：300 + 5 + 500
+    m.requestInspectorWidth(805)
+    await waitFor(() => expect(result.current.inspectorWidth).toBe(805))
+
+    // 收起预览 → 退回文件夹层那一层的宽
+    m.requestInspectorWidth(360)
+    await waitFor(() => expect(result.current.inspectorWidth).toBe(360))
   })
 
-  it('用户拖得更宽时不动他的宽度', async () => {
+  it('报过的值不再反复施加，外把手才拖得动', async () => {
     const m = await freshModules()
     const { result } = renderHook(() => m.useWorkspaceLayout(true))
-    // 拖到上界（几何还要给 Dock 留位，落地值由 inspectorBounds 说了算）
-    result.current.setInspectorWidth(m.INSPECTOR_MAX)
-    await waitFor(() => expect(result.current.inspectorWidth).toBeGreaterThan(825))
-    const dragged = result.current.inspectorWidth
+    m.requestInspectorWidth(805)
+    await waitFor(() => expect(result.current.inspectorWidth).toBe(805))
 
-    m.requestInspectorWidth(825)
-    await new Promise((r) => setTimeout(r, 50))
-    expect(result.current.inspectorWidth).toBe(dragged)
+    // 用户拖外把手：报的值没变，不许把他弹回 805
+    result.current.setInspectorWidth(700)
+    await waitFor(() => expect(result.current.inspectorWidth).toBe(700))
+    await new Promise((r) => setTimeout(r, 60))
+    expect(result.current.inspectorWidth).toBe(700)
   })
 })
