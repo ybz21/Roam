@@ -227,8 +227,11 @@ export function FileView({
   )
 
   if (inline) {
+    // flex:1 + minWidth:0 缺一不可：这块内容常挂在行向 flex 父级里（抽屉的预览层就是），
+    // 不给 flex 它按内容宽收缩——代码文件表现为「编辑器只占左边一条，右边空一大片」，
+    // Monaco 按容器宽排版，容器多窄它就画多窄，长行还被截掉。
     return (
-      <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg-base)' }}>
+      <div style={{ flex: 1, minWidth: 0, height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg-base)' }}>
         {/* 编辑器 tab 语境(tabbed)：文件名/操作已由外层 tab 承担 → 去掉整条标题栏，编辑器全屏。保存用 Ctrl/Cmd+S。 */}
         {!tabbed && <div style={{ padding: '9px 12px', borderBottom: '1px solid var(--border-subtle)' }}>{titleNode}</div>}
         <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', padding: tabbed ? 0 : 12, position: 'relative' }}>

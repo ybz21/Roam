@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLayout, type WindowSize } from '../layout'
 import { usePreferences, preferencesLoaded, saveWorkspace } from '../preferences'
-import { useInspectorOpen } from './inspector'
+import { useInspectorOpen, useInspectorWantWidth } from './inspector'
 
 /** 尺寸契约，与 index.css 的 --canvas-min / --dock-* 同源（14 §8.2）。 */
 export const CANVAS_MIN = 560
@@ -24,7 +24,9 @@ export const OVERLAY_DOCK = 480
 /** Inspector（Git / Worktree 列）的尺寸契约，见 14-desktop-workspace/panels-desktop.html */
 export const INSPECTOR_MIN = 360
 export const INSPECTOR_DEFAULT = 420
-export const INSPECTOR_MAX = 880
+// 文件抽屉是两层折叠（文件夹层 + 预览层），两层加起来能到一千出头——880 会把预览截短。
+// 真正的上界仍由 inspectorBounds 按剩余空间给，这里只是"用户最多能拖多宽"。
+export const INSPECTOR_MAX = 1200
 /** 面板内左右分栏（列表 ｜ diff）的阈值：280 列表 + 8 + 400 diff + 32 padding */
 export const INSPECTOR_SPLIT = 720
 
@@ -275,6 +277,23 @@ export function useWorkspaceLayout(hasTerms: boolean): WorkspaceLayout {
     setInsWidthLocal(clamped)
     saveWorkspace({ inspectorWidth: clamped })
   }, [insBounds])
+
+  /**
+   * 面板自己报的宽度（文件抽屉是两层折叠，宽度＝两层之和，见 FileBrowser 顶部那段）。
+   *
+   * **只在它变化的那一刻应用一次**：盯着 inspectorWidth 反复施加的话，用户拖外把手拖出来的
+   * 宽度会被立刻弹回去——那根把手就等于拖不动了。面板量到自己被拖宽后会把差值收进对应
+   * 那一层并报一个新值，两边由此收敛。
+   *
+   * 只在真有这一列的档位生效——手机走全屏二级页，没有这一列，不该被它改掉这份偏好。
+   */
+  const wantInspector = useInspectorWantWidth()
+  const appliedWant = useRef(0)
+  useEffect(() => {
+    if (!splitCapable || wantInspector === appliedWant.current) return
+    appliedWant.current = wantInspector
+    if (wantInspector > 0) setInspectorWidth(wantInspector)
+  }, [wantInspector, setInspectorWidth, splitCapable])
 
   const setNavCollapsed = useCallback((collapsed: boolean) => {
     hydrated.current = true

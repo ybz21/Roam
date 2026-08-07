@@ -17,6 +17,7 @@ import {
   FolderUpIcon, ForwardIcon, IconButton, ListIcon, NewFolderIcon, RefreshIcon, SearchIcon, SortIcon, TreeIcon, UploadIcon,
 } from './file-icons'
 import { Viewer } from './fileview'
+import { requestInspectorWidth } from './shell/inspector'
 import { ArrowUp } from './icons'
 import { composingEnter, onEnterSubmit } from './enter-submit'
 
@@ -331,12 +332,26 @@ function FileTree({
   return <>{renderLevel(root, rootEntries, 0)}</>
 }
 
-// 「文件夹 / 文件」两栏的尺寸契约（dock 布局用）
+/**
+ * dock 布局是**两层折叠**，不是一个定宽面板切两半。
+ *
+ * 先弹出文件夹这层（宽 = LIST_*），点开一个文件再在它左边**叠一层**预览（宽 = PREVIEW_*），
+ * 面板总宽是两层相加。切总宽的做法是错的：420 的面板切完只剩两百出头的预览，读不了代码；
+ * 而且一开文件，你正看着的那一列就自己变窄了。
+ *
+ * 两层各自记宽度、各自能拖：
+ *   · 里把手（两层之间）贴着文件夹层 → 拖它改的是文件夹宽；
+ *   · 外把手（面板左缘）贴着最左那层 → 预览开着时改预览宽，没开时改文件夹宽。
+ * 每根把手都只管紧挨着它的那一层，面板外缘跟着两层之和走。
+ */
+const RAIL = 5
 const TREE_MIN = 180        // 树再窄就只剩省略号
 const TREE_MAX = 480
-const TREE_DEFAULT = 260
+const TREE_DEFAULT = 360
 const PREVIEW_MIN = 280     // 预览再窄读不了代码
-const SPLIT_MIN = TREE_MIN + PREVIEW_MIN + 5   // 面板窄于此只显示一栏
+const PREVIEW_MAX = 1200
+const PREVIEW_DEFAULT = 560 // 80 列等宽正文 + 两侧留白
+const SPLIT_MIN = TREE_MIN + PREVIEW_MIN + RAIL   // 面板窄到这个数以下只显示一栏
 
 export default function FileBrowser({
   dir,
@@ -720,7 +735,7 @@ export default function FileBrowser({
     }
   }
 
-  // 「文件夹 / 文件」两栏的分界：可拖，记 localStorage。
+  // ── 两层折叠的尺寸（契约见文件上方 RAIL/TREE_*/PREVIEW_* 那段）──
   const dockRef = useRef<HTMLDivElement>(null)
   const [dockW, setDockW] = useState(0)
   useEffect(() => {
@@ -731,23 +746,76 @@ export default function FileBrowser({
     setDockW(el.getBoundingClientRect().width)
     return () => ro.disconnect()
   }, [])
-  const [treeW, setTreeW] = useState(() => {
-    const v = Number(localStorage.getItem('ttmux.fileTreeW'))
-    return v >= TREE_MIN && v <= TREE_MAX ? v : TREE_DEFAULT
-  })
+
+  const clampTree = (v: number) => Math.min(TREE_MAX, Math.max(TREE_MIN, Math.round(v)))
+  const clampPreview = (v: number) => Math.min(PREVIEW_MAX, Math.max(PREVIEW_MIN, Math.round(v)))
+  const stored = (key: string, fallback: number, clamp: (v: number) => number) => {
+    const v = Number(localStorage.getItem(key))
+    return Number.isFinite(v) && v > 0 ? clamp(v) : fallback
+  }
+  const [treeW, setTreeW] = useState(() => stored('ttmux.fileTreeW', TREE_DEFAULT, clampTree))
+  const [previewW, setPreviewW] = useState(() => stored('ttmux.filePreviewW', PREVIEW_DEFAULT, clampPreview))
   const treeWRef = useRef(treeW)
   treeWRef.current = treeW
+
+  /**
+   * 面板宽 = 两层之和，由这里说了算（不是「面板多宽就切多宽」）。
+   *
+   * askedRef/matchedRef 是为了把「我们请求的宽度」和「用户拖外把手拖出来的宽度」分开：
+   * 请求发出后先等它落地（matched），之后再量到的差值才算是外把手拖的，收进最左那一层。
+   * 不分开的话，首帧量到的旧面板宽会被当成用户意图，把文件夹层的宽度冲掉。
+   */
+  const askedRef = useRef(0)
+  const matchedRef = useRef(false)
+  useEffect(() => {
+    if (layout !== 'dock') return
+    const want = view ? previewW + RAIL + treeW : treeW
+    if (askedRef.current === want) return
+    askedRef.current = want
+    matchedRef.current = false
+    requestInspectorWidth(want)
+  }, [view, layout, treeW, previewW])
+  useEffect(() => () => requestInspectorWidth(0), [])
+
+  /**
+   * 外把手（面板左缘）拖的是最左那一层：预览开着改预览宽，没开改文件夹宽。
+   *
+   * **等它不动了再收**：面板宽度是带过渡的，松手后那几帧量到的是中间态。当场就收的话，
+   * 收到的瞬时值会被当成用户的意图再报回去——实测松手明明到了 985，0.4 秒后自己缩回 872。
+   */
+  const settle = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (layout !== 'dock' || !dockW || !askedRef.current) return
+    if (Math.abs(dockW - askedRef.current) <= 1) { matchedRef.current = true; return }
+    if (!matchedRef.current) return
+    if (settle.current) clearTimeout(settle.current)
+    settle.current = setTimeout(() => {
+      if (view) {
+        const next = clampPreview(dockW - treeW - RAIL)
+        if (next !== previewW) { setPreviewW(next); localStorage.setItem('ttmux.filePreviewW', String(next)) }
+      } else {
+        const next = clampTree(dockW)
+        if (next !== treeW) { setTreeW(next); localStorage.setItem('ttmux.fileTreeW', String(next)) }
+      }
+    }, 400)
+    return () => { if (settle.current) clearTimeout(settle.current) }
+  }, [dockW])
+
+  // 里把手（两层之间）贴着文件夹层：往右拖把它推窄，面板外缘跟着让出来
   const dockResize = usePointerResize()
   const startTreeResize = (e: ReactPointerEvent<HTMLDivElement>) => {
     const startX = e.clientX
     const startW = treeW
-    // 预览至少留 PREVIEW_MIN：拖到把预览挤没了，这个分栏就白做了
-    const cap = Math.max(TREE_MIN, Math.min(TREE_MAX, (dockRef.current?.getBoundingClientRect().width || TREE_MAX) - PREVIEW_MIN))
     dockResize.start(e, {
-      onMove: (ev) => setTreeW(Math.min(cap, Math.max(TREE_MIN, startW + ev.clientX - startX))),
+      onMove: (ev) => {
+        const w = clampTree(startW - (ev.clientX - startX))
+        treeWRef.current = w // ref 不等下一次渲染：最后一次 move 与 up 落在同一帧时，onEnd 否则存的是上一个宽度
+        setTreeW(w)
+      },
       onEnd: () => localStorage.setItem('ttmux.fileTreeW', String(treeWRef.current)),
     })
   }
+
 
   // 对话里点了文件名 → 在这个浏览器里打开它：先把树导航到它所在目录，再开预览。
   // 走 openPath 而不是直接 setView：不 navigate 的话左边的树还停在别处，
@@ -1073,21 +1141,14 @@ export default function FileBrowser({
   //
   // 面板窄到放不下两栏时（< SPLIT_MIN）自动退回单栏：预览盖住树，左上角给返回。
   // 420 宽硬塞两栏的结果是两边都没法看——宁可少一栏，也不要两栏都残。
+  //
+  // **列表靠右缘，文件内容往左展开。**这块面板是从屏幕右边拉出来的：列表原本铺满整个
+  // 面板、贴着右缘，一点开文件却被挤到左半边，等于你刚点的那一列自己跑了。现在列表钉在
+  // 右缘不动，内容从它左边长出来——新出现的东西占新地方，已经在看的那列不动。
   if (layout === 'dock') {
     const twoPane = !!view && dockW >= SPLIT_MIN
     return (
       <div ref={dockRef} style={{ position: 'relative', flex: 1, minWidth: 0, minHeight: 0, display: 'flex' }}>
-        <div style={{
-          flex: twoPane ? `0 0 ${treeW}px` : '1 1 auto',
-          minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column',
-        }}>
-          {browserPane}
-        </div>
-        {twoPane && (
-          <div data-resize-handle="filetree" onPointerDown={startTreeResize}
-            title={t('file.dragResize')} className="tt-split-rail"
-            style={{ flex: '0 0 5px', cursor: 'col-resize', background: 'var(--border)', touchAction: 'none' }} />
-        )}
         {view && (
           <div style={twoPane
             ? { flex: '1 1 auto', minWidth: 0, minHeight: 0, display: 'flex' }
@@ -1097,6 +1158,17 @@ export default function FileBrowser({
               onOpenPath={openPath} onOpenAgent={onOpenAgent} />
           </div>
         )}
+        {twoPane && (
+          <div data-resize-handle="filetree" onPointerDown={startTreeResize}
+            title={t('file.dragResize')} className="tt-split-rail"
+            style={{ flex: `0 0 ${RAIL}px`, cursor: 'col-resize', background: 'var(--border)', touchAction: 'none' }} />
+        )}
+        <div style={{
+          flex: twoPane ? `0 0 ${treeW}px` : '1 1 auto',
+          minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column',
+        }}>
+          {browserPane}
+        </div>
       </div>
     )
   }
