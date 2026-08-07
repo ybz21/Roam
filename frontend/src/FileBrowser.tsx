@@ -435,10 +435,16 @@ export default function FileBrowser({
   const [prefs] = usePreferences() // P2P 直连下载开关（设置页可关，网络抖动时回退纯 frp）
 
   // 会话切换（dir 变化）→ 回到工作目录根，并重置历史
+  // 预览也一起收：树都回新会话的工作目录了，右边还挂着上个会话（往往是另一个项目）的文件，
+  // 看起来就是「点开文件面板，它自己带出个不相干的旧文件」。
+  // 首帧的 '' → cwd 不算切会话（cwd 是异步取回来的），那会把刚从对话里点开的文件误关掉。
+  const prevDirRef = useRef(dir)
   useEffect(() => {
     setPath(dir || '')
     setHistory([dir || ''])
     setHistIdx(0)
+    if (prevDirRef.current && prevDirRef.current !== dir) setView(null)
+    prevDirRef.current = dir
   }, [dir])
 
   // 进入新目录：截断当前位置之后的前进记录，再追加并前移

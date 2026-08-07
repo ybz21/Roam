@@ -1108,6 +1108,11 @@ function TerminalPane(props: {
   // 全屏二级页，带 ← 和物理返回键），返回就回到原会话原滚动位置——**不是**跳走。
   // 早先这里按 isPhone 把 onOpenFile 置空，结果手机上工具行里的路径根本点不动。
   const [dockFileReq, setDockFileReq] = useState<{ path: string; nonce: number } | null>(null)
+  // 请求是一次性的：抽屉一关 <FileBrowser> 就整个卸载，下次点「文件」是全新挂载，
+  // 留着的旧请求会被当成新请求重放一遍——于是点「文件」总把上次点开的那个文件又开出来，
+  // 换了会话也照开（那是上个会话工作目录里的文件）。开完就丢，关抽屉/换会话时清干净。
+  useEffect(() => { if (!showFiles) setDockFileReq(null) }, [showFiles])
+  useEffect(() => { setDockFileReq(null) }, [active])
   const openFileFromChat = (path: string, line?: number) => {
     if (fileDock === 'left') {
       requestIntent(OPEN_FILE_INTENT, { path, line, side: true })
