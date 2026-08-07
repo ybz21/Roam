@@ -18,6 +18,7 @@ import {
 } from './file-icons'
 import { Viewer } from './fileview'
 import { ArrowUp } from './icons'
+import { composingEnter, onEnterSubmit } from './enter-submit'
 
 interface Entry { name: string; dir: boolean; size: number; mtime: number; ctime: number }
 interface Dir { path: string; parent: string; entries: Entry[] }
@@ -878,7 +879,7 @@ export default function FileBrowser({
             allowClear
             enterButton={t('file.open')}
             onSearch={(v) => submitTypedPath(v)}
-            onPressEnter={(e) => submitTypedPath((e.target as HTMLInputElement).value)}
+            onPressEnter={(e) => { if (composingEnter(e)) return; submitTypedPath((e.target as HTMLInputElement).value) }}
             placeholder={t('file.pathPlaceholder')}
             style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12 }}
           />
@@ -955,7 +956,7 @@ export default function FileBrowser({
         onOk={doMkdir}
         onCancel={() => { setMkdirOpen(false); setMkdirName(''); setMkdirDir(null) }}
       >
-        <Input autoFocus value={mkdirName} onChange={(e) => setMkdirName(e.target.value)} onPressEnter={doMkdir} placeholder={t('file.folderName')} />
+        <Input autoFocus value={mkdirName} onChange={(e) => setMkdirName(e.target.value)} onPressEnter={onEnterSubmit(doMkdir)} placeholder={t('file.folderName')} />
         <div style={{ marginTop: 8, color: 'var(--text-dimmer)', fontSize: 12, wordBreak: 'break-all' }}>
           {t('file.createUnder', { path: displayPath(mkdirDir || cur) })}
         </div>
@@ -969,7 +970,7 @@ export default function FileBrowser({
         onOk={doTouch}
         onCancel={() => { setTouchDir(null); setTouchName('') }}
       >
-        <Input autoFocus value={touchName} onChange={(e) => setTouchName(e.target.value)} onPressEnter={doTouch} placeholder={t('file.fileName')} />
+        <Input autoFocus value={touchName} onChange={(e) => setTouchName(e.target.value)} onPressEnter={onEnterSubmit(doTouch)} placeholder={t('file.fileName')} />
         <div style={{ marginTop: 8, color: 'var(--text-dimmer)', fontSize: 12, wordBreak: 'break-all' }}>
           {touchDir ? t('file.createUnder', { path: displayPath(touchDir) }) : null}
         </div>
@@ -983,7 +984,7 @@ export default function FileBrowser({
         onOk={doMove}
         onCancel={() => { setMoveTarget(null); setMoveDest('') }}
       >
-        <Input autoFocus value={moveDest} onChange={(e) => setMoveDest(e.target.value)} onPressEnter={doMove} placeholder={t('file.copyTargetPlaceholder')} />
+        <Input autoFocus value={moveDest} onChange={(e) => setMoveDest(e.target.value)} onPressEnter={onEnterSubmit(doMove)} placeholder={t('file.copyTargetPlaceholder')} />
         <div style={{ marginTop: 8, color: 'var(--text-dimmer)', fontSize: 12, wordBreak: 'break-all' }}>
           {moveTarget ? t('file.copySourceHint', { path: moveTarget.path }) : null}
         </div>
@@ -997,7 +998,7 @@ export default function FileBrowser({
         onOk={doRename}
         onCancel={() => { setRenameTarget(null); setRenameName('') }}
       >
-        <Input autoFocus value={renameName} onChange={(e) => setRenameName(e.target.value)} onPressEnter={doRename} placeholder={t('file.namePlaceholder')} />
+        <Input autoFocus value={renameName} onChange={(e) => setRenameName(e.target.value)} onPressEnter={onEnterSubmit(doRename)} placeholder={t('file.namePlaceholder')} />
         <div style={{ marginTop: 8, color: 'var(--text-dimmer)', fontSize: 12, wordBreak: 'break-all' }}>
           {renameTarget ? t('file.renamePathHint', { path: renameTarget.path }) : null}
         </div>
@@ -1011,7 +1012,7 @@ export default function FileBrowser({
         onOk={doCopy}
         onCancel={() => { setCopyTarget(null); setCopyDest('') }}
       >
-        <Input autoFocus value={copyDest} onChange={(e) => setCopyDest(e.target.value)} onPressEnter={doCopy} placeholder={t('file.copyTargetPlaceholder')} />
+        <Input autoFocus value={copyDest} onChange={(e) => setCopyDest(e.target.value)} onPressEnter={onEnterSubmit(doCopy)} placeholder={t('file.copyTargetPlaceholder')} />
         <div style={{ marginTop: 8, color: 'var(--text-dimmer)', fontSize: 12, wordBreak: 'break-all' }}>
           {copyTarget ? t('file.copySourceHint', { path: copyTarget.path }) : null}
         </div>

@@ -14,6 +14,7 @@ import { DirPicker, recentDirs, pushRecentDir } from './App'
 import { useI18n } from './i18n'
 import Markdown from './Markdown'
 import { useLayout } from './layout'
+import { onEnterSubmit } from './enter-submit'
 import { BlockIcon, BotIcon, CheckIcon, ChevronLeft, ClockIcon, CloseIcon, DiamondIcon, DotIcon, KeyboardIcon, LinkIcon, MegaphoneIcon, OpenInIcon, QuestionIcon, ReplyIcon, TargetIcon } from './icons'
 
 // ── 配色（与 App.tsx 一致） ──
@@ -223,7 +224,7 @@ export function NewSwarmModal({ open, onClose, onDone, initialDir, lockDir }: {
     <>
       <Modal open={open} onCancel={onClose} onOk={ok} okText={t('file.create')} confirmLoading={busy} title={t('swarm.new')} destroyOnClose>
         <Space direction="vertical" style={{ width: '100%' }}>
-          <Input placeholder={t('swarm.namePlaceholder')} value={name} onChange={(e) => setName(e.target.value)} autoFocus onPressEnter={ok} />
+          <Input placeholder={t('swarm.namePlaceholder')} value={name} onChange={(e) => setName(e.target.value)} autoFocus onPressEnter={onEnterSubmit(ok)} />
           <Input.TextArea rows={2} placeholder={t('swarm.goalPlaceholder')} value={goal} onChange={(e) => setGoal(e.target.value)} />
           {lockDir ? (
             <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12, color: C.fg2, padding: '6px 10px', border: `1px solid ${C.line}`, borderRadius: 6 }} title={dir}>{dir}</div>
@@ -862,7 +863,7 @@ function Plaza({ name, posts, focus }: { name: string; posts: Post[]; focus: str
       <div style={{ display: 'flex', gap: 8, padding: '9px 12px', borderTop: `1px solid ${C.line}` }}>
         <Select size="small" value={kind} onChange={setKind} style={{ width: 96 }}
           options={['note', 'ask', 'decide', 'broadcast', 'block', 'done'].map((k) => ({ value: k, label: k }))} />
-        <Input size="small" value={text} onChange={(e) => setText(e.target.value)} onPressEnter={send} placeholder={t('swarm.sayPlaceholder')} />
+        <Input size="small" value={text} onChange={(e) => setText(e.target.value)} onPressEnter={onEnterSubmit(send)} placeholder={t('swarm.sayPlaceholder')} />
         <Button size="small" type="primary" loading={sending} onClick={send}>{t('swarm.say')}</Button>
       </div>
     </Panel>
@@ -1021,7 +1022,7 @@ function AddCardModal({ open, name, onClose, onDone }: { open: boolean; name: st
   return (
     <Modal open={open} onCancel={onClose} onOk={ok} okText={t('swarm.addCard')} title={t('swarm.newCard')} destroyOnClose>
       <Space direction="vertical" style={{ width: '100%' }}>
-        <Input placeholder={t('swarm.cardTitlePlaceholder')} value={title} onChange={(e) => setTitle(e.target.value)} autoFocus onPressEnter={ok} />
+        <Input placeholder={t('swarm.cardTitlePlaceholder')} value={title} onChange={(e) => setTitle(e.target.value)} autoFocus onPressEnter={onEnterSubmit(ok)} />
         <Input placeholder={t('swarm.assigneePlaceholder')} value={assignee} onChange={(e) => setAssignee(e.target.value)} />
         <Select value={col} onChange={(v) => setCol(v as Col)} style={{ width: '100%' }}
           options={COLS.map((c) => ({ value: c, label: `${c} (${colLabel(t, c)})` }))} />

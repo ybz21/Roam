@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Input, Modal } from 'antd'
 import { useI18n } from '../i18n'
+import { onEnterSubmit } from '../enter-submit'
 
 export interface AskSpec {
   title: string
@@ -36,7 +37,7 @@ export default function AskModal({ spec, onClose }: { spec: AskSpec | null; onCl
       {spec?.label && <div style={{ fontSize: 12.5, color: 'var(--text-dim)', marginBottom: 6 }}>{spec.label}</div>}
       <Input autoFocus value={value} placeholder={spec?.placeholder}
         onChange={(e) => setValue(e.target.value)}
-        onPressEnter={submit} />
+        onPressEnter={onEnterSubmit(submit)} />
     </Modal>
   )
 }
