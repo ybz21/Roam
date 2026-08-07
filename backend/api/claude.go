@@ -79,24 +79,79 @@ func procChildren() map[int][]int {
 	return m
 }
 
-func processCmdline(pid int) string {
+// processArgv 返回进程的 argv（小写）。/proc 读不到时退回 ps，按空格切——
+// 那条路只用来兜底，切不准也只影响判断精度，不影响正确性。
+func processArgv(pid int) []string {
 	b, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "cmdline"))
 	if err == nil {
-		return strings.ToLower(strings.ReplaceAll(string(b), "\x00", " "))
+		args := strings.Split(strings.TrimRight(string(b), "\x00"), "\x00")
+		for i := range args {
+			args[i] = strings.ToLower(args[i])
+		}
+		return args
 	}
 	out, err := exec.Command("ps", "-p", strconv.Itoa(pid), "-o", "command=").Output()
 	if err != nil {
-		return ""
+		return nil
 	}
-	return strings.ToLower(strings.TrimSpace(string(out)))
+	return strings.Fields(strings.ToLower(strings.TrimSpace(string(out))))
 }
 
-// cmdlineHasClaude 判断进程命令行是否是 claude。
-func cmdlineHasClaude(pid int) bool {
-	cl := processCmdline(pid)
-	// 命令行里出现独立的 claude 段（claude / .../claude / node ... claude）
-	return strings.Contains(cl, "claude") && !strings.Contains(cl, "claude-code-webui")
+// jsRuntime 判断 argv[0] 是不是「真正跑的是 argv[1] 那个脚本」的运行时。
+// claude / codex 都是 node 脚本，装法不同 argv[1] 也不同：
+// `/home/ai/.local/bin/codex`、`.../@anthropic-ai/claude-code/cli.js` 都要认得出。
+func jsRuntime(arg0 string) bool {
+	base := filepath.Base(arg0)
+	switch base {
+	case "node", "nodejs", "bun", "deno", "npx", "npm", "sh", "bash", "zsh":
+		return true
+	}
+	return false
 }
+
+// agentLaunchArgs 取 argv 里「能代表跑的是哪个 CLI」的那一两段：argv[0]，
+// 以及 argv[0] 是 node 这类运行时时的脚本路径 argv[1]。
+//
+// **不能拿整条命令行去 Contains**：prompt 就在 argv 里。一句「claude 分析到了什么」
+// 会让一个 codex 会话被认成 claude——真机上就这么把派生出来的 Codex 会话标成了 Claude。
+// 反过来，rust 版 codex 的 argv[1] 直接就是 prompt，所以 argv[1] 只在运行时那档才看。
+func agentLaunchArgs(argv []string) string {
+	if len(argv) == 0 {
+		return ""
+	}
+	if jsRuntime(argv[0]) && len(argv) > 1 {
+		return argv[0] + " " + argv[1]
+	}
+	return argv[0]
+}
+
+// agentExcluded 排除项要看到子命令（`codex mcp-server`），所以扫 argv 前三段——
+// 再往后就是 prompt，不能扫。
+func agentExcluded(argv []string, marks ...string) bool {
+	if len(argv) > 3 {
+		argv = argv[:3]
+	}
+	head := strings.Join(argv, " ")
+	for _, m := range marks {
+		if strings.Contains(head, m) {
+			return true
+		}
+	}
+	return false
+}
+
+// argvIsClaude / argvIsCodex：判定只看启动段，测试直接喂 argv。
+func argvIsClaude(argv []string) bool {
+	return strings.Contains(agentLaunchArgs(argv), "claude") && !agentExcluded(argv, "claude-code-webui")
+}
+
+func argvIsCodex(argv []string) bool {
+	return strings.Contains(agentLaunchArgs(argv), "codex") &&
+		!agentExcluded(argv, "codex-web", "mcp-server", "app-server")
+}
+
+// cmdlineHasClaude 判断进程跑的是不是 claude。
+func cmdlineHasClaude(pid int) bool { return argvIsClaude(processArgv(pid)) }
 
 // treeMatch 从 pid 起 DFS 子进程树，任一进程命中 match 即返回 true。
 func treeMatch(pid int, children map[int][]int, depth int, match func(int) bool) bool {
