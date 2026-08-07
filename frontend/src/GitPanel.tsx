@@ -20,6 +20,7 @@ import {
 } from './git/parts'
 import type { RawCommit } from './git/graph'
 import { useLayout } from './layout'
+import { InspectorLayers, type LayerSize } from './shell/InspectorLayers'
 import { useBackDismiss } from './shell/useBackDismiss'
 import { CheckIcon, ChevronDown, ChevronRight, WarnIcon } from './icons'
 import { WindowsIcon } from './icons'
@@ -51,6 +52,16 @@ function statusColor(code: string): string {
   }
 }
 const fileNameOf = (p: string) => p.split('/').pop() || p
+
+// 「改动列表 ｜ 详情」两层折叠，与文件抽屉的「文件树 ｜ 预览」共用 <InspectorLayers>：
+// 列表钉在抽屉右缘不动，diff / 提交详情从它左边长出来，面板外缘跟着两层之和让位。
+// 下限比文件抽屉那对（树 180 / 预览 280）各放宽一档：改动行前面多一列状态字母，
+// diff 又比正文多「-/+ 一列 + 原始缩进」，400 是它还读得下去的底线。
+// 两层下限之和 625 就是分栏阈值：抽屉外缘的上界由 Shell 按终端让出的余量给（1600 屏上
+// 终端并排时只有 552），到不了就整层盖住列表——**宁可少一栏，也不要开出一栏读不了的 diff**。
+// 把 diff 下限压到 300 换取「这一档也能并排」试过，实测就是一栏 300 的 diff，每行都在横滚。
+const LIST: LayerSize = { key: 'ttmux.gitListW', min: 220, max: 520, def: 320 }
+const DETAIL: LayerSize = { key: 'ttmux.gitDetailW', min: 400, max: 1400, def: 620 }
 
 function GitRow({ f, accent, active, kind, root, onOpen, onStage, onUnstage, onDiscard }: {
   f: GitFile; accent: string; active: boolean; kind: 'staged' | 'changes' | 'untracked' | 'conflict'; root?: string
@@ -133,9 +144,6 @@ export default function GitPanel({ dir, accent = 'var(--accent)', onClose, openT
   const [wtOpen, setWtOpen] = useState(false)
   const [merging, setMerging] = useState(false)
 
-  // 详情列在宽屏贴面板左侧，窄屏整屏推入（92vw 抽屉上再叠浮层会两侧各露一条缝）。
-  // 面板宽度各处不同（会话 420 / 项目 520），所以量自己的左边缘，别写死。
-  const panelRef = useRef<HTMLDivElement>(null)
   const { desktop: wide } = useLayout()
   // 窄档：返回键先关 diff 详情（面板本身由外面的二级页接管，一次返回退一层）
   useBackDismiss(!wide && !!detail, () => setDetail(null))
@@ -749,9 +757,11 @@ export default function GitPanel({ dir, accent = 'var(--accent)', onClose, openT
     </div>
   )
 
-  // 详情列内容：提交详情 或 文件差异。宽屏渲染在面板左侧的固定列里，窄屏直接盖住面板，
-  // 两处共用这一份，所以先算好再给下面两处引用。
-  const detailBody = detail?.kind === 'commit' ? (
+  // 详情层内容：提交详情 或 文件差异。并排时它是左边那一栏，窄到放不下时盖住列表。
+  // 返回与关闭只留一个（与文件预览同一条规矩）：盖着的时候给「←」——底下那层还在，
+  // 你要的是退回去；并排的时候给「✕」——列表就在旁边，没有「退回」可言。
+  // 两个按钮都调 setDetail(null)，并排时同时画出来等于同一个动作放了两遍。
+  const detailBody = (twoPane: boolean) => detail?.kind === 'commit' ? (
     <CommitDetail
       root={root || ''} hash={detail.hash} accent={accent}
       menu={commitActionsMenu(detail.hash, detail.hash.slice(0, 7))}
@@ -761,7 +771,9 @@ export default function GitPanel({ dir, accent = 'var(--accent)', onClose, openT
   ) : detail?.kind === 'file' ? (
     <>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderBottom: '1px solid var(--border-subtle)', flex: '0 0 auto' }}>
-        <button type="button" className="tt-file-close" onClick={() => setDetail(null)} title={t('common.back')} aria-label={t('common.back')}><BackIcon /></button>
+        {!twoPane && (
+          <button type="button" className="tt-file-close" onClick={() => setDetail(null)} title={t('common.back')} aria-label={t('common.back')}><BackIcon /></button>
+        )}
         <span style={{ fontFamily: MONO, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
           <span style={{ color: accent, display: 'inline-flex', verticalAlign: -2 }}><ChevronRight size={12} /></span> {detail.file}
         </span>
@@ -771,7 +783,9 @@ export default function GitPanel({ dir, accent = 'var(--accent)', onClose, openT
             {detail.staged ? t('git.stagedDiff') : t('git.working')}
           </Button>
         )}
-        <button type="button" title={t('git.closeDiff')} aria-label={t('git.closeDiff')} className="tt-file-close" onClick={() => setDetail(null)}><CloseIcon /></button>
+        {twoPane && (
+          <button type="button" title={t('git.closeDiff')} aria-label={t('git.closeDiff')} className="tt-file-close" onClick={() => setDetail(null)}><CloseIcon /></button>
+        )}
       </div>
       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
         {diffLoading ? <div style={{ height: '100%', display: 'grid', placeItems: 'center' }}><Spin /></div>
@@ -781,12 +795,8 @@ export default function GitPanel({ dir, accent = 'var(--accent)', onClose, openT
     </>
   ) : null
 
-  const panel = (
-    // 容器查询看的是**面板自己的宽度**：拖到 ≥720 就在面板内部分成「列表 ｜ diff」两栏，
-    // 窄于此 diff 盖成面板内的第二层。取代的是原来那个按 `100vw − panelLeft` 算位置的
-    // 浮层——它既不是列也不是抽屉（图纸 panels-desktop.html §一④）。
-    <div ref={panelRef} className="tt-git-root">
-      <div className="tt-git-main">
+  const changesList = (
+    <div className="tt-git-main">
       {header}
       {banner}
 
@@ -838,10 +848,17 @@ export default function GitPanel({ dir, accent = 'var(--accent)', onClose, openT
           <Button size="small" onClick={() => setWtOpen(true)}>{t('git.wt.manage')}</Button>
         </div>
       )}
+    </div>
+  )
 
-      </div>
-      {/* ≥720：这是右边那一栏；窄于 720：绝对定位盖住整块（CSS 里切） */}
-      {detail && <div className="tt-git-detail">{detailBody}</div>}
+  // 抽屉里的两层：改动列表钉右缘，详情从它左边长出来（和文件抽屉同一份 <InspectorLayers>）。
+  const panel = (
+    <div className="tt-git-root">
+      <InspectorLayers
+        pinned={changesList} pinnedSize={LIST} grownSize={DETAIL}
+        handle="gitdetail"
+        grown={detail ? (twoPane) => <div className="tt-git-detail">{detailBody(twoPane)}</div> : null}
+      />
     </div>
   )
 

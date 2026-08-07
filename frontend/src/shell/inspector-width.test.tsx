@@ -58,4 +58,23 @@ describe('文件预览要列宽', () => {
     await new Promise((r) => setTimeout(r, 60))
     expect(result.current.inspectorWidth).toBe(700)
   })
+
+  // 报进来的值会被当场钳到当时的上界。钳完就不管的话，窗口后来变宽也补不回来——
+  // 抽屉永远停在被钳出来的那个宽度（实测 1600 并排时要 945 只给 552，拉到 2200 还是 552）。
+  it('窗口变宽后把当初被钳掉的宽度补回来', async () => {
+    const m = await freshModules()
+    const { result, rerender } = renderHook(() => m.useWorkspaceLayout(true))
+
+    // 两档都是 large（splitCapable 不变），变的只有终端让出来的余量——
+    // 否则「变宽后好了」可能只是因为这一档本来就不给 Inspector，验不到要验的东西。
+    window.innerWidth = 1400          // 并排：上界只有五百多，945 会被钳
+    window.dispatchEvent(new Event('resize'))
+    m.requestInspectorWidth(945)
+    await waitFor(() => expect(result.current.inspectorWidth).toBeLessThan(945))
+
+    window.innerWidth = 2400          // 宽：这回放得下，报过的值要生效
+    window.dispatchEvent(new Event('resize'))
+    rerender()
+    await waitFor(() => expect(result.current.inspectorWidth).toBe(945))
+  })
 })

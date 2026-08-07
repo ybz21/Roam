@@ -27,8 +27,6 @@ export const INSPECTOR_DEFAULT = 420
 // 文件抽屉是两层折叠（文件夹层 + 预览层），两层加起来能到一千出头——880 会把预览截短。
 // 真正的上界仍由 inspectorBounds 按剩余空间给，这里只是"用户最多能拖多宽"。
 export const INSPECTOR_MAX = 1200
-/** 面板内左右分栏（列表 ｜ diff）的阈值：280 列表 + 8 + 400 diff + 32 padding */
-export const INSPECTOR_SPLIT = 720
 
 export type SpaceMode = 'page' | 'split' | 'focus' | 'overlay'
 export type FocusTarget = 'none' | 'page' | 'dock'
@@ -289,11 +287,17 @@ export function useWorkspaceLayout(hasTerms: boolean): WorkspaceLayout {
    */
   const wantInspector = useInspectorWantWidth()
   const appliedWant = useRef(0)
+  const appliedMax = useRef(0)
   useEffect(() => {
-    if (!splitCapable || wantInspector === appliedWant.current) return
+    if (!splitCapable) return
+    // 上界变了也要重来一次：报进来的值会被当场钳到当时的上界，钳完就没人再提这茬——
+    // 窗口后来变宽、终端后来让位，抽屉也永远停在被钳出来的那个宽度。
+    // 实测：1600 并排时抽屉要 945 只拿到 552，拉到 2200 仍是 552。
+    if (wantInspector === appliedWant.current && insBounds.max === appliedMax.current) return
     appliedWant.current = wantInspector
+    appliedMax.current = insBounds.max
     if (wantInspector > 0) setInspectorWidth(wantInspector)
-  }, [wantInspector, setInspectorWidth, splitCapable])
+  }, [wantInspector, insBounds.max, setInspectorWidth, splitCapable])
 
   const setNavCollapsed = useCallback((collapsed: boolean) => {
     hydrated.current = true

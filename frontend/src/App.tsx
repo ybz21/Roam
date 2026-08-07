@@ -1092,10 +1092,14 @@ function TerminalPane(props: {
   const [showFiles, setShowFiles] = useState(fileDock === 'left')
   const [showGit, setShowGit] = useState(false)
   const [cwd, setCwd] = useState('')
-  // 文件栏与 Git 面板可并存：左侧停靠时文件走左栏、Git 走右抽屉，天然并列；
-  // 右侧停靠时两者都是右抽屉，Git 抽屉在文件也开着时向左让位（见下方 right 偏移），并排显示而非互相覆盖。
-  const toggleFiles = () => setShowFiles((s) => !s)
-  const toggleGit = () => setShowGit((s) => !s)
+  // 右侧停靠时文件与 Git 是**同一个抽屉的两种内容**：Inspector 是个栈，只画栈顶那个。
+  // 所以两个按钮不能同时亮着——亮着的那个必须是你现在看得见的那个，否则「文件」亮着、
+  // 露出来的却是 Git，关掉 Git 又冒出个没人叫的文件面板。开一个就收另一个。
+  // 左侧停靠时文件走左栏、Git 走右抽屉，天然并列，不受此限。
+  const oneDrawer = fileDock === 'right'
+  const toggleFiles = () => setShowFiles((s) => { if (!s && oneDrawer) setShowGit(false); return !s })
+  const toggleGit = () => setShowGit((s) => { if (!s && oneDrawer) setShowFiles(false); return !s })
+  const openGitFromChat = () => { if (oneDrawer) setShowFiles(false); setShowGit(true) }
   // 对话页里点工具行的文件路径 → 在文件面板打开（带行号就跳到那一行）。
   // 左侧停靠时 <FileWorkspace> 已挂载在同一页，直接发意图即可开成对话旁边的标签页；
   // 否则先切到文件页再发，跟 ⌘K 搜索结果打开文件是同一条路（见 intents.ts）。
@@ -1118,6 +1122,7 @@ function TerminalPane(props: {
       requestIntent(OPEN_FILE_INTENT, { path, line, side: true })
       return
     }
+    if (oneDrawer) setShowGit(false)
     setShowFiles(true)
     setDockFileReq((prev) => ({ path, nonce: (prev?.nonce || 0) + 1 }))
   }
@@ -1728,12 +1733,12 @@ function TerminalPane(props: {
               onImagePaste={(files) => { setActive(termName); pasteImage(termName, files) }} />
             {claudeView[termName] && claudeMap[termName]?.running && (
               <div style={{ position: 'absolute', inset: 0 }}>
-                <ClaudeChat name={termName} file={claudeMap[termName].file} onOpenFile={openFileFromChat} onOpenGit={() => setShowGit(true)} />
+                <ClaudeChat name={termName} file={claudeMap[termName].file} onOpenFile={openFileFromChat} onOpenGit={openGitFromChat} />
               </div>
             )}
             {codexView[termName] && codexMap[termName]?.running && (
               <div style={{ position: 'absolute', inset: 0 }}>
-                <CodexChat name={termName} file={codexMap[termName].file} onOpenFile={openFileFromChat} onOpenGit={() => setShowGit(true)} />
+                <CodexChat name={termName} file={codexMap[termName].file} onOpenFile={openFileFromChat} onOpenGit={openGitFromChat} />
               </div>
             )}
             {showVoice && !claudeView[termName] && !codexView[termName] && (
