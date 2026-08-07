@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLayout, type WindowSize } from '../layout'
 import { usePreferences, preferencesLoaded, saveWorkspace } from '../preferences'
-import { useInspectorOpen, useInspectorWantWidth } from './inspector'
+import { reportInspectorCap, useInspectorOpen, useInspectorWantWidth } from './inspector'
 
 /** 尺寸契约，与 index.css 的 --canvas-min / --dock-* 同源（14 §8.2）。 */
 export const CANVAS_MIN = 560
@@ -27,8 +27,6 @@ export const INSPECTOR_DEFAULT = 420
 // 文件抽屉是两层折叠（文件夹层 + 预览层），两层加起来能到一千出头——880 会把预览截短。
 // 真正的上界仍由 inspectorBounds 按剩余空间给，这里只是"用户最多能拖多宽"。
 export const INSPECTOR_MAX = 1200
-/** 面板内左右分栏（列表 ｜ diff）的阈值：280 列表 + 8 + 400 diff + 32 padding */
-export const INSPECTOR_SPLIT = 720
 
 export type SpaceMode = 'page' | 'split' | 'focus' | 'overlay'
 export type FocusTarget = 'none' | 'page' | 'dock'
@@ -91,28 +89,41 @@ export function canvasFitsWith(o: {
 }
 
 /**
- * Inspector 打开时 Dock 实际渲染多宽。
+ * Inspector 打开时 Dock 实际渲染多宽。让位次序三步，一步比一步肉疼：
  *
- * 保得住 Canvas 就从 Dock 借到刚好（不低于 480、也不超过用户拖出来的宽度）；
- * 保不住就不折腾终端——Canvas 反正要整个让掉，Dock 用回用户那个宽度。
- * 借宽会让终端 fit 一次，但「终端窄 13%」远好过「页面整个消失」。
+ *   1. 保得住 Canvas 560 → 从 Dock 借到刚好（不低于 480、不超过用户拖出来的宽度）；
+ *   2. 保不住 → Canvas 让位，终端一寸不动（「终端窄 13%」不如「页面整个消失」难受，
+ *      但页面反正要让掉，就别再折腾终端）；
+ *   3. Canvas 让光了还不够 → **终端跟着让**，让到 480 为止。
+ *
+ * 第 3 步是「抽屉向左长」这件事的地基：抽屉两层加起来能到一千出头，终端一寸不让的话
+ * 那个宽度永远只是个愿望（inspectorBounds 会把它钳回剩余空间），diff / 预览就永远
+ * 挤在四五百里。这里给了它一条真正能长的路：终端按需要退，退到自己的下限。
  */
 export function effectiveDockWidth(o: {
   workspaceWidth: number; dockWidth: number; inspectorWidth: number; inspectorOpen: boolean
 }): number {
   if (!o.inspectorOpen) return o.dockWidth
+  // 三步共用的硬底线：Dock + Inspector 不许撑破工作区（撑破 = 文档横向溢出 = 10px 滚动条）
+  const hard = o.workspaceWidth - SPLIT_RAIL * 2 - o.inspectorWidth
   if (!canvasFitsWith({ workspaceWidth: o.workspaceWidth, inspectorWidth: o.inspectorWidth, hasDock: true })) {
-    return o.dockWidth
+    return Math.max(DOCK_MIN, Math.min(o.dockWidth, hard))
   }
   const room = o.workspaceWidth - CANVAS_MIN - SPLIT_RAIL * 2 - o.inspectorWidth
-  return Math.max(DOCK_MIN, Math.min(o.dockWidth, room))
+  return Math.max(DOCK_MIN, Math.min(o.dockWidth, room, hard))
 }
 
-/** Inspector 的拖拽区间：下界 360，上界不能把 Dock 挤破 */
+/**
+ * Inspector 的拖拽区间：下界 360，上界按**终端让到底**之后的余量算。
+ *
+ * 原先这里减的是 Dock 当前的宽度，于是「终端会让位」这条规矩在上界这一步就被否掉了：
+ * 抽屉报 945、当场被钳成 552，终端根本没机会让。上界改用 DOCK_MIN，让位由
+ * effectiveDockWidth 按次序执行（先 Canvas 后终端），两边说的才是同一套规矩。
+ */
 export function inspectorBounds(o: {
-  workspaceWidth: number; dockWidth: number; hasDock: boolean
+  workspaceWidth: number; hasDock: boolean
 }): { min: number; max: number } {
-  const room = o.workspaceWidth - SPLIT_RAIL - (o.hasDock ? o.dockWidth + SPLIT_RAIL : 0)
+  const room = o.workspaceWidth - SPLIT_RAIL - (o.hasDock ? DOCK_MIN + SPLIT_RAIL : 0)
   return { min: INSPECTOR_MIN, max: Math.max(INSPECTOR_MIN, Math.min(INSPECTOR_MAX, room)) }
 }
 
@@ -236,12 +247,12 @@ export function useWorkspaceLayout(hasTerms: boolean): WorkspaceLayout {
 
   const mode = resolveMode({ hasTerms, dockOpen, focus, size: layout.size, workspaceWidth })
 
-  // Inspector 宽度同样先钳后用：换到窄窗口不能拿旧大屏的宽度把 Dock 挤破
+  // Inspector 宽度同样先钳后用：换到窄窗口不能拿旧大屏的宽度把终端挤到下限之下
   const hasDock = mode === 'split'
   const inspectorOpen = useInspectorOpen() && splitCapable
   const insBounds = useMemo(
-    () => inspectorBounds({ workspaceWidth, dockWidth, hasDock }),
-    [workspaceWidth, dockWidth, hasDock],
+    () => inspectorBounds({ workspaceWidth, hasDock }),
+    [workspaceWidth, hasDock],
   )
   const inspectorWidth = useMemo(() => {
     const wish = insWidth || INSPECTOR_DEFAULT
@@ -289,11 +300,22 @@ export function useWorkspaceLayout(hasTerms: boolean): WorkspaceLayout {
    */
   const wantInspector = useInspectorWantWidth()
   const appliedWant = useRef(0)
+  const appliedMax = useRef(0)
   useEffect(() => {
-    if (!splitCapable || wantInspector === appliedWant.current) return
+    if (!splitCapable) return
+    // 上界变了也要重来一次：报进来的值会被当场钳到当时的上界，钳完就没人再提这茬——
+    // 窗口后来变宽、终端后来让位，抽屉也永远停在被钳出来的那个宽度。
+    // 实测：1600 并排时抽屉要 945 只拿到 552，拉到 2200 仍是 552。
+    if (wantInspector === appliedWant.current && insBounds.max === appliedMax.current) return
     appliedWant.current = wantInspector
+    appliedMax.current = insBounds.max
     if (wantInspector > 0) setInspectorWidth(wantInspector)
-  }, [wantInspector, setInspectorWidth, splitCapable])
+  }, [wantInspector, insBounds.max, setInspectorWidth, splitCapable])
+
+  // 给不了就说一声：面板据此把「Shell 钳的」和「用户拖的」分开（见 inspector.ts）。
+  useEffect(() => {
+    reportInspectorCap(wantInspector > 0 && inspectorWidth < wantInspector ? inspectorWidth : 0)
+  }, [wantInspector, inspectorWidth])
 
   const setNavCollapsed = useCallback((collapsed: boolean) => {
     hydrated.current = true

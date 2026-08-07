@@ -227,6 +227,23 @@ describe('FileBrowser dock 预览不弹模态框', () => {
     await waitFor(() => expect(container.textContent || '').toContain('a.md'))
     expect(document.querySelector('.ant-modal')).toBeNull()
   })
+
+  // 换会话（dir 变了）→ 上个会话那个文件不能还挂在预览里：树都回新工作目录了，
+  // 右边留着别的项目的文件，看起来就是「文件面板自己带出个旧文件」。
+  it('换会话就收掉上个会话的预览', async () => {
+    const view = (dir: string) => (
+      <I18nProvider><AntApp>
+        <div style={{ display: 'flex', flexDirection: 'column', width: 420, height: 600 }}>
+          <FileBrowser dir={dir} layout="dock" openRequest={{ path: '/workspace/a.md', nonce: 1 }} />
+        </div>
+      </AntApp></I18nProvider>
+    )
+    const { container, rerender } = render(view('/workspace'))
+    await waitFor(() => expect(container.textContent || '').toContain('a.md'))
+
+    rerender(view('/other'))
+    await waitFor(() => expect(container.textContent || '').not.toContain('a.md'))
+  })
 })
 
 // 抽屉够宽时「文件夹 / 文件」并排两栏，中间可拖；窄了自动退回单栏。
