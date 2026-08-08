@@ -177,6 +177,22 @@ html[data-theme="light"] .pick { box-shadow:0 20px 48px rgba(140,149,159,.28); }
 .termhd { display:flex; align-items:center; gap:8px; padding:6px 10px; background:var(--bg-term); border-bottom:1px solid var(--border-subtle); font-size:var(--fs-micro); color:var(--text-dim); }
 .termbody { background:var(--bg-term); padding:10px; font:var(--fs-micro)/1.7 var(--mono); color:var(--text-dimmer); }
 
+/* 工作台：行动队列 + 项目墙 */
+.needs { display:flex; gap:var(--sp-3); flex-wrap:wrap; }
+.need { flex:1 1 220px; min-width:200px; border:1px solid var(--border); border-left:2px solid var(--warn); border-radius:var(--r-sm); background:var(--bg-container); padding:10px 12px; display:flex; flex-direction:column; gap:5px; }
+.need.sw { border-left-color:#a371f7; }
+.need.fin { border-left-color:var(--accent); }
+.need .hd { display:flex; align-items:center; gap:7px; font-size:var(--fs-sm); font-weight:600; color:var(--text-bright); }
+.need .hd .nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.need .pj { font-size:var(--fs-micro); color:var(--text-dimmer); }
+.need .ds { font-size:var(--fs-micro); color:var(--text-dim); font-family:var(--mono); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.need .go { align-self:flex-start; font-size:var(--fs-micro); color:var(--accent); }
+.pwall { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:var(--sp-3); }
+.pcd { border:1px solid var(--border); border-radius:var(--r-card); background:var(--bg-container); padding:10px 12px; font-size:var(--fs-micro); color:var(--text-dim); }
+.pcd b { display:block; font-size:var(--fs-sm); color:var(--text-bright); margin-bottom:4px; }
+.seclbl { display:flex; align-items:center; gap:8px; margin:2px 0 8px; font-size:var(--fs-meta); color:var(--text-bright); font-weight:600; }
+.seclbl .sc { font-size:var(--fs-micro); font-weight:400; color:var(--text-dimmer); border:1px solid var(--border); border-radius:var(--r-pill); padding:1px 8px; }
+
 /* 机器卡片墙 */
 .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:var(--sp-3); padding:var(--sp-3); }
 .ncard { border:1px solid var(--border); border-radius:var(--r-card); background:var(--bg-container); padding:12px; display:flex; flex-direction:column; gap:9px; }
@@ -280,7 +296,8 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
   没连 Broker 的单机用户，界面和今天像素级一致。
 </p>
 <ul class="pts">
-  <li><b>切机器 = 换浏览范围</b>：概览 / 项目 / 会话 / 文件 / Git / 浏览器 / 手机整体换到那台机器。</li>
+  <li><b>切机器 = 换浏览范围</b>：项目 / 会话 / 文件 / Git / 浏览器 / 手机整体换到那台机器。
+    <b>唯一的例外是工作台顶上那层</b>——「需要你」行动队列永远是全机器的（§6）。</li>
   <li><b>终端不跟着走</b>：已打开的终端各自钉在自己的机器上，带方章，切机器不关它们——那是正在跑的活。</li>
   <li><b>机器身份只有两个锚点</b>：侧栏底座（我连着谁）和页头眉标（这一页是谁的）。多一处就是噪音，少一处就会误删。</li>
 </ul>
@@ -312,7 +329,8 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
     </tr>
     <tr>
       <td>每台机器 <b>hash 出一个颜色</b>，标签左侧色点</td>
-      <td>AGENTS.md 硬规矩：<b>全站只有四支色</b>（蓝/绿/黄/红），且蓝绿各只有一支</td>
+      <td>AGENTS.md 硬规矩：<b>全站只有四支色</b>（蓝/绿/黄/红），且蓝绿各只有一支。
+        <b>#186 之后已经有第五支</b>——蜂群紫 <code>--swarm</code>，还是被收拢过一次才只剩一处的</td>
       <td>机器<b>不给颜色</b>，给<b>机器方章</b>（<code>.tt-nodemark</code>，一个汉字或两个字母）。
         颜色只留给状态：绿在线 / 黄降级 / 灰离线</td>
     </tr>
@@ -324,13 +342,16 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
     </tr>
     <tr>
       <td><code>/nodes</code> 进常驻导航 <code>NAV</code></td>
-      <td>导航分「工作区 / 工具」两组；手机底栏六格已满，第七个只能落进「更多」</td>
+      <td>导航分「工作区 / 工具」两组，#186 之后共 <b>7 项</b>；
+        手机底栏 4 格 + 更多，空出的一格<b>特意没补人</b></td>
       <td><b>连了 Broker 才出现</b>在「工具」组；手机只在「更多」里。单机用户看不到这一项</td>
     </tr>
     <tr>
       <td>跨机器总览留到 P3</td>
-      <td>概览页今天就是「战况页」（活跃项目作战卡）</td>
-      <td>概览加一个<b>「全部机器 / 当前机器」</b>切换（P2）——多机的价值一半在这一屏</td>
+      <td><b>概览页没有了</b>（#186 / 18 设计）：并进项目页成了唯一首页「工作台」，
+        独有的<b>「需要你」行动队列</b>和活动轨挂在项目墙顶上</td>
+      <td>不做「全部机器 / 当前机器」开关。<b>工作台上下两层各归各的</b>：
+        行动队列跨机器，项目墙跟当前机器（§6）</td>
     </tr>
   </tbody>
 </table>
@@ -368,8 +389,10 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
         </tbody>
       </table>
     </div>
-    <figcaption>四支色一支都没新增。红只在「你正在用的这台没了」时出现——
-      别的机器离线是灰，因为那不是一件需要你现在处理的事。</figcaption>
+    <figcaption>一支都没新增。红只在「你正在用的这台没了」时出现——
+      别的机器离线是灰，因为那不是一件需要你现在处理的事。
+      <b>色板已经排到第五支（蜂群紫）了，机器再发色就彻底失控</b>：
+      一枚标签上同时挂着机器色、状态色、蜂群色，没人分得清哪个说的是哪件事。</figcaption>
   </figure>
 </div>
 
@@ -557,17 +580,105 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
     内容搜索比名字搜索贵一到两个数量级，扇出到 20 台机器等于同时点着 20 个 rg——
     显式触发的心智今天已经有了（面板里的全文搜索本来就要手动点），沿用即可。</li>
   <li><b>点开别台机器的结果 = 隐式切过去</b>：文件/项目类直接切并打开；
-    会话类走 §6 的弱联动气泡问一句。</li>
+    会话类走 §7 的弱联动气泡问一句。</li>
 </ul>
 <div class="note warn">
   <b>这条决定了一件必须在 P1 就做对的事</b>：结果的 <code>id</code> 和 <code>action.target</code>
   <b>都要带 nodeId</b>。今天 <code>rows.ts</code> 的 <code>dedupeByKey</code> 按
   <code>kind + id</code> 去重——两台机器上都有 <code>build</code> 会话、都有
   <code>~/codes/roam/README.md</code>，不带 nodeId 就会<b>被合成一条</b>，
-  而且合掉的那条无声无息。这和 §6 终端键的账是同一笔，一起还。
+  而且合掉的那条无声无息。这和终端标签键 <code>(nodeId, name)</code>（技术稿 §6）是同一笔账，一起还。
 </div>
 
-<h2>6. 终端：标签钉死在机器上</h2>
+<h2>6. 工作台：上层跨机器，下层跟当前机器</h2>
+<p class="lede">
+  <b>概览页已经没有了</b>——#186 把它并进项目页，<code>#/projects</code> 成为唯一首页
+  「工作台」，概览独有的<b>「需要你」行动队列</b>和<b>最近活动轨</b>挂在项目墙顶上。
+  这对多机是件好事：旧稿要在概览上加一个「全部机器 / 当前机器」开关，
+  而合并之后<b>这一页天然就分成了语义不同的两层，各归各的，不需要开关</b>。
+</p>
+<table>
+  <thead><tr><th style="width:22%">这一层</th><th style="width:16%">归属</th><th>为什么</th></tr></thead>
+  <tbody>
+    <tr><td><b>「需要你」行动队列</b><br><code>project-list/needs-queue.tsx</code></td>
+      <td><span class="pill new">跨机器</span></td>
+      <td>它回答的是<b>「我下一步做什么」</b>，而「下一步」不该被机器边界切开。
+        GPU 机上有个 agent 在等你确认、你却在看工作站，这条就必须出现在眼前——
+        否则你得逐台切过去挨个看，那正是多机管理要消灭的负担</td></tr>
+    <tr><td><b>最近活动轨</b><br><code>project-list/activity-rail.tsx</code></td>
+      <td><span class="pill new">跨机器</span></td>
+      <td>同上，它是「都发生了什么」。跨机器反而更有价值：一眼看到 GPU 机昨晚合了什么</td></tr>
+    <tr><td><b>项目卡片墙</b><br><code>project-list/project-card.tsx</code></td>
+      <td><span class="pill">当前机器</span></td>
+      <td>项目是<b>一台机器上的一份 checkout</b>，不是跨机概念。
+        把四台机器的项目混在一面墙上，同名仓库会出现四次，点哪个全靠猜</td></tr>
+  </tbody>
+</table>
+
+<div class="cap"><b>工作台（桌面）</b><span class="pill new">唯一首页 · 上下两层归属不同</span></div>
+<div class="screen">
+  <div class="phead">
+    <div class="kick"><span class="chip"><span class="nmk sm" data-cjk>公</span>公司工作站<svg width="11" height="11" viewBox="0 0 24 24"><use href="#i-chev"/></svg></span> · 工作区</div>
+    <h4>下午好</h4><p>3 件事等你 · 7 个项目 · 4 台机器</p>
+  </div>
+  <div style="padding:12px;display:flex;flex-direction:column;gap:16px">
+    <div>
+      <div class="seclbl">需要你 <span class="sc">全部机器</span></div>
+      <div class="needs">
+        <div class="need">
+          <div class="hd"><span class="nmk sm" data-cjk>云</span><span class="nm">train</span></div>
+          <div class="pj">云 GPU 机 · nn</div>
+          <div class="ds">Do you want to proceed? (y/n)</div>
+          <span class="go">去会话</span>
+        </div>
+        <div class="need sw">
+          <div class="hd"><span class="nmk sm" data-cjk>公</span><span class="nm">refactor-api</span></div>
+          <div class="pj">公司工作站 · roam</div>
+          <div class="ds">2 名成员等待解锁</div>
+          <span class="go">开蜂群台</span>
+        </div>
+        <div class="need fin">
+          <div class="hd"><span class="nmk sm" data-cjk>家</span><span class="nm">fix-login</span></div>
+          <div class="pj">家里台式机 · blade</div>
+          <div class="ds">已合并，worktree 待收尾</div>
+          <span class="go">去收尾</span>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="seclbl">项目 <span class="sc"><span class="nmk sm" data-cjk>公</span> 公司工作站</span></div>
+      <div class="pwall">
+        <div class="pcd"><b>roam</b>2 会话 · 待收尾 1</div>
+        <div class="pcd"><b>blade-core</b>1 会话</div>
+        <div class="pcd"><b>docs-site</b>无会话</div>
+        <div class="pcd"><b>infra</b>无会话</div>
+      </div>
+    </div>
+  </div>
+</div>
+<ul class="pts">
+  <li><b>两层各挂一枚范围标</b>：行动队列右边写「全部机器」，项目墙右边写方章 + 机器名。
+    <b>不给开关</b>——开关意味着"你可以选"，而这两层的归属是设计结论，不是偏好。
+    唯一的例外是行动队列可以点范围标收成「只看本机」，那是筛选不是模式。</li>
+  <li><b>事项卡带方章</b>，项目卡<b>不带</b>（整面墙都是同一台机器，每张都挂等于没挂）。</li>
+  <li><b>零事项时整层不渲染</b>（沿用 #186 的规则）。多机后这条更要守住：
+    四台机器加起来才更容易凑出"总有一条"，一旦常驻就成了新的琥珀横幅。</li>
+  <li><b>点跨机器的事项卡 = 隐式切过去</b>：它天然是"去那台机器上处理"，
+    不必再问一句（与 §7 终端标签的弱联动不同——那里你可能只是想瞄一眼）。</li>
+  <li><b>排序不按机器分组</b>：队列的顺序是优先级（等待输入 &gt; 蜂群待解锁 &gt; 待收尾），
+    按机器分组会把"最急的那件"推到第二组去。这跟 §5 搜索<b>刚好相反</b>——
+    搜索是"我在找东西"（分组帮你缩范围），队列是"帮我排序"（分组破坏排序）。</li>
+</ul>
+<div class="note ok">
+  <b>#186 顺手把跨机器工作台从"不可行"变成了"一台一条请求"。</b>
+  合并前，概览对最多 14 个会话逐个打 <code>/claude</code> <code>/codex</code> <code>/capture</code>，
+  6 秒一轮、峰值 42 条请求——<b>乘以 N 台机器直接不用谈</b>。
+  #186 把这些字段并进了 <code>/projects</code> 一条请求（<code>top[]</code> 2→3、
+  <code>running</code> 放宽成 <code>claude|codex</code>、<code>waiting</code> 带出尾行摘要），
+  前端那套轮询整段删除。于是跨机器工作台 = <b>N 条请求 6 秒一轮</b>，十台机器也才十条。
+</div>
+
+<h2>7. 终端：标签钉死在机器上</h2>
 <p class="lede">
   终端是长活上下文，切机器<b>绝不能</b>关掉它们——瞄一眼另一台机器的状态就丢掉正在跑的
   Claude 会话，这在实际使用里不可接受。所以标签各自带方章，跨切换保留。
@@ -607,7 +718,7 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
   </figure>
 </div>
 
-<h2>7. 机器页 <code>/nodes</code></h2>
+<h2>8. 机器页 <code>/nodes</code></h2>
 <p class="lede">
   卡片墙，和项目页同一套构件：<code>.tt-pagehead</code> 页头 + 卡片 + <code>.tt-act</code> 幽灵钮。
   这一页只在连了 Broker 时出现在「工具」组。
@@ -674,7 +785,7 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
   用户不用回列表页刷新确认。这是这一页唯一需要实时的地方，值得一条轮询。
 </div>
 
-<h2>8. 掉线、重连、误操作防护</h2>
+<h2>9. 掉线、重连、误操作防护</h2>
 <div class="screen" style="margin-bottom:6px">
   <div class="banner warn">
     <svg width="14" height="14" viewBox="0 0 24 24"><use href="#i-warn"/></svg>
@@ -698,7 +809,7 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
   </tbody>
 </table>
 
-<h2>9. 手机：不加一层壳，全靠已有的三处</h2>
+<h2>10. 手机：不加一层壳，全靠已有的三处</h2>
 <div class="phones">
   <div>
     <div class="phone">
@@ -707,20 +818,24 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
         <div class="pbody">
           <div class="phead" style="border:0;padding:0 0 8px">
             <div class="kick"><span class="chip"><span class="nmk sm" data-cjk>公</span>公司工作站<svg width="11" height="11" viewBox="0 0 24 24"><use href="#i-chev"/></svg></span></div>
-            <h4 style="font-size:var(--fs-lg)">项目</h4>
-            <p>7 个项目 · 3 个待收尾</p>
+            <h4 style="font-size:var(--fs-lg)">下午好</h4>
+            <p>3 件事等你 · 7 个项目</p>
           </div>
+          <div class="need" style="flex:0 0 auto">
+            <div class="hd"><span class="nmk sm" data-cjk>云</span><span class="nm">train</span></div>
+            <div class="ds">Do you want to proceed?</div>
+          </div>
+          <div class="seclbl" style="margin:2px 0 0"><span style="font-size:var(--fs-meta)">项目</span><span class="sc"><span class="nmk sm" data-cjk>公</span> 本机</span></div>
           <div class="pcard">roam · 2 会话 · 待收尾 1</div>
-          <div class="pcard">nn-train · 1 会话</div>
           <div class="pcard" style="opacity:.6">blade · 无会话</div>
         </div>
         <div class="sessdock"><span class="nmk sm" data-cjk>云</span><span style="flex:1">nn · train</span><span class="dot warn"></span><span style="color:var(--text-dimmer);font-size:var(--fs-micro)">2</span></div>
         <div class="bottomnav">
-          <span class="on"><i></i>概览</span><span><i></i>项目</span><span><i></i>文件</span><span><i></i>浏览</span><span><i></i>手机</span><span><i></i>更多</span>
+          <span class="on"><i></i>项目</span><span><i></i>文件</span><span><i></i>浏览</span><span><i></i>手机</span><span><i></i>更多</span>
         </div>
       </div>
     </div>
-    <div class="phone-tag"><b>①</b> 页头眉标那枚芯片 = 机器切换器<br>会话坞里的方章说明「那个会话在别的机器上」</div>
+    <div class="phone-tag"><b>①</b> 页头眉标那枚芯片 = 机器切换器<br>行动队列跨机器（带方章）、项目墙跟本机<br>会话坞里的方章说明「那个会话在别的机器上」</div>
   </div>
   <div>
     <div class="phone">
@@ -759,19 +874,22 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
         </div>
       </div>
     </div>
-    <div class="phone-tag"><b>③</b>「更多」里多一段「当前机器」<br>底栏六格<b>一格不动</b></div>
+    <div class="phone-tag"><b>③</b>「更多」里多一段「当前机器」<br>底栏 4 格 + 更多，<b>一格不动</b></div>
   </div>
 </div>
 <ul class="pts">
-  <li><b>底栏不加「机器」格</b>：切机器是横切动作，不是一个页面；六格已经是 360px 下的极限
-    （每格 60px，标签 11px 单行）。</li>
+  <li><b>底栏那空出来的一格，仍然不给「机器」。</b>#186 之后底栏是
+    <b>4 格 + 更多</b>（项目/文件/浏览/手机），概览走了以后<b>特意留白没补人</b>——
+    390 宽下每格从 65 涨到 78，相邻图标之间终于有了像样的间隙。
+    补上「机器」等于把这个收益原样吐回去，换来的还是一个<b>本来就不该是页面</b>的东西
+    （切机器是横切动作）。何况机器切换器已经在页头眉标上，<b>每一页都有，比底栏一格更近</b>。</li>
   <li><b>粗指针</b>：芯片视觉高 22，靠 <code>::after</code> 撑到 44；sheet 行本身就是 44。
     芯片和旁边的分组名之间留 &gt;8px，避免误触（相邻图标钮的间隙规则同 AGENTS）。</li>
   <li><b>Tooltip 在手机上是隐藏的</b>，所以芯片、方章都必须带 <code>aria-label</code>：
     <code>切换机器，当前 公司工作站</code>。</li>
 </ul>
 
-<h2>10. 单机零变化（验收基线）</h2>
+<h2>11. 单机零变化（验收基线）</h2>
 <div class="vs">
   <div>
     <div class="h"><span class="pill good">单机（没连 Broker）</span>= 今天</div>
@@ -798,7 +916,7 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
   一个多机元素漏在单机界面上，就是这一期的 bug。
 </p>
 
-<h2>11. 文案（i18n 键）</h2>
+<h2>12. 文案（i18n 键）</h2>
 <p class="lede">全部走 <code>useI18n().t()</code>，两份 locale 同步加键；图标一律在调用处给，不焊进译文。</p>
 <pre class="code"><i>// 机器身份</i>
 'node.current'      : <b>'当前机器'</b>            / 'Current machine'
@@ -825,9 +943,14 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
 'node.retry'        : <b>'重试'</b>   'node.switchAway' : <b>'切到别的机器'</b>
 'node.followTab'    : <b>'你点开的是 {name} 上的会话，一起切过去？'</b>
 'node.followYes'    : <b>'一起切过去'</b>  'node.followNo' : <b>'只看终端'</b>
-'node.dangerOn'     : <b>'在 {name} 上{action}？'</b>   <i>// 删除类确认标题统一带机器名</i></pre>
+'node.dangerOn'     : <b>'在 {name} 上{action}？'</b>   <i>// 删除类确认标题统一带机器名</i>
 
-<h2>12. 落地清单</h2>
+<i>// 工作台两层的范围标</i>
+'node.scopeAll'     : <b>'全部机器'</b>          / 'All machines'
+'node.scopeThis'    : <b>'只看本机'</b>          / 'This machine only'
+'node.scopeOf'      : <b>'{name}'</b>           <i>// 项目墙顶那枚：方章 + 机器名</i></pre>
+
+<h2>13. 落地清单</h2>
 <table>
   <thead><tr><th style="width:30%">改哪</th><th style="width:26%">文件</th><th>怎么改</th></tr></thead>
   <tbody>
@@ -843,22 +966,31 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
     <tr><td><b>终端标签 / 头部</b></td><td><code>shell/SessionDock.tsx</code>（<code>DockTitle</code>）、<code>Terminal.tsx</code> 头部</td><td>名字前插方章；<code>title</code> 补机器全名</td></tr>
     <tr><td><b>机器页</b></td><td><code>cluster/Nodes.tsx</code></td><td>卡片墙照抄项目页构件；添加弹窗 + 轮询接入状态</td></tr>
     <tr><td><b>导航项</b></td><td><code>App.tsx</code> 的 <code>NAV</code> / <code>NAV_TOOLS</code> / <code>MOBILE_MORE_TOOLS</code></td><td>多机时才注入 <code>nodes</code> 项</td></tr>
+    <tr><td><b>工作台行动队列</b></td>
+      <td><code>project-list/needs-queue.tsx</code>（<code>buildNeedCards</code>）</td>
+      <td><code>buildNeedCards</code> 是纯函数——跨机器就是把 N 台的 cards <code>concat</code> 后按同一优先级排，
+        卡片加方章、<code>key</code> 带 nodeId。数据源改成扇出（技术稿 §12）</td></tr>
+    <tr><td><b>活动轨</b></td><td><code>project-list/activity-rail.tsx</code></td>
+      <td>同上，<code>/projects/:key/activity</code> 逐机器取，合并倒序</td></tr>
+    <tr><td><b>项目墙范围标</b></td><td><code>Projects.tsx</code> 编排层</td>
+      <td>墙顶加一枚「方章 + 机器名」的范围标；墙本身不动（它本来就只画当前这台的数据）</td></tr>
     <tr><td><b>掉线条</b></td><td><code>UpdateBanner.tsx</code> 同层新增 <code>NodeBanner.tsx</code></td><td>与更新提示同一条位置，不叠两条</td></tr>
   </tbody>
 </table>
 
 <h3>分期</h3>
 <ol class="pts">
-  <li><b>P1 · 切得动 + 搜得全</b>：方章 + 侧栏切换器 + 页头芯片 + <code>/nodes</code> 基础页 + 终端标签方章
-    + <b>⌘K 名字搜索跨机器扇出</b>（结果按机器分组、逐台流式到达）。
+  <li><b>P1 · 切得动 + 看得全</b>：方章 + 侧栏切换器 + 页头芯片 + <code>/nodes</code> 基础页 + 终端标签方章
+    + <b>⌘K 名字搜索跨机器扇出</b> + <b>工作台行动队列跨机器</b>（两者共用同一套 Broker 扇出）。
     验收＝在 A 机器开着终端，切到 B 看文件，A 的终端还在跑；
-    <b>在 B 上搜一个只存在于 A 的文件名，能搜到并一键跳过去</b>。</li>
+    在 B 上搜一个只存在于 A 的文件名能搜到并一键跳过去；
+    <b>A 上有个 agent 在等输入时，人在 B 的首页第一屏就能看见</b>。</li>
   <li><b>P2 · 好用</b>：弱联动气泡、掉线条与降级态、添加机器一键复制 + 等待接入、
-    概览的「全部机器 / 当前机器」、<b>内容搜索的跨机器显式扇出</b>。</li>
+    活动轨跨机器、行动队列的「只看本机」筛选、<b>内容搜索的跨机器显式扇出</b>。</li>
   <li><b>P3 · 跨机</b>：跨机器 swarm 分派、机器分组/标签、跨机器文件对比。</li>
 </ol>
 
-<h2>13. 验收（这一页做完必须跑）</h2>
+<h2>14. 验收（这一页做完必须跑）</h2>
 <ul class="pts">
   <li><code>npm run typecheck &amp;&amp; npm run i18n:check &amp;&amp; npm run hover:check &amp;&amp; npx vitest run &amp;&amp; npm run build</code></li>
   <li><b>真机</b>：按 <code>docs/development/web-ui-checklist.md</code> 走一遍。
