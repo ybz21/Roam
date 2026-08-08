@@ -41,6 +41,13 @@ const enUS = {
   'p2p.link.sub.relay': 'Relay',
   'p2p.link.sub.directPath': 'Direct · {path}',
   'nav.searchOrJump': 'Search or jump to',
+  // 多机：底座切换器与机器列表
+  'node.switch': 'Switch machine',
+  'node.current': 'Current machine',
+  'node.offline': 'Offline',
+  'node.latencyMs': '{ms}ms',
+  'node.aria.switcher': 'Switch machine, currently {name}',
+  'node.sessionsN': '{count} sessions',
   'nav.thisDevice': 'This device',
   'nav.terminal': 'Terminal',
   'workspace.resizeDock': 'Resize terminal',

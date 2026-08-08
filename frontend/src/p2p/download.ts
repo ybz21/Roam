@@ -18,6 +18,7 @@
 // UI 极简（M1）：只透出 path / rate / 完成 / 失败回调；进度角标详版是 M2。
 
 import { connectFile } from './transport'
+import { nodeApi } from '../cluster/node-url'
 import { GoodputMeter, type GoodputSample, type PairDiag } from './stats'
 import { pathLabelKey, type P2PPathLabel } from './labels'
 import { canStreamSave, createStreamWriter } from './stream-saver'
@@ -87,7 +88,7 @@ export interface MetricPayload {
 
 function reportMetric(m: MetricPayload): void {
   try {
-    void fetch('/api/p2p/metric', {
+    void fetch(nodeApi('/p2p/metric'), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(m),
@@ -345,7 +346,7 @@ async function runTransfer(
       let last = httpStart
       let lastWritten = 0
       try {
-        const res = await fetch(`/api/file/download?path=${encodeURIComponent(target.path)}`, { cache: 'no-store' })
+        const res = await fetch(nodeApi(`/file/download?path=${encodeURIComponent(target.path)}`), { cache: 'no-store' })
         if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
         // pipeTo 直接把响应流写进同一个 writable（不经内存、不二次弹窗），顺带算回退速率/进度。
         await res.body.pipeTo(new WritableStream<Uint8Array>({
@@ -454,7 +455,7 @@ const BLOB_SINK_MAX_BYTES = 2 * 1024 * 1024 * 1024 // 2 GiB
 // 用于「不可倒带的 sink（StreamSaver）已写过 P2P 前缀」的回退兜底：绝不复用被污染的流（P0-1）。
 function legacyAnchorDownload(path: string, name: string): void {
   const a = document.createElement('a')
-  a.href = `/api/file/download?path=${encodeURIComponent(path)}`
+  a.href = nodeApi(`/file/download?path=${encodeURIComponent(path)}`)
   a.download = name
   document.body.appendChild(a)
   a.click()

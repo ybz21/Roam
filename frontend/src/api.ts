@@ -1,5 +1,7 @@
 // 与后端 /api 通信的薄封装；401 时触发回调（跳登录）
 
+import { nodeApi } from './cluster/node-url'
+
 let onUnauth: () => void = () => {}
 export function setUnauthorizedHandler(f: () => void) {
   onUnauth = f
@@ -8,7 +10,7 @@ export function setUnauthorizedHandler(f: () => void) {
 // opts.signal 给「打字时连着问」的接口（⌘K 搜索）用：下一次请求发出前先掐掉上一次，
 // 否则慢的那条后回来会把新结果盖掉。
 export async function api(method: string, path: string, body?: any, opts?: { signal?: AbortSignal }): Promise<any> {
-  const r = await fetch('/api' + path, {
+  const r = await fetch(nodeApi(path), {
     method,
     signal: opts?.signal,
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
@@ -43,7 +45,7 @@ export async function upload(dir: string, files: FileList | File[]): Promise<{ d
     form.append('files', f)
     form.append('paths', (f as any).webkitRelativePath || '')
   })
-  const r = await fetch('/api/upload', { method: 'POST', body: form })
+  const r = await fetch(nodeApi('/upload'), { method: 'POST', body: form })
   if (r.status === 401) { onUnauth(); throw new Error('UNAUTHORIZED') }
   const data = await r.json().catch(() => null)
   if (!r.ok) throw new Error(data?.error?.message || data?.error?.code || 'HTTP ' + r.status)
@@ -65,7 +67,7 @@ export function makeClipboardImageFile(blob: Blob, mime: string, index: number):
 export async function transcribe(audio: Blob): Promise<string> {
   const form = new FormData()
   form.append('audio', audio, 'audio.wav')
-  const r = await fetch('/api/speech/transcribe', { method: 'POST', body: form })
+  const r = await fetch(nodeApi('/speech/transcribe'), { method: 'POST', body: form })
   if (r.status === 401) { onUnauth(); throw new Error('UNAUTHORIZED') }
   const data = await r.json().catch(() => null)
   if (!r.ok) throw new Error(data?.error?.message || data?.error?.code || 'HTTP ' + r.status)

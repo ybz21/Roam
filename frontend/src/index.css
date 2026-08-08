@@ -366,6 +366,32 @@ html[data-pointer="coarse"] .tt-rail-btn::after {
 .tt-nav-item .nm, .tt-nav-account .nm, .tt-nav-collapse .nm {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* ── 机器徽记（多机）───────────────────────────────────────────────
+   机器身份看形状（方章里的字），状态看颜色（点）。机器**不发色**：色板已经排到
+   第五支（蜂群紫），再给每台机器一支，一枚标签上就会同时挂机器色/状态色/蜂群色。
+   单个汉字撑得起整格，两个拉丁字母才要缩——所以字号跟着内容走。 */
+.tt-nodemark {
+  display: inline-grid; place-items: center; flex: 0 0 auto;
+  width: 20px; height: 20px; border-radius: var(--r-xs);
+  border: 1px solid var(--border); background: var(--bg-elevated);
+  font: 600 9px/1 var(--mono); color: var(--text-dim); letter-spacing: .02em;
+  white-space: nowrap; overflow: hidden;
+}
+.tt-nodemark[data-cjk] { font: 600 12px/1 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+.tt-nodemark.sm { width: 16px; height: 16px; border-radius: 5px; font-size: 8px; }
+.tt-nodemark.sm[data-cjk] { font-size: 10px; }
+.tt-nodemark.lg { width: 28px; height: 28px; font-size: 12px; }
+.tt-nodemark.lg[data-cjk] { font-size: 17px; }
+.tt-nodemark.cur { color: var(--accent); border-color: var(--accent-border); background: var(--accent-soft); }
+.tt-nodemark.off { color: var(--text-dimmer); border-style: dashed; background: transparent; }
+/* 底座那枚：展开态名字后面缀状态点；轨态只剩方章，点叠在右下角（外描底色免得糊在边上） */
+.tt-nav-account .nd { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; }
+.tt-nav-account .nd.rail {
+  position: absolute; right: 6px; bottom: 6px;
+  box-shadow: 0 0 0 2px var(--bg-base);
+}
+.tt-nav.rail .tt-nav-account.node { position: relative; }
+
 /* 选中态：3px 左强调线 + 低饱和蓝底。整块高亮会把注意力从内容上夺走（14 §4.4） */
 .tt-nav-item.on { background: var(--accent-soft); color: var(--text-bright); }
 .tt-nav-item.on::before {
