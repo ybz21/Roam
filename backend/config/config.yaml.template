@@ -38,3 +38,24 @@ web:
   p2p_udp_port: 0
   p2p_upnp: false
   p2p_mdns: true
+
+# ── 横向扩展：一个入口管多台开发机（见 docs/design/cluster/architecture.html）──
+# 整段留空 = 现在的单机 Roam，界面与行为零变化。
+cluster:
+  # standard（默认）= 本机跑全套能力；cloud = 云端 Broker，只做路由 + 注册表 + 控制台。
+  mode: standard
+
+  # 只有 standard 模式填了 broker 才会上云：额外起一条**出站**隧道注册进云端。
+  # 上云不影响本机监听口——局域网直连和经 Broker 访问是两条并行的入口，不是二选一。
+  # broker: https://roam.example.com
+
+  # 一次性接入令牌（Broker 的「添加机器」签发）。首次注册后自动换成长期凭证
+  # 落到 <home>/cluster/node.json，之后重连不再用它。
+  # token: enr_xxx
+
+  # 显示名与分组，都可选。name 默认取 hostname。
+  # name: 公司工作站
+  # group: 工作
+
+  # 跳过 Broker 的 TLS 校验。**只在自签证书调试时开**，生产等于把中间人放进来。
+  insecure: false

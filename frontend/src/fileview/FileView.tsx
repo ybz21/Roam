@@ -2,6 +2,7 @@
 // 职责：按路径取内容、活重载轮询、脏/保存、源码⇄渲染切换、标题栏与外壳（inline/modal）；
 // 正文本身按类型分发给 fileview/ 下的子组件（Image/Pdf/Html/Markdown/Csv/Code/Office）。
 import { type MouseEvent, useEffect, useRef, useState } from 'react'
+import { nodeApi } from '../cluster/node-url'
 import { Button, Modal, Space, Spin, App as AntApp, Tooltip } from 'antd'
 import { api } from '../api'
 import ErrorBoundary from '../ErrorBoundary'
@@ -57,10 +58,10 @@ export function FileView({
 }) {
   const kind = fileKind(path)
   const { isImg, isMd, isHtml, isPdf, isOffice, isSheet } = kind
-  const rawUrl = `/api/file/raw?path=${encodeURIComponent(path)}`
+  const rawUrl = nodeApi(`/file/raw?path=${encodeURIComponent(path)}`)
   // HTML 预览专用：绝对路径编进 URL 路径（逐段转义、保留斜杠），让 iframe 里同目录相对引用能解析
-  const serveUrl = `/api/file/serve${path.split('/').map(encodeURIComponent).join('/')}`
-  const previewUrl = `/api/file/preview?path=${encodeURIComponent(path)}`
+  const serveUrl = nodeApi(`/file/serve${path.split('/').map(encodeURIComponent).join('/')}`)
+  const previewUrl = nodeApi(`/file/preview?path=${encodeURIComponent(path)}`)
   const downloadUrl = `${rawUrl}&dl=1`
   const downloadName = fileNameOf(path)
   const previewHeight = inline ? '100%' : '74vh'
@@ -141,8 +142,8 @@ export function FileView({
   const resolvePreviewHref = (href: string, refKind: 'link' | 'image') => {
     const local = localPathFromRef(path, href)
     if (!local) return href
-    if (refKind === 'image') return `/api/file/raw?path=${encodeURIComponent(local)}`
-    return `/api/file/raw?path=${encodeURIComponent(local)}`
+    if (refKind === 'image') return nodeApi(`/file/raw?path=${encodeURIComponent(local)}`)
+    return nodeApi(`/file/raw?path=${encodeURIComponent(local)}`)
   }
   const openPreviewLink = (href: string, ev: MouseEvent<HTMLAnchorElement>) => {
     const local = localPathFromRef(path, href)

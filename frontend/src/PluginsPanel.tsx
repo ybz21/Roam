@@ -2,6 +2,7 @@
 // (配置表单按 manifest.configFields 自动渲染 / 命令 / 审计)。
 // 数据全部走 backend 薄封装 REST(exec ttmux plugin ... --json),前端不感知 plugind。
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { nodeApi } from './cluster/node-url'
 import {
   Alert, Button, Card, Checkbox, Descriptions, Divider, Empty, Form, Input, List, Modal, Popconfirm, Select,
   Space, Spin, Switch, Table, Tabs, Tag, Tooltip, Typography, Upload, message,
@@ -217,7 +218,7 @@ function InstallModal({ open, onClose, onDone, locale, t }: {
     try {
       const form = new FormData()
       form.append('file', file)
-      const r = await fetch('/api/plugin/install', { method: 'POST', body: form })
+      const r = await fetch(nodeApi('/plugin/install'), { method: 'POST', body: form })
       const data = await r.json().catch(() => null)
       if (!r.ok) throw new Error(data?.error?.message || data?.error?.code || 'HTTP ' + r.status)
       finish(data)

@@ -3,6 +3,7 @@
 //   收 二进制帧 [w:u16][h:u16][seq:u16][jpeg...] | {type:'pong'|'error'|'level'}
 //   发 {type:'ack',n} | {type:'ping',t} | {type:'tap'|'swipe'|'text'|'key'}
 import { useEffect, useRef, useState } from 'react'
+import { nodeWs } from './cluster/node-url'
 import { Dropdown, Input, App as AntApp } from 'antd'
 import type { MenuProps } from 'antd'
 import { api } from './api'
@@ -149,7 +150,7 @@ export default function PhoneView() {
     // params（control/auto|q）经 label 带给后端（原本靠 WS query 传）。
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
     const qParam = quality === 'auto' ? 'auto=1' : `q=${quality}`
-    const frpUrl = `${proto}://${location.host}/api/phone/stream?control=1&${qParam}`
+    const frpUrl = nodeWs(`/phone/stream?control=1&${qParam}`)
     const initParams: Record<string, string> = { control: '1' }
     if (quality === 'auto') initParams.auto = '1'
     else initParams.q = String(quality)

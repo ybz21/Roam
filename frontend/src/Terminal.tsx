@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { nodeWs } from './cluster/node-url'
 import type { CSSProperties, TouchEvent as RTouchEvent } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
@@ -434,7 +435,7 @@ const Term = forwardRef<TermHandle, {
     const t0 = termRef.current
     const requested = t0 && t0.cols > 1 && t0.rows > 1 ? { cols: t0.cols, rows: t0.rows } : null
     const q = requested ? `?cols=${requested.cols}&rows=${requested.rows}` : ''
-    const ws = new WebSocket(`${proto}://${location.host}/api/term/${encodeURIComponent(name)}${q}`)
+    const ws = new WebSocket(nodeWs(`/term/${encodeURIComponent(name)}${q}`))
     ws.binaryType = 'arraybuffer'
     wsRef.current = ws
     ws.onopen = () => {

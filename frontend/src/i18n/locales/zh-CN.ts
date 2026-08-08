@@ -41,6 +41,13 @@ const zhCN = {
   'p2p.link.sub.relay': '中转',
   'p2p.link.sub.directPath': '直连 · {path}',
   'nav.searchOrJump': '搜索或跳转',
+  // 多机：底座切换器与机器列表
+  'node.switch': '切换机器',
+  'node.current': '当前机器',
+  'node.offline': '离线',
+  'node.latencyMs': '{ms}ms',
+  'node.aria.switcher': '切换机器，当前 {name}',
+  'node.sessionsN': '{count} 会话',
   'nav.thisDevice': '当前设备',
   'nav.terminal': '终端',
   'workspace.resizeDock': '调整终端宽度',

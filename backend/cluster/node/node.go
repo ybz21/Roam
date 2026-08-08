@@ -1,0 +1,233 @@
+// Package node 是标准节点的出站隧道客户端：拨号云端 Broker、注册 / 重连、把 Broker
+// 转发进来的业务请求交给本机业务 Handler、并定期上报心跳。对现有业务 handler 零改动
+// ——只是把「本机 loopback」换成「隧道」。见 docs/design/cluster/客户端-服务端横向扩展设计.md §4。
+package node
+
+import (
+	"bufio"
+	"context"
+	"crypto/tls"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"net/url"
+	"os"
+	"runtime"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/gorilla/websocket"
+	"ttmux-web/auth"
+	"ttmux-web/cluster/tunnel"
+)
+
+// 与 broker 侧约定的接入头（见 cluster/broker/broker.go）。
+const (
+	hdrEnroll = "X-Roam-Enroll"
+	hdrNodeID = "X-Roam-Node-Id"
+	hdrToken  = "X-Roam-Node-Token"
+	hdrName   = "X-Roam-Node-Name"
+	hdrGroup  = "X-Roam-Node-Group"
+	hdrMeta   = "X-Roam-Node-Meta"
+)
+
+// Client 是节点侧隧道客户端。
+type Client struct {
+	Broker   string       // 云端 Broker 地址，如 https://broker:443
+	Token    string       // 一次性 enrollment token（首次注册用）
+	Name     string       // 节点显示名
+	Group    string       // 分组
+	Insecure bool         // 跳过 Broker TLS 校验（自签调试）
+	Version  string       // 本机 Roam 版本
+	CredPath string       // node.json 落盘路径
+	Handler  http.Handler // 本机业务 Handler（server.New 返回的引擎）
+	// Stats 供心跳上报本机会话数与负载；为 nil 时报 0。由 main 注入，
+	// 免得 cluster/node 反过来依赖 ttmux。
+	Stats func() (sessions int, load float64)
+}
+
+func (cl *Client) meta() map[string]any {
+	host, _ := os.Hostname()
+	return map[string]any{
+		"hostname":     host,
+		"os":           runtime.GOOS,
+		"version":      cl.Version,
+		"capabilities": []string{"term", "files", "git", "browser", "phone", "swarm"},
+	}
+}
+
+// Run 持续维持到 Broker 的隧道：断线指数退避重连，直到 ctx 取消。
+func (cl *Client) Run(ctx context.Context) {
+	backoff := time.Second
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		if err := cl.connectOnce(ctx); err != nil {
+			log.Printf("[cluster] 连接 Broker 失败: %v（%s 后重试）", err, backoff)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(backoff):
+		}
+		if backoff < 30*time.Second {
+			backoff *= 2
+		}
+	}
+}
+
+// connectOnce 建立一次隧道并服务，直到会话断开才返回。
+func (cl *Client) connectOnce(ctx context.Context) error {
+	u, err := url.Parse(cl.Broker)
+	if err != nil {
+		return err
+	}
+	switch u.Scheme {
+	case "https", "wss":
+		u.Scheme = "wss"
+	default:
+		u.Scheme = "ws"
+	}
+	u.Path = "/cluster/tunnel"
+
+	metaJSON, _ := json.Marshal(cl.meta())
+	header := http.Header{}
+	header.Set(hdrMeta, string(metaJSON))
+	if cl.Name != "" {
+		header.Set(hdrName, cl.Name)
+	}
+	if cl.Group != "" {
+		header.Set(hdrGroup, cl.Group)
+	}
+	creds, _ := loadCreds(cl.CredPath)
+	enrolling := creds == nil
+	if enrolling {
+		if cl.Token == "" {
+			return errNoToken
+		}
+		header.Set(hdrEnroll, cl.Token)
+	} else {
+		header.Set(hdrNodeID, creds.ID)
+		header.Set(hdrToken, creds.Token)
+	}
+
+	d := websocket.Dialer{HandshakeTimeout: 15 * time.Second}
+	if cl.Insecure {
+		d.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} // #nosec G402 —— 仅自签调试
+	}
+	ws, resp, err := d.Dial(u.String(), header)
+	if err != nil {
+		// gorilla 在非 101 时只给一句 "websocket: bad handshake"，看不出到底是令牌无效、
+		// 节点被移除还是地址写错——而这三种的处理完全不同。把 Broker 的状态码与错误码带出来。
+		// 踩过一次：改口令重启了 Broker，内存里的接入令牌全没了，节点这边只有 bad handshake。
+		if resp != nil {
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+			_ = resp.Body.Close()
+			return fmt.Errorf("%w（Broker 返回 %s%s）", err, resp.Status, brokerHint(resp.StatusCode, string(body)))
+		}
+		return err
+	}
+	if enrolling && resp != nil {
+		// 注册成功：从 101 响应头取长期节点凭证并落盘，之后用它重连。
+		id, tok := resp.Header.Get(hdrNodeID), resp.Header.Get(hdrToken)
+		if id != "" && tok != "" {
+			if err := saveCreds(cl.CredPath, &creds2{ID: id, Token: tok}); err != nil {
+				log.Printf("[cluster] 保存节点凭证失败: %v", err)
+			}
+			log.Printf("[cluster] 已注册为节点 %s", id)
+		}
+	}
+
+	sess, err := tunnel.Client(ws)
+	if err != nil {
+		_ = ws.Close()
+		return err
+	}
+	defer sess.Close()
+	log.Printf("[cluster] 已连上 Broker %s", cl.Broker)
+
+	go cl.heartbeat(ctx, sess)
+
+	// Broker 主动 Open 的流是转发进来的前端业务请求；用本机业务 Handler 服务它们。
+	// 隧道流已由 Broker 完成用户会话校验，标记为内部主体（进程内、不可伪造）后放行本地鉴权。
+	internal := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cl.Handler.ServeHTTP(w, auth.WithInternal(r))
+	})
+	return http.Serve(sess, internal) // 会话断开即返回
+}
+
+// heartbeat 开一条控制流，定期上报换行分隔的心跳 JSON。
+// heartbeat 开一条控制流，双向跑：定期上报心跳，并原样回 Broker 的 ping。
+//
+// 回声必须和心跳共用**同一条**流——RTT 要量的是这条隧道的往返，另开一条量出来的是别的东西。
+// 一条流上两个 goroutine 会撞写，所以写都收口到 send()。
+func (cl *Client) heartbeat(ctx context.Context, sess sessionOpener) {
+	st, err := sess.Open()
+	if err != nil {
+		return
+	}
+	defer st.Close()
+
+	var wmu sync.Mutex
+	enc := json.NewEncoder(st)
+	send := func(v any) error {
+		wmu.Lock()
+		defer wmu.Unlock()
+		return enc.Encode(v)
+	}
+
+	// 回声：读 Broker 的 {"ping":n}，原样回 {"pong":n}
+	go func() {
+		sc := bufio.NewScanner(st)
+		for sc.Scan() {
+			var m struct {
+				Ping int64 `json:"ping"`
+			}
+			if json.Unmarshal(sc.Bytes(), &m) == nil && m.Ping > 0 {
+				if send(map[string]any{"pong": m.Ping}) != nil {
+					return
+				}
+			}
+		}
+	}()
+
+	t := time.NewTicker(15 * time.Second)
+	defer t.Stop()
+	for {
+		n, load := 0, 0.0
+		if cl.Stats != nil {
+			n, load = cl.Stats()
+		}
+		if err := send(map[string]any{"heartbeat": true, "sessionCount": n, "load": load}); err != nil {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
+}
+
+// brokerHint 把 Broker 的错误码翻成「下一步该干什么」。接入失败最常见的两种原因
+// （令牌无效 / 凭证失效）都要人去控制台重新签一次，光有状态码不够。
+func brokerHint(code int, body string) string {
+	switch {
+	case strings.Contains(body, "ENROLL_INVALID"):
+		return "：接入令牌无效或已过期，去控制台「添加机器」重新签一个"
+	case strings.Contains(body, "NODE_UNAUTHORIZED"):
+		return "：节点凭证已失效（可能被移除过），删掉 <home>/cluster/node.json 后用新令牌重新接入"
+	case code == 404:
+		return "：这个地址上没有 Broker（对方是普通 Roam？检查 cluster.broker）"
+	case code == 401 || code == 403:
+		return "：被拒绝，检查令牌"
+	}
+	if body != "" {
+		return "：" + strings.TrimSpace(body)
+	}
+	return ""
+}

@@ -13,6 +13,7 @@
 //   未连 → 返回 kind='frp' 占位（本阶段 echo 无 frp 实现，仅结构就位，供后续消费者接管回退）。
 
 import { openSignal } from './signaling'
+import { nodeApi } from '../cluster/node-url'
 import type { SignalMsg } from './types'
 import type { P2PPathLabel } from './labels'
 import { getPreferences } from '../preferences'
@@ -136,7 +137,7 @@ let iceServers: RTCIceServer[] | null = null // 缓存，避免每次重连都�
 // 拉后端 ICE 配置；成功 → P2P 可用。失败/未启用返回 null（不建 control PC）。
 async function fetchIce(): Promise<RTCIceServer[] | null> {
   try {
-    const r = await fetch('/api/p2p/config', { cache: 'no-store' })
+    const r = await fetch(nodeApi('/p2p/config'), { cache: 'no-store' })
     if (!r.ok) return null
     const data = await r.json().catch(() => null)
     const cfg: P2PConfig = data?.data ?? data ?? {}
