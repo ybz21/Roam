@@ -221,6 +221,11 @@ type CreateReq struct {
 	Branch string `json:"branch"` // 空 = 旧时间戳行为（兼容）
 	Base   string `json:"base"`   // 空 = 仓库默认分支
 	Remote string `json:"remote"` // 非空则先 fetch remote base
+	// Dirname 指定 .worktrees/ 下的目录名，编排层一律传会话 id。
+	// 分支名派生自展示名，中文标题会被 autoBranch 清成空、兜底成字面量 "task"——
+	// 于是每个中文任务都叫 task/task-2/task-3，且 task 被收尾释放后原地复用同一路径，
+	// 新旧任务的会话归属、标注、开着的终端全指向同一个目录。会话 id 唯一且不回收。
+	Dirname string `json:"dirname"`
 }
 
 type CreateResp struct {
@@ -334,9 +339,13 @@ func (s *Service) Create(ctx context.Context, req CreateReq) (CreateResp, error)
 	if err := os.MkdirAll(wtDir, 0o755); err != nil {
 		return CreateResp{}, errf("MKDIR_FAILED", "%v", err)
 	}
-	path := filepath.Join(wtDir, pathSlug(finalBranch))
+	slug := pathSlug(finalBranch)
+	if d := strings.TrimSpace(req.Dirname); d != "" {
+		slug = pathSlug(d)
+	}
+	path := filepath.Join(wtDir, slug)
 	for i := 2; pathExists(path) && i < 100; i++ {
-		path = filepath.Join(wtDir, fmt.Sprintf("%s-%d", pathSlug(finalBranch), i))
+		path = filepath.Join(wtDir, fmt.Sprintf("%s-%d", slug, i))
 	}
 
 	if out, e := git(ctx, repo.Root, "worktree", "add", "--no-track", "-b", finalBranch, "--", path, startOid); e != nil {

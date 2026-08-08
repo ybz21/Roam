@@ -332,7 +332,7 @@ func (a *API) WorktreeSessionCreate(c *gin.Context) {
 	if branch == "" {
 		branch = autoBranch(label)
 	}
-	wt, err := a.WT.Create(ctx, worktree.CreateReq{Dir: b.Dir, Branch: branch, Base: b.Base, Remote: b.Remote})
+	wt, err := a.WT.Create(ctx, worktree.CreateReq{Dir: b.Dir, Branch: branch, Base: b.Base, Remote: b.Remote, Dirname: sess})
 	if err != nil {
 		_, _ = a.TT.Run("kill", sess, "--yes")
 		wtErr(c, err)
@@ -420,7 +420,7 @@ func (a *API) SessionForkWorktree(c *gin.Context) {
 	if branch == "" {
 		branch = autoBranch(label) // 分支占位名按展示名派生，别派生出一串 id
 	}
-	wt, err := a.WT.Create(ctx, worktree.CreateReq{Dir: dir, Branch: branch, Base: b.Base, Remote: b.Remote})
+	wt, err := a.WT.Create(ctx, worktree.CreateReq{Dir: dir, Branch: branch, Base: b.Base, Remote: b.Remote, Dirname: child})
 	if err != nil {
 		_, _ = a.TT.Run("kill", child, "--yes")
 		wtErr(c, err)
