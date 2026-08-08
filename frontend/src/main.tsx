@@ -1,4 +1,5 @@
 import React from 'react'
+import { bootstrapCluster } from './cluster/node-url'
 import { createRoot } from 'react-dom/client'
 import { App as AntApp } from 'antd'
 import App from './App'
@@ -38,16 +39,21 @@ try {
 // 主题(黑/白)统一收敛到 ThemeProvider：它内部按 mode 渲染 ConfigProvider + 写 data-theme。
 // 根上再套一层错误边界：React 里任何未捕获的渲染/卸载异常都会把整棵树卸掉 → 整页黑屏，
 // 连重试入口都没有。兜住后至少显示「出错·重试」，点一下重挂应用，不必手动刷新。
-createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <I18nProvider>
-      <ThemeProvider>
-        <AntApp>
-          <ErrorBoundary>
-            <App />
-          </ErrorBoundary>
-        </AntApp>
-      </ThemeProvider>
-    </I18nProvider>
-  </React.StrictMode>,
-)
+// 多机引导要跑在第一条业务请求**之前**：它决定后续 URL 是 /api/… 还是 /n/<id>/api/…。
+// 只打一个 Broker-local 端点（单机后端 404，即判定单机），代价几毫秒，
+// 换来的是不会先朝错的机器打一轮请求再纠正。失败也照常渲染——当单机处理。
+void bootstrapCluster().finally(() => {
+  createRoot(document.getElementById('root')!).render(
+    <React.StrictMode>
+      <I18nProvider>
+        <ThemeProvider>
+          <AntApp>
+            <ErrorBoundary>
+              <App />
+            </ErrorBoundary>
+          </AntApp>
+        </ThemeProvider>
+      </I18nProvider>
+    </React.StrictMode>,
+  )
+})

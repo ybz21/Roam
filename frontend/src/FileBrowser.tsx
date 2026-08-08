@@ -1,6 +1,7 @@
 // 文件侧栏 —— 在 Claude / Codex 对话页右侧浏览工作目录、查看文件内容（类似 codex 右侧边栏）。
 // 单层可导航列表：目录在前可进入、↑ 回上级、点文件在弹层里查看正文。
 import { type ReactNode, Fragment, createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { nodeApi } from './cluster/node-url'
 import { AutoComplete, Button, ConfigProvider, Dropdown, Input, Modal, Spin, App as AntApp, Tooltip, type MenuProps } from 'antd'
 import { api, upload } from './api'
 import { useI18n } from './i18n'
@@ -223,7 +224,7 @@ function FileRowBody({ full, name, isDir, size, accent, onInsertPath, onDownload
               <Button type="text" size="small" onClick={(e) => { e.stopPropagation(); onDownload({ path: full, name, dir: isDir, size, mtime: 0, ctime: 0 }) }}
                 style={{ width: 24, height: 24, minWidth: 24, padding: 0, color: 'var(--text-dim)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><DownloadIcon /></Button>
             ) : (
-              <Button type="text" size="small" href={`/api/file/raw?path=${encodeURIComponent(full)}&dl=1`} download={name}
+              <Button type="text" size="small" href={nodeApi(`/file/raw?path=${encodeURIComponent(full)}&dl=1`)} download={name}
                 style={{ width: 24, height: 24, minWidth: 24, padding: 0, color: 'var(--text-dim)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><DownloadIcon /></Button>
             )}
           </Tooltip>
@@ -621,7 +622,7 @@ export default function FileBrowser({
   // legacy：系统 a[download]（走 frp）。手机护栏命中或不支持 File System Access 时用它。
   const legacyAnchorDownload = (target: FileTarget) => {
     const a = document.createElement('a')
-    a.href = `/api/file/download?path=${encodeURIComponent(target.path)}`
+    a.href = nodeApi(`/file/download?path=${encodeURIComponent(target.path)}`)
     a.download = target.dir ? `${target.name}.zip` : target.name
     document.body.appendChild(a)
     a.click()
