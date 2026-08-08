@@ -31,7 +31,6 @@ const BrowserView = lazy(() => import('./BrowserView'))
 const PhoneView = lazy(() => import('./PhoneView'))
 const Swarm = lazy(() => import('./Swarm'))
 const Projects = lazy(() => import('./Projects'))
-const OverviewPage = lazy(() => import('./Overview'))
 import UpdateBanner from './UpdateBanner'
 import { useThemeMode } from './theme'
 import { useI18n } from './i18n'
@@ -66,11 +65,12 @@ const { Text } = Typography
 
 // 「蜂群」不进导航：项目页是唯一主入口（任务驱动，08 设计），蜂群从项目编队 tab 进
 // （蜂群台深链 #/swarm/<名>）。
-// 「会话」在 NAV 里但不进桌面侧栏两组：桌面从项目页/概览进，命令面板能搜到；
-// 手机则**必须**有个导航入口——此前它只能从概览的「全部会话」链接进，而搜索、筛选、
-// Worktree 管理、新建竞赛全在那一页（13 §6）。
+// 「会话」在 NAV 里但不进桌面侧栏两组：桌面从项目页进，命令面板能搜到；手机则**必须**
+// 有个导航入口——搜索、筛选、Worktree 管理、新建竞赛全在那一页（13 §6）。
+//
+// 「概览」已并进项目页（18 设计）：两页画的是同一批项目卡、拉的是同一条 /projects，
+// 概览独有的问候条/行动队列/活动轨现在挂在项目列表页顶上。旧链接由 normalizeRoute 接住。
 const NAV = [
-  { key: 'overview', labelKey: 'nav.overview' },
   { key: 'projects', labelKey: 'nav.projects' },
   { key: 'sessions', labelKey: 'nav.sessions' },
   { key: 'files', labelKey: 'nav.files' },
@@ -82,13 +82,15 @@ const NAV = [
 
 // 桌面导航的两组（14 §4.4）。NAV 仍是全量注册表——命令面板和手机「更多」都从它取，
 // 所以 settings/about 留在 NAV 里，只是不进这两组，改由账户菜单收口。
-const NAV_WORKSPACE = ['overview', 'projects', 'files']
+const NAV_WORKSPACE = ['projects', 'files']
 const NAV_TOOLS = ['browser', 'phone', 'plugins']
 
 // 手机底栏。13 §4.1 当初把「浏览器/手机镜像」折进「更多」，理由是低频且窄屏下几乎不可用
 // （地址栏固定 150、设备选择器固定 240）——那两处固定宽度后来都改成自适应了，而这两页
 // 恰恰是本机最常用的两个工具，藏在二级 sheet 里每次要点两下。现在放回底栏。
-const MOBILE_NAV_KEYS = ['overview', 'projects', 'files', 'browser', 'phone']
+// 概览并进项目页后这里空出一格，不再补人：4 格 + 「更多」= 5 个按钮，390 宽下每格 78，
+// 比原来 6 格的 65 宽出一截（13 §7.1 的命中区下限是 44，但相邻图标还要留够间隙）。
+const MOBILE_NAV_KEYS = ['projects', 'files', 'browser', 'phone']
 // 「更多」sheet 里的两段：会话属于工作区主线，不归到工具下面
 const MOBILE_MORE_WORKSPACE = ['sessions']
 const MOBILE_MORE_TOOLS = ['plugins', 'settings']
@@ -96,12 +98,13 @@ const MOBILE_MORE_KEYS = [...MOBILE_MORE_WORKSPACE, ...MOBILE_MORE_TOOLS]
 
 // 用 Canvas 容器查询排版的页面（见 index.css 的 .tt-canvas[data-cq]）。逐页开，
 // 不是全局开：container-type 会改变 fixed 后代的包含块。
-const CQ_PAGES = new Set(['overview', 'sessions'])
+const CQ_PAGES = new Set(['projects', 'sessions'])
 
-// 旧链接兼容：/#/env 重定向到 /#/settings
+// 旧链接兼容：/#/env → /#/settings，/#/overview → /#/projects（概览并进项目页，18 设计）
 function normalizeRoute(raw: string): string {
   const route = raw.split('?')[0]
   if (route === 'env' || route.startsWith('env/')) return 'settings' + route.slice(3)
+  if (route === 'overview' || route.startsWith('overview/')) return 'projects'
   return route
 }
 
@@ -139,7 +142,6 @@ const svg = (paths: any) => (
     strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{paths}</svg>
 )
 const ICONS: Record<string, any> = {
-  overview: svg(<><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>),
   projects: svg(<><path d="M3 10.2 12 3l9 7.2" /><path d="M5.5 9v11h13V9" /><path d="M9.5 20v-5h5v5" /></>),
   sessions: svg(<><polyline points="5 8 9 12 5 16" /><line x1="12" y1="16" x2="18" y2="16" /></>),
   swarm: svg(<><circle cx="12" cy="5" r="2.4" /><circle cx="5" cy="17" r="2.4" /><circle cx="19" cy="17" r="2.4" /><line x1="12" y1="7.4" x2="6.5" y2="14.8" /><line x1="12" y1="7.4" x2="17.5" y2="14.8" /></>),
@@ -525,7 +527,7 @@ export default function App() {
   }, [authed, prefs.p2pEnabled])
 
   if (authed === null) return <div style={{ height: '100dvh', display: 'grid', placeItems: 'center' }}><Spin size="large" /></div>
-  if (!authed) return <Login onOk={() => { setAuthed(true); loadPreferences(); go('overview') }} />
+  if (!authed) return <Login onOk={() => { setAuthed(true); loadPreferences(); go('projects') }} />
 
   // 独立单终端页（新标签全屏打开）：hash 路由 #/term/<会话名>
   const soloName = tab === 'term' && route.includes('/') ? decodeURIComponent(route.slice(route.indexOf('/') + 1)) : ''
@@ -629,8 +631,6 @@ export default function App() {
   )
 
   const pages: any = {
-    // 概览不再嵌会话列表：那是会话页的活（分工见 docs/design/web/13-mobile-responsive/ia.html）
-    overview: <OverviewPage openTerm={openTerm} />,
     swarm: <Swarm openTerm={openTerm} initialSwarm={swarmSub || undefined} onNav={(n) => { location.hash = n ? '#/swarm/' + encodeURIComponent(n) : '#/swarm' }} />,
     projects: <Projects openTerm={openTerm} closeTerm={closeTerm} initialKey={projectSub || undefined} activeTerm={active} />,
     sessions: <Sessions openTerm={openTerm} closeTerm={closeTerm} activeTerm={active} />,
@@ -2937,7 +2937,7 @@ function Sessions({ openTerm, closeTerm, activeTerm, embedded }: {
                     <i title={waiting ? t('prompt.confirmRequired') : connected ? t('terminal.status.connected') : t('terminal.status.idle')} style={{ width: 8, height: 8, borderRadius: '50%', flex: '0 0 8px', background: waiting ? '#d29922' : connected ? 'var(--ok)' : 'var(--text-dimmer)' }} />
                     <span className="nm" style={{ color: activeRow ? '#fff' : undefined }}
                       title={`${s.label || s.name}（${s.id || s.name}）· ${t('session.createdAt')} ${absTime(s.created)}`}>
-                      {en.fam && <Tooltip title={t('session.fork.childOf', { parent: s.parent })}><span style={{ color: '#a371f7', marginRight: 6, display: 'inline-flex' }}><BranchIcon size={12} /></span></Tooltip>}
+                      {en.fam && <Tooltip title={t('session.fork.childOf', { parent: s.parent })}><span style={{ color: 'var(--swarm)', marginRight: 6, display: 'inline-flex' }}><BranchIcon size={12} /></span></Tooltip>}
                       {s.label || s.name}
                       {/* 会话 ID 只留尾 4 位：全名与名字同权并排时，每行前半截都在念一串日期 */}
                       {(s.id || s.name) !== (s.label || s.name) && <span className="id">{(s.id || s.name).slice(-4)}</span>}

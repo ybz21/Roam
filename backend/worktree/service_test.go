@@ -572,3 +572,52 @@ func TestRemoveHalfDeadWorktree(t *testing.T) {
 		t.Fatalf("registry entry should be pruned:\n%s", out)
 	}
 }
+
+// Dirname 指定目录名：分支名可以撞（中文标题一律派生成 "task"），目录不能撞——
+// 撞了就是新旧两个任务共用一个工作区。传会话 id 后两次创建各自落在自己的目录里。
+func TestCreateDirnameSeparatesSameBranch(t *testing.T) {
+	ctx := context.Background()
+	s := New("")
+	repo := mkRepo(t)
+
+	a, err := s.Create(ctx, CreateReq{Dir: repo, Branch: "task", Base: "main", Dirname: "2026-0807-2143-002m"})
+	if err != nil {
+		t.Fatalf("create a: %v", err)
+	}
+	b, err := s.Create(ctx, CreateReq{Dir: repo, Branch: "task", Base: "main", Dirname: "2026-0807-2201-002n"})
+	if err != nil {
+		t.Fatalf("create b: %v", err)
+	}
+	if filepath.Base(a.Path) != "2026-0807-2143-002m" || filepath.Base(b.Path) != "2026-0807-2201-002n" {
+		t.Fatalf("dirname ignored: %s / %s", a.Path, b.Path)
+	}
+	// 分支仍按老规矩加序号；目录不该跟着分支走
+	if a.Branch != "task" || b.Branch != "task-2" {
+		t.Fatalf("branch alloc changed: %s / %s", a.Branch, b.Branch)
+	}
+	// 收尾释放 task 目录后，新任务不该原地复用它
+	if err := s.Remove(ctx, RemoveReq{Path: a.Path}); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	c, err := s.Create(ctx, CreateReq{Dir: repo, Branch: "task", Base: "main", Dirname: "2026-0807-2230-002p"})
+	if err != nil {
+		t.Fatalf("create c: %v", err)
+	}
+	if c.Path == a.Path {
+		t.Fatalf("recycled removed worktree path: %s", c.Path)
+	}
+}
+
+// 不传 Dirname 时沿用分支 slug（/git/worktree 直建口径不变）。
+func TestCreateWithoutDirnameKeepsBranchSlug(t *testing.T) {
+	ctx := context.Background()
+	s := New("")
+	repo := mkRepo(t)
+	resp, err := s.Create(ctx, CreateReq{Dir: repo, Branch: "feat/x", Base: "main"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if filepath.Base(resp.Path) != "feat-x" {
+		t.Fatalf("path = %s, want .worktrees/feat-x", resp.Path)
+	}
+}

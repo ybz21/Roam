@@ -176,7 +176,7 @@ func (a *API) RaceCreate(c *gin.Context) {
 		ct.Session = sess
 		a.WT.BindSessionHome(ct.Session, b.Dir) // 选手会话归属本仓库；cdInto 之后改钉到各自 worktree
 		ct.SessionID = a.WT.SessionID(ct.Session)
-		wt, err := a.WT.Create(ctx, worktree.CreateReq{Dir: b.Dir, Branch: autoBranch(b.Name) + "-" + letter, Base: b.Base})
+		wt, err := a.WT.Create(ctx, worktree.CreateReq{Dir: b.Dir, Branch: autoBranch(b.Name) + "-" + letter, Base: b.Base, Dirname: sess})
 		if err != nil {
 			_, _ = a.TT.Run("kill", ct.Session, "--yes")
 			fail("worktree: " + err.Error())

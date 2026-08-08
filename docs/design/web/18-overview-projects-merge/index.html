@@ -1,0 +1,1109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Roam · 概览 × 项目 合并成一个工作台</title>
+<style>
+/* ── 令牌：直接取 frontend/src/theme.tsx 的真值，稿子和成品同源 ───────────── */
+:root {
+  --bg-base:#0d1117; --bg-container:#161b22; --bg-elevated:#1b222b; --bg-term:#06090d;
+  --border:#30363d; --border-subtle:#21262d;
+  --text-bright:#e6edf3; --text-dim:#8b949e; --text-dimmer:#6e7681;
+  --accent:#58a6ff; --accent-solid:#1f6feb; --accent-soft:rgba(31,111,235,.14); --accent-border:rgba(88,166,255,.45);
+  --ok:#3fb950; --ok-solid:#238636; --ok-soft:rgba(63,185,80,.14); --ok-border:rgba(63,185,80,.42);
+  --danger:#f85149; --danger-soft:rgba(248,81,73,.12); --danger-border:rgba(248,81,73,.40);
+  --warn:#d29922; --warn-soft:rgba(210,153,34,.12); --warn-border:rgba(210,153,34,.40);
+  --purple:#a371f7; --purple-soft:rgba(163,113,247,.12); --purple-border:rgba(163,113,247,.38);
+  --list-hover:rgba(255,255,255,.025);
+  --brand-claude:#d97757; --brand-codex:var(--text-bright);
+  --fs-micro:11px; --fs-meta:12px; --fs-sm:13px; --fs-body:14px; --fs-lg:16px; --fs-title:22px;
+  --r-xs:6px; --r-sm:10px; --r-card:14px; --r-pill:999px;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+html[data-theme="light"] {
+  --bg-base:#f6f8fa; --bg-container:#ffffff; --bg-elevated:#ffffff; --bg-term:#ffffff;
+  --border:#d0d7de; --border-subtle:#e6e9ec;
+  --text-bright:#1f2328; --text-dim:#57606a; --text-dimmer:#8c959f;
+  --accent:#0969da; --accent-solid:#1f6feb; --accent-soft:rgba(31,111,235,.10); --accent-border:rgba(31,111,235,.40);
+  --ok:#1a7f37; --ok-solid:#1f883d; --ok-soft:rgba(31,136,61,.10); --ok-border:rgba(31,136,61,.40);
+  --danger:#cf222e; --danger-soft:rgba(207,34,46,.09); --danger-border:rgba(207,34,46,.35);
+  --warn:#9a6700; --warn-soft:rgba(154,103,0,.10); --warn-border:rgba(154,103,0,.35);
+  --purple:#8250df; --purple-soft:rgba(130,80,223,.10); --purple-border:rgba(130,80,223,.35);
+  --list-hover:rgba(27,31,36,.04);
+  --brand-codex:var(--text-bright);
+}
+* { box-sizing:border-box; }
+html { background:#07090d; }
+html[data-theme="light"] { background:#eef1f5; }
+body {
+  margin:0; color:var(--text-bright);
+  font:var(--fs-body)/1.6 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+svg { display:block; }
+button { font:inherit; cursor:pointer; }
+
+/* ── 文档骨架（沿用 17 号稿体例）────────────────────────────────────────── */
+.top {
+  position:sticky; top:0; z-index:20;
+  display:flex; align-items:center; gap:var(--sp-3);
+  padding:10px clamp(16px,3vw,40px);
+  background:color-mix(in srgb, var(--bg-base) 84%, transparent);
+  border-bottom:1px solid var(--border-subtle); backdrop-filter:blur(18px);
+}
+.top .kicker { font-size:var(--fs-micro); letter-spacing:.14em; text-transform:uppercase; color:var(--text-dimmer); }
+.top h1 { margin:0; font-size:var(--fs-sm); font-weight:600; }
+.top .sp { flex:1; }
+.tbtn {
+  border:1px solid var(--border); background:var(--bg-container); color:var(--text-dim);
+  border-radius:var(--r-pill); padding:5px 14px; font-size:var(--fs-meta);
+}
+.tbtn:hover { color:var(--text-bright); border-color:var(--accent-border); }
+
+.wrap { max-width:1180px; margin:0 auto; padding:34px clamp(16px,3vw,40px) 120px; }
+h2 { margin:56px 0 6px; padding-top:26px; font-size:var(--fs-lg); font-weight:600; border-top:1px solid var(--border-subtle); }
+h2:first-of-type { margin-top:8px; border-top:0; padding-top:0; }
+h3 { margin:28px 0 8px; font-size:var(--fs-sm); font-weight:600; color:var(--text-bright); }
+.lede { max-width:78ch; margin:0 0 18px; color:var(--text-dim); font-size:var(--fs-sm); line-height:1.9; }
+.lede b { color:var(--text-bright); font-weight:600; }
+.lede code, li code, td code, p code {
+  font:var(--fs-meta)/1.4 var(--mono); background:var(--list-hover);
+  border:1px solid var(--border-subtle); border-radius:4px; padding:1px 5px; color:var(--text-bright);
+}
+ul.pts, ol.pts { max-width:78ch; margin:0 0 18px; padding-left:20px; color:var(--text-dim); font-size:var(--fs-sm); line-height:1.9; }
+ul.pts b, ol.pts b { color:var(--text-bright); }
+ul.pts li, ol.pts li { margin-bottom:4px; }
+table { width:100%; border-collapse:collapse; margin:6px 0 20px; font-size:var(--fs-meta); }
+th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border-subtle); vertical-align:top; }
+th { color:var(--text-dimmer); font-weight:600; font-size:var(--fs-micro); text-transform:uppercase; letter-spacing:.08em; }
+td { color:var(--text-dim); } td b { color:var(--text-bright); font-weight:600; }
+td.same { color:var(--danger); } td.same b { color:var(--danger); }
+.cap { display:flex; align-items:center; gap:var(--sp-2); margin:24px 0 8px; font-size:var(--fs-meta); color:var(--text-dimmer); flex-wrap:wrap; }
+.cap b { color:var(--text-bright); font-size:var(--fs-sm); font-weight:600; }
+.pill { font-size:var(--fs-micro); padding:1px 8px; border-radius:var(--r-pill); border:1px solid var(--border); color:var(--text-dimmer); white-space:nowrap; }
+.pill.bad { color:var(--danger); border-color:var(--danger-border); background:var(--danger-soft); }
+.pill.good { color:var(--ok); border-color:var(--ok-border); background:var(--ok-soft); }
+.pill.warn { color:var(--warn); border-color:var(--warn-border); background:var(--warn-soft); }
+.note { border-left:2px solid var(--accent); background:var(--accent-soft); padding:11px 15px; border-radius:0 var(--r-xs) var(--r-xs) 0; color:var(--text-dim); font-size:var(--fs-meta); line-height:1.85; max-width:82ch; margin:16px 0 22px; }
+.note b { color:var(--text-bright); }
+.note.warn { border-left-color:var(--warn); background:var(--warn-soft); }
+.note.good { border-left-color:var(--ok); background:var(--ok-soft); }
+pre.code {
+  margin:8px 0 20px; padding:14px 16px; overflow:auto;
+  border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-base);
+  font:var(--fs-meta)/1.7 var(--mono); color:var(--text-dim);
+}
+pre.code b { color:var(--text-bright); } pre.code i { color:var(--accent); font-style:normal; }
+pre.code s { color:var(--text-dimmer); text-decoration:none; }
+pre.code em { color:var(--danger); font-style:normal; }
+pre.code u { color:var(--ok); text-decoration:none; }
+
+/* ── 通用 mock 零件 ───────────────────────────────────────────────────── */
+.d { width:6px; height:6px; border-radius:50%; background:var(--text-dimmer); flex:0 0 auto; display:block; }
+.d.g { background:var(--ok); } .d.a { background:var(--warn); } .d.p { background:var(--purple); }
+.mono { font-family:var(--mono); }
+
+/* 屏幕外框 */
+.scr {
+  border:1px solid var(--border); border-radius:var(--r-card); overflow:hidden;
+  background:var(--bg-base); box-shadow:0 16px 44px rgba(1,4,9,.45);
+}
+html[data-theme="light"] .scr { box-shadow:0 16px 44px rgba(140,149,159,.22); }
+.scr-bar { display:flex; align-items:center; gap:6px; padding:8px 12px; background:var(--bg-container); border-bottom:1px solid var(--border-subtle); }
+.scr-bar i { width:9px; height:9px; border-radius:50%; background:var(--border); display:block; }
+.scr-bar span { margin-left:var(--sp-2); font-size:var(--fs-micro); color:var(--text-dimmer); font-family:var(--mono); }
+.scr-body { display:flex; min-height:0; }
+
+/* 导航轨 */
+.navrail { flex:0 0 46px; border-right:1px solid var(--border-subtle); background:var(--bg-container); padding:10px 0; display:flex; flex-direction:column; align-items:center; gap:5px; }
+.navrail .ni { width:30px; height:30px; border-radius:var(--r-sm); display:grid; place-items:center; color:var(--text-dimmer); }
+.navrail .ni.on { background:var(--accent-soft); color:var(--accent); }
+.navrail .ni.gone { opacity:.32; position:relative; }
+.navrail .ni.gone::after { content:""; position:absolute; left:4px; right:4px; top:50%; height:1.5px; background:var(--danger); }
+.navrail .sep { width:20px; height:1px; background:var(--border-subtle); margin:4px 0; }
+
+/* 页面画布 */
+.cvs { flex:1 1 auto; min-width:0; padding:var(--sp-4); display:flex; flex-direction:column; gap:var(--sp-3); background:var(--bg-base); }
+
+/* 页头 */
+.ph { display:flex; align-items:flex-end; gap:var(--sp-3); flex-wrap:wrap; }
+.ph .ttl { min-width:0; flex:1 1 260px; }
+.ph h4 { margin:0; font-size:var(--fs-lg); font-weight:600; color:var(--text-bright); }
+.ph p { margin:3px 0 0; font-size:var(--fs-meta); color:var(--text-dimmer); }
+.sumbar { display:flex; align-items:center; gap:var(--sp-4); font-size:var(--fs-meta); color:var(--text-dim); }
+.sumbar span { display:inline-flex; align-items:center; gap:5px; }
+.sumbar b { font-family:var(--mono); font-weight:700; font-size:var(--fs-sm); color:var(--text-bright); }
+.btn-pri { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 14px; border:0; border-radius:var(--r-sm); background:var(--accent-solid); color:#fff; font-size:var(--fs-sm); font-weight:600; }
+
+/* 分区头 */
+.sect { display:flex; align-items:center; gap:var(--sp-2); font-size:var(--fs-sm); font-weight:600; color:var(--text-bright); margin-top:var(--sp-1); }
+.sect .n { min-width:19px; height:19px; padding:0 6px; display:grid; place-items:center; border-radius:var(--r-pill); background:var(--bg-container); color:var(--text-dim); font:600 var(--fs-micro)/1 var(--mono); }
+.sect .ln { flex:1; height:1px; background:var(--border-subtle); }
+.sect a { font-size:var(--fs-meta); font-weight:400; color:var(--accent); }
+
+/* 行动卡 */
+.acts3 { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:var(--sp-3); }
+.acard {
+  position:relative; min-height:104px; padding:11px 12px 30px; border-radius:var(--r-card);
+  border:1px solid var(--warn-border); background:linear-gradient(145deg,rgba(210,153,34,.10),rgba(210,153,34,.03));
+}
+.acard.p { border-color:var(--purple-border); background:linear-gradient(145deg,rgba(163,113,247,.10),rgba(163,113,247,.03)); }
+.acard .ty { display:flex; align-items:center; gap:6px; font-size:var(--fs-micro); font-weight:600; color:var(--warn); }
+.acard.p .ty { color:var(--purple); }
+.acard .ty em { color:var(--text-dimmer); font-weight:400; font-style:normal; }
+.acard h5 { margin:7px 0 4px; font-size:var(--fs-sm); font-weight:600; color:var(--text-bright); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.acard p { margin:0; font:var(--fs-micro)/1.5 var(--mono); color:var(--text-dim); max-height:33px; overflow:hidden; }
+.acard .go { position:absolute; left:12px; bottom:10px; font-size:var(--fs-micro); color:var(--accent); }
+
+/* 工具条 */
+.tools { display:flex; align-items:center; gap:var(--sp-2); padding:7px 0; border-bottom:1px solid var(--border-subtle); flex-wrap:wrap; }
+.chip { display:inline-flex; align-items:center; gap:5px; height:26px; padding:0 10px; border-radius:var(--r-pill); background:var(--bg-container); box-shadow:inset 0 0 0 1px var(--border-subtle); color:var(--text-dim); font-size:var(--fs-meta); white-space:nowrap; }
+.chip .n { font-family:var(--mono); font-size:var(--fs-micro); color:var(--text-dimmer); }
+.chip.on { background:var(--accent-soft); color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent-border); }
+.chip.on .n { color:var(--accent); }
+.tools .sp { flex:1; }
+.searchbox { display:inline-flex; align-items:center; gap:6px; height:26px; width:180px; padding:0 10px; border-radius:var(--r-pill); background:var(--bg-container); box-shadow:inset 0 0 0 1px var(--border-subtle); color:var(--text-dimmer); font-size:var(--fs-meta); }
+
+/* 项目卡栅格 */
+.cols { display:grid; grid-template-columns:minmax(0,1fr) 232px; gap:var(--sp-3); align-items:start; }
+.pgrid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--sp-3); align-items:start; }
+.pcard { min-width:0; padding:11px 11px 9px; border-radius:var(--r-card); border:1px solid var(--border-subtle); background:var(--bg-container); display:flex; flex-direction:column; gap:5px; }
+.pcard .hd { display:flex; align-items:center; gap:8px; }
+.pico { width:26px; height:26px; flex:0 0 auto; border-radius:var(--r-sm); display:grid; place-items:center; font-size:11px; font-weight:800; }
+.pcard .nm { min-width:0; flex:1 1 auto; }
+.pcard .nm b { display:block; font-size:var(--fs-sm); color:var(--text-bright); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pcard .nm span { display:block; font:var(--fs-micro)/1.3 var(--mono); color:var(--text-dimmer); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pcard .hda { display:inline-flex; gap:5px; color:var(--text-dimmer); flex:0 0 auto; }
+.pcard .hda .star { color:var(--warn); }
+.pstat { display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:var(--fs-micro); color:var(--text-dim); }
+.pstat b { color:var(--text-bright); font-family:var(--mono); }
+.tag { font-size:var(--fs-micro); padding:0 6px; border-radius:var(--r-xs); border:1px solid var(--warn-border); background:var(--warn-soft); color:var(--warn); }
+.tag.ok { border-color:var(--ok-border); background:var(--ok-soft); color:var(--ok); }
+.trow { display:flex; align-items:center; gap:6px; min-height:26px; padding:2px 6px; border-radius:var(--r-xs); font-size:var(--fs-meta); color:var(--text-bright); }
+.trow .t { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.trow .tm { margin-left:auto; flex:0 0 auto; font-size:var(--fs-micro); color:var(--text-dimmer); }
+.trow .mk { flex:0 0 auto; color:var(--text-dimmer); display:inline-flex; }
+.more { padding-left:6px; font-size:var(--fs-micro); color:var(--text-dimmer); }
+.foot { display:flex; align-items:center; gap:6px; min-height:24px; padding:2px 7px; border-radius:var(--r-xs); font-size:var(--fs-micro); border:1px solid var(--purple-border); background:var(--purple-soft); color:var(--purple); }
+.foot.w { border-color:var(--warn-border); background:var(--warn-soft); color:var(--warn); }
+.foot b { font-weight:600; }
+.foot a { margin-left:auto; flex:0 0 auto; color:inherit; }
+.sessbox { display:flex; flex-direction:column; gap:2px; padding:5px 4px; border-radius:var(--r-sm); background:var(--bg-term); border:1px solid var(--border-subtle); }
+
+/* 安静行 / 散会话行 */
+.qrow { display:flex; align-items:center; gap:var(--sp-3); min-height:30px; padding:4px 10px; border-radius:var(--r-xs); font-size:var(--fs-meta); color:var(--text-dim); border-bottom:1px solid var(--border-subtle); }
+.qrow .nm { color:var(--text-bright); font-weight:600; }
+.qrow .p { font-family:var(--mono); font-size:var(--fs-micro); color:var(--text-dimmer); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.qrow .sp { flex:1; }
+
+/* 活动右轨 */
+.arail { padding:11px; border-radius:var(--r-card); background:var(--bg-container); }
+.arail h5 { margin:0 0 10px; font-size:var(--fs-meta); font-weight:600; color:var(--text-bright); }
+.tl { position:relative; display:flex; flex-direction:column; gap:13px; }
+.tl::before { content:""; position:absolute; left:3px; top:5px; bottom:5px; border-left:1px solid var(--border-subtle); }
+.ev { position:relative; padding-left:15px; }
+.ev::before { content:""; position:absolute; left:0; top:4px; width:7px; height:7px; border-radius:50%; border:2px solid var(--bg-container); background:var(--accent); }
+.ev.p::before { background:var(--purple); }
+.ev b { display:block; font-size:var(--fs-micro); color:var(--text-bright); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ev p { margin:2px 0 0; font-size:var(--fs-micro); line-height:1.5; color:var(--text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ev time { display:block; margin-top:2px; font-size:10px; color:var(--text-dimmer); }
+
+/* 重叠高亮 */
+.dup { position:relative; outline:1.5px dashed var(--danger); outline-offset:3px; border-radius:var(--r-sm); }
+.dup::after {
+  content:attr(data-dup); position:absolute; top:-9px; right:6px; z-index:2;
+  padding:0 6px; border-radius:var(--r-pill); background:var(--danger); color:#fff;
+  font-size:10px; font-weight:700; line-height:16px; white-space:nowrap;
+}
+.pair { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--sp-4); align-items:start; }
+.trio { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:var(--sp-4); align-items:start; }
+.cardwrap { max-width:330px; }
+
+/* 手机机身 */
+.phones { display:flex; flex-wrap:wrap; gap:var(--sp-5); justify-content:center; margin:14px 0 8px; }
+.phone { width:330px; flex:0 0 auto; border:8px solid #1b222b; border-radius:30px; overflow:hidden; background:var(--bg-base); box-shadow:0 18px 48px rgba(1,4,9,.5); }
+html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px rgba(140,149,159,.28); }
+.phone-notch { height:18px; background:var(--bg-container); display:flex; align-items:center; justify-content:center; }
+.phone-notch i { width:56px; height:4px; border-radius:var(--r-pill); background:var(--border); display:block; }
+.phone-cvs { padding:11px; display:flex; flex-direction:column; gap:9px; }
+.phone-tag { text-align:center; margin-top:var(--sp-2); font-size:var(--fs-meta); color:var(--text-dim); }
+.phone-tag b { color:var(--text-bright); }
+.bnav { display:flex; border-top:1px solid var(--border); background:var(--bg-container); }
+.bnav span { flex:1; text-align:center; padding:6px 0 8px; font-size:10px; color:var(--text-dimmer); }
+.bnav span.on { color:var(--accent); }
+.bnav i { display:block; margin:0 auto 3px; width:15px; height:15px; border-radius:4px; border:1.6px solid currentColor; }
+.hscroll { display:flex; gap:var(--sp-2); overflow:hidden; }
+.hscroll > * { flex:0 0 76%; }
+
+@media (max-width:900px) {
+  .pair, .trio, .acts3, .pgrid { grid-template-columns:minmax(0,1fr); }
+  .cols { grid-template-columns:minmax(0,1fr); }
+}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div>
+    <div class="kicker">Roam · Web · 18</div>
+    <h1>概览 × 项目 —— 合并成一个工作台</h1>
+  </div>
+  <span class="sp"></span>
+  <button class="tbtn" onclick="document.documentElement.dataset.theme=document.documentElement.dataset.theme==='light'?'dark':'light'">切换明暗</button>
+</div>
+
+<div class="wrap">
+
+<p class="lede">
+现在导航第一组里并排放着<b>「概览」</b>和<b>「项目」</b>两页。它们不是「总览 + 详情」的关系——
+概览的主体（活跃项目作战卡）和项目页的主体（项目卡栅格）<b>画的是同一批卡片、拉的是同一条接口</b>，
+只是排序和筛选不同。真正只属于概览的东西只有三样：一行问候、一条「需要你」行动队列、一条最近活动轨；
+而这三样都可以直接挂在项目页的顶上。
+</p>
+<p class="lede">
+本稿的结论是<b>把概览并进项目页</b>：`#/projects` 成为唯一的工作台首页，`#/overview` 重定向过去，
+导航从 8 项减到 7 项。合并顺带解决一个存量问题——概览为了画绿点/黄点，
+每 6 秒对最多 14 个会话各发 3 条请求，重算的是后端 `/projects` 已经算好并返回过的字段。
+</p>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<h2>1 · 两页在画同一张图</h2>
+
+<p class="lede">
+逐块对照。标红的行是<b>两页各写了一份、渲染结果几乎一样</b>的部分——它占了两页各自 70% 以上的版面。
+</p>
+
+<table>
+  <thead><tr><th style="width:15%">版面块</th><th style="width:36%">概览 <code>#/overview</code></th><th style="width:36%">项目 <code>#/projects</code></th><th>判定</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>页头</b></td>
+      <td>问候 + 日期副句 + 状态条（运行中/等待输入/待收尾/蜂群）+「开一个新任务」</td>
+      <td>sticky 工具条：页名 + 筛选 chips（全部/活跃/待收尾）+ 搜索 + 排序</td>
+      <td>互补</td>
+    </tr>
+    <tr>
+      <td><b>行动队列</b></td>
+      <td>最多 3 张卡：等待输入 / 蜂群待解锁 / 待收尾</td>
+      <td>—</td>
+      <td>概览独有</td>
+    </tr>
+    <tr class="dup-row">
+      <td class="same"><b>项目卡栅格</b></td>
+      <td class="same"><code>.ov-grid</code>：活跃项目，按「需要你」条数排序，卡内 3 条会话行 + 蜂群脚注 + 待收尾脚注</td>
+      <td class="same"><code>.prj-grid</code>：置顶/活跃两段，按 名称·创建·活跃 排序，卡内 2 条会话行 + 计数 + 待收尾/可清理 Tag</td>
+      <td class="same"><b>同一批卡，排序不同</b></td>
+    </tr>
+    <tr>
+      <td class="same"><b>不活跃项目</b></td>
+      <td class="same">一行「其余 N 个项目无活动 —— 在项目页查看全部」</td>
+      <td class="same">「安静」分组，逐个一行</td>
+      <td class="same"><b>同一件事的强弱两版</b></td>
+    </tr>
+    <tr>
+      <td class="same"><b>散会话</b></td>
+      <td class="same"><code>.ov-loose</code>，截断到 5 条，只能点进终端</td>
+      <td class="same"><code>.prj-row</code>，全量，行尾带动作钮</td>
+      <td class="same"><b>同一个列表的完整/截断版</b></td>
+    </tr>
+    <tr>
+      <td><b>最近活动</b></td>
+      <td>右侧 320 sticky 轨：commit + 合并留痕时间轴</td>
+      <td>—（只在 P2 项目详情里有单项目版）</td>
+      <td>概览独有</td>
+    </tr>
+    <tr>
+      <td><b>项目管理</b></td>
+      <td>—</td>
+      <td>新建 / 置顶 / 删除 / 搜索 / 筛选 / 排序</td>
+      <td>项目页独有</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="cap"><span class="pill bad">现状</span><span>同一时刻的两页。红框标出的是两边都画、内容重合的块</span></div>
+
+<div class="pair">
+  <div>
+    <div class="scr">
+      <div class="scr-bar"><i></i><i></i><i></i><span>#/overview</span></div>
+      <div class="scr-body">
+        <div class="navrail">
+          <div class="ni on"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></div>
+          <div class="ni"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
+          <div class="ni"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16M4 12h16M4 19h10"/></svg></div>
+        </div>
+        <div class="cvs" style="gap:10px">
+          <div class="ph">
+            <div class="ttl"><h4 style="font-size:var(--fs-sm)">上午好，今天有 3 件事需要你</h4><p>8月7日 星期五 · 最近活动 3 分钟前</p></div>
+          </div>
+          <div class="sumbar" style="font-size:var(--fs-micro)">
+            <span><i class="d g"></i><b>4</b>运行中</span><span><i class="d a"></i><b>1</b>等待输入</span>
+            <span><i class="d a"></i><b>2</b>待收尾</span><span><i class="d p"></i><b>1</b>蜂群</span>
+          </div>
+          <div class="sect" style="font-size:var(--fs-meta)">需要你<span class="n">3</span><span class="ln"></span></div>
+          <div class="acts3" style="gap:8px">
+            <div class="acard" style="min-height:74px;padding:8px 9px 22px"><div class="ty"><i class="d a"></i>等待输入<em>· ttmux</em></div><h5 style="font-size:var(--fs-meta)">修登录超时</h5><p>Do you want to proceed?</p><span class="go" style="left:9px;bottom:7px">进入会话 ›</span></div>
+            <div class="acard p" style="min-height:74px;padding:8px 9px 22px"><div class="ty"><i class="d p"></i>蜂群待解锁<em>· blade</em></div><h5 style="font-size:var(--fs-meta)">swarm-web</h5><p>2 名成员在等你决策</p><span class="go" style="left:9px;bottom:7px">看板 ›</span></div>
+            <div class="acard" style="min-height:74px;padding:8px 9px 22px"><div class="ty"><i class="d a"></i>待收尾<em>· roam</em></div><h5 style="font-size:var(--fs-meta)">2 个任务待收尾</h5><p>worktree 还没合并或丢弃</p><span class="go" style="left:9px;bottom:7px">去收尾 ›</span></div>
+          </div>
+
+          <div class="dup" data-dup="重叠 A · 项目卡栅格">
+            <div class="sect" style="font-size:var(--fs-meta)">活跃项目<span class="n">3</span><span class="ln"></span></div>
+            <div class="pgrid" style="gap:8px;margin-top:8px">
+              <div class="pcard" style="padding:9px">
+                <div class="hd"><span class="pico" style="color:#9ccaff;background:rgba(31,111,235,.13)">T</span><span class="nm"><b>ttmux</b><span>~/codes/ttmux</span></span></div>
+                <div class="sessbox"><div class="trow"><i class="d g"></i><span class="t">概览项目合并</span><span class="tm">3分钟</span></div><div class="trow"><i class="d a"></i><span class="t">修登录超时</span><span class="tm">12分钟</span></div></div>
+                <div class="foot w">2 个任务待收尾<a>去收尾 ›</a></div>
+              </div>
+              <div class="pcard" style="padding:9px">
+                <div class="hd"><span class="pico" style="color:#c7a5ff;background:rgba(163,113,247,.13)">B</span><span class="nm"><b>blade-os</b><span>~/codes/blade-os</span></span></div>
+                <div class="sessbox"><div class="trow"><i class="d g"></i><span class="t">图标配置</span><span class="tm">1小时</span></div></div>
+                <div class="foot">swarm-web 2/4<a>看板 ›</a></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="dup" data-dup="重叠 B · 不活跃项目" style="margin-top:14px">
+            <div class="qrow" style="border:0;color:var(--text-dimmer);justify-content:center">其余 9 个项目无活动 —— 在「项目」页查看全部</div>
+          </div>
+
+          <div class="dup" data-dup="重叠 C · 散会话" style="margin-top:14px">
+            <div class="sect" style="font-size:var(--fs-meta)">散会话<span class="n">7</span><span class="ln"></span></div>
+            <div class="qrow" style="margin-top:6px"><i class="d"></i><span class="nm">临时-sh</span><span class="sp"></span><span class="p">20分钟</span></div>
+            <div class="qrow"><i class="d"></i><span class="nm">ssh-ai@192</span><span class="sp"></span><span class="p">2天</span></div>
+            <div class="more" style="padding:6px">（截断到 5 条）</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="scr">
+      <div class="scr-bar"><i></i><i></i><i></i><span>#/projects</span></div>
+      <div class="scr-body">
+        <div class="navrail">
+          <div class="ni"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></div>
+          <div class="ni on"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
+          <div class="ni"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16M4 12h16M4 19h10"/></svg></div>
+        </div>
+        <div class="cvs" style="gap:10px">
+          <div class="tools" style="padding-top:0">
+            <b style="font-size:var(--fs-sm)">项目</b>
+            <span style="width:1px;height:14px;background:var(--border-subtle)"></span>
+            <span class="chip on">全部<span class="n">12</span></span>
+            <span class="chip">活跃<span class="n">3</span></span>
+            <span class="chip">待收尾<span class="n">2</span></span>
+            <span class="sp"></span>
+            <span class="searchbox" style="width:130px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>搜索项目</span>
+            <span class="chip">名称 ▾</span>
+          </div>
+
+          <div class="dup" data-dup="重叠 A · 同一批卡">
+            <div class="sect" style="font-size:var(--fs-meta)">置顶<span class="n">1</span><span class="ln"></span></div>
+            <div class="pgrid" style="gap:8px;margin-top:8px">
+              <div class="pcard" style="padding:9px">
+                <div class="hd"><span class="pico" style="color:#9ccaff;background:rgba(31,111,235,.13)">T</span><span class="nm"><b>ttmux</b><span>~/codes/ttmux</span></span><span class="hda"><span class="star"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 2.6 5.6 6.4.8-4.7 4.3 1.3 6.3L12 17l-5.6 3 1.3-6.3L3 9.4l6.4-.8z"/></svg></span><span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg></span></span></div>
+                <div class="pstat"><span><b>3</b> 任务</span>·<span><b>2</b> worktree</span><span class="tag">待收尾 2</span></div>
+                <div class="sessbox"><div class="trow"><i class="d g"></i><span class="t">概览项目合并</span><span class="tm">3分钟</span></div><div class="trow"><i class="d a"></i><span class="t">修登录超时</span><span class="tm">12分钟</span></div></div>
+              </div>
+              <div class="pcard" style="padding:9px">
+                <div class="hd"><span class="pico" style="color:#c7a5ff;background:rgba(163,113,247,.13)">B</span><span class="nm"><b>blade-os</b><span>~/codes/blade-os</span></span><span class="hda"><span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m12 3 2.6 5.6 6.4.8-4.7 4.3 1.3 6.3L12 17l-5.6 3 1.3-6.3L3 9.4l6.4-.8z"/></svg></span><span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg></span></span></div>
+                <div class="pstat"><span><b>1</b> 任务</span>·<span><b>1</b> worktree</span></div>
+                <div class="sessbox"><div class="trow"><i class="d g"></i><span class="t">图标配置</span><span class="tm">1小时</span></div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="dup" data-dup="重叠 B · 同一批项目" style="margin-top:14px">
+            <div class="sect" style="font-size:var(--fs-meta)">安静<span class="n">9</span><span class="ln"></span></div>
+            <div class="qrow" style="margin-top:6px"><span class="nm">roam-docs</span><span class="p">~/codes/roam-docs</span><span class="sp"></span></div>
+            <div class="qrow"><span class="nm">jetson-tools</span><span class="p">~/codes/jetson-tools</span><span class="sp"></span><span class="tag ok">可清理 1</span></div>
+          </div>
+
+          <div class="dup" data-dup="重叠 C · 同一个列表" style="margin-top:14px">
+            <div class="sect" style="font-size:var(--fs-meta)">散会话<span class="n">7</span><span class="ln"></span></div>
+            <div class="qrow" style="margin-top:6px"><i class="d"></i><span class="nm">临时-sh</span><span class="sp"></span><span class="p">20分钟</span></div>
+            <div class="qrow"><i class="d"></i><span class="nm">ssh-ai@192</span><span class="sp"></span><span class="p">2天</span></div>
+            <div class="more" style="padding:6px">（全量 7 条）</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h3>重叠不止在版面上，还在数据链路上</h3>
+
+<p class="lede">
+两页拉的是<b>同一条 <code>GET /projects</code></b>。这条接口的返回里，每个项目的 <code>top[]</code> 已经带了
+<code>running</code> / <code>waiting</code> / <code>branch</code> / <code>linked</code> —— 后端一次 <code>tmux list-panes -a</code>
+加一趟进程树扫描就全算出来了，只对在跑的会话补一次 <code>capture-pane</code>。
+</p>
+<p class="lede">
+概览<b>把这套判定又在前端做了一遍</b>：它自己拉 <code>/sessions?tree=1</code> 拼项目归属，然后对最多 14 个会话
+逐个打 <code>/claude</code>、<code>/codex</code>、<code>/capture</code>，6 秒一轮。
+</p>
+
+<pre class="code">// backend/api/claude.go —— 后端这个函数的注释里就写着这件事
+<s>// runningAgentSessions 一次性扫全部 pane 的进程树，返回跑着 claude / codex 的会话集合。</s>
+<s>// 供项目列表批量判「活跃」——绿点语义（设计 W2）：</s><b>避免前端逐会话打 /claude+/codex（N×2 请求）</b>
+
+// 而 Overview.tsx 现在是（每 6s）：
+names.slice(0, <em>14</em>).forEach(async (n) =&gt; {
+  await api('GET', `/sessions/${n}/<em>claude</em>`)    // 后端 top[].running 已经有
+  await api('GET', `/sessions/${n}/<em>codex</em>`)     // 后端 top[].running 已经有
+  await api('GET', `/sessions/${n}/<em>capture</em>?lines=50`) // 后端 top[].waiting 已经有
+})
+// 峰值 <em>42 条请求 / 6 秒</em>，重算的是同一页另一条接口已经返回过的字段</pre>
+
+<div class="note warn">
+<b>为什么概览当初非自己算不可：</b>后端 <code>top[]</code> 被截到 <b>2 条</b>（<code>if len(top) &gt; 2</code>），
+而概览的卡片要显示 <b>3 条</b>会话行，还要区分 Claude / Codex 品牌标——<code>top[].running</code> 只是个 bool。
+所以这不是「前端偷懒」，是<b>接口差两个字段</b>。合并后补上这两处，前端那套轮询整段删掉（见 §9）。
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<h2>2 · 各自真正独有的东西</h2>
+
+<p class="lede">合并的前提是一样都不能丢。剥掉重叠部分之后，两页剩下的是：</p>
+
+<div class="pair">
+  <div>
+    <div class="cap"><b>只有概览有</b><span class="pill">合并后上移到页头与右轨</span></div>
+    <ul class="pts">
+      <li><b>问候 + 一句话状态</b>：「今天有 3 件事需要你」/「当前没有待处理事项」。这是首屏唯一回答「下一步做什么」的句子。</li>
+      <li><b>状态条</b>：运行中 / 等待输入 / 待收尾 / 蜂群，四个数都是导航入口，零值不渲染。</li>
+      <li><b>「需要你」行动队列</b>：最多 3 张卡，跨项目。<b>这是概览的真正价值</b>——它按「人不动就卡住」排序，不按项目组织。</li>
+      <li><b>最近活动轨</b>：跨项目的 commit + 合并留痕时间轴。</li>
+    </ul>
+  </div>
+  <div>
+    <div class="cap"><b>只有项目页有</b><span class="pill">合并后原样保留</span></div>
+    <ul class="pts">
+      <li><b>搜索 / 筛选 / 排序</b>（sticky 工具条）。</li>
+      <li><b>置顶、删除、新建项目</b>——项目作为存储对象的增删改。</li>
+      <li><b>安静分组</b>：无会话无待收尾的项目折成一行，不占整张卡。</li>
+      <li><b>全量散会话</b>，行尾带动作钮。</li>
+      <li><b>P2 详情深链</b> <code>#/projects/&lt;key&gt;</code>：composer、任务流、Worktree、编队、活动。<b>整个 IA 的骨架</b>。</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<h2>3 · 合并方向：项目吞并概览</h2>
+
+<table>
+  <thead><tr><th style="width:6%"></th><th style="width:26%">方案</th><th>后果</th><th style="width:12%">判定</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>A</b></td><td><b>概览吞并项目</b><br>保留 <code>#/overview</code>，项目页降级成它的一段</td>
+      <td>P2 详情页 <code>#/projects/&lt;key&gt;</code> 是 composer、任务流、Worktree、编队的唯一入口，也是命令面板项目搜索的落点。列表页和详情页必须同前缀，否则「进入项目」要跨页面族跳。</td>
+      <td><span class="pill bad">否</span></td>
+    </tr>
+    <tr>
+      <td><b>B</b></td><td><b>项目吞并概览</b><br><code>#/projects</code> 成为工作台首页</td>
+      <td>项目页本来就是「列表 + 详情」的完整页族，把概览那三样独有的挂到列表页顶上即可。导航 8 → 7 项，手机底栏空出一格。</td>
+      <td><span class="pill good">采纳</span></td>
+    </tr>
+    <tr>
+      <td><b>C</b></td><td><b>两页都留，各自瘦身</b><br>概览删掉项目栅格</td>
+      <td>概览就只剩「问候 + 3 张卡 + 一条时间轴」，事项为 0 时整页只有一行问候和一条空轨——比现在更空。而且用户仍要在两个 tab 之间回跳才能拿到全貌。</td>
+      <td><span class="pill bad">否</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="note">
+<b>一句话：</b>概览不是另一个页面，它是<b>项目列表的一种默认排序 + 一条跨项目的待办条</b>。
+排序进下拉、待办条进页头，页面就只需要一个。
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<h2>4 · 新版 · 桌面</h2>
+
+<p class="lede">
+自上而下五层，前两层来自概览，后三层来自项目页：
+<b>①问候 + 状态条</b> → <b>②「需要你」行动条</b> → <b>③工具条（sticky）</b> → <b>④项目卡栅格</b> → <b>⑤安静 / 散会话</b>，
+右侧 <b>⑥最近活动轨</b>。
+</p>
+
+<div class="cap"><span class="pill good">新版</span><span>Canvas ≥ 1180，一屏之内既回答「该做什么」也回答「有哪些项目」</span></div>
+
+<div class="scr">
+  <div class="scr-bar"><i></i><i></i><i></i><span>#/projects　（#/overview 重定向至此）</span></div>
+  <div class="scr-body">
+    <div class="navrail">
+      <div class="ni gone" title="概览：已移除"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></div>
+      <div class="ni on"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
+      <div class="ni"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16M4 12h16M4 19h10"/></svg></div>
+      <div class="sep"></div>
+      <div class="ni"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18"/></svg></div>
+      <div class="ni"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/></svg></div>
+      <div class="ni"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><circle cx="12" cy="12" r="4"/></svg></div>
+    </div>
+
+    <div class="cvs">
+      <!-- ① 页头 -->
+      <div class="ph">
+        <div class="ttl">
+          <h4>上午好，今天有 3 件事需要你</h4>
+          <p>8月7日 星期五 · 最近活动 3 分钟前</p>
+        </div>
+        <div class="sumbar">
+          <span><i class="d g"></i><b>4</b>运行中</span>
+          <span><i class="d a"></i><b>1</b>等待输入</span>
+          <span><i class="d a"></i><b>2</b>待收尾</span>
+          <span><i class="d p"></i><b>1</b>蜂群</span>
+        </div>
+        <button class="btn-pri"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>开一个新任务</button>
+      </div>
+
+      <!-- ② 行动条 -->
+      <div class="sect">需要你<span class="n">3</span><span class="ln"></span></div>
+      <div class="acts3">
+        <div class="acard">
+          <div class="ty"><i class="d a"></i>等待输入<em>· ttmux</em></div>
+          <h5>修登录超时</h5>
+          <p>Do you want to proceed? › 1. Yes  2. No</p>
+          <span class="go">进入会话 ›</span>
+        </div>
+        <div class="acard p">
+          <div class="ty"><i class="d p"></i>蜂群待解锁<em>· blade-os</em></div>
+          <h5>swarm-web</h5>
+          <p>2 名成员在等你决策</p>
+          <span class="go">看板 ›</span>
+        </div>
+        <div class="acard">
+          <div class="ty"><i class="d a"></i>待收尾<em>· ttmux</em></div>
+          <h5>2 个任务待收尾</h5>
+          <p>worktree 还没合并或丢弃</p>
+          <span class="go">去收尾 ›</span>
+        </div>
+      </div>
+
+      <!-- ③ 工具条 -->
+      <div class="tools">
+        <span class="chip on">需要你<span class="n">3</span></span>
+        <span class="chip">活跃<span class="n">3</span></span>
+        <span class="chip">待收尾<span class="n">2</span></span>
+        <span class="chip">全部<span class="n">12</span></span>
+        <span class="sp"></span>
+        <span class="searchbox"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>搜索项目</span>
+        <span class="chip">需要你 ▾</span>
+      </div>
+
+      <!-- ④⑥ 栅格 + 右轨 -->
+      <div class="cols">
+        <div style="display:flex;flex-direction:column;gap:var(--sp-3);min-width:0">
+          <div class="pgrid">
+            <!-- 合成卡 -->
+            <div class="pcard">
+              <div class="hd">
+                <span class="pico" style="color:#9ccaff;background:rgba(31,111,235,.13)">T</span>
+                <span class="nm"><b>ttmux</b><span>~/codes/ttmux</span></span>
+                <span class="hda">
+                  <span class="star"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 2.6 5.6 6.4.8-4.7 4.3 1.3 6.3L12 17l-5.6 3 1.3-6.3L3 9.4l6.4-.8z"/></svg></span>
+                  <span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg></span>
+                  <span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg></span>
+                </span>
+              </div>
+              <div class="pstat"><span><b>3</b> 任务</span>·<span><b>2</b> worktree</span></div>
+              <div class="sessbox">
+                <div class="trow"><i class="d g"></i><span class="t">概览项目合并设计</span><span class="mk"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="8" r="2.5"/><path d="M6 8.5v7M8.5 6H14a4 4 0 0 1 4 4v0"/></svg></span><span class="mk" style="color:var(--brand-claude)"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z"/></svg></span><span class="tm">3分钟</span></div>
+                <div class="trow"><i class="d a"></i><span class="t">修登录超时</span><span class="mk"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="8" r="2.5"/><path d="M6 8.5v7M8.5 6H14a4 4 0 0 1 4 4v0"/></svg></span><span class="mk" style="color:var(--brand-codex)"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"/></svg></span><span class="tm">12分钟</span></div>
+                <div class="trow"><i class="d g"></i><span class="t">文件抽屉重做</span><span class="tm">1小时</span></div>
+                <div class="more">+2 更多</div>
+              </div>
+              <div class="foot w"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 21V4h12l-2 4 2 4H5"/></svg><b>2 个任务待收尾</b><a>去收尾 ›</a></div>
+            </div>
+
+            <div class="pcard">
+              <div class="hd">
+                <span class="pico" style="color:#c7a5ff;background:rgba(163,113,247,.13)">B</span>
+                <span class="nm"><b>blade-os</b><span>~/codes/blade-os</span></span>
+                <span class="hda">
+                  <span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m12 3 2.6 5.6 6.4.8-4.7 4.3 1.3 6.3L12 17l-5.6 3 1.3-6.3L3 9.4l6.4-.8z"/></svg></span>
+                  <span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg></span>
+                  <span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg></span>
+                </span>
+              </div>
+              <div class="pstat"><span><b>4</b> 任务</span>·<span><b>3</b> worktree</span><span class="tag ok">可清理 1</span></div>
+              <div class="sessbox">
+                <div class="trow"><i class="d g"></i><span class="t">图标配置</span><span class="mk" style="color:var(--brand-claude)"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z"/></svg></span><span class="tm">1小时</span></div>
+                <div class="trow"><i class="d"></i><span class="t">系统 app 排序</span><span class="tm">2天</span></div>
+              </div>
+              <div class="foot"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="6" r="2.4"/><circle cx="6" cy="17" r="2.4"/><circle cx="18" cy="17" r="2.4"/><path d="M12 8.4 7.2 14.8M12 8.4l4.8 6.4"/></svg><b>swarm-web</b><span style="color:var(--text-dimmer)">2/4 成员</span><a>看板 ›</a></div>
+            </div>
+
+            <div class="pcard">
+              <div class="hd">
+                <span class="pico" style="color:#76d18a;background:rgba(63,185,80,.13)">R</span>
+                <span class="nm"><b>roam-docs</b><span>~/codes/roam-docs</span></span>
+                <span class="hda">
+                  <span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m12 3 2.6 5.6 6.4.8-4.7 4.3 1.3 6.3L12 17l-5.6 3 1.3-6.3L3 9.4l6.4-.8z"/></svg></span>
+                  <span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg></span>
+                  <span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg></span>
+                </span>
+              </div>
+              <div class="pstat"><span><b>1</b> 任务</span></div>
+              <div class="sessbox">
+                <div class="trow"><i class="d g"></i><span class="t">周报整理</span><span class="tm">28分钟</span></div>
+              </div>
+            </div>
+
+            <div class="pcard" style="justify-content:center;align-items:center;min-height:120px;border-style:dashed;color:var(--text-dimmer);font-size:var(--fs-meta)">
+              其余 9 个项目安静着 ↓
+            </div>
+          </div>
+
+          <!-- ⑤ 安静 / 散会话 -->
+          <div class="sect">安静<span class="n">9</span><span style="color:var(--text-dimmer);font-weight:400;font-size:var(--fs-meta)">没有会话，也没有待收尾</span><span class="ln"></span></div>
+          <div>
+            <div class="qrow"><span class="nm">jetson-tools</span><span class="p">~/codes/jetson-tools</span><span class="sp"></span><span class="tag ok">可清理 1</span></div>
+            <div class="qrow"><span class="nm">app-音乐 feed</span><span class="p">~/codes/music-feed</span><span class="sp"></span></div>
+            <div class="qrow" style="color:var(--text-dimmer)">…… 其余 7 个</div>
+          </div>
+
+          <div class="sect">散会话<span class="n">7</span><span style="color:var(--text-dimmer);font-weight:400;font-size:var(--fs-meta)">不属于任何项目</span><span class="ln"></span></div>
+          <div>
+            <div class="qrow"><i class="d"></i><span class="nm">临时-sh</span><span class="sp"></span><span class="p">20分钟</span><span style="color:var(--text-dimmer)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2.5" y="4" width="19" height="16" rx="2.5"/><path d="m7 9 3 3-3 3M13 15h4"/></svg></span></div>
+            <div class="qrow"><i class="d g"></i><span class="nm">ssh-ai@192</span><span class="sp"></span><span class="p">2天</span><span style="color:var(--text-dimmer)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2.5" y="4" width="19" height="16" rx="2.5"/><path d="m7 9 3 3-3 3M13 15h4"/></svg></span></div>
+          </div>
+        </div>
+
+        <!-- ⑥ 最近活动 -->
+        <aside class="arail">
+          <h5>最近活动</h5>
+          <div class="tl">
+            <div class="ev"><b><span class="mono">6873524</span> · ttmux</b><p>feat(web): 右侧抽屉统一成两层折叠</p><time>12 分钟前</time></div>
+            <div class="ev p"><b>feat/file-drawer</b><p>已 squash 合入 main</p><time>ttmux · 1 小时前</time></div>
+            <div class="ev"><b><span class="mono">f6a51e1</span> · ttmux</b><p>feat(web): 侧栏去掉标语</p><time>2 小时前</time></div>
+            <div class="ev"><b><span class="mono">a91c0d3</span> · blade-os</b><p>fix: 图标配置读取顺序</p><time>3 小时前</time></div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note good">
+<b>零事项时长什么样：</b>标题变成「当前没有待处理事项」，状态条零值项不渲染（全零则整条消失），
+「需要你」整层不渲染，工具条自动落到「活跃」档。页面从行动条直接开始，不留空槽。
+这是概览已有的行为，原样带过来。
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<h2>5 · 项目卡怎么合</h2>
+
+<p class="lede">
+两张卡各带一半信息。合并后取<b>并集</b>，顺序按「是什么 → 有多少 → 谁在跑 → 还欠什么」：
+</p>
+
+<div class="trio">
+  <div>
+    <div class="cap"><span class="pill">概览卡</span></div>
+    <div class="cardwrap">
+      <div class="pcard">
+        <div class="hd"><span class="pico" style="color:#9ccaff;background:rgba(31,111,235,.13)">T</span><span class="nm"><b>ttmux</b><span>~/codes/ttmux</span></span><span class="hda"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg></span></div>
+        <div class="sessbox">
+          <div class="trow"><i class="d g"></i><span class="t">概览项目合并设计</span><span class="tm">3分钟</span></div>
+          <div class="trow"><i class="d a"></i><span class="t">修登录超时</span><span class="tm">12分钟</span></div>
+          <div class="trow"><i class="d g"></i><span class="t">文件抽屉重做</span><span class="tm">1小时</span></div>
+          <div class="more">+2 更多</div>
+        </div>
+        <div class="foot w">2 个任务待收尾<a>去收尾 ›</a></div>
+      </div>
+    </div>
+    <ul class="pts" style="font-size:var(--fs-meta);line-height:1.7;margin-top:10px">
+      <li>会话行 <b>3 条</b>，带 agent 品牌标和分支标</li>
+      <li>蜂群 / 待收尾<b>脚注带出口</b></li>
+      <li>没有计数行、没有置顶、没有删除</li>
+    </ul>
+  </div>
+
+  <div>
+    <div class="cap"><span class="pill">项目卡</span></div>
+    <div class="cardwrap">
+      <div class="pcard">
+        <div class="hd"><span class="nm"><b>ttmux</b></span><span class="hda"><span class="star"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 2.6 5.6 6.4.8-4.7 4.3 1.3 6.3L12 17l-5.6 3 1.3-6.3L3 9.4l6.4-.8z"/></svg></span><span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg></span></span></div>
+        <div style="font:var(--fs-micro)/1.3 var(--mono);color:var(--text-dimmer)">~/codes/ttmux</div>
+        <div class="pstat"><span><b>3</b> 任务</span>·<span><b>2</b> worktree</span><span class="tag">待收尾 2</span><span class="tag ok">可清理 1</span></div>
+        <div class="sessbox">
+          <div class="trow"><i class="d g"></i><span class="t">概览项目合并设计</span><span class="tm">3分钟</span></div>
+          <div class="trow"><i class="d a"></i><span class="t">修登录超时</span><span class="tm">12分钟</span></div>
+        </div>
+      </div>
+    </div>
+    <ul class="pts" style="font-size:var(--fs-meta);line-height:1.7;margin-top:10px">
+      <li>会话行只有 <b>2 条</b>（后端 <code>top[]</code> 截断），无 agent 标</li>
+      <li>有<b>计数行 + Tag</b>、置顶、删除</li>
+      <li>待收尾只是个 Tag，<b>点不进去</b></li>
+    </ul>
+  </div>
+
+  <div>
+    <div class="cap"><span class="pill good">合成卡</span></div>
+    <div class="cardwrap">
+      <div class="pcard" style="border-color:var(--ok-border)">
+        <div class="hd">
+          <span class="pico" style="color:#9ccaff;background:rgba(31,111,235,.13)">T</span>
+          <span class="nm"><b>ttmux</b><span>~/codes/ttmux</span></span>
+          <span class="hda">
+            <span class="star"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 2.6 5.6 6.4.8-4.7 4.3 1.3 6.3L12 17l-5.6 3 1.3-6.3L3 9.4l6.4-.8z"/></svg></span>
+            <span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg></span>
+            <span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg></span>
+          </span>
+        </div>
+        <div class="pstat"><span><b>3</b> 任务</span>·<span><b>2</b> worktree</span><span class="tag ok">可清理 1</span></div>
+        <div class="sessbox">
+          <div class="trow"><i class="d g"></i><span class="t">概览项目合并设计</span><span class="mk" style="color:var(--brand-claude)"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z"/></svg></span><span class="tm">3分钟</span></div>
+          <div class="trow"><i class="d a"></i><span class="t">修登录超时</span><span class="mk" style="color:var(--brand-codex)"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"/></svg></span><span class="tm">12分钟</span></div>
+          <div class="trow"><i class="d g"></i><span class="t">文件抽屉重做</span><span class="tm">1小时</span></div>
+          <div class="more">+2 更多</div>
+        </div>
+        <div class="foot"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="6" r="2.4"/><circle cx="6" cy="17" r="2.4"/><circle cx="18" cy="17" r="2.4"/><path d="M12 8.4 7.2 14.8M12 8.4l4.8 6.4"/></svg><b>swarm-web</b><span style="color:var(--text-dimmer)">2/4 成员</span><a>看板 ›</a></div>
+        <div class="foot w"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 21V4h12l-2 4 2 4H5"/></svg><b>2 个任务待收尾</b><a>去收尾 ›</a></div>
+      </div>
+    </div>
+    <ul class="pts" style="font-size:var(--fs-meta);line-height:1.7;margin-top:10px">
+      <li>头部取项目卡（置顶 / 删除），图标与双行名字取概览卡</li>
+      <li>计数行保留，但<b>「待收尾」不再当 Tag</b>——它下移到脚注，因为它是个<b>动作</b>，Tag 点不动</li>
+      <li>会话行 3 条 + agent 标 + 分支标</li>
+      <li>脚注两条：蜂群、待收尾，各带自己的出口</li>
+    </ul>
+  </div>
+</div>
+
+<div class="note">
+<b>点击语义（沿用概览卡已经定好的）：</b>整张卡是「进入项目」的按钮；卡内的会话行、看板、去收尾各自
+<code>stopPropagation</code>。指针落在这些子目标上时，卡片自己的 hover 收回去——两层同时亮等于没说清点哪个。
+右上角保留一枚 chevron 当方向暗示，不写「进入项目 ›」的字。
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<h2>6 · 排序、筛选与行动条的关系</h2>
+
+<p class="lede">
+两页的排序差异是合并里唯一需要新做决策的地方。概览按「需要你」排，项目页按「名称」排（默认）。
+合并后<b>把「需要你」加成排序下拉的第一档并设为默认</b>，旧的三档原样保留：
+</p>
+
+<table>
+  <thead><tr><th style="width:16%">排序档</th><th style="width:42%">规则</th><th>来自</th></tr></thead>
+  <tbody>
+    <tr><td><b>需要你</b>（默认）</td><td>置顶恒最前；其余按「等待输入 + 待收尾 + 蜂群待解锁」条数降序，同数按最近活跃降序</td><td>概览 <code>projNeeds()</code></td></tr>
+    <tr><td>名称</td><td><code>localeCompare</code>，稳定</td><td>项目页（原默认）</td></tr>
+    <tr><td>创建时间</td><td><code>firstSeen</code> 新在前</td><td>项目页</td></tr>
+    <tr><td>最近活跃</td><td><code>lastActivity</code> 新在前</td><td>项目页</td></tr>
+  </tbody>
+</table>
+
+<p class="lede">
+筛选 chips 同理加一档「需要你」并置于最左，其余三档不变。<b>选择仍持久化到 <code>localStorage</code></b>
+（沿用 <code>SORT_KEY</code>），所以习惯按名称找项目的人改一次就够了。
+</p>
+
+<div class="note warn">
+<b>两条实现时才暴露的死角，稿子原来没写：</b>
+<br>① <b>一打字就跳回「全部」</b>。默认筛选是「需要你」，而搜索是「找这一个项目」的明确动作——
+两者叠加的话，搜任何没欠事的项目都只会得到「没有匹配的项目」。第一个字符落下就把筛选切到「全部」，
+chip 上看得见，不是隐形规则。
+<br>② <b>「需要你」为 0 时自动退回「活跃」</b>。默认档在事项清零的那一刻会把整页变成空列表——
+空列表不是答案，是死路。
+</div>
+
+<h3>搜索/筛选进行时，行动条收成一行</h3>
+
+<p class="lede">
+行动条是<b>跨项目</b>的待办，它不该被「搜索 ttmux」过滤掉——但也不该在用户明显在找某个项目时占三行。
+所以：<b>一旦有搜索词、或筛选不是「需要你」，行动层折成一行摘要</b>，点一下展开。
+</p>
+
+<div class="pair">
+  <div>
+    <div class="cap"><span class="pill">默认态</span><span>行动条展开</span></div>
+    <div class="scr"><div class="cvs" style="gap:9px;padding:12px">
+      <div class="sect" style="font-size:var(--fs-meta)">需要你<span class="n">3</span><span class="ln"></span></div>
+      <div class="acts3" style="gap:7px">
+        <div class="acard" style="min-height:64px;padding:7px 8px 20px"><div class="ty">等待输入</div><h5 style="font-size:var(--fs-meta)">修登录超时</h5><span class="go" style="left:8px;bottom:6px">进入 ›</span></div>
+        <div class="acard p" style="min-height:64px;padding:7px 8px 20px"><div class="ty">蜂群待解锁</div><h5 style="font-size:var(--fs-meta)">swarm-web</h5><span class="go" style="left:8px;bottom:6px">看板 ›</span></div>
+        <div class="acard" style="min-height:64px;padding:7px 8px 20px"><div class="ty">待收尾</div><h5 style="font-size:var(--fs-meta)">2 个任务</h5><span class="go" style="left:8px;bottom:6px">收尾 ›</span></div>
+      </div>
+      <div class="tools" style="padding-bottom:0">
+        <span class="chip on">需要你<span class="n">3</span></span><span class="chip">活跃<span class="n">3</span></span>
+        <span class="sp"></span><span class="searchbox" style="width:120px">搜索项目</span>
+      </div>
+    </div></div>
+  </div>
+  <div>
+    <div class="cap"><span class="pill">搜索中</span><span>折成一行，仍可点开</span></div>
+    <div class="scr"><div class="cvs" style="gap:9px;padding:12px">
+      <div class="tools" style="border:1px solid var(--warn-border);background:var(--warn-soft);border-radius:var(--r-sm);padding:5px 9px">
+        <i class="d a"></i>
+        <span style="font-size:var(--fs-meta);color:var(--warn);font-weight:600">3 件事需要你</span>
+        <span style="font-size:var(--fs-micro);color:var(--text-dimmer)">等待输入 1 · 蜂群 1 · 待收尾 2</span>
+        <span class="sp"></span>
+        <span style="font-size:var(--fs-micro);color:var(--warn)">展开 ▾</span>
+      </div>
+      <div class="tools" style="padding-bottom:0">
+        <span class="chip">需要你<span class="n">3</span></span><span class="chip">活跃<span class="n">3</span></span>
+        <span class="sp"></span><span class="searchbox" style="width:120px;box-shadow:inset 0 0 0 1px var(--accent-border);color:var(--text-bright)">blade<span style="width:1.5px;height:12px;background:var(--accent);display:inline-block"></span></span>
+      </div>
+      <div class="pgrid" style="grid-template-columns:minmax(0,1fr);gap:7px">
+        <div class="pcard" style="padding:8px"><div class="hd"><span class="pico" style="color:#c7a5ff;background:rgba(163,113,247,.13)">B</span><span class="nm"><b>blade-os</b><span>~/codes/blade-os</span></span></div></div>
+      </div>
+    </div></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<h2>7 · 新版 · 手机</h2>
+
+<p class="lede">
+手机档（<code>data-size="compact"</code>）的问题是纵向预算：页头 + 状态条 + 3 张行动卡 + 工具条 + 项目卡，
+不处理的话第一张项目卡会被推到屏幕 60% 以下。三条塌陷规则：
+</p>
+
+<ol class="pts">
+  <li><b>状态条并进副句</b>：「4 运行 · 1 待输入 · 2 待收尾」跟日期同一行，不再单占一条。</li>
+  <li><b>行动卡横滑</b>：单行 <code>scroll-snap</code>，卡宽 76%，露出下一张的边——一眼知道右边还有。竖排三张要吃掉 330px。</li>
+  <li><b>「＋ 开一个新任务」不在页头</b>：它已经在顶栏的全局「＋ 新建」里（两处触发同一个 intent），手机页头不重复放。</li>
+</ol>
+
+<div class="phones">
+  <div>
+    <div class="phone">
+      <div class="phone-notch"><i></i></div>
+      <div class="phone-cvs">
+        <div>
+          <div style="font-size:var(--fs-body);font-weight:600;color:var(--text-bright)">上午好，今天有 3 件事需要你</div>
+          <div style="font-size:var(--fs-micro);color:var(--text-dimmer);margin-top:3px">
+            8月7日 · <span style="color:var(--ok)">●</span> 4 运行 · <span style="color:var(--warn)">●</span> 1 待输入 · 2 待收尾
+          </div>
+        </div>
+        <div class="sect" style="font-size:var(--fs-meta)">需要你<span class="n">3</span><span class="ln"></span></div>
+        <div class="hscroll">
+          <div class="acard" style="min-height:78px;padding:8px 9px 22px">
+            <div class="ty"><i class="d a"></i>等待输入<em>· ttmux</em></div>
+            <h5 style="font-size:var(--fs-meta)">修登录超时</h5>
+            <p>Do you want to proceed?</p>
+            <span class="go" style="left:9px;bottom:7px">进入会话 ›</span>
+          </div>
+          <div class="acard p" style="min-height:78px;padding:8px 9px 22px">
+            <div class="ty"><i class="d p"></i>蜂群<em>· blade</em></div>
+            <h5 style="font-size:var(--fs-meta)">swarm-web</h5>
+            <p>2 名成员在等你</p>
+            <span class="go" style="left:9px;bottom:7px">看板 ›</span>
+          </div>
+        </div>
+        <div class="tools" style="padding:6px 0;gap:6px;flex-wrap:nowrap;overflow:hidden">
+          <span class="chip on">需要你<span class="n">3</span></span>
+          <span class="chip">活跃<span class="n">3</span></span>
+          <span class="chip">待收尾<span class="n">2</span></span>
+          <span class="sp"></span>
+          <span style="color:var(--text-dimmer);flex:0 0 auto"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></span>
+          <span style="color:var(--text-dimmer);flex:0 0 auto"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M7 12h10M10 18h4"/></svg></span>
+        </div>
+        <div class="pcard" style="padding:9px">
+          <div class="hd"><span class="pico" style="color:#9ccaff;background:rgba(31,111,235,.13)">T</span><span class="nm"><b>ttmux</b><span>~/codes/ttmux</span></span><span class="hda"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg></span></div>
+          <div class="pstat"><span><b>3</b> 任务</span>·<span><b>2</b> worktree</span></div>
+          <div class="sessbox">
+            <div class="trow"><i class="d g"></i><span class="t">概览项目合并</span><span class="tm">3分钟</span></div>
+            <div class="trow"><i class="d a"></i><span class="t">修登录超时</span><span class="tm">12分钟</span></div>
+          </div>
+          <div class="foot w">2 个任务待收尾<a>去收尾 ›</a></div>
+        </div>
+      </div>
+      <div class="bnav">
+        <span class="on"><i></i>项目</span>
+        <span><i></i>文件</span>
+        <span><i></i>浏览器</span>
+        <span><i></i>手机</span>
+        <span><i></i>更多</span>
+      </div>
+    </div>
+    <div class="phone-tag"><b>合并后</b> · 底栏 5 格：概览让出的那格给了「浏览器」，不再需要「更多」里翻</div>
+  </div>
+
+  <div>
+    <div class="phone">
+      <div class="phone-notch"><i></i></div>
+      <div class="phone-cvs">
+        <div class="dup" data-dup="占 60% 屏高" style="display:flex;flex-direction:column;gap:8px">
+          <div>
+            <div style="font-size:var(--fs-body);font-weight:600;color:var(--text-bright)">上午好，今天有 3 件事需要你</div>
+            <div style="font-size:var(--fs-micro);color:var(--text-dimmer);margin-top:3px">8月7日 星期五 · 最近活动 3 分钟前</div>
+          </div>
+          <div class="sumbar" style="font-size:var(--fs-micro);gap:var(--sp-3);flex-wrap:wrap">
+            <span><i class="d g"></i><b>4</b>运行中</span><span><i class="d a"></i><b>1</b>等待输入</span>
+            <span><i class="d a"></i><b>2</b>待收尾</span><span><i class="d p"></i><b>1</b>蜂群</span>
+          </div>
+          <div class="sect" style="font-size:var(--fs-meta)">需要你<span class="n">3</span><span class="ln"></span></div>
+          <div class="acard" style="min-height:70px;padding:8px 9px 20px"><div class="ty"><i class="d a"></i>等待输入<em>· ttmux</em></div><h5 style="font-size:var(--fs-meta)">修登录超时</h5><span class="go" style="left:9px;bottom:6px">进入会话 ›</span></div>
+          <div class="acard p" style="min-height:70px;padding:8px 9px 20px"><div class="ty"><i class="d p"></i>蜂群<em>· blade</em></div><h5 style="font-size:var(--fs-meta)">swarm-web</h5><span class="go" style="left:9px;bottom:6px">看板 ›</span></div>
+          <div class="acard" style="min-height:70px;padding:8px 9px 20px"><div class="ty"><i class="d a"></i>待收尾<em>· ttmux</em></div><h5 style="font-size:var(--fs-meta)">2 个任务待收尾</h5><span class="go" style="left:9px;bottom:6px">去收尾 ›</span></div>
+        </div>
+        <div style="font-size:var(--fs-micro);color:var(--text-dimmer);text-align:center">↓ 第一张项目卡在这条线以下 ↓</div>
+      </div>
+      <div class="bnav">
+        <span class="on"><i></i>项目</span><span><i></i>文件</span><span><i></i>浏览器</span><span><i></i>手机</span><span><i></i>更多</span>
+      </div>
+    </div>
+    <div class="phone-tag"><b>不做塌陷的话</b> · 竖排三张卡 + 独立状态条，把项目栅格整个推出首屏</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<h2>8 · 栅格阈值</h2>
+
+<p class="lede">
+两页现在的栅格规则不一样，而且合并后右轨会吃掉 320px，阈值必须重定。
+<b>阈值一律看 Canvas 容器查询，不看 viewport</b>——终端坞开合只改 Canvas 宽度，不该由窗口宽度决定列数。
+</p>
+
+<table>
+  <thead><tr><th style="width:14%">Canvas 宽</th><th style="width:16%">行动卡</th><th style="width:16%">项目栅格</th><th style="width:18%">最近活动</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>&lt; 900</td><td>1 列</td><td>1 列</td><td>落到页尾</td><td>手机 / 终端坞占了大半宽度的桌面</td></tr>
+    <tr><td>≥ 900</td><td>2 列</td><td>2 列</td><td>落到页尾</td><td>状态条并进页头右端，省掉一整行</td></tr>
+    <tr><td>≥ 1180</td><td>3 列</td><td><b>自动</b></td><td><b>右侧 320 sticky</b></td><td>右轨挂出来，栅格可用宽随之少 320</td></tr>
+  </tbody>
+</table>
+
+<div class="note good">
+<b>落地时项目栅格没有写断点。</b>行动卡是固定三档（它一行最多三张，是刻意的封顶），
+但项目卡用的是 <code>repeat(auto-fill, minmax(320px, 1fr))</code>——列数由**栅格自己剩多少宽**决定，
+右轨挂不挂出来它都对，不需要为「1180 挂轨、1560 才够三列」各写一条规则。
+原概览写死的「≥1320 → 3 列」恰恰是这里出错的地方：它同时在 ≥1180 就挂了右轨，
+1320 减去 320 只剩 ~980，三列每列 320 会挤破下限。auto-fill 不会犯这个错。
+</div>
+
+<p class="lede">
+容器宽度上限：概览用 <code>--content-overview: 1680px</code>，项目页用 <code>.prj-wrap-wide { max-width: 1180px }</code>。
+合并后<b>取 1680</b>——项目页那个 1180 是在没有右轨时定的，带上右轨就只剩一列半。
+</p>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<h2>9 · 数据链路：删掉一整套轮询</h2>
+
+<p class="lede">
+合并页只保留一套数据源。<b>前端删三段轮询，后端补两个字段。</b>
+</p>
+
+<h3>后端（<code>backend/api/project.go</code> + <code>claude.go</code>）</h3>
+<pre class="code">// ① top[] 从 2 条放宽到 3 条 —— 卡片要画三行，截到 2 才逼得前端自己拼列表
+-  if len(top) &gt; <em>2</em> { top = top[:<em>2</em>] }
++  if len(top) &gt; <u>3</u> { top = top[:<u>3</u>] }
+
+// ② runningAgentSessions 已经分别判过 claude / codex，只是把结果压成了 bool。
+//    放宽成 map[string]string，top[] 多一个 agent 字段，品牌标就不用前端逐会话问。
+-  func runningAgentSessions() map[string]<em>bool</em> {
+-      if treeMatch(pid, children, 0, cmdlineHasClaude) <em>||</em> treeMatch(pid, children, 0, cmdlineHasCodex) {
+-          running[parts[0]] = <em>true</em>
++  func runningAgentSessions() map[string]<u>string</u> {
++      if treeMatch(pid, children, 0, cmdlineHasClaude) { running[parts[0]] = <u>"claude"</u>
++      } else if treeMatch(pid, children, 0, cmdlineHasCodex) { running[parts[0]] = <u>"codex"</u> }
+
+// ③ 行动卡的摘要行（会话最后一行输出）：后端判 waiting 时本来就抓了屏，顺手带出来
+   type projectSession struct {
+       Waiting bool `json:"waiting"`
++      <u>Agent   string `json:"agent,omitempty"`</u>   // claude | codex
++      <u>Tail    string `json:"tail,omitempty"`</u>    // 仅 waiting 时非空，供行动卡摘要
+   }</pre>
+
+<h3>前端（<code>Overview.tsx</code> 整个删掉，逻辑并进 <code>Projects.tsx</code>）</h3>
+<pre class="code">// 删：per-session 探测（3 条请求 × ≤14 会话 / 6s）
+- useEffect(() =&gt; { names.forEach(async (n) =&gt; {
+-   api('GET', `/sessions/${n}/claude`);  api('GET', `/sessions/${n}/codex`)
+-   api('GET', `/sessions/${n}/capture?lines=50`)  }) }, [...])
+
+// 删：/sessions?tree=1 + /sessions/annotations 拼项目归属（后端 top[] 就是归属结果）
+- const sessByProj = useMemo(() =&gt; { ... ann[s.name]?.primary?.repo === p.dir ... })
+
+// 留：/projects（5s，两页本来就都在拉）
+// 留：/swarms + /swarms/:name（10s，行动卡与卡片脚注要）
+// 留：/projects/:key/activity（60s，右轨要）</pre>
+
+<table>
+  <thead><tr><th style="width:26%">接口</th><th style="width:16%">合并前</th><th style="width:16%">合并后</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td><code>GET /projects</code></td><td>两页各 5s</td><td>一页 5s</td><td>请求数减半</td></tr>
+    <tr><td><code>GET /sessions?tree=1</code></td><td>两页各 5s</td><td><b>不再需要</b></td><td>归属改吃 <code>top[]</code></td></tr>
+    <tr><td><code>GET /sessions/annotations</code></td><td>两页各 5s</td><td><b>10s，蜂群归属用</b></td><td>见下方注</td></tr>
+    <tr><td><code>/sessions/:n/claude｜codex｜capture</code></td><td><b>≤42 条 / 6s</b></td><td><b>0</b></td><td>后端一趟进程树扫描已覆盖</td></tr>
+    <tr><td><code>GET /swarms</code>（+ 逐群详情）</td><td>10s</td><td>10s</td><td>不变</td></tr>
+    <tr><td><code>GET /projects/:key/activity</code></td><td>60s × 3 项目</td><td>60s × 3 项目</td><td>不变</td></tr>
+  </tbody>
+</table>
+
+<div class="note warn">
+<b>annotations 没能完全删掉——蜂群归属还要它。</b>项目详情页判蜂群归属取的是两条判据的**并集**
+（08 §2.2）：① 蜂群自报的 <code>dir</code> == 项目目录；② 指挥/成员会话的归属仓库 == 项目目录。
+只留 ① 的话，所有 <code>dir</code> 为空的老蜂群在列表页一个都归不了属——而它们在详情页里归得了，
+于是<b>列表说这个群不属于任何项目，点进项目却看得见它</b>。判据必须与详情页一模一样，
+所以列表页保留一张 session → repo 的表（annotations，10s 一次，跟蜂群同拍）。
+真正删掉的是 <code>/sessions?tree=1</code>：项目归属后端已经在 <code>/projects</code> 里算过了。
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<h2>10 · 落地清单</h2>
+
+<h3>路由与导航</h3>
+<ul class="pts">
+  <li><code>normalizeRoute()</code> 加一行：<code>overview</code> → <code>projects</code>（跟已有的 <code>env</code> → <code>settings</code> 同一处，旧书签不断）。</li>
+  <li><code>NAV</code> 删掉 <code>overview</code> 条目；<code>NAV_WORKSPACE</code> = <code>['projects','files']</code>；<code>MOBILE_NAV_KEYS</code> 去掉 <code>overview</code>，底栏空出的一格给「浏览器」。</li>
+  <li><code>CQ_PAGES</code>（Canvas 容器查询开关）把 <code>overview</code> 换成 <code>projects</code>——合并后的栅格阈值靠它。</li>
+  <li>默认路由本来就是 <code>#/projects</code>（<code>setHashParams</code> 里的 fallback），无需改。</li>
+</ul>
+
+<h3>文件</h3>
+<ul class="pts">
+  <li><code>Overview.tsx</code> 删除。它的三段独有逻辑（行动队列 / 状态条 / 活动轨）搬进 <code>Projects.tsx</code> 的 <code>ProjectList</code>。</li>
+  <li><code>ProjectList</code> 已经 240 行，加完会到 ~400。按块拆成三个同目录文件：<code>project-list/needs-queue.tsx</code>（行动队列）、<code>project-list/activity-rail.tsx</code>（活动轨）、<code>project-list/project-card.tsx</code>（合成卡）。<b>不要叫 <code>helpers</code>／<code>shared</code></b>。</li>
+  <li><code>dot()</code> 现在从 <code>Projects</code> 导出给 <code>Overview</code> 用，合并后回到本地。</li>
+</ul>
+
+<h3>i18n</h3>
+<ul class="pts">
+  <li><code>overview.*</code> 里仍在用的键（<code>greet*</code>／<code>headline*</code>／<code>sum*</code>／<code>card*</code>／<code>needsYou</code>／<code>recentActivity</code>）保留原 key，<b>不改名</b>——改名等于把一批中英对照全推倒重译，收益为零。</li>
+  <li>删除只服务于旧概览的键：<code>overview.gotoProjects</code>、<code>overview.inactiveRest</code>、<code>overview.recentSessions</code>、<code>overview.allSessions</code>、<code>overview.restQuiet</code>。</li>
+  <li>新增：<code>project.sort.needs</code>（排序档「需要你」）、<code>project.filterNeeds</code>、<code>overview.needsCollapsed</code>（折叠态摘要行）。</li>
+  <li><code>nav.overview</code> 保留在 locale 里但不再被引用 → 由 <code>npm run i18n:check</code> 决定是删还是留。</li>
+</ul>
+
+<h3>验收（<code>docs/development/web-ui-checklist.md</code>）</h3>
+<ul class="pts">
+  <li>真机：行动卡横滑到底、卡片 hover 不粘（<code>:where(html[data-pointer="fine"])</code> 全覆盖，<code>npm run hover:check</code> 守门）。</li>
+  <li>粗指针下 <b>不挂 Tooltip</b>：卡片头部的置顶/删除是图标钮，名字进 <code>aria-label</code>。</li>
+  <li>终端坞开合时列数跟着 Canvas 变（不是 viewport），四档阈值各看一遍。</li>
+  <li>零事项态：行动层整层消失，页面不留空槽。</li>
+  <li>旧链接 <code>#/overview</code> 落到新页；命令面板里「概览」不再出现，搜「项目」能到。</li>
+</ul>
+
+<h3>落地记录</h3>
+<p class="lede">本稿已实现，与稿子的出入都写在上面对应小节里。实际的文件切法：</p>
+<pre class="code">frontend/src/project-list/
+  <b>project-model.ts</b>      读模型 + projNeeds() + 项目图标取色
+  <b>needs-queue.tsx</b>       页头（问候/状态条/新任务）+ 行动队列 + 折叠态
+  <b>project-card.tsx</b>      合成卡（§5）
+  <b>activity-rail.tsx</b>     最近活动轨 + useRecentActivity
+  <b>swarm-projection.ts</b>   蜂群 → 项目 投影（判据与详情页同款）
+frontend/src/<b>Projects.tsx</b>  ProjectList 只剩编排：筛选/排序/分组/栅格
+frontend/src/<s>Overview.tsx</s>   <em>已删除</em>
+
+每个模块自带一段 CSS 常量（<code>NEEDS_CSS</code>/<code>CARD_CSS</code>/<code>RAIL_CSS</code>），
+由 Projects.tsx 拼进同一个 &lt;style&gt; 一次注入——样式跟着组件走，但注入点仍只有一个。</pre>
+
+<div class="note good">
+<b>顺带收了一个存量违规：</b>蜂群紫 <code>#a371f7</code> 原来散在 Overview / Projects / App 三个文件里
+各写一遍，没有令牌。这次在 <code>index.css</code> 加了 <code>--swarm</code> / <code>--swarm-soft</code> /
+<code>--swarm-border</code>，新代码全走令牌。
+</div>
+
+</div>
+</body>
+</html>

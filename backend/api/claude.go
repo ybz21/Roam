@@ -195,28 +195,32 @@ func paneToolDir(name string, match func(int) bool) string {
 // paneClaudeDir 返回会话中正在跑 claude 的 pane 的工作目录；没有则返回 ""。
 func paneClaudeDir(name string) string { return paneToolDir(name, cmdlineHasClaude) }
 
-// runningAgentSessions 一次性扫全部 pane 的进程树，返回跑着 claude / codex 的会话集合。
+// runningAgentSessions 一次性扫全部 pane 的进程树，返回会话名 → 在跑的 agent（"claude"/"codex"）。
 // 供项目列表批量判「活跃」——绿点语义（设计 W2）：agent 进程在跑才算活跃。避免前端
 // 逐会话打 /claude+/codex（N×2 请求），也纠正原先拿 session_attached（有没有人 attach）
 // 当活跃代理的误判：后台干活没人看=灰、开着终端却 idle=绿 的反相。
-func runningAgentSessions() map[string]bool {
+// 返回具体是哪个 agent 而不只是 bool：列表要画品牌标，压成 bool 前端就只能再问一遍。
+func runningAgentSessions() map[string]string {
 	out, err := exec.Command("tmux", "list-panes", "-a", "-F", "#{session_name}\t#{pane_pid}").Output()
 	if err != nil {
 		return nil
 	}
 	children := procChildren()
-	running := map[string]bool{}
+	running := map[string]string{}
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		parts := strings.SplitN(line, "\t", 2)
-		if len(parts) != 2 || running[parts[0]] {
+		if len(parts) != 2 || running[parts[0]] != "" {
 			continue
 		}
 		pid, err := strconv.Atoi(parts[1])
 		if err != nil {
 			continue
 		}
-		if treeMatch(pid, children, 0, cmdlineHasClaude) || treeMatch(pid, children, 0, cmdlineHasCodex) {
-			running[parts[0]] = true
+		switch {
+		case treeMatch(pid, children, 0, cmdlineHasClaude):
+			running[parts[0]] = "claude"
+		case treeMatch(pid, children, 0, cmdlineHasCodex):
+			running[parts[0]] = "codex"
 		}
 	}
 	return running
