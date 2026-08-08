@@ -64,7 +64,8 @@ func main() {
 	if pw == "" {
 		log.Printf("⚠ 未设置登录口令，请首次打开网页时在界面上设置（也可编辑 %s 的 web.password）", cfgPath)
 	}
-	if _, err := exec.LookPath(bin); err != nil {
+	// 云端 Broker 不跑业务，自然也用不着 ttmux——不要为它解压内嵌副本，更不要报缺失。
+	if _, err := exec.LookPath(bin); err != nil && conf.Cluster.Mode != "cloud" {
 		// PATH 上没有 ttmux：单一二进制发行时用内嵌的 ttmux（解压到 <home>/bin）。
 		if p := clibin.Ensure(dataDir()); p != "" {
 			bin = p

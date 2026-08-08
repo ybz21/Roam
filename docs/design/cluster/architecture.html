@@ -791,14 +791,24 @@ BrokerPrefs     { lastNodeId, followTabSwitch bool }   <i>// 新增：Broker 级
   ② 单机快照测试——<code>cluster.broker</code> 为空时渲染树里<b>不出现任何多机组件</b>。
 </p>
 
-<h2>17. 实测：一台 x86 Broker + 一台 arm64 节点</h2>
+<h2>17. 实测：公网 Broker + 两台 NAT 后的节点</h2>
 <p class="lede">
-  P1 数据面已经在真机上跑通（<code>feat/cluster-p1</code>）。拓扑：
-  <b>Broker</b> = 开发机（amd64，<code>mode: cloud</code>，:13600）·
-  <b>节点</b> = Jetson（<b>aarch64</b>，Ubuntu/Tegra，<code>mode: standard</code> + <code>cluster.broker</code>，:13592）。
-  节点是交叉编译的 <code>CGO_ENABLED=0 GOOS=linux GOARCH=arm64</code>，26MB 单文件，
-  <b>丢过去就能跑</b>，目标机不需要 Go。
+  P1 数据面已经在真机上跑通（<code>feat/cluster-p1</code>），而且是<b>真跨公网</b>：
 </p>
+<pre class="code"><b>Broker</b>   阿里云 47.94.183.77:13570   amd64 · <i>mode: cloud</i> · <u>自签 TLS（wss 隧道）</u>
+   ↑ 出站
+<b>节点 A</b>  Jetson（<b>aarch64</b> Tegra）  NAT 后 · <i>mode: standard</i> + cluster.broker · 本机口 :13592
+<b>节点 B</b>  开发机（amd64）              NAT 后 · <i>mode: standard</i> + cluster.broker · 本机口 :13601
+
+<i># 节点侧交叉编译，26MB 单文件丢过去就跑，目标机<b>不需要 Go</b></i>
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o roam ./cmd</pre>
+<div class="note warn">
+  <b>踩到的第一个坑不在代码里</b>：云主机安全组放行了 13570-13590，但机器本身
+  <code>ufw</code> 是 <code>policy DROP</code>——13579-13590 之所以通，是<b>同机 docker 自己插的
+  iptables 规则绕过了 ufw</b>，看起来「端口开着」其实只对 docker 容器成立。
+  裸进程要单独 <code>ufw allow</code>。这条值得写进部署文档：
+  <b>「docker 能通」不等于「这台机器的端口开着」。</b>
+</div>
 <table>
   <thead><tr><th style="width:30%">验的是什么</th><th>结果</th></tr></thead>
   <tbody>
@@ -812,14 +822,22 @@ BrokerPrefs     { lastNodeId, followTabSwitch bool }   <i>// 新增：Broker 级
     <tr><td><b>重连</b></td><td>节点重启：用<b>长期凭证</b>认回来，nodeId 不变，8 秒内 <code>online:true</code>。<b>Broker 也重启</b>后同样认得回来（凭证哈希随 nodes.json 落盘）</td></tr>
     <tr><td><b>双入口并存</b></td><td>同一个文件、同一个 <code>/api/info</code>，<b>经隧道与经局域网直连拿到完全一样的响应</b>；两条路<b>都要登录</b>（未登录均 401）</td></tr>
     <tr><td><b>凭证不外泄</b></td><td>节点列表曾把 <code>tokenHash</code> 发给浏览器，已修：落盘保留、接口清空，两条都有测试盯着</td></tr>
+    <tr><td><b>跨公网 + wss</b></td><td>两台 NAT 后的机器<b>出站</b>拨到公网 Broker 的 <b>TLS</b> 口并注册成功；
+      浏览器 → <code>wss://47.94.183.77:13570/n/&lt;id&gt;/api/term/…</code> → 隧道 → Jetson 的 tmux，全程打通</td></tr>
+    <tr><td><b>延迟是真值</b></td><td><code>ping</code> 实测本机→Broker <b>6.6ms</b>，控制流 ping/pong 报的是 <b>6ms</b>；
+      Jetson 走 WiFi 报 9–34ms 随抖动变化。<b>量出来的就是这条隧道的往返</b></td></tr>
+    <tr><td><b>多节点路由</b></td><td>同一个 <code>/api/info</code> 打两个 nodeId，各自回各自的真实数据
+      （Jetson <code>tmux 3.0a</code> / 4 会话，开发机 <code>tmux 3.4</code> / 21 会话）</td></tr>
+    <tr><td><b>故障隔离</b></td><td>掐掉开发机：它 502 <code>NODE_OFFLINE</code>，<b>Jetson 同一时刻照常 200</b>。
+      一台挂掉不影响别台的路由</td></tr>
   </tbody>
 </table>
 <div class="note warn">
-  <b>没验到的</b>：① <b>跨公网</b>——目标 Broker（47.94.183.77）的公网口 13579-13590 全被现有
-  frp-panel 的 docker-proxy 占着，安全组也只放行了那几段，<b>没有空位给 Broker</b>；
-  本轮改在同网段验证，链路性质（出站拨号 + yamux + 反代）完全一致，但真实 RTT、
-  丢包与企业防火墙下的 wss 表现还没测。② TLS 隧道（本轮走的 ws 明文）。
-  ③ 镜像 / 大文件经隧道的带宽表现（§11 那笔账还是纸面的）。
+  <b>还没验到的</b>：① <b>镜像 / 大文件经隧道的带宽表现</b>——§11 那笔账仍是纸面的，
+  而它恰恰是这套架构最贵的地方。② <b>队头阻塞</b>（§10）：现在还是单条隧道，
+  「下大文件时终端卡不卡」没实测过，分三条隧道的改造也还没做。
+  ③ 企业防火墙 / 深度包检测下的 wss（本轮的公网链路很干净，RTT 只有 6ms）。
+  ④ 长时间稳定性：最长一次连续运行只有小时级。
 </div>
 
 <h2>18. 未决</h2>
