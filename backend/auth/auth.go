@@ -143,6 +143,12 @@ func (a *Auth) verify(tok string) bool {
 // Middleware 校验签名 Cookie；失败返回 401。
 func (a *Auth) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// 来自已认证隧道的进程内请求（云端 Broker 已校验用户会话）直接放行，
+		// 不要求节点本地登录 Cookie。标记走 request context，不可经线缆伪造。见 auth/internal.go。
+		if IsInternal(c.Request) {
+			c.Next()
+			return
+		}
 		tok, err := c.Cookie(CookieName)
 		if err != nil || !a.verify(tok) {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code": "UNAUTHORIZED"}})
