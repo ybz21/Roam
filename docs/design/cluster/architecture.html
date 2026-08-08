@@ -152,7 +152,7 @@ dl.q dd { margin:4px 0 0; color:var(--text-dim); line-height:1.85; }
   <b>协议问题的结论（§10、§11）</b>：承载没有比「WebSocket + 复用」更稳的标准选择，
   行业路径都是<b>先 TCP+复用跑通、再迁 QUIC</b>（frp / Cloudflare Tunnel 都走过这条），
   所以 P1 不动、但要先抽出 <code>Transport</code> 接口并按流量分三条隧道（否则一次大下载会卡住终端）。
-  <b>搜索必须是跨机器的</b>（§12）——它是多机之后唯一「功能变强」的地方，
+  <b>搜索和工作台的行动队列必须是跨机器的</b>（§12）——它们是多机之后仅有的「功能变强」的地方，
   而且它反过来要求 <code>SearchHit.id</code> 在 P1 就带上 nodeId，晚做是全面返工。
   <b>真正的带宽大头不在隧道协议上，在镜像</b>：今天浏览器与手机镜像都是<b>整帧 JPEG</b>，
   一路标清 6 Mbps ≈ 2.7 GB/小时，换成视频编码能省 5–10×，这比换任何承载协议都值钱。
@@ -305,7 +305,9 @@ if r.URL.RawPath != "" { r.URL.RawPath = <b>strings.TrimPrefix</b>(r.URL.RawPath
     <tr><td><code>/api/broker/bootstrap</code></td><td>Broker</td><td>启动最小信息：可访问节点 + 兜底推荐 + Broker 级偏好</td></tr>
     <tr><td><code>/api/broker/preferences</code></td><td>Broker</td><td><b>Broker 级</b>偏好（当前节点、弱联动开关）。<b>不是</b>节点业务偏好</td></tr>
     <tr><td><code>/api/broker/enroll</code></td><td>Broker</td><td>签发一次性 token + 接入命令</td></tr>
-    <tr><td><code>/api/broker/search</code></td><td>Broker <b>扇出</b></td><td>把一次搜索打散到所有在线节点，逐台流式回推（§12）。<b>唯一一个 Broker 主动调节点的接口</b></td></tr>
+    <tr><td><code>/api/broker/search</code><br><code>/api/broker/projects</code></td><td>Broker <b>扇出</b></td>
+      <td>把一次搜索 / 一轮工作台刷新打散到所有在线节点再合并（§12）。
+        <b>只有这两个是 Broker 主动调节点的</b>，其余一律是被动转发</td></tr>
     <tr><td><code>/cluster/tunnel</code></td><td>Broker</td><td>节点出站拨号落点（token 鉴权，不走用户会话）</td></tr>
     <tr><td><code>/install.sh</code></td><td>Broker</td><td>一键接入脚本（<b>PR #116 缺</b>，enroll 已经在引用它）</td></tr>
     <tr><td><code>/n/&lt;id&gt;/api/**</code></td><td>→ 节点</td><td>全部业务 REST / multipart / WS / 原生资源，<b>原路径不变</b></td></tr>
@@ -587,12 +589,22 @@ tunnel[2] <b>bulk</b>      文件下载 / 上传 / 镜像回退路径  <i>// 大
     从「标清」起步会先冲高再回落，白烧一段。跨 Broker 时初始档改「流畅」。</li>
 </ol>
 
-<h2>12. 跨机器搜索：Broker 扇出</h2>
+<h2>12. Broker 扇出：搜索与工作台</h2>
 <p class="lede">
-  <b>搜索是唯一一个天然横跨所有机器的功能</b>，也是多机之后唯一一个「功能变强」而不只是
-  「能切换」的地方。只搜当前机器等于把路由工作推回给人——用户得先想起来「那东西在哪台机器上」。
-  所以它进 P1，而且它<b>反过来约束数据形状</b>（见下 ③），晚做就是全面返工。
+  有<b>两件事天然横跨所有机器</b>，它们也是多机之后仅有的「功能变强」而不只是「能切换」的地方：
+  <b>①搜索</b>——只搜当前机器等于把「那东西在哪台机器上」这个路由工作推回给人；
+  <b>②工作台顶上的「需要你」行动队列</b>——它回答「我下一步做什么」，而"下一步"不该被机器边界切开。
+  两者共用同一套扇出机制，一起进 P1。而且搜索<b>反过来约束数据形状</b>（见下 ③），晚做就是全面返工。
 </p>
+<div class="note ok">
+  <b>#186 刚好把工作台的扇出从"不可行"变成了"一台一条"。</b>
+  合并前，概览页对最多 14 个会话逐个打 <code>/claude</code> <code>/codex</code> <code>/capture</code>，
+  6 秒一轮、峰值 <b>42 条请求</b>——乘以 N 台机器根本不用谈。#186 把这些字段并进
+  <code>/projects</code> 一条请求（<code>top[]</code> 2→3、<code>runningAgentSessions</code> 由
+  bool 放宽成 <code>claude|codex</code>、判 waiting 时带出尾行当摘要），前端那套轮询整段删除。
+  于是<b>跨机器工作台 = N 条请求 6 秒一轮</b>，十台机器也才十条。
+  这不是巧合能一直有的运气——<b>以后再往首页加数据，都得先问一句"乘以 N 台还成立吗"</b>。
+</div>
 <pre class="code"><i>// Broker 扇出：一条请求打散成 N 条，逐台<b>流式</b>回推（NDJSON / SSE）</i>
 GET <b>/api/broker/search</b>?q=train&amp;limit=20&amp;scope=all
   ├─ <u>/n/n_01/api/search</u>?q=train&amp;limit=20   → 12ms  9 条   <i>// 节点侧<b>零改动</b></i>
@@ -604,7 +616,13 @@ GET <b>/api/broker/search</b>?q=train&amp;limit=20&amp;scope=all
 {"node":"n_01","hits":[…],"tookMs":12,"indexing":false}
 {"node":"n_02","hits":[…],"tookMs":45}
 {"node":"n_03","hits":[…],"tookMs":210,"truncated":true}
-{"done":true,"nodes":4,"failed":["n_04"]}</pre>
+{"done":true,"nodes":4,"failed":["n_04"]}
+
+<i>// 工作台同一套：一台一条，节点侧还是那个 /projects，一个字段都不用加</i>
+GET <b>/api/broker/projects</b>?scope=needs        <i>// 6s 一轮</i>
+  └─ <u>/n/&lt;id&gt;/api/projects</u> × N → 前端把各台的 <b>buildNeedCards()</b> 结果 concat 后按同一优先级排
+<i>// 注意 scope=needs：项目<b>墙</b>只要当前机器那一台（项目是一台机器上的一份 checkout，
+// 混在一面墙上同名仓库会出现四次）。扇出只为顶上那层行动队列和活动轨。</i></pre>
 <table>
   <thead><tr><th style="width:22%">设计点</th><th>做法与理由</th></tr></thead>
   <tbody>
@@ -638,6 +656,15 @@ GET <b>/api/broker/search</b>?q=train&amp;limit=20&amp;scope=all
     <tr><td><b>⑧ 带宽</b></td>
       <td>结果是小 JSON，扇出对带宽<b>无压力</b>（这是少数不用担心 §11 那笔账的地方）。
         压力在各节点 CPU 和 Broker 的扇出并发上</td></tr>
+    <tr><td><b>⑨ 一个是轮询，一个是按键触发</b></td>
+      <td>两者节奏完全不同：搜索一次性、可取消；工作台 6 秒一轮、常驻。
+        所以工作台的扇出要<b>错峰</b>（各节点请求打散在这 6 秒里，别每 6 秒同时打 N 条）
+        并且<b>页面不可见就停</b>——否则一个后台标签页会持续拨十台机器。
+        离线节点直接跳过，不要每轮都去撞一次</td></tr>
+    <tr><td><b>⑩ 队列不按机器分组</b></td>
+      <td>与搜索<b>刚好相反</b>。搜索是「我在找东西」，分组帮你缩范围；
+        队列是「帮我排序」，按机器分组会把最急的那件推到第二组去。
+        队列只按优先级排（等待输入 &gt; 蜂群待解锁 &gt; 待收尾），机器身份靠卡片上的方章表达</td></tr>
   </tbody>
 </table>
 <p class="lede">
@@ -645,6 +672,9 @@ GET <b>/api/broker/search</b>?q=train&amp;limit=20&amp;scope=all
   改成「读一条流、每行 setState 一次」；<code>search/types.ts</code> 的 <code>SearchHit</code> 加
   <code>nodeId</code> 并把它并进 <code>id</code>；<code>shell/palette/rows.ts</code> 的
   <code>mergeRows</code> 加机器分组。<b>节点侧后端一行不改</b>——它只是被并发调用了 N 次。
+  工作台这边落在 <code>project-list/needs-queue.tsx</code>：<code>buildNeedCards()</code>
+  已经是纯函数（<code>projects[] + swarms[]</code> → 卡片数组），跨机器就是<b>对每台各调一次再 concat</b>，
+  卡片的 <code>key</code> 补 nodeId。<code>activity-rail.tsx</code> 同理。
 </p>
 
 <h2>13. 版本偏斜：控制台来自 Broker，API 来自节点</h2>
@@ -708,14 +738,16 @@ BrokerPrefs     { lastNodeId, followTabSwitch bool }   <i>// 新增：Broker 级
       <td>重起分支 cherry-pick #116 + 修三处硬伤；<b><code>tunnel.Transport</code> 接口 + 按 control/interactive/bulk 分三条隧道</b>（§10）；
         <code>node-url.ts</code> 收口 12 类入口；会话键改 <code>(nodeId, name)</code>；bootstrap + localStorage 镜像；
         侧栏切换器 + 页头芯片 + <code>/nodes</code> 基础页；
-        <b>⌘K 名字搜索的 Broker 扇出</b>（流式 + 按机器分组 + <code>id</code> 带 nodeId，§12）</td>
+        <b>Broker 扇出</b>：⌘K 名字搜索（流式 + 按机器分组 + <code>id</code> 带 nodeId）
+        与<b>工作台行动队列</b>（错峰轮询 + 不分组，§12）</td>
       <td>在 A 机器开着跑 Claude 的终端，切到 B 浏览文件、开 B 的终端，
         <b>A 的终端还在跑且输出没串台</b>；含特殊字符的文件名能预览和下载；
         <b>下大文件时终端不卡</b>（队头阻塞已隔离）；
-        <b>在 B 上搜一个只存在于 A 的文件名能搜到并跳过去，且慢机器不拖慢搜索框</b></td></tr>
+        <b>在 B 上搜一个只存在于 A 的文件名能搜到并跳过去，且慢机器不拖慢搜索框</b>；
+        <b>A 上有 agent 在等输入时，人在 B 的首页第一屏就能看见</b></td></tr>
     <tr><td><b>P2 · 好用</b></td>
       <td>延迟/负载展示、降级与重连 UI、⌘K 机器组、弱联动、接入命令一键复制 + 等待接入、
-        概览「全部机器」、版本偏斜提示、<b>内容搜索的跨机器显式扇出</b>；<b>省带宽第一批</b>：permessage-deflate（RFC 7692）、
+        活动轨跨机器、版本偏斜提示、<b>内容搜索的跨机器显式扇出</b>；<b>省带宽第一批</b>：permessage-deflate（RFC 7692）、
         REST gzip + ETag、页面不可见停推流、切机器断旧镜像、跨 Broker 初始画质降一档（§11）</td>
       <td>拔掉一台机器的网线：黄条出现 &lt; 10s，恢复后自动转绿，全程不用刷新；
         <b>终端整屏重绘流量实测降 5× 以上</b>，后台标签页镜像流量归零</td></tr>
