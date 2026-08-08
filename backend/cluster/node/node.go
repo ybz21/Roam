@@ -8,11 +8,14 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -118,6 +121,14 @@ func (cl *Client) connectOnce(ctx context.Context) error {
 	}
 	ws, resp, err := d.Dial(u.String(), header)
 	if err != nil {
+		// gorilla 在非 101 时只给一句 "websocket: bad handshake"，看不出到底是令牌无效、
+		// 节点被移除还是地址写错——而这三种的处理完全不同。把 Broker 的状态码与错误码带出来。
+		// 踩过一次：改口令重启了 Broker，内存里的接入令牌全没了，节点这边只有 bad handshake。
+		if resp != nil {
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+			_ = resp.Body.Close()
+			return fmt.Errorf("%w（Broker 返回 %s%s）", err, resp.Status, brokerHint(resp.StatusCode, string(body)))
+		}
 		return err
 	}
 	if enrolling && resp != nil {
@@ -200,4 +211,23 @@ func (cl *Client) heartbeat(ctx context.Context, sess sessionOpener) {
 		case <-t.C:
 		}
 	}
+}
+
+// brokerHint 把 Broker 的错误码翻成「下一步该干什么」。接入失败最常见的两种原因
+// （令牌无效 / 凭证失效）都要人去控制台重新签一次，光有状态码不够。
+func brokerHint(code int, body string) string {
+	switch {
+	case strings.Contains(body, "ENROLL_INVALID"):
+		return "：接入令牌无效或已过期，去控制台「添加机器」重新签一个"
+	case strings.Contains(body, "NODE_UNAUTHORIZED"):
+		return "：节点凭证已失效（可能被移除过），删掉 <home>/cluster/node.json 后用新令牌重新接入"
+	case code == 404:
+		return "：这个地址上没有 Broker（对方是普通 Roam？检查 cluster.broker）"
+	case code == 401 || code == 403:
+		return "：被拒绝，检查令牌"
+	}
+	if body != "" {
+		return "：" + strings.TrimSpace(body)
+	}
+	return ""
 }

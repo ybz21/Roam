@@ -64,6 +64,14 @@ type Registry struct {
 	path     string // nodes.json 落盘路径
 }
 
+// persisted 是 nodes.json 的形状。**接入令牌也要落盘**：它只在内存里的时候，
+// Broker 随便重启一次（比如改个口令）就把所有未使用的令牌清空了，而节点那边看到的
+// 只有一句「websocket: bad handshake」——没人猜得到是令牌没了。踩过一次。
+type persisted struct {
+	Nodes  []*Node       `json:"nodes"`
+	Enroll []*enrollment `json:"enroll,omitempty"`
+}
+
 // NewRegistry 从 dir/nodes.json 加载已知节点（缺失则空）。
 func NewRegistry(dir string) *Registry {
 	r := &Registry{
@@ -73,10 +81,23 @@ func NewRegistry(dir string) *Registry {
 		path:     filepath.Join(dir, "nodes.json"),
 	}
 	if b, err := os.ReadFile(r.path); err == nil {
-		var list []*Node
-		if json.Unmarshal(b, &list) == nil {
-			for _, n := range list {
+		var p persisted
+		if json.Unmarshal(b, &p) == nil && len(p.Nodes) > 0 {
+			for _, n := range p.Nodes {
 				r.nodes[n.ID] = n
+			}
+			for _, e := range p.Enroll {
+				if !e.Used && time.Now().Before(e.ExpiresAt) {
+					r.enroll[e.Token] = e
+				}
+			}
+		} else {
+			// 兼容更早的裸数组格式
+			var list []*Node
+			if json.Unmarshal(b, &list) == nil {
+				for _, n := range list {
+					r.nodes[n.ID] = n
+				}
 			}
 		}
 	}
@@ -84,11 +105,16 @@ func NewRegistry(dir string) *Registry {
 }
 
 func (r *Registry) persistLocked() {
-	list := make([]*Node, 0, len(r.nodes))
+	out := persisted{Nodes: make([]*Node, 0, len(r.nodes))}
 	for _, n := range r.nodes {
-		list = append(list, n)
+		out.Nodes = append(out.Nodes, n)
 	}
-	b, err := json.MarshalIndent(list, "", "  ")
+	for _, e := range r.enroll {
+		if !e.Used && time.Now().Before(e.ExpiresAt) {
+			out.Enroll = append(out.Enroll, e)
+		}
+	}
+	b, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {
 		return
 	}
@@ -104,6 +130,7 @@ func (r *Registry) CreateEnrollment(name, group string, ttl time.Duration) *enro
 	e := &enrollment{Token: randToken(), ExpiresAt: time.Now().Add(ttl), Name: name, Group: group}
 	r.mu.Lock()
 	r.enroll[e.Token] = e
+	r.persistLocked()
 	r.mu.Unlock()
 	return e
 }
