@@ -30,8 +30,10 @@ type projectSession struct {
 	Name         string `json:"name"`
 	Label        string `json:"label,omitempty"`
 	Attached     bool   `json:"attached"`
-	Running      bool   `json:"running"` // 会话里跑着 claude/codex 进程——绿点语义（设计 W2）
-	Waiting      bool   `json:"waiting"` // 屏上有等待输入的交互框——黄点（设计 W2，优先于绿）
+	Running      bool   `json:"running"`         // 会话里跑着 claude/codex 进程——绿点语义（设计 W2）
+	Waiting      bool   `json:"waiting"`         // 屏上有等待输入的交互框——黄点（设计 W2，优先于绿）
+	Agent        string `json:"agent,omitempty"` // claude | codex：品牌标用。进程树扫描本就分得出，别让前端再逐会话问一遍
+	Tail         string `json:"tail,omitempty"`  // 仅 Waiting 时非空：判待输入抓的那一屏的最后一行，给行动卡当摘要
 	LastActivity int64  `json:"lastActivity"`
 	Branch       string `json:"branch,omitempty"` // 落在 worktree 里才有
 	Linked       bool   `json:"linked,omitempty"`
@@ -53,7 +55,7 @@ type projectSummary struct {
 	Races        int              `json:"races"`      // running 状态的竞赛数
 	LastActivity int64            `json:"lastActivity"`
 	FirstSeen    int64            `json:"firstSeen"`
-	Top          []projectSession `json:"top"` // 活跃会话前 2（P1 卡片「进行中」）
+	Top          []projectSession `json:"top"` // 活跃会话前 3（列表卡「进行中」三行）
 }
 
 // sessListItem 兼容解析 ttmux ls --json（数值字段 CLI 可能给字符串）。
@@ -136,9 +138,12 @@ func (a *API) ProjectsList(c *gin.Context) {
 	addSession := func(p *projectSummary, top *[]projectSession, name, label string, attached bool, last int64, branch string, linked bool) {
 		claimed[name] = true
 		p.Sessions++
-		ps := projectSession{Name: name, Label: label, Attached: attached, Running: agentRunning[name], LastActivity: last, Linked: linked, Branch: branch}
+		ps := projectSession{Name: name, Label: label, Attached: attached, Agent: agentRunning[name], Running: agentRunning[name] != "", LastActivity: last, Linked: linked, Branch: branch}
 		if ps.Running { // 只对在跑的会话抓屏判待输入，省掉给 idle 会话的 capture-pane
-			ps.Waiting = sessionWaiting(sessionCapture(name, 50))
+			screen := sessionCapture(name, 50)
+			if ps.Waiting = sessionWaiting(screen); ps.Waiting {
+				ps.Tail = sessionTail(screen, 120) // 摘要只有待输入卡用得上，不待输入就不占返回体积
+			}
 		}
 		if ps.Attached {
 			p.Attached++
@@ -155,8 +160,8 @@ func (a *API) ProjectsList(c *gin.Context) {
 			}
 			return top[i].LastActivity > top[j].LastActivity
 		})
-		if len(top) > 2 {
-			top = top[:2]
+		if len(top) > 3 { // 卡片画三行；截到 2 就逼得前端自己再拉一遍会话列表拼
+			top = top[:3]
 		}
 		p.Top = top
 		list = append(list, *p)
@@ -275,9 +280,12 @@ func (a *API) ProjectsList(c *gin.Context) {
 
 	for _, s := range sessions {
 		if !claimed[s.Name] {
-			ls := projectSession{Name: s.Name, Label: s.Label, Attached: rawInt(s.Attached) > 0, Running: agentRunning[s.Name], LastActivity: rawInt(s.LastActivity)}
+			ls := projectSession{Name: s.Name, Label: s.Label, Attached: rawInt(s.Attached) > 0, Agent: agentRunning[s.Name], Running: agentRunning[s.Name] != "", LastActivity: rawInt(s.LastActivity)}
 			if ls.Running {
-				ls.Waiting = sessionWaiting(sessionCapture(s.Name, 50))
+				screen := sessionCapture(s.Name, 50)
+				if ls.Waiting = sessionWaiting(screen); ls.Waiting {
+					ls.Tail = sessionTail(screen, 120)
+				}
 			}
 			loose = append(loose, ls)
 		}

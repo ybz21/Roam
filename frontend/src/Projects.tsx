@@ -1,5 +1,5 @@
 // 项目页（08 设计）——「项目 = 目录（git 可选），任务驱动」：
-//   #/projects        P1 列表：GET /projects 聚合卡片（发现/退场在后端读时收敛）+ 散会话
+//   #/projects        P1 工作台：问候+行动队列（原概览页，18 设计）+ 项目卡栅格 + 散会话 + 活动轨
 //   #/projects/<key>  P2 主页：composer（描述任务 ⏎ 开干）+ 任务流（会话 ∪ 孤儿 worktree）
 //                     + Worktree / 编队 / 活动 tab（仅 git 项目开启）
 // 项目是后台存储对象（POST/DELETE /projects）；开 session、建 feature 是项目内的动作。
@@ -22,8 +22,14 @@ import AdaptivePanel from './shell/AdaptivePanel'
 import { useLayout } from './layout'
 import { detectPrompt } from './prompt'
 import { relTime, taskNameFromPrompt, shq, NewSessionModal, DirPicker, recentDirs, pushRecentDir, CloseWorktreeModal } from './App'
+import { projNeeds } from './project-list/project-model'
+import type { Proj, ProjSession } from './project-list/project-model'
+import { NeedsQueue, WorkbenchHead, buildNeedCards, NEEDS_CSS } from './project-list/needs-queue'
+import { ActivityRail, useRecentActivity, RAIL_CSS } from './project-list/activity-rail'
+import { ProjectCard, CARD_CSS } from './project-list/project-card'
+import { useSwarmProjection, normDir } from './project-list/swarm-projection'
 import FileBrowser from './FileBrowser'
-import { AgentLogo, ArchiveIcon, ArrowDown, ArrowUp, CheckIcon, ChevronDown, CircleIcon, CloseIcon, DiffIcon, ForkIcon, MergeIcon, PaperclipIcon, PlayIcon, PlusIcon, PushIcon, StarIcon, SwarmIcon, TerminalIcon, TrashIcon, WarnIcon, WindowsIcon } from './icons'
+import { AgentLogo, ArchiveIcon, ArrowDown, ArrowUp, CheckIcon, ChevronDown, CircleIcon, CloseIcon, DiffIcon, ForkIcon, MergeIcon, PaperclipIcon, PlayIcon, PlusIcon, PushIcon, SwarmIcon, TerminalIcon, TrashIcon, WarnIcon, WindowsIcon } from './icons'
 import { BranchIcon } from './git/parts'
 
 const WorktreePanel = lazy(() => import('./WorktreePanel'))
@@ -32,18 +38,12 @@ const RaceCreateModal = lazy(() => import('./Race').then((m) => ({ default: m.Ra
 const RaceComparePanel = lazy(() => import('./Race').then((m) => ({ default: m.RaceComparePanel })))
 const NewSwarmModal = lazy(() => import('./Swarm').then((m) => ({ default: m.NewSwarmModal })))
 
-// name 是会话名(= 会话 id，打开终端的 handle)，label 是展示名(@roam_name)
-type ProjSession = { name: string; label?: string; attached: boolean; running?: boolean; waiting?: boolean; lastActivity: number; branch?: string; linked?: boolean }
-type Proj = {
-  key: string; name: string; dir: string; git: boolean; pinned: boolean
-  sessions: number; attached: number; worktrees: number; unfinished: number; cleanable: number; races: number
-  lastActivity: number; firstSeen: number; top: ProjSession[] | null
-}
-
-// 项目列表排序模式（置顶恒在最前；选择持久化）
-type ProjSort = 'name' | 'created' | 'active'
+// 项目列表排序模式（置顶恒在最前；选择持久化）。
+// 「需要你」是默认档——概览并进来之后，首屏第一问是「该做什么」，不是「按名字排一排」。
+type ProjSort = 'needs' | 'name' | 'created' | 'active'
+type ProjFilter = 'needs' | 'active' | 'unfinished' | 'all'
 const SORT_KEY = 'roam.projects.sort'
-const SORTS = ['name', 'created', 'active'] as const
+const SORTS = ['needs', 'name', 'created', 'active'] as const
 // 设计系统 §2：箭头/符号一律 SVG。⌕ ⇅ ✓ 这类文字符号在手机字体上画得又细又歪
 const ico = (d: React.ReactNode) => (
   <svg viewBox="0 0 24 24" width={17} height={17} fill="none" stroke="currentColor"
@@ -61,7 +61,18 @@ const ICON_CHEVRON = (
 const PRJ_CSS = `
 /* 左对齐不居中：全站页面统一从 tt-page 的 (16,16) 起笔，限宽只管可读性 */
 .prj-wrap{max-width:880px;margin:0;padding:0 0 32px}
-.prj-wrap-wide{max-width:1180px;margin:0;padding:0 0 32px}
+/* 概览并进来之后这一页带右轨：1180 是没有右轨时定的，减掉 320 只剩一列半 */
+.prj-wrap-wide{max-width:var(--content-overview);margin:0;padding:0 0 32px;
+  display:flex;flex-direction:column;gap:var(--sp-3)}
+/* 栅格与右轨。阈值一律看 Canvas 容器，不看 viewport——终端坞开合只改 Canvas 宽度 */
+.prj-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--sp-4);align-items:start}
+.prj-feed{min-width:0;display:flex;flex-direction:column}
+@container canvas (min-width: 1180px){
+  .prj-layout{grid-template-columns:minmax(0,1fr) var(--activity-rail)}
+  .prj-rail{position:sticky;top:0;align-self:start}
+  /* 右轨吃掉 320，剩下的宽度按 .prj-grid 的 auto-fill(320) 自然落成 2 列；
+     ≥1560 才够 3 列——1320 减去右轨只剩 980，三列会挤破 320 的下限 */
+}
 .prj-mono{font-family:ui-monospace,'SF Mono','JetBrains Mono',Menlo,Consolas,monospace}
 .prj-in{animation:prjIn .38s cubic-bezier(.2,.85,.3,1) backwards}
 @keyframes prjIn{from{opacity:0;transform:translateY(6px)}}
@@ -91,7 +102,8 @@ const PRJ_CSS = `
   font-size:var(--fs-sm);color:var(--text-bright);font-weight:600}
 .prj-sect .n{font-family:ui-monospace,monospace;font-size:var(--fs-micro);color:var(--text-dim);font-weight:400}
 .prj-sect .ln{flex:1}
-.prj-sect.warn{color:#d29922}
+.prj-sect .hint{color:var(--text-dimmer);font-weight:400;font-size:var(--fs-meta)}
+.prj-sect.warn{color:var(--warn)}
 .prj-sect.ok{color:var(--ok)}
 
 .prj-row{position:relative;display:flex;align-items:flex-start;gap:9px;padding:10px 12px;
@@ -148,11 +160,6 @@ html[data-size="compact"] .prj-subbar.searching .prj-iconbtn.find{display:none}
 .prj-chip .n{font-family:ui-monospace,monospace;font-size:var(--fs-micro);color:var(--text-dimmer)}
 .prj-chip.on .n{color:var(--accent)}
 
-/* 卡片列固定在 ≥320：原来是 minmax(270,1fr)，右侧一开终端就塌成一条极窄列表（14 §6.1）。
-   align-items:start —— 默认的 stretch 会把整行卡片拉到最高那张的高度：一张列了两个会话、
-   邻座一个都没有时，邻座卡的下半截就是空的（实测整行被撑到 167）。 */
-.prj-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:var(--sp-4);align-items:start}
-
 /* 「其他项目」：没有会话在跑的项目不值一张卡（图纸 14-desktop-workspace/desktop-ia.html §二）——
    实测 4 个空项目占掉 467px 的栅格。折成一行一个：名字 + 路径 + 可清理标。 */
 .prj-quiet{display:grid;grid-template-columns:minmax(96px,150px) minmax(0,1fr) auto;align-items:center;
@@ -165,18 +172,6 @@ html[data-size="compact"] .prj-subbar.searching .prj-iconbtn.find{display:none}
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 html[data-size="compact"] .prj-quiet{grid-template-columns:minmax(0,1fr) auto;min-height:44px}
 html[data-size="compact"] .prj-quiet .p{display:none}
-
-.prj-card{background:var(--bg-container);border:1px solid var(--border-subtle);border-radius:var(--r-card);
-  padding:var(--sp-3) var(--sp-4);cursor:pointer;display:flex;flex-direction:column;gap:8px;
-  transition:border-color .18s,transform .18s,box-shadow .18s}
-:where(html[data-pointer="fine"]) .prj-card:hover{border-color:rgba(88,166,255,.45);transform:translateY(-1px);box-shadow:var(--card-hover-shadow)}
-.prj-card:focus-visible{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
-.prj-card .prj-acts{opacity:.25;transition:opacity .15s;display:inline-flex;gap:var(--sp-3);align-items:center}
-/* 次要操作 hover 才出现，但键盘走到时同样要看得见——否则纯键盘用户够不着（14 §6.1） */
-.prj-card:focus-within .prj-acts,.prj-card:focus-visible .prj-acts{opacity:1}
-:where(html[data-pointer="fine"]) .prj-card:hover .prj-acts{opacity:1}
-html[data-pointer="coarse"] .prj-card .prj-acts{opacity:1}
-.prj-card .prj-acts .pinned{opacity:1}
 
 .prj-panel{background:var(--bg-container);border:1px solid var(--border-subtle);border-radius:12px;margin-top:8px}
 .prj-wtrow{padding:13px 16px}
@@ -279,7 +274,7 @@ export default function Projects({ openTerm, closeTerm, initialKey, activeTerm }
 
   return (
     <>
-      <style>{PRJ_CSS}</style>
+      <style>{PRJ_CSS + NEEDS_CSS + CARD_CSS + RAIL_CSS}</style>
       {initialKey
         ? <ProjectHome proj={data.projects.find((x) => x.key === initialKey)} allProjects={data.projects} loaded={loaded} openTerm={openTerm} closeTerm={closeTerm} refresh={load} activeTerm={activeTerm} />
         : <ProjectList data={data} loaded={loaded} openTerm={openTerm} refresh={load} />}
@@ -344,43 +339,34 @@ function NewProjectModal({ open, onClose }: { open: boolean; onClose: () => void
   )
 }
 
-// ── P1 项目列表 ───────────────────────────────────────────
+// ── P1 工作台（18 设计）：概览并进来之后，这一页同时回答「该做什么」和「有哪些项目」──
+// ①问候+状态条 ②「需要你」行动条 ③工具条(sticky) ④项目卡栅格 ⑤安静/散会话 ⑥最近活动轨
+// 数据只有一条 GET /projects（+ /swarms 投影、/activity 右轨）——绿点/黄点/agent 品牌标
+// 后端一趟进程树扫描就算好了，前端不再逐会话探测（18 §9）。
 function ProjectList({ data, loaded, openTerm, refresh }: {
   data: { projects: Proj[]; loose: ProjSession[] }; loaded: boolean
   openTerm: (n: string) => void; refresh: () => void
 }) {
   const { t } = useI18n()
-  const { message } = AntApp.useApp()
   const [newOpen, setNewOpen] = useState(false)
   const [sortBy, setSortBy] = useState<ProjSort>(() => {
-    try { return (localStorage.getItem(SORT_KEY) as ProjSort) || 'name' } catch { return 'name' }
+    try {
+      const v = localStorage.getItem(SORT_KEY) as ProjSort
+      return SORTS.includes(v) ? v : 'needs'
+    } catch { return 'needs' }
   })
   const changeSort = (v: ProjSort) => { setSortBy(v); try { localStorage.setItem(SORT_KEY, v) } catch {} }
-  // 新建项目的按钮只有顶栏那一枚（Command Center，14 §4.5）：它切到本页并留下一个
-  // 意图，这里挂载时取走。挂载时也要取一次——从别的页面点过来时，事件早在本组件
-  // 存在之前就发完了（见 intents.ts）。
+  // 新建项目的按钮有两枚（顶栏 Command Center 与本页页头，14 §4.5），都只切页 + 留意图，
+  // 这里挂载时取走。挂载时也要取一次——从别的页面点过来时，事件早在本组件存在之前就发完了。
   useEffect(() => {
     const on = () => { if (takeIntent('new-project')) setNewOpen(true) }
     on()
     window.addEventListener(INTENT_EVENT, on)
     return () => window.removeEventListener(INTENT_EVENT, on)
   }, [])
-  // 排序：置顶恒在最前；名称(默认,稳定)/创建时间(新在前)/最近活跃(新在前)
-  const sorted = useMemo(() => [...data.projects].sort((a, b) => {
-    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
-    if (sortBy === 'created') return (b.firstSeen || 0) - (a.firstSeen || 0)
-    if (sortBy === 'active') return (b.lastActivity || 0) - (a.lastActivity || 0)
-    return a.name.localeCompare(b.name)
-  }), [data.projects, sortBy])
-  const pin = async (p: Proj) => {
-    try { await api('PATCH', `/projects/${encodeURIComponent(p.key)}/prefs`, { pinned: !p.pinned }); refresh() }
-    catch (e: any) { message.error(e.message) }
-  }
-  const remove = async (p: Proj) => {
-    try { await api('DELETE', `/projects/${encodeURIComponent(p.key)}`); message.success(t('project.removed')); refresh() }
-    catch (e: any) { message.error(e.message) }
-  }
-  const open = (p: Proj) => { location.hash = '#/projects/' + encodeURIComponent(p.key) }
+
+  const swarms = useSwarmProjection(data.projects)
+  const acts = useRecentActivity(data.projects)
 
   // 搜索 + 筛选（14 §6.1）：项目一多，「哪些还欠着事」比「一共有几个」有用得多
   const { phone: isPhone } = useLayout()
@@ -388,30 +374,62 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
   const [searching, setSearching] = useState(false)
   const [sortSheet, setSortSheet] = useState(false)
   const searchRef = useRef<InputRef>(null)
-  const [filter, setFilter] = useState<'all' | 'active' | 'unfinished'>('all')
+  const [filter, setFilter] = useState<ProjFilter>('needs')
+
+  const needsOf = (p: Proj) => projNeeds(p, swarms)
+  // 排序：置顶恒在最前；需要你(默认) / 名称(稳定) / 创建时间 / 最近活跃
+  const sorted = useMemo(() => [...data.projects].sort((a, b) => {
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
+    if (sortBy === 'created') return (b.firstSeen || 0) - (a.firstSeen || 0)
+    if (sortBy === 'active') return (b.lastActivity || 0) - (a.lastActivity || 0)
+    if (sortBy === 'needs') return (needsOf(b) - needsOf(a)) || ((b.lastActivity || 0) - (a.lastActivity || 0))
+    return a.name.localeCompare(b.name)
+  }), [data.projects, sortBy, swarms])
+
   const counts = useMemo(() => ({
-    all: data.projects.length,
+    needs: data.projects.filter((p) => needsOf(p) > 0).length,
     active: data.projects.filter((p) => p.sessions > 0).length,
     unfinished: data.projects.filter((p) => p.unfinished > 0).length,
-  }), [data.projects])
+    all: data.projects.length,
+  }), [data.projects, swarms])
   const visible = useMemo(() => {
     const kw = q.trim().toLowerCase()
     return sorted.filter((p) => {
+      if (filter === 'needs' && needsOf(p) <= 0) return false
       if (filter === 'active' && p.sessions <= 0) return false
       if (filter === 'unfinished' && p.unfinished <= 0) return false
       if (!kw) return true
       return p.name.toLowerCase().includes(kw) || p.dir.toLowerCase().includes(kw)
     })
-  }, [sorted, q, filter])
-  // 置顶与活跃共用同一套栅格，只靠 section header 分组（14 §6.1）——两套栅格会让
+  }, [sorted, q, filter, swarms])
+  // 「需要你」筛选下一个项目都没有时自动退回「活跃」：空列表不是答案，是死路
+  useEffect(() => {
+    if (filter === 'needs' && loaded && counts.needs === 0 && counts.all > 0) setFilter('active')
+  }, [filter, loaded, counts.needs, counts.all])
+
+  // 置顶与其余共用同一套栅格，只靠 section header 分组（14 §6.1）——两套栅格会让
   // 卡片宽度在分组之间对不齐
   const pinned = visible.filter((p) => p.pinned)
   // 没有会话、也没有待收尾/竞赛的项目折到页尾（图纸 desktop-ia.html §二）：它们和「正在跑
   // 两个任务」的项目占同样大的卡，还被同一行最高的卡撑高，页面下三分之一因此全是空卡。
-  // 「活跃 / 待收尾」筛选下 visible 里本来就没有它们，这里不必再判筛选态。
   const isQuiet = (p: Proj) => p.sessions <= 0 && p.unfinished <= 0 && p.races <= 0
   const rest = visible.filter((p) => !p.pinned && !isQuiet(p))
   const quiet = visible.filter((p) => !p.pinned && isQuiet(p))
+
+  // 行动队列与状态条：跨项目，不吃搜索/筛选（它们只作用于下面的栅格）
+  const goProject = (key: string) => { location.hash = '#/projects/' + encodeURIComponent(key) }
+  const goSwarm = (name: string) => { location.hash = '#/swarm/' + encodeURIComponent(name) }
+  const cards = useMemo(
+    () => buildNeedCards(data.projects, swarms, t, { openTerm, goProject, goSwarm }),
+    [data.projects, swarms, t])
+  const allTop = useMemo(() => data.projects.flatMap((p) => p.top || []), [data.projects])
+  const stats = {
+    running: allTop.filter((s) => s.running).length,
+    waiting: allTop.filter((s) => s.waiting).length,
+    unfinished: data.projects.reduce((n, p) => n + (p.unfinished || 0), 0),
+    swarms: swarms.length,
+  }
+  const lastAt = data.projects.reduce((n, p) => Math.max(n, p.lastActivity || 0), 0)
 
   // 上下左右移动选中：列数从栅格实际算，不写死——它随 Canvas 宽度变
   const onGridKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -427,162 +445,140 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
   }
 
   const card = (p: Proj, i: number) => (
-    <div key={p.key} onClick={() => open(p)} className="prj-card prj-in" data-prj-card
-      role="button" tabIndex={0} aria-label={p.name}
-      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); open(p) } }}
-      style={{ animationDelay: `${Math.min(i, 8) * 45}ms` }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontWeight: 700, fontSize: 'var(--fs-body)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
-                {p.races > 0 && <Tag color="gold" style={{ margin: 0 }}>{t('project.race', { count: p.races })}</Tag>}
-                <span style={{ flex: 1 }} />
-                <span className="prj-acts">
-                  <Tooltip title={p.pinned ? t('project.unpin') : t('project.pin')}>
-                    <a className={p.pinned ? 'pinned' : ''} onClick={(e) => { e.stopPropagation(); pin(p) }}
-                      style={{ color: p.pinned ? '#d29922' : 'var(--text-dimmer)', display: 'inline-flex' }}><StarIcon filled={p.pinned} /></a>
-                  </Tooltip>
-                  <Popconfirm title={t('project.removeConfirm')} onConfirm={() => remove(p)}
-                    onPopupClick={(e) => e.stopPropagation()}>
-                    <a onClick={(e) => e.stopPropagation()} style={{ color: 'var(--text-dimmer)', display: 'inline-flex' }}><CloseIcon size={13} /></a>
-                  </Popconfirm>
-                </span>
-              </div>
-              <div className="prj-mono" style={{ fontSize: 'var(--fs-micro)', color: 'var(--text-dimmer)', marginTop: -4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.dir}>{p.dir}</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap', fontSize: 'var(--fs-meta)', color: 'var(--text-dim)' }}>
-                <span><b style={{ color: 'var(--text-bright)' }}>{p.sessions}</b> {t('project.tasks')}</span>
-                {p.git && <>·<span><b style={{ color: 'var(--text-bright)' }}>{p.worktrees}</b> worktree</span></>}
-                {p.unfinished > 0 && <Tag color="warning" style={{ margin: 0 }}>{t('project.unfinished', { count: p.unfinished })}</Tag>}
-                {p.cleanable > 0 && <Tag color="success" style={{ margin: 0 }}>{t('project.cleanableCount', { count: p.cleanable })}</Tag>}
-              </div>
-              {(p.top?.length || 0) > 0 && (
-                <div style={{
-                  display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)', padding: '7px 9px',
-                  borderRadius: 'var(--r-sm)', background: 'var(--bg-term)', border: '1px solid var(--border-subtle)', fontSize: 'var(--fs-sm)',
-                }}>
-                  {p.top!.map((s) => (
-                    <div key={s.name} style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', minWidth: 0 }}>
-                      {dot(false, s.waiting ? '#d29922' : s.running ? 'var(--ok)' : undefined)}
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.name}>{s.label || sessionLabel(s.name)}</span>
-                      {s.branch && <span className="tt-branch" title={s.branch}><BranchIcon size={11} /></span>}
-                      <span style={{ marginLeft: 'auto', color: 'var(--text-dimmer)', fontSize: 'var(--fs-meta)', flex: '0 0 auto' }}>{relTime(s.lastActivity, t)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-    </div>
+    <ProjectCard key={p.key} p={p} swarms={swarms} index={i} openTerm={openTerm} refresh={refresh} />
   )
 
   return (
     // 这里**不能**加 overflow:auto——任何非 visible 的祖先都会成为 sticky 的
     // 参照系，而这一层并不真的滚动（真正滚的是 .tt-canvas），于是页头永远粘不住。
-    <div>
-      <div className="prj-wrap-wide">
-        {/* sticky subheader（14 §6.1）：搜索 / 筛选 / 排序。滚到项目列表深处时这一条还在——
-            筛选条件跟着内容滚走，等于要滚回顶部才能改。 */}
-        <div className={`prj-subbar${searching ? ' searching' : ''}`}>
-          <span className="tt-pagename" title={t('project.subtitle')}>{t('project.title')}</span>
-          <span className="tt-pagedivider" aria-hidden="true" />
-          {/* 筛选与排序合成一条横滑带：手机上它俩各自换行，加上搜索框一共占了 5 行，
-              第一张卡片被推到屏幕 26% 处。现在一行装下，滑得到即可。 */}
-          <div className="prj-filters">
-            {([
-              ['all', t('project.filterAll'), counts.all],
-              ['active', t('project.filterActive'), counts.active],
-              ['unfinished', t('project.section.unfinished'), counts.unfinished],
-            ] as const).map(([k, label, n]) => (
-              <button key={k} type="button" className={`prj-chip${filter === k ? ' on' : ''}`}
-                onClick={() => setFilter(k)}>{label}<span className="n">{n}</span></button>
-            ))}
-            <span className="sp" />
-          </div>
-          {/* 搜索与排序贴右：左端回答「看什么」（筛选，属于内容），右端放「怎么找」（工具）。
-              原来搜索在最左、排序甩到最右，中间空掉 ~700px。 */}
-          <Input allowClear size="small" value={q} onChange={(e) => setQ(e.target.value)}
-            ref={searchRef} className="prj-search" onBlur={() => { if (!q) setSearching(false) }}
-            placeholder={t('project.searchPlaceholder')} style={{ width: isPhone ? undefined : 200 }} />
-          <Dropdown trigger={['click']} menu={{
-            selectable: true, selectedKeys: [sortBy],
-            items: SORTS.map((k) => ({ key: k, label: t(`project.sort.${k}`) })),
-            onClick: ({ key }) => changeSort(key as ProjSort),
-          }}>
-            <button type="button" className="prj-chip prj-sortpill" aria-label={t('project.sortBy')}>
-              {t(`project.sort.${sortBy}`)}{ICON_CHEVRON}
-            </button>
-          </Dropdown>
-          {/* 手机：搜索原地展开、排序进 sheet。两枚图标钉在右侧，不随筛选带横滑跑掉 */}
-          <button type="button" className="prj-iconbtn find" aria-label={t('project.searchPlaceholder')}
-            onClick={() => { setSearching(true); setTimeout(() => searchRef.current?.focus(), 0) }}>
-            {ICON_SEARCH}
+    <div className="prj-wrap-wide">
+      {/* ① 问候 + 状态条 */}
+      <WorkbenchHead needs={cards.length} stats={stats} lastAt={lastAt} phone={isPhone}
+        onNew={() => setNewOpen(true)}
+        onSummaryClick={(f) => { setFilter(f); setQ('') }} />
+
+      {/* ② 行动条：搜索/筛选进行时收成一行（它是跨项目待办，不该被过滤掉） */}
+      <NeedsQueue cards={cards} collapsed={!!q.trim() || filter !== 'needs'}
+        onViewAll={() => { setQ(''); setFilter('needs') }} />
+
+      {/* ③ 工具条：滚到列表深处时这一条还在——筛选条件跟着内容滚走，等于要滚回顶部才能改 */}
+      <div className={`prj-subbar${searching ? ' searching' : ''}`}>
+        {/* 筛选与排序合成一条横滑带：手机上它俩各自换行的话，加上搜索框一共占 5 行 */}
+        <div className="prj-filters">
+          {([
+            ['needs', t('project.filterNeeds'), counts.needs],
+            ['active', t('project.filterActive'), counts.active],
+            ['unfinished', t('project.section.unfinished'), counts.unfinished],
+            ['all', t('project.filterAll'), counts.all],
+          ] as const).map(([k, label, n]) => (
+            <button key={k} type="button" className={`prj-chip${filter === k ? ' on' : ''}`}
+              onClick={() => setFilter(k)}>{label}<span className="n">{n}</span></button>
+          ))}
+          <span className="sp" />
+        </div>
+        {/* 搜索与排序贴右：左端回答「看什么」（筛选，属于内容），右端放「怎么找」（工具） */}
+        {/* 一开始打字就跳出筛选：默认筛选是「需要你」，而搜索是「找这一个项目」的明确动作，
+            两者叠加的话搜任何没欠事的项目都只会得到「没有匹配的项目」 */}
+        <Input allowClear size="small" value={q}
+          onChange={(e) => { const v = e.target.value; setQ(v); if (v.trim() && filter !== 'all') setFilter('all') }}
+          ref={searchRef} className="prj-search" onBlur={() => { if (!q) setSearching(false) }}
+          placeholder={t('project.searchPlaceholder')} style={{ width: isPhone ? undefined : 200 }} />
+        <Dropdown trigger={['click']} menu={{
+          selectable: true, selectedKeys: [sortBy],
+          items: SORTS.map((k) => ({ key: k, label: t(`project.sort.${k}`) })),
+          onClick: ({ key }) => changeSort(key as ProjSort),
+        }}>
+          <button type="button" className="prj-chip prj-sortpill" aria-label={t('project.sortBy')}>
+            {t(`project.sort.${sortBy}`)}{ICON_CHEVRON}
           </button>
-          <button type="button" className="prj-iconbtn" aria-label={t('project.sortBy')}
-            onClick={() => setSortSheet(true)}>{ICON_SORT}</button>
-          {searching && (
-            <button type="button" className="prj-iconbtn" style={{ display: 'grid', width: 'auto', padding: '0 4px', fontSize: 'var(--fs-meta)' }}
-              onClick={() => { setSearching(false); setQ('') }}>{t('common.cancel')}</button>
+        </Dropdown>
+        {/* 手机：搜索原地展开、排序进 sheet。两枚图标钉在右侧，不随筛选带横滑跑掉 */}
+        <button type="button" className="prj-iconbtn find" aria-label={t('project.searchPlaceholder')}
+          onClick={() => { setSearching(true); setTimeout(() => searchRef.current?.focus(), 0) }}>
+          {ICON_SEARCH}
+        </button>
+        <button type="button" className="prj-iconbtn" aria-label={t('project.sortBy')}
+          onClick={() => setSortSheet(true)}>{ICON_SORT}</button>
+        {searching && (
+          <button type="button" className="prj-iconbtn" style={{ display: 'grid', width: 'auto', padding: '0 4px', fontSize: 'var(--fs-meta)' }}
+            onClick={() => { setSearching(false); setQ('') }}>{t('common.cancel')}</button>
+        )}
+      </div>
+
+      <MobileSheet open={sortSheet} title={t('project.sortBy')} onClose={() => setSortSheet(false)}>
+        {SORTS.map((k) => (
+          <SheetRow key={k} minHeight={44} active={sortBy === k}
+            title={t(`project.sort.${k}`)}
+            extra={sortBy === k ? <span style={{ color: 'var(--accent)' }}>{ICON_CHECK}</span> : undefined}
+            onClick={() => { changeSort(k); setSortSheet(false) }} />
+        ))}
+      </MobileSheet>
+
+      {/* ④⑥ 栅格 + 最近活动轨（Canvas ≥1180 时右轨 sticky，窄于此落回页尾） */}
+      <div className="prj-layout">
+        <div className="prj-feed">
+          {loaded && data.projects.length === 0 && (
+            <div className="prj-empty" style={{ textAlign: 'center', padding: '48px 0' }}>{t('project.empty')}</div>
+          )}
+          {loaded && data.projects.length > 0 && visible.length === 0 && (
+            <div className="prj-empty" style={{ textAlign: 'center', padding: '48px 0' }}>{t('project.noMatch')}</div>
+          )}
+
+          {pinned.length > 0 && (
+            <div className="prj-sect"><b>{t('project.pinnedSection')}</b><span className="n">{pinned.length}</span><span className="ln" /></div>
+          )}
+          {pinned.length > 0 && <div className="prj-grid" onKeyDown={onGridKey}>{pinned.map(card)}</div>}
+          {pinned.length > 0 && rest.length > 0 && (
+            <div className="prj-sect"><b>{t('overview.activeProjects')}</b><span className="n">{rest.length}</span><span className="ln" /></div>
+          )}
+          {rest.length > 0 && <div className="prj-grid" onKeyDown={onGridKey}>{rest.map(card)}</div>}
+
+          {quiet.length > 0 && (
+            <>
+              <div className="prj-sect">
+                <b>{t('project.quietSection')}</b><span className="n">{quiet.length}</span>
+                <span className="hint">{t('project.quietHint')}</span>
+                <span className="ln" />
+              </div>
+              <div>
+                {quiet.map((p) => (
+                  <div key={p.key} className="prj-quiet" onClick={() => goProject(p.key)}
+                    role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); goProject(p.key) } }}>
+                    <span className="nm">{p.name}</span>
+                    <span className="p" title={p.dir}>{p.dir}</span>
+                    <span>{p.cleanable > 0 && <Tag color="success" style={{ margin: 0 }}>{t('project.cleanableCount', { count: p.cleanable })}</Tag>}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* ⑤ 散会话：不属于任何项目的会话，放在项目之后，避免被作战地图淹没 */}
+          {data.loose.length > 0 && (
+            <>
+              <div className="prj-sect">
+                <b>{t('project.loose')}</b><span className="n">{data.loose.length}</span>
+                <span className="hint">{t('project.looseHint')}</span>
+                <span className="ln" />
+              </div>
+              <div>
+                {data.loose.map((s) => (
+                  <div key={s.name} className="prj-row" onClick={() => openTerm(s.name)}>
+                    <span style={{ marginTop: 5, display: 'inline-flex' }}>{dot(false, s.waiting ? 'var(--warn)' : s.running ? 'var(--ok)' : undefined)}</span>
+                    <span style={{ fontWeight: 600 }} title={s.name}>{s.label || sessionLabel(s.name)}</span>
+                    <span style={{ color: 'var(--text-dimmer)', fontSize: 'var(--fs-meta)', marginTop: 2 }}>{relTime(s.lastActivity, t)}</span>
+                    <span style={{ flex: 1 }} />
+                    <span className="acts"><ActBtn icon={<TerminalIcon size={14} />} label={t('project.enter')} /></span>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </div>
 
-        <MobileSheet open={sortSheet} title={t('project.sortBy')} onClose={() => setSortSheet(false)}>
-          {SORTS.map((k) => (
-            <SheetRow key={k} minHeight={44} active={sortBy === k}
-              title={t(`project.sort.${k}`)}
-              extra={sortBy === k ? <span style={{ color: 'var(--accent)' }}>{ICON_CHECK}</span> : undefined}
-              onClick={() => { changeSort(k); setSortSheet(false) }} />
-          ))}
-        </MobileSheet>
-
-        {loaded && data.projects.length === 0 && (
-          <div className="prj-empty" style={{ textAlign: 'center', padding: '48px 0' }}>{t('project.empty')}</div>
-        )}
-        {loaded && data.projects.length > 0 && visible.length === 0 && (
-          <div className="prj-empty" style={{ textAlign: 'center', padding: '48px 0' }}>{t('project.noMatch')}</div>
-        )}
-
-        {pinned.length > 0 && (
-          <div className="prj-sect"><b>{t('project.pinnedSection')}</b><span className="n">{pinned.length}</span><span className="ln" /></div>
-        )}
-        {pinned.length > 0 && <div className="prj-grid" onKeyDown={onGridKey}>{pinned.map(card)}</div>}
-        {pinned.length > 0 && rest.length > 0 && (
-          <div className="prj-sect"><b>{t('overview.activeProjects')}</b><span className="n">{rest.length}</span><span className="ln" /></div>
-        )}
-        {rest.length > 0 && <div className="prj-grid" onKeyDown={onGridKey}>{rest.map(card)}</div>}
-
-        {quiet.length > 0 && (
-          <>
-            <div className="prj-sect" style={{ marginTop: 22 }}>
-              <b>{t('project.quietSection')}</b><span className="n">{quiet.length}</span>
-              <span style={{ color: 'var(--text-dimmer)', fontWeight: 400, fontSize: 'var(--fs-meta)' }}>
-                {t('project.quietHint')}</span>
-              <span className="ln" />
-            </div>
-            {quiet.map((p) => (
-              <div key={p.key} className="prj-quiet" onClick={() => open(p)}
-                role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); open(p) } }}>
-                <span className="nm">{p.name}</span>
-                <span className="p" title={p.dir}>{p.dir}</span>
-                <span>{p.cleanable > 0 && <Tag color="success" style={{ margin: 0 }}>{t('project.cleanableCount', { count: p.cleanable })}</Tag>}</span>
-              </div>
-            ))}
-          </>
-        )}
-
-        {data.loose.length > 0 && (
-          <>
-            <div className="prj-sect" style={{ marginTop: 22 }}>
-              <b>{t('project.loose')}</b><span className="n">{data.loose.length}</span><span className="ln" />
-            </div>
-            {data.loose.map((s) => (
-              <div key={s.name} className="prj-row" onClick={() => openTerm(s.name)}>
-                <span style={{ marginTop: 5, display: 'inline-flex' }}>{dot(false, s.waiting ? '#d29922' : s.running ? 'var(--ok)' : undefined)}</span>
-                <span style={{ fontWeight: 600 }} title={s.name}>{s.label || sessionLabel(s.name)}</span>
-                <span style={{ color: 'var(--text-dimmer)', fontSize: 'var(--fs-meta)', marginTop: 2 }}>{relTime(s.lastActivity, t)}</span>
-                <span style={{ flex: 1 }} />
-                <span className="acts"><ActBtn icon={<TerminalIcon size={14} />} label={t('project.enter')} /></span>
-              </div>
-            ))}
-          </>
-        )}
-        <NewProjectModal open={newOpen} onClose={() => { setNewOpen(false); refresh() }} />
+        <ActivityRail acts={acts} />
       </div>
+      <NewProjectModal open={newOpen} onClose={() => { setNewOpen(false); refresh() }} />
     </div>
   )
 }
@@ -703,12 +699,6 @@ function tailLine(raw: string): string {
   const clean = String(raw || '').replace(/\x1b\][^\x07]*(\x07|\x1b\\)/g, '').replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '')
   const lines = clean.split('\n').map((l) => l.trim()).filter(Boolean)
   return (lines[lines.length - 1] || '').slice(0, 90)
-}
-
-// 目录规整：去尾斜杠 + 折叠重复斜杠，用于蜂群 dir 与项目 dir 的等值比较
-function normDir(p: string): string {
-  const s = String(p || '').trim().replace(/\/{2,}/g, '/').replace(/\/+$/, '')
-  return s
 }
 
 // ── P2 项目主页：头部 + composer(hero) + 任务流/Worktree/编队/活动 ──
@@ -1248,7 +1238,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
         style={{ marginLeft: isChild ? 22 : 0, animationDelay: `${Math.min(i, 8) * 40}ms` }}
         onClick={() => openTerm(s.name)}>
         <span style={{ marginTop: 7, display: 'inline-flex' }}>{dot(false, waiting ? '#d29922' : running ? 'var(--ok)' : undefined)}</span>
-        {isChild && <span style={{ color: '#a371f7', marginTop: 3, display: 'inline-flex' }}><BranchIcon size={12} /></span>}
+        {isChild && <span style={{ color: 'var(--swarm)', marginTop: 3, display: 'inline-flex' }}><BranchIcon size={12} /></span>}
         <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
             <span style={{ fontWeight: 700 }} title={s.name}>{s.label || sessionLabel(s.name)}</span>
@@ -1463,7 +1453,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
                 return (
                   <div key={'g' + swName}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 6px 2px', fontSize: 'var(--fs-sm)', color: 'var(--text-dim)' }}>
-                      <span style={{ color: '#a371f7', display: 'inline-flex' }}><SwarmIcon /></span>
+                      <span style={{ color: 'var(--swarm)', display: 'inline-flex' }}><SwarmIcon /></span>
                       <b style={{ color: 'var(--text-bright)' }}>{swName}</b>
                       {sw && <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)' }}>{t('project.swarm.members', { mine: sw.inProj, total: sw.roster })}</span>}
                       <span style={{ flex: 1 }} />
@@ -1558,7 +1548,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
             {sect(t('project.section.clean'), clean.length)}
             {clean.map((w: any) => (
               <div key={w.path} className="prj-row">
-                <span style={{ marginTop: 7, display: 'inline-flex' }}>{dot(false, '#a371f7')}</span>
+                <span style={{ marginTop: 7, display: 'inline-flex' }}>{dot(false, 'var(--swarm)')}</span>
                 <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
                     <span className="tt-branch" title={w.branch}><BranchIcon size={10} />{w.branch}</span>
@@ -1809,7 +1799,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
           <div className="prj-panel prj-in" style={{ padding: '6px 4px' }}>
             {activity.map((e: any) => e.kind === 'trace' ? (
               <div key={'t' + e.at + e.branch} className="prj-mono" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', fontSize: 'var(--fs-sm)' }}>
-                <span style={{ color: '#a371f7', display: 'inline-flex' }}><MergeIcon /></span>
+                <span style={{ color: 'var(--swarm)', display: 'inline-flex' }}><MergeIcon /></span>
                 <span style={{ color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {e.action === 'merged'
                     ? t('project.act.traceMerged', { branch: e.branch, base: e.base || '?', strategy: e.strategy || 'squash' })

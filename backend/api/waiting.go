@@ -42,6 +42,21 @@ func sessionCapture(name string, lines int) string {
 	return string(out)
 }
 
+// sessionTail 取一屏 capture 里最后一行有内容的输出，给「等待输入」行动卡当摘要。
+// 与 sessionWaiting 吃同一份 capture——判待输入本来就抓了屏，不为摘要再抓一次。
+func sessionTail(capture string, max int) string {
+	lines := strings.Split(strings.ReplaceAll(waitStripCtl(capture), "\r", ""), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		if s := waitClean(lines[i]); s != "" {
+			if r := []rune(s); len(r) > max {
+				return string(r[:max])
+			}
+			return s
+		}
+	}
+	return ""
+}
+
 // sessionWaiting 判断一屏 capture 是否有等待输入的交互框（detectPrompt 的布尔版）。
 func sessionWaiting(capture string) bool {
 	lines := strings.Split(strings.ReplaceAll(waitStripCtl(capture), "\r", ""), "\n")
