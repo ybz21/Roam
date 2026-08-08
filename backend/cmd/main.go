@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"net"
@@ -10,13 +11,18 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"syscall"
 
+	"github.com/gin-gonic/gin"
 	"ttmux-web/browser"
+	"ttmux-web/cluster/node"
 	"ttmux-web/config"
 	"ttmux-web/internal/clibin"
 	"ttmux-web/internal/webui"
 	"ttmux-web/server"
+	"ttmux-web/ttmux"
 )
 
 // version 是 roam 版本号，发布时由 -ldflags "-X main.version=<tag>" 注入（默认 dev）。
@@ -115,7 +121,32 @@ func main() {
 		P2PMDNS:       conf.Web.P2PMDNS,
 	}
 
-	r := server.New(cfg)
+	// 横向扩展模式分流（见 docs/design/cluster/architecture.html §1/§3）：
+	//   - cloud：云端 Broker，只做路由 + 注册表 + 控制台，不构造业务 runtime；
+	//   - standard（默认）：现在的单机 Roam；若配了 cluster.broker，则额外出站注册进云端。
+	// standard 下**本机监听口照常对外**——上云和局域网直连是两条并行的入口，不是二选一。
+	var r *gin.Engine
+	if conf.Cluster.Mode == "cloud" {
+		log.Printf("以云端 Broker 模式启动（只做路由 + 注册表 + 控制台，不跑本机业务）")
+		r = server.NewBroker(cfg)
+	} else {
+		r = server.New(cfg)
+		if conf.Cluster.Broker != "" {
+			cl := &node.Client{
+				Broker:   conf.Cluster.Broker,
+				Token:    conf.Cluster.Token,
+				Name:     conf.Cluster.Name,
+				Group:    conf.Cluster.Group,
+				Insecure: conf.Cluster.Insecure,
+				Version:  version,
+				CredPath: filepath.Join(dataDir(), "cluster", "node.json"),
+				Handler:  r, // 业务 Handler 不变，隧道请求经内部主体放行本地鉴权
+				Stats:    nodeStats(bin),
+			}
+			go cl.Run(context.Background())
+			log.Printf("标准模式：出站注册到云端 Broker %s（局域网直连口 %s 照常可用）", conf.Cluster.Broker, bind)
+		}
+	}
 
 	// 退出时回收本进程拉起的 Chrome（含其子进程组），避免泄漏孤儿进程
 	sig := make(chan os.Signal, 1)
@@ -249,4 +280,27 @@ func frontendDir() string {
 		}
 	}
 	return ""
+}
+
+// nodeStats 给心跳提供「这台机器上有几个会话、负载多少」。会话数走 tmux，负载读
+// /proc/loadavg（非 Linux 读不到就报 0，不值得为它引一个跨平台依赖）。
+func nodeStats(bin string) func() (int, float64) {
+	tt := ttmux.New(bin)
+	return func() (int, float64) {
+		n := 0
+		if out, err := tt.Run("list-sessions", "-F", "#{session_name}"); err == nil {
+			for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+				if strings.TrimSpace(line) != "" {
+					n++
+				}
+			}
+		}
+		load := 0.0
+		if b, err := os.ReadFile("/proc/loadavg"); err == nil {
+			if f, err := strconv.ParseFloat(strings.Fields(string(b))[0], 64); err == nil {
+				load = f
+			}
+		}
+		return n, load
+	}
 }

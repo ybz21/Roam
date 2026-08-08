@@ -172,9 +172,31 @@ dl.q dd { margin:4px 0 0; color:var(--text-dim); line-height:1.85; }
 </table>
 <p class="lede">
   <b>没有第三种「client 模式」</b>：一台开发机注册进云端后，它本身还是标准 Roam，
-  只是多连了一条到 Broker 的隧道，局域网直连照旧可用。
+  只是多连了一条到 Broker 的隧道。
   "Client" 只是「标准节点在云端视角下的身份」，不是一种部署形态。
 </p>
+
+<h3>两条入口<b>并存</b>，不是二选一</h3>
+<p class="lede">
+  这是硬要求，不是副作用：上了云之后，<b>本机监听口照常对外</b>。同一台机器同时有两条路——
+</p>
+<div class="hop">
+  <div class="acc"><b>经 Broker</b>公网 / 跨网<br><code>https://broker/n/&lt;id&gt;/api/…</code></div>
+  <div class="okk"><b>直连</b>同一局域网<br><code>https://192.168.x.x:13579/api/…</code></div>
+  <div><b>两条都要登录</b>直连走本机 public handler（Cookie），
+    隧道走 Broker 校验后的内部主体。<b>没有一条是免密的</b></div>
+</div>
+<ul class="pts">
+  <li><b>为什么必须并存</b>：局域网直连没有 Broker 那一跳，延迟低一个量级、带宽是本地网速，
+    还在公网/Broker 挂掉时仍然能用。为了上云去掉它，等于用一个远程依赖换掉一条本来最好的路。</li>
+  <li><b>实现上就是「什么都不做」</b>：<code>standard</code> 模式照常 <code>r.Run(bind)</code>，
+    隧道客户端只是<b>另起一个 goroutine</b> 拨出去。同一个 <code>http.Handler</code> 两个入口，
+    业务代码一行不改。</li>
+  <li><b>前端跟着自适应</b>：<code>nodePath()</code> 在没有 <code>currentNodeId</code> 时返回裸路径
+    （§5）。所以浏览器直接开 <code>192.168.x.x:13579</code> 时，界面自动退回单机形态——
+    没有机器芯片、没有方章、没有 <code>/nodes</code>。<b>同一份前端，两种入口，零分支。</b></li>
+  <li><b>一台机器可以同时被两个人从两条路用</b>：tmux 本来就是多客户端的，这不引入新问题。</li>
+</ul>
 <pre class="code"><i># 开发机（标准节点）~/.roam/config.yaml</i>
 cluster:
   mode: standard                 <s># 默认，可省</s>
@@ -769,7 +791,38 @@ BrokerPrefs     { lastNodeId, followTabSwitch bool }   <i>// 新增：Broker 级
   ② 单机快照测试——<code>cluster.broker</code> 为空时渲染树里<b>不出现任何多机组件</b>。
 </p>
 
-<h2>17. 未决</h2>
+<h2>17. 实测：一台 x86 Broker + 一台 arm64 节点</h2>
+<p class="lede">
+  P1 数据面已经在真机上跑通（<code>feat/cluster-p1</code>）。拓扑：
+  <b>Broker</b> = 开发机（amd64，<code>mode: cloud</code>，:13600）·
+  <b>节点</b> = Jetson（<b>aarch64</b>，Ubuntu/Tegra，<code>mode: standard</code> + <code>cluster.broker</code>，:13592）。
+  节点是交叉编译的 <code>CGO_ENABLED=0 GOOS=linux GOARCH=arm64</code>，26MB 单文件，
+  <b>丢过去就能跑</b>，目标机不需要 Go。
+</p>
+<table>
+  <thead><tr><th style="width:30%">验的是什么</th><th>结果</th></tr></thead>
+  <tbody>
+    <tr><td><b>cloud 模式不跑业务</b></td><td><code>GET /api/sessions</code> → <b>404</b>；日志无 SyncLoop / browser / phone 初始化。Broker 只有认证 + <code>/api/broker/*</code> + <code>/n/…</code> + 静态资源</td></tr>
+    <tr><td><b>接入</b></td><td><code>POST /api/broker/enroll</code> 签发一次性令牌 → 节点出站拨号 → <code>已注册为节点 n_796f302fbeed98ce</code>，换发长期凭证落盘</td></tr>
+    <tr><td><b>反代 REST</b></td><td><code>/n/&lt;id&gt;/api/info</code> 回 Jetson 真实数据：<code>ttmux 0.4.1-go · tmux 3.0a · sessions 4</code></td></tr>
+    <tr><td><b>反代 WebSocket</b></td><td><code>ws://…/n/&lt;id&gt;/api/term/&lt;会话&gt;</code> 升级成功，收到 tmux 的备用屏初始化序列，<b>敲进去的字节出现在 Jetson 的真实 tmux 会话里</b>。pty 层零改动</td></tr>
+    <tr><td><b>RawPath（§3 ①）</b></td><td>文件名 <code>a b#c%d.txt</code> 经 <code>/n/&lt;id&gt;/api/file/raw?path=…</code> 与 <b>路径形式</b> <code>/api/file/serve/&lt;绝对路径&gt;</code> 都读到正确内容（200）。已补回归测试</td></tr>
+    <tr><td><b>延迟（§3 ③）</b></td><td>控制流 ping/pong 生效：<code>latencyMs</code> 8 → 41 → 86 随链路变化；<code>load</code> 取自 <code>/proc/loadavg</code>，<code>sessionCount</code> 取自 tmux，都是真值</td></tr>
+    <tr><td><b>掉线</b></td><td>杀掉节点：<code>/n/&lt;id&gt;/…</code> 立刻 <b>502 <code>NODE_OFFLINE</code></b>（不是转圈到超时），列表 <code>online:false</code></td></tr>
+    <tr><td><b>重连</b></td><td>节点重启：用<b>长期凭证</b>认回来，nodeId 不变，8 秒内 <code>online:true</code>。<b>Broker 也重启</b>后同样认得回来（凭证哈希随 nodes.json 落盘）</td></tr>
+    <tr><td><b>双入口并存</b></td><td>同一个文件、同一个 <code>/api/info</code>，<b>经隧道与经局域网直连拿到完全一样的响应</b>；两条路<b>都要登录</b>（未登录均 401）</td></tr>
+    <tr><td><b>凭证不外泄</b></td><td>节点列表曾把 <code>tokenHash</code> 发给浏览器，已修：落盘保留、接口清空，两条都有测试盯着</td></tr>
+  </tbody>
+</table>
+<div class="note warn">
+  <b>没验到的</b>：① <b>跨公网</b>——目标 Broker（47.94.183.77）的公网口 13579-13590 全被现有
+  frp-panel 的 docker-proxy 占着，安全组也只放行了那几段，<b>没有空位给 Broker</b>；
+  本轮改在同网段验证，链路性质（出站拨号 + yamux + 反代）完全一致，但真实 RTT、
+  丢包与企业防火墙下的 wss 表现还没测。② TLS 隧道（本轮走的 ws 明文）。
+  ③ 镜像 / 大文件经隧道的带宽表现（§11 那笔账还是纸面的）。
+</div>
+
+<h2>18. 未决</h2>
 <ol class="pts">
   <li><b>Broker 部署形态</b>：独立公网小主机（推荐，职责干净）还是和某台标准节点同机？
     同机部署要注意那台机器既是 Broker 又是节点，<code>/n/&lt;自己&gt;/</code> 会绕一圈隧道回到本机——
