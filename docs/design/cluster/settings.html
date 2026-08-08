@@ -1,0 +1,574 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Roam · 设置 · 多机（模式与接入）</title>
+<style>
+:root {
+  --bg-base:#0d1117; --bg-container:#161b22; --bg-elevated:#1b222b; --bg-term:#06090d;
+  --border:#30363d; --border-subtle:#21262d;
+  --text-bright:#e6edf3; --text-dim:#8b949e; --text-dimmer:#6e7681;
+  --accent:#58a6ff; --accent-solid:#1f6feb; --accent-soft:rgba(31,111,235,.14); --accent-border:rgba(88,166,255,.45);
+  --ok:#3fb950; --ok-solid:#238636; --ok-soft:rgba(63,185,80,.14); --ok-border:rgba(63,185,80,.42);
+  --danger:#f85149; --danger-soft:rgba(248,81,73,.12); --danger-border:rgba(248,81,73,.40);
+  --warn:#d29922; --warn-soft:rgba(210,153,34,.12); --warn-border:rgba(210,153,34,.40);
+  --list-hover:rgba(255,255,255,.025);
+  --fs-micro:11px; --fs-meta:12px; --fs-sm:13px; --fs-body:14px; --fs-lg:16px; --fs-title:22px;
+  --r-xs:6px; --r-sm:10px; --r-card:14px; --r-pill:999px;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+html[data-theme="light"] {
+  --bg-base:#f6f8fa; --bg-container:#ffffff; --bg-elevated:#ffffff; --bg-term:#ffffff;
+  --border:#d0d7de; --border-subtle:#e6e9ec;
+  --text-bright:#1f2328; --text-dim:#57606a; --text-dimmer:#8c959f;
+  --accent:#0969da; --accent-solid:#1f6feb; --accent-soft:rgba(31,111,235,.10); --accent-border:rgba(31,111,235,.40);
+  --ok:#1a7f37; --ok-solid:#1f883d; --ok-soft:rgba(31,136,61,.10); --ok-border:rgba(31,136,61,.40);
+  --danger:#cf222e; --danger-soft:rgba(207,34,46,.09); --danger-border:rgba(207,34,46,.35);
+  --warn:#9a6700; --warn-soft:rgba(154,103,0,.10); --warn-border:rgba(154,103,0,.35);
+  --list-hover:rgba(27,31,36,.04);
+}
+* { box-sizing:border-box; }
+html { background:#07090d; } html[data-theme="light"] { background:#eef1f5; }
+body { margin:0; color:var(--text-bright);
+  font:var(--fs-body)/1.6 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased; }
+svg { display:block; } button { font:inherit; cursor:pointer; }
+
+.top { position:sticky; top:0; z-index:20; display:flex; align-items:center; gap:var(--sp-3);
+  padding:10px clamp(16px,3vw,40px); background:color-mix(in srgb, var(--bg-base) 84%, transparent);
+  border-bottom:1px solid var(--border-subtle); backdrop-filter:blur(18px); }
+.top .kicker { font-size:var(--fs-micro); letter-spacing:.14em; text-transform:uppercase; color:var(--text-dimmer); }
+.top h1 { margin:0; font-size:var(--fs-sm); font-weight:600; }
+.top .sp { flex:1; }
+.tbtn { border:1px solid var(--border); background:var(--bg-container); color:var(--text-dim);
+  border-radius:var(--r-pill); padding:5px 14px; font-size:var(--fs-meta); }
+.tbtn:hover { color:var(--text-bright); border-color:var(--accent-border); }
+
+.wrap { max-width:1000px; margin:0 auto; padding:30px clamp(16px,3vw,40px) 110px; }
+h2 { margin:52px 0 6px; padding-top:24px; font-size:var(--fs-lg); font-weight:600; border-top:1px solid var(--border-subtle); }
+h2:first-of-type { margin-top:4px; border-top:0; padding-top:0; }
+h3 { margin:26px 0 8px; font-size:var(--fs-sm); font-weight:600; }
+.lede { max-width:78ch; margin:0 0 16px; color:var(--text-dim); font-size:var(--fs-sm); line-height:1.9; }
+.lede b { color:var(--text-bright); font-weight:600; }
+.lede code, li code, td code, p code { font:var(--fs-meta)/1.4 var(--mono); background:var(--list-hover);
+  border:1px solid var(--border-subtle); border-radius:4px; padding:1px 5px; color:var(--text-bright); }
+ul.pts, ol.pts { max-width:78ch; margin:0 0 16px; padding-left:20px; color:var(--text-dim); font-size:var(--fs-sm); line-height:1.9; }
+ul.pts b, ol.pts b { color:var(--text-bright); }
+.note { border-left:2px solid var(--accent); background:var(--accent-soft); padding:10px 14px;
+  border-radius:0 var(--r-xs) var(--r-xs) 0; color:var(--text-dim); font-size:var(--fs-meta); line-height:1.85;
+  max-width:78ch; margin:14px 0 20px; }
+.note b { color:var(--text-bright); }
+.note.warn { border-left-color:var(--warn); background:var(--warn-soft); }
+.note.ok { border-left-color:var(--ok); background:var(--ok-soft); }
+.cap { display:flex; align-items:center; gap:var(--sp-2); margin:22px 0 8px; font-size:var(--fs-meta); color:var(--text-dimmer); }
+.cap b { color:var(--text-bright); font-size:var(--fs-sm); font-weight:600; }
+.pill { font-size:var(--fs-micro); padding:1px 8px; border-radius:var(--r-pill); border:1px solid var(--border); color:var(--text-dimmer); white-space:nowrap; }
+.pill.good { color:var(--ok); border-color:var(--ok-border); background:var(--ok-soft); }
+.pill.new { color:var(--accent); border-color:var(--accent-border); background:var(--accent-soft); }
+.pill.warn { color:var(--warn); border-color:var(--warn-border); background:var(--warn-soft); }
+
+/* ══ 设置页外壳（对齐现有 EnvPage：Tabs + Card）══════════════════ */
+.pane { border:1px solid var(--border); border-radius:var(--r-card); background:var(--bg-base); overflow:hidden; }
+.tabs { display:flex; gap:2px; padding:0 var(--sp-4); border-bottom:1px solid var(--border-subtle); background:var(--bg-base); }
+.tabs span { padding:11px 14px; font-size:var(--fs-sm); color:var(--text-dim); }
+.tabs span.on { color:var(--accent); box-shadow:inset 0 -2px 0 var(--accent); }
+.body { padding:var(--sp-4); display:flex; flex-direction:column; gap:var(--sp-4); background:var(--bg-base); }
+.card { border:1px solid var(--border); border-radius:var(--r-card); background:var(--bg-container); overflow:hidden; }
+.card > .hd { padding:11px 16px; border-bottom:1px solid var(--border-subtle); font-size:var(--fs-sm); font-weight:600;
+  display:flex; align-items:center; gap:var(--sp-2); }
+.card > .hd .sp { flex:1; }
+.card > .bd { padding:14px 16px; display:flex; flex-direction:column; gap:var(--sp-3); }
+
+/* 模式二选一 */
+.modes { display:grid; grid-template-columns:1fr 1fr; gap:var(--sp-3); }
+@media (max-width:720px) { .modes { grid-template-columns:1fr; } }
+.mode { position:relative; text-align:left; border:1px solid var(--border); border-radius:var(--r-card);
+  background:var(--bg-elevated); padding:14px 16px 14px 44px; color:var(--text-dim); }
+.mode .radio { position:absolute; left:16px; top:16px; width:16px; height:16px; border-radius:50%;
+  border:1.6px solid var(--border); }
+.mode.on { border-color:var(--accent-border); background:var(--accent-soft); }
+.mode.on .radio { border-color:var(--accent); box-shadow:inset 0 0 0 3.5px var(--bg-base), inset 0 0 0 9px var(--accent); }
+.mode .t { display:flex; align-items:center; gap:8px; font-size:var(--fs-body); font-weight:600; color:var(--text-bright); margin-bottom:5px; }
+.mode .t .cur { font-size:var(--fs-micro); font-weight:400; color:var(--ok); border:1px solid var(--ok-border);
+  background:var(--ok-soft); border-radius:var(--r-pill); padding:1px 7px; }
+.mode .d { font-size:var(--fs-meta); line-height:1.8; }
+.mode .d b { color:var(--text-bright); }
+.mode .now { margin-top:9px; padding-top:9px; border-top:1px dashed var(--border); font-size:var(--fs-micro); color:var(--text-dimmer); }
+.mode .now b { color:var(--text-bright); }
+
+/* 表单 */
+.row { display:flex; gap:var(--sp-3); flex-wrap:wrap; }
+.f { display:flex; flex-direction:column; gap:5px; flex:1 1 240px; min-width:200px; }
+.f label { font-size:var(--fs-meta); color:var(--text-dim); display:flex; align-items:center; gap:6px; }
+.f .box { height:32px; border:1px solid var(--border); border-radius:var(--r-xs); background:var(--bg-base);
+  display:flex; align-items:center; padding:0 10px; font-size:var(--fs-meta); color:var(--text-bright); gap:8px; }
+.f .box.ph { color:var(--text-dimmer); }
+.f .box .mono { font-family:var(--mono); font-size:var(--fs-micro); }
+.f .hint { font-size:var(--fs-micro); color:var(--text-dimmer); line-height:1.7; }
+.f .hint a { color:var(--accent); text-decoration:none; }
+.sw { display:inline-flex; align-items:center; gap:8px; font-size:var(--fs-meta); color:var(--text-dim); }
+.sw i { width:30px; height:17px; border-radius:var(--r-pill); background:var(--border); position:relative; flex:0 0 auto; }
+.sw i::after { content:""; position:absolute; left:2px; top:2px; width:13px; height:13px; border-radius:50%; background:var(--bg-base); }
+.sw.on i { background:var(--accent-solid); } .sw.on i::after { left:15px; background:#fff; }
+.acts { display:flex; gap:var(--sp-2); flex-wrap:wrap; align-items:center; }
+.btn { display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 13px; border-radius:var(--r-xs);
+  border:1px solid var(--border); background:transparent; color:var(--text-dim); font-size:var(--fs-meta); }
+.btn.pri { background:var(--accent-solid); border-color:transparent; color:#fff; }
+.btn.danger { color:var(--danger); border-color:var(--danger-border); }
+.btn.ghost { color:var(--text-dimmer); }
+
+/* 状态条 */
+.state { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:var(--r-sm);
+  border:1px solid var(--ok-border); background:var(--ok-soft); font-size:var(--fs-meta); color:var(--text-bright); }
+.state.warn { border-color:var(--warn-border); background:var(--warn-soft); }
+.state.off { border-color:var(--border); background:var(--list-hover); color:var(--text-dim); }
+.state .dot { width:8px; height:8px; border-radius:50%; background:var(--ok); flex:0 0 auto; }
+.state.warn .dot { background:var(--warn); } .state.off .dot { background:var(--text-dimmer); }
+.state .sp { flex:1; }
+.state .sub { font-size:var(--fs-micro); color:var(--text-dim); }
+
+/* 两条入口 */
+.ways { display:grid; grid-template-columns:1fr 1fr; gap:var(--sp-3); }
+@media (max-width:720px) { .ways { grid-template-columns:1fr; } }
+.way { border:1px solid var(--border); border-radius:var(--r-sm); padding:11px 13px; background:var(--bg-base); }
+.way .h { display:flex; align-items:center; gap:7px; font-size:var(--fs-meta); color:var(--text-bright); font-weight:600; margin-bottom:5px; }
+.way .u { font:var(--fs-micro)/1.6 var(--mono); color:var(--accent); word-break:break-all; }
+.way .n { margin-top:5px; font-size:var(--fs-micro); color:var(--text-dimmer); line-height:1.7; }
+
+/* 机器表（Broker 模式） */
+table.nodes { width:100%; border-collapse:collapse; font-size:var(--fs-meta); }
+table.nodes th { text-align:left; padding:7px 8px; font-size:var(--fs-micro); text-transform:uppercase;
+  letter-spacing:.08em; color:var(--text-dimmer); border-bottom:1px solid var(--border-subtle); font-weight:600; }
+table.nodes td { padding:9px 8px; border-bottom:1px solid var(--border-subtle); color:var(--text-dim); vertical-align:middle; }
+table.nodes td b { color:var(--text-bright); font-weight:600; }
+.nmk { display:inline-grid; place-items:center; width:20px; height:20px; border-radius:var(--r-xs);
+  border:1px solid var(--border); background:var(--bg-elevated); font:600 12px/1 -apple-system,"PingFang SC",sans-serif;
+  color:var(--text-dim); }
+.nmk.cur { color:var(--accent); border-color:var(--accent-border); background:var(--accent-soft); }
+.nmk.off { color:var(--text-dimmer); border-style:dashed; background:transparent; }
+.dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--ok); }
+.dot.off { background:var(--text-dimmer); } .dot.warn { background:var(--warn); }
+.cmd { border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-base); padding:10px 12px;
+  font:var(--fs-micro)/1.8 var(--mono); color:var(--text-dim); overflow:auto; }
+.cmd b { color:var(--text-bright); }
+
+/* 手机 */
+.phones { display:flex; flex-wrap:wrap; gap:var(--sp-5); justify-content:center; margin:14px 0 6px; }
+.phone { width:330px; flex:0 0 auto; border:8px solid #1b222b; border-radius:30px; overflow:hidden; background:var(--bg-base);
+  box-shadow:0 18px 48px rgba(1,4,9,.5); }
+html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px rgba(140,149,159,.28); }
+.phone-notch { height:20px; background:var(--bg-container); display:flex; align-items:center; justify-content:center; }
+.phone-notch i { width:60px; height:5px; border-radius:var(--r-pill); background:var(--border); display:block; }
+.phone .body { padding:12px; gap:12px; }
+.phone-tag { text-align:center; margin-top:var(--sp-2); font-size:var(--fs-meta); color:var(--text-dim); }
+.phone-tag b { color:var(--text-bright); }
+
+/* 确认弹窗 */
+.modal { max-width:460px; border:1px solid var(--border); border-radius:var(--r-card); background:var(--bg-elevated); overflow:hidden; }
+.modal .hd { padding:13px 16px; font-size:var(--fs-sm); font-weight:600; display:flex; align-items:center; gap:8px; }
+.modal .bd { padding:0 16px 14px; font-size:var(--fs-meta); color:var(--text-dim); line-height:1.85; }
+.modal .bd b { color:var(--text-bright); }
+.modal .ft { padding:10px 16px; border-top:1px solid var(--border-subtle); display:flex; justify-content:flex-end; gap:8px; }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div>
+    <div class="kicker">Roam · Cluster · 设置页</div>
+    <h1>多机：两种模式，页面上就能切</h1>
+  </div>
+  <span class="sp"></span>
+  <button class="tbtn" id="theme">切到浅色</button>
+</div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <g id="i-host" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></g>
+  <g id="i-cloud" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18h10a4 4 0 0 0 .3-8A6 6 0 0 0 6 11a3.5 3.5 0 0 0 1 7z"/></g>
+  <g id="i-plus" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></g>
+  <g id="i-copy" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></g>
+  <g id="i-lan" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M12 14V8M7 8h10"/></g>
+  <g id="i-warn" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/></g>
+  <g id="i-eye" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.6"/></g>
+</defs></svg>
+
+<div class="wrap">
+
+<h2>0. 只有两种模式，用一句话各自说清</h2>
+<p class="lede">
+  多机这件事最容易卡住的地方，是用户第一次打开时不知道<b>「我这台该配成什么」</b>。
+  所以设置页第一屏不给表单，先给两张卡片让人选身份；选完才出现<b>那一种模式真正需要填的东西</b>。
+  文案里不出现 standard / cloud / frps / frpc —— 那是实现的说法，不是用户的说法。
+</p>
+<table style="width:100%;border-collapse:collapse;font-size:var(--fs-meta);margin-bottom:18px">
+  <thead><tr>
+    <th style="text-align:left;padding:8px;border-bottom:1px solid var(--border-subtle);color:var(--text-dimmer);font-size:var(--fs-micro);text-transform:uppercase">模式</th>
+    <th style="text-align:left;padding:8px;border-bottom:1px solid var(--border-subtle);color:var(--text-dimmer);font-size:var(--fs-micro);text-transform:uppercase">一句话</th>
+    <th style="text-align:left;padding:8px;border-bottom:1px solid var(--border-subtle);color:var(--text-dimmer);font-size:var(--fs-micro);text-transform:uppercase">要填什么</th>
+  </tr></thead>
+  <tbody>
+    <tr><td style="padding:9px 8px;border-bottom:1px solid var(--border-subtle)"><b style="color:var(--text-bright)">这台机器</b><br><span style="color:var(--text-dimmer);font-size:var(--fs-micro)">默认</span></td>
+      <td style="padding:9px 8px;border-bottom:1px solid var(--border-subtle);color:var(--text-dim)">
+        <b style="color:var(--text-bright)">就是你现在用的这套</b>，在这台机器上跑活。
+        可以选填一个中心地址把自己接上去，接上之后<b style="color:var(--text-bright)">从外网也能用它</b></td>
+      <td style="padding:9px 8px;border-bottom:1px solid var(--border-subtle);color:var(--text-dim)">中心地址 + 接入令牌<br><span style="font-size:var(--fs-micro);color:var(--text-dimmer)">（不填 = 纯单机，和今天一模一样）</span></td></tr>
+    <tr><td style="padding:9px 8px;border-bottom:1px solid var(--border-subtle)"><b style="color:var(--text-bright)">中心</b></td>
+      <td style="padding:9px 8px;border-bottom:1px solid var(--border-subtle);color:var(--text-dim)">
+        <b style="color:var(--text-bright)">只当入口，不跑活</b>。别的机器接进来之后，在这里能访问它们全部</td>
+      <td style="padding:9px 8px;border-bottom:1px solid var(--border-subtle);color:var(--text-dim)">什么都不用填<br><span style="font-size:var(--fs-micro);color:var(--text-dimmer)">（装好就是入口，之后点「添加机器」）</span></td></tr>
+  </tbody>
+</table>
+<div class="note">
+  <b>一条要反复讲的事</b>：接入中心<b>不会</b>关掉局域网直连。同一台机器永远有两条路——
+  在家/公司用局域网直连（快、不过中心），在外面走中心。所以「要不要接中心」不是一个取舍题，
+  接了只多一条路。设置页里把这两条并排画出来，就是为了让人不必问这句。
+</div>
+
+<h2>1. 「这台机器」模式（默认）</h2>
+<div class="cap"><b>设置 › 多机</b><span class="pill new">已接入中心</span></div>
+<div class="pane">
+  <div class="tabs"><span>通用</span><span>环境变量</span><span class="on">多机</span><span>关于</span></div>
+  <div class="body">
+
+    <div class="card">
+      <div class="hd">这台机器是什么角色</div>
+      <div class="bd">
+        <div class="modes">
+          <button class="mode on">
+            <span class="radio"></span>
+            <span class="t"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-host"/></svg>这台机器<span class="cur">当前</span></span>
+            <span class="d">在这台机器上跑活——终端、文件、Git、镜像都在这里。<b>就是你现在用的这套。</b><br>
+              可以接到一个中心上，接上之后<b>从外网也能访问它</b>。</span>
+            <span class="now">现在：已接入 <b>roam.example.com</b> · 4 个会话</span>
+          </button>
+          <button class="mode">
+            <span class="radio"></span>
+            <span class="t"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-cloud"/></svg>中心</span>
+            <span class="d">只当入口，<b>自己不跑活</b>。别的机器接进来之后，在这里能访问它们全部。<br>
+              适合放一台有公网地址的小主机。</span>
+            <span class="now">切过去会停掉这台机器上的终端与文件服务</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="hd">接入中心<span class="sp"></span><span class="pill good">已连接</span></div>
+      <div class="bd">
+        <div class="state">
+          <i class="dot"></i>
+          <span>已接入 <b>roam.example.com</b></span>
+          <span class="sub">延迟 12ms · 已连 2 小时 18 分</span>
+          <span class="sp"></span>
+          <button class="btn ghost">断开</button>
+        </div>
+
+        <div class="row">
+          <div class="f">
+            <label>中心地址</label>
+            <div class="box"><span class="mono">https://roam.example.com</span></div>
+            <div class="hint">在中心那台机器的「多机」设置页顶上能看到这个地址。</div>
+          </div>
+          <div class="f">
+            <label>接入令牌 <span class="pill">一次性</span></label>
+            <div class="box"><span class="mono">enr_7f3a··············</span><span class="sp" style="flex:1"></span><svg width="14" height="14" viewBox="0 0 24 24" style="color:var(--text-dimmer)"><use href="#i-eye"/></svg></div>
+            <div class="hint">在中心页点<b>「添加机器」</b>生成，复制过来。首次接入后会自动换成长期凭证，这一栏可以清空。</div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="f">
+            <label>这台机器叫什么</label>
+            <div class="box">公司工作站</div>
+            <div class="hint">在中心的机器列表里显示的名字。留空用主机名。</div>
+          </div>
+          <div class="f">
+            <label>分组（可选）</label>
+            <div class="box ph">工作</div>
+            <div class="hint">机器多了之后按分组归拢。</div>
+          </div>
+        </div>
+        <label class="sw"><i></i>中心用的是自签证书，跳过证书校验</label>
+
+        <div class="acts">
+          <button class="btn pri">保存并接入</button>
+          <button class="btn">测试连接</button>
+          <span class="sp" style="flex:1"></span>
+          <button class="btn danger">断开并清除凭证</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="hd">怎么访问这台机器<span class="sp"></span><span class="pill">两条同时有效</span></div>
+      <div class="bd">
+        <div class="ways">
+          <div class="way">
+            <div class="h"><svg width="14" height="14" viewBox="0 0 24 24"><use href="#i-lan"/></svg>局域网直连</div>
+            <div class="u">https://192.168.1.20:13579</div>
+            <div class="n">在家/公司走这条：不过中心，最快，中心挂了也能用。<b>接入中心不会把它关掉。</b></div>
+          </div>
+          <div class="way">
+            <div class="h"><svg width="14" height="14" viewBox="0 0 24 24"><use href="#i-cloud"/></svg>经中心（外网）</div>
+            <div class="u">https://roam.example.com → 选「公司工作站」</div>
+            <div class="n">在外面走这条：这台机器<b>不需要公网 IP、不用开端口</b>，是它自己拨出去连的中心。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="note ok">
+  <b>为什么把「怎么访问」单独做成一张卡</b>：这是用户配完之后<b>第一个想确认的事</b>——
+  「那我到底该输哪个网址？」。不给这张卡，他就得自己拼；给了，配置完成的那一刻就闭环了。
+  两条并排还顺手回答了「接了中心是不是就不能直连了」。
+</div>
+
+<h3>没接中心的时候（纯单机，默认长这样）</h3>
+<div class="pane">
+  <div class="body" style="padding-top:var(--sp-4)">
+    <div class="card">
+      <div class="hd">接入中心<span class="sp"></span><span class="pill">未接入</span></div>
+      <div class="bd">
+        <div class="state off">
+          <i class="dot"></i>
+          <span>这台机器<b>没有</b>接入任何中心——只能在局域网里访问，和以前一样。</span>
+        </div>
+        <div class="row">
+          <div class="f">
+            <label>中心地址</label>
+            <div class="box ph">https://…</div>
+            <div class="hint">还没有中心？在一台有公网地址的机器上把模式选成<b>「中心」</b>就行。</div>
+          </div>
+          <div class="f">
+            <label>接入令牌</label>
+            <div class="box ph">在中心页点「添加机器」复制</div>
+          </div>
+        </div>
+        <div class="acts"><button class="btn pri">保存并接入</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="note">
+  <b>空态要把下一步指出来</b>：「还没有中心？在一台有公网地址的机器上把模式选成中心就行。」
+  ——不写这句，用户会卡在「令牌哪来的」上，而这正是整条链路唯一一个需要先做别的事的环节。
+</div>
+
+<h2>2. 「中心」模式</h2>
+<div class="cap"><b>设置 › 多机</b><span class="pill new">中心 · 3 台机器</span></div>
+<div class="pane">
+  <div class="tabs"><span>通用</span><span class="on">多机</span><span>关于</span></div>
+  <div class="body">
+
+    <div class="card">
+      <div class="hd">这台机器是什么角色</div>
+      <div class="bd">
+        <div class="modes">
+          <button class="mode">
+            <span class="radio"></span>
+            <span class="t"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-host"/></svg>这台机器</span>
+            <span class="d">在这台机器上跑活。可以接到一个中心上。</span>
+            <span class="now">切回去会重新启用这台机器上的终端与文件服务</span>
+          </button>
+          <button class="mode on">
+            <span class="radio"></span>
+            <span class="t"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-cloud"/></svg>中心<span class="cur">当前</span></span>
+            <span class="d">只当入口，<b>自己不跑活</b>。别的机器接进来之后，在这里能访问它们全部。</span>
+            <span class="now">现在：<b>3 台机器</b>接入，2 台在线</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="hd">入口地址<span class="sp"></span><span class="pill good">对外可达</span></div>
+      <div class="bd">
+        <div class="ways">
+          <div class="way">
+            <div class="h"><svg width="14" height="14" viewBox="0 0 24 24"><use href="#i-cloud"/></svg>给人用（浏览器）</div>
+            <div class="u">https://roam.example.com</div>
+            <div class="n">你和你的手机都只记这一个地址。</div>
+          </div>
+          <div class="way">
+            <div class="h"><svg width="14" height="14" viewBox="0 0 24 24"><use href="#i-host"/></svg>给机器用（接入）</div>
+            <div class="u">https://roam.example.com</div>
+            <div class="n">同一个地址。机器是<b>出站</b>连过来的，所以它们不用有公网 IP。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="hd">接进来的机器<span class="sp"></span>
+        <button class="btn pri"><svg width="12" height="12" viewBox="0 0 24 24"><use href="#i-plus"/></svg>添加机器</button>
+      </div>
+      <div class="bd" style="padding-top:6px">
+        <table class="nodes">
+          <thead><tr><th>机器</th><th>主机 / 系统</th><th>版本</th><th>延迟</th><th>会话</th><th></th></tr></thead>
+          <tbody>
+            <tr>
+              <td><span style="display:inline-flex;align-items:center;gap:8px"><span class="nmk cur">公</span><b>公司工作站</b><i class="dot"></i></span></td>
+              <td>dev-ws-01 · Linux</td><td>v0.1.0-rc.2</td><td>12ms</td><td>3</td>
+              <td style="text-align:right"><button class="btn">重命名</button> <button class="btn danger">移除</button></td>
+            </tr>
+            <tr>
+              <td><span style="display:inline-flex;align-items:center;gap:8px"><span class="nmk">家</span><b>家里台式机</b><i class="dot"></i></span></td>
+              <td>home-pc · Linux</td><td>v0.1.0-rc.2</td><td>45ms</td><td>1</td>
+              <td style="text-align:right"><button class="btn">重命名</button> <button class="btn danger">移除</button></td>
+            </tr>
+            <tr style="opacity:.62">
+              <td><span style="display:inline-flex;align-items:center;gap:8px"><span class="nmk off">树</span><b>树莓派</b><i class="dot off"></i></span></td>
+              <td>rpi4 · Linux</td><td style="color:var(--warn)">v0.1.0-rc.1 可升级</td><td>离线</td><td>—</td>
+              <td style="text-align:right"><button class="btn">接入命令</button> <button class="btn danger">移除</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="hd">添加机器<span class="sp"></span><span class="pill warn">令牌 30 分钟内有效</span></div>
+      <div class="bd">
+        <div class="row">
+          <div class="f"><label>给它起个名（可选）</label><div class="box ph">默认用它的主机名</div></div>
+          <div class="f"><label>分组（可选）</label><div class="box ph">工作</div></div>
+        </div>
+        <div style="font-size:var(--fs-meta);color:var(--text-dim)">
+          <b style="color:var(--text-bright)">方式一</b>：在那台机器上执行这条命令（没装 Roam 也能一步装好）
+        </div>
+        <div class="cmd">curl -fsSL <b>https://roam.example.com/install.sh</b> | bash -s -- \
+          <br>&nbsp;&nbsp;--broker <b>https://roam.example.com</b> --token <b>enr_7f3a…</b></div>
+        <div style="font-size:var(--fs-meta);color:var(--text-dim)">
+          <b style="color:var(--text-bright)">方式二</b>：那台机器已经装了 Roam —— 打开它的
+          <b style="color:var(--text-bright)">设置 › 多机</b>，把下面两样填进去
+        </div>
+        <div class="row">
+          <div class="f"><label>中心地址</label><div class="box"><span class="mono">https://roam.example.com</span></div></div>
+          <div class="f"><label>接入令牌</label><div class="box"><span class="mono">enr_7f3a9c2b41e8…</span></div></div>
+        </div>
+        <div class="acts">
+          <button class="btn"><svg width="12" height="12" viewBox="0 0 24 24"><use href="#i-copy"/></svg>复制命令</button>
+          <button class="btn"><svg width="12" height="12" viewBox="0 0 24 24"><use href="#i-copy"/></svg>复制地址和令牌</button>
+          <span class="sp" style="flex:1"></span>
+          <span style="display:inline-flex;align-items:center;gap:7px;font-size:var(--fs-meta);color:var(--text-dim)">
+            <i class="dot warn"></i>等待这台机器接入…</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+<ul class="pts">
+  <li><b>两种接入方式并列给，不藏</b>：一条命令装好新机器；已经装了 Roam 的直接在它的设置页填两栏。
+    后者是常见情况（用户往往先各自装了几台），只给 curl 命令会让人以为必须重装。</li>
+  <li><b>「等待接入…」原地变绿</b>：机器一连上，这一行变成「<b>公司工作站</b> 已接入」，上面的表格多一行。
+    不用回列表刷新确认——这是整页唯一需要实时的地方，值得一条轮询。</li>
+  <li><b>令牌有效期写在标题右边</b>，不写在说明文字里。它是个会失效的东西，得一眼看见。</li>
+</ul>
+
+<h2>3. 切模式：唯一需要拦一下的动作</h2>
+<div style="display:flex;gap:var(--sp-4);flex-wrap:wrap;align-items:flex-start">
+  <div class="modal">
+    <div class="hd"><svg width="16" height="16" viewBox="0 0 24 24" style="color:var(--warn)"><use href="#i-warn"/></svg>把这台机器改成「中心」？</div>
+    <div class="bd">
+      改成中心之后，<b>这台机器就不再跑活了</b>：
+      <ul style="margin:8px 0;padding-left:18px;line-height:1.9">
+        <li>正在跑的 <b>4 个终端会话</b>会断开（tmux 会话本身还在，重新切回来还能接上）</li>
+        <li>这台机器上的项目、文件、Git、镜像<b>都不会再出现在界面里</b></li>
+        <li>它会变成入口：别的机器接进来后，你在这里访问它们</li>
+      </ul>
+      需要重启服务，大约 3 秒。
+    </div>
+    <div class="ft"><button class="btn">取消</button><button class="btn pri">改成中心并重启</button></div>
+  </div>
+  <ul class="pts" style="flex:1 1 300px;margin:0">
+    <li><b>只有 这台机器 → 中心 需要确认</b>，反过来不用：切回「这台机器」只是把本机能力重新打开，
+      没有东西会消失。<b>确认框只留给真会丢东西的方向</b>。</li>
+    <li>文案不说「切换 cluster.mode」，说的是<b>用户会失去什么</b>——终端会断、项目会不见。
+      这是他唯一需要判断的信息。</li>
+    <li>写清「tmux 会话本身还在」：不写这句，用户会以为把活干没了，
+      而实际上只是这台机器不再从这个界面暴露而已。</li>
+  </ul>
+</div>
+
+<h2>4. 手机</h2>
+<div class="phones">
+  <div>
+    <div class="phone">
+      <div class="phone-notch"><i></i></div>
+      <div class="body" style="display:flex;flex-direction:column;height:420px;overflow:hidden">
+        <div style="font-size:var(--fs-lg);font-weight:600">多机</div>
+        <div class="modes" style="grid-template-columns:1fr">
+          <button class="mode on" style="padding:11px 13px 11px 38px">
+            <span class="radio" style="left:13px;top:13px"></span>
+            <span class="t" style="font-size:var(--fs-sm)"><svg width="14" height="14" viewBox="0 0 24 24"><use href="#i-host"/></svg>这台机器<span class="cur">当前</span></span>
+            <span class="d" style="font-size:var(--fs-micro)">在这台机器上跑活。可接到一个中心，接上后外网也能用。</span>
+          </button>
+          <button class="mode" style="padding:11px 13px 11px 38px">
+            <span class="radio" style="left:13px;top:13px"></span>
+            <span class="t" style="font-size:var(--fs-sm)"><svg width="14" height="14" viewBox="0 0 24 24"><use href="#i-cloud"/></svg>中心</span>
+            <span class="d" style="font-size:var(--fs-micro)">只当入口，自己不跑活。</span>
+          </button>
+        </div>
+        <div class="state" style="font-size:var(--fs-micro)"><i class="dot"></i><span>已接入 <b>roam.example.com</b> · 12ms</span></div>
+        <div class="f"><label>中心地址</label><div class="box"><span class="mono" style="font-size:10px">https://roam.example.com</span></div></div>
+        <div class="f"><label>接入令牌</label><div class="box ph"><span class="mono" style="font-size:10px">enr_7f3a··········</span></div></div>
+        <div class="acts"><button class="btn pri" style="flex:1;justify-content:center">保存并接入</button></div>
+      </div>
+    </div>
+    <div class="phone-tag"><b>①</b> 两张卡竖着排，各占一行<br>手指档卡片本身就是 ≥44 的命中区</div>
+  </div>
+  <div>
+    <div class="phone">
+      <div class="phone-notch"><i></i></div>
+      <div class="body" style="display:flex;flex-direction:column;height:420px;overflow:hidden">
+        <div style="font-size:var(--fs-lg);font-weight:600">多机 · 中心</div>
+        <div class="way">
+          <div class="h"><svg width="14" height="14" viewBox="0 0 24 24"><use href="#i-cloud"/></svg>入口地址</div>
+          <div class="u" style="font-size:10px">https://roam.example.com</div>
+        </div>
+        <div style="font-size:var(--fs-meta);color:var(--text-dim);display:flex;align-items:center">
+          接进来的机器 <span style="flex:1"></span>
+          <button class="btn pri" style="height:26px"><svg width="11" height="11" viewBox="0 0 24 24"><use href="#i-plus"/></svg>添加</button>
+        </div>
+        <div class="way" style="display:flex;align-items:center;gap:9px"><span class="nmk cur">公</span><b style="color:var(--text-bright);font-size:var(--fs-meta)">公司工作站</b><span style="flex:1"></span><span style="font-size:var(--fs-micro);color:var(--text-dimmer);font-family:var(--mono)">12ms</span><i class="dot"></i></div>
+        <div class="way" style="display:flex;align-items:center;gap:9px"><span class="nmk">家</span><b style="color:var(--text-bright);font-size:var(--fs-meta)">家里台式机</b><span style="flex:1"></span><span style="font-size:var(--fs-micro);color:var(--text-dimmer);font-family:var(--mono)">45ms</span><i class="dot"></i></div>
+        <div class="way" style="display:flex;align-items:center;gap:9px;opacity:.6"><span class="nmk off">树</span><b style="color:var(--text-bright);font-size:var(--fs-meta)">树莓派</b><span style="flex:1"></span><span style="font-size:var(--fs-micro);color:var(--text-dimmer)">离线</span><i class="dot off"></i></div>
+      </div>
+    </div>
+    <div class="phone-tag"><b>②</b> 中心模式：机器列表改成卡片行<br>表格在 390 宽下没法看</div>
+  </div>
+</div>
+
+<h2>5. 落地要点</h2>
+<ul class="pts">
+  <li><b>后端要一对新接口</b>：<code>GET /api/cluster/config</code> 返回当前模式 + 中心地址 + 名字 + 分组
+    + <b>实时状态</b>（已连接 / 重连中 / 最后一次失败原因）；<code>PUT</code> 写回 <code>config.yaml</code> 的
+    <code>cluster:</code> 段。令牌<b>只写不读</b>——读回来没有意义，还多一个泄漏面。</li>
+  <li><b>「最后一次失败原因」直接用节点侧已经翻好的那句</b>：令牌过期 / 凭证失效 / 地址不是 Broker，
+    三种的下一步完全不同。这句话现在只进日志，得让它进界面。</li>
+  <li><b>改模式要重启服务</b>：cloud 与 standard 的依赖图不同（中心根本不构造业务 runtime）。
+    所以是「保存 → 重启 → 页面自己重连」，不是热切换。前端保存后轮询 <code>/api/version</code> 等它回来。</li>
+  <li><b>写 config.yaml 要保留注释</b>：现有的 <code>SavePassword</code> 是正则替换单行，
+    整段 <code>cluster:</code> 得同样按行改写而不是 <code>yaml.Marshal</code> 全量重写——
+    后者会把模板里那些解释性注释全部抹掉，而那些注释是用户手改时唯一的说明书。</li>
+  <li><b>i18n</b>：整页文案走 <code>t()</code>，两份 locale 同步。模式名在英文里用
+    <b>This machine</b> / <b>Hub</b>——同样不用 standard/cloud。</li>
+</ul>
+
+</div>
+
+<script>
+  const btn = document.getElementById('theme')
+  btn.addEventListener('click', () => {
+    const light = document.documentElement.getAttribute('data-theme') === 'light'
+    document.documentElement.setAttribute('data-theme', light ? 'dark' : 'light')
+    btn.textContent = light ? '切到浅色' : '切到深色'
+  })
+</script>
+</body>
+</html>
