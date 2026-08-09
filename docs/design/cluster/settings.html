@@ -119,6 +119,53 @@ ul.pts b, ol.pts b { color:var(--text-bright); }
 .btn.danger { color:var(--danger); border-color:var(--danger-border); }
 .btn.ghost { color:var(--text-dimmer); }
 
+/* ── 拓扑：你 / 中心 / 这台机器。一眼回答「我在哪、连着谁」 ───────── */
+.topo { display:flex; align-items:stretch; gap:0; flex-wrap:wrap; }
+.tnode {
+  flex:1 1 150px; min-width:130px; border:1px solid var(--border); border-radius:var(--r-sm);
+  background:var(--bg-base); padding:11px 12px; position:relative;
+}
+.tnode .role { font-size:var(--fs-micro); color:var(--text-dimmer); letter-spacing:.06em; text-transform:uppercase; }
+.tnode .nm { display:flex; align-items:center; gap:7px; font-size:var(--fs-sm); font-weight:600; color:var(--text-bright); margin:3px 0 2px; }
+.tnode .sub { font-size:var(--fs-micro); color:var(--text-dim); line-height:1.6; }
+.tnode.me { border-color:var(--accent-border); background:var(--accent-soft); box-shadow:0 0 0 1px var(--accent-border); }
+.tnode.me .role { color:var(--accent); }
+.tnode.ghost { border-style:dashed; background:transparent; opacity:.75; }
+.tnode.ghost .nm { color:var(--text-dimmer); }
+.tlink { flex:0 0 78px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; padding:0 2px; }
+.tlink .ln { width:100%; height:2px; background:var(--ok); border-radius:2px; }
+.tlink .ln.dash { background:none; border-top:2px dashed var(--border); height:0; }
+.tlink .ln.bad { background:var(--danger); }
+.tlink .ln.wait { background:var(--warn); }
+.tlink .lb { font-size:10px; color:var(--text-dimmer); font-family:var(--mono); white-space:nowrap; }
+.tlink .lb.ok { color:var(--ok); } .tlink .lb.bad { color:var(--danger); } .tlink .lb.wait { color:var(--warn); }
+.tstack { flex:1 1 150px; min-width:130px; display:flex; flex-direction:column; gap:6px; }
+.tstack .tnode { flex:0 0 auto; padding:8px 10px; }
+@media (max-width:720px) {
+  .topo { flex-direction:column; }
+  .tlink { flex:0 0 auto; width:100%; height:34px; flex-direction:row; }
+  .tlink .ln { width:2px; height:100%; }
+  .tlink .ln.dash { width:0; height:100%; border-top:0; border-left:2px dashed var(--border); }
+}
+
+/* 接入是怎么发生的（三步） */
+.steps { display:grid; grid-template-columns:repeat(3,1fr); gap:var(--sp-3); }
+@media (max-width:720px) { .steps { grid-template-columns:1fr; } }
+.step { border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-base); padding:11px 13px; position:relative; }
+.step .n { position:absolute; right:11px; top:9px; font:600 var(--fs-lg)/1 var(--mono); color:var(--border); }
+.step .h { font-size:var(--fs-meta); font-weight:600; color:var(--text-bright); margin-bottom:5px; }
+.step .d { font-size:var(--fs-micro); color:var(--text-dim); line-height:1.75; }
+.step .d b { color:var(--text-bright); }
+.step.me { border-color:var(--accent-border); background:var(--accent-soft); }
+
+/* 当前生效的配置（只读回执） */
+.eff { border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-base); overflow:hidden; }
+.eff .r { display:flex; align-items:center; gap:10px; padding:7px 12px; border-bottom:1px solid var(--border-subtle); font-size:var(--fs-meta); }
+.eff .r:last-child { border-bottom:0; }
+.eff .k { flex:0 0 110px; color:var(--text-dimmer); font-size:var(--fs-micro); }
+.eff .v { color:var(--text-bright); font-family:var(--mono); font-size:var(--fs-micro); word-break:break-all; }
+.eff .v.dim { color:var(--text-dimmer); font-family:inherit; }
+
 /* 状态条 */
 .state { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:var(--r-sm);
   border:1px solid var(--ok-border); background:var(--ok-soft); font-size:var(--fs-meta); color:var(--text-bright); }
@@ -233,6 +280,35 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
   <div class="body">
 
     <div class="card">
+      <div class="hd">你在这里<span class="sp"></span><span class="pill good">已接入</span></div>
+      <div class="bd">
+        <div class="topo">
+          <div class="tnode">
+            <div class="role">你</div>
+            <div class="nm"><svg width="14" height="14" viewBox="0 0 24 24"><use href="#i-eye"/></svg>浏览器 / 手机</div>
+            <div class="sub">在外面 · 在家 · 在公司</div>
+          </div>
+          <div class="tlink"><span class="lb">HTTPS</span><span class="ln"></span><span class="lb ok">↓ 外网</span></div>
+          <div class="tnode">
+            <div class="role">中心</div>
+            <div class="nm"><svg width="14" height="14" viewBox="0 0 24 24"><use href="#i-cloud"/></svg>roam.example.com</div>
+            <div class="sub">唯一入口 · 不跑活</div>
+          </div>
+          <div class="tlink"><span class="lb">隧道</span><span class="ln"></span><span class="lb ok">12ms · 它拨出去的</span></div>
+          <div class="tnode me">
+            <div class="role">这台机器</div>
+            <div class="nm"><svg width="14" height="14" viewBox="0 0 24 24"><use href="#i-host"/></svg>公司工作站</div>
+            <div class="sub">终端 · 文件 · Git · 镜像<br>4 个会话在跑</div>
+          </div>
+        </div>
+        <div class="note" style="margin:0">
+          <b>还有一条没画在链上的路</b>：你在同一个局域网里时可以<b>直连</b>这台机器
+          （<code>https://192.168.1.20:13579</code>），不经过中心。两条一直都在，见下方「怎么访问」。
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
       <div class="hd">这台机器是什么角色</div>
       <div class="bd">
         <div class="modes">
@@ -250,6 +326,37 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
               适合放一台有公网地址的小主机。</span>
             <span class="now">切过去会停掉这台机器上的终端与文件服务</span>
           </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="hd">这台机器是怎么连上中心的<span class="sp"></span><span class="pill">出站，不用开端口</span></div>
+      <div class="bd">
+        <div class="steps">
+          <div class="step"><span class="n">1</span>
+            <div class="h">在中心点「添加机器」</div>
+            <div class="d">中心签出一张<b>一次性令牌</b>（30 分钟有效），连同它自己的地址给你。</div>
+          </div>
+          <div class="step me"><span class="n">2</span>
+            <div class="h">在这台机器上填两栏</div>
+            <div class="d">就是下面那两个输入框：<b>中心地址</b> + <b>接入令牌</b>。填完点「保存并接入」。</div>
+          </div>
+          <div class="step"><span class="n">3</span>
+            <div class="h">它自己拨出去</div>
+            <div class="d">这台机器<b>主动</b>连中心并建一条长连接，令牌当场换成长期凭证存在本地。
+              之后重启、断网恢复都自动重连，<b>不用再填令牌</b>。</div>
+          </div>
+        </div>
+        <div class="note" style="margin:0">
+          <b>要输密码吗？不用。</b>中心的<b>登录口令是给人用的</b>——你在浏览器里打开中心时输它。
+          机器接入走的是<b>令牌</b>，两者是两回事，别把口令填进令牌栏。
+          令牌只用一次，之后这台机器靠自己那份长期凭证重连；凭证存在
+          <code>&lt;home&gt;/cluster/node.json</code>，删掉它就得重新签一张令牌。
+        </div>
+        <div class="note warn" style="margin:0">
+          <b>为什么不用给这台机器开公网端口</b>：连接是<b>它拨出去</b>的，方向朝外，
+          所以它在 NAT / 公司防火墙后面也能被你从外面用到。需要有公网地址的<b>只有中心那一台</b>。
         </div>
       </div>
     </div>
@@ -274,7 +381,8 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
           <div class="f">
             <label>接入令牌 <span class="pill">一次性</span></label>
             <div class="box"><span class="mono">enr_7f3a··············</span><span class="sp" style="flex:1"></span><svg width="14" height="14" viewBox="0 0 24 24" style="color:var(--text-dimmer)"><use href="#i-eye"/></svg></div>
-            <div class="hint">在中心页点<b>「添加机器」</b>生成，复制过来。首次接入后会自动换成长期凭证，这一栏可以清空。</div>
+            <div class="hint"><b>不是中心的登录口令</b>——口令是给人登录浏览器用的，机器接入走令牌。
+              在中心页点<b>「添加机器」</b>生成，复制过来；首次接入后自动换成长期凭证，这一栏可以清空。</div>
           </div>
         </div>
         <div class="row">
@@ -314,6 +422,25 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
             <div class="u">https://roam.example.com → 选「公司工作站」</div>
             <div class="n">在外面走这条：这台机器<b>不需要公网 IP、不用开端口</b>，是它自己拨出去连的中心。</div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="hd">当前生效的配置<span class="sp"></span><span class="pill">只读 · 来自 config.yaml</span></div>
+      <div class="bd">
+        <div class="eff">
+          <div class="r"><span class="k">角色</span><span class="v">这台机器（standard）</span></div>
+          <div class="r"><span class="k">中心地址</span><span class="v">https://roam.example.com</span></div>
+          <div class="r"><span class="k">接入凭证</span><span class="v">长期凭证 · 已换发<span style="color:var(--text-dimmer)"> （令牌已作废，不再显示）</span></span></div>
+          <div class="r"><span class="k">显示名</span><span class="v">公司工作站</span></div>
+          <div class="r"><span class="k">分组</span><span class="v dim">未设置</span></div>
+          <div class="r"><span class="k">节点 ID</span><span class="v">n_7f3a9c2b41e8</span></div>
+          <div class="r"><span class="k">配置文件</span><span class="v">~/.roam/config.yaml</span></div>
+        </div>
+        <div class="hint" style="font-size:var(--fs-micro);color:var(--text-dimmer);line-height:1.7">
+          上面表单里的值是<b style="color:var(--text-bright)">你正在编辑的</b>，这一块是<b style="color:var(--text-bright)">当前真正生效的</b>。
+          改完保存并重启之后两边才会一致——不给这块，用户改完不知道到底生效了没。
         </div>
       </div>
     </div>
@@ -363,6 +490,31 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
 <div class="pane">
   <div class="tabs"><span>通用</span><span class="on">多机</span><span>关于</span></div>
   <div class="body">
+
+    <div class="card">
+      <div class="hd">你在这里<span class="sp"></span><span class="pill good">3 台接入 · 2 台在线</span></div>
+      <div class="bd">
+        <div class="topo">
+          <div class="tnode">
+            <div class="role">你</div>
+            <div class="nm"><svg width="14" height="14" viewBox="0 0 24 24"><use href="#i-eye"/></svg>浏览器 / 手机</div>
+            <div class="sub">只记一个地址</div>
+          </div>
+          <div class="tlink"><span class="lb">HTTPS</span><span class="ln"></span><span class="lb ok">↓</span></div>
+          <div class="tnode me">
+            <div class="role">这台机器 · 中心</div>
+            <div class="nm"><svg width="14" height="14" viewBox="0 0 24 24"><use href="#i-cloud"/></svg>roam.example.com</div>
+            <div class="sub">只当入口<br><b style="color:var(--text-dimmer)">不跑活</b></div>
+          </div>
+          <div class="tlink"><span class="lb">隧道</span><span class="ln"></span><span class="lb ok">它们拨进来</span></div>
+          <div class="tstack">
+            <div class="tnode"><div class="nm" style="margin:0"><span class="nmk cur">公</span>公司工作站<span style="flex:1"></span><i class="dot"></i></div></div>
+            <div class="tnode"><div class="nm" style="margin:0"><span class="nmk">家</span>家里台式机<span style="flex:1"></span><i class="dot"></i></div></div>
+            <div class="tnode ghost"><div class="nm" style="margin:0"><span class="nmk off">树</span>树莓派<span style="flex:1"></span><i class="dot off"></i></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <div class="card">
       <div class="hd">这台机器是什么角色</div>
