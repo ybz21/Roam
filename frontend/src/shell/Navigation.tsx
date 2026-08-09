@@ -26,14 +26,16 @@ export type NavEntry = {
 export type NavGroup = { label: string; items: NavEntry[] }
 
 export function Navigation({
-  rail, active, groups, onGo,
+  rail, active, groups, onGo, settings,
   linkStatus, dock, account, accountName, onToggleRail,
 }: {
-  /** 64px 轨态：用户收起 / Focus / 非 large 档 */
+  /** 48px 轨态：用户收起 / Focus / 非 large 档 */
   rail: boolean
   active: string
   groups: NavGroup[]
   onGo: (key: string) => void
+  /** 设置：是页面，但摆在底部——它跟「概览/项目」不是一类事（14 §4.4） */
+  settings: NavEntry
   linkStatus: ReactNode
   /** 终端开合入口；没有已打开的终端时传 null */
   dock: { count: number; open: boolean; onToggle: () => void; title: string } | null
@@ -60,7 +62,7 @@ export function Navigation({
     <div className={`tt-nav${rail ? ' rail' : ''}`}>
       <div className="tt-nav-brand">
         {/* 轨态下标是唯一的品牌元素，得由它报名字；展开时旁边就写着 Roam，再念一遍是重复 */}
-        <img src="/logo-mark.svg" width={34} height={34} alt={rail ? 'Roam' : ''} aria-hidden={rail ? undefined : true} />
+        <img src="/logo-mark.svg" width={26} height={26} alt={rail ? 'Roam' : ''} aria-hidden={rail ? undefined : true} />
         {!rail && <strong className="wd">Roam</strong>}
       </div>
 
@@ -86,7 +88,10 @@ export function Navigation({
             <span className="bd blue">{dock.count}</span>
           </button>
         )}
-        {/* 设置 / 关于 / 主题 / 全屏 / 退出 收进账户菜单：它们是操作不是导航，
+        {/* 设置摆在这儿而不是账户菜单里：它是一整页，且是这列里唯一天天要开的一页——
+            藏在下拉里等于每次进设置都多点一下。菜单里那条随之删掉，一个入口就够。 */}
+        {item(settings)}
+        {/* 关于 / 主题 / 全屏 / 退出 留在账户菜单：它们是操作不是导航，
             和「概览/项目」并排时，退出登录和切主题的误触代价差了几个数量级 */}
         <Dropdown menu={{ items: account }} trigger={['click']} placement={rail ? 'topLeft' : 'top'}>
           <button type="button" className="tt-nav-account" title={accountName}>

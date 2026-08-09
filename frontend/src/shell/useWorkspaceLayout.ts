@@ -17,7 +17,9 @@ export const DOCK_MIN = 480
 export const DOCK_MAX = 880
 export const SPLIT_RAIL = 8
 export const NAV_WIDTH = 224
-export const NAV_RAIL = 64
+// 轨态 48：一列 20px 图标要的就是这个宽度（VS Code 活动栏同宽）。64 是给「图标 + 文字」
+// 留的位子，可轨态本来就没有文字，多出来的 16px 只是一条空黑边贴在页面左边。
+export const NAV_RAIL = 48
 /** expanded 档覆盖式终端面板的宽度（13 §13.1）。 */
 export const OVERLAY_DOCK = 480
 
@@ -184,6 +186,9 @@ export type WorkspaceLayout = {
   resetInspectorWidth: () => void
   /** Inspector 打开时 Canvas 还够不够 560——不够就让位 */
   canvasFitsInspector: boolean
+  /** Inspector 折起（面板仍挂着，只是这一列宽度归零）；把手上那枚握把切它 */
+  inspectorCollapsed: boolean
+  toggleInspectorCollapsed: () => void
   /** Dock 实际渲染宽度：Inspector 打开时可能被借走一部分 */
   dockRenderWidth: number
 }
@@ -323,6 +328,11 @@ export function useWorkspaceLayout(hasTerms: boolean): WorkspaceLayout {
     saveWorkspace({ navCollapsed: collapsed })
   }, [])
 
+  // Inspector 折起是**临时**视图态，不进偏好：面板下次打开时理应看得见自己，
+  // 记住「折起」等于下回点 Git 出来一列 0 宽的空气。
+  const [inspectorCollapsed, setInspectorCollapsed] = useState(false)
+  useEffect(() => { if (inspectorOpen) setInspectorCollapsed(false) }, [inspectorOpen])
+
   return {
     mode,
     dockWidth,
@@ -338,6 +348,8 @@ export function useWorkspaceLayout(hasTerms: boolean): WorkspaceLayout {
     setInspectorWidth,
     resetInspectorWidth: () => { hydrated.current = true; setInsWidthLocal(0); saveWorkspace({ inspectorWidth: 0 }) },
     canvasFitsInspector: canvasFitsWith({ workspaceWidth, inspectorWidth, hasDock }),
+    inspectorCollapsed,
+    toggleInspectorCollapsed: () => setInspectorCollapsed((v) => !v),
     dockRenderWidth,
     toggleDock: () => setDockOpen(!dockOpen),
     setDockOpen,

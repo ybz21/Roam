@@ -33,10 +33,13 @@ import { PointerResizeShield, usePointerResize } from '../PointerResize'
 import { OVERLAY_DOCK, type SpaceMode } from './useWorkspaceLayout'
 import { useInspectorOpen } from './inspector'
 import { InspectorColumn } from './InspectorColumn'
+import { RailControls, RAIL_STEP, isGripEvent, isStepEvent } from './RailGrip'
 
 export function Workspace({
   mode, canvas, dock, dockWidth, bounds, splitMax, onResize, onReset, onFocus, onDismiss, capsule,
+  splitCapable, onToggleDock, onExitFocus,
   inspectorWidth, inspectorBounds, inspectorOverlay, canvasFitsInspector, onInspectorResize, onInspectorReset,
+  inspectorCollapsed, onToggleInspector,
 }: {
   mode: SpaceMode
   canvas: ReactNode
@@ -54,6 +57,11 @@ export function Workspace({
   onDismiss: () => void
   /** 覆盖态收起时右下角的会话胶囊（13 §13.1）；其余档传 null */
   capsule?: ReactNode
+  /** large 档：终端收起后把手仍留在原地，点它把终端叫回来 */
+  splitCapable: boolean
+  onToggleDock: () => void
+  /** Focus 态（页面已藏）时把手上那枚握把用来把页面叫回来 */
+  onExitFocus: () => void
   /** Inspector（Git / Worktree）列宽与区间 */
   inspectorWidth: number
   inspectorBounds: { min: number; max: number }
@@ -63,6 +71,8 @@ export function Workspace({
   canvasFitsInspector: boolean
   onInspectorResize: (width: number) => void
   onInspectorReset: () => void
+  inspectorCollapsed: boolean
+  onToggleInspector: () => void
 }) {
   const { t } = useI18n()
   const { active, start } = usePointerResize()
@@ -78,7 +88,10 @@ export function Workspace({
   const onPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const rail = railRef.current
     const guide = guideRef.current
-    if (!rail) return
+    if (!rail || isStepEvent(e)) return
+    // 按在握把上但一路没挪 → 这是一次点击，交给开合；挪了就还是拖拽（握把不挡拖）
+    const onGrip = isGripEvent(e)
+    let moved = false
     const startX = e.clientX
     const startWidth = dockWidth
     const railCenter = rail.getBoundingClientRect().left + rail.offsetWidth / 2
@@ -88,6 +101,7 @@ export function Workspace({
     }
     start(e, {
       onMove: (ev) => {
+        if (Math.abs(ev.clientX - startX) > 3) moved = true
         // 往左拖 = 终端变宽，所以是减；钳制交给 clamp，引导线也就停在边界上
         const next = clamp(startWidth - (ev.clientX - startX))
         pending.current = next
@@ -102,6 +116,7 @@ export function Workspace({
         if (guide) guide.style.display = 'none'
         const next = pending.current
         pending.current = null
+        if (onGrip && !moved) { onToggleDock(); return }
         if (next == null) return
         // 拖过 splitMax = Canvas 已经不足 560：与其留一条 300px 的废页面，不如整页藏起来。
         // 这样「一直往左拖」这个动作有终点，而不是拖到某处就顶死不动。
@@ -109,8 +124,14 @@ export function Workspace({
         else onResize(next)
       },
     })
-  }, [dockWidth, clamp, onResize, onFocus, splitMax, start])
+  }, [dockWidth, clamp, onResize, onFocus, splitMax, start, onToggleDock])
 
+
+  // 按钮一档一档地挪，与键盘同一条路径（都是一次提交，不存在高频重排）
+  const stepDock = useCallback((dir: -1 | 1) => {
+    const next = clamp(dockWidth - dir * RAIL_STEP)
+    if (next > splitMax) onFocus(); else onResize(next)
+  }, [dockWidth, clamp, splitMax, onFocus, onResize])
 
   // 键盘调宽是一次一档，不存在高频重排，直接提交
   const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -167,7 +188,12 @@ export function Workspace({
         {canvas}
       </div>
 
-      {mode === 'split' && (
+      {/* 三种态里把手都在，只有覆盖态没有（那一档终端是盖上来的，没有列可分）：
+            split  拖宽 + 点握把收起终端
+            page   终端已收起，握把把它叫回来
+            focus  页面已藏起（往左拖到底的落点），握把把页面叫回来——
+                   否则拖到底之后这条路只剩快捷键，而用户刚刚就是用拖走过来的。 */}
+      {(mode === 'split' || mode === 'focus' || (mode === 'page' && splitCapable)) && (
         <div
           ref={railRef}
           role="separator"
@@ -175,13 +201,22 @@ export function Workspace({
           aria-label={t('workspace.resizeDock')}
           aria-valuemin={bounds.min}
           aria-valuemax={bounds.max}
-          aria-valuenow={dockWidth}
+          aria-valuenow={mode === 'split' ? dockWidth : 0}
           tabIndex={0}
-          onPointerDown={onPointerDown}
-          onDoubleClick={onReset}
-          onKeyDown={onKeyDown}
-          className="tt-split-rail"
-        />
+          onPointerDown={mode === 'split' ? onPointerDown : undefined}
+          onDoubleClick={mode === 'split' ? onReset : undefined}
+          onKeyDown={mode === 'split' ? onKeyDown : undefined}
+          className={`tt-split-rail${mode === 'split' ? '' : ' collapsed'}`}
+        >
+          {focus
+            ? <RailControls collapsed side="left" onToggle={onExitFocus} label={t('workspace.showCanvas')} />
+            : (
+              <RailControls collapsed={mode !== 'split'} side="right" onToggle={onToggleDock}
+                label={mode === 'split' ? t('workspace.collapseDock') : t('workspace.expandDock')}
+                onStep={stepDock}
+                stepLabels={{ minus: t('workspace.widenDock'), plus: t('workspace.narrowDock') }} />
+            )}
+        </div>
       )}
 
       {/* 遮罩只盖 Canvas，不盖导航轨和顶栏——「上下文不消失」也适用于覆盖态 */}
@@ -196,7 +231,8 @@ export function Workspace({
       {/* Inspector：Git / Worktree 这一列（图纸 panels-desktop.html）。
           它自带 rail 与拖拽——没有终端时 App 走的是另一棵树，那边也要有同一列。 */}
       <InspectorColumn width={inspectorWidth} bounds={inspectorBounds}
-        overlay={inspectorOverlay} onResize={onInspectorResize} onReset={onInspectorReset} />
+        overlay={inspectorOverlay} onResize={onInspectorResize} onReset={onInspectorReset}
+        collapsed={inspectorCollapsed} onToggleCollapsed={onToggleInspector} />
 
       {capsule}
 

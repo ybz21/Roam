@@ -11,6 +11,7 @@ import { PointerResizeShield, usePointerResize } from './PointerResize'
 import { useLayout } from './layout'
 import { CloseIcon, MoreIcon } from './icons'
 import { INTENT_EVENT, OPEN_FILE_INTENT, takeIntentData } from './intents'
+import { RailControls, RAIL_STEP, isGripEvent, isStepEvent } from './shell/RailGrip'
 
 type Group = 'A' | 'B'
 const TAB_MIME = 'application/x-ttmux-tab'
@@ -31,6 +32,7 @@ export default function FileWorkspace({
   onOpenAgent,
   explorerOpen = true,
   onExplorerClose,
+  onExplorerOpen,
   leadingTab,
   leadingTitle,
   leadingContent,
@@ -43,6 +45,8 @@ export default function FileWorkspace({
   onOpenAgent?: (kind: 'claude' | 'codex', path: string) => void
   explorerOpen?: boolean
   onExplorerClose?: () => void
+  /** 收起后把手留在原地，点它把文件树叫回来；不给就没有回程，那时把手也不画 */
+  onExplorerOpen?: () => void
   leadingTab?: ReactNode
   leadingTitle?: string
   leadingContent?: ReactNode
@@ -53,6 +57,16 @@ export default function FileWorkspace({
   const { t } = useI18n()
   const { modal } = AntApp.useApp()
   const hasLeading = leadingTab != null
+
+  // 文件树的开合：外面给了回调就听外面的（会话页那枚「文件」按钮），没给就自己记
+  // （独立文件页没有别的开关，握把是唯一入口）。
+  const treeControlled = onExplorerClose != null || onExplorerOpen != null
+  const [treeOpenLocal, setTreeOpenLocal] = useState(true)
+  const treeOpen = treeControlled ? explorerOpen : treeOpenLocal
+  const toggleTree = () => {
+    if (!treeControlled) { setTreeOpenLocal((v) => !v); return }
+    if (explorerOpen) onExplorerClose?.(); else onExplorerOpen?.()
+  }
 
   // 两个编辑组：A 主（含固定首 tab）、B 副（filesB 非空时出现，即分栏）
   const [filesA, setFilesA] = useState<string[]>([])
@@ -231,10 +245,18 @@ export default function FileWorkspace({
     setDockW(w); localStorage.setItem('ttmux.fileDockW', String(w))
   }
   const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isStepEvent(e)) return
+    // 握把上按下但没挪 → 当成点击去开合文件树；挪了就是正常拖宽
+    const onGrip = isGripEvent(e)
+    let moved = false
     const startX = e.clientX, startW = dockW
     resize.start(e, {
-      onMove: (ev) => setDockW(Math.min(DOCK_MAX, Math.max(DOCK_MIN, startW + ev.clientX - startX))),
+      onMove: (ev) => {
+        if (Math.abs(ev.clientX - startX) > 3) moved = true
+        setDockW(Math.min(DOCK_MAX, Math.max(DOCK_MIN, startW + ev.clientX - startX)))
+      },
       onEnd: () => {
+        if (onGrip && !moved) { toggleTree(); return }
         localStorage.setItem('ttmux.fileDockW', String(dockWRef.current))
       },
     })
@@ -449,21 +471,27 @@ export default function FileWorkspace({
         // 文件树拖出的路径:onDragStart 在 FileBrowser 里不置 kind,这里补判(唯一非 tab/lead 的来源)
         setDragKind(e.dataTransfer.types.includes(PATH_MIME) ? 'path' : e.dataTransfer.types.includes(LEAD_MIME) ? 'lead' : 'tab')
       }}>
-      {explorerOpen && (
-        <>
-          <div style={{ flex: `0 0 ${dockW}px`, minWidth: 0, minHeight: 0, display: 'flex' }}>
-            <FileBrowser dir={dir} accent={accent} layout="dock" onClose={onExplorerClose} onOpenFile={openFileTab} selectedPath={activeA ? realPath(activeA) : null} onOpenAgent={onOpenAgent} />
-          </div>
-          {/* 分栏把手统一走 .tt-split-rail（设计系统 §4.3）：细底槽 + 居中握把，
-              别再自画一条 --border 实心竖条——那条在页面上就是一道大粗线。 */}
-          <div data-resize-handle="dock" className="tt-split-rail"
-            role="separator" aria-orientation="vertical" tabIndex={0}
-            aria-label={t('file.dragResize')} aria-valuemin={DOCK_MIN} aria-valuemax={DOCK_MAX} aria-valuenow={Math.round(dockW)}
-            onPointerDown={startResize} title={t('file.dragResize')}
-            onDoubleClick={() => saveDockW(DOCK_DEFAULT)}
-            onKeyDown={(e) => railKey(e, (dir, big) => saveDockW(dockW + dir * (big ? 48 : 16)), () => saveDockW(DOCK_DEFAULT))} />
-        </>
+      {treeOpen && (
+        <div style={{ flex: `0 0 ${dockW}px`, minWidth: 0, minHeight: 0, display: 'flex' }}>
+          <FileBrowser dir={dir} accent={accent} layout="dock" onClose={onExplorerClose} onOpenFile={openFileTab} selectedPath={activeA ? realPath(activeA) : null} onOpenAgent={onOpenAgent} />
+        </div>
       )}
+      {/* 分栏把手统一走 .tt-split-rail（设计系统 §4.3）：细底槽 + 居中握把，
+          别再自画一条 --border 实心竖条——那条在页面上就是一道大粗线。
+          收起文件树后把手不撤：它带着的那枚握把是把树叫回来的第二条路（第一条是工具栏
+          的「文件」按钮），撤了就只剩那一个入口。 */}
+      <div data-resize-handle="dock" className={`tt-split-rail${treeOpen ? '' : ' collapsed'}`}
+        role="separator" aria-orientation="vertical" tabIndex={0}
+        aria-label={t('file.dragResize')} aria-valuemin={DOCK_MIN} aria-valuemax={DOCK_MAX}
+        aria-valuenow={treeOpen ? Math.round(dockW) : 0}
+        onPointerDown={treeOpen ? startResize : undefined} title={treeOpen ? t('file.dragResize') : undefined}
+        onDoubleClick={treeOpen ? () => saveDockW(DOCK_DEFAULT) : undefined}
+        onKeyDown={treeOpen ? (e) => railKey(e, (dir, big) => saveDockW(dockW + dir * (big ? 48 : 16)), () => saveDockW(DOCK_DEFAULT)) : undefined}>
+        <RailControls collapsed={!treeOpen} side="left"
+          label={treeOpen ? t('file.collapseTree') : t('file.expandTree')} onToggle={toggleTree}
+          onStep={(dir) => saveDockW(dockW + dir * RAIL_STEP)}
+          stepLabels={{ minus: t('file.narrowTree'), plus: t('file.widenTree') }} />
+      </div>
       <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <div ref={panesRef} style={{ flex: 1, minHeight: 0, display: 'flex' }}>
           {(split ? (swapped ? ['B', 'A'] : ['A', 'B']) : ['A'] as Group[]).map((g, i) => (
