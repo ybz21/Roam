@@ -57,6 +57,16 @@ func SanitizeSessionName(name string) string {
 	return strings.NewReplacer(".", "_", ":", "_").Replace(name)
 }
 
+// target 给会话名加 '=' 前缀。**tmux 的 -t 是前缀匹配**：`-t dev` 在没有 dev 时会挑中
+// dev-review，于是「点开已经没了的 dev」静默连进了另一个会话，输入全打在别人身上。
+// 这一条在 AGENTS.md 里写死了，本文件从前只有 exists() 遵守。
+func target(name string) string { return "=" + name }
+
+// sessionExists 判断会话是否真的还在（精确匹配，见 target）。
+func sessionExists(name string) bool {
+	return exec.Command("tmux", "has-session", "-t", target(name)).Run() == nil
+}
+
 // paneState 读活动 pane 的备用屏状态、鼠标上报模式与尺寸。
 //   - alt=1：当前跑的是全屏 TUI（Claude Code / Codex / vim / less 等）。
 //   - mouseOn：应用**真的**开了鼠标上报（任一模式）。这是能否给它合成滚轮的唯一可靠判据：
@@ -65,7 +75,7 @@ func SanitizeSessionName(name string) string {
 //     表现就是命令行被 "65;137;33M65;137;33M…" 灌满、整屏花掉。
 //   - sgr：应用用 SGR(1006) 扩展坐标编码；否则回退 X10 编码。
 func paneState(name string) (alt, mouseOn, sgr bool, w, h int) {
-	out, err := exec.Command("tmux", "display-message", "-p", "-t", name, "-F",
+	out, err := exec.Command("tmux", "display-message", "-p", "-t", target(name), "-F",
 		"#{alternate_on} #{pane_width} #{pane_height} #{mouse_any_flag} #{mouse_standard_flag} #{mouse_button_flag} #{mouse_all_flag} #{mouse_sgr_flag}").Output()
 	if err != nil {
 		return false, false, false, 0, 0
@@ -114,7 +124,7 @@ func altScreenWheel(name, dir string, notches, w, h int, sgr bool) {
 		}
 		seq = fmt.Sprintf("\x1b[M%c%c%c", rune(32+btn), rune(32+col), rune(32+row))
 	}
-	_ = exec.Command("tmux", "send-keys", "-t", name, "-l", "--", strings.Repeat(seq, notches)).Run()
+	_ = exec.Command("tmux", "send-keys", "-t", target(name), "-l", "--", strings.Repeat(seq, notches)).Run()
 }
 
 // tmuxScroll 滚动会话历史，返回本连接是否仍停在 tmux copy-mode（供 handler 决定真实键入前是否需退出）。
@@ -145,14 +155,14 @@ func tmuxScroll(name, dir string, lines int) (inCopyMode bool) {
 	n := strconv.Itoa(lines)
 	switch dir {
 	case "up":
-		_ = exec.Command("tmux", "copy-mode", "-t", name).Run()
-		_ = exec.Command("tmux", "send-keys", "-t", name, "-N", n, "-X", "scroll-up").Run()
+		_ = exec.Command("tmux", "copy-mode", "-t", target(name)).Run()
+		_ = exec.Command("tmux", "send-keys", "-t", target(name), "-N", n, "-X", "scroll-up").Run()
 		return true
 	case "down":
-		_ = exec.Command("tmux", "send-keys", "-t", name, "-N", n, "-X", "scroll-down").Run()
+		_ = exec.Command("tmux", "send-keys", "-t", target(name), "-N", n, "-X", "scroll-down").Run()
 		return true
 	case "bottom":
-		_ = exec.Command("tmux", "send-keys", "-t", name, "-X", "cancel").Run() // 退出 copy-mode 回到最新
+		_ = exec.Command("tmux", "send-keys", "-t", target(name), "-X", "cancel").Run() // 退出 copy-mode 回到最新
 	}
 	return false
 }
@@ -164,7 +174,7 @@ func tmuxSelectPaneAt(name string, col, row int) {
 	if col < 0 || row < 0 {
 		return
 	}
-	out, err := exec.Command("tmux", "list-panes", "-t", name, "-F", "#{pane_id}\t#{pane_left}\t#{pane_top}\t#{pane_width}\t#{pane_height}").Output()
+	out, err := exec.Command("tmux", "list-panes", "-t", target(name), "-F", "#{pane_id}\t#{pane_left}\t#{pane_top}\t#{pane_width}\t#{pane_height}").Output()
 	if err != nil {
 		return
 	}
@@ -200,7 +210,7 @@ func tmuxMoveCursorAt(name string, col, row int) {
 	if col < 0 || row < 0 {
 		return
 	}
-	out, err := exec.Command("tmux", "list-panes", "-t", name, "-F",
+	out, err := exec.Command("tmux", "list-panes", "-t", target(name), "-F",
 		"#{pane_id}\t#{pane_left}\t#{pane_top}\t#{pane_width}\t#{pane_height}\t#{alternate_on}\t#{cursor_x}\t#{cursor_y}\t#{pane_in_mode}").Output()
 	if err != nil {
 		return
@@ -285,6 +295,10 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+// closeSessionGone 是「这个 tmux 会话不存在」的关闭码（4000–4999 归应用自己用）。
+// 前端见到它就不再重连——重连一万次也变不出一个已经被 kill 的会话。
+const closeSessionGone = 4404
+
 // Handler 处理 /api/term/:name 的 WebSocket 升级与 PTY 桥接。
 func Handler(c *gin.Context) {
 	name := SanitizeSessionName(c.Param("name"))
@@ -294,26 +308,37 @@ func Handler(c *gin.Context) {
 	}
 	defer conn.Close()
 
+	// 会话已经没了就当场说清楚并用 4404 关掉。
+	// 从前这里照样 attach：tmux 打一行 "can't find session" 就退出 → pty EOF → 前端按
+	// 「普通断线」1.2s 后重连 → 再来一遍，永远停在「连接中」。标签页是从 URL 恢复的，
+	// 昨天跑完被 kill 的会话今天还在标签条上，于是「很多终端连不上」。
+	if !sessionExists(name) {
+		_ = conn.WriteMessage(websocket.TextMessage, []byte("\r\n[会话已不存在: "+name+"]\r\n"))
+		_ = conn.WriteMessage(websocket.CloseMessage,
+			websocket.FormatCloseMessage(closeSessionGone, "session gone"))
+		return
+	}
+
 	// 关闭 tmux 鼠标模式，保留浏览器/xterm 原生拖选复制体验。
 	// Web 端需要点击切换 pane 时，会发送 select-pane 控制消息，由后端按点击坐标选择窗格。
-	_ = exec.Command("tmux", "set-option", "-t", name, "mouse", "off").Run()
+	_ = exec.Command("tmux", "set-option", "-t", target(name), "mouse", "off").Run()
 
 	// 窗口尺寸跟随「最近活跃的客户端」，而非被所有 attach 客户端里最小的那个限制。
 	// 同一会话被多处 attach（网页多标签 / 手机+桌面 / CLI）时，默认会缩到最小客户端，
 	// 表现为当前这个明明很宽却渲染成左侧窄条；latest + aggressive-resize 让在用的客户端尺寸生效。
-	_ = exec.Command("tmux", "set-option", "-t", name, "window-size", "latest").Run()
-	_ = exec.Command("tmux", "set-window-option", "-t", name, "aggressive-resize", "on").Run()
+	_ = exec.Command("tmux", "set-option", "-t", target(name), "window-size", "latest").Run()
+	_ = exec.Command("tmux", "set-window-option", "-t", target(name), "aggressive-resize", "on").Run()
 	// extended-keys always: 让 tmux 接受并透传 CSI u 修饰键序列（如 Shift+Enter = \x1b[13;2u），
 	// 使 Claude Code / Codex 等 TUI 能区分 Enter(提交) 与 Shift+Enter(换行)。
-	_ = exec.Command("tmux", "set-option", "-t", name, "extended-keys", "always").Run()
+	_ = exec.Command("tmux", "set-option", "-t", target(name), "extended-keys", "always").Run()
 
 	// 新连接一律退出可能残留的 copy-mode：copy-mode 是会话级状态，会跨 attach/重连存活。
 	// 上次滚动历史进了 copy-mode 后断线重连时，本连接的 inCopy 会重置为 false，但 tmux 仍停在
 	// copy-mode，键入被导航键吃掉到不了 shell（表现为「要先按底才能输入」）。这里让新客户端
 	// 一律从实时提示符开始。
-	_ = exec.Command("tmux", "send-keys", "-t", name, "-X", "cancel").Run()
+	_ = exec.Command("tmux", "send-keys", "-t", target(name), "-X", "cancel").Run()
 
-	cmd := exec.Command("tmux", "attach", "-t", name)
+	cmd := exec.Command("tmux", "attach", "-t", target(name))
 	cmd.Env = utf8Env(append(os.Environ(), "TERM=xterm-256color"))
 	// 用客户端带来的尺寸建 pty（StartWithSize 在 c.Start 前就把窗口大小设好）：
 	// 先 Start 再 Setsize 会让 tmux attach 按默认 80x24 画完首帧、随即因 SIGWINCH 整屏重画一次，
