@@ -12,7 +12,15 @@ type Act = { oid?: string; subject?: string; branch?: string; base?: string; str
 
 export function useRecentActivity(projects: Proj[]): Act[] {
   const [acts, setActs] = useState<Act[]>([])
-  const keys = projects.filter((p) => p.git).slice(0, 3).map((p) => p.key)
+  // 「最近活动」得挑**最近在动的**三个 git 项目。原来取的是数组里的前 3 个——
+  // 那个顺序来自列表的排序（置顶/名字/需要你…），于是活动轨会长期盯着几个冷仓库，
+  // 真正刚提交过的那个反而不出现。
+  const keys = projects
+    .filter((p) => p.git)
+    .slice()
+    .sort((a, b) => (b.lastActivity || 0) - (a.lastActivity || 0))
+    .slice(0, 3)
+    .map((p) => p.key)
   const dep = keys.join(',')
   useEffect(() => {
     if (!keys.length) { setActs([]); return }
