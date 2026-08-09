@@ -47,6 +47,33 @@ type Client struct {
 	// Stats 供心跳上报本机会话数与负载；为 nil 时报 0。由 main 注入，
 	// 免得 cluster/node 反过来依赖 ttmux。
 	Stats func() (sessions int, load float64)
+
+	mu    sync.Mutex
+	state State
+}
+
+// State 是设置页要显示的东西：连上了没、什么时候连上的、上次为什么没连上。
+// **「上次失败原因」必须能进界面**——令牌过期 / 凭证失效 / 地址不是中心，
+// 三种的下一步完全不同，只写进日志等于让用户自己去翻 journalctl。
+type State struct {
+	Connected bool      `json:"connected"`
+	NodeID    string    `json:"nodeId,omitempty"`
+	Since     time.Time `json:"since,omitempty"`
+	LastError string    `json:"lastError,omitempty"`
+	Retrying  bool      `json:"retrying"`
+}
+
+// Status 返回当前接入状态的快照。
+func (cl *Client) Status() State {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+	return cl.state
+}
+
+func (cl *Client) setState(f func(*State)) {
+	cl.mu.Lock()
+	f(&cl.state)
+	cl.mu.Unlock()
 }
 
 func (cl *Client) meta() map[string]any {
@@ -68,6 +95,11 @@ func (cl *Client) Run(ctx context.Context) {
 		}
 		if err := cl.connectOnce(ctx); err != nil {
 			log.Printf("[cluster] 连接 Broker 失败: %v（%s 后重试）", err, backoff)
+			cl.setState(func(st *State) {
+				st.Connected, st.Retrying, st.LastError = false, true, err.Error()
+			})
+		} else {
+			cl.setState(func(st *State) { st.Connected, st.Retrying = false, true })
 		}
 		select {
 		case <-ctx.Done():
@@ -149,6 +181,14 @@ func (cl *Client) connectOnce(ctx context.Context) error {
 	}
 	defer sess.Close()
 	log.Printf("[cluster] 已连上 Broker %s", cl.Broker)
+	cl.setState(func(st *State) {
+		st.Connected, st.Retrying, st.LastError = true, false, ""
+		st.Since = time.Now()
+		if c, _ := loadCreds(cl.CredPath); c != nil {
+			st.NodeID = c.ID
+		}
+	})
+	defer cl.setState(func(st *State) { st.Connected = false })
 
 	go cl.heartbeat(ctx, sess)
 

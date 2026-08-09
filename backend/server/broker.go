@@ -33,6 +33,12 @@ func NewBroker(cfg Config) *gin.Engine {
 	g.Use(func(c *gin.Context) { c.Header("Cache-Control", "no-store") })
 	g.GET("/me", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"data": gin.H{"ok": true}}) })
 
+	// 多机设置：中心这边也得能改角色——否则切成中心之后就再也切不回来了（只能手改 yaml）。
+	cl := &clusterAPI{cfgPath: cfg.ConfigPath, cluster: cfg.Cluster, bind: cfg.Bind, tls: cfg.TLSEnabled}
+	g.GET("/cluster/config", cl.Get)
+	g.PUT("/cluster/config", cl.Put)
+	g.POST("/cluster/restart", cl.Restart)
+
 	// Broker-local API：节点列表 / bootstrap / 接入签发（用户会话鉴权）。
 	bg := r.Group("/api/broker", a.Middleware())
 	bg.Use(func(c *gin.Context) { c.Header("Cache-Control", "no-store") })

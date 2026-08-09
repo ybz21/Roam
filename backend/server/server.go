@@ -22,6 +22,8 @@ import (
 	"ttmux-web/api"
 	"ttmux-web/auth"
 	"ttmux-web/browser"
+	"ttmux-web/cluster/node"
+	"ttmux-web/config"
 	"ttmux-web/home"
 	"ttmux-web/p2p"
 	"ttmux-web/phone"
@@ -55,6 +57,14 @@ type Config struct {
 	P2PUDPPort int
 	P2PUPnP    bool
 	P2PMDNS    bool
+
+	// 多机（设置页要读要写）：配置文件路径、当前 cluster 段、以及 standard 模式下
+	// 那个隧道客户端（用来报接入状态）。单机时后两者为零值，设置页照样显示得出来。
+	ConfigPath string
+	Cluster    config.Cluster
+	NodeClient *node.Client
+	Bind       string
+	TLSEnabled bool
 }
 
 func New(cfg Config) *gin.Engine {
@@ -74,6 +84,11 @@ func New(cfg Config) *gin.Engine {
 	// 公开端点（登录 / 首次设置 / 版本 / 证书 / 导航页）——与云端 Broker 共用
 	mountPublic(r, a, cfg)
 
+	// 多机设置（设置页 › 多机）。**单机也挂**：用户就是从这一页把自己接到中心上的，
+	// 没接之前它当然也得在。
+	cl := &clusterAPI{cfgPath: cfg.ConfigPath, cluster: cfg.Cluster, client: cfg.NodeClient,
+		bind: cfg.Bind, tls: cfg.TLSEnabled}
+
 	// 受保护端点
 	g := r.Group("/api", a.Middleware())
 	// API 返回的都是动态数据（会话状态、文件内容/元信息…）。移动端(Safari/WebView)与反代会对
@@ -81,6 +96,10 @@ func New(cfg Config) *gin.Engine {
 	// → 不刷新。统一禁缓存，兜底前端的 cache:no-store。
 	g.Use(func(c *gin.Context) { c.Header("Cache-Control", "no-store") })
 	{
+		g.GET("/cluster/config", cl.Get) // 当前角色 + 接入状态 + 本机局域网地址
+		g.PUT("/cluster/config", cl.Put) // 写回 config.yaml 的 cluster 段（令牌只写不读）
+		g.POST("/cluster/restart", cl.Restart)
+
 		g.GET("/me", h.Me)
 		g.GET("/info", h.Info)
 

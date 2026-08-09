@@ -120,6 +120,10 @@ func main() {
 		P2PUDPPort:    conf.Web.P2PUDPPort,
 		P2PUPnP:       conf.Web.P2PUPnP,
 		P2PMDNS:       conf.Web.P2PMDNS,
+		ConfigPath:    cfgPath,
+		Cluster:       conf.Cluster,
+		Bind:          bind,
+		TLSEnabled:    tlsOn,
 	}
 
 	// 横向扩展模式分流（见 docs/design/cluster/architecture.html §1/§3）：
@@ -128,12 +132,13 @@ func main() {
 	// standard 下**本机监听口照常对外**——上云和局域网直连是两条并行的入口，不是二选一。
 	var r *gin.Engine
 	if conf.Cluster.Mode == "cloud" {
-		log.Printf("以云端 Broker 模式启动（只做路由 + 注册表 + 控制台，不跑本机业务）")
+		log.Printf("以「中心」模式启动（只做入口 + 机器注册表 + 控制台，不跑本机业务）")
 		r = server.NewBroker(cfg)
 	} else {
-		r = server.New(cfg)
+		// 隧道客户端先建出来（哪怕不启动）：设置页要靠它报接入状态。
+		var cl *node.Client
 		if conf.Cluster.Broker != "" {
-			cl := &node.Client{
+			cl = &node.Client{
 				Broker:   conf.Cluster.Broker,
 				Token:    conf.Cluster.Token,
 				Name:     conf.Cluster.Name,
@@ -141,11 +146,15 @@ func main() {
 				Insecure: conf.Cluster.Insecure,
 				Version:  version,
 				CredPath: filepath.Join(dataDir(), "cluster", "node.json"),
-				Handler:  r, // 业务 Handler 不变，隧道请求经内部主体放行本地鉴权
 				Stats:    nodeStats(bin),
 			}
+		}
+		cfg.NodeClient = cl
+		r = server.New(cfg)
+		if cl != nil {
+			cl.Handler = r // 业务 Handler 不变，隧道请求经内部主体放行本地鉴权
 			go cl.Run(context.Background())
-			log.Printf("标准模式：出站注册到云端 Broker %s（局域网直连口 %s 照常可用）", conf.Cluster.Broker, bind)
+			log.Printf("这台机器：出站接入中心 %s（局域网直连口 %s 照常可用）", conf.Cluster.Broker, bind)
 		}
 	}
 

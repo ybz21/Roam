@@ -6,6 +6,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { bootstrapCluster, isBrokerMode, nodeApi, setCurrentNode, useClusterNodes, useCurrentNodeId } from './cluster/node-url'
 import { NodeMark, nodeDotColor } from './cluster/NodeMark'
+import { ClusterSettings } from './cluster/ClusterSettings'
 import {
   Layout, Button, Card, List, Tag, Form, Input, Select, Segmented, Tabs, Descriptions,
   Statistic, Row, Col, Space, Popconfirm, Empty, Modal, App as AntApp, Typography, Spin, Tooltip, Dropdown, Checkbox, Progress, AutoComplete, Radio, Switch, Collapse, InputNumber,
@@ -3536,6 +3537,7 @@ function EnvPage() {
   }
   return (
     <Tabs defaultActiveKey="general" style={{ width: '100%' }} items={[
+      { key: 'cluster', label: t('settings.tabCluster'), children: <ClusterSettings /> },
       { key: 'general', label: t('settings.tabGeneral'), children: (
         <Space direction="vertical" size="middle" style={{ width: '100%' }}>
           <Card title={t('settings.appearance')}>
