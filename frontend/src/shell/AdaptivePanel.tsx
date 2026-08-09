@@ -45,10 +45,13 @@ export default function AdaptivePanel({ open, title, onClose, layer, children }:
   const { slot, isTop } = useInspectorSlot(id)
 
   if (!open) return null
-  if (phone) {
+  // 没有槽位就退回全屏二级页。**「开着却什么都不画」永远不是一个可接受的状态**：
+  // 槽位由 Shell 的 Inspector 列提供，而那一列只在有侧栏的档位里存在——档位切换、
+  // 或者 Workspace 与无终端分支互换的那一帧，槽位可能还没登记回来，原来的
+  // `return null` 就把面板画成了一片空白（按钮亮着、右边什么也没有）。
+  if (phone || !slot) {
     return <MobileSubPage title={title} onBack={onClose} layer={layer}>{children}</MobileSubPage>
   }
-  if (!slot) return null
   return createPortal(
     <div style={{
       flex: 1, minHeight: 0, minWidth: 0, flexDirection: 'column',

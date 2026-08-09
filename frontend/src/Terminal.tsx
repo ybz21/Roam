@@ -15,6 +15,11 @@ import type { TerminalDimensions } from './terminal-resize'
 import { parseTerminalPong } from './terminal-lifecycle'
 
 export type TermStatus = 'connecting' | 'connected' | 'closed'
+
+/** 与后端 pty.closeSessionGone 对齐：会话已不存在，重连没有意义 */
+const CLOSE_SESSION_GONE = 4404
+const RETRY_BASE_MS = 1200
+const RETRY_MAX_MS = 10000
 export interface TermHandle {
   // keepFocus=true：发送但不把焦点抢回 xterm（移动端输入框流程用，避免软键盘被收起）
   send: (s: string, keepFocus?: boolean) => void
@@ -182,6 +187,9 @@ const Term = forwardRef<TermHandle, {
   const wsRef = useRef<WebSocket>()
   const unmounted = useRef(false)
   const retry = useRef<any>()
+  // 连不上时的退避：每失败一次翻倍，封顶 10s。恒定 1.2s 的重连在「会话已经没了」这种
+  // 永远好不了的情况下就是一个每秒一次的死循环——绿点闪、屏上刷满报错，还一直占着后端。
+  const retryDelay = useRef(RETRY_BASE_MS)
   const webglRef = useRef<WebglAddon>()
   const activeRef = useRef(active)
   activeRef.current = active
@@ -439,6 +447,7 @@ const Term = forwardRef<TermHandle, {
     wsRef.current = ws
     ws.onopen = () => {
       silentReconnect.current = false
+      retryDelay.current = RETRY_BASE_MS
       onStatus?.('connected'); termRef.current?.focus()
       // query 已经决定了新 pty 的尺寸，把它记为“已同步”。若连接建立期间布局又变了，
       // applyResize 会只补发最终的新尺寸；没有变化则不再发送一次重复 resize。
@@ -475,12 +484,17 @@ const Term = forwardRef<TermHandle, {
         : stripMouseEnableBytes(new Uint8Array(e.data as ArrayBuffer))
       t.write(data, () => releaseVisualHandoff())
     }
-    ws.onclose = () => {
+    ws.onclose = (e) => {
       acknowledgeConnection()
       const reconnectImmediately = silentReconnect.current
       if (!reconnectImmediately) onStatus?.('closed')
       if (unmounted.current) return
-      retry.current = setTimeout(connect, reconnectImmediately ? 0 : 1200) // 探测失败立即接管；普通断线稍后重试
+      // 后端明说「这个会话不存在」（4404）：不重连。标签是从 URL 恢复的，昨天被 kill 的
+      // 会话今天还在标签条上，重连只会让它永远停在「连接中」。要回来走工具栏「重连」。
+      if (e.code === CLOSE_SESSION_GONE) return
+      const wait = reconnectImmediately ? 0 : retryDelay.current
+      if (!reconnectImmediately) retryDelay.current = Math.min(retryDelay.current * 2, RETRY_MAX_MS)
+      retry.current = setTimeout(connect, wait) // 探测失败立即接管；普通断线退避后重试
     }
   }
 

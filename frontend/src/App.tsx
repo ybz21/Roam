@@ -81,7 +81,7 @@ const NAV = [
 ]
 
 // 桌面导航的两组（14 §4.4）。NAV 仍是全量注册表——命令面板和手机「更多」都从它取，
-// 所以 settings/about 留在 NAV 里，只是不进这两组，改由账户菜单收口。
+// 所以 settings 留在 NAV 里，只是不进这两组：它单独摆在侧栏底部（见 Navigation 的 settings）。
 const NAV_WORKSPACE = ['projects', 'files']
 const NAV_TOOLS = ['browser', 'phone', 'plugins']
 
@@ -149,7 +149,16 @@ const ICONS: Record<string, any> = {
   settings: svg(<><line x1="4" y1="7" x2="20" y2="7" /><circle cx="9" cy="7" r="2.3" /><line x1="4" y1="17" x2="20" y2="17" /><circle cx="15" cy="17" r="2.3" /></>),
   browser: svg(<><rect x="3" y="4" width="18" height="16" rx="2" /><line x1="3" y1="9" x2="21" y2="9" /><circle cx="6" cy="6.5" r="0.6" /><circle cx="8.4" cy="6.5" r="0.6" /></>),
   phone: svg(<><rect x="6" y="2" width="12" height="20" rx="2.5" /><line x1="10" y1="18.5" x2="14" y2="18.5" /></>),
-  plugins: svg(<path d="M10 3.5a1.8 1.8 0 0 1 3.6 0V5H17a2 2 0 0 1 2 2v3.4h1.5a1.8 1.8 0 0 1 0 3.6H19V17a2 2 0 0 1-2 2h-3.4v1.5a1.8 1.8 0 0 1-3.6 0V19H7a2 2 0 0 1-2-2v-3.4H3.5a1.8 1.8 0 0 1 0-3.6H5V7a2 2 0 0 1 2-2h3z" />),
+  // 「四格缺一角」是 VS Code 侧栏「扩展」的图形，装插件的人第一眼就认得；
+  // 拼图块那版在 20px 下只剩一团带凸起的圆疙瘩，跟隔壁线性图标也不是一套语言。
+  // VS Code 侧栏「扩展」那个记号：三格 + 右上角一枚转 45° 探出去的方块（不是四格棋盘）。
+  // 几何照 codicon 0xEAE6 的字形量出来再折算到 24 网格：框 2.3–21.7、十字线在 12、
+  // 菱形心 (17.3, 6.7)。装插件的人第一眼就认得，也跟隔壁一列线性图标同一套笔画。
+  plugins: svg(<>
+    <path d="M12 2.3H3.8A1.5 1.5 0 0 0 2.3 3.8v16.4a1.5 1.5 0 0 0 1.5 1.5h16.4a1.5 1.5 0 0 0 1.5-1.5V12H12Z" />
+    <path d="M2.3 12H12v9.7" />
+    <path d="M17.3 1.4 22.6 6.7 17.3 12 12 6.7Z" />
+  </>),
   github: (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
       <path d="M12 2C6.48 2 2 6.58 2 12.26c0 4.5 2.87 8.32 6.84 9.67.5.1.68-.22.68-.49 0-.24-.01-.87-.01-1.71-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.49-1.11-1.49-.91-.64.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.36-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.27 2.75 1.05a9.36 9.36 0 0 1 2.5-.34c.85 0 1.71.12 2.5.34 1.91-1.32 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.81-4.57 5.06.36.32.68.94.68 1.9 0 1.37-.01 2.48-.01 2.82 0 .27.18.6.69.49A10.02 10.02 0 0 0 22 12.26C22 6.58 17.52 2 12 2z" />
@@ -704,8 +713,8 @@ export default function App() {
     }),
   }))
 
+  // 设置不在这里：它在侧栏底部有自己的入口，菜单里再放一条就是同一页两个门
   const accountMenu: MenuProps['items'] = [
-    { key: 'settings', icon: ICONS.settings, label: t('nav.env'), onClick: () => go('settings') },
     { key: 'about', icon: ICONS.github, label: t('nav.about'), onClick: () => go('about') },
     { type: 'divider' },
     { key: 'theme', icon: themeIcon, label: mode === 'dark' ? t('common.lightTheme') : t('common.darkTheme'), onClick: () => toggleTheme() },
@@ -735,6 +744,7 @@ export default function App() {
           style={{ position: 'sticky', top: 0, height: '100dvh', background: 'var(--bg-base)', borderRight: '1px solid var(--border-subtle)' }}>
           <Navigation
             rail={navRail} active={tab} groups={navGroups} onGo={go}
+            settings={{ key: 'settings', label: t('nav.env'), icon: ICONS.settings }}
             linkStatus={<LinkStatus collapsed={navRail} />}
             dock={terms.length > 0 ? {
               count: terms.length, open: space.dockVisible,
@@ -771,6 +781,11 @@ export default function App() {
             onResize={space.setDockWidth} onReset={space.resetDockWidth}
             onFocus={() => space.setFocus('dock')}
             onDismiss={() => space.setDockOpen(false)}
+            splitCapable={space.splitCapable}
+            onToggleDock={() => { space.setFocus('none'); space.toggleDock() }}
+            onExitFocus={() => space.setFocus('none')}
+            inspectorCollapsed={space.inspectorCollapsed}
+            onToggleInspector={space.toggleInspectorCollapsed}
             inspectorWidth={space.inspectorWidth} inspectorBounds={space.inspectorBounds}
             inspectorOverlay={!space.splitCapable} canvasFitsInspector={space.canvasFitsInspector}
             onInspectorResize={space.setInspectorWidth} onInspectorReset={space.resetInspectorWidth}
@@ -794,7 +809,8 @@ export default function App() {
             {hasSider && (
               <InspectorColumn width={space.inspectorWidth} bounds={space.inspectorBounds}
                 overlay={!space.splitCapable} onResize={space.setInspectorWidth}
-                onReset={space.resetInspectorWidth} />
+                onReset={space.resetInspectorWidth}
+                collapsed={space.inspectorCollapsed} onToggleCollapsed={space.toggleInspectorCollapsed} />
             )}
           </div>
         )}
@@ -1858,7 +1874,7 @@ function TerminalPane(props: {
       {fileDock === 'left' ? (
         <FileWorkspace
           dir={cwd} accent="var(--accent)"
-          explorerOpen={showFiles} onExplorerClose={() => setShowFiles(false)}
+          explorerOpen={showFiles} onExplorerClose={() => setShowFiles(false)} onExplorerOpen={() => setShowFiles(true)}
           leadingTitle={active || ''} leadingTab={sessionTab}
           leadingContent={terminalArea} chrome={sessionToolbar} footer={sessionBottom}
         />

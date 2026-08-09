@@ -104,7 +104,7 @@
 
   /* 桌面壳层：Navigation ｜ Canvas ｜ rail ｜ Dock 的尺寸契约 */
   --nav-w: 224px;
-  --nav-rail: 64px;
+  --nav-rail: 48px;
   --topbar-h: 40px;
   --canvas-min: 560px;
   --dock-min: 480px;
@@ -217,6 +217,40 @@ body {
 .tt-split-rail:active::after,
 .tt-split-rail:focus-visible::after { width: 2px; background: var(--accent); }
 .tt-split-rail:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+/* 收起状态下这条只剩「把旁边那栏叫回来」一个用途，不再是 col-resize */
+.tt-split-rail.collapsed { cursor: default; }
+
+/* 把手上那簇按钮（RailControls：‹ 收起/展开 ›）——拖之外的第二条路。
+   鼠标档默认隐身：常驻三枚亮块在每条分隔线上，页面就被钉满了小按钮；
+   指针进到把手的 20px 命中区（::before）里才浮出来。手指没有 hover，只能常显。 */
+.tt-rail-ctl {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  z-index: 1; display: flex; flex-direction: column;
+  border: 1px solid var(--border); border-radius: var(--r-pill);
+  background: var(--bg-elevated); overflow: hidden;
+  opacity: 0; transition: opacity .12s;
+}
+.tt-rail-btn {
+  width: 16px; height: 22px; padding: 0; border: 0;
+  display: grid; place-items: center;
+  background: none; color: var(--text-dimmer); cursor: pointer;
+  transition: color .12s, background .12s;
+}
+.tt-rail-btn.main { height: 26px; color: var(--text-dim); }
+.tt-rail-btn + .tt-rail-btn { border-top: 1px solid var(--border-subtle); }
+:where(html[data-pointer="fine"]) .tt-rail-btn:hover { color: var(--accent); background: var(--list-hover); }
+.tt-rail-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+:where(html[data-pointer="fine"]) .tt-split-rail:hover .tt-rail-ctl,
+.tt-split-rail:focus-within .tt-rail-ctl { opacity: 1; }
+/* 收起后这簇是唯一的回程入口，必须一直看得见 */
+.tt-split-rail.collapsed .tt-rail-ctl { opacity: 1; }
+/* 手指档：常显，每枚按钮吃满 44 高；宽度不动，命中区靠伪元素往两边放 */
+html[data-pointer="coarse"] .tt-rail-ctl { opacity: 1; }
+html[data-pointer="coarse"] .tt-rail-btn { height: 40px; position: relative; }
+html[data-pointer="coarse"] .tt-rail-btn.main { height: 44px; }
+html[data-pointer="coarse"] .tt-rail-btn::after {
+  content: ""; position: absolute; inset: 0 -8px;
+}
 
 /* 拖拽引导线。越过 splitMax（Canvas 会不足 560）时换成琥珀色：松手的后果从
    "再宽一点"变成"整页藏起来"，颜色先说一声。 */
@@ -269,24 +303,31 @@ body {
 }
 
 /* ── 侧边导航 / Activity Bar（14 §4.4）──
-   两态一套样式：展开 224、轨 64。轨态只是把文字和分组标题去掉，间距结构不变，
+   两态一套样式：展开 224、轨 48。轨态只是把文字和分组标题去掉，间距结构不变，
    所以图标在两态之间不会左右跳。 */
 .tt-nav { display: flex; flex-direction: column; height: 100%; padding: 0 8px 8px; }
+/* 轨态 48：容器不留横向留白，每一项自己铺满整轨——选中的那条 accent 线要贴在栏的
+   最左边，而 .tt-nav-list 是 overflow-y:auto（横向随之被裁），负偏移的线会被剪掉。 */
+.tt-nav.rail { padding: 0 0 8px; }
+/* 品牌块与顶栏同高同分割线：两条横线接成一条，标才像壳的一部分，而不是浮在侧栏顶上的一张图。
+   高度由 --topbar-h 定，标随之收到 26——34 在 40 的行里贴着上下边。
+   容器留白在 .tt-nav 上，这里用负 margin 把分割线还原成整栏宽。 */
 .tt-nav-brand {
-  display: flex; align-items: center; gap: 11px;
-  padding: 18px 10px 14px;
+  display: flex; align-items: center; gap: var(--sp-2);
+  height: var(--topbar-h); flex: 0 0 var(--topbar-h);
+  margin: 0 -8px var(--sp-2); padding: 0 var(--sp-3);
+  border-bottom: 1px solid var(--border-subtle);
 }
-.tt-nav.rail .tt-nav-brand { justify-content: center; padding: 18px 0 14px; }
+.tt-nav.rail .tt-nav-brand { justify-content: center; margin: 0 0 var(--sp-2); padding: 0; }
 /* 标是透明底的，别再给它圆角和投影——那是当年方形底板留下的两笔 */
 .tt-nav-brand img { flex: 0 0 auto; }
 /* 只有标 + 名，没有标语。
    标语（ANYWHERE · ANYTIME）是 10px——比 --fs-micro 还小一档，掉在字号阶梯外面；
    它也不承载信息：这一栏是导航，用户已经在应用里了，不需要再被介绍一遍产品。
-   名字随之从 19 提到 --fs-title：一行名压不住 34 的标，提一档才配得上；块高仍由标
-   决定（34 > 22×1.15），删掉一行不会让下面整列往上跳。 */
+   名字用 --fs-lg：块高被顶栏定死在 40，22 的标题在这一行里会顶到上下边。 */
 .tt-nav-brand .wd {
   min-width: 0; line-height: 1.15;
-  font-size: var(--fs-title); font-weight: 800; letter-spacing: .5px;
+  font-size: var(--fs-lg); font-weight: 800; letter-spacing: .5px;
   background: var(--brand-grad); -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -309,9 +350,13 @@ body {
   background: none; color: var(--text-dim); font-size: var(--fs-body); text-align: left;
   cursor: pointer; transition: background .14s, color .14s;
 }
+/* 轨态每项 36 高、铺满整轨、不带圆角：一条 48 宽的轨里再切圆角，悬停块两边各剩 6px
+   黑边，读起来像一排小卡片而不是一列导航 */
 .tt-nav.rail .tt-nav-item,
 .tt-nav.rail .tt-nav-account,
-.tt-nav.rail .tt-nav-collapse { justify-content: center; padding: 0; }
+.tt-nav.rail .tt-nav-collapse {
+  justify-content: center; min-height: 36px; padding: 0; border-radius: 0;
+}
 :where(html[data-pointer="fine"]) .tt-nav-item:hover, :where(html[data-pointer="fine"]) .tt-nav-account:hover, :where(html[data-pointer="fine"]) .tt-nav-collapse:hover { background: var(--list-hover); color: var(--text-bright); }
 /* 图标槽：导航项 / 终端开关 / 账户 / 收起 用同一个 20px 方槽，图标才在一条竖线上。
    账户那枚以前是「蓝底圆角块」，在一列裸图标里自成一格——同一列里不要两种图标语言。 */
@@ -329,6 +374,10 @@ body {
 }
 /* 终端是开关不是页面：给底色，但不给「当前在哪一页」的那条强调线 */
 .tt-nav-item.toggle.on::before { display: none; }
+/* 轨态不给底色：一块淡蓝垫在裸图标下面不读作「选中」，读作图标下压了张灰卡片。
+   选中于是只剩两件事——图标点亮成 accent、栏最左边一条 accent 线。 */
+.tt-nav.rail .tt-nav-item.on { background: none; color: var(--accent); }
+.tt-nav.rail .tt-nav-item.on::before { height: 18px; }
 /* 角标只有一种形状与分量（淡底 + 同色字），颜色只用来分语义：
    琥珀＝需要你处理，蓝＝计数。一个实心蓝圆点混在一列淡底胶囊里会读成「更重要」 */
 .tt-nav-item .bd {
@@ -342,6 +391,14 @@ body {
 .tt-nav.rail .tt-nav-item .bd {
   position: absolute; top: 3px; right: 6px; margin: 0; min-width: 15px; height: 15px;
   padding: 0 3px; font-size: 9.5px;
+}
+
+/* 粗指针：视觉仍是 36 高，命中区用伪元素补到 44——直接把行画高会把这一列拉长一截 */
+html[data-pointer="coarse"] .tt-nav-item::after,
+html[data-pointer="coarse"] .tt-nav-account::after,
+html[data-pointer="coarse"] .tt-nav-collapse::after {
+  content: ""; position: absolute; left: 0; right: 0; top: 50%;
+  transform: translateY(-50%); height: 44px;
 }
 
 .tt-nav-foot { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; border-top: 1px solid var(--border-subtle); }

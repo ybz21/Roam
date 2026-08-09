@@ -11,14 +11,18 @@ import { useCallback, useRef } from 'react'
 import { useI18n } from '../i18n'
 import { PointerResizeShield, usePointerResize } from '../PointerResize'
 import { setInspectorSlot, useInspectorOpen } from './inspector'
+import { RailControls, RAIL_STEP, isGripEvent, isStepEvent } from './RailGrip'
 
-export function InspectorColumn({ width, bounds, overlay, onResize, onReset }: {
+export function InspectorColumn({ width, bounds, overlay, onResize, onReset, collapsed, onToggleCollapsed }: {
   width: number
   bounds: { min: number; max: number }
   /** expanded 档：与 Dock 同语义的覆盖式（这一档没有三列的空间） */
   overlay: boolean
   onResize: (width: number) => void
   onReset: () => void
+  /** 折起：面板仍挂着（滚动位置、展开态都留着），只是这一列宽度归零 */
+  collapsed: boolean
+  onToggleCollapsed: () => void
 }) {
   const { t } = useI18n()
   const { active, start } = usePointerResize()
@@ -26,7 +30,9 @@ export function InspectorColumn({ width, bounds, overlay, onResize, onReset }: {
   const guideRef = useRef<HTMLDivElement>(null)
   const pending = useRef<number | null>(null)
   const open = useInspectorOpen()
-  const inline = open && !overlay
+  const inline = open && !overlay && !collapsed
+  // 折起时把手还在（它是回程的唯一入口），覆盖态没有列可折，也就没有把手
+  const rail = open && !overlay
 
   const clamp = useCallback(
     (w: number) => Math.round(Math.max(bounds.min, Math.min(bounds.max, w))),
@@ -36,13 +42,17 @@ export function InspectorColumn({ width, bounds, overlay, onResize, onReset }: {
   const onPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const rail = railRef.current
     const guide = guideRef.current
-    if (!rail) return
+    if (!rail || isStepEvent(e)) return
+    // 按在握把上没挪动 = 点击（收起/展开）；挪了才是拖宽——握把不挡拖
+    const onGrip = isGripEvent(e)
+    let moved = false
     const startX = e.clientX
     const startWidth = width
     const railCenter = rail.getBoundingClientRect().left + rail.offsetWidth / 2
     if (guide) { guide.style.display = 'block'; guide.style.left = `${railCenter}px` }
     start(e, {
       onMove: (ev) => {
+        if (Math.abs(ev.clientX - startX) > 3) moved = true
         // 这一列贴右缘：往左拖 = 变宽，所以是减
         const next = clamp(startWidth - (ev.clientX - startX))
         pending.current = next
@@ -52,10 +62,11 @@ export function InspectorColumn({ width, bounds, overlay, onResize, onReset }: {
         if (guide) guide.style.display = 'none'
         const next = pending.current
         pending.current = null
+        if (onGrip && !moved) { onToggleCollapsed(); return }
         if (next != null) onResize(next)
       },
     })
-  }, [width, clamp, onResize, start])
+  }, [width, clamp, onResize, start, onToggleCollapsed])
 
   const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'ArrowLeft') onResize(clamp(width + 16))
@@ -68,7 +79,7 @@ export function InspectorColumn({ width, bounds, overlay, onResize, onReset }: {
 
   return (
     <>
-      {inline && (
+      {rail && (
         <div
           ref={railRef}
           role="separator"
@@ -76,13 +87,18 @@ export function InspectorColumn({ width, bounds, overlay, onResize, onReset }: {
           aria-label={t('workspace.resizeInspector')}
           aria-valuemin={bounds.min}
           aria-valuemax={bounds.max}
-          aria-valuenow={width}
+          aria-valuenow={inline ? width : 0}
           tabIndex={0}
-          onPointerDown={onPointerDown}
-          onDoubleClick={onReset}
-          onKeyDown={onKeyDown}
-          className="tt-split-rail"
-        />
+          onPointerDown={inline ? onPointerDown : undefined}
+          onDoubleClick={inline ? onReset : undefined}
+          onKeyDown={inline ? onKeyDown : undefined}
+          className={`tt-split-rail${inline ? '' : ' collapsed'}`}
+        >
+          <RailControls collapsed={!inline} side="right" onToggle={onToggleCollapsed}
+            label={inline ? t('workspace.collapsePanel') : t('workspace.expandPanel')}
+            onStep={(dir) => onResize(clamp(width - dir * RAIL_STEP))}
+            stepLabels={{ minus: t('workspace.widenPanel'), plus: t('workspace.narrowPanel') }} />
+        </div>
       )}
       {open && overlay && <div className="tt-dock-scrim" aria-hidden="true" />}
       {/* 槽位 DOM 常驻：面板要 portal 进来，挂载点不能随开合出现/消失 */}
