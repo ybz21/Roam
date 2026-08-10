@@ -311,13 +311,21 @@ export default function App() {
     return () => { stop = true; clearInterval(t) }
   }, [authed])
 
-  // 从 URL 还原标签：拿到 id 表后做一次。老链接里存的是名字，id 表里查不到就按名字用。
+  // 还原标签：拿到 id 表后做一次。老链接里存的是名字，id 表里查不到就按名字用。
+  //
+  // **URL 没写标签时回落到本机记的那份**（term-tabs-store）。少了这一步，从书签里打开裸域名
+  // 就是「没有标签」，紧接着这个空集会被写回 store，把上次开着的一笔勾销——等于这台浏览器
+  // 只要从裸域名进过一次，跨机保留就永远失效。URL 是显式的、可分享的句柄，它没说话时
+  // 才轮到本机记忆说话。
   useEffect(() => {
     if (!sessIds || restored.current) return
     restored.current = true
     const toName = (tok: string) => sessIds.byId[tok] || tok
-    // 查无此会话的 id 直接丢：切机器、或会话在别处被关掉，都会在这里长出打不开的空标签
-    const names = Array.from(new Set(dropDeadTokens(urlTerms.current, sessIds.byId).map(toName)))
+    const fromUrl = urlTerms.current
+    const saved = fromUrl.length ? null : loadTabs(curNodeId)
+    if (saved && !urlActive.current) urlActive.current = saved.active
+    // 查无此会话的 id 直接丢：切机器、会话在别处被关掉，都会在这里长出打不开的空标签
+    const names = Array.from(new Set(dropDeadTokens(saved ? saved.terms : fromUrl, sessIds.byId).map(toName)))
     if (!names.length) return
     // 用户在 id 表回来之前就点开了标签 → 以他的操作为准，别被 URL 还原顶掉
     setTerms((cur) => (cur.length ? cur : names))
@@ -326,7 +334,7 @@ export default function App() {
       const a = urlActive.current ? toName(urlActive.current) : ''
       return a && names.includes(a) ? a : names[names.length - 1]
     })
-  }, [sessIds])
+  }, [sessIds, curNodeId])
 
   // 终端状态同步到 URL，刷新后可恢复。写 id；还没有 id 的（刚建、列表未刷新）先退回写名字。
   useEffect(() => {

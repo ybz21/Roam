@@ -44,6 +44,28 @@ describe('按机器记终端标签', () => {
   })
 })
 
+// 这条是真机上撞出来的：从书签打开裸域名（URL 上没有 terms=）时，如果不回落到本机记的
+// 那份，还原就是空的，紧接着这个空集会被写回 store，把上次开着的一笔勾销——跨机保留于是
+// 「只在带参数的链接里有效」，等于没有。App.tsx 的还原副作用负责回落，这里钉住 store 侧的契约：
+// 存过就必须读得回来，读回来的顺序也不能乱。
+describe('URL 没写标签时靠 store 兜底', () => {
+  beforeEach(() => localStorage.clear())
+
+  it('存过的原样读回来，顺序不乱', () => {
+    const terms = ['2026-0101-1200-aaaa', '2026-0101-1200-bbbb', '2026-0101-1200-cccc']
+    saveTabs('node-a', terms, '2026-0101-1200-bbbb')
+    const back = loadTabs('node-a')
+    expect(back.terms).toEqual(terms)
+    expect(back.active).toBe('2026-0101-1200-bbbb')
+  })
+
+  it('用户关光了标签就是空——不该被「兜底」复活', () => {
+    saveTabs('node-a', ['2026-0101-1200-aaaa'], '2026-0101-1200-aaaa')
+    saveTabs('node-a', [], '')
+    expect(loadTabs('node-a').terms).toEqual([])
+  })
+})
+
 describe('还原前滤掉死 token', () => {
   const known = { '2026-0808-0859-002v': 'roam-sh' }
 
