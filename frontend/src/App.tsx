@@ -768,8 +768,17 @@ export default function App() {
       ),
       disabled: !n.online,
       // 切机器 = 换「浏览 / 新开操作落到哪台」。整页重载是这一版的取舍：页面各自缓存着
-      // 上一台的数据，逐个清远比重来一次更容易漏（终端跨机保留要等会话键改造，见设计稿 §7）。
-      onClick: () => { setCurrentNode(n.id); location.reload() },
+      // 上一台的数据，逐个清远比重来一次更容易漏。
+      //
+      // **必须先把 terms/active 从 URL 里摘掉**：它们是上一台机器的会话 id，原样带过去
+      // 就会在新机器上还原一批根本不存在的标签——界面上表现为「一堆打不开的窗口」，
+      // 而且同名会话还可能连到错的那台。终端真正的跨机保留要等会话键改成 (nodeId, name)，
+      // 见设计稿；在那之前，切机器就是换一台机器的终端，不留残影。
+      onClick: () => {
+        setCurrentNode(n.id)
+        setHashParams({ terms: '', active: '' })
+        location.reload()
+      },
     })) },
     { type: 'divider' },
   ] : []
@@ -817,7 +826,10 @@ export default function App() {
             account={accountMenu}
             node={curNode ? {
               name: curNode.name,
-              mark: <NodeMark name={curNode.name} size="sm" current />,
+              // 底座这枚**不涂蓝**：它永远是当前机器，`current` 那层高亮不传递任何信息，
+              // 只会和上面终端开关的蓝撞成两块「选中」，让人以为选了两样东西。
+              // 蓝留给弹层列表里区分「哪台是当前」，那里才有对比对象。
+              mark: <NodeMark name={curNode.name} size="sm" />,
               dot: nodeDotColor(curNode),
               latency: curNode.online ? t('node.latencyMs', { ms: curNode.latencyMs }) : t('node.offline'),
             } : null}
