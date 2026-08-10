@@ -126,6 +126,11 @@ func main() {
 		TLSEnabled:    tlsOn,
 	}
 
+	// 诊断口：默认不开，ROAM_PPROF=127.0.0.1:6060 才起（只绑回环，见 pprof.go）
+	if a := os.Getenv("ROAM_PPROF"); a != "" {
+		startPprof(a)
+	}
+
 	// 横向扩展模式分流（见 docs/design/cluster/architecture.html §1/§3）：
 	//   - cloud：中心，只做路由 + 注册表 + 控制台，不构造业务 runtime；
 	//   - standard（默认）：现在的单机 Roam；若配了 cluster.broker，则额外出站注册进云端。
