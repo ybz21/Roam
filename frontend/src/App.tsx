@@ -753,8 +753,9 @@ export default function App() {
 
   // 多机：机器列表接在账户菜单最上面（切机器是「换浏览范围」，不是页面）。
   // 单机时 nodes 为空，这一段整个不出现，菜单与今天逐项一致。
+  // 顶部切换器的下拉：就是机器列表本身，不再套一层分组标题——它已经有自己的按钮当标题了
   const nodeItems: MenuProps['items'] = clusterNodes.length ? [
-    { key: 'nodes-title', type: 'group', label: t('node.switch'), children: clusterNodes.map((n) => ({
+    ...clusterNodes.map((n) => ({
       key: 'node:' + n.id,
       icon: <NodeMark name={n.name} size="sm" current={n.id === curNodeId} offline={!n.online} />,
       label: (
@@ -768,15 +769,22 @@ export default function App() {
       ),
       disabled: !n.online,
       // 切机器 = 换「浏览 / 新开操作落到哪台」。整页重载是这一版的取舍：页面各自缓存着
-      // 上一台的数据，逐个清远比重来一次更容易漏（终端跨机保留要等会话键改造，见设计稿 §7）。
-      onClick: () => { setCurrentNode(n.id); location.reload() },
-    })) },
-    { type: 'divider' },
+      // 上一台的数据，逐个清远比重来一次更容易漏。
+      //
+      // **必须先把 terms/active 从 URL 里摘掉**：它们是上一台机器的会话 id，原样带过去
+      // 就会在新机器上还原一批根本不存在的标签——界面上表现为「一堆打不开的窗口」，
+      // 而且同名会话还可能连到错的那台。终端真正的跨机保留要等会话键改成 (nodeId, name)，
+      // 见设计稿；在那之前，切机器就是换一台机器的终端，不留残影。
+      onClick: () => {
+        setCurrentNode(n.id)
+        setHashParams({ terms: '', active: '' })
+        location.reload()
+      },
+    })),
   ] : []
 
   // 设置不在这里：它在侧栏底部有自己的入口，菜单里再放一条就是同一页两个门
   const accountMenu: MenuProps['items'] = [
-    ...nodeItems,
     { key: 'about', icon: ICONS.github, label: t('nav.about'), onClick: () => go('about') },
     { type: 'divider' },
     { key: 'theme', icon: themeIcon, label: mode === 'dark' ? t('common.lightTheme') : t('common.darkTheme'), onClick: () => toggleTheme() },
@@ -808,16 +816,15 @@ export default function App() {
             rail={navRail} active={tab} groups={navGroups} onGo={go}
             settings={{ key: 'settings', label: t('nav.env'), icon: ICONS.settings }}
             linkStatus={<LinkStatus collapsed={navRail} />}
-            dock={terms.length > 0 ? {
-              count: terms.length, open: space.dockVisible,
-              onToggle: () => { space.setFocus('none'); space.toggleDock() },
-              title: `${space.dockVisible ? t('terminal.collapseRightTitle') : t('terminal.expandTitle')} (${modKeyLabel}J)`,
-            } : null}
             accountName={t('nav.thisDevice')}
             account={accountMenu}
+            nodeMenu={nodeItems}
             node={curNode ? {
               name: curNode.name,
-              mark: <NodeMark name={curNode.name} size="sm" current />,
+              // 切换器那枚**不涂蓝**：它永远是当前机器，`current` 那层高亮不传递任何信息，
+              // 只会和别处的蓝撞成两块「选中」。蓝留给下拉列表里区分「哪台是当前」，
+              // 那里才有对比对象。
+              mark: <NodeMark name={curNode.name} size="sm" />,
               dot: nodeDotColor(curNode),
               latency: curNode.online ? t('node.latencyMs', { ms: curNode.latencyMs }) : t('node.offline'),
             } : null}

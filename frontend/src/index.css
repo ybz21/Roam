@@ -430,13 +430,25 @@ html[data-pointer="coarse"] .tt-rail-btn::after {
 .tt-nodemark.lg[data-cjk] { font-size: 17px; }
 .tt-nodemark.cur { color: var(--accent); border-color: var(--accent-border); background: var(--accent-soft); }
 .tt-nodemark.off { color: var(--text-dimmer); border-style: dashed; background: transparent; }
-/* 底座那枚：展开态名字后面缀状态点；轨态只剩方章，点叠在右下角（外描底色免得糊在边上） */
-.tt-nav-account .nd { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; }
-.tt-nav-account .nd.rail {
-  position: absolute; right: 6px; bottom: 6px;
-  box-shadow: 0 0 0 2px var(--bg-base);
+/* 机器切换器：摆在底部这一组的第一位。底下几样都是「上下文与账户」，
+   而它是其中作用域最大的一个——切它，上面整列页面看的都换一台机器。 */
+.tt-nav-node {
+  position: relative; display: flex; align-items: center; gap: 8px; width: 100%;
+  height: 34px; padding: 0 8px; margin-bottom: 4px;
+  border: 0; border-radius: var(--r-sm); background: var(--bg-elevated); color: var(--text-dim);
+  font-size: var(--fs-meta); text-align: left;
 }
-.tt-nav.rail .tt-nav-account.node { position: relative; }
+.tt-nav-node .av { flex: 0 0 auto; display: grid; place-items: center; }
+.tt-nav-node .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-bright); }
+.tt-nav-node .nd { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; }
+.tt-nav-node .dots { flex: 0 0 auto; display: grid; place-items: center; color: var(--text-dimmer); }
+:where(html[data-pointer="fine"]) .tt-nav-node:hover { background: var(--list-hover); color: var(--text-bright); }
+/* 轨态：只剩方章，状态点叠在右下角（外描底色免得糊在方章边上） */
+.tt-nav.rail .tt-nav-node { width: 34px; justify-content: center; padding: 0; margin: 0 auto 4px; }
+.tt-nav.rail .tt-nav-node .nd { position: absolute; right: 1px; bottom: 1px; box-shadow: 0 0 0 2px var(--bg-base); }
+/* 它和下面的设置/账户是一组，但作用域不同：给一条分隔线把它单独拎出来 */
+.tt-nav-node { margin-bottom: 6px; padding-bottom: 6px; }
+.tt-nav-foot .tt-nav-node { border-bottom: 1px solid var(--border-subtle); border-radius: var(--r-sm); }
 
 /* 选中态：3px 左强调线 + 低饱和蓝底。整块高亮会把注意力从内容上夺走（14 §4.4） */
 .tt-nav-item.on { background: var(--accent-soft); color: var(--text-bright); }
