@@ -7,7 +7,7 @@ import { App as AntApp, AutoComplete, Button, Drawer, Dropdown, Empty, Input, Mo
 import { sessionLabel } from './session-label'
 import { api } from './api'
 import { useI18n } from './i18n'
-import { recentDirs } from './App'
+import { recentDirs } from './components/sessions/DirPicker'
 import DiffView from './DiffView'
 import { useLayout } from './layout'
 import AdaptivePanel from './shell/AdaptivePanel'

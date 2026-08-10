@@ -10,7 +10,7 @@ import {
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
 import { sessionLabel } from './session-label'
 import { api, upload } from './api'
-import { DirPicker, recentDirs, pushRecentDir } from './App'
+import { DirPicker, recentDirs, pushRecentDir } from './components/sessions/DirPicker'
 import { useI18n } from './i18n'
 import Markdown from './Markdown'
 import { useLayout } from './layout'

@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import { useI18n } from '../i18n'
-import { relTime } from '../App'
+import { relTime } from '../time-format'
 import { MergeIcon } from '../icons'
 import type { Proj } from './project-model'
 

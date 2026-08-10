@@ -8,7 +8,7 @@
 // 但用户明显在找某个项目时也不该占三行。
 import { useState } from 'react'
 import { useI18n } from '../i18n'
-import { relTime } from '../App'
+import { relTime } from '../time-format'
 import { ChevronDown, ChevronRight, ChevronUp, FlagIcon, PlusIcon, SwarmIcon } from '../icons'
 import { waitingSessions, type Proj, type ProjSwarm } from './project-model'
 

@@ -6,7 +6,7 @@ import { App as AntApp, AutoComplete, Button, Checkbox, Drawer, Dropdown, Empty,
 import { api } from './api'
 import { useI18n } from './i18n'
 import { usePreferences } from './preferences'
-import { recentDirs } from './App'
+import { recentDirs } from './components/sessions/DirPicker'
 import DiffView from './DiffView'
 import { CloseIcon, PlusIcon } from './icons'
 import { BranchIcon } from './git/parts'
