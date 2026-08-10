@@ -4,52 +4,52 @@
 //   平板/手机   → 终端为全屏覆盖层；手机底部 Tab 导航
 // 终端：多标签 / 字号调节 / 复制 / 更多快捷键 / 断线自动重连。
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { bootstrapCluster, setCurrentNode, useClusterNodes, useCurrentNodeId } from './cluster/node-url'
-import { NodeMark, nodeDotColor } from './cluster/NodeMark'
+import { bootstrapCluster, setCurrentNode, useClusterNodes, useCurrentNodeId } from './components/cluster/node-url'
+import { NodeMark, nodeDotColor } from './components/cluster/NodeMark'
 import {
   Layout, Button, Card, List, Tag, Form, Input, Select, Segmented, Tabs, Descriptions,
   Statistic, Row, Col, Space, Popconfirm, Empty, Modal, App as AntApp, Typography, Spin, Tooltip, Dropdown, Checkbox, Progress, AutoComplete, Radio, Switch, Collapse, InputNumber,
 } from 'antd'
 import type { MenuProps } from 'antd'
 import { api, setUnauthorizedHandler } from './api'
-import Term, { TermHandle, TermStatus } from './Terminal'
-import ClaudeChat from './ClaudeChat'
-import CodexChat from './CodexChat'
-import FileBrowser from './FileBrowser'
-import FileWorkspace from './FileWorkspace'
-import AdaptivePanel from './shell/AdaptivePanel'
-import { InspectorColumn } from './shell/InspectorColumn'
-import MobileSubPage from './MobileSubPage'
-import SettingsPage from './settings/SettingsPage'
+import Term, { TermHandle, TermStatus } from './components/terminal/Terminal'
+import ClaudeChat from './components/chat/ClaudeChat'
+import CodexChat from './components/chat/CodexChat'
+import FileBrowser from './components/files/FileBrowser'
+import FileWorkspace from './components/files/FileWorkspace'
+import AdaptivePanel from './components/shell/AdaptivePanel'
+import { InspectorColumn } from './components/shell/InspectorColumn'
+import MobileSubPage from './components/MobileSubPage'
+import SettingsPage from './components/settings/SettingsPage'
 // 非首屏的重页面（蜂群/Git 面板/浏览器/手机镜像/插件）按路由懒加载：切到对应 tab 才拉 chunk，
 // 缩小首屏 index 块。都渲染在同一个 Suspense 边界内（见 lazyFallback，App 内 page）。
-const GitPanel = lazy(() => import('./GitPanel'))
-const WorktreePanel = lazy(() => import('./WorktreePanel'))
-const RaceCreateModal = lazy(() => import('./Race').then((m) => ({ default: m.RaceCreateModal })))
-const RaceComparePanel = lazy(() => import('./Race').then((m) => ({ default: m.RaceComparePanel })))
-const PluginsPanel = lazy(() => import('./PluginsPanel'))
-const BrowserView = lazy(() => import('./BrowserView'))
-const PhoneView = lazy(() => import('./PhoneView'))
-const Swarm = lazy(() => import('./Swarm'))
-const Projects = lazy(() => import('./Projects'))
-import UpdateBanner from './UpdateBanner'
+const GitPanel = lazy(() => import('./components/git/GitPanel'))
+const WorktreePanel = lazy(() => import('./components/git/WorktreePanel'))
+const RaceCreateModal = lazy(() => import('./components/swarm/Race').then((m) => ({ default: m.RaceCreateModal })))
+const RaceComparePanel = lazy(() => import('./components/swarm/Race').then((m) => ({ default: m.RaceComparePanel })))
+const PluginsPanel = lazy(() => import('./components/plugins/PluginsPanel'))
+const BrowserView = lazy(() => import('./components/mirror/BrowserView'))
+const PhoneView = lazy(() => import('./components/mirror/PhoneView'))
+const Swarm = lazy(() => import('./components/swarm/Swarm'))
+const Projects = lazy(() => import('./components/projects/Projects'))
+import UpdateBanner from './components/UpdateBanner'
 import { useThemeMode } from './theme'
 import { useI18n } from './i18n'
 import { usePreferences, loadPreferences } from './preferences'
-import { detectPrompt } from './prompt'
-import type { PromptSignal } from './prompt'
+import { detectPrompt } from './components/prompt'
+import type { PromptSignal } from './components/prompt'
 import { useLayout } from './layout'
-import { useWorkspaceLayout, NAV_WIDTH, NAV_RAIL } from './shell/useWorkspaceLayout'
-import { Workspace, SessionCapsule } from './shell/Workspace'
-import { Navigation } from './shell/Navigation'
-import { reorderTabs } from './shell/tabs'
+import { useWorkspaceLayout, NAV_WIDTH, NAV_RAIL } from './components/shell/useWorkspaceLayout'
+import { Workspace, SessionCapsule } from './components/shell/Workspace'
+import { Navigation } from './components/shell/Navigation'
+import { reorderTabs } from './components/shell/tabs'
 import { requestIntent, OPEN_FILE_INTENT } from './intents'
-import { SessionDock } from './shell/SessionDock'
-import { sessionProject, setSessionProjects, buildSessionProjects } from './session-project'
-import { MobileSheet, SheetRow, SheetSection } from './shell/MobileSheet'
-import { WorkspaceTopbar, type PaletteActions, type PaletteItem } from './shell/WorkspaceTopbar'
-import { GlobalSearch, openPalette } from './shell/palette'
-import { setSessionLabels, sessionLabel, sessionDisplay } from './session-label'
+import { SessionDock } from './components/shell/SessionDock'
+import { sessionProject, setSessionProjects, buildSessionProjects } from './components/sessions/session-project'
+import { MobileSheet, SheetRow, SheetSection } from './components/shell/MobileSheet'
+import { WorkspaceTopbar, type PaletteActions, type PaletteItem } from './components/shell/WorkspaceTopbar'
+import { GlobalSearch, openPalette } from './components/shell/palette'
+import { setSessionLabels, sessionLabel, sessionDisplay } from './components/sessions/session-label'
 import LinkStatus from './p2p/LinkStatus'
 import { startControlLink, stopControlLink } from './p2p/transport'
 import FilesPage from './components/files/FilesPage'

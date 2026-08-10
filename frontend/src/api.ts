@@ -1,6 +1,6 @@
 // 与后端 /api 通信的薄封装；401 时触发回调（跳登录）
 
-import { nodeApi } from './cluster/node-url'
+import { nodeApi } from './components/cluster/node-url'
 
 let onUnauth: () => void = () => {}
 export function setUnauthorizedHandler(f: () => void) {

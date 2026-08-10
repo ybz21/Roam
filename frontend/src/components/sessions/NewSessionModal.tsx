@@ -3,13 +3,13 @@
 // 仅提交路由不同（fork / fork-worktree，meta 记父子关系）。两处不再各维护一份表单。
 import { useEffect, useState } from 'react'
 import { api } from '../../api'
-import { DirPicker, pushRecentDir, recentDirs } from '../../components/sessions/DirPicker'
+import { DirPicker, pushRecentDir, recentDirs } from './DirPicker'
 import { useI18n } from '../../i18n'
 import { usePreferences } from '../../preferences'
-import { sessionLabel } from '../../session-label'
+import { sessionLabel } from './session-label'
 import { shellQuote as shq } from '../../shell-quote'
 import { AutoComplete, Button, Checkbox, Input, Modal, Radio, Segmented, Select, Space, Tag, Tooltip, App as AntApp } from 'antd'
-import { BranchIcon } from '../../git/parts'
+import { BranchIcon } from '../git/parts'
 
 // 由 prompt 首句推会话名：派活时用户只写了要干什么，名字不该再问一遍。
 // worktree 分支默认名：会话名 slug（小写、非字母数字转 -）

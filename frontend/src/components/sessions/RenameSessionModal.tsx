@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../api'
 import { useI18n } from '../../i18n'
-import { sessionLabel, updateSessionLabel } from '../../session-label'
+import { sessionLabel, updateSessionLabel } from './session-label'
 import { Input, Modal, Space, App as AntApp } from 'antd'
 
 export default function RenameSessionModal({ session, onClose, onDone }: { session: string | null; onClose: () => void; onDone: (oldName: string, newName: string) => void }) {

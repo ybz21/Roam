@@ -1,13 +1,13 @@
 // ── 独立单终端页：新浏览器标签全屏打开单个会话（hash 路由 #/term/name）──
 import { useEffect, useRef, useState } from 'react'
-import { TermHandle, TermStatus } from '../../Terminal'
+import { TermHandle, TermStatus } from './Terminal'
 import { api } from '../../api'
-import TerminalPane from '../../components/terminal/TerminalPane'
-import { type ClaudeInfo } from '../../components/terminal/claude-info'
+import TerminalPane from './TerminalPane'
+import { type ClaudeInfo } from './claude-info'
 import { OPEN_FILE_INTENT, requestIntent } from '../../intents'
-import { sessionDisplay, setSessionLabels, useSessionLabel } from '../../session-label'
-import { type PaletteActions } from '../../shell/WorkspaceTopbar'
-import { GlobalSearch } from '../../shell/palette'
+import { sessionDisplay, setSessionLabels, useSessionLabel } from '../sessions/session-label'
+import { type PaletteActions } from '../shell/WorkspaceTopbar'
+import { GlobalSearch } from '../shell/palette'
 
 export default function SoloTerminal({ name }: { name: string }) {
   const [fontSize, setFontSize] = useState(13)

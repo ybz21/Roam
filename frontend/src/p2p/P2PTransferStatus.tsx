@@ -11,7 +11,7 @@
 
 import { useState } from 'react'
 import { useI18n } from '../i18n'
-import { fmtSize } from '../file-utils'
+import { fmtSize } from '../components/files/file-utils'
 import { pathLabelKey, type P2PPathLabel } from './labels'
 import type { P2PState, P2PProgress } from './download'
 import type { PairDiag } from './stats'

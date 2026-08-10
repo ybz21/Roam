@@ -3,8 +3,8 @@
 // 与左侧主导航同一套线性语言：24 viewBox、currentColor 描边、无 emoji（emoji 各平台字形不一，
 // 在深色栏里显得廉价且无法跟随强调色）。样式在 index.css 的 .tt-tabs / .tt-tbar 段。
 import { type ReactNode } from 'react'
-import Projects from '../../Projects'
-import { svg } from '../../components/nav-icons'
+import Projects from '../projects/Projects'
+import { svg } from '../nav-icons'
 import { useLayout } from '../../layout'
 import { Tooltip } from 'antd'
 
