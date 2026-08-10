@@ -13,7 +13,13 @@ export type ProjSession = {
 export type Proj = {
   key: string; name: string; dir: string; git: boolean; pinned: boolean
   sessions: number; attached: number; worktrees: number; unfinished: number; cleanable: number; races: number
-  lastActivity: number; firstSeen: number; top: ProjSession[] | null
+  lastActivity: number; firstSeen: number
+  /** 卡片「进行中」三行——**被后端截断过，不能拿它数数**。计数用 running/waiting，队列用 needs。 */
+  top: ProjSession[] | null
+  running?: number
+  waiting?: number
+  /** 全部等待输入的会话（不截断）。「需要你」队列要的是它——第 4 个以后的等待不能凭空消失。 */
+  needs?: ProjSession[] | null
 }
 
 // 蜂群在项目上的投影（/swarms + 逐群详情，10s）
@@ -24,9 +30,24 @@ export type ProjSwarm = {
 
 /** 一个项目「需要你」的件数：等待输入 + 待收尾 + 蜂群待解锁。排序与筛选都用它。 */
 export function projNeeds(p: Proj, swarms: ProjSwarm[]): number {
-  return (p.top || []).filter((s) => s.waiting).length
+  return waitingCount(p)
     + (p.unfinished || 0)
     + swarms.filter((sw) => sw.projKey === p.key && sw.pending > 0).length
+}
+
+/** 等待输入的会话数。**别从 top 数**——它只有三行，第 4 个以后的等待会被漏掉，
+ *  「需要你」的计数和默认排序都会跟着失真。老后端没有这个字段时才回落到 top。 */
+export function waitingCount(p: Proj): number {
+  return p.waiting ?? (p.top || []).filter((s) => s.waiting).length
+}
+
+export function runningCount(p: Proj): number {
+  return p.running ?? (p.top || []).filter((s) => s.running).length
+}
+
+/** 「需要你」队列要的全部等待会话；老后端回落到 top 里的那几个。 */
+export function waitingSessions(p: Proj): ProjSession[] {
+  return p.needs || (p.top || []).filter((s) => s.waiting)
 }
 
 // 项目图标底色：按 key 取一个稳定色，卡片多了才能一眼分辨是哪个项目

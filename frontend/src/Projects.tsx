@@ -22,7 +22,7 @@ import AdaptivePanel from './shell/AdaptivePanel'
 import { useLayout } from './layout'
 import { detectPrompt } from './prompt'
 import { relTime, taskNameFromPrompt, shq, NewSessionModal, DirPicker, recentDirs, pushRecentDir, CloseWorktreeModal } from './App'
-import { projNeeds } from './project-list/project-model'
+import { projNeeds, runningCount, waitingCount } from './project-list/project-model'
 import type { Proj, ProjSession } from './project-list/project-model'
 import { NeedsQueue, WorkbenchHead, buildNeedCards, NEEDS_CSS } from './project-list/needs-queue'
 import { ActivityRail, useRecentActivity, RAIL_CSS } from './project-list/activity-rail'
@@ -422,10 +422,10 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
   const cards = useMemo(
     () => buildNeedCards(data.projects, swarms, t, { openTerm, goProject, goSwarm }),
     [data.projects, swarms, t])
-  const allTop = useMemo(() => data.projects.flatMap((p) => p.top || []), [data.projects])
+  // 计数走后端的全量字段：top 只有三行，拿它数会漏掉第 4 个以后的会话（#186 的账）
   const stats = {
-    running: allTop.filter((s) => s.running).length,
-    waiting: allTop.filter((s) => s.waiting).length,
+    running: data.projects.reduce((n, p) => n + runningCount(p), 0),
+    waiting: data.projects.reduce((n, p) => n + waitingCount(p), 0),
     unfinished: data.projects.reduce((n, p) => n + (p.unfinished || 0), 0),
     swarms: swarms.length,
   }

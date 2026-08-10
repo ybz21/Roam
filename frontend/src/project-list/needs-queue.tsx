@@ -10,7 +10,7 @@ import { useState } from 'react'
 import { useI18n } from '../i18n'
 import { relTime } from '../App'
 import { ChevronDown, ChevronRight, ChevronUp, FlagIcon, PlusIcon, SwarmIcon } from '../icons'
-import type { Proj, ProjSession, ProjSwarm } from './project-model'
+import { waitingSessions, type Proj, type ProjSwarm } from './project-model'
 
 export type NeedCard = {
   key: string; kind: 'waiting' | 'unfinished' | 'swarm'
@@ -24,8 +24,7 @@ export function buildNeedCards(
 ): NeedCard[] {
   const items: NeedCard[] = []
   for (const p of projects) {
-    for (const s of (p.top || []) as ProjSession[]) {
-      if (!s.waiting) continue
+    for (const s of waitingSessions(p)) {
       items.push({
         key: 'w' + s.name, kind: 'waiting', proj: p.name,
         title: s.label || s.name,

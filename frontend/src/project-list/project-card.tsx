@@ -57,7 +57,14 @@ export function ProjectCard({ p, swarms, index, openTerm, refresh }: {
     <div className="prj-card prj-in" data-prj-card role="button" tabIndex={0}
       aria-label={p.name} title={t('overview.enterProject')}
       onClick={open}
-      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); open() } }}
+      // role="button" 就得按按钮的键盘语义来：Enter **和** Space 都要能打开。
+      // 只认 Enter 是半套——原生 <button> 两个都响应，用户的手指记的是这个。
+      onKeyDown={(e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return
+        if (e.target !== e.currentTarget) return // 卡片里的按钮自己处理，别被外层抢走
+        e.preventDefault()
+        open()
+      }}
       style={{ animationDelay: `${Math.min(index, 8) * 45}ms` }}>
       <div className="hd">
         <span className="prj-cico" style={{ color: fg, background: bg }} aria-hidden>{(p.name[0] || '?').toUpperCase()}</span>

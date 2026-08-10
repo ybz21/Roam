@@ -56,6 +56,12 @@ type projectSummary struct {
 	LastActivity int64            `json:"lastActivity"`
 	FirstSeen    int64            `json:"firstSeen"`
 	Top          []projectSession `json:"top"` // 活跃会话前 3（列表卡「进行中」三行）
+
+	// Top 是**给卡片画三行用的**，被截断过，所以它算不出总数——前端拿它数 waiting/running
+	// 会漏掉第 4 个以后的会话。下面这三样在截断**之前**统计，是完整的：
+	Running int              `json:"running"` // 跑着 agent 的会话数（全量）
+	Waiting int              `json:"waiting"` // 等待输入的会话数（全量）
+	Needs   []projectSession `json:"needs"`   // 全部等待输入的会话——「需要你」队列要的是它，不是 Top
 }
 
 // sessListItem 兼容解析 ttmux ls --json（数值字段 CLI 可能给字符串）。
@@ -154,16 +160,7 @@ func (a *API) ProjectsList(c *gin.Context) {
 		*top = append(*top, ps)
 	}
 	finish := func(p *projectSummary, top []projectSession) {
-		sort.Slice(top, func(i, j int) bool {
-			if top[i].Attached != top[j].Attached {
-				return top[i].Attached
-			}
-			return top[i].LastActivity > top[j].LastActivity
-		})
-		if len(top) > 3 { // 卡片画三行；截到 2 就逼得前端自己再拉一遍会话列表拼
-			top = top[:3]
-		}
-		p.Top = top
+		summarizeSessions(p, top)
 		list = append(list, *p)
 	}
 
@@ -440,4 +437,38 @@ func (a *API) ProjectPrefs(c *gin.Context) {
 	projResp = nil // 偏好变更立即反映到下一次列表
 	projRespMu.Unlock()
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"ok": true}})
+}
+
+// summarizeSessions 把一个项目的会话汇总进 summary：**先在全量上统计，再截断给卡片**。
+//
+// 反过来做会漏。Top 只留三行给卡片画，而前端一度拿它数 waiting/running、挑「需要你」——
+// 于是一个有 4 个以上活跃会话的项目里，排第 4 的那个「等待输入」会从行动队列和页头计数里
+// 凭空消失，默认排序也跟着失真。计数走 Running/Waiting，队列走 Needs，Top 只管画。
+func summarizeSessions(p *projectSummary, top []projectSession) {
+	p.Running, p.Waiting, p.Needs = 0, 0, nil
+	for _, s := range top {
+		if s.Running {
+			p.Running++
+		}
+		if s.Waiting {
+			p.Waiting++
+			p.Needs = append(p.Needs, s)
+		}
+	}
+	sort.Slice(p.Needs, func(i, j int) bool { return p.Needs[i].LastActivity > p.Needs[j].LastActivity })
+
+	sort.Slice(top, func(i, j int) bool {
+		// 等待输入的排最前：卡片只画三行，而「有人在等你」是这三行里最该被看见的一行
+		if top[i].Waiting != top[j].Waiting {
+			return top[i].Waiting
+		}
+		if top[i].Attached != top[j].Attached {
+			return top[i].Attached
+		}
+		return top[i].LastActivity > top[j].LastActivity
+	})
+	if len(top) > 3 { // 卡片画三行；截到 2 就逼得前端自己再拉一遍会话列表拼
+		top = top[:3]
+	}
+	p.Top = top
 }
