@@ -32,6 +32,14 @@ export const PaperclipIcon = ({ size = 15 }: P) => line(
 /** 继续 / 恢复：原来写作 ▶ */
 export const PlayIcon = ({ size = 12 }: P) => solid(<path d="M8 5.5v13l11-6.5Z" />, size)
 export const StopIcon = ({ size = 12 }: P) => solid(<rect x="6" y="6" width="12" height="12" rx="2" />, size)
+/** 进全屏 / 退全屏：四角箭头向外、向内。原来在 App.tsx 里现画一对 */
+export const FullscreenIcon = ({ size = 18 }: P) => line(
+  <><polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><path d="M21 3l-7 7" /><path d="M3 21l7-7" /></>, size)
+export const ExitFullscreenIcon = ({ size = 18 }: P) => line(
+  <><polyline points="4 14 10 14 10 20" /><polyline points="20 10 14 10 14 4" /><path d="M14 10l6-6" /><path d="M4 20l6-6" /></>, size)
+/** 退出登录：门 + 往外的箭头 */
+export const LogoutIcon = ({ size = 18 }: P) => line(
+  <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><path d="M21 12H9" /></>, size)
 
 // ── 方向 ──
 export const ChevronLeft = ({ size = 15 }: P) => line(<path d="m15 18-6-6 6-6" />, size, 2)
@@ -89,6 +97,10 @@ export const StarIcon = ({ size = 14, filled }: P & { filled?: boolean }) => (
 export const CloudIcon = ({ size = 13 }: P) => line(<path d="M6.5 18a4.5 4.5 0 0 1-.4-9 6 6 0 0 1 11.6 1.4A3.8 3.8 0 0 1 17.5 18Z" />, size)
 export const LinkIcon = ({ size = 13 }: P) => line(
   <><path d="M10 13a4 4 0 0 0 6 .5l2.5-2.5a4 4 0 0 0-5.7-5.7L11.5 6.7" /><path d="M14 11a4 4 0 0 0-6-.5L5.5 13a4 4 0 0 0 5.7 5.7l1.3-1.3" /></>, size)
+
+/** GitHub 品牌标：官方字形，实心填充——和 AgentLogo 一样属于「品牌标不改画法」的例外 */
+export const GithubIcon = ({ size = 18 }: P) => solid(
+  <path d="M12 2C6.48 2 2 6.58 2 12.26c0 4.5 2.87 8.32 6.84 9.67.5.1.68-.22.68-.49 0-.24-.01-.87-.01-1.71-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.49-1.11-1.49-.91-.64.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.36-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.27 2.75 1.05a9.36 9.36 0 0 1 2.5-.34c.85 0 1.71.12 2.5.34 1.91-1.32 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.81-4.57 5.06.36.32.68.94.68 1.9 0 1.37-.01 2.48-.01 2.82 0 .27.18.6.69.49A10.02 10.02 0 0 0 22 12.26C22 6.58 17.52 2 12 2z" />, size)
 
 // ── 领域物件 ──
 /** 蜂群：原来写作 ⬡（六边形字符），在多数字体里比正文小半档还带自己的边距 */

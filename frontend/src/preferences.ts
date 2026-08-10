@@ -90,6 +90,33 @@ const DEFAULTS: Preferences = {
  */
 const WORKSPACE_MIRROR = 'ttmux.workspace'
 
+/**
+ * 观感项的**本地权威**：主题与语言。
+ *
+ * 偏好存在服务端，多机之后就成了「主题跟着机器走」：从开发机切到 Jetson，
+ * 读的是那台机器上的值，界面当着面换一副样子——而这两项是「我习惯这样」，
+ * 跟人不跟机器。尺寸类偏好早就按浏览器镜像了一份（WORKSPACE_MIRROR，见上），
+ * 这里沿用同一条路：**本地有值就以本地为准**，服务端那份退化成备份与首次默认。
+ *
+ * 只覆盖纯观感项。命令、密钥、传输参数仍以服务端为权威——那些是机器的事实，
+ * 不是口味。
+ */
+const LOOK_MIRROR = 'ttmux.look'
+
+type LookMirror = { theme?: Preferences['theme']; locale?: string }
+
+function readLookMirror(): LookMirror {
+  try {
+    const raw = localStorage.getItem(LOOK_MIRROR)
+    const v = raw ? JSON.parse(raw) : null
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : {}
+  } catch { return {} }
+}
+
+function writeLookMirror(p: Preferences) {
+  try { localStorage.setItem(LOOK_MIRROR, JSON.stringify({ theme: p.theme, locale: p.locale })) } catch {}
+}
+
 function readWorkspaceMirror(): Partial<WorkspacePreference> {
   try {
     const raw = localStorage.getItem(WORKSPACE_MIRROR)
@@ -102,7 +129,7 @@ function writeWorkspaceMirror(ws: WorkspacePreference) {
   try { localStorage.setItem(WORKSPACE_MIRROR, JSON.stringify(ws)) } catch {}
 }
 
-let cache: Preferences = { ...DEFAULTS, workspace: { ...WORKSPACE_DEFAULTS, ...readWorkspaceMirror() } }
+let cache: Preferences = { ...DEFAULTS, ...readLookMirror(), workspace: { ...WORKSPACE_DEFAULTS, ...readWorkspaceMirror() } }
 let listeners = new Set<() => void>()
 let loaded = false
 
@@ -145,7 +172,8 @@ export async function loadPreferences() {
   try {
     const r = await api('GET', '/preferences')
     // workspace 是嵌套对象：整体展开会让服务端存的旧结构缺字段变 undefined，单独深合一层
-    cache = { ...DEFAULTS, ...r?.data, workspace: { ...WORKSPACE_DEFAULTS, ...r?.data?.workspace } }
+    // 本地存过的观感项压在服务端之上：这一条是「跟着我走」与「这台机器」的分界线
+    cache = { ...DEFAULTS, ...r?.data, ...readLookMirror(), workspace: { ...WORKSPACE_DEFAULTS, ...r?.data?.workspace } }
     writeWorkspaceMirror(cache.workspace)
     if (!cache._migrated) {
       migrateFromLocalStorage()
@@ -162,6 +190,7 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null
 export function savePreferences(partial: Partial<Preferences>) {
   cache = { ...cache, ...partial }
   if (partial.workspace) writeWorkspaceMirror(cache.workspace)
+  if (partial.theme !== undefined || partial.locale !== undefined) writeLookMirror(cache)
   notify()
   // debounce server writes to avoid rapid-fire PUTs
   if (saveTimer) clearTimeout(saveTimer)

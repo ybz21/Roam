@@ -1,0 +1,833 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Roam 设置页重构 · 原型</title>
+<style>
+/* 设置页重构原型 —— 令牌取 frontend/src/theme.tsx 与 index.css 的真值，稿子和成品同源。
+ * 只画结构与状态：看的是「设置怎么分、怎么找得到」，不是像素级还原 antd 组件。 */
+:root {
+  --bg-base:#0d1117; --bg-container:#161b22; --bg-elevated:#1b222b;
+  --border:#30363d; --border-subtle:#21262d;
+  --text-bright:#e6edf3; --text-dim:#8b949e; --text-dimmer:#6e7681;
+  --accent:#58a6ff; --accent-solid:#1f6feb; --accent-soft:rgba(31,111,235,.14); --accent-border:rgba(88,166,255,.45);
+  --ok:#3fb950; --ok-solid:#238636; --ok-soft:rgba(63,185,80,.14); --ok-border:rgba(63,185,80,.42);
+  --danger:#f85149; --danger-soft:rgba(248,81,73,.12); --danger-border:rgba(248,81,73,.40);
+  --warn:#d29922; --warn-soft:rgba(210,153,34,.12); --warn-border:rgba(210,153,34,.40);
+  --swarm:#a371f7; --swarm-soft:rgba(163,113,247,.12); --swarm-border:rgba(163,113,247,.38);
+  --list-hover:rgba(255,255,255,.025);
+  --fs-micro:11px; --fs-meta:12px; --fs-sm:13px; --fs-body:14px; --fs-lg:16px; --fs-title:22px;
+  --r-xs:6px; --r-sm:10px; --r-card:14px; --r-pill:999px;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --rail:48px; --topbar:40px; --tap:44px;
+}
+html[data-theme="light"] {
+  --bg-base:#f6f8fa; --bg-container:#ffffff; --bg-elevated:#ffffff;
+  --border:#d0d7de; --border-subtle:#e6e9ec;
+  --text-bright:#1f2328; --text-dim:#57606a; --text-dimmer:#8c959f;
+  --accent:#0969da; --accent-soft:rgba(31,111,235,.10); --accent-border:rgba(31,111,235,.40);
+  --ok:#1a7f37; --ok-soft:rgba(31,136,61,.10); --ok-border:rgba(31,136,61,.40);
+  --danger:#cf222e; --danger-soft:rgba(207,34,46,.09); --danger-border:rgba(207,34,46,.35);
+  --warn:#9a6700; --warn-soft:rgba(154,103,0,.10); --warn-border:rgba(154,103,0,.35);
+  --list-hover:rgba(27,31,36,.04);
+}
+* { box-sizing:border-box; }
+html { background:#07090d; }
+html[data-theme="light"] { background:#eef1f5; }
+body { margin:0; background:var(--bg-base); color:var(--text-bright);
+  font:var(--fs-body)/1.65 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased; }
+svg { display:block; } button { font:inherit; cursor:pointer; color:inherit; }
+a { color:var(--accent); text-decoration:none; }
+code { font-family:var(--mono); font-size:.92em; background:var(--bg-elevated);
+  border:1px solid var(--border-subtle); border-radius:4px; padding:1px 5px; }
+
+/* ══ 文档骨架 ═════════════════════════════════════════════════ */
+.doc { max-width:1180px; margin:0 auto; padding:40px 24px 120px; }
+.doc > header { border-bottom:1px solid var(--border-subtle); padding-bottom:24px; margin-bottom:32px; }
+.kick { font-size:var(--fs-micro); letter-spacing:.14em; text-transform:uppercase; color:var(--text-dimmer); }
+.doc > header h1 { margin:8px 0 6px; font-size:30px; font-weight:700; letter-spacing:-.01em; }
+.doc > header p { margin:0; color:var(--text-dim); font-size:var(--fs-sm); max-width:76ch; }
+section { margin:56px 0 0; scroll-margin-top:20px; }
+section > h2 { display:flex; align-items:baseline; gap:10px; margin:0 0 6px; font-size:var(--fs-title); font-weight:650; }
+section > h2 .n { font:600 var(--fs-meta)/1 var(--mono); color:var(--accent); border:1px solid var(--accent-border);
+  border-radius:var(--r-pill); padding:5px 9px; }
+section > .lead { margin:0 0 20px; color:var(--text-dim); font-size:var(--fs-sm); max-width:82ch; }
+h3 { margin:28px 0 10px; font-size:var(--fs-lg); font-weight:600; }
+p { max-width:82ch; }
+.note { border-left:2px solid var(--accent); background:var(--accent-soft); border-radius:0 var(--r-sm) var(--r-sm) 0;
+  padding:12px 14px; margin:16px 0; font-size:var(--fs-sm); color:var(--text-dim); }
+.note b { color:var(--text-bright); }
+.note.warn { border-color:var(--warn); background:var(--warn-soft); }
+.note.ok { border-color:var(--ok); background:var(--ok-soft); }
+.cap { font-size:var(--fs-meta); color:var(--text-dimmer); margin:8px 0 0; }
+ul.tight { margin:10px 0; padding-left:20px; font-size:var(--fs-sm); color:var(--text-dim); }
+ul.tight li { margin:5px 0; } ul.tight b { color:var(--text-bright); font-weight:600; }
+
+table { width:100%; border-collapse:collapse; font-size:var(--fs-meta); margin:14px 0; }
+th, td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--border-subtle); vertical-align:top; }
+th { color:var(--text-dimmer); font-size:var(--fs-micro); letter-spacing:.08em; text-transform:uppercase; font-weight:600; }
+td { color:var(--text-dim); } td b { color:var(--text-bright); font-weight:600; }
+tr:hover td { background:var(--list-hover); }
+
+.themer { position:fixed; right:16px; top:16px; z-index:50; display:flex; gap:4px; padding:4px;
+  border:1px solid var(--border); border-radius:var(--r-pill); background:var(--bg-container); }
+.themer button { border:0; background:none; color:var(--text-dimmer); border-radius:var(--r-pill);
+  padding:5px 12px; font-size:var(--fs-micro); }
+.themer button.on { background:var(--accent-soft); color:var(--accent); }
+
+/* ══ 界面框 ═══════════════════════════════════════════════════ */
+.frame { border:1px solid var(--border); border-radius:var(--r-card); overflow:hidden; background:var(--bg-base);
+  box-shadow:0 16px 44px rgba(0,0,0,.36); }
+html[data-theme="light"] .frame { box-shadow:0 12px 32px rgba(31,35,40,.10); }
+.frame .chrome { height:30px; display:flex; align-items:center; gap:6px; padding:0 12px;
+  border-bottom:1px solid var(--border-subtle); background:var(--bg-container); }
+.frame .chrome .dot { width:9px; height:9px; border-radius:50%; background:var(--border); }
+.frame .chrome .url { margin-left:10px; font:var(--fs-micro)/1 var(--mono); color:var(--text-dimmer); }
+.shell { display:flex; height:640px; }
+
+/* 侧栏 48 轨 */
+.nav { width:var(--rail); flex:0 0 var(--rail); display:flex; flex-direction:column; align-items:center;
+  padding:6px 0; gap:4px; border-right:1px solid var(--border-subtle); }
+.nav .brand { width:26px; height:26px; border-radius:7px; background:linear-gradient(135deg,#1f6feb,#3fb950); margin:3px 0 6px; }
+.nav .it { width:34px; height:34px; border-radius:8px; display:grid; place-items:center; color:var(--text-dimmer);
+  position:relative; border:0; background:none; }
+.nav .it.on { color:var(--accent); background:var(--accent-soft); }
+.nav .it.on::before { content:""; position:absolute; left:-7px; top:50%; transform:translateY(-50%);
+  width:3px; height:18px; border-radius:0 3px 3px 0; background:var(--accent); }
+.nav .sp { flex:1; }
+.nav .sep { width:24px; height:1px; background:var(--border-subtle); margin:4px 0; }
+.nav .node { position:relative; width:34px; height:34px; border-radius:8px; background:var(--bg-elevated);
+  display:grid; place-items:center; border:0; font-size:var(--fs-micro); font-weight:700; color:var(--text-dim); }
+.nav .node .d { position:absolute; right:1px; bottom:1px; width:7px; height:7px; border-radius:50%;
+  background:var(--ok); box-shadow:0 0 0 2px var(--bg-base); }
+
+.main { flex:1; min-width:0; display:flex; flex-direction:column; }
+
+/* ══ 设置页本体 ═══════════════════════════════════════════════ */
+.set { flex:1; min-height:0; display:flex; flex-direction:column; }
+.set-head { flex:0 0 auto; padding:14px 18px 12px; border-bottom:1px solid var(--border-subtle); }
+.set-head .row1 { display:flex; align-items:flex-end; gap:12px; }
+.set-head h1 { margin:2px 0 0; font-size:var(--fs-title); font-weight:600; }
+.set-head .kick2 { font-size:var(--fs-micro); letter-spacing:.12em; text-transform:uppercase; color:var(--text-dimmer); }
+.set-head .grow { flex:1; }
+.tt-act { height:28px; padding:0 11px; display:inline-flex; align-items:center; gap:6px; border-radius:var(--r-xs);
+  border:1px solid var(--border); background:none; color:var(--text-dim); font-size:var(--fs-meta); }
+.tt-act:hover { border-color:var(--accent-border); color:var(--text-bright); }
+.tt-act.primary { background:var(--accent-solid); border-color:var(--accent-solid); color:#fff; }
+
+.searchbar { margin-top:12px; display:flex; align-items:center; gap:8px; height:34px; padding:0 11px;
+  border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-elevated); }
+.searchbar:focus-within { border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft); }
+.searchbar input { flex:1; min-width:0; border:0; outline:0; background:none; color:var(--text-bright);
+  font:var(--fs-body)/1 inherit; }
+.searchbar input::placeholder { color:var(--text-dimmer); }
+.searchbar .count { font-size:var(--fs-micro); color:var(--text-dimmer); white-space:nowrap; }
+.searchbar .clr { border:0; background:none; color:var(--text-dimmer); display:none; padding:2px; }
+.searchbar.has .clr { display:block; }
+
+/* 双栏：分类树 + 一类一页 */
+.set-body { flex:1; min-height:0; display:flex; }
+.tree { width:200px; flex:0 0 200px; overflow:auto; padding:10px 8px 20px;
+  border-right:1px solid var(--border-subtle); }
+.tree .row { display:flex; align-items:center; gap:6px; width:100%; min-height:30px; padding:0 8px;
+  border:0; border-radius:var(--r-sm); background:none; color:var(--text-dim); font-size:var(--fs-sm); text-align:left; }
+.tree .row:hover { background:var(--list-hover); color:var(--text-bright); }
+.tree .row.on { background:var(--accent-soft); color:var(--accent); font-weight:500; }
+.tree .row .cv { width:14px; flex:0 0 14px; color:var(--text-dimmer); transition:transform .12s; }
+.tree .row.open .cv { transform:rotate(90deg); }
+.tree .row .n { margin-left:auto; font-size:var(--fs-micro); color:var(--text-dimmer); font-variant-numeric:tabular-nums; }
+.tree .row.on .n { color:var(--accent); }
+.tree .kid { padding-left:28px; }
+.tree .kids { display:none; } .tree .kids.open { display:block; }
+.tree .row.dim { opacity:.32; }
+
+/* 右边：一类一页，页内不滚（够不下就是这一类该拆） */
+.pane { flex:1; min-width:0; display:flex; flex-direction:column; padding:18px 22px 8px; overflow:hidden; }
+.pane .crumb { font-size:var(--fs-meta); color:var(--text-dimmer); }
+.pane .ptitle { display:flex; align-items:center; gap:10px; margin:2px 0 2px; }
+.pane .ptitle .grow { flex:1; }
+.pane .ptitle h2 { margin:0; font-size:20px; font-weight:600; }
+.pane .pnote { margin:0 0 10px; font-size:var(--fs-meta); color:var(--text-dim); }
+.pane .rows { flex:1; min-height:0; overflow:hidden; }
+.pane.scroll .rows { overflow:auto; }   /* 只有搜索结果页允许滚 */
+
+/* 设置行：名字 → 说明 → 控件。
+   紧凑控件（开关 / 分段 / 下拉）收进标题行右端——VSCode 把它们摆在说明下面，
+   但那是一页可以滚的排法；这里一页不滚，行高就是预算。 */
+.st { position:relative; padding:8px 0 9px 12px; border-bottom:1px solid var(--border-subtle); }
+.st:last-child { border-bottom:0; }
+.st .t { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.st .t .name { font-size:var(--fs-body); font-weight:600; color:var(--text-bright); }
+.st .t .from, .st .t .key { font-size:var(--fs-meta); color:var(--text-dimmer); }
+.st .t .key { font-family:var(--mono); font-size:var(--fs-micro); }
+.st .t .grow { flex:1; }
+.st .d { margin:2px 0 0; font-size:var(--fs-meta); color:var(--text-dim); max-width:64ch; padding-right:12px; }
+.st .ctl { margin-top:7px; display:flex; align-items:center; gap:9px; }
+.st.mod::before { content:""; position:absolute; left:0; top:9px; bottom:9px; width:2px; background:var(--accent); }
+.st .reset { display:none; border:0; background:none; color:var(--text-dimmer); font-size:var(--fs-micro); padding:2px 4px; }
+.st.mod .reset { display:inline-block; }
+.st .reset:hover { color:var(--accent); }
+.chip { font-size:var(--fs-micro); border-radius:var(--r-pill); padding:2px 8px; border:1px solid var(--border-subtle);
+  color:var(--text-dimmer); }
+.chip.acc { color:var(--accent); border-color:var(--accent-border); background:var(--accent-soft); }
+.chip.warn { color:var(--warn); border-color:var(--warn-border); background:var(--warn-soft); }
+.chip.swarm { color:var(--swarm); border-color:var(--swarm-border); background:var(--swarm-soft); }
+.chip.where { display:inline-flex; align-items:center; gap:5px; }
+.chip.where .d2 { width:6px; height:6px; border-radius:50%; background:var(--ok); }
+mark { background:rgba(210,153,34,.28); color:inherit; border-radius:3px; padding:0 1px; }
+.pane .none { padding:50px 10px; color:var(--text-dimmer); font-size:var(--fs-sm); }
+
+/* 控件（画个样子，够看结构就行） */
+.seg { display:inline-flex; border:1px solid var(--border); border-radius:var(--r-xs); overflow:hidden; background:var(--bg-elevated); }
+.seg span { padding:4px 11px; font-size:var(--fs-meta); color:var(--text-dim); }
+.seg span.on { background:var(--accent-soft); color:var(--accent); }
+.sel, .inp { height:30px; border:1px solid var(--border); border-radius:var(--r-xs); background:var(--bg-elevated);
+  color:var(--text-bright); font-size:var(--fs-meta); padding:0 10px; display:inline-flex; align-items:center; }
+.inp { flex:0 1 300px; min-width:0; }
+.inp > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.inp .ph { color:var(--text-dimmer); }
+.sw { width:34px; height:19px; border-radius:var(--r-pill); background:var(--border); position:relative;
+  display:inline-block; flex:0 0 34px; }
+.sw::after { content:""; position:absolute; top:2px; left:2px; width:15px; height:15px; border-radius:50%; background:#fff; }
+.sw.on { background:var(--accent-solid); } .sw.on::after { left:17px; }
+.tags { display:flex; gap:6px; flex-wrap:wrap; }
+.tags .tg { font:var(--fs-meta)/1 var(--mono); border:1px solid var(--border); border-radius:var(--r-xs);
+  padding:5px 8px; color:var(--text-dim); background:var(--bg-elevated); }
+
+/* 手机档 */
+.phones { display:flex; gap:24px; flex-wrap:wrap; }
+.phone { width:290px; border:1px solid var(--border); border-radius:22px; overflow:hidden; background:var(--bg-base);
+  box-shadow:0 14px 34px rgba(0,0,0,.34); }
+html[data-theme="light"] .phone { box-shadow:0 10px 26px rgba(31,35,40,.12); }
+.phone .scr { height:520px; display:flex; flex-direction:column; }
+.phone .ph-head { padding:12px 14px 10px; border-bottom:1px solid var(--border-subtle); }
+.phone .ph-head .b { display:flex; align-items:center; gap:8px; font-size:var(--fs-sm); color:var(--text-dim); }
+.phone .ph-head h1 { margin:6px 0 0; font-size:19px; font-weight:600; }
+.phone .ph-body { flex:1; overflow:auto; }
+.phone .cat { display:flex; align-items:center; gap:10px; min-height:var(--tap); padding:0 14px;
+  border-bottom:1px solid var(--border-subtle); font-size:var(--fs-body); color:var(--text-bright); }
+.phone .cat .n { margin-left:auto; font-size:var(--fs-micro); color:var(--text-dimmer); }
+.phone .cat .ar { color:var(--text-dimmer); flex:0 0 13px; }
+.phone .ph-sec { padding:12px 14px 4px; font-size:var(--fs-micro); letter-spacing:.1em; text-transform:uppercase;
+  color:var(--text-dimmer); }
+.phone .tabbar { flex:0 0 52px; display:flex; border-top:1px solid var(--border-subtle); }
+.phone .tabbar div { flex:1; display:grid; place-items:center; gap:2px; color:var(--text-dimmer); font-size:9px; }
+.phone .tabbar div.on { color:var(--accent); }
+.phone .srow { padding:11px 14px; border-bottom:1px solid var(--border-subtle); }
+.phone .srow .t { display:flex; align-items:center; gap:8px; }
+.phone .srow .t .grow { flex:1; }
+.phone .srow .d { margin:3px 0 0; font-size:var(--fs-meta); color:var(--text-dim); }
+
+/* 现状对照 */
+.old { border:1px solid var(--border); border-radius:var(--r-card); overflow:hidden; }
+.old .tabs { display:flex; gap:2px; padding:0 14px; border-bottom:1px solid var(--border-subtle); background:var(--bg-container); }
+.old .tabs span { padding:11px 12px; font-size:var(--fs-sm); color:var(--text-dim); border-bottom:2px solid transparent; }
+.old .tabs span.on { color:var(--accent); border-bottom-color:var(--accent); }
+.old .cards { padding:14px; display:flex; flex-direction:column; gap:10px; background:var(--bg-base); }
+.old .card { border:1px solid var(--border-subtle); border-radius:var(--r-sm); padding:10px 12px;
+  font-size:var(--fs-meta); color:var(--text-dim); background:var(--bg-container); }
+.old .card b { color:var(--text-bright); font-weight:600; }
+
+@media (max-width:860px) { .shell { height:auto; } }
+</style>
+</head>
+<body>
+
+<div class="themer">
+  <button class="on" onclick="theme('dark',this)">深色</button>
+  <button onclick="theme('light',this)">浅色</button>
+</div>
+
+<div class="doc">
+<header>
+  <div class="kick">Roam · Design</div>
+  <h1>设置页重构 · 搜索 + 分类树 + 一类一页</h1>
+  <p>今天的设置是「7 个横向 tab，其中一个 tab 装 9 张卡」。这份稿子换成 VSCode 那套：顶上一个搜索框，
+     左边一棵两级分类树，右边<b>只显示选中的那一类</b>——不是一条从主题滚到两步验证的长流。
+     第 2 节的原型可以直接点、直接搜。</p>
+</header>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<section id="s1">
+  <h2><span class="n">01</span> 现在坏在哪</h2>
+  <p class="lead">先把现状摆出来，再说改法。下面这张是 <code>App.tsx</code> 里 <code>EnvPage</code> 的真实结构，不是稻草人。</p>
+
+  <div class="old">
+    <div class="tabs">
+      <span>多机</span><span class="on">通用</span><span>浏览器</span><span>手机</span>
+      <span>语音</span><span>偏好</span><span>环境变量</span>
+    </div>
+    <div class="cards">
+      <div class="card"><b>外观</b> · 深色/浅色</div>
+      <div class="card"><b>语言</b> · 中文/English</div>
+      <div class="card"><b>智能体命令</b> · claude / codex 可执行文件</div>
+      <div class="card"><b>快捷命令</b> · 终端工具条上的自定义按钮</div>
+      <div class="card"><b>提示词弹窗</b> · 默认开/关</div>
+      <div class="card"><b>P2P 直连</b> · 开关 + STUN + 三个超时 + 最低速率</div>
+      <div class="card"><b>安装到桌面</b> · PWA + 下载自签证书</div>
+      <div class="card"><b>修改口令</b></div>
+      <div class="card"><b>两步验证</b> · TOTP</div>
+    </div>
+  </div>
+  <p class="cap">「通用」tab 的九张卡，从换主题一路排到两步验证——它不是一个分类，是没地方放的东西的收容所。</p>
+
+  <h3>三条毛病</h3>
+  <ul class="tight">
+    <li><b>找不到。</b> 五十多项设置没有一个搜索框。「Claude 用哪个可执行文件」在<em>通用</em>的第三张卡里，
+        「镜像画质」在<em>浏览器</em>还是<em>手机</em>里全靠试。</li>
+    <li><b>分类不成立。</b> 七个 tab 里有一个叫「通用」的垃圾桶（9 张卡），一个叫「偏好」的只读 KV 表
+        （<code>PreferencesOverview</code>，把已经在别处能改的值再列一遍），剩下五个才是真分类。
+        横向 tab 还有硬上限：再加两类就得换行或者滚动。</li>
+    <li><b>看不出改没改、写去哪。</b> 每张卡的保存策略都不一样——有的改完即存，有的要按「保存」，
+        浏览器那张还要「保存并重启」。多机之后又多一个问题：<b>这一下写到哪台机器上？</b>页面一个字都没说。</li>
+  </ul>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<section id="s2">
+  <h2><span class="n">02</span> 新结构（可交互原型）</h2>
+  <p class="lead">
+    左边两级树（父可展开，<b>叶子才是一页</b>），右边只画选中的那一页，翻页不滚动。
+    顶上的搜索是唯一跨类的入口：搜出来的结果按类分段平铺，点一条就跳到它所在的页。
+    试试搜 <code>claude</code>、<code>超时</code>、<code>密码</code>。
+  </p>
+
+  <div class="frame">
+    <div class="chrome"><i class="dot"></i><i class="dot"></i><i class="dot"></i>
+      <span class="url" id="url">roam.local / #/settings/common</span></div>
+    <div class="shell">
+      <nav class="nav">
+        <div class="brand"></div>
+        <button class="it" title="项目">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h6l2 2h10v10H3z"/></svg></button>
+        <button class="it" title="终端">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8l4 4-4 4M12 16h7"/></svg></button>
+        <button class="it" title="文件">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h4"/></svg></button>
+        <span class="sp"></span>
+        <button class="node" title="开发机 · 已连中心">开<i class="d"></i></button>
+        <div class="sep"></div>
+        <button class="it on" title="设置">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><circle cx="9" cy="7" r="2.3"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="15" cy="17" r="2.3"/></svg></button>
+      </nav>
+
+      <div class="main">
+        <div class="set">
+          <div class="set-head">
+            <div class="row1">
+              <div>
+                <div class="kick2">Settings</div>
+                <h1>设置</h1>
+              </div>
+              <span class="grow"></span>
+              <button class="tt-act" onclick="alert('打开 preferences.json —— 对应 VSCode 的「在 settings.json 中编辑」，\n取代今天那个只读的「偏好」tab。')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4H6a2 2 0 0 0-2 2v3l-2 3 2 3v3a2 2 0 0 0 2 2h2M16 4h2a2 2 0 0 1 2 2v3l2 3-2 3v3a2 2 0 0 1-2 2h-2"/></svg>
+                JSON
+              </button>
+            </div>
+            <div class="searchbar" id="sb">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="color:var(--text-dimmer)"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+              <input id="q" placeholder="搜索设置（名称、说明、键名都能搜）" autocomplete="off">
+              <span class="count" id="cnt"></span>
+              <button class="clr" onclick="clearQ()" aria-label="清空">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="set-body">
+            <div class="tree" id="tree"></div>
+            <div class="pane" id="pane"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="cap">原型里的控件只画样子，不真的存；蓝色竖条 + 「重置」表示这一项被改离了默认值。</p>
+
+  <h3>为什么是「一类一页」而不是长流</h3>
+  <ul class="tight">
+    <li><b>翻页比滚动可回溯。</b> 一条长流里改完一项再往回找，你得凭肌肉记忆滚回去；一类一页，
+        位置由树决定，回来时那一页还是原样。</li>
+    <li><b>一页装不下 = 这一类该拆。</b> 这条约束是设计的一部分：桌面一页控制在 <b>6 项以内</b>，
+        超了就分二级（<em>浏览器 → 启动 / 窗口</em>），而不是让它长出滚动条。
+        「通用」那种九张卡的收容所，在这条规则下压根建不起来。</li>
+    <li><b>每一页都有地址。</b> <code>#/settings/node/browser</code> 可以直接发给别人、可以被
+        「去设置里打开它」的按钮直接跳（比如镜像页报「Chrome 没装」时跳到浏览器页），返回键也认。
+        一条长流做不到这件事——锚点滚动落点会被上一次的滚动位置带偏。</li>
+    <li><b>唯一允许滚的是搜索结果页</b>，因为它天然跨类、条数不可控。</li>
+  </ul>
+
+  <h3>三区各自解决第 1 节的哪一条</h3>
+  <table>
+    <tr><th style="width:120px">区</th><th style="width:180px">解决</th><th>怎么解决的</th></tr>
+    <tr><td><b>搜索框</b></td><td>找不到</td>
+      <td>索引 = 名称 + 说明 + 键名（<code>claudeCommand</code> 这种）。结果按类分段，
+          每条带面包屑；点一条切到那一页并高亮该行。树上同时显示每类的命中数——
+          一眼看出「证书」这个词横跨<em>安全</em>和<em>多机</em>两类。</td></tr>
+    <tr><td><b>分类树</b></td><td>分类不成立</td>
+      <td>纵向两级，没有横向 tab 的数量上限；父级只管展开，值都在叶子上。
+          分段标题把「值写在哪」直接写进导航。</td></tr>
+    <tr><td><b>一类一页</b></td><td>看不出改没改</td>
+      <td>页头常驻一枚写入目标徽标（<em>本机 · 开发机</em>），行上用蓝竖条标出改离默认的项，
+          「重置」跟在名字后面。</td></tr>
+  </table>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<section id="s3">
+  <h2><span class="n">03</span> 分类怎么划的</h2>
+  <p class="lead">树的三段不是随手起的名字，是按<b>值真正存在哪个文件里</b>划的——这是多机之后唯一还站得住的划法。</p>
+
+  <table>
+    <tr><th style="width:130px">段</th><th style="width:210px">存储</th><th>为什么归在一起</th></tr>
+    <tr><td><b>跟着我走</b></td><td><code>preferences.json</code> ＋ <code>localStorage</code> 镜像</td>
+      <td>主题、语言、密度、快捷命令这些是「我习惯这样」，跟人不跟机器。今天它们只存在服务端，
+          于是切一台机器主题可能就变了——见下面那条待决。</td></tr>
+    <tr><td><b>这台机器</b></td><td><code>config.yaml</code>、<code>browser-config.json</code>、
+        <code>phone-config.json</code>、<code>speech-config.json</code>、环境变量</td>
+      <td>Chrome 装在哪、adb 连哪台安卓、ASR 密钥、登录口令——都是这台机器上的东西，
+          换台机器本来就该是另一份值。</td></tr>
+    <tr><td><b>整个集群</b></td><td>中心的注册表 ＋ 本节点的 <code>cluster/node.json</code></td>
+      <td>角色（节点/中心）、接入地址、注册令牌。这一段是唯一「改一处、多机可见」的。</td></tr>
+  </table>
+
+  <div class="note ok">
+    <b>已落地：主题与语言不再跟着机器走。</b>
+    它们本来只存在服务端 <code>preferences.json</code> 里，切到另一台机器读的是那台的值，界面会当着面换一副样子。
+    现在按 <code>WORKSPACE_MIRROR</code> 的先例多存一份 <code>ttmux.look</code>：<b>本地存过就以本地为准</b>，
+    服务端那份退化成备份与首次默认（这台浏览器还没表过态时才作数）。尺寸类偏好早就是这么办的。
+    <br>只覆盖纯观感项。命令、密钥、传输参数仍以服务端为权威——那些是机器的事实，不是口味。
+    回归用例在 <code>frontend/src/preferences.test.ts</code>。
+  </div>
+
+  <h3>旧 tab → 新分类，逐项去向</h3>
+  <table>
+    <tr><th style="width:110px">今天在哪</th><th style="width:170px">项</th><th style="width:170px">去哪（父 › 叶）</th><th>备注</th></tr>
+    <tr><td>通用</td><td>外观 / 语言</td><td><b>界面 › 外观与语言</b></td><td>再加上今天只能拖、不能在设置里改的信息密度</td></tr>
+    <tr><td>—</td><td>侧栏成轨 / 终端区 / 方向簇</td><td><b>界面 › 工作区布局</b></td>
+      <td>已经在 <code>WorkspacePreference</code> 里，只是从来没有入口</td></tr>
+    <tr><td>通用</td><td>智能体命令</td><td><b>智能体 › 可执行文件</b></td><td></td></tr>
+    <tr><td>通用</td><td>快捷命令 / 提示词弹窗</td><td><b>智能体 › 新会话</b></td><td>两张卡本来就是一件事：新开会话时怎么起</td></tr>
+    <tr><td>通用</td><td>P2P 五项</td><td><b>这台机器 › 文件传输</b></td><td>自己一页。五个参数挤在一张卡里，是「通用」最不通用的一块</td></tr>
+    <tr><td>通用</td><td>安装到桌面 / 下载证书</td><td><b>关于与安装</b></td><td>和版本、检查更新在一起，等于把今天的「关于」页并进设置</td></tr>
+    <tr><td>通用</td><td>修改口令 / 两步验证</td><td><b>安全</b></td><td>安全项和换主题放同一个 tab，本来就说不过去</td></tr>
+    <tr><td>浏览器</td><td>整张卡</td><td><b>这台机器 › 浏览器</b></td><td>原样保留，只把「保存 / 保存并重启」的差别写进说明</td></tr>
+    <tr><td>手机</td><td>整张卡</td><td><b>这台机器 › 手机</b></td><td>Android / iOS 两块仍是自定义块，挂在同一页里</td></tr>
+    <tr><td>语音</td><td>整张卡</td><td><b>这台机器 › 语音输入</b></td><td>按服务商切换字段，原样保留</td></tr>
+    <tr><td>环境变量</td><td>KV 列表</td><td><b>这台机器 › 环境变量</b></td><td>原样保留</td></tr>
+    <tr><td>多机</td><td>整张卡</td><td><b>多机</b></td><td>原样保留，成为「整个集群」段的唯一一页</td></tr>
+    <tr><td>偏好</td><td>只读 KV 表</td><td><b>删掉</b></td><td>换成页头那枚「JSON」按钮。把可改的值再只读列一遍，是给用户两条互相矛盾的路</td></tr>
+  </table>
+
+  <div class="note">
+    <b>「常用」是别名页，不是第十一类。</b> 它把出现频率最高的几项从各自的页里<em>引用</em>过来
+    （和 VSCode 的 Commonly Used 一样），改哪边都是同一个值。别名不参与「一项只有一个家」的统计，
+    但要在行上标出它真正的归属（<em>来自 界面 › 外观与语言</em>），否则用户会以为有两份。
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<section id="s4">
+  <h2><span class="n">04</span> 一行设置长什么样</h2>
+  <p class="lead">所有设置共用一种行，不再是「一项一张 Card」。Card 的边框在这里没有信息量，
+     五十项设置就是五十个框，反而把真正的分组线淹了。顺序固定：<b>名字 → 说明 → 控件</b>。</p>
+
+  <div class="frame" style="max-width:720px">
+    <div class="pane" style="height:auto; overflow:visible">
+      <div class="crumb">这台机器 › 示例</div>
+      <div class="ptitle"><h2>示例</h2><span class="chip where"><i class="d2"></i>本机 · 开发机</span>
+        <span class="grow" style="flex:1"></span><span class="chip warn">改完要重启</span>
+        <button class="tt-act">保存并重启浏览器</button></div>
+      <div class="rows" style="overflow:visible">
+        <div class="st mod">
+          <div class="t"><span class="name">开关型</span><span class="chip">默认 关</span><button class="reset">重置</button>
+            <span class="grow"></span><span class="sw on"></span></div>
+          <p class="d">开启后下载走点对点直连，打不通自动回退中转。说明写后果，不复述控件；
+            左边那条蓝竖条 = 已改离默认值。</p>
+        </div>
+        <div class="st">
+          <div class="t"><span class="name">文本型</span></div>
+          <p class="d">失焦即存，不给「保存」按钮——一页里五个保存按钮是五次犹豫。</p>
+          <div class="ctl"><span class="inp"><span class="ph">/usr/local/bin/claude</span></span></div>
+          <div class="key">claudeCommand</div>
+        </div>
+        <div class="st">
+          <div class="t"><span class="name">枚举型</span><span class="grow"></span>
+            <span class="seg"><span class="on">自动</span><span>无头</span><span>有头</span></span></div>
+          <p class="d">三档以内用分段器，更多用下拉；两者都够窄，收在标题行右端。</p>
+        </div>
+        <div class="st">
+          <div class="t"><span class="name">危险型</span><span class="key">totp</span></div>
+          <p class="d">关掉之后，只要有口令就能登录。这类项走二次确认，按钮是危险色，
+            和上面那些改完即存的行明确不是一种东西。</p>
+          <div class="ctl"><button class="tt-act" style="border-color:var(--danger-border);color:var(--danger)">关闭两步验证</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <ul class="tight" style="margin-top:16px">
+    <li><b>能即时存的就即时存。</b> 开关、分段器、下拉改完就写（跟今天 <code>setPrefs</code> 一样），文本框走失焦提交。
+        只有「会打断正在跑的东西」的（重启浏览器、切集群角色、改口令）保留显式按钮。</li>
+    <li><b>键名常驻显示。</b> <code>claudeCommand</code> 既是搜索命中项，也是用户去 issue 里描述问题时的说法。</li>
+    <li><b>徽标只在偏离时出现</b>——「默认 关」「改完要重启」「实验性」。每行都挂满徽标等于每行都没有徽标。</li>
+    <li><b>页级动作在页头，不占一行。</b> 「保存并重启浏览器」「推送到会话」管的是整页而不是某一项，
+        摆在标题右边（连同那枚说明后果的徽标）。这条同时把行数省了出来——
+        「一页 6 项」的预算不该被动作按钮吃掉。</li>
+    <li><b>危险动作不进普通行。</b> 「离开集群」「关闭两步验证」走危险色 + 二次确认，
+        和它上面那些改完即存的行明确不是一种东西。</li>
+  </ul>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<section id="s5">
+  <h2><span class="n">05</span> 手机档</h2>
+  <p class="lead">手机上没有并排两栏的余地：树变成一页列表，点进去是子页——正好是仓库里已有的
+     <code>MobileSubPage</code> 那套（返回手势已经接好）。
+     「一类一页」在手机上本来就是唯一可行的形态，桌面这么做只是把两端对齐了。</p>
+
+  <div class="phones">
+    <div class="phone"><div class="scr">
+      <div class="ph-head">
+        <div class="b">设置</div>
+        <div class="searchbar" style="margin-top:10px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="color:var(--text-dimmer)"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><span style="color:var(--text-dimmer);font-size:var(--fs-meta)">搜索设置</span></div>
+      </div>
+      <div class="ph-body">
+        <div class="ph-sec">跟着我走</div>
+        <div class="cat">常用<span class="n">5</span><svg class="ar" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></div>
+        <div class="cat">界面<span class="n">2 类</span><svg class="ar" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></div>
+        <div class="cat">智能体<span class="n">2 类</span><svg class="ar" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></div>
+        <div class="ph-sec">这台机器 · 开发机</div>
+        <div class="cat">浏览器<span class="n">6</span><svg class="ar" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></div>
+        <div class="cat">手机<span class="n">5</span><svg class="ar" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></div>
+        <div class="cat">语音输入<span class="n">5</span><svg class="ar" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></div>
+        <div class="cat">文件传输<span class="n">5</span><svg class="ar" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></div>
+        <div class="cat">环境变量<span class="n">2</span><svg class="ar" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></div>
+        <div class="ph-sec">整个集群</div>
+        <div class="cat">多机<span class="n">6</span><svg class="ar" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></div>
+        <div class="ph-sec">这台设备</div>
+        <div class="cat">安全<span class="n">3</span><svg class="ar" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></div>
+        <div class="cat">关于与安装<span class="n">4</span><svg class="ar" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></div>
+      </div>
+      <div class="tabbar"><div>项目</div><div>会话</div><div>文件</div><div class="on">更多</div></div>
+    </div></div>
+
+    <div class="phone"><div class="scr">
+      <div class="ph-head">
+        <div class="b"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><path d="M15 5l-7 7 7 7"/></svg> 界面</div>
+        <h1>工作区布局</h1>
+      </div>
+      <div class="ph-body">
+        <div class="srow"><div class="t"><span>侧栏收成轨</span><span class="grow"></span><span class="sw on"></span></div>
+          <p class="d">48px 图标轨。1280 以下强制成轨，这里只决定宽屏默认。</p></div>
+        <div class="srow"><div class="t"><span>终端区默认展开</span><span class="grow"></span><span class="sw on"></span></div></div>
+        <div class="srow"><div class="t"><span>信息密度</span><span class="grow"></span><span class="seg"><span class="on">宽松</span><span>紧凑</span></span></div>
+          <p class="d">紧凑档把列表行高和内边距各收一档。</p></div>
+        <div class="srow"><div class="t"><span>方向簇</span><span class="grow"></span><span class="sw on"></span></div>
+          <p class="d">终端上方的方向键簇，只在手机档出现。</p></div>
+        <div class="srow"><div class="t"><span>方向簇位置</span><span class="grow"></span><span class="seg"><span>左手</span><span class="on">右手</span></span></div></div>
+      </div>
+      <div class="tabbar"><div>项目</div><div>会话</div><div>文件</div><div class="on">更多</div></div>
+    </div></div>
+  </div>
+
+  <ul class="tight" style="margin-top:18px">
+    <li>行高按 <code>--tap: 44px</code> 起步，控件靠右、不跟标题抢宽度；相邻两个开关之间的空隙比桌面多留 4px。</li>
+    <li>手机上<b>不画左侧竖条</b>：44px 行里那 2px 看不清。改离默认值的行用「重置」文字按钮表示。</li>
+    <li>手机上一页仍然可以滚（子页天然是滚动容器），但拆页规则不变——一页十几项在手机上更难用，不是更好用。</li>
+  </ul>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<section id="s6">
+  <h2><span class="n">06</span> 怎么落地</h2>
+  <p class="lead">核心是：<b>设置项变成数据，页面变成渲染器</b>——不这么做就没有搜索，也没法保证「一页 6 项」这条约束。</p>
+
+  <h3>文件</h3>
+  <table>
+    <tr><th style="width:300px">文件</th><th>放什么</th></tr>
+    <tr><td><code>frontend/src/settings/registry.ts</code></td>
+      <td>唯一的设置清单：<code>{ id, page, labelKey, descKey, key?, control, scope, needsRestart?, read, write }</code>。
+          分类树、每一页的内容、搜索索引、手机端列表全部从它生成。「常用」页存的是一串 id 引用，不是副本。</td></tr>
+    <tr><td><code>frontend/src/settings/SettingsPage.tsx</code></td>
+      <td>三区外壳：搜索框、树、当前页。路由 <code>#/settings/&lt;page&gt;</code>，
+          未知或缺省落到 <code>common</code>。不需要滚动侦测——没有长流要侦测。</td></tr>
+    <tr><td><code>frontend/src/settings/SettingRow.tsx</code></td>
+      <td>一行的渲染 + 控件分发（开关 / 分段 / 下拉 / 文本 / 标签组 / 自定义）。</td></tr>
+    <tr><td><code>frontend/src/settings/pages/*.tsx</code></td>
+      <td>装不进「一项一行」的复杂块：手机的 Android/iOS 双卡、两步验证的二维码流程、多机的角色卡。
+          以 <code>control: 'custom'</code> 挂进对应页，仍然吃搜索（靠 <code>keywords</code>）。</td></tr>
+    <tr><td><code>frontend/src/cluster/ClusterSettings.tsx</code></td>
+      <td>现成的，原样搬进「多机」页，不重写。</td></tr>
+  </table>
+
+  <h3>顺序</h3>
+  <ul class="tight">
+    <li><b>P1 · 换壳。</b> 三区外壳 + registry + 路由 + 搜索，把今天七个 tab 的内容按第 3 节的表搬进去，
+        <em>行为一个不改</em>。删掉只读的「偏好」tab，换成页头的 JSON 按钮。</li>
+    <li><b>P2 · 补漏。</b> 把今天只能靠拖、靠猜的项补进设置：信息密度、侧栏成轨、终端区默认展开、方向簇。</li>
+    <li><s><b>P3 · 观感项本地优先</b></s> —— 已做：主题/语言以 <code>localStorage</code> 为准，切机器不再换脸。</li>
+  </ul>
+
+  <div class="note">
+    <b>i18n：</b>registry 里存的是 <code>labelKey</code> / <code>descKey</code>，不是中文串——
+    搜索索引因此必须在 <code>t()</code> 之后建，否则英文界面下搜不到任何东西。
+    <code>npm run i18n:check</code> 守住两份键齐全。
+  </div>
+  <div class="note ok">
+    <b>验收：</b>桌面确认每一页都不出滚动条（出了就是这一页该拆），刷新后停在同一页，浏览器返回键能退回上一页；
+    手机档按 <code>docs/development/web-ui-checklist.md</code> 走真机——重点是 44px 行、搜索框吊起键盘后列表还能滚、
+    子页返回手势正常。
+  </div>
+</section>
+</div>
+
+<script>
+function theme(m, el) {
+  document.documentElement.dataset.theme = m
+  document.querySelectorAll('.themer button').forEach(b => b.classList.toggle('on', b === el))
+}
+
+/* ── 设置清单：原型里就是最终 registry 的形状 ──────────────────────
+ * 一个 page = 树上的一个叶子 = 右边的一屏。items 超过 6 条就该拆页。 */
+/* 控件返回 { h, inline, lab }：inline 决定它挂在标题行还是说明下面；
+   lab 是开关自带的一句说明，没写 d 时就当说明用。 */
+function seg(o, i) { return { h:'<span class="seg">' + o.map((x,j) => '<span class="'+(j===i?'on':'')+'">'+x+'</span>').join('') + '</span>', inline:true } }
+function sel(v) { return { h:'<span class="sel">'+v+'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left:6px;color:var(--text-dimmer)"><path d="M6 9l6 6 6-6"/></svg></span>', inline:true } }
+function inp(v) { const ph = /^（/.test(v) || v.indexOf('•') === 0 ? ' class="ph"' : ''
+  return { h:'<span class="inp"><span'+ph+'>'+v+'</span></span>', inline:true } }
+function sw(on, lab) { return { h:'<span class="sw '+(on?'on':'')+'"></span>', inline:true, lab } }
+function btn(l) { return { h:'<button class="tt-act">'+l+'</button>', inline:true } }
+function tags(a) { return { h:'<span class="tags">' + a.map(x => '<span class="tg">'+x+'</span>').join('') + '</span>', inline:false } }
+
+const TREE = [
+  { seg:'跟着我走', segNote:'存在偏好里，换台机器也是这一份' },
+  { id:'common', name:'常用', note:'从各页引用过来的高频项，改的是同一个值。', items:[
+    { n:'主题', k:'theme', from:'界面 › 外观与语言', c:seg(['深色','浅色'],0), d:'深色/浅色。同时决定终端配色。' },
+    { n:'语言', k:'locale', from:'界面 › 外观与语言', c:sel('中文'), d:'界面语言，切换即时生效。' },
+    { n:'Claude 可执行文件', k:'claudeCommand', from:'智能体 › 可执行文件', mod:1,
+      c:inp('claude'), d:'新开 Claude 会话时执行的命令，可以是绝对路径或包装脚本。' },
+    { n:'快捷命令', k:'quickCommands', from:'智能体 › 新会话', c:tags(['git status','npm run dev','/clear']),
+      d:'终端工具条上的自定义按钮，点一下把这行字送进当前会话。' },
+    { n:'P2P 直连', k:'p2pEnabled', from:'这台机器 › 文件传输', tag:'实验性', tagc:'swarm',
+      c:sw(0,'先试点对点直连，打不通自动回退中转'), d:'' },
+  ]},
+  { id:'ui', name:'界面', kids:[
+    { id:'ui.look', name:'外观与语言', items:[
+      { n:'主题', k:'theme', c:seg(['深色','浅色'],0), d:'深色/浅色。同时决定终端配色。' },
+      { n:'语言', k:'locale', c:sel('中文'), d:'界面语言，切换即时生效。' },
+      { n:'信息密度', k:'workspace.density', c:seg(['宽松','紧凑'],0),
+        d:'与窗口档正交：紧凑档在任何宽度下都把行高和内边距各收一档。' },
+    ]},
+    { id:'ui.layout', name:'工作区布局', items:[
+      { n:'侧栏收成轨', k:'workspace.navCollapsed', c:sw(1,'48px 图标轨；1280 以下强制成轨，这里只决定宽屏默认'), d:'' },
+      { n:'终端区默认展开', k:'workspace.dockOpen', c:sw(1,'进入工作区时终端区是否已经展开'), d:'' },
+      { n:'终端区宽度', k:'workspace.dockWidth', c:inp('（跟随窗口：clamp(480, 42vw, 880)）'),
+        d:'拖过分隔条就以拖出来的值为准；这里可以清回自动。' },
+      { n:'方向簇', k:'workspace.dpadOn', tag:'手机档', c:sw(1,'终端上方的方向键簇'), d:'' },
+      { n:'方向簇位置', k:'workspace.dpadSide', tag:'手机档', c:seg(['左手','右手'],1), d:'落在哪只手。' },
+    ]},
+  ]},
+  { id:'agent', name:'智能体', kids:[
+    { id:'agent.bin', name:'可执行文件', items:[
+      { n:'Claude', k:'claudeCommand', mod:1, c:inp('claude'), d:'新开 Claude 会话时执行的命令，可以是绝对路径或包装脚本。' },
+      { n:'Codex', k:'codexCommand', c:inp('codex'), d:'同上，用于 Codex 会话。' },
+    ]},
+    { id:'agent.new', name:'新会话', items:[
+      { n:'快捷命令', k:'quickCommands', c:tags(['git status','npm run dev','/clear','新增…']),
+        d:'终端工具条上的自定义按钮，点一下把这行字送进当前会话。' },
+      { n:'提示词弹窗默认开', k:'promptPopupOff', c:sw(0,'新开会话时自动弹出提示词编辑框'), d:'' },
+      { n:'显示语音按钮', k:'showVoiceButton', c:sw(1,'输入框里的麦克风；录音需要 HTTPS'), d:'' },
+      { n:'概览默认页签', k:'overviewTab', c:seg(['项目','会话'],0), d:'项目页记住上次停在哪个页签。' },
+    ]},
+  ]},
+
+  { seg:'这台机器 · 开发机', segNote:'写进当前切到的那台机器的配置文件', where:'本机 · 开发机' },
+  { id:'node', name:'这台机器', kids:[
+    { id:'node.browser', name:'浏览器', where:'本机 · 开发机', items:[
+      { n:'运行模式', k:'headless', c:seg(['自动','无头','有头'],0),
+        d:'自动：有桌面就有头，没有就无头。镜像页用它托管 Chrome。' },
+      { n:'窗口尺寸', k:'windowSize', c:inp('1920,1080'), d:'启动 Chrome 的窗口大小，逗号分隔。' },
+      { n:'全屏启动', k:'fullscreen', c:sw(1,'去掉地址栏与标签页，镜像里能多出约 90px 高'), d:'' },
+      { n:'缩放', k:'scale', c:inp('2'), d:'设备像素比。2 在高分屏上更清楚，也更费带宽。' },
+      { n:'用户资料目录', k:'profile', mod:1, c:inp('/tmp/ttmux-chrome'),
+        d:'登录态存在这里。换个目录等于换一个全新的浏览器身份。' },
+      { n:'可执行文件', k:'bin', c:inp('（自动查找 Chrome / Chromium）'), d:'指定别的浏览器时才填。' },
+    ], act:{ label:'保存并重启浏览器', tag:'尺寸与路径改完要重启' }},
+    { id:'node.phone', name:'手机', where:'本机 · 开发机', items:[
+      { n:'启用 Android', k:'phone.android', c:sw(1,'与 iOS 互斥；未装依赖时先自动装'), d:'' },
+      { n:'Android 后端', k:'android.mode', c:seg(['本地','远程','真机'],0), d:'本地 redroid / 远程 redroid / 真机 三选一。' },
+      { n:'adb 地址', k:'android.address', c:inp('localhost:5555'), d:'真机或远程 redroid 的 host:port。本地模式不用填。' },
+      { n:'分辨率', k:'android.resolution', c:inp('（跟随容器默认）'), d:'改了要重建容器。' },
+      { n:'启用 iOS', k:'phone.ios', c:sw(0,'只在 macOS 上可用，走模拟器'), d:'' },
+    ]},
+    { id:'node.speech', name:'语音输入', where:'本机 · 开发机', items:[
+      { n:'服务商', k:'provider', mod:1, c:sel('火山引擎'),
+        d:'不选则输入框里的麦克风不出现。密钥存在这台机器上，不下发到浏览器。' },
+      { n:'App ID', k:'volcano.appId', c:inp('••••••'), d:'火山语音控制台里的应用 ID。' },
+      { n:'Access Token', k:'volcano.accessToken', c:inp('••••••••••••'), d:'与 App ID 配对的密钥。' },
+      { n:'Resource ID', k:'volcano.resourceId', c:inp('volc.bigasr.auc'),
+        d:'决定走标准版还是极速版；只开了标准版就填 auc。' },
+      { n:'接口地址', k:'volcano.endpoint', c:inp('https://openspeech.bytedance.com/...'), d:'一般不用改。' },
+    ]},
+    { id:'node.p2p', name:'文件传输', where:'本机 · 开发机', items:[
+      { n:'P2P 直连', k:'p2pEnabled', tag:'实验性', tagc:'swarm',
+        c:sw(0,'下载与镜像先试点对点直连，打不通自动回退中转'), d:'' },
+      { n:'STUN 服务器', k:'p2pStunServers', c:inp('（用服务端默认）'), d:'逗号分隔。只影响本浏览器。' },
+      { n:'建链超时', k:'p2pConnectTimeoutSec', c:inp('30'), d:'打洞多久算失败，超时回退中转。默认 30 秒。' },
+      { n:'候选收集超时', k:'p2pGatherTimeoutSec', c:inp('30'), d:'等 ICE 候选的上限。手机蜂窝网下可以调大。默认 30 秒。' },
+      { n:'最低速率', k:'p2pMinSpeedKBps', c:inp('200'),
+        d:'直连平均落盘速率长期低于此值就回退中转；0 = 永不回退。' },
+    ]},
+    { id:'node.env', name:'环境变量', where:'本机 · 开发机', items:[
+      { n:'全局环境变量', k:'', c:tags(['ANTHROPIC_BASE_URL','NO_PROXY','新增…']),
+        d:'注入新开会话的 KV。已经开着的会话要点一次「推送」才拿到——那是页头那颗按钮。' },
+    ], act:{ label:'推送到会话', tag:'补发 export，不重启会话' }},
+  ]},
+
+  { seg:'整个集群 / 这台设备', segNote:'角色与接入是集群共享的；安全与安装只关这一台' },
+  { id:'cluster', name:'多机', where:'集群共享', items:[
+    { n:'本机角色', k:'cluster.mode', c:seg(['节点','中心'],0),
+      d:'节点：接入某个中心，同时保持局域网直连。中心：只做路由，不跑会话。' },
+    { n:'中心地址', k:'cluster.hub', mod:1, c:inp('https://47.94.183.77:13570'),
+      d:'节点主动往外拨号，所以中心要有公网可达地址；节点自己不用暴露端口。' },
+    { n:'注册令牌', k:'cluster.token', c:inp('（已注册，留空保持不变）'),
+      d:'一次性，30 分钟有效。换来一份长期凭据存到 cluster/node.json。' },
+    { n:'本机显示名', k:'cluster.name', c:inp('开发机'), d:'切换器和机器列表里显示的名字。留空用主机名。' },
+    { n:'分组', k:'cluster.group', c:inp('（可选）'), d:'机器多了以后用来分栏，比如「家里」「公司」。' },
+    { n:'允许自签证书', k:'cluster.insecure', c:sw(1,'中心用自签 HTTPS 时必须打开，否则拨号会因证书校验失败'), d:'' },
+  ]},
+  { id:'sec', name:'安全', where:'本机 · 开发机', items:[
+    { n:'登录口令', k:'', tag:'改完即时生效', c:btn('修改口令'),
+      d:'校验旧口令后写回 config.yaml；已登录的会话不掉线。' },
+    { n:'两步验证', k:'totp', c:sw(0,'登录时再输一次动态码；绑定需扫码并输一次码确认'), d:'' },
+    { n:'自签证书', k:'', c:btn('下载证书'),
+      d:'装进手机的受信任凭据后站点才算安全上下文，麦克风、剪贴板、装成 PWA 才能用。' },
+  ]},
+  { id:'about', name:'关于与安装', items:[
+    { n:'安装到桌面', k:'', c:btn('安装'), d:'装成 PWA 后全屏、有独立图标；需要安全上下文。' },
+    { n:'版本', k:'', c:sel('v0.9.3'), d:'当前运行的版本号与提交。' },
+    { n:'检查更新', k:'', c:btn('检查更新'), d:'走后端查 GitHub Releases，带缓存，失败时给出跳转链接。' },
+    { n:'源码仓库', k:'', c:btn('打开 github.com/ybz21/Roam'), d:'' },
+  ]},
+]
+
+/* 叶子表：id → { name, parent, where, items } */
+const PAGES = {}
+TREE.forEach(t => {
+  if (t.seg) return
+  if (t.kids) t.kids.forEach(k => PAGES[k.id] = { ...k, parent:t.name })
+  else PAGES[t.id] = { ...t, parent:null }
+})
+
+const tree = document.getElementById('tree')
+const pane = document.getElementById('pane')
+const q = document.getElementById('q')
+const cnt = document.getElementById('cnt')
+let cur = 'common'
+let open = {}   // 展开的父节点
+
+function chev() { return '<svg class="cv" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>' }
+function hits(id, s) {
+  if (!s) return null
+  return PAGES[id].items.filter(it => idx(it, PAGES[id]).includes(s)).length
+}
+function idx(it, p) { return (it.n + ' ' + (it.d || '') + ' ' + (it.c.lab || '') + ' ' + it.k + ' ' + p.name).toLowerCase() }
+
+function drawTree() {
+  const s = q.value.trim().toLowerCase()
+  let h = ''
+  TREE.forEach(t => {
+    if (t.seg) { h += '<div style="padding:12px 8px 4px;font-size:var(--fs-micro);font-weight:700;letter-spacing:.1em;'
+      + 'text-transform:uppercase;color:var(--text-dimmer)">'+t.seg
+      + '<span style="display:block;margin-top:3px;letter-spacing:0;text-transform:none;font-weight:400;opacity:.8">'+t.segNote+'</span></div>'; return }
+    if (t.kids) {
+      const isOpen = open[t.id] !== false
+      const n = s ? t.kids.reduce((a,k) => a + hits(k.id, s), 0) : null
+      h += '<button class="row '+(isOpen?'open ':'')+(s && !n ? 'dim ':'')+'" data-open="'+t.id+'">'
+        + chev() + '<span>'+t.name+'</span>' + (s ? '<span class="n">'+n+'</span>' : '') + '</button>'
+      h += '<div class="kids '+(isOpen?'open':'')+'">'
+      t.kids.forEach(k => {
+        const kn = s ? hits(k.id, s) : k.items.length
+        h += '<button class="row kid '+(cur===k.id && !s ?'on ':'')+(s && !kn ? 'dim ':'')+'" data-go="'+k.id+'">'
+          + '<span>'+k.name+'</span><span class="n">'+kn+'</span></button>'
+      })
+      h += '</div>'
+    } else {
+      const n = s ? hits(t.id, s) : t.items.length
+      h += '<button class="row '+(cur===t.id && !s ?'on ':'')+(s && !n ? 'dim ':'')+'" data-go="'+t.id+'">'
+        + '<span style="padding-left:20px">'+t.name+'</span><span class="n">'+n+'</span></button>'
+    }
+  })
+  tree.innerHTML = h
+  tree.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { if (q.value) clearQ(); cur = b.dataset.go; draw() })
+  tree.querySelectorAll('[data-open]').forEach(b => b.onclick = () => {
+    const id = b.dataset.open; open[id] = open[id] === false; drawTree()
+  })
+}
+
+function row(it, p, s, showFrom) {
+  const tag = it.tag ? '<span class="chip '+(it.tagc||'')+'">'+it.tag+'</span>' : ''
+  const from = (showFrom && it.from) ? '<span class="from">来自 '+it.from+'</span>' : ''
+  const reset = it.mod ? '<button class="reset" onclick="this.closest(\'.st\').classList.remove(\'mod\')">重置</button>' : ''
+  const hl = (x) => s ? x.replace(new RegExp('('+s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi'), '<mark>$1</mark>') : x
+  const desc = it.d || it.c.lab || ''
+  const key = it.k ? '<span class="key">'+hl(it.k)+'</span>' : ''
+  return '<div class="st '+(it.mod?'mod':'')+'">'
+    + '<div class="t"><span class="name">'+hl(it.n)+'</span>'+key+tag+from+reset
+      + (it.c.inline ? '<span class="grow"></span>'+it.c.h : '') + '</div>'
+    + (desc ? '<p class="d">'+hl(desc)+'</p>' : '')
+    + (it.c.inline ? '' : '<div class="ctl">'+it.c.h+'</div>')
+    + '</div>'
+}
+
+function draw() {
+  const s = q.value.trim().toLowerCase()
+  drawTree()
+  if (s) {   // 搜索：跨类平铺，唯一允许滚的一页
+    let h = '<div class="crumb">搜索</div><div class="ptitle"><h2>“'+q.value.trim()+'”</h2></div>'
+    let n = 0, body = ''
+    Object.keys(PAGES).forEach(id => {
+      const p = PAGES[id]
+      const list = p.items.filter(it => idx(it, p).includes(s))
+      if (!list.length) return
+      n += list.length
+      body += '<div class="crumb" style="margin:14px 0 2px">'+(p.parent ? p.parent+' › ' : '')+p.name
+        + ' <a href="#" onclick="goto(\''+id+'\');return false" style="font-size:var(--fs-micro)">打开这一页</a></div>'
+      body += list.map(it => row(it, p, s, false)).join('')
+    })
+    pane.className = 'pane scroll'
+    pane.innerHTML = h + '<p class="pnote">结果按类分段，点「打开这一页」跳过去改。</p>'
+      + '<div class="rows">' + (n ? body : '<div class="none">没有匹配的设置。换个词试试，或者 <a href="#" onclick="clearQ();return false">清空搜索</a>。</div>') + '</div>'
+    cnt.textContent = n + ' 项匹配'
+    document.getElementById('url').textContent = 'roam.local / #/settings?q=' + encodeURIComponent(q.value.trim())
+    return
+  }
+  const p = PAGES[cur]
+  pane.className = 'pane'
+  pane.innerHTML = '<div class="crumb">'+(p.parent ? p.parent+' › ' : '')+p.name+'</div>'
+    + '<div class="ptitle"><h2>'+p.name+'</h2>'
+      + (p.where ? '<span class="chip where"><i class="d2"></i>'+p.where+'</span>' : '<span class="chip">跟着我走</span>')
+      + (p.act ? '<span class="grow"></span><span class="chip warn">'+p.act.tag+'</span>'
+                 + '<button class="tt-act">'+p.act.label+'</button>' : '')
+    + '</div>'
+    + (p.note ? '<p class="pnote">'+p.note+'</p>' : '')
+    + '<div class="rows">' + p.items.map(it => row(it, p, '', true)).join('') + '</div>'
+  cnt.textContent = ''
+  document.getElementById('url').textContent = 'roam.local / #/settings/' + cur.replace('.', '/')
+}
+function goto(id) { clearQ(); cur = id; draw() }
+function clearQ() { q.value = ''; document.getElementById('sb').classList.remove('has') }
+q.addEventListener('input', () => {
+  document.getElementById('sb').classList.toggle('has', !!q.value.trim())
+  draw()
+})
+document.querySelector('.clr').onclick = () => { clearQ(); draw(); q.focus() }
+draw()
+</script>
+</body>
+</html>

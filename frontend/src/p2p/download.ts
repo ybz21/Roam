@@ -18,7 +18,7 @@
 // UI 极简（M1）：只透出 path / rate / 完成 / 失败回调；进度角标详版是 M2。
 
 import { connectFile } from './transport'
-import { nodeApi } from '../cluster/node-url'
+import { nodeApi } from '../components/cluster/node-url'
 import { GoodputMeter, type GoodputSample, type PairDiag } from './stats'
 import { pathLabelKey, type P2PPathLabel } from './labels'
 import { canStreamSave, createStreamWriter } from './stream-saver'

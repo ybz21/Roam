@@ -13,7 +13,7 @@
 //   未连 → 返回 kind='frp' 占位（本阶段 echo 无 frp 实现，仅结构就位，供后续消费者接管回退）。
 
 import { openSignal } from './signaling'
-import { nodeApi } from '../cluster/node-url'
+import { nodeApi } from '../components/cluster/node-url'
 import type { SignalMsg } from './types'
 import type { P2PPathLabel } from './labels'
 import { getPreferences } from '../preferences'
