@@ -80,12 +80,33 @@ export function setCurrentNode(id: string | null) {
 }
 
 /**
- * 给路径加上机器前缀。**所有** HTTP / WS / 原生资源 URL 都要过这里——
+ * 中心自己处理、**永远不能加节点前缀**的路径。
+ *
+ * 认证是最要命的一条：登录发到 /n/<id>/api/login 会被转发到那台**节点**，校验的是
+ * 节点的口令而不是中心的——于是「用中心的口令登不进去，用某台机器的口令反而能进」，
+ * 而且这个错法完全看不出来。踩过：全新 profile 没有 nodeId，测试一路不带前缀全绿，
+ * 真实浏览器里存着上次的 nodeId 就必炸。
+ *
+ * /version 与 /update-check 同理：它们说的是「你正连着的这个入口」的版本。
+ */
+const HUB_LOCAL = ['/login', '/logout', '/setup', '/pubconfig', '/me', '/version', '/update-check']
+
+function isHubLocal(path: string): boolean {
+  const p = path.split('?')[0]
+  return HUB_LOCAL.some((x) => p === x || p.startsWith(x + '/')) || p.startsWith('/hub/')
+}
+
+/**
+ * 给路径加上机器前缀。**所有**业务 HTTP / WS / 原生资源 URL 都要过这里——
  * 包括 <img src>、<iframe src>、<a download>、window.open 这些加不了 header 的，
- * 这也正是身份走路径而不走 header 的原因。
+ * 这也正是身份走路径而不走 header 的原因。认证类路径除外，见 HUB_LOCAL。
  */
 export function nodePath(path: string): string {
-  return nodeId ? `/n/${encodeURIComponent(nodeId)}${path}` : path
+  if (!nodeId) return path
+  // path 形如 /api/login；这里比的是去掉 /api 之后的那一段
+  const rel = path.startsWith('/api') ? path.slice(4) : path
+  if (isHubLocal(rel)) return path
+  return `/n/${encodeURIComponent(nodeId)}${path}`
 }
 
 /** `/api/...` 的简写；传的 p 以 / 开头，如 nodeApi('/sessions')。 */

@@ -111,3 +111,32 @@ describe('引导失败的兜底', () => {
     vi.unstubAllGlobals()
   })
 })
+
+// 认证类路径**永远不能带节点前缀**：登录发到 /n/<id>/api/login 会被转发到那台节点，
+// 校验的是节点的口令而不是中心的——「用中心的口令登不进去、用某台机器的口令反而能进」。
+// 这条是真实浏览器里踩出来的：测试用全新 profile 没有 nodeId，一路不带前缀全绿，
+// 而浏览器里存着上次的 nodeId 就必炸。
+describe('认证类路径不加机器前缀', () => {
+  beforeEach(() => { localStorage.clear() })
+
+  it('登录/登出/首次设置/探测/自身信息 一律打到中心', async () => {
+    const m = await fresh()
+    m.setCurrentNode('n_01')
+    for (const p of ['/login', '/logout', '/setup', '/pubconfig', '/me', '/version', '/update-check']) {
+      expect(m.nodeApi(p)).toBe('/api' + p)
+    }
+    // 中心本地的机器名单同理
+    expect(m.nodeApi('/hub/nodes')).toBe('/api/hub/nodes')
+    expect(m.nodeApi('/hub/bootstrap')).toBe('/api/hub/bootstrap')
+  })
+
+  it('业务路径照旧带前缀，别把这条改过头', async () => {
+    const m = await fresh()
+    m.setCurrentNode('n_01')
+    expect(m.nodeApi('/sessions')).toBe('/n/n_01/api/sessions')
+    expect(m.nodeApi('/projects')).toBe('/n/n_01/api/projects')
+    // 名字里带 me/login 的业务路径不能被误伤
+    expect(m.nodeApi('/files?path=/home/me')).toBe('/n/n_01/api/files?path=/home/me')
+    expect(m.nodeApi('/metrics')).toBe('/n/n_01/api/metrics')
+  })
+})
