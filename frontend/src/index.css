@@ -2806,15 +2806,12 @@ html[data-size="compact"] .cc-run-slot { width: auto; }
    在 dev 下会喊）。唯一允许滚的是搜索结果页 .tt-set-pane.scroll，它跨类、条数不可控。 */
 .tt-set { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 .tt-set-head { flex: 0 0 auto; padding-bottom: var(--sp-3); border-bottom: 1px solid var(--border-subtle); }
-.tt-set-head .row1 { display: flex; align-items: flex-end; gap: var(--sp-3); }
-.tt-set-head .row1 .grow { flex: 1; }
-.tt-set-head h1 { margin: 2px 0 0; font-size: var(--fs-title); font-weight: 600; }
-.tt-set-kick {
-  font-size: var(--fs-micro); letter-spacing: .12em; text-transform: uppercase; color: var(--text-dimmer);
-}
+/* 页名 + 搜索 + JSON 一行（与会话页同一套：.tt-pagename 在手机档自动隐藏） */
+.tt-set-headrow { display: flex; align-items: center; gap: var(--sp-2); }
 .tt-set-search {
-  margin-top: var(--sp-3); display: flex; align-items: center; gap: var(--sp-2);
-  height: 34px; padding: 0 11px; color: var(--text-dimmer);
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--sp-2);
+  /* 32 = antd Input 的默认高：这一行要和会话页的工具条一格不差 */
+  height: 32px; padding: 0 11px; color: var(--text-dimmer);
   border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg-elevated);
 }
 .tt-set-search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }

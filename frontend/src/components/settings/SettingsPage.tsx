@@ -124,29 +124,29 @@ export default function SettingsPage({ sub, onNav }: { sub?: string; onNav?: (ro
     ),
   })
 
+  // 页名并进这一行，不另起眉标 + 大标题：眉标「SETTINGS」+ 22px 标题 + 第二行搜索是三层，
+  // 而侧栏此刻正高亮着「设置」——它已经把「这是哪一页」说完了。会话页与项目页同一套
+  // （.tt-pagename + .tt-pagedivider，见 index.css「页名并进工具条」）。
   const head = (
     <div className="tt-set-head">
-      <div className="row1">
-        <div>
-          <div className="tt-set-kick">Settings</div>
-          <h1>{t('nav.env')}</h1>
+      <div className="tt-set-headrow">
+        <span className="tt-pagename">{t('nav.env')}</span>
+        <span className="tt-pagedivider" aria-hidden="true" />
+        <div className={`tt-set-search${q ? ' has' : ''}`}>
+          <SearchIcon size={15} />
+          <input
+            ref={searchRef} value={q} onChange={(e) => setQ(e.target.value)}
+            placeholder={t('set.searchPlaceholder')} aria-label={t('set.searchPlaceholder')}
+            autoComplete="off" spellCheck={false}
+          />
+          {query && <span className="count">{t('set.hitCount', { n: totalHits })}</span>}
+          {q && (
+            <button type="button" className="clr" aria-label={t('common.clear')} onClick={() => { setQ(''); searchRef.current?.focus() }}>
+              <CloseIcon size={14} />
+            </button>
+          )}
         </div>
-        <span className="grow" />
         <button type="button" className="tt-act" onClick={showJson}>{t('set.jsonButton')}</button>
-      </div>
-      <div className={`tt-set-search${q ? ' has' : ''}`}>
-        <SearchIcon size={15} />
-        <input
-          ref={searchRef} value={q} onChange={(e) => setQ(e.target.value)}
-          placeholder={t('set.searchPlaceholder')} aria-label={t('set.searchPlaceholder')}
-          autoComplete="off" spellCheck={false}
-        />
-        {query && <span className="count">{t('set.hitCount', { n: totalHits })}</span>}
-        {q && (
-          <button type="button" className="clr" aria-label={t('common.clear')} onClick={() => { setQ(''); searchRef.current?.focus() }}>
-            <CloseIcon size={14} />
-          </button>
-        )}
       </div>
     </div>
   )
