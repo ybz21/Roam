@@ -30,7 +30,7 @@
 **[cluster/](./design/cluster/)** — 多机管理（一个入口管所有开发机）：
 [ui.html](./design/cluster/ui.html) 视觉 ｜ [settings.html](./design/cluster/settings.html) 设置页与初次安装 ｜
 [architecture.html](./design/cluster/architecture.html) 技术架构 ｜
-[mockups/](./design/cluster/mockups/) 可点原型（桌面 / 手机各一个自包含文件）
+[mockups/index.html](./design/cluster/mockups/index.html) 可点原型（多机只加的那三样）
 
 **[mockups/](./design/mockups/)** — 静态原型
 
