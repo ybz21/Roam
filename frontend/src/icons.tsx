@@ -32,6 +32,14 @@ export const PaperclipIcon = ({ size = 15 }: P) => line(
 /** 继续 / 恢复：原来写作 ▶ */
 export const PlayIcon = ({ size = 12 }: P) => solid(<path d="M8 5.5v13l11-6.5Z" />, size)
 export const StopIcon = ({ size = 12 }: P) => solid(<rect x="6" y="6" width="12" height="12" rx="2" />, size)
+/** 进全屏 / 退全屏：四角箭头向外、向内。原来在 App.tsx 里现画一对 */
+export const FullscreenIcon = ({ size = 18 }: P) => line(
+  <><polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><path d="M21 3l-7 7" /><path d="M3 21l7-7" /></>, size)
+export const ExitFullscreenIcon = ({ size = 18 }: P) => line(
+  <><polyline points="4 14 10 14 10 20" /><polyline points="20 10 14 10 14 4" /><path d="M14 10l6-6" /><path d="M4 20l6-6" /></>, size)
+/** 退出登录：门 + 往外的箭头 */
+export const LogoutIcon = ({ size = 18 }: P) => line(
+  <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><path d="M21 12H9" /></>, size)
 
 // ── 方向 ──
 export const ChevronLeft = ({ size = 15 }: P) => line(<path d="m15 18-6-6 6-6" />, size, 2)

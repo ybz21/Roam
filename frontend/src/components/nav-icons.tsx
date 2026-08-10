@@ -1,11 +1,11 @@
-// 侧栏/底栏导航的图标集。
+// 侧栏/底栏导航的图标集：路由 key → 图标，成组只服务导航，所以单独放一处。
 //
-// 这些是 24 网格的线性图标，画法与 icons.tsx 一致，但成组只服务导航，所以单独放一处；
-// svg() 同时被登录页、会话页的几处一次性图标复用（那几处早该收进 icons.tsx，是历史欠账）。
+// 画法与 icons.tsx 一致（24 网格、currentColor 描边、无 emoji）。svg() 只在本文件内用——
+// 以前它被登录页、会话页借去现画一次性图标，那些已经收进 icons.tsx 了，别再往外借。
 
 
 // 线性图标（无 emoji，currentColor 描边）
-export const svg = (paths: any) => (
+const svg = (paths: any) => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
     strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{paths}</svg>
 )

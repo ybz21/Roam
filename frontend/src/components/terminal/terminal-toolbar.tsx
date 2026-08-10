@@ -4,7 +4,6 @@
 // 在深色栏里显得廉价且无法跟随强调色）。样式在 index.css 的 .tt-tabs / .tt-tbar 段。
 import { type ReactNode } from 'react'
 import Projects from '../projects/Projects'
-import { svg } from '../nav-icons'
 import { useLayout } from '../../layout'
 import { Tooltip } from 'antd'
 

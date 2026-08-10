@@ -58,10 +58,10 @@ import Sessions from './components/sessions/Sessions'
 import Tasks from './components/tasks/Tasks'
 import TerminalPane from './components/terminal/TerminalPane'
 import SoloTerminal from './components/terminal/SoloTerminal'
-import { ICONS, svg } from './components/nav-icons'
+import { ICONS } from './components/nav-icons'
 import { normalizeRoute, setHashParams, readTermTokens } from './route-hash'
 import type { ClaudeInfo } from './components/terminal/claude-info'
-import { SearchIcon } from './icons'
+import { ExitFullscreenIcon, FullscreenIcon, LogoutIcon, MoonIcon, MoreIcon, SearchIcon, SunIcon } from './icons'
 
 const { Sider, Content } = Layout
 const { Text } = Typography
@@ -129,9 +129,7 @@ export default function App() {
   const { mode, toggle: toggleTheme } = useThemeMode()
   const { t } = useI18n()
   const [prefs] = usePreferences()
-  const themeIcon = mode === 'dark'
-    ? svg(<><circle cx="12" cy="12" r="4.2" /><path d="M12 2v2.2M12 19.8V22M4.2 4.2l1.6 1.6M18.2 18.2l1.6 1.6M2 12h2.2M19.8 12H22M4.2 19.8l1.6-1.6M18.2 5.8l1.6-1.6" /></>)
-    : svg(<><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z" /></>)
+  const themeIcon = mode === 'dark' ? <SunIcon size={18} /> : <MoonIcon size={18} />
   const { phone: isMobile, desktop: hasSider } = useLayout()
   // 全屏（平板更易用：隐藏浏览器栏，等价 F11）。监听变化以同步按钮图标
   const [isFs, setIsFs] = useState(false)
@@ -457,9 +455,7 @@ export default function App() {
       (docEl.requestFullscreen || docEl.webkitRequestFullscreen)?.call(docEl)
     }
   }
-  const fsIcon = isFs
-    ? svg(<><polyline points="4 14 10 14 10 20" /><polyline points="20 10 14 10 14 4" /><line x1="14" y1="10" x2="20" y2="4" /><line x1="4" y1="20" x2="10" y2="14" /></>)
-    : svg(<><polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" /></>)
+  const fsIcon = isFs ? <ExitFullscreenIcon /> : <FullscreenIcon />
 
   const termPane = (
     <TerminalPane
@@ -591,7 +587,7 @@ export default function App() {
     { type: 'divider' },
     {
       key: 'logout', danger: true, label: t('common.logout'),
-      icon: svg(<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></>),
+      icon: <LogoutIcon />,
       onClick: () => Modal.confirm({
         title: t('common.logoutConfirm'), okText: t('common.logout'), cancelText: t('common.cancel'),
         okButtonProps: { danger: true }, onOk: logout,
@@ -721,7 +717,7 @@ export default function App() {
           })}
           <button onClick={() => setMoreOpen(true)} className="tt-bottomnav-btn"
             style={{ color: MOBILE_MORE_KEYS.includes(tab) ? 'var(--accent)' : 'var(--text-dim)' }}>
-            {svg(<><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></>)}<span>{t('common.more')}</span>
+            <MoreIcon size={18} /><span>{t('common.more')}</span>
           </button>
         </nav>
         </div>
@@ -755,7 +751,7 @@ export default function App() {
           )}
           <SheetRow icon={ICONS.github} title={t('nav.about')} onClick={() => { setMoreOpen(false); go('about') }} />
           <SheetRow
-            icon={svg(<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></>)}
+            icon={<LogoutIcon />}
             title={t('common.logout')} desc={t('common.logoutConfirm')} danger
             onClick={() => { setMoreOpen(false); Modal.confirm({ title: t('common.logoutConfirm'), okText: t('common.logout'), cancelText: t('common.cancel'), okButtonProps: { danger: true }, onOk: logout }) }} />
         </MobileSheet>

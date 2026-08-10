@@ -3,7 +3,6 @@ import { Suspense, useEffect, useState } from 'react'
 import { RaceComparePanel, RaceCreateModal } from '../swarm/Race'
 import WorktreePanel from '../git/WorktreePanel'
 import { api } from '../../api'
-import { svg } from '../nav-icons'
 import { CloseWorktreeModal } from './CloseWorktreeModal'
 import { NewSessionModal } from './NewSessionModal'
 import { useI18n } from '../../i18n'
@@ -13,7 +12,7 @@ import { sessionDisplay, setSessionLabels } from './session-label'
 import { sessionLocation, useSessionProjects } from './session-project'
 import { absTime, relTime } from '../../time-format'
 import { Button, Checkbox, Empty, Input, List, Popconfirm, Segmented, Select, Space, Tag, Tooltip, App as AntApp } from 'antd'
-import { AgentLogo, ArrowDown, ArrowUp, Disclosure, WindowsIcon } from '../../icons'
+import { AgentLogo, ArrowDown, ArrowUp, Disclosure, SearchIcon, WindowsIcon } from '../../icons'
 import { BranchIcon } from '../git/parts'
 import { Dropdown } from 'antd'
 
@@ -335,7 +334,7 @@ export default function Sessions({ openTerm, closeTerm, activeTerm, embedded }: 
           </>)}
           <Input allowClear value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('session.searchPlaceholder')}
             style={{ flex: 1, minWidth: 0 }}
-            prefix={svg(<><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></>)} />
+            prefix={<SearchIcon size={15} />} />
           <Select value={sortBy} onChange={(v) => setSortBy(v)} title={t('session.sortBy')}
             style={{ width: 120, flex: '0 0 auto' }} options={[
               { label: t('session.sortActivity'), value: 'activity' },

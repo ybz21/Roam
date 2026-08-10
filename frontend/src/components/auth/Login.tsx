@@ -1,7 +1,6 @@
 // ── 登录 ──
 import { useEffect, useState, type ReactNode } from 'react'
 import { api } from '../../api'
-import { svg } from '../nav-icons'
 import { useI18n } from '../../i18n'
 import { Button, Card, Checkbox, Form, Input, Spin, App as AntApp } from 'antd'
 

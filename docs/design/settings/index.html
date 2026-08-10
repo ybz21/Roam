@@ -395,11 +395,13 @@ html[data-theme="light"] .phone { box-shadow:0 10px 26px rgba(31,35,40,.12); }
       <td>角色（节点/中心）、接入地址、注册令牌。这一段是唯一「改一处、多机可见」的。</td></tr>
   </table>
 
-  <div class="note warn">
-    <b>一条待决：主题和语言现在跟着机器走。</b>
-    它们存在服务端 <code>preferences.json</code> 里，切到另一台机器读的是那台的值，界面会当着面换一副样子。
-    建议按 <code>WORKSPACE_MIRROR</code> 已有的先例办：<b>纯观感项（主题 / 语言 / 密度 / 方向簇 / 各种宽度）
-    以浏览器本地为准，服务端只作备份</b>；其余仍以服务端为权威。这件事不做，「跟着我走」这一段就是空头支票。
+  <div class="note ok">
+    <b>已落地：主题与语言不再跟着机器走。</b>
+    它们本来只存在服务端 <code>preferences.json</code> 里，切到另一台机器读的是那台的值，界面会当着面换一副样子。
+    现在按 <code>WORKSPACE_MIRROR</code> 的先例多存一份 <code>ttmux.look</code>：<b>本地存过就以本地为准</b>，
+    服务端那份退化成备份与首次默认（这台浏览器还没表过态时才作数）。尺寸类偏好早就是这么办的。
+    <br>只覆盖纯观感项。命令、密钥、传输参数仍以服务端为权威——那些是机器的事实，不是口味。
+    回归用例在 <code>frontend/src/preferences.test.ts</code>。
   </div>
 
   <h3>旧 tab → 新分类，逐项去向</h3>
@@ -568,8 +570,7 @@ html[data-theme="light"] .phone { box-shadow:0 10px 26px rgba(31,35,40,.12); }
     <li><b>P1 · 换壳。</b> 三区外壳 + registry + 路由 + 搜索，把今天七个 tab 的内容按第 3 节的表搬进去，
         <em>行为一个不改</em>。删掉只读的「偏好」tab，换成页头的 JSON 按钮。</li>
     <li><b>P2 · 补漏。</b> 把今天只能靠拖、靠猜的项补进设置：信息密度、侧栏成轨、终端区默认展开、方向簇。</li>
-    <li><b>P3 · 观感项本地优先。</b> 第 3 节那条待决落地：主题/语言/密度以 <code>localStorage</code> 为准，
-        切机器不再换脸。</li>
+    <li><s><b>P3 · 观感项本地优先</b></s> —— 已做：主题/语言以 <code>localStorage</code> 为准，切机器不再换脸。</li>
   </ul>
 
   <div class="note">

@@ -12,6 +12,8 @@
 import { Dropdown, Tooltip } from 'antd'
 import type { MenuProps } from 'antd'
 import type { ReactNode } from 'react'
+import { ChevronLeft, ChevronRight } from '../../icons'
+import { HostIcon } from '../cluster/cluster-icons'
 import { useI18n } from '../../i18n'
 
 export type NavEntry = {
@@ -132,9 +134,9 @@ const stroke = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeL
 const svg = (children: ReactNode) => <svg viewBox="0 0 24 24" width={18} height={18} {...stroke}>{children}</svg>
 // 主机图标而不是姓名首字母：这里代表的是"你连着的这台机器"，不是一个人。
 // 尺寸跟导航项同为 18：整列图标要落在同一条竖线、同一个视觉重量上。
-const hostIcon = svg(<><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M8 20h8" /><path d="M12 16v4" /></>)
+const hostIcon = <HostIcon size={18} />
 const chevronDown = <svg viewBox="0 0 24 24" width={14} height={14} {...stroke}><polyline points="6 9 12 15 18 9" /></svg>
-const chevronLeft = svg(<polyline points="15 6 9 12 15 18" />)
-const chevronRight = svg(<polyline points="9 6 15 12 9 18" />)
+const chevronLeft = <ChevronLeft size={18} />
+const chevronRight = <ChevronRight size={18} />
 // 「•••」是三个句点，不是图标：字号下和标点混作一团，也跟不上这一列的线性图标语言
 const moreIcon = <svg viewBox="0 0 24 24" width={16} height={16} fill="currentColor"><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg>
