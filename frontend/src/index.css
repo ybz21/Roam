@@ -1123,14 +1123,17 @@ html[data-pointer="coarse"] .tt-srow .acts { opacity: 1; }
 }
 .tt-page-files,
 .tt-page-phone,
-.tt-page-browser {
+.tt-page-browser,
+/* 设置页自己管滚动：搜索框与分类树必须钉住，只有内容区可以动 */
+.tt-page-settings {
   height: 100%;
   min-height: 0;
   overflow: hidden;
 }
 .tt-page-files > *,
 .tt-page-phone > *,
-.tt-page-browser > * {
+.tt-page-browser > *,
+.tt-page-settings > * {
   height: 100%;
   min-height: 0;
 }
@@ -2797,3 +2800,128 @@ html[data-size="compact"] .cc-run-slot { width: auto; }
 .hljs-deletion { color: #f85149; }
 .hljs-emphasis { font-style: italic; }
 .hljs-strong { font-weight: 600; }
+
+/* ── 设置页（settings/）：搜索 + 两级树 + 一类一页 ─────────────────────────
+   右边只画选中的那一类，页内不滚——一页装不下就是这一类该拆（registry 的 MAX_ROWS
+   在 dev 下会喊）。唯一允许滚的是搜索结果页 .tt-set-pane.scroll，它跨类、条数不可控。 */
+.tt-set { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.tt-set-head { flex: 0 0 auto; padding-bottom: var(--sp-3); border-bottom: 1px solid var(--border-subtle); }
+.tt-set-head .row1 { display: flex; align-items: flex-end; gap: var(--sp-3); }
+.tt-set-head .row1 .grow { flex: 1; }
+.tt-set-head h1 { margin: 2px 0 0; font-size: var(--fs-title); font-weight: 600; }
+.tt-set-kick {
+  font-size: var(--fs-micro); letter-spacing: .12em; text-transform: uppercase; color: var(--text-dimmer);
+}
+.tt-set-search {
+  margin-top: var(--sp-3); display: flex; align-items: center; gap: var(--sp-2);
+  height: 34px; padding: 0 11px; color: var(--text-dimmer);
+  border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg-elevated);
+}
+.tt-set-search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.tt-set-search input {
+  flex: 1; min-width: 0; border: 0; outline: 0; background: none;
+  color: var(--text-bright); font: var(--fs-body)/1 inherit;
+}
+.tt-set-search input::placeholder { color: var(--text-dimmer); }
+.tt-set-search .count { flex: 0 0 auto; font-size: var(--fs-micro); color: var(--text-dimmer); }
+.tt-set-search .clr {
+  flex: 0 0 auto; border: 0; background: none; color: var(--text-dimmer);
+  display: grid; place-items: center; padding: 2px; cursor: pointer;
+}
+:where(html[data-pointer="fine"]) .tt-set-search .clr:hover { color: var(--text-bright); }
+
+.tt-set-body { flex: 1; min-height: 0; display: flex; }
+
+/* 分类树：纵向两级，没有横向 tab 的数量上限 */
+.tt-set-tree {
+  width: 196px; flex: 0 0 196px; overflow: auto;
+  padding: var(--sp-3) var(--sp-2) var(--sp-5) 0; border-right: 1px solid var(--border-subtle);
+}
+.tt-set-tree .grp {
+  padding: 14px 10px 5px; font-size: var(--fs-micro); font-weight: 700;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--text-dimmer);
+}
+.tt-set-tree > .grp:first-child { padding-top: 2px; }
+.tt-set-tree .grp .m {
+  display: block; margin-top: 3px; letter-spacing: 0; text-transform: none;
+  font-weight: 400; opacity: .8;
+}
+.tt-set-tree .row {
+  display: flex; align-items: center; gap: 6px; width: 100%; min-height: 32px; padding: 0 10px;
+  border: 0; border-radius: var(--r-sm); background: none; color: var(--text-dim);
+  font-size: var(--fs-sm); text-align: left; cursor: pointer;
+}
+.tt-set-tree .row.kid, .tt-set-tree .row.solo { padding-left: 28px; }
+:where(html[data-pointer="fine"]) .tt-set-tree .row:hover { background: var(--list-hover); color: var(--text-bright); }
+.tt-set-tree .row.on { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+.tt-set-tree .row.dim { opacity: .35; }
+.tt-set-tree .row .cv { flex: 0 0 12px; color: var(--text-dimmer); transition: transform .12s; }
+.tt-set-tree .row .n {
+  margin-left: auto; font-size: var(--fs-micro); color: var(--text-dimmer);
+  font-variant-numeric: tabular-nums;
+}
+.tt-set-tree .row.on .n { color: var(--accent); }
+.tt-set-tree .row:focus-visible { outline: 1px solid var(--accent-border); outline-offset: -1px; }
+
+/* 一类一页 */
+.tt-set-pane {
+  flex: 1; min-width: 0; display: flex; flex-direction: column;
+  padding: var(--sp-4) 0 var(--sp-2) var(--sp-4); overflow: hidden;
+}
+.tt-set-pane .crumb { font-size: var(--fs-meta); color: var(--text-dimmer); }
+.tt-set-pane .ptitle { display: flex; align-items: center; gap: var(--sp-2); margin: 2px 0; }
+.tt-set-pane .ptitle .grow { flex: 1; }
+.tt-set-pane .ptitle h2 { margin: 0; font-size: var(--fs-lg); font-weight: 600; }
+.tt-set-pane .pnote { margin: 0 0 var(--sp-2); font-size: var(--fs-meta); color: var(--text-dim); max-width: 74ch; }
+.tt-set-pane .rows { flex: 1; min-height: 0; overflow: hidden; padding-right: var(--sp-4); }
+.tt-set-pane.scroll .rows { overflow: auto; }
+.tt-set-empty { padding: 48px 10px; color: var(--text-dimmer); font-size: var(--fs-sm); }
+.tt-set-resulthead { display: flex; align-items: center; gap: var(--sp-2); margin: var(--sp-3) 0 2px; }
+.tt-set-jump {
+  border: 0; background: none; padding: 2px 4px; cursor: pointer;
+  color: var(--accent); font-size: var(--fs-micro);
+}
+.tt-set-jump:focus-visible { outline: 1px solid var(--accent-border); }
+
+/* 一行设置：名字 → 说明 → 控件 */
+.tt-set-row { position: relative; padding: 9px 0 10px; border-bottom: 1px solid var(--border-subtle); }
+.tt-set-row:last-child { border-bottom: 0; }
+.tt-set-row .t { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.tt-set-row .t .grow { flex: 1; }
+.tt-set-row .name { font-size: var(--fs-body); font-weight: 600; color: var(--text-bright); }
+.tt-set-row .key {
+  font-family: var(--mono); font-size: var(--fs-micro); color: var(--text-dimmer);
+}
+.tt-set-row .from { font-size: var(--fs-meta); color: var(--text-dimmer); }
+.tt-set-row .d { margin: 2px 0 0; font-size: var(--fs-meta); color: var(--text-dim); max-width: 68ch; }
+.tt-set-row .ctl { margin-top: var(--sp-2); }
+.tt-set-hit { background: var(--warn-soft); color: inherit; border-radius: 3px; padding: 0 1px; }
+.tt-set-badge {
+  font-size: var(--fs-micro); border-radius: var(--r-pill); padding: 2px 8px;
+  border: 1px solid var(--border-subtle); color: var(--text-dimmer);
+}
+.tt-set-badge.warn { color: var(--warn); border-color: var(--warn-border); background: var(--warn-soft); }
+.tt-set-badge.node { color: var(--ok); border-color: var(--ok-border); background: var(--ok-soft); }
+
+/* 手机档：树摊成一页列表，点进去是子页 */
+.tt-set-catlist { flex: 1; min-height: 0; overflow: auto; margin: 0 calc(-1 * var(--sp-2)); }
+.tt-set-sec {
+  padding: var(--sp-3) var(--sp-2) var(--sp-1); font-size: var(--fs-micro);
+  letter-spacing: .1em; text-transform: uppercase; color: var(--text-dimmer);
+}
+.tt-set-cat {
+  display: flex; align-items: center; gap: var(--sp-2); width: 100%;
+  min-height: var(--tap); padding: 0 var(--sp-2);
+  border: 0; border-bottom: 1px solid var(--border-subtle); background: none;
+  color: var(--text-bright); font-size: var(--fs-body); text-align: left; cursor: pointer;
+}
+/* 两个都写 auto：有条数时条数吃掉空白、箭头贴着它；没有条数时箭头自己吃 */
+.tt-set-cat .n { margin-left: auto; font-size: var(--fs-micro); color: var(--text-dimmer); }
+.tt-set-cat .cv { margin-left: auto; color: var(--text-dimmer); flex: 0 0 12px; }
+.tt-set-cat:active { background: var(--list-hover); }
+@media (pointer: coarse) {
+  /* 手机上不画「已改」竖条：44px 行里那 2px 看不清，改用文字入口 */
+  .tt-set-tree .row { min-height: var(--tap); }
+  .tt-set-row { padding: var(--sp-2) 0 var(--sp-3); }
+}
+.tt-set-bare { padding-top: var(--sp-2); }
