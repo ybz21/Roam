@@ -3,6 +3,7 @@
 //   收 {type:'frame', data, w, h} | {type:'pong', t} | {type:'error', msg}
 //   发 {type:'nav', url} | {type:'ping', t} | {type:'mouse'|'wheel'|'key', ...}（输入仅 control=1 生效）
 import { useEffect, useRef, useState } from 'react'
+import { nodeWs, nodeWsHostPath } from './cluster/node-url'
 import { Dropdown, App as AntApp } from 'antd'
 import type { MenuProps } from 'antd'
 import { api } from './api'
@@ -302,7 +303,7 @@ export default function BrowserView() {
     // 通用传输 Phase 1b：镜像走 media PC 的不可靠 DataChannel；media 未连/P2P 不可用 → 回退
     // 到原 /api/browser/stream WS（frpUrl），行为与迁移前逐字节一致。p2p 分支把 query 里的
     // params 经 init 握手带给后端（原本靠 WS query 传）。
-    const frpUrl = `${proto}://${location.host}/api/browser/stream?${params}`
+    const frpUrl = nodeWs(`/browser/stream?${params}`)
     const tp = connect('screencast', { frpUrl, initParams: Object.fromEntries(params) })
     tpRef.current = tp
     lastEmuRef.current = '' // 新连接：后端会话尚无视口覆盖，onopen 必须强制发一次 emulate
@@ -395,7 +396,7 @@ export default function BrowserView() {
     if (!target) { message.warning(t('browser.noDebuggableTab')); return }
     const wsParam = location.protocol === 'https:' ? 'wss' : 'ws'
     const u = `${location.origin}/api/browser/cdp/devtools/inspector.html`
-      + `?${wsParam}=${location.host}/api/browser/cdp/devtools/page/${target}`
+      + `?${wsParam}=${nodeWsHostPath(`/browser/cdp/devtools/page/${target}`)}`
     window.open(u, `ttmux-devtools-${target}`, 'width=1100,height=720')
   }
 

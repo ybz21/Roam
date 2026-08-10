@@ -38,6 +38,9 @@ try {
 // 主题(黑/白)统一收敛到 ThemeProvider：它内部按 mode 渲染 ConfigProvider + 写 data-theme。
 // 根上再套一层错误边界：React 里任何未捕获的渲染/卸载异常都会把整棵树卸掉 → 整页黑屏，
 // 连重试入口都没有。兜住后至少显示「出错·重试」，点一下重挂应用，不必手动刷新。
+// 多机引导**不在这里**：它要带登录态才问得出结果，跑在登录之前只会拿到 401，
+// 然后整页当成单机、把业务请求打去 /api/*（在中心上全是 404）。
+// 引导挪进 App：/me 确认登录之后、渲染工作区之前跑一次。
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <I18nProvider>

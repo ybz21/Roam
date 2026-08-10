@@ -38,3 +38,26 @@ web:
   p2p_udp_port: 0
   p2p_upnp: false
   p2p_mdns: true
+
+# ── 多机：一个入口管所有开发机（见 docs/design/cluster/settings.html）──
+# 整段留空 = 现在的单机 Roam，界面与行为零变化。
+cluster:
+  # standard（默认）= 这台机器：跑活，可选接到一个中心上
+  # hub            = 中心：只当入口，不跑活，别的机器接进来后在这里访问它们全部
+  mode: standard
+
+  # 只有 standard 模式填了 hub 才会接入中心：额外起一条**出站**长连注册进去。
+  # 接入不影响本机监听口——局域网直连和经中心访问是两条并行的入口，不是二选一。
+  # hub: https://roam.example.com
+
+  # 一次性接入令牌（中心的「添加机器」签发）。**不是中心的登录口令**——口令是给人
+  # 登录浏览器用的，机器接入走令牌。首次接入后自动换成长期凭证落到
+  # <home>/cluster/node.json，之后重连不再用它。
+  # token: enr_xxx
+
+  # 显示名与分组，都可选。name 默认取 hostname。
+  # name: 公司工作站
+  # group: 工作
+
+  # 跳过中心的 TLS 校验。**只在自签证书调试时开**，生产等于把中间人放进来。
+  insecure: false

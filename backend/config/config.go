@@ -44,10 +44,34 @@ type Web struct {
 	P2PMDNS    bool `yaml:"p2p_mdns"`
 }
 
+// Cluster 对应 config.yaml 里的 cluster: 段（横向扩展：标准节点 / 中心）。
+// mode=standard（默认）为现在的单机 Roam，填了 broker 就额外出站注册进云端；
+// mode=cloud 是中心，只做路由 + 注册表 + 控制台，不跑业务。
+// 见 docs/design/cluster/architecture.html。
+type Cluster struct {
+	Mode     string `yaml:"mode"`     // standard（默认）| hub。旧值 cloud 仍能读
+	Hub      string `yaml:"hub"`      // 中心地址（standard 模式填了才上云）。旧键 broker: 仍能读，见 Load
+	Token    string `yaml:"token"`    // 一次性 enrollment token（首次注册用，之后换长期节点凭证）
+	Name     string `yaml:"name"`     // 节点显示名（默认 hostname）
+	Group    string `yaml:"group"`    // 分组（可选）
+	Insecure bool   `yaml:"insecure"` // 跳过中心 TLS 校验（自签证书调试用，生产勿开）
+
+	// 以下两项只对 mode=hub 有意义。
+	//
+	// PublicURL 是**机器要拨过来用的那个地址**。中心不知道自己在外面叫什么——它看到的是
+	// 网卡上的内网地址（云主机上常是 172.17.x），而接入命令里必须写外面能到的那个。
+	// 留空则回落到「当前这次请求的 Host」，那只在「你用什么地址管它、机器就用什么地址接」
+	// 时才成立；反代/frp/内外网双地址的场景必须显式填。
+	PublicURL string `yaml:"public_url"`
+	// EnrollTTLMin 接入令牌有效期（分钟）。默认 30；跨时区手动粘贴命令时可以调长。
+	EnrollTTLMin int `yaml:"enroll_ttl_min"`
+}
+
 // Config 是解析后的配置（env 覆盖已叠加，默认值已填充）。
 type Config struct {
-	Web  Web
-	Path string // 实际配置文件路径（供 SavePassword 落盘）
+	Web     Web
+	Cluster Cluster
+	Path    string // 实际配置文件路径（供 SavePassword 落盘）
 }
 
 // Home 返回 Roam 主目录（数据/配置根）。优先 ROAM_HOME，兼容旧 TTMUX_HOME。
@@ -86,8 +110,18 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 	var file struct {
-		Web Web `yaml:"web"`
+		Web     Web     `yaml:"web"`
+		Cluster Cluster `yaml:"cluster"`
 	}
+	// 旧键兼容：这套东西一度叫 broker / cloud。用户口径统一成「中心 / hub」之后，
+	// 配置也跟着改名——但已经写进 config.yaml 的那些不能一改就断，所以旧键仍然读，
+	// 只是不再往外写（SaveCluster 只写新键）。
+	var legacy struct {
+		Cluster struct {
+			Broker string `yaml:"broker"`
+		} `yaml:"cluster"`
+	}
+	_ = yaml.Unmarshal(b, &legacy)
 	if err := yaml.Unmarshal(b, &file); err != nil {
 		return nil, err
 	}
@@ -102,7 +136,10 @@ func Load(path string) (*Config, error) {
 	if mdnsProbe.Web.P2PMDNS == nil {
 		file.Web.P2PMDNS = true
 	}
-	c := &Config{Web: file.Web, Path: path}
+	if file.Cluster.Hub == "" {
+		file.Cluster.Hub = legacy.Cluster.Broker
+	}
+	c := &Config{Web: file.Web, Cluster: file.Cluster, Path: path}
 	c.applyDefaults()
 	c.applyEnv()
 	return c, nil
@@ -121,6 +158,15 @@ func (c *Config) applyDefaults() {
 	if len(c.Web.P2PICEServers) == 0 {
 		// 默认公共 STUN 仅供开发/自测；生产应改为 frps 自建 STUN（见 docs/design/p2p）。
 		c.Web.P2PICEServers = []string{"stun:stun.l.google.com:19302"}
+	}
+	if c.Cluster.Mode == "" {
+		c.Cluster.Mode = "standard"
+	}
+	if c.Cluster.EnrollTTLMin <= 0 {
+		c.Cluster.EnrollTTLMin = 30
+	}
+	if c.Cluster.Mode == "cloud" {
+		c.Cluster.Mode = "hub" // 旧值：这个模式一度叫 cloud，但中心完全可以是家里的一台小主机
 	}
 }
 
@@ -170,6 +216,28 @@ func (c *Config) applyEnv() {
 	}
 	if v := firstEnv("ROAM_WEB_P2P_MDNS", "TTMUX_WEB_P2P_MDNS"); v != "" {
 		c.Web.P2PMDNS = truthy(v)
+	}
+	// cluster 段的环境变量覆盖（横向扩展）。
+	if v := firstEnv("ROAM_CLUSTER_MODE"); v != "" {
+		c.Cluster.Mode = v
+	}
+	if v := firstEnv("ROAM_CLUSTER_HUB", "ROAM_CLUSTER_BROKER"); v != "" {
+		c.Cluster.Hub = v
+	}
+	if v := firstEnv("ROAM_CLUSTER_TOKEN"); v != "" {
+		c.Cluster.Token = v
+	}
+	if v := firstEnv("ROAM_CLUSTER_NAME"); v != "" {
+		c.Cluster.Name = v
+	}
+	if v := firstEnv("ROAM_CLUSTER_GROUP"); v != "" {
+		c.Cluster.Group = v
+	}
+	if v := firstEnv("ROAM_CLUSTER_INSECURE"); v != "" {
+		c.Cluster.Insecure = truthy(v)
+	}
+	if v := firstEnv("ROAM_CLUSTER_PUBLIC_URL"); v != "" {
+		c.Cluster.PublicURL = v
 	}
 }
 

@@ -366,6 +366,78 @@ html[data-pointer="coarse"] .tt-rail-btn::after {
 .tt-nav-item .nm, .tt-nav-account .nm, .tt-nav-collapse .nm {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* ── 设置 › 多机：模式二选一 + 接入状态 + 两条入口 ───────────────── */
+.tt-modes { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); }
+@media (max-width: 720px) { .tt-modes { grid-template-columns: 1fr; } }
+.tt-mode {
+  position: relative; text-align: left; border: 1px solid var(--border); border-radius: var(--r-card);
+  background: var(--bg-elevated); padding: 14px 16px 14px 44px; color: var(--text-dim);
+}
+.tt-mode .radio {
+  position: absolute; left: 16px; top: 17px; width: 16px; height: 16px; border-radius: 50%;
+  border: 1.6px solid var(--border);
+}
+.tt-mode.on { border-color: var(--accent-border); background: var(--accent-soft); }
+.tt-mode.on .radio { border-color: var(--accent); box-shadow: inset 0 0 0 3.5px var(--bg-base), inset 0 0 0 9px var(--accent); }
+.tt-mode .t {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 5px;
+  font-size: var(--fs-body); font-weight: 600; color: var(--text-bright);
+}
+.tt-mode .d { display: block; font-size: var(--fs-meta); line-height: 1.8; }
+/* 卡片本身就是命中区，粗指针下天然够 44 */
+:where(html[data-pointer="fine"]) .tt-mode:hover { border-color: var(--accent-border); }
+
+.tt-cstate {
+  display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+  padding: 10px 12px; border-radius: var(--r-sm);
+  border: 1px solid var(--border); background: var(--list-hover);
+  font-size: var(--fs-meta); color: var(--text-dim);
+}
+.tt-cstate .d { width: 8px; height: 8px; border-radius: 50%; background: var(--text-dimmer); flex: 0 0 auto; }
+.tt-cstate.ok { border-color: var(--ok-border); background: var(--ok-soft); color: var(--text-bright); }
+.tt-cstate.ok .d { background: var(--ok); }
+.tt-cstate.warn { border-color: var(--warn-border); background: var(--warn-soft); }
+.tt-cstate.warn .d { background: var(--warn); }
+.tt-cstate .err { width: 100%; font-family: var(--mono); font-size: var(--fs-micro); color: var(--warn); line-height: 1.7; }
+
+.tt-crow { display: flex; gap: var(--sp-3); flex-wrap: wrap; }
+.tt-cf { display: flex; flex-direction: column; gap: 5px; flex: 1 1 240px; min-width: 200px; }
+.tt-cf > span { font-size: var(--fs-meta); color: var(--text-dim); display: flex; align-items: center; gap: 6px; }
+.tt-cf > em { font-style: normal; font-size: var(--fs-micro); color: var(--text-dimmer); line-height: 1.7; }
+
+.tt-ways { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); }
+@media (max-width: 720px) { .tt-ways { grid-template-columns: 1fr; } }
+.tt-way { border: 1px solid var(--border); border-radius: var(--r-sm); padding: 11px 13px; background: var(--bg-base); }
+.tt-way .h { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; font-size: var(--fs-meta); font-weight: 600; color: var(--text-bright); }
+.tt-way .u { font: var(--fs-micro)/1.7 var(--mono); color: var(--accent); word-break: break-all; }
+.tt-way .n { margin-top: 5px; font-size: var(--fs-micro); color: var(--text-dimmer); line-height: 1.7; }
+
+/* ── 机器徽记（多机）───────────────────────────────────────────────
+   机器身份看形状（方章里的字），状态看颜色（点）。机器**不发色**：色板已经排到
+   第五支（蜂群紫），再给每台机器一支，一枚标签上就会同时挂机器色/状态色/蜂群色。
+   单个汉字撑得起整格，两个拉丁字母才要缩——所以字号跟着内容走。 */
+.tt-nodemark {
+  display: inline-grid; place-items: center; flex: 0 0 auto;
+  width: 20px; height: 20px; border-radius: var(--r-xs);
+  border: 1px solid var(--border); background: var(--bg-elevated);
+  font: 600 9px/1 var(--mono); color: var(--text-dim); letter-spacing: .02em;
+  white-space: nowrap; overflow: hidden;
+}
+.tt-nodemark[data-cjk] { font: 600 12px/1 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+.tt-nodemark.sm { width: 16px; height: 16px; border-radius: 5px; font-size: 8px; }
+.tt-nodemark.sm[data-cjk] { font-size: 10px; }
+.tt-nodemark.lg { width: 28px; height: 28px; font-size: 12px; }
+.tt-nodemark.lg[data-cjk] { font-size: 17px; }
+.tt-nodemark.cur { color: var(--accent); border-color: var(--accent-border); background: var(--accent-soft); }
+.tt-nodemark.off { color: var(--text-dimmer); border-style: dashed; background: transparent; }
+/* 底座那枚：展开态名字后面缀状态点；轨态只剩方章，点叠在右下角（外描底色免得糊在边上） */
+.tt-nav-account .nd { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; }
+.tt-nav-account .nd.rail {
+  position: absolute; right: 6px; bottom: 6px;
+  box-shadow: 0 0 0 2px var(--bg-base);
+}
+.tt-nav.rail .tt-nav-account.node { position: relative; }
+
 /* 选中态：3px 左强调线 + 低饱和蓝底。整块高亮会把注意力从内容上夺走（14 §4.4） */
 .tt-nav-item.on { background: var(--accent-soft); color: var(--text-bright); }
 .tt-nav-item.on::before {

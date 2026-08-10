@@ -4,6 +4,9 @@
 //   平板/手机   → 终端为全屏覆盖层；手机底部 Tab 导航
 // 终端：多标签 / 字号调节 / 复制 / 更多快捷键 / 断线自动重连。
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { bootstrapCluster, nodeApi, setCurrentNode, useClusterNodes, useCurrentNodeId } from './cluster/node-url'
+import { NodeMark, nodeDotColor } from './cluster/NodeMark'
+import { ClusterSettings } from './cluster/ClusterSettings'
 import {
   Layout, Button, Card, List, Tag, Form, Input, Select, Segmented, Tabs, Descriptions,
   Statistic, Row, Col, Space, Popconfirm, Empty, Modal, App as AntApp, Typography, Spin, Tooltip, Dropdown, Checkbox, Progress, AutoComplete, Radio, Switch, Collapse, InputNumber,
@@ -306,6 +309,13 @@ function FilesPage({ openTerm }: { openTerm: (name: string) => void }) {
 }
 
 export default function App() {
+  // 多机：底座那枚按钮 + 账户菜单顶部的机器列表。单机时两者都为空，界面与今天一致。
+  // **必须在任何提前 return 之前**——这个组件下面有 `if (!authed) return <Login/>` 这类分支，
+  // 放到后面就是条件调用 hook，登录成功那一帧 hook 数量变化，React 直接抛 #310（踩过）。
+  const clusterNodes = useClusterNodes()
+  const curNodeId = useCurrentNodeId()
+  const curNode = clusterNodes.find((n) => n.id === curNodeId) || null
+
   const [authed, setAuthed] = useState<boolean | null>(null)
   const [route, setRoute] = useState(() => normalizeRoute(location.hash.replace(/^#\/?/, '') || 'projects'))
   const tab = route.split('/')[0]                                  // 基础页（swarm/leave → swarm）
@@ -373,6 +383,11 @@ export default function App() {
   const [unfinished, setUnfinished] = useState(0)
   // 不能按 hasSider 收窄：手机没有侧栏，但会话坞同样要写「项目 · 会话」
   useEffect(() => {
+    // **必须等 authed**：hooks 跑在下面 `return <Login/>` 那些提前 return 之前，
+    // 不等就会在「登录确认 + 多机引导」之前把业务请求发出去——单机上那是一发 401
+    // （被 401 处理器吞掉，看不见），在中心上是**没带 /n/<id> 前缀的 404**，
+    // 而且没人会告诉你为什么。踩过。
+    if (!authed) return
     let stop = false
     const load = async () => {
       try {
@@ -389,7 +404,7 @@ export default function App() {
     load()
     const i = setInterval(load, 15000)
     return () => { stop = true; clearInterval(i) }
-  }, [])
+  }, [authed])
 
   // Canvas 滚动位置（14 §6.3.5）：终端一开，Canvas 变窄、卡片重排，scrollHeight
   // 从 1108 掉到 781，浏览器顺手把 scrollTop 归零——"你看到哪儿了"就这么没了。
@@ -449,12 +464,28 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [hasSider, space])
 
+  // 启动：先确认登录态，**再**做多机引导，最后才放行渲染。
+  //
+  // 三步的顺序是踩出来的。引导要带登录态才问得出结果，所以不能跑在 /me 之前（只会拿 401）；
+  // 而它又必须跑在任何业务请求之前，否则第一轮请求发的是 /api/*——在中心上那是 404，
+  // 而且没人会告诉你为什么。中间那个「先当单机跑一轮再纠正」的窗口就是这么来的。
   useEffect(() => {
     setUnauthorizedHandler(() => setAuthed(false))
-    api('GET', '/me').then(() => {
-      setAuthed(true); loadPreferences()
+    let alive = true
+    void (async () => {
+      try {
+        await api('GET', '/me')
+      } catch {
+        if (alive) setAuthed(false)
+        return
+      }
+      await bootstrapCluster()
+      if (!alive) return
+      setAuthed(true)
+      loadPreferences()
       navigator.clipboard?.readText?.().catch(() => {})
-    }).catch(() => setAuthed(false))
+    })()
+    return () => { alive = false }
   }, [])
 
   // ── 会话身份映射（id ↔ 名字）──
@@ -536,7 +567,14 @@ export default function App() {
   }, [authed, prefs.p2pEnabled])
 
   if (authed === null) return <div style={{ height: '100dvh', display: 'grid', placeItems: 'center' }}><Spin size="large" /></div>
-  if (!authed) return <Login onOk={() => { setAuthed(true); loadPreferences(); go('projects') }} />
+  // 登录成功后同样是「先引导、再放行」：不引导就渲染的话，第一轮业务请求会漏掉
+  // /n/<id> 前缀。await 之后才 setAuthed，那个窗口就不存在了。
+  if (!authed) {
+    return <Login onOk={async () => {
+      await bootstrapCluster()
+      setAuthed(true); loadPreferences(); go('projects')
+    }} />
+  }
 
   // 独立单终端页（新标签全屏打开）：hash 路由 #/term/<会话名>
   const soloName = tab === 'term' && route.includes('/') ? decodeURIComponent(route.slice(route.indexOf('/') + 1)) : ''
@@ -713,8 +751,32 @@ export default function App() {
     }),
   }))
 
+  // 多机：机器列表接在账户菜单最上面（切机器是「换浏览范围」，不是页面）。
+  // 单机时 nodes 为空，这一段整个不出现，菜单与今天逐项一致。
+  const nodeItems: MenuProps['items'] = clusterNodes.length ? [
+    { key: 'nodes-title', type: 'group', label: t('node.switch'), children: clusterNodes.map((n) => ({
+      key: 'node:' + n.id,
+      icon: <NodeMark name={n.name} size="sm" current={n.id === curNodeId} offline={!n.online} />,
+      label: (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 168 }}>
+          <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{n.name}</span>
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 'var(--fs-micro)', color: 'var(--text-dimmer)' }}>
+            {n.online ? t('node.latencyMs', { ms: n.latencyMs }) : t('node.offline')}
+          </span>
+          <i style={{ width: 7, height: 7, borderRadius: '50%', background: nodeDotColor(n) }} />
+        </span>
+      ),
+      disabled: !n.online,
+      // 切机器 = 换「浏览 / 新开操作落到哪台」。整页重载是这一版的取舍：页面各自缓存着
+      // 上一台的数据，逐个清远比重来一次更容易漏（终端跨机保留要等会话键改造，见设计稿 §7）。
+      onClick: () => { setCurrentNode(n.id); location.reload() },
+    })) },
+    { type: 'divider' },
+  ] : []
+
   // 设置不在这里：它在侧栏底部有自己的入口，菜单里再放一条就是同一页两个门
   const accountMenu: MenuProps['items'] = [
+    ...nodeItems,
     { key: 'about', icon: ICONS.github, label: t('nav.about'), onClick: () => go('about') },
     { type: 'divider' },
     { key: 'theme', icon: themeIcon, label: mode === 'dark' ? t('common.lightTheme') : t('common.darkTheme'), onClick: () => toggleTheme() },
@@ -753,6 +815,12 @@ export default function App() {
             } : null}
             accountName={t('nav.thisDevice')}
             account={accountMenu}
+            node={curNode ? {
+              name: curNode.name,
+              mark: <NodeMark name={curNode.name} size="sm" current />,
+              dot: nodeDotColor(curNode),
+              latency: curNode.online ? t('node.latencyMs', { ms: curNode.latencyMs }) : t('node.offline'),
+            } : null}
             onToggleRail={() => space.setNavCollapsed(!space.navCollapsed)}
           />
         </Sider>
@@ -3080,7 +3148,7 @@ function P2PCard() {
   const [serverStun, setServerStun] = useState('')
   // 拉服务端默认 STUN 预填进输入框（用户未自定义时展示当前默认；改了才存自定义偏好）。
   useEffect(() => {
-    fetch('/api/p2p/config', { cache: 'no-store' })
+    fetch(nodeApi('/p2p/config'), { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         const cfg = d?.data ?? d ?? {}
@@ -3487,6 +3555,7 @@ function EnvPage() {
   }
   return (
     <Tabs defaultActiveKey="general" style={{ width: '100%' }} items={[
+      { key: 'cluster', label: t('settings.tabCluster'), children: <ClusterSettings /> },
       { key: 'general', label: t('settings.tabGeneral'), children: (
         <Space direction="vertical" size="middle" style={{ width: '100%' }}>
           <Card title={t('settings.appearance')}>

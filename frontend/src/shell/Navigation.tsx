@@ -27,7 +27,7 @@ export type NavGroup = { label: string; items: NavEntry[] }
 
 export function Navigation({
   rail, active, groups, onGo, settings,
-  linkStatus, dock, account, accountName, onToggleRail,
+  linkStatus, dock, account, accountName, node, onToggleRail,
 }: {
   /** 48px 轨态：用户收起 / Focus / 非 large 档 */
   rail: boolean
@@ -41,6 +41,8 @@ export function Navigation({
   dock: { count: number; open: boolean; onToggle: () => void; title: string } | null
   account: MenuProps['items']
   accountName: string
+  /** 多机（连了中心）时给：底座那枚按钮变成机器切换器；单机传 null */
+  node: { name: string; mark: ReactNode; dot: string; latency: string } | null
   onToggleRail: () => void
 }) {
   const { t } = useI18n()
@@ -94,14 +96,20 @@ export function Navigation({
         {/* 关于 / 主题 / 全屏 / 退出 留在账户菜单：它们是操作不是导航，
             和「概览/项目」并排时，退出登录和切主题的误触代价差了几个数量级 */}
         <Dropdown menu={{ items: account }} trigger={['click']} placement={rail ? 'topLeft' : 'top'}>
-          <button type="button" className="tt-nav-account" title={accountName}>
-            <span className="av">{hostIcon}</span>
+          {/* 多机时这枚按钮就是机器切换器——它本来说的就是「你连着的这台机器」，
+              多机后终于有了名字。单机时原样保留今天的长相（主机图标 + 「当前设备」）。 */}
+          <button type="button" className={`tt-nav-account${node ? ' node' : ''}`}
+            title={node ? `${node.name} · ${node.latency}` : accountName}
+            aria-label={node ? t('node.aria.switcher', { name: node.name }) : accountName}>
+            <span className="av">{node ? node.mark : hostIcon}</span>
             {!rail && (
               <>
-                <span className="nm">{accountName}</span>
+                <span className="nm">{node ? node.name : accountName}</span>
+                {node && <i className="nd" style={{ background: node.dot }} />}
                 <span className="dots">{moreIcon}</span>
               </>
             )}
+            {node && rail && <i className="nd rail" style={{ background: node.dot }} />}
           </button>
         </Dropdown>
         <button type="button" className="tt-nav-collapse" onClick={onToggleRail}
