@@ -61,6 +61,7 @@ import SoloTerminal from './components/terminal/SoloTerminal'
 import { ICONS } from './components/nav-icons'
 import { normalizeRoute, setHashParams, readTermTokens } from './route-hash'
 import type { ClaudeInfo } from './components/terminal/claude-info'
+import { dropDeadTokens, loadTabs, saveTabs } from './components/terminal/term-tabs-store'
 import { ExitFullscreenIcon, FullscreenIcon, LogoutIcon, MoonIcon, MoreIcon, SearchIcon, SunIcon } from './icons'
 
 const { Sider, Content } = Layout
@@ -315,7 +316,8 @@ export default function App() {
     if (!sessIds || restored.current) return
     restored.current = true
     const toName = (tok: string) => sessIds.byId[tok] || tok
-    const names = Array.from(new Set(urlTerms.current.map(toName)))
+    // 查无此会话的 id 直接丢：切机器、或会话在别处被关掉，都会在这里长出打不开的空标签
+    const names = Array.from(new Set(dropDeadTokens(urlTerms.current, sessIds.byId).map(toName)))
     if (!names.length) return
     // 用户在 id 表回来之前就点开了标签 → 以他的操作为准，别被 URL 还原顶掉
     setTerms((cur) => (cur.length ? cur : names))
@@ -330,11 +332,15 @@ export default function App() {
   useEffect(() => {
     if (!restored.current) return
     const toTok = (n: string) => sessIds?.byName[n] || n
+    const toks = terms.map(toTok)
+    const activeTok = active ? toTok(active) : ''
     setHashParams({
-      terms: terms.map((n) => encodeURIComponent(toTok(n))).join(','),
-      active: active ? encodeURIComponent(toTok(active)) : '',
+      terms: toks.map(encodeURIComponent).join(','),
+      active: activeTok ? encodeURIComponent(activeTok) : '',
     })
-  }, [terms, active, sessIds])
+    // 同一份东西再按机器存一份：切走了还能切回来（见 term-tabs-store）
+    saveTabs(curNodeId, toks, activeTok)
+  }, [terms, active, sessIds, curNodeId])
 
   // hash 路由：URL #/xxx 与当前页同步（支持前进/后退、刷新保持、收藏分享）
   useEffect(() => {
@@ -566,13 +572,17 @@ export default function App() {
       // 切机器 = 换「浏览 / 新开操作落到哪台」。整页重载是这一版的取舍：页面各自缓存着
       // 上一台的数据，逐个清远比重来一次更容易漏。
       //
-      // **必须先把 terms/active 从 URL 里摘掉**：它们是上一台机器的会话 id，原样带过去
-      // 就会在新机器上还原一批根本不存在的标签——界面上表现为「一堆打不开的窗口」，
-      // 而且同名会话还可能连到错的那台。终端真正的跨机保留要等会话键改成 (nodeId, name)，
-      // 见设计稿；在那之前，切机器就是换一台机器的终端，不留残影。
+      // 切机器 = 换终端。URL 上的 terms/active 是**上一台**的会话 id，原样带过去会在新机器上
+      // 还原一批根本不存在的标签（一堆打不开的窗口，同名会话还可能连错机器）。
+      // 所以这里换成那台机器**自己上次**开着的标签——各记各的，切回来还在（term-tabs-store）。
+      // 兜底还有一层：还原时会把查无此会话的 id 丢掉，关掉的会话不会变成空标签。
       onClick: () => {
+        const back = loadTabs(n.id)
         setCurrentNode(n.id)
-        setHashParams({ terms: '', active: '' })
+        setHashParams({
+          terms: back.terms.map(encodeURIComponent).join(','),
+          active: back.active ? encodeURIComponent(back.active) : '',
+        })
         location.reload()
       },
     })),
