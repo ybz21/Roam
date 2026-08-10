@@ -753,8 +753,9 @@ export default function App() {
 
   // 多机：机器列表接在账户菜单最上面（切机器是「换浏览范围」，不是页面）。
   // 单机时 nodes 为空，这一段整个不出现，菜单与今天逐项一致。
+  // 顶部切换器的下拉：就是机器列表本身，不再套一层分组标题——它已经有自己的按钮当标题了
   const nodeItems: MenuProps['items'] = clusterNodes.length ? [
-    { key: 'nodes-title', type: 'group', label: t('node.switch'), children: clusterNodes.map((n) => ({
+    ...clusterNodes.map((n) => ({
       key: 'node:' + n.id,
       icon: <NodeMark name={n.name} size="sm" current={n.id === curNodeId} offline={!n.online} />,
       label: (
@@ -779,13 +780,11 @@ export default function App() {
         setHashParams({ terms: '', active: '' })
         location.reload()
       },
-    })) },
-    { type: 'divider' },
+    })),
   ] : []
 
   // 设置不在这里：它在侧栏底部有自己的入口，菜单里再放一条就是同一页两个门
   const accountMenu: MenuProps['items'] = [
-    ...nodeItems,
     { key: 'about', icon: ICONS.github, label: t('nav.about'), onClick: () => go('about') },
     { type: 'divider' },
     { key: 'theme', icon: themeIcon, label: mode === 'dark' ? t('common.lightTheme') : t('common.darkTheme'), onClick: () => toggleTheme() },
@@ -817,18 +816,14 @@ export default function App() {
             rail={navRail} active={tab} groups={navGroups} onGo={go}
             settings={{ key: 'settings', label: t('nav.env'), icon: ICONS.settings }}
             linkStatus={<LinkStatus collapsed={navRail} />}
-            dock={terms.length > 0 ? {
-              count: terms.length, open: space.dockVisible,
-              onToggle: () => { space.setFocus('none'); space.toggleDock() },
-              title: `${space.dockVisible ? t('terminal.collapseRightTitle') : t('terminal.expandTitle')} (${modKeyLabel}J)`,
-            } : null}
             accountName={t('nav.thisDevice')}
             account={accountMenu}
+            nodeMenu={nodeItems}
             node={curNode ? {
               name: curNode.name,
-              // 底座这枚**不涂蓝**：它永远是当前机器，`current` 那层高亮不传递任何信息，
-              // 只会和上面终端开关的蓝撞成两块「选中」，让人以为选了两样东西。
-              // 蓝留给弹层列表里区分「哪台是当前」，那里才有对比对象。
+              // 切换器那枚**不涂蓝**：它永远是当前机器，`current` 那层高亮不传递任何信息，
+              // 只会和别处的蓝撞成两块「选中」。蓝留给下拉列表里区分「哪台是当前」，
+              // 那里才有对比对象。
               mark: <NodeMark name={curNode.name} size="sm" />,
               dot: nodeDotColor(curNode),
               latency: curNode.online ? t('node.latencyMs', { ms: curNode.latencyMs }) : t('node.offline'),

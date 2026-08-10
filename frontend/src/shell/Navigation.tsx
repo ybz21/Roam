@@ -27,7 +27,7 @@ export type NavGroup = { label: string; items: NavEntry[] }
 
 export function Navigation({
   rail, active, groups, onGo, settings,
-  linkStatus, dock, account, accountName, node, onToggleRail,
+  linkStatus, account, accountName, node, nodeMenu, onToggleRail,
 }: {
   /** 48px 轨态：用户收起 / Focus / 非 large 档 */
   rail: boolean
@@ -37,12 +37,12 @@ export function Navigation({
   /** 设置：是页面，但摆在底部——它跟「概览/项目」不是一类事（14 §4.4） */
   settings: NavEntry
   linkStatus: ReactNode
-  /** 终端开合入口；没有已打开的终端时传 null */
-  dock: { count: number; open: boolean; onToggle: () => void; title: string } | null
   account: MenuProps['items']
   accountName: string
-  /** 多机（连了中心）时给：底座那枚按钮变成机器切换器；单机传 null */
+  /** 多机（连了中心）时给：顶部出现机器切换器；单机传 null，那一块整个不渲染 */
   node: { name: string; mark: ReactNode; dot: string; latency: string } | null
+  /** 切换器下拉里的机器列表（含中心）；单机时不会用到 */
+  nodeMenu: MenuProps['items']
   onToggleRail: () => void
 }) {
   const { t } = useI18n()
@@ -71,6 +71,7 @@ export function Navigation({
       {/* 这里原来还有一枚搜索入口。去掉了：顶栏 Command Center 的搜索横跨整个工作区、
           轨态下也在，侧栏这枚是同一个动作的第二个入口，只是把导航第一屏又占掉一行。 */}
 
+
       <div className="tt-nav-list">
         {groups.map((g) => (
           <div key={g.label} className="tt-nav-group">
@@ -81,35 +82,40 @@ export function Navigation({
       </div>
 
       <div className="tt-nav-foot">
-        {linkStatus}
-        {/* 终端是开关不是页面，所以只给底色不给 3px 强调线——那条线是"当前在哪一页"的语言 */}
-        {dock && (
-          <button type="button" className={`tt-nav-item toggle${dock.open ? ' on' : ''}`} onClick={dock.onToggle} title={dock.title}>
-            <span className="ic">{termIcon}</span>
-            {!rail && <span className="nm">{t('nav.terminal')}</span>}
-            <span className="bd blue">{dock.count}</span>
-          </button>
+        {/* 机器切换器摆在这一组的第一位：底下这几样都是「上下文与账户」，
+            而它是其中作用域最大的一个——切它，上面整列页面看的都换一台机器。
+            单机（没连中心）时整块不渲染，侧栏与今天逐像素一致。 */}
+        {node && (
+          <Dropdown menu={{ items: nodeMenu }} trigger={['click']} placement={rail ? 'topLeft' : 'top'}>
+            <button type="button" className="tt-nav-node"
+              title={`${node.name} · ${node.latency}`}
+              aria-label={t('node.aria.switcher', { name: node.name })}>
+              <span className="av">{node.mark}</span>
+              {!rail && <span className="nm">{node.name}</span>}
+              <i className={`nd${rail ? ' rail' : ''}`} style={{ background: node.dot }} />
+              {!rail && <span className="dots">{chevronDown}</span>}
+            </button>
+          </Dropdown>
         )}
+        {linkStatus}
+        {/* 终端开关不在这儿了：顶栏 Command Center 已经有一枚（还带数量），
+            外加 ⌘J。侧栏这枚是同一个动作的第三个入口，占的还是最贵的那一格。 */}
         {/* 设置摆在这儿而不是账户菜单里：它是一整页，且是这列里唯一天天要开的一页——
             藏在下拉里等于每次进设置都多点一下。菜单里那条随之删掉，一个入口就够。 */}
         {item(settings)}
         {/* 关于 / 主题 / 全屏 / 退出 留在账户菜单：它们是操作不是导航，
             和「概览/项目」并排时，退出登录和切主题的误触代价差了几个数量级 */}
+        {/* 账户按钮回到它本来的样子：这台设备 + 关于/主题/全屏/退出。
+            机器切换已经搬到最上面，这里不再兼两份职。 */}
         <Dropdown menu={{ items: account }} trigger={['click']} placement={rail ? 'topLeft' : 'top'}>
-          {/* 多机时这枚按钮就是机器切换器——它本来说的就是「你连着的这台机器」，
-              多机后终于有了名字。单机时原样保留今天的长相（主机图标 + 「当前设备」）。 */}
-          <button type="button" className={`tt-nav-account${node ? ' node' : ''}`}
-            title={node ? `${node.name} · ${node.latency}` : accountName}
-            aria-label={node ? t('node.aria.switcher', { name: node.name }) : accountName}>
-            <span className="av">{node ? node.mark : hostIcon}</span>
+          <button type="button" className="tt-nav-account" title={accountName} aria-label={accountName}>
+            <span className="av">{hostIcon}</span>
             {!rail && (
               <>
-                <span className="nm">{node ? node.name : accountName}</span>
-                {node && <i className="nd" style={{ background: node.dot }} />}
+                <span className="nm">{accountName}</span>
                 <span className="dots">{moreIcon}</span>
               </>
             )}
-            {node && rail && <i className="nd rail" style={{ background: node.dot }} />}
           </button>
         </Dropdown>
         <button type="button" className="tt-nav-collapse" onClick={onToggleRail}
@@ -124,10 +130,10 @@ export function Navigation({
 
 const stroke = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
 const svg = (children: ReactNode) => <svg viewBox="0 0 24 24" width={18} height={18} {...stroke}>{children}</svg>
-const termIcon = svg(<><rect x="3" y="4" width="18" height="16" rx="2" /><line x1="14" y1="4" x2="14" y2="20" /></>)
 // 主机图标而不是姓名首字母：这里代表的是"你连着的这台机器"，不是一个人。
 // 尺寸跟导航项同为 18：整列图标要落在同一条竖线、同一个视觉重量上。
 const hostIcon = svg(<><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M8 20h8" /><path d="M12 16v4" /></>)
+const chevronDown = <svg viewBox="0 0 24 24" width={14} height={14} {...stroke}><polyline points="6 9 12 15 18 9" /></svg>
 const chevronLeft = svg(<polyline points="15 6 9 12 15 18" />)
 const chevronRight = svg(<polyline points="9 6 15 12 9 18" />)
 // 「•••」是三个句点，不是图标：字号下和标点混作一团，也跟不上这一列的线性图标语言
