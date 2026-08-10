@@ -84,3 +84,30 @@ describe('方章取字', () => {
     expect(markText('jetson')).toBe('JE')
   })
 })
+
+// 引导失败时**不能**悄悄退化成单机：在中心上那意味着每条业务请求都少了 /n/<id> 前缀，
+// 整页 404 而且没有任何提示。这里盯住「引导没成功就不该有 nodeId」这条底线。
+describe('引导失败的兜底', () => {
+  // 本地镜像会跨用例留着（它本来就是「刷新后还记得上次那台」），这里要的是干净起点
+  beforeEach(() => { localStorage.clear() })
+
+  it('中心返回 401（没登录）时不进多机态，也不乱认一台机器', async () => {
+    const m = await fresh()
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 401 })))
+    await m.bootstrapCluster()
+    expect(m.isHubMode()).toBe(false)
+    expect(m.currentNodeId()).toBe(null)
+    vi.unstubAllGlobals()
+  })
+
+  it('一台在线的都没有时不选任何机器——总比选个连不上的强', async () => {
+    const m = await fresh()
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      data: { recommended: '', nodes: [{ id: 'n_a', online: false }] },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    await m.bootstrapCluster()
+    expect(m.isHubMode()).toBe(true)
+    expect(m.currentNodeId()).toBe(null)
+    vi.unstubAllGlobals()
+  })
+})

@@ -4,7 +4,7 @@
 //   平板/手机   → 终端为全屏覆盖层；手机底部 Tab 导航
 // 终端：多标签 / 字号调节 / 复制 / 更多快捷键 / 断线自动重连。
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { bootstrapCluster, isHubMode, nodeApi, setCurrentNode, useClusterNodes, useCurrentNodeId } from './cluster/node-url'
+import { bootstrapCluster, nodeApi, setCurrentNode, useClusterNodes, useCurrentNodeId } from './cluster/node-url'
 import { NodeMark, nodeDotColor } from './cluster/NodeMark'
 import { ClusterSettings } from './cluster/ClusterSettings'
 import {
@@ -383,6 +383,11 @@ export default function App() {
   const [unfinished, setUnfinished] = useState(0)
   // 不能按 hasSider 收窄：手机没有侧栏，但会话坞同样要写「项目 · 会话」
   useEffect(() => {
+    // **必须等 authed**：hooks 跑在下面 `return <Login/>` 那些提前 return 之前，
+    // 不等就会在「登录确认 + 多机引导」之前把业务请求发出去——单机上那是一发 401
+    // （被 401 处理器吞掉，看不见），在中心上是**没带 /n/<id> 前缀的 404**，
+    // 而且没人会告诉你为什么。踩过。
+    if (!authed) return
     let stop = false
     const load = async () => {
       try {
@@ -399,7 +404,7 @@ export default function App() {
     load()
     const i = setInterval(load, 15000)
     return () => { stop = true; clearInterval(i) }
-  }, [])
+  }, [authed])
 
   // Canvas 滚动位置（14 §6.3.5）：终端一开，Canvas 变窄、卡片重排，scrollHeight
   // 从 1108 掉到 781，浏览器顺手把 scrollTop 归零——"你看到哪儿了"就这么没了。
@@ -459,12 +464,28 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [hasSider, space])
 
+  // 启动：先确认登录态，**再**做多机引导，最后才放行渲染。
+  //
+  // 三步的顺序是踩出来的。引导要带登录态才问得出结果，所以不能跑在 /me 之前（只会拿 401）；
+  // 而它又必须跑在任何业务请求之前，否则第一轮请求发的是 /api/*——在中心上那是 404，
+  // 而且没人会告诉你为什么。中间那个「先当单机跑一轮再纠正」的窗口就是这么来的。
   useEffect(() => {
     setUnauthorizedHandler(() => setAuthed(false))
-    api('GET', '/me').then(() => {
-      setAuthed(true); loadPreferences()
+    let alive = true
+    void (async () => {
+      try {
+        await api('GET', '/me')
+      } catch {
+        if (alive) setAuthed(false)
+        return
+      }
+      await bootstrapCluster()
+      if (!alive) return
+      setAuthed(true)
+      loadPreferences()
       navigator.clipboard?.readText?.().catch(() => {})
-    }).catch(() => setAuthed(false))
+    })()
+    return () => { alive = false }
   }, [])
 
   // ── 会话身份映射（id ↔ 名字）──
@@ -546,15 +567,12 @@ export default function App() {
   }, [authed, prefs.p2pEnabled])
 
   if (authed === null) return <div style={{ height: '100dvh', display: 'grid', placeItems: 'center' }}><Spin size="large" /></div>
-  // 登录成功要**重新引导一次**：首屏那次 bootstrap 跑在登录之前，中心会 401，
-  // 于是整页会当成单机、把业务请求打去 /api/*（在 中心上全是 404）。
-  // reload 而不是 setState：拿到 nodeId 之前已经有一批组件挂上去了，重来一次最干净。
+  // 登录成功后同样是「先引导、再放行」：不引导就渲染的话，第一轮业务请求会漏掉
+  // /n/<id> 前缀。await 之后才 setAuthed，那个窗口就不存在了。
   if (!authed) {
-    return <Login onOk={() => {
-      bootstrapCluster().then(() => {
-        if (isHubMode()) { location.hash = '#/projects'; location.reload(); return }
-        setAuthed(true); loadPreferences(); go('projects')
-      })
+    return <Login onOk={async () => {
+      await bootstrapCluster()
+      setAuthed(true); loadPreferences(); go('projects')
     }} />
   }
 
