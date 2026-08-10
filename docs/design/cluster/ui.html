@@ -513,33 +513,65 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
   </figure>
 </div>
 
-<h2>4. 第二个锚点：页头眉标就是机器面包屑</h2>
-<p class="lede">
-  <code>.tt-pagehead</code> 的眉标行今天写的是「工作区」「工具」这类分组名——
-  信息量约等于零。多机后它变成 <b>机器芯片 · 分组名</b>：桌面手机同一个组件，
-  一次改动两端都有。这就是旧稿要为手机单独加一条 36px 细条的那个需求，
-  只是它其实已经有地方放了。
-</p>
+<h2>4. 切换器全站只有一个，页面里不写机器名</h2>
+<div class="note warn">
+  <b>这一节推翻了本稿的前一版。</b>前一版在侧栏底座放切换器，<b>又</b>在每一页的页头眉标放一枚
+  可点的机器芯片——那等于把同一个动作散到七个页面上，用户还得判断这两处是不是一回事。
+  现在的结论是：<b>显示和切换都只在侧栏那一处。</b>
+</div>
 <div class="stack">
   <figure>
     <div class="screen"><div class="phead">
-      <div class="kick"><span class="chip"><span class="nmk sm" data-cjk>公</span>公司工作站<svg width="11" height="11" viewBox="0 0 24 24"><use href="#i-chev"/></svg></span> · 工作区</div>
+      <div class="kick">工作区</div>
       <h4>文件</h4><p>/home/ai/codes/roam</p>
     </div></div>
-    <figcaption>正常：芯片是 <code>&lt;button&gt;</code>，点开同一个机器选择弹层。</figcaption>
+    <figcaption><b>页头不写机器名</b>。眉标退回原来的分组名。
+      轨是常驻的、一直在屏幕上，页面里再写一遍是把同一件事说七遍。</figcaption>
   </figure>
   <figure>
-    <div class="screen"><div class="phead">
-      <div class="kick"><span class="chip warn"><span class="nmk sm" style="border-color:var(--warn-border);color:var(--warn)" data-cjk>云</span>云 GPU 机 · 重连中<svg width="11" height="11" viewBox="0 0 24 24"><use href="#i-chev"/></svg></span> · 工作区</div>
-      <h4>文件</h4><p style="opacity:.5">/home/ai/data —— 数据已停在 3 分钟前</p>
-    </div></div>
-    <figcaption>降级：芯片转黄并把原因写进去；页面内容<b>不清空</b>，只置灰并禁写——
-      清空等于把你刚才看到的东西也抢走了。</figcaption>
+    <ul class="pts" style="margin:0">
+      <li><b>那「误操作防护」怎么办</b>——不靠被动提示，靠<b>动作发生时</b>把机器名写进确认框：
+        「在 <b>云 GPU 机</b> 上删除 3 个文件？」。被动的芯片看久了就不看了，确认框是拦得住的地方。</li>
+      <li><b>唯一的例外是工作台</b>：同一屏上有两种范围（跨机器的队列 / 本机的项目墙），
+        各挂一枚小标「全部机器」「本机」。<b>它标的是范围，不是「你在哪台」</b>——
+        本机那枚也不写机器名。</li>
+      <li><b>降级时另说</b>：当前机器掉线要用一条横幅讲清楚（§9），那是状态不是身份。</li>
+      <li><b>手机上那一处在底栏最后一格</b>：没有侧栏，就让「更多」那一格的图标变成机器方章，
+        点开第一段是切换列表。格数不变、间隙不变，入口仍然只有一个。</li>
+    </ul>
   </figure>
 </div>
-<div class="note">
-  <b>单机时这枚芯片不渲染</b>，眉标退回今天的「工作区 / 工具」。
-  这条对所有多机元素都成立：<b>没连 Broker 就当它不存在</b>，一处都不留。
+
+<h3>切换器里第一项是「中心」</h3>
+<p class="lede">
+  中心不是一台「机器」（没有终端、没有文件、不在机器列表里），但它是一个
+  <b>能被切过去看的地方</b>——机器名单、接入、中心自己的设置都在那儿。
+  不给它一个位置，用户在中心的控制台里就<b>永远够不到中心本身</b>，
+  切成中心之后连改回来的入口都没有。所以它进同一张列表，排在机器之前，自成一段。
+</p>
+<div class="stack">
+  <figure style="flex:0 0 auto">
+    <div class="pick">
+      <div class="hd">切到哪里</div>
+      <div class="gl">中心</div>
+      <div class="row"><span class="nmk cur" data-cjk>中</span><span class="nm">中心</span><span class="mt">3 台在线</span><span class="dot"></span></div>
+      <div class="gl">机器 · 4</div>
+      <div class="row on"><span class="nmk cur" data-cjk>公</span><span class="nm">公司工作站</span><span class="mt">12ms</span><span class="dot"></span></div>
+      <div class="row"><span class="nmk" data-cjk>家</span><span class="nm">家里台式机</span><span class="mt">45ms</span><span class="dot"></span></div>
+      <div class="row"><span class="nmk" data-cjk>云</span><span class="nm">云 GPU 机</span><span class="mt">210ms</span><span class="dot warn"></span></div>
+      <div class="row dis"><span class="nmk off" data-cjk>树</span><span class="nm">树莓派</span><span class="mt">离线</span><span class="dot off"></span></div>
+      <div class="ft"><span class="act"><svg width="12" height="12" viewBox="0 0 24 24"><use href="#i-plus"/></svg>添加机器</span></div>
+    </div>
+    <figcaption>一张列表管完「切到哪里」。中心自成一段——它和机器不是一类东西，
+      但都是<b>能去的地方</b>。</figcaption>
+  </figure>
+  <figure>
+    <ul class="pts" style="margin:0">
+      <li><b>单机时整枚按钮退回今天的样子</b>（主机图标 + 「当前设备」），列表不存在。</li>
+      <li>底下只剩「添加机器」一枚——「管理机器」不用了：切到中心就是管理机器。</li>
+      <li>离线的机器灰显不可选；中心那一行永远可选（你正连着它）。</li>
+    </ul>
+  </figure>
 </div>
 
 <h2>5. ⌘K：搜索<b>一定</b>是跨机器的</h2>

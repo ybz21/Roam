@@ -1,68 +1,683 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>多机切换 · 页面初版原型索引</title>
-<link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <h1>多机切换 · 页面初版原型</h1>
-  <p class="lede" style="border-left:2px solid #d29922;background:rgba(210,153,34,.12);padding:10px 14px">
-    <b>已作废（2026-08）</b>：这批原型对齐的是 2026-07 的界面。现行设计见
-    <a href="../ui.html">../ui.html</a>（视觉）与 <a href="../architecture.html">../architecture.html</a>（技术架构）。
-  </p>
-  <p class="lede">
-    每个页面一个独立 HTML（评审样机，无 emoji，左侧栏对齐现有实现）。点卡片进入；
-    页内左侧导航为真实跳转，机器切换器选中的当前机器跨页保持（localStorage 模拟全局 currentNode）。
-    寻址 <code>/n/&lt;nodeId&gt;/...</code>、Broker-local <code>/api/broker/*</code>。配套文档见
-    <code>../多机切换交互设计.md</code>。
-  </p>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Roam 原型 · 多机（桌面）</title>
+<style>
+/* 多机原型 · 共享外壳样式 —— 对齐 2026-08 的真实界面（48 轨 / 顶栏 / 页头眉标 / 底栏四格）。
+ *
+ * 令牌直接取 frontend/src/theme.tsx 的真值，稿子和成品同源。原型只画壳与状态，
+ * 不复刻每个组件的细节——看的是「多机这件事摆在哪」，不是像素级还原。 */
+:root {
+  --bg-base:#0d1117; --bg-container:#161b22; --bg-elevated:#1b222b; --bg-term:#06090d;
+  --border:#30363d; --border-subtle:#21262d;
+  --text-bright:#e6edf3; --text-dim:#8b949e; --text-dimmer:#6e7681;
+  --accent:#58a6ff; --accent-solid:#1f6feb; --accent-soft:rgba(31,111,235,.14); --accent-border:rgba(88,166,255,.45);
+  --ok:#3fb950; --ok-solid:#238636; --ok-soft:rgba(63,185,80,.14); --ok-border:rgba(63,185,80,.42);
+  --danger:#f85149; --danger-soft:rgba(248,81,73,.12); --danger-border:rgba(248,81,73,.40);
+  --warn:#d29922; --warn-soft:rgba(210,153,34,.12); --warn-border:rgba(210,153,34,.40);
+  --swarm:#a371f7; --swarm-soft:rgba(163,113,247,.12); --swarm-border:rgba(163,113,247,.38);
+  --list-hover:rgba(255,255,255,.025);
+  --fs-micro:11px; --fs-meta:12px; --fs-sm:13px; --fs-body:14px; --fs-lg:16px; --fs-title:22px;
+  --r-xs:6px; --r-sm:10px; --r-card:14px; --r-pill:999px;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --rail:48px; --topbar:40px;
+}
+html[data-theme="light"] {
+  --bg-base:#f6f8fa; --bg-container:#ffffff; --bg-elevated:#ffffff; --bg-term:#ffffff;
+  --border:#d0d7de; --border-subtle:#e6e9ec;
+  --text-bright:#1f2328; --text-dim:#57606a; --text-dimmer:#8c959f;
+  --accent:#0969da; --accent-solid:#1f6feb; --accent-soft:rgba(31,111,235,.10); --accent-border:rgba(31,111,235,.40);
+  --ok:#1a7f37; --ok-solid:#1f883d; --ok-soft:rgba(31,136,61,.10); --ok-border:rgba(31,136,61,.40);
+  --danger:#cf222e; --danger-soft:rgba(207,34,46,.09); --danger-border:rgba(207,34,46,.35);
+  --warn:#9a6700; --warn-soft:rgba(154,103,0,.10); --warn-border:rgba(154,103,0,.35);
+  --list-hover:rgba(27,31,36,.04);
+}
+* { box-sizing:border-box; }
+html, body { height:100%; overflow:hidden; }  /* 文档永不滚动：每一页在自己的容器里滚 */
+body { margin:0; background:var(--bg-base); color:var(--text-bright);
+  font:var(--fs-body)/1.6 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased; }
+svg { display:block; } button { font:inherit; cursor:pointer; color:inherit; }
+a { color:inherit; text-decoration:none; }
 
-  <div class="idxgrid">
-    <a class="idxcard" href="overview.html">
-      <span class="ic"><svg class="i"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span>
-      <div><div class="t">概览</div><div class="d">当前机器统计 + 活动任务 + 告警</div></div>
-    </a>
-    <a class="idxcard" href="projects.html">
-      <span class="ic"><svg class="i"><path d="M3 10.2 12 3l9 7.2"/><path d="M5.5 9v11h13V9"/><path d="M9.5 20v-5h5v5"/></svg></span>
-      <div><div class="t">项目</div><div class="d">项目列表 + 会话详情</div></div>
-    </a>
-    <a class="idxcard" href="files.html">
-      <span class="ic"><svg class="i"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M7 12h10"/><path d="M7 16h6"/></svg></span>
-      <div><div class="t">文件</div><div class="d">面包屑带机器名 + 预览</div></div>
-    </a>
-    <a class="idxcard" href="browser.html">
-      <span class="ic"><svg class="i"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><circle cx="6" cy="6.5" r="0.6"/><circle cx="8.4" cy="6.5" r="0.6"/></svg></span>
-      <div><div class="t">浏览器</div><div class="d">当前机器 Chrome 镜像</div></div>
-    </a>
-    <a class="idxcard" href="phone.html">
-      <span class="ic"><svg class="i"><rect x="6" y="2" width="12" height="20" rx="2.5"/><line x1="10" y1="18.5" x2="14" y2="18.5"/></svg></span>
-      <div><div class="t">手机</div><div class="d">当前机器连着的安卓真机</div></div>
-    </a>
-    <a class="idxcard" href="nodes.html">
-      <span class="ic"><svg class="i"><rect x="3" y="4" width="18" height="7" rx="1.6"/><rect x="3" y="13" width="18" height="7" rx="1.6"/><circle cx="7" cy="7.5" r="0.9"/><circle cx="7" cy="16.5" r="0.9"/></svg></span>
-      <div><div class="t">机器（新增）</div><div class="d">机器管理卡片墙 + 离线告警</div></div>
-    </a>
-    <a class="idxcard" href="plugins.html">
-      <span class="ic"><svg class="i"><path d="M10 3.5a1.8 1.8 0 0 1 3.6 0V5H17a2 2 0 0 1 2 2v3.4h1.5a1.8 1.8 0 0 1 0 3.6H19V17a2 2 0 0 1-2 2h-3.4v1.5a1.8 1.8 0 0 1-3.6 0V19H7a2 2 0 0 1-2-2v-3.4H3.5a1.8 1.8 0 0 1 0-3.6H5V7a2 2 0 0 1 2-2h3z"/></svg></span>
-      <div><div class="t">插件</div><div class="d">已装插件 + 启用开关</div></div>
-    </a>
-    <a class="idxcard" href="settings.html">
-      <span class="ic"><svg class="i"><line x1="4" y1="7" x2="20" y2="7"/><circle cx="9" cy="7" r="2.3"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="15" cy="17" r="2.3"/></svg></span>
-      <div><div class="t">设置</div><div class="d">当前机器信息 + 弱联动开关</div></div>
-    </a>
-    <a class="idxcard" href="mobile.html">
-      <span class="ic"><svg class="i"><rect x="6" y="2" width="12" height="20" rx="2.5"/><line x1="10" y1="18.5" x2="14" y2="18.5"/></svg></span>
-      <div><div class="t">手机端合集</div><div class="d">置顶细条 + 底部 Tab + 底部选择 sheet</div></div>
-    </a>
+/* ══ 外壳骨架 ═══════════════════════════════════════════════════ */
+.app { display:flex; height:100dvh; }
+.main { flex:1; min-width:0; display:flex; flex-direction:column; }
+
+/* 侧栏：48 轨（今天的默认）。展开态 224 只在原型里当对照 */
+.nav { width:var(--rail); flex:0 0 var(--rail); display:flex; flex-direction:column; align-items:center;
+  padding:6px 0; gap:4px; border-right:1px solid var(--border-subtle); background:var(--bg-base); }
+.nav .brand { width:26px; height:26px; border-radius:7px; background:linear-gradient(135deg,#1f6feb,#3fb950); margin:3px 0 6px; }
+.nav a.it { width:34px; height:34px; border-radius:8px; display:grid; place-items:center; color:var(--text-dimmer); position:relative; }
+.nav a.it:hover { background:var(--list-hover); color:var(--text-dim); }
+.nav a.it.on { color:var(--accent); background:var(--accent-soft); }
+.nav a.it.on::before { content:""; position:absolute; left:-7px; top:50%; transform:translateY(-50%);
+  width:3px; height:18px; border-radius:0 3px 3px 0; background:var(--accent); }
+.nav .sp { flex:1; }
+.nav .sep { width:24px; height:1px; background:var(--border-subtle); margin:4px 0; }
+/* 底座那枚 = 机器切换器。单机时它是主机图标 + 「当前设备」，多机时换成方章 + 状态点 */
+.nav .node { position:relative; width:34px; height:34px; border-radius:8px; background:var(--bg-elevated);
+  display:grid; place-items:center; border:0; }
+.nav .node .d { position:absolute; right:1px; bottom:1px; width:7px; height:7px; border-radius:50%;
+  box-shadow:0 0 0 2px var(--bg-base); }
+
+/* 顶栏 */
+.top { height:var(--topbar); flex:0 0 var(--topbar); display:flex; align-items:center; gap:8px; padding:0 10px;
+  border-bottom:1px solid var(--border-subtle); }
+.top .search { flex:0 1 360px; height:26px; border-radius:var(--r-xs); background:var(--bg-elevated);
+  display:flex; align-items:center; gap:6px; padding:0 9px; color:var(--text-dimmer); font-size:var(--fs-micro); }
+.top .search kbd { margin-left:auto; font:var(--fs-micro)/1 var(--mono); border:1px solid var(--border);
+  border-radius:4px; padding:2px 5px; }
+.top .grow { flex:1; }
+.top .cbtn { height:26px; padding:0 10px; border-radius:var(--r-xs); background:var(--accent-solid); color:#fff;
+  display:inline-flex; align-items:center; gap:5px; font-size:var(--fs-micro); border:0; }
+.top .link { display:inline-flex; align-items:center; gap:6px; font-size:var(--fs-micro); color:var(--text-dim); }
+
+/* 内容区：唯一滚动的地方 */
+.page { flex:1; min-height:0; overflow:auto; padding:16px; }
+
+/* 页头（.tt-pagehead）：眉标行就是机器面包屑 */
+.head { margin-bottom:14px; }
+.head .kick { display:flex; align-items:center; gap:7px; font-size:var(--fs-micro); letter-spacing:.1em;
+  text-transform:uppercase; color:var(--text-dimmer); margin-bottom:5px; }
+.head h1 { margin:0; font-size:var(--fs-title); font-weight:600; }
+.head p { margin:4px 0 0; font-size:var(--fs-meta); color:var(--text-dim); }
+.head .acts { float:right; display:flex; gap:8px; }
+/* 机器身份**不进页头**：轨是常驻的，页面里再写一遍是把同一件事说七遍。
+   .crumb 只剩两处还在用——手机底栏那一格，以及降级时的提示条。 */
+.crumb { display:inline-flex; align-items:center; gap:5px; padding:2px 8px 2px 4px;
+  border:1px solid var(--border-subtle); border-radius:var(--r-pill);
+  color:var(--text-dim); letter-spacing:0; text-transform:none; font-size:var(--fs-micro); }
+.crumb.warn { border-color:var(--warn-border); background:var(--warn-soft); color:var(--warn); }
+/* 中心那一行：它不是机器，给它自己的一段 */
+.picker .row.hub .nm { font-weight:600; }
+
+/* ══ 机器徽记：一个汉字或两个字母的方章 + 三态点 ═══════════════════
+   机器**不发色**——色板已经排到第五支（蜂群紫），再给每台机器一支，
+   一枚标签上就会同时挂机器色/状态色/蜂群色，没人分得清哪个说的是哪件事。 */
+.nmk { display:inline-grid; place-items:center; flex:0 0 auto; width:20px; height:20px; border-radius:var(--r-xs);
+  border:1px solid var(--border); background:var(--bg-elevated); font:600 9px/1 var(--mono);
+  color:var(--text-dim); white-space:nowrap; overflow:hidden; }
+.nmk[data-cjk] { font:600 12px/1 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif; }
+.nmk.sm { width:16px; height:16px; border-radius:5px; font-size:8px; }
+.nmk.sm[data-cjk] { font-size:10px; }
+.nmk.lg { width:28px; height:28px; font-size:12px; }
+.nmk.lg[data-cjk] { font-size:17px; }
+.nmk.cur { color:var(--accent); border-color:var(--accent-border); background:var(--accent-soft); }
+.nmk.off { color:var(--text-dimmer); border-style:dashed; background:transparent; }
+.dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--ok); flex:0 0 auto; }
+.dot.lag { background:var(--warn); } .dot.off { background:var(--text-dimmer); } .dot.bad { background:var(--danger); }
+
+/* ══ 机器选择弹层：复用 ⌘K 面板的列表语言，不是第二套下拉 ═══════ */
+.picker { position:fixed; left:56px; bottom:12px; width:296px; z-index:50;
+  border:1px solid var(--border); border-radius:var(--r-card); background:var(--bg-elevated);
+  box-shadow:0 20px 48px rgba(1,4,9,.55); overflow:hidden; }
+html[data-theme="light"] .picker { box-shadow:0 20px 48px rgba(140,149,159,.28); }
+.picker.hide { display:none; }
+.picker .hd { padding:9px 12px; border-bottom:1px solid var(--border-subtle); color:var(--text-dimmer); font-size:var(--fs-meta); }
+.picker .gl { padding:8px 12px 4px; font-size:var(--fs-micro); letter-spacing:.08em; text-transform:uppercase; color:var(--text-dimmer); }
+.picker .row { display:flex; align-items:center; gap:9px; width:100%; padding:7px 12px; font-size:var(--fs-meta);
+  color:var(--text-dim); background:none; border:0; text-align:left; }
+.picker .row:hover { background:var(--list-hover); }
+.picker .row .nm { flex:1; min-width:0; color:var(--text-bright); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.picker .row .mt { font-family:var(--mono); font-size:var(--fs-micro); color:var(--text-dimmer); }
+.picker .row.cur { background:var(--accent-soft); box-shadow:inset 2px 0 0 var(--accent); }
+.picker .row.off { opacity:.5; }
+.picker .ft { display:flex; gap:6px; padding:8px 10px; border-top:1px solid var(--border-subtle); }
+
+/* ══ 通用零件 ═══════════════════════════════════════════════════ */
+.card { border:1px solid var(--border); border-radius:var(--r-card); background:var(--bg-container); }
+.card > .hd { padding:11px 15px; border-bottom:1px solid var(--border-subtle); font-size:var(--fs-sm);
+  font-weight:600; display:flex; align-items:center; gap:8px; }
+.card > .hd .sp { flex:1; }
+.card > .bd { padding:14px 15px; display:flex; flex-direction:column; gap:var(--sp-3); }
+.act { display:inline-flex; align-items:center; gap:5px; height:26px; padding:0 10px; border:1px solid var(--border);
+  border-radius:var(--r-xs); background:transparent; color:var(--text-dim); font-size:var(--fs-micro); }
+.act:hover { color:var(--text-bright); border-color:var(--accent-border); }
+.act.pri { background:var(--accent-solid); border-color:transparent; color:#fff; }
+.act.danger { color:var(--danger); border-color:var(--danger-border); }
+.pill { font-size:var(--fs-micro); padding:1px 8px; border-radius:var(--r-pill); border:1px solid var(--border);
+  color:var(--text-dimmer); white-space:nowrap; }
+.pill.ok { color:var(--ok); border-color:var(--ok-border); background:var(--ok-soft); }
+.pill.warn { color:var(--warn); border-color:var(--warn-border); background:var(--warn-soft); }
+.pill.acc { color:var(--accent); border-color:var(--accent-border); background:var(--accent-soft); }
+.note { border-left:2px solid var(--accent); background:var(--accent-soft); padding:9px 13px;
+  border-radius:0 var(--r-xs) var(--r-xs) 0; color:var(--text-dim); font-size:var(--fs-meta); line-height:1.8; }
+.note b { color:var(--text-bright); }
+.note.warn { border-left-color:var(--warn); background:var(--warn-soft); }
+.note.ok { border-left-color:var(--ok); background:var(--ok-soft); }
+.mono { font-family:var(--mono); font-size:var(--fs-micro); }
+.seclbl { display:flex; align-items:center; gap:8px; margin:0 0 9px; font-size:var(--fs-meta);
+  font-weight:600; color:var(--text-bright); }
+.seclbl .sc { display:inline-flex; align-items:center; gap:5px; font-size:var(--fs-micro); font-weight:400;
+  color:var(--text-dimmer); border:1px solid var(--border); border-radius:var(--r-pill); padding:1px 8px; }
+.grid { display:grid; gap:var(--sp-3); }
+.empty { padding:40px 0; text-align:center; color:var(--text-dimmer); font-size:var(--fs-meta); }
+
+/* 终端坞（桌面右侧）：标签带方章，切机器不关它们 */
+.dock { width:300px; flex:0 0 300px; border-left:1px solid var(--border-subtle); background:var(--bg-term);
+  display:flex; flex-direction:column; }
+.dock .tabs { display:flex; overflow:hidden; background:var(--bg-container); border-bottom:1px solid var(--border-subtle); }
+.dock .tab { display:flex; align-items:center; gap:6px; padding:7px 10px; font-size:var(--fs-meta);
+  color:var(--text-dim); border-right:1px solid var(--border-subtle); white-space:nowrap; }
+.dock .tab.on { background:var(--bg-term); color:var(--text-bright); box-shadow:inset 0 -2px 0 var(--accent); }
+.dock .tab .pj { color:var(--text-dimmer); }
+.dock .st { display:flex; align-items:center; gap:7px; padding:6px 10px; font-size:var(--fs-micro);
+  color:var(--text-dim); border-bottom:1px solid var(--border-subtle); }
+.dock .body { flex:1; padding:10px; font:var(--fs-micro)/1.7 var(--mono); color:var(--text-dimmer); overflow:auto; }
+
+/* 手机机身（mobile.html 用） */
+.phones { display:flex; flex-wrap:wrap; gap:24px; justify-content:center; }
+.phone { width:320px; border:8px solid #1b222b; border-radius:30px; overflow:hidden; background:var(--bg-base);
+  box-shadow:0 18px 48px rgba(1,4,9,.5); }
+html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px rgba(140,149,159,.28); }
+.phone .notch { height:20px; background:var(--bg-container); display:grid; place-items:center; }
+.phone .notch i { width:60px; height:5px; border-radius:var(--r-pill); background:var(--border); display:block; }
+.phone .stage { height:420px; display:flex; flex-direction:column; min-height:0; }
+.phone .pbody { flex:1; min-height:0; overflow:hidden; padding:10px; display:flex; flex-direction:column; gap:8px; }
+.phone .sessdock { display:flex; align-items:center; gap:7px; padding:8px 10px; border-top:1px solid var(--border);
+  background:var(--bg-container); font-size:var(--fs-meta); color:var(--text-bright); }
+.phone .bnav { display:flex; border-top:1px solid var(--border); background:var(--bg-container); }
+.phone .bnav span { flex:1; text-align:center; padding:6px 0 8px; font-size:9px; color:var(--text-dimmer); }
+.phone .bnav span.on { color:var(--accent); }
+.phone .bnav i { display:block; margin:0 auto 3px; width:15px; height:15px; border-radius:4px; border:1.5px solid currentColor; }
+.phonetag { text-align:center; margin-top:8px; font-size:var(--fs-meta); color:var(--text-dim); }
+.phonetag b { color:var(--text-bright); }
+
+/* 原型自己的横幅：说明这是稿子不是产品 */
+.protobar { display:flex; align-items:center; gap:10px; padding:6px 12px; background:var(--accent-soft);
+  border-bottom:1px solid var(--accent-border); font-size:var(--fs-micro); color:var(--text-dim); }
+.protobar b { color:var(--text-bright); }
+.protobar .sp { flex:1; }
+.protobar a { color:var(--accent); }
+
+</style>
+</head>
+<body></body>
+<script>
+// 多机原型 · 共享外壳。每页只写内容，壳（轨导航 / 顶栏 / 页头眉标 / 机器切换器）由这里渲染。
+//
+// 三件事和真实应用同构，别的都可以糊：
+//   ① 当前机器跨页保持（localStorage），切一下所有页面跟着换 —— 这就是 currentNodeId
+//   ② 机器身份 = 方章（一个汉字或两个字母），不发颜色；状态才用颜色
+//   ③ 终端标签钉在各自机器上，切机器不关它们
+(function () {
+  var NODES = [
+    { id: 'n_ws',  name: '公司工作站', host: 'dev-ws-01', os: 'Linux', ver: 'v0.1.0-rc.2', group: '工作',
+      latency: 12, sessions: 3, load: 0.7, online: true },
+    { id: 'n_home', name: '家里台式机', host: 'home-pc', os: 'Linux', ver: 'v0.1.0-rc.2', group: '家',
+      latency: 45, sessions: 1, load: 0.2, online: true },
+    { id: 'n_gpu', name: '云 GPU 机', host: 'gpu-box', os: 'Linux', ver: 'v0.1.0-rc.1', group: '工作',
+      latency: 210, sessions: 2, load: 3.1, online: true },
+    { id: 'n_pi',  name: '树莓派', host: 'rpi4', os: 'Linux', ver: 'v0.1.0-rc.1', group: '家',
+      latency: 0, sessions: 0, load: 0, online: false }
+  ];
+  var HUB = 'https://roam.example.com';
+  var KEY = 'roam.proto.node';
+
+  // 中文名取首字，拉丁名取两个首字母（gpu-box → GB）。两个汉字在 16px 的格子里会换行——
+  // 这是画出来才发现的，不是拍脑袋定的。
+  function markText(name) {
+    var s = (name || '?').trim();
+    if (/^[一-龥]/.test(s)) return s[0];
+    var parts = s.split(/[^A-Za-z0-9]+/).filter(Boolean);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return s.slice(0, 2).toUpperCase();
+  }
+  function mark(node, size, cur) {
+    var t = markText(node.name);
+    var cjk = /[一-龥]/.test(t) ? ' data-cjk' : '';
+    return '<span class="nmk' + (size ? ' ' + size : '') + (cur ? ' cur' : '') +
+      (node.online ? '' : ' off') + '"' + cjk + ' aria-hidden="true">' + t + '</span>';
+  }
+  function dotCls(node) {
+    if (!node.online) return 'dot off';
+    return node.latency > 150 ? 'dot lag' : 'dot';
+  }
+
+  // 中心也是一个「能切过去的地方」，所以它和机器共用同一个当前值。
+  var HUBNODE = { id: 'hub', name: '中心', host: 'roam.example.com', online: true, latency: 0, isHub: true };
+  var current = null;
+  function cur() {
+    if (!current) {
+      var saved = null;
+      try { saved = localStorage.getItem(KEY); } catch (e) {}
+      if (saved === 'hub') current = HUBNODE;
+      else current = NODES.filter(function (n) { return n.id === saved && n.online; })[0] || NODES[0];
+    }
+    return current;
+  }
+  function setCur(id) {
+    var n = id === 'hub' ? HUBNODE : NODES.filter(function (x) { return x.id === id; })[0];
+    if (!n || !n.online) return;
+    current = n;
+    try { localStorage.setItem(KEY, id); } catch (e) {}
+    Proto.render(); // 切机器 = 换浏览范围。原型里就地重画，等价于实现里的整页 reload
+  }
+
+  var ICONS = {
+    projects: '<path d="M3 10.2 12 3l9 7.2"/><path d="M5.5 9v11h13V9"/><path d="M9.5 20v-5h5v5"/>',
+    sessions: '<rect x="3" y="4" width="18" height="16" rx="2"/><line x1="14" y1="4" x2="14" y2="20"/>',
+    files: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+    browser: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 3 2.6 15 0 18M12 3c-2.6 3-2.6 15 0 18"/>',
+    phone: '<rect x="7" y="2.5" width="10" height="19" rx="2.4"/><path d="M11 18.5h2"/>',
+    nodes: '<rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/><path d="M7 6.5h.01M7 17.5h.01"/>',
+    settings: '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/>'
+  };
+  // 全部页面在同一个文件里，轨点一下就地换内容——原型不该为了「像多页」而拆成十个文件。
+  var PAGES = [
+    { key: 'projects', label: '工作台' },
+    { key: 'files', label: '文件' },
+    { key: 'sessions', label: '会话' },
+    { key: 'browser', label: '浏览器' },
+    { key: 'phone', label: '手机' },
+    { key: 'nodes', label: '机器' }
+  ];
+  function svg(d, size) {
+    return '<svg viewBox="0 0 24 24" width="' + (size || 18) + '" height="' + (size || 18) +
+      '" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + d + '</svg>';
+  }
+
+  function railHTML(active) {
+    var n = cur();
+    var items = PAGES.map(function (p) {
+      return '<a class="it' + (p.key === active ? ' on' : '') + '" href="#' + p.key + '" title="' + p.label + '">' +
+        svg(ICONS[p.key]) + '</a>';
+    }).join('');
+    return '<nav class="nav">' +
+      '<a class="brand" href="#projects" title="回工作台"></a>' + items +
+      '<div class="sp"></div>' +
+      '<a class="it' + (active === 'settings' ? ' on' : '') + '" href="#settings" title="设置">' + svg(ICONS.settings) + '</a>' +
+      '<div class="sep"></div>' +
+      // **全站唯一的切换入口**。它本来说的就是「你连着的这台机器」，多机后终于有了名字；
+      // 列表里第一项是中心自己，所以「切到哪里」这件事从头到尾只有这一个地方
+      '<button class="node" onclick="Proto.togglePicker(event)" aria-label="切换，当前 ' + n.name + '" title="' +
+        n.name + (n.isHub ? '' : ' · ' + n.latency + 'ms') + '">' +
+        (n.isHub ? '<span class="nmk sm cur" aria-hidden="true">中</span>' : mark(n, 'sm', true)) +
+        '<i class="' + dotCls(n) + '"></i></button>' +
+      '</nav>';
+  }
+
+  function pickerHTML() {
+    var c = cur();
+    // 中心自己也在这张列表里。它不是一台「机器」（没有终端和文件），但它是一个
+    // **能被切过去看的地方**——机器名单、接入、中心自己的设置都在那儿。
+    // 不给它一个位置，用户在中心的控制台里就永远够不到中心本身。
+    var hubRow = '<button class="row hub' + (c.id === 'hub' ? ' cur' : '') + '" onclick="Proto.setNode(\'hub\')">' +
+      '<span class="nmk cur" aria-hidden="true">中</span>' +
+      '<span class="nm">中心</span>' +
+      '<span class="mt">3 台在线</span><i class="dot"></i></button>';
+    var rows = NODES.map(function (n) {
+      return '<button class="row' + (n.id === c.id ? ' cur' : '') + (n.online ? '' : ' off') + '"' +
+        (n.online ? ' onclick="Proto.setNode(\'' + n.id + '\')"' : ' disabled') + '>' +
+        mark(n, null, n.id === c.id) +
+        '<span class="nm">' + n.name + '</span>' +
+        '<span class="mt">' + (n.online ? n.latency + 'ms' : '离线') + '</span>' +
+        '<i class="' + dotCls(n) + '"></i></button>';
+    }).join('');
+    return '<div class="picker hide" id="picker">' +
+      '<div class="hd">切到哪里</div>' +
+      '<div class="gl">中心</div>' + hubRow +
+      '<div class="gl">机器 · ' + NODES.length + '</div>' + rows +
+      '<div class="ft"><a class="act" href="#nodes">＋ 添加机器</a></div></div>';
+  }
+
+  function topHTML() {
+    return '<div class="top">' +
+      '<div class="search">' + svg('<circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/>', 13) +
+      '搜索项目、会话和文件<kbd>Ctrl+K</kbd></div>' +
+      '<span class="grow"></span>' +
+      '<span class="link"><i class="dot"></i>在线</span>' +
+      '<button class="cbtn">＋ 新建</button></div>';
+  }
+
+  /**
+   * 页头。**不放机器身份**——眉标就是原来的分组名。
+   *
+   * 「我在哪台机器」只由侧栏底座那一处回答，切换也在那一处。之前每页都挂一枚芯片，
+   * 等于把同一件事说七遍：轨是常驻的，它本来就一直在屏幕上，页面里再写一遍纯属噪音，
+   * 而且用户还得判断这两处是不是一回事。
+   *
+   * 误操作的防线不靠这种被动提示，靠<b>动作发生时</b>把机器名写进确认框
+   * （「在 云 GPU 机 上删除 3 个文件？」）——那才是真拦得住的地方。
+   */
+  function head(o) {
+    return '<div class="head">' +
+      (o.acts ? '<div class="acts">' + o.acts + '</div>' : '') +
+      (o.kicker ? '<div class="kick"><span>' + o.kicker + '</span></div>' : '') +
+      '<h1>' + o.title + '</h1>' + (o.desc ? '<p>' + o.desc + '</p>' : '') + '</div>';
+  }
+
+  /** 终端坞：标签各自钉在自己的机器上，切机器不关它们——那是正在跑的活。 */
+  function dockHTML() {
+    return '<aside class="dock">' +
+      '<div class="tabs">' +
+      '<div class="tab on">' + mark(NODES[0], 'sm', cur().id === 'n_ws') + '<span class="pj">roam ·</span>build</div>' +
+      '<div class="tab">' + mark(NODES[2], 'sm', cur().id === 'n_gpu') + '<span class="pj">nn ·</span>train</div>' +
+      '</div>' +
+      '<div class="st"><i class="dot"></i>公司工作站 · roam · build<span style="flex:1"></span>已连接 · 12ms</div>' +
+      '<div class="body">$ npm run build<br>vite v5 building…<br>✓ built in 37.2s</div></aside>';
+  }
+
+  function protobar(where) {
+    return '<div class="protobar"><b>原型</b>· 多机（2026-08 版）· 当前页：' + where +
+      '<span class="sp"></span>' +
+      '<a href="#" onclick="Proto.theme();return false" style="margin-left:12px">切换深浅</a></div>';
+  }
+
+  window.Proto = {
+    nodes: NODES, hub: HUB, cur: cur, mark: mark, dotCls: dotCls, svg: svg, head: head,
+    setNode: setCur,
+    togglePicker: function (e) { e.stopPropagation(); document.getElementById('picker').classList.toggle('hide'); },
+    theme: function () {
+      var light = document.documentElement.getAttribute('data-theme') === 'light';
+      document.documentElement.setAttribute('data-theme', light ? 'dark' : 'light');
+    },
+    /** 按 hash 渲染整屏。切页、切机器都走它——原型里没有真正的路由，也不需要。 */
+    render: function () {
+      var key = (location.hash || '#projects').slice(1);
+      if (!PAGES.concat([{ key: 'settings' }]).some(function (p) { return p.key === key; })) key = 'projects';
+      var meta = PAGES.concat([{ key: 'settings', label: '设置 › 多机' }])
+        .filter(function (p) { return p.key === key; })[0];
+      var withDock = key === 'projects' || key === 'files' || key === 'sessions';
+      document.body.innerHTML =
+        '<div class="app">' + railHTML(key) +
+        '<div class="main">' + protobar(meta.label) + topHTML() +
+        '<div style="flex:1;min-height:0;display:flex">' +
+        '<div class="page">' + window.PAGE_HTML[key]() + '</div>' +
+        (withDock ? dockHTML() : '') +
+        '</div></div></div>' + pickerHTML();
+    }
+  };
+})();
+
+</script>
+<script>
+// ── 各页内容。壳（轨 / 顶栏 / 切换器 / 终端坞）由上面那段统一渲染，这里只写「内容」。
+window.PAGE_HTML = {
+  projects: function(){ return Proto.head({ kicker:'工作区', title:'下午好', desc:'3 件事等你 · 7 个项目 · 4 台机器' }) + `
+<div class="grid" style="gap:18px">
+
+  <div>
+    <div class="seclbl">需要你 <span class="sc">全部机器</span>
+      <span style="flex:1"></span>
+      <span style="font-size:var(--fs-micro);color:var(--text-dimmer)">跨机器 · 6 秒一轮</span></div>
+    <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(230px,1fr))">
+      <div class="card" style="border-left:2px solid var(--warn)"><div class="bd" style="gap:5px;padding:11px 13px">
+        <div style="display:flex;align-items:center;gap:7px;font-size:var(--fs-sm);font-weight:600">
+          ${Proto.mark(Proto.nodes[2],'sm')}<span>train</span></div>
+        <div style="font-size:var(--fs-micro);color:var(--text-dimmer)">云 GPU 机 · nn</div>
+        <div class="mono" style="color:var(--text-dim)">Do you want to proceed? (y/n)</div>
+        <a href="#" style="color:var(--accent);font-size:var(--fs-micro)">去会话</a>
+      </div></div>
+      <div class="card" style="border-left:2px solid var(--swarm)"><div class="bd" style="gap:5px;padding:11px 13px">
+        <div style="display:flex;align-items:center;gap:7px;font-size:var(--fs-sm);font-weight:600">
+          ${Proto.mark(Proto.nodes[0],'sm')}<span>refactor-api</span></div>
+        <div style="font-size:var(--fs-micro);color:var(--text-dimmer)">公司工作站 · roam</div>
+        <div style="font-size:var(--fs-micro);color:var(--text-dim)">2 名成员等待解锁</div>
+        <a href="#" style="color:var(--accent);font-size:var(--fs-micro)">开蜂群台</a>
+      </div></div>
+      <div class="card" style="border-left:2px solid var(--accent)"><div class="bd" style="gap:5px;padding:11px 13px">
+        <div style="display:flex;align-items:center;gap:7px;font-size:var(--fs-sm);font-weight:600">
+          ${Proto.mark(Proto.nodes[1],'sm')}<span>fix-login</span></div>
+        <div style="font-size:var(--fs-micro);color:var(--text-dimmer)">家里台式机 · blade</div>
+        <div style="font-size:var(--fs-micro);color:var(--text-dim)">已合并，worktree 待收尾</div>
+        <a href="#" style="color:var(--accent);font-size:var(--fs-micro)">去收尾</a>
+      </div></div>
+    </div>
+    <div class="note" style="margin-top:10px">
+      <b>这一层是跨机器的。</b>它回答「我下一步做什么」，而「下一步」不该被机器边界切开——
+      GPU 机上有个 agent 在等你确认、你却在看工作站，这条就必须出现在眼前。
+      <b>队列不按机器分组</b>：顺序是优先级（等待输入 &gt; 蜂群待解锁 &gt; 待收尾），
+      按机器分组会把最急的那件推到第二组去。机器身份靠卡片上的方章表达。
+    </div>
   </div>
 
-  <p class="note">
-    <b>与设计文档对应：</b>切换器位置 = 交互 §3；终端标签色点/前缀（仅显示，寻址用 nodeId）= §4 / §9；
-    切机器各页行为 + 弱联动（设置可关）= §5；逐页面改动 = §6；机器管理 = §7；离线告警/重连/置灰 = §8；
-    深链 + bootstrap（<code>/api/broker/bootstrap</code>）= §9 / §9.1；路由 <code>/n/&lt;nodeId&gt;/...</code> 与
-    <code>/api/broker/*</code> = 架构 §7.2。<b>单机模式（未连 Broker）：切换器整体不渲染，界面与今天一致。</b>
-  </p>
-</body>
+  <div>
+    <div class="seclbl">项目 <span class="sc">本机</span></div>
+    <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr))">
+      <div class="card"><div class="bd" style="gap:4px;padding:12px 13px">
+        <b style="font-size:var(--fs-sm)">roam</b>
+        <span style="font-size:var(--fs-micro);color:var(--text-dimmer)">2 会话 · 待收尾 1</span></div></div>
+      <div class="card"><div class="bd" style="gap:4px;padding:12px 13px">
+        <b style="font-size:var(--fs-sm)">blade-core</b>
+        <span style="font-size:var(--fs-micro);color:var(--text-dimmer)">1 会话</span></div></div>
+      <div class="card"><div class="bd" style="gap:4px;padding:12px 13px">
+        <b style="font-size:var(--fs-sm)">docs-site</b>
+        <span style="font-size:var(--fs-micro);color:var(--text-dimmer)">无会话</span></div></div>
+      <div class="card"><div class="bd" style="gap:4px;padding:12px 13px">
+        <b style="font-size:var(--fs-sm)">infra</b>
+        <span style="font-size:var(--fs-micro);color:var(--text-dimmer)">无会话</span></div></div>
+    </div>
+    <div class="note" style="margin-top:10px">
+      <b>这一层只跟当前机器。</b>项目是一台机器上的一份 checkout，不是跨机概念——
+      四台机器的项目混在一面墙上，同名仓库会出现四次，点哪个全靠猜。
+      所以<b>不给「全部机器／当前机器」开关</b>：上下两层的归属是设计结论，不是偏好。<br>
+      两个小标（<b>全部机器</b> / <b>本机</b>）是这一页唯一在正文里提机器的地方——
+      因为同一屏上有两种范围，不标就分不出来。<b>它标的是范围，不是「你在哪台」</b>：
+      后者只由侧栏那一处回答。
+    </div>
+  </div>
+
+</div>` },
+  sessions: function(){ return Proto.head({ kicker:'工作区', title:'会话', desc:'当前机器 5 个 · 全部机器 6 个' }) + `
+<div class="card"><div class="bd" style="padding:0">
+  ${[['build','roam','跑着 · claude',true,0],['deploy','roam','空闲',false,0],
+     ['review','blade-core','等待输入',false,0]].map(r=>`
+  <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border-subtle)">
+    <i class="dot${r[2].includes('等待')?' lag':(r[3]?'':' off')}"></i>
+    <span style="min-width:150px"><b>${r[0]}</b>
+      <span style="color:var(--text-dimmer);font-size:var(--fs-micro)"> · ${r[1]}</span></span>
+    <span style="flex:1;font-size:var(--fs-micro);color:var(--text-dim)">${r[2]}</span>
+    <button class="act">进终端</button></div>`).join('')}
+</div></div>
+
+<div class="note" style="margin-top:14px">
+  <b>这一页跟当前机器</b>——会话是 tmux 会话，长在某台机器上。别台机器的会话在
+  <b>⌘K 里搜得到</b>（结果按机器分组），也在<b>终端标签</b>上留着（切机器不关它们）。
+  这一页不混着列：混了之后「同名的 build 是哪台的」全靠猜，而这一页恰恰是拿来点进终端的。
+</div>
+
+<div class="card" style="margin-top:14px"><div class="hd">⌘K 里的跨机器搜索<span class="sp"></span>
+  <span class="pill acc">这才是找别台机器东西的地方</span></div>
+  <div class="bd" style="gap:0;padding:0">
+    <div style="padding:10px 14px;border-bottom:1px solid var(--border-subtle);color:var(--text-dim);font-size:var(--fs-meta)">
+      🔍 train</div>
+    <div style="padding:7px 14px 3px;font-size:var(--fs-micro);text-transform:uppercase;color:var(--text-dimmer)">会话 · 本机</div>
+    <div style="padding:6px 14px;display:flex;gap:9px;align-items:center"><b>train-data-prep</b></div>
+    <div style="padding:7px 14px 3px;font-size:var(--fs-micro);text-transform:uppercase;color:var(--text-dimmer);display:flex;gap:6px;align-items:center">
+      ${Proto.mark(Proto.nodes[2],'sm')} 云 GPU 机</div>
+    <div style="padding:6px 14px;display:flex;gap:9px;align-items:center"><b>train</b>
+      <span style="flex:1"></span><span style="font-size:var(--fs-micro);color:var(--text-dimmer)">会话 · 跑了 4 小时</span></div>
+    <div style="padding:6px 14px 12px;display:flex;gap:9px;align-items:center"><b>train.py</b>
+      <span style="flex:1"></span><span style="font-size:var(--fs-micro);color:var(--text-dimmer)">nn/src</span></div>
+    <div style="padding:8px 14px;border-top:1px solid var(--border-subtle);font-size:var(--fs-micro);color:var(--text-dimmer)">
+      4 台机器 · <span style="color:var(--warn)">树莓派 未响应</span> · 1 台还在建索引
+      <span style="float:right;color:var(--accent)">在全部机器里搜内容</span></div>
+  </div></div>` },
+  files: function(){ return Proto.head({ kicker:'工作区', title:'文件', desc:'/home/ai/codes/roam' }) + `
+<div style="display:flex;gap:12px;align-items:stretch;height:420px">
+  <div class="card" style="flex:1;min-width:0"><div class="bd" style="padding:0">
+    <div style="padding:9px 13px;border-bottom:1px solid var(--border-subtle);font-size:var(--fs-micro);color:var(--text-dimmer)">
+      预览 · README.md</div>
+    <div style="padding:13px;font-size:var(--fs-meta);color:var(--text-dim);line-height:1.9">
+      # Roam<br>Code anywhere, anytime.<br><br>…</div>
+  </div></div>
+  <div class="card" style="width:240px;flex:0 0 240px"><div class="bd" style="padding:0">
+    ${['backend/','frontend/','docs/','README.md','start.sh'].map(f=>`
+      <div style="padding:8px 13px;font-size:var(--fs-meta);color:var(--text-dim);border-bottom:1px solid var(--border-subtle)">${f}</div>`).join('')}
+  </div></div>
+</div>
+
+<div class="note" style="margin-top:14px">
+  <b>文件跟当前机器</b>，路径也是那台机器上的路径。页头眉标那枚芯片就是唯一的身份提示——
+  文件页最容易「在 A 上删了 B 的东西」，所以芯片在这一页尤其不能省。
+</div>
+<div class="note warn" style="margin-top:10px">
+  <b>实现上这一页最费劲</b>：预览、下载、HTML 内嵌、Office 转换全是浏览器<b>原生发起</b>的 URL
+  （<code>&lt;img src&gt;</code> / <code>&lt;iframe&gt;</code> / <code>&lt;a download&gt;</code>），
+  加不了 header——这正是机器身份必须走路径前缀 <code>/n/&lt;id&gt;/…</code> 的原因。
+  文件名里的 <code>#</code> <code>%</code> 空格还会在反代那一跳变形，已经踩过并修掉。
+</div>` },
+  browser: function(){ return Proto.head({ kicker:'工具', title:'浏览器', desc:'镜像的是当前机器上的Chrome 画面' }) + `
+<div class="card"><div class="bd">
+  <div style="height:300px;border-radius:var(--r-sm);background:linear-gradient(150deg,#0a1a2e,#08243f 45%,#061523);display:grid;place-items:center;color:rgba(255,255,255,.12);font-size:64px;font-weight:800">
+    ${Proto.cur().name}</div>
+</div></div>
+<div class="note" style="margin-top:14px">
+  <b>镜像只跟当前机器</b>，而且<b>切机器时要把旧的那路断掉</b>——多机之后很容易同时挂着两台的
+  镜像流而不自知，一路标清就是 6 Mbps ≈ 2.7 GB/小时。<b>页面不可见也要停</b>：
+  一个后台标签页能持续烧掉这些流量。
+</div>
+<div class="note warn" style="margin-top:10px">
+  <b>这是整套里最贵的一条流</b>：今天浏览器和手机镜像都是<b>整帧 JPEG</b>。经中心中转时，
+  它直接决定中心那台小主机的账单。省法有两条——换视频编码（省 5–10×）、
+  以及 WebRTC <b>P2P 直连绕开中心</b>（仓库里已经有这套）。
+</div>` },
+  phone: function(){ return Proto.head({ kicker:'工具', title:'手机', desc:'镜像的是当前机器上的手机屏幕' }) + `
+<div class="card"><div class="bd">
+  <div style="height:300px;border-radius:var(--r-sm);background:linear-gradient(150deg,#0a1a2e,#08243f 45%,#061523);display:grid;place-items:center;color:rgba(255,255,255,.12);font-size:64px;font-weight:800">
+    ${Proto.cur().name}</div>
+</div></div>
+<div class="note" style="margin-top:14px">
+  <b>镜像只跟当前机器</b>，而且<b>切机器时要把旧的那路断掉</b>——多机之后很容易同时挂着两台的
+  镜像流而不自知，一路标清就是 6 Mbps ≈ 2.7 GB/小时。<b>页面不可见也要停</b>：
+  一个后台标签页能持续烧掉这些流量。
+</div>
+<div class="note warn" style="margin-top:10px">
+  <b>这是整套里最贵的一条流</b>：今天浏览器和手机镜像都是<b>整帧 JPEG</b>。经中心中转时，
+  它直接决定中心那台小主机的账单。省法有两条——换视频编码（省 5–10×）、
+  以及 WebRTC <b>P2P 直连绕开中心</b>（仓库里已经有这套）。
+</div>` },
+  nodes: function(){ return Proto.head({ kicker:'工具', title:'机器', desc:'4 台 · 3 在线 · 共 6 个会话',
+  acts:'<button class="act pri">＋ 添加机器</button>' }) + `
+<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(250px,1fr))">
+${Proto.nodes.map(n=>{
+  const isCur = n.id===Proto.cur().id
+  return `<div class="card" style="${isCur?'border-color:var(--accent-border);':''}${n.online?'':'opacity:.62;'}">
+    <div class="bd" style="gap:9px">
+      <div style="display:flex;align-items:center;gap:9px">
+        ${Proto.mark(n,'lg',isCur)}
+        <b style="flex:1;font-size:var(--fs-sm)">${n.name}</b><i class="${Proto.dotCls(n)}"></i></div>
+      <div class="mono" style="color:var(--text-dimmer)">${n.host} · ${n.os} ·
+        ${n.ver==='v0.1.0-rc.1'?'<span style="color:var(--warn)">'+n.ver+' 可升级</span>':n.ver}</div>
+      <div style="display:flex;gap:14px;font-size:var(--fs-micro);color:var(--text-dim)">
+        <span><b style="display:block;font-size:var(--fs-sm);color:var(--text-bright)">${n.online?n.sessions:'—'}</b>会话</span>
+        <span><b style="display:block;font-size:var(--fs-sm);color:var(--text-bright)">${n.online?n.load:'—'}</b>负载</span>
+        <span><b style="display:block;font-size:var(--fs-sm);color:var(--text-bright)">${n.online?n.latency+'ms':'离线'}</b>${n.online?'延迟':''}</span></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${isCur?'':(n.online?'<button class="act">进入</button>':'<button class="act">接入命令</button>')}
+        <button class="act">重命名</button>${isCur?'<button class="act">分组</button>':''}
+        ${isCur?'':'<button class="act danger">移除</button>'}</div>
+    </div></div>`}).join('')}
+</div>
+
+<div class="card" id="add" style="margin-top:16px;max-width:640px">
+  <div class="hd">添加机器<span class="sp"></span><span class="pill warn">令牌 30 分钟内有效</span></div>
+  <div class="bd">
+    <div style="font-size:var(--fs-meta);color:var(--text-dim)"><b style="color:var(--text-bright)">方式一</b>：
+      在那台机器上执行（没装 Roam 也能一步装好）</div>
+    <div class="mono" style="border:1px solid var(--border);border-radius:var(--r-sm);background:var(--bg-base);padding:10px 12px;overflow:auto">
+      curl -fsSL <b style="color:var(--text-bright)">${Proto.hub}/install.sh</b> | bash -s -- \
+      <br>&nbsp;&nbsp;--broker <b style="color:var(--text-bright)">${Proto.hub}</b> --token <b style="color:var(--text-bright)">enr_7f3a…</b></div>
+    <div style="font-size:var(--fs-meta);color:var(--text-dim)"><b style="color:var(--text-bright)">方式二</b>：
+      那台机器已经装了 Roam —— 打开它的 <b style="color:var(--text-bright)">设置 › 多机</b>，填这两栏</div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <div style="flex:1 1 240px"><div style="font-size:var(--fs-micro);color:var(--text-dimmer);margin-bottom:4px">中心地址</div>
+        <div class="mono" style="border:1px solid var(--border);border-radius:var(--r-xs);padding:7px 9px">${Proto.hub}</div></div>
+      <div style="flex:1 1 240px"><div style="font-size:var(--fs-micro);color:var(--text-dimmer);margin-bottom:4px">接入令牌</div>
+        <div class="mono" style="border:1px solid var(--border);border-radius:var(--r-xs);padding:7px 9px">enr_7f3a9c2b41e8…</div></div>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <button class="act">复制命令</button><button class="act">复制地址和令牌</button>
+      <span style="flex:1"></span>
+      <span style="display:inline-flex;align-items:center;gap:7px;font-size:var(--fs-meta);color:var(--text-dim)">
+        <i class="dot lag"></i>等待这台机器接入…</span></div>
+    <div class="note" style="margin:0"><b>接入不需要口令。</b>中心的登录口令是给人登录浏览器用的，
+      机器接入走一次性令牌，首次接入后自动换成长期凭证。</div>
+  </div></div>` },
+  settings: function(){ return Proto.head({ kicker:'设置', title:'多机', desc:'这台机器的角色、接入、以及怎么访问它' }) + `
+<div class="grid" style="gap:16px;max-width:900px">
+
+  <div class="card"><div class="hd">你在这里<span class="sp"></span><span class="pill ok">已接入</span></div>
+    <div class="bd">
+      <div style="display:flex;align-items:stretch;flex-wrap:wrap">
+        <div style="flex:1 1 150px;border:1px solid var(--border);border-radius:var(--r-sm);padding:11px 12px;background:var(--bg-base)">
+          <div style="font-size:var(--fs-micro);color:var(--text-dimmer);text-transform:uppercase">你</div>
+          <div style="font-size:var(--fs-sm);font-weight:600;margin:3px 0 2px">浏览器 / 手机</div>
+          <div style="font-size:var(--fs-micro);color:var(--text-dim)">在外面 · 在家 · 在公司</div></div>
+        <div style="flex:0 0 78px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:4px">
+          <span style="font-size:10px;color:var(--text-dimmer)" class="mono">HTTPS</span>
+          <span style="width:100%;height:2px;background:var(--ok);border-radius:2px"></span></div>
+        <div style="flex:1 1 150px;border:1px solid var(--border);border-radius:var(--r-sm);padding:11px 12px;background:var(--bg-base)">
+          <div style="font-size:var(--fs-micro);color:var(--text-dimmer);text-transform:uppercase">中心</div>
+          <div style="font-size:var(--fs-sm);font-weight:600;margin:3px 0 2px">roam.example.com</div>
+          <div style="font-size:var(--fs-micro);color:var(--text-dim)">唯一入口 · 不跑活</div></div>
+        <div style="flex:0 0 78px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:4px">
+          <span style="font-size:10px;color:var(--text-dimmer)" class="mono">隧道</span>
+          <span style="width:100%;height:2px;background:var(--ok);border-radius:2px"></span>
+          <span style="font-size:10px;color:var(--ok)" class="mono">它拨出去的</span></div>
+        <div style="flex:1 1 150px;border:1px solid var(--accent-border);border-radius:var(--r-sm);padding:11px 12px;background:var(--accent-soft)">
+          <div style="font-size:var(--fs-micro);color:var(--accent);text-transform:uppercase">这台机器</div>
+          <div style="font-size:var(--fs-sm);font-weight:600;margin:3px 0 2px">${Proto.cur().name}</div>
+          <div style="font-size:var(--fs-micro);color:var(--text-dim)">终端 · 文件 · Git · 镜像</div></div>
+      </div>
+      <div class="note" style="margin:0">还有一条没画在链上的路：同一个局域网里可以<b>直连</b>这台机器，不经过中心。两条一直都在。</div>
+    </div></div>
+
+  <div class="card"><div class="hd">这台机器是什么角色</div><div class="bd">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <button style="position:relative;text-align:left;border:1px solid var(--accent-border);border-radius:var(--r-card);background:var(--accent-soft);padding:14px 16px 14px 42px;color:var(--text-dim)">
+        <span style="position:absolute;left:16px;top:17px;width:15px;height:15px;border-radius:50%;border:1.6px solid var(--accent);box-shadow:inset 0 0 0 3px var(--bg-base),inset 0 0 0 8px var(--accent)"></span>
+        <span style="display:block;font-size:var(--fs-body);font-weight:600;color:var(--text-bright);margin-bottom:4px">这台机器
+          <span class="pill ok" style="font-weight:400">当前</span></span>
+        <span style="display:block;font-size:var(--fs-meta);line-height:1.8">在这台机器上跑活，就是你现在用的这套。可以接到一个中心上，接上之后<b style="color:var(--text-bright)">从外网也能访问它</b>。</span></button>
+      <button style="position:relative;text-align:left;border:1px solid var(--border);border-radius:var(--r-card);background:var(--bg-elevated);padding:14px 16px 14px 42px;color:var(--text-dim)">
+        <span style="position:absolute;left:16px;top:17px;width:15px;height:15px;border-radius:50%;border:1.6px solid var(--border)"></span>
+        <span style="display:block;font-size:var(--fs-body);font-weight:600;color:var(--text-bright);margin-bottom:4px">中心</span>
+        <span style="display:block;font-size:var(--fs-meta);line-height:1.8">只当入口，<b style="color:var(--text-bright)">自己不跑活</b>。别的机器接进来之后，在这里访问它们全部。</span></button>
+    </div></div></div>
+
+  <div class="card"><div class="hd">接入中心<span class="sp"></span><span class="pill ok">已连接</span></div><div class="bd">
+    <div style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:var(--r-sm);border:1px solid var(--ok-border);background:var(--ok-soft);font-size:var(--fs-meta)">
+      <i class="dot"></i><span>已接入 <b>${Proto.hub}</b></span>
+      <span style="font-size:var(--fs-micro);color:var(--text-dim)">延迟 ${Proto.cur().latency}ms</span></div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <div style="flex:1 1 240px"><div style="font-size:var(--fs-meta);color:var(--text-dim);margin-bottom:4px">中心地址</div>
+        <div class="mono" style="border:1px solid var(--border);border-radius:var(--r-xs);padding:8px 10px">${Proto.hub}</div></div>
+      <div style="flex:1 1 240px"><div style="font-size:var(--fs-meta);color:var(--text-dim);margin-bottom:4px">接入令牌
+          <span class="pill">一次性</span></div>
+        <div class="mono" style="border:1px solid var(--border);border-radius:var(--r-xs);padding:8px 10px;color:var(--text-dimmer)">已配置，留空则不改</div>
+        <div style="font-size:var(--fs-micro);color:var(--text-dimmer);margin-top:4px;line-height:1.7">
+          <b style="color:var(--text-bright)">不是中心的登录口令</b>——口令给人登录浏览器用，机器接入走令牌。</div></div>
+    </div>
+    <div style="display:flex;gap:8px"><button class="act pri">保存并接入</button><button class="act danger">断开接入</button></div>
+  </div></div>
+
+  <div class="card"><div class="hd">怎么访问这台机器<span class="sp"></span><span class="pill">两条同时有效</span></div>
+    <div class="bd"><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div style="border:1px solid var(--border);border-radius:var(--r-sm);padding:11px 13px;background:var(--bg-base)">
+        <div style="font-size:var(--fs-meta);font-weight:600;margin-bottom:5px">局域网直连</div>
+        <div class="mono" style="color:var(--accent)">https://192.168.1.20:13579</div>
+        <div style="font-size:var(--fs-micro);color:var(--text-dimmer);margin-top:5px;line-height:1.7">
+          不过中心，最快，中心挂了也能用。<b style="color:var(--text-bright)">接入中心不会把它关掉。</b></div></div>
+      <div style="border:1px solid var(--border);border-radius:var(--r-sm);padding:11px 13px;background:var(--bg-base)">
+        <div style="font-size:var(--fs-meta);font-weight:600;margin-bottom:5px">经中心（外网）</div>
+        <div class="mono" style="color:var(--accent)">${Proto.hub}</div>
+        <div style="font-size:var(--fs-micro);color:var(--text-dimmer);margin-top:5px;line-height:1.7">
+          这台机器<b style="color:var(--text-bright)">不需要公网 IP、不用开端口</b>，是它自己拨出去连的。</div></div>
+    </div></div></div>
+
+</div>` },
+};
+Proto.render();
+window.addEventListener('hashchange', Proto.render);
+document.addEventListener('click', function () {
+  var p = document.getElementById('picker');
+  if (p) p.classList.add('hide');
+});
+</script>
 </html>

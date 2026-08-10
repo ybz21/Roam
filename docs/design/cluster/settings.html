@@ -119,6 +119,30 @@ ul.pts b, ol.pts b { color:var(--text-bright); }
 .btn.danger { color:var(--danger); border-color:var(--danger-border); }
 .btn.ghost { color:var(--text-dimmer); }
 
+/* 首次向导：一屏三选 */
+.wiz { max-width:560px; border:1px solid var(--border); border-radius:var(--r-card); background:var(--bg-container); overflow:hidden; }
+.wiz .steps { display:flex; gap:6px; padding:11px 16px; border-bottom:1px solid var(--border-subtle); font-size:var(--fs-micro); color:var(--text-dimmer); }
+.wiz .steps b { color:var(--text-bright); font-weight:600; }
+.wiz .steps .on { color:var(--accent); }
+.wiz .bd2 { padding:16px; display:flex; flex-direction:column; gap:12px; }
+.wiz h4 { margin:0; font-size:var(--fs-lg); font-weight:600; }
+.wiz .sub { font-size:var(--fs-meta); color:var(--text-dim); }
+.opt { position:relative; text-align:left; border:1px solid var(--border); border-radius:var(--r-sm);
+  background:var(--bg-base); padding:11px 14px 11px 40px; color:var(--text-dim); width:100%; }
+.opt .radio { position:absolute; left:14px; top:14px; width:15px; height:15px; border-radius:50%; border:1.6px solid var(--border); }
+.opt.on { border-color:var(--accent-border); background:var(--accent-soft); }
+.opt.on .radio { border-color:var(--accent); box-shadow:inset 0 0 0 3px var(--bg-base), inset 0 0 0 8px var(--accent); }
+.opt .t { display:block; font-size:var(--fs-sm); font-weight:600; color:var(--text-bright); margin-bottom:3px; }
+.opt .d { display:block; font-size:var(--fs-micro); line-height:1.75; }
+.wiz .ft { display:flex; gap:8px; align-items:center; padding:12px 16px; border-top:1px solid var(--border-subtle); }
+.wiz .ft .sp { flex:1; }
+
+/* 状态转移矩阵 */
+table.mx th, table.mx td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--border-subtle); vertical-align:top; font-size:var(--fs-meta); }
+table.mx th { color:var(--text-dimmer); font-size:var(--fs-micro); text-transform:uppercase; letter-spacing:.08em; }
+table.mx td b { color:var(--text-bright); }
+table.mx { width:100%; border-collapse:collapse; margin:6px 0 18px; }
+
 /* 起一个中心的三条路 */
 .paths { display:grid; grid-template-columns:repeat(3,1fr); gap:var(--sp-3); }
 @media (max-width:820px) { .paths { grid-template-columns:1fr; } }
@@ -773,7 +797,125 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
   ①③ 便宜且收益最大，先做。
 </div>
 
-<h2>4. 切模式：唯一需要拦一下的动作</h2>
+<h2>4. 初次安装：只问一次，而且能一键跳过</h2>
+<p class="lede">
+  <b>装的时候不问身份。</b><code>install.sh</code> 默认装成「这台机器」——命令行是问这个问题
+  最差的时机：用户还没见过界面，不知道自己在选什么，选错了还得回来重装。
+  唯一的例外是他<b>自己知道</b>要装中心（<code>--hub</code>），那说明他已经想清楚了。
+</p>
+<p class="lede">
+  问题留到<b>第一次打开网页</b>——今天那里已经有一步「设置登录口令」，多机这一问接在它后面，
+  <b>只多一屏，而且默认选中第一项，回车即过</b>。绝大多数人第一次装就是单机自己用，
+  对他们来说多问一句都是负担。
+</p>
+
+<div class="cap"><b>首次打开 · 第 2 步</b><span class="pill">回车即过</span></div>
+<div class="wiz">
+  <div class="steps"><span>1 设置口令</span> › <b class="on">2 这台机器是什么</b> › <span>3 完成</span></div>
+  <div class="bd2">
+    <h4>这台机器是什么？</h4>
+    <div class="sub">选不准也没关系——之后在<b style="color:var(--text-bright)">设置 › 多机</b>里随时能改。</div>
+
+    <button class="opt on"><span class="radio"></span>
+      <span class="t">就我自己用这一台</span>
+      <span class="d">在这台机器上跑活，用局域网访问它。<b>不涉及多机，界面里不会出现任何多机的东西。</b>
+        以后想加机器再回来改。</span></button>
+
+    <button class="opt"><span class="radio"></span>
+      <span class="t">我已经有一个中心，把这台接上去</span>
+      <span class="d">这台照常跑活，同时接到中心上——接上之后<b>从外网也能用它</b>，局域网直连不受影响。
+        需要中心地址和一张接入令牌。</span></button>
+
+    <button class="opt"><span class="radio"></span>
+      <span class="t">这台就是中心</span>
+      <span class="d">只当入口，<b>自己不跑活</b>。别的机器接进来之后，你在这里访问它们全部。
+        适合一台有公网地址的小主机。</span></button>
+
+    <div class="note" style="margin:4px 0 0">
+      <b>不确定选哪个？</b>选第一个。它是纯单机、零多机元素，也是最容易改成别的那一个。
+    </div>
+  </div>
+  <div class="ft"><button class="btn ghost">上一步</button><span class="sp"></span>
+    <button class="btn pri">完成</button></div>
+</div>
+
+<h3>选了第二项：就地填、就地验</h3>
+<div class="wiz" style="margin-top:12px">
+  <div class="steps"><span>1 设置口令</span> › <b class="on">2 接到中心</b> › <span>3 完成</span></div>
+  <div class="bd2">
+    <div class="row">
+      <div class="f"><label>中心地址</label><div class="box"><span class="mono">https://roam.example.com</span></div></div>
+      <div class="f"><label>接入令牌</label><div class="box"><span class="mono">enr_7f3a··········</span></div>
+        <div class="hint">在中心页点「添加机器」生成。<b>不是中心的登录口令。</b></div></div>
+    </div>
+    <div class="chk ok"><svg width="13" height="13" viewBox="0 0 24 24"><use href="#i-cloud"/></svg>
+      <span><b>已接上。</b>中心那边现在能看到这台机器了。</span></div>
+    <div class="note" style="margin:0">
+      接不上就<b>当场说清为什么</b>（令牌过期 / 地址不是中心 / 网络不通），并允许<b>先跳过</b>——
+      别把人卡在首次向导里。跳过之后设置页里那张卡还在，随时能补。
+    </div>
+  </div>
+  <div class="ft"><button class="btn ghost">跳过，之后再说</button><span class="sp"></span>
+    <button class="btn pri">完成</button></div>
+</div>
+<ul class="pts" style="margin-top:14px">
+  <li><b>为什么放在设置口令之后而不是之前</b>：口令是<b>非做不可</b>的一步（不设就没法用），
+    身份是<b>可以先不管</b>的一步。把必答题放前面、选答题放后面，跳过才跳得心安。</li>
+  <li><b>三个选项写的是「你现在的处境」，不是模式名</b>：「我已经有一个中心」比
+    「standard + broker」好懂一个数量级，而且它顺带告诉用户<b>得先有个中心</b>——
+    这正是新手最容易卡住的前置条件。</li>
+  <li><b>选中心的那一路仍然要设口令</b>：中心是唯一暴露在公网的一台，口令比单机时更要紧，
+    所以第 1 步一步都不能省。</li>
+</ul>
+
+<h2>5. 后续更改：四种起点，各自会发生什么</h2>
+<p class="lede">
+  改身份不是一个开关那么简单——每一种转移丢的东西不一样。<b>只有真会丢东西的方向才拦</b>，
+  其余的直接做，别为了"一致"给每一步都加确认框。
+</p>
+<table class="mx">
+  <thead><tr>
+    <th style="width:20%">从 → 到</th><th style="width:34%">会发生什么</th>
+    <th style="width:12%">要重启？</th><th>要拦一下？</th>
+  </tr></thead>
+  <tbody>
+    <tr><td><b>单机 → 接入中心</b><br><span style="color:var(--text-dimmer);font-size:var(--fs-micro)">最常见</span></td>
+      <td>多起一条到中心的出站长连。<b>本机什么都不变</b>——终端、项目、局域网直连全在，
+        只是多了一条外网进来的路</td>
+      <td><b>要</b><br><span style="font-size:var(--fs-micro);color:var(--text-dimmer)">隧道客户端在启动时建</span></td>
+      <td><b>不拦。</b>没有任何东西会丢，拦了只是碍事</td></tr>
+    <tr><td><b>接入中心 → 断开</b></td>
+      <td>外网访问没了，局域网直连照常。中心那边的记录还在，<b>重新接入要一张新令牌</b>
+        （旧的是一次性的）</td>
+      <td>要</td>
+      <td><b>轻拦一句</b>：说清「要新令牌才能再接回来」——用户以为随手能撤销，其实不能</td></tr>
+    <tr><td><b>这台机器 → 中心</b><br><span style="color:var(--danger);font-size:var(--fs-micro)">破坏性</span></td>
+      <td>这台<b>不再跑活</b>：终端会话断开（<b>tmux 会话本身还在</b>），项目、文件、Git、镜像
+        都不再出现在界面里。它变成入口</td>
+      <td>要</td>
+      <td><b>要，而且要列清单</b>：几个会话会断、哪些东西会从界面消失。
+        文案说的是<b>会失去什么</b>，不是「切换 cluster.mode」</td></tr>
+    <tr><td><b>中心 → 这台机器</b></td>
+      <td>重新开始跑自己的活。<b>接进来的机器失去入口</b>，直到你把它改回中心或另起一个</td>
+      <td>要</td>
+      <td><b>要，但理由不同</b>：丢的不是这台的东西，是<b>别人的入口</b>。
+        提示里要写「3 台机器会失去入口」</td></tr>
+    <tr><td><b>换一个中心</b></td>
+      <td>断开旧的、接入新的。旧中心那边这台机器变离线，但记录还在</td>
+      <td>要</td>
+      <td>不拦，但要提示「旧中心那边记得把它移除」——否则那边会挂一台永远离线的机器</td></tr>
+  </tbody>
+</table>
+<div class="note">
+  <b>「要重启」这件事本身要说清楚。</b>五种转移全都要重启，因为
+  <code>cloud</code> 与 <code>standard</code> 的依赖图不同、隧道客户端也只在启动时建——
+  这不是能热切的东西。所以统一做成<b>「保存 → 自动重启 → 页面等它回来」</b>：
+  前端保存后轮询 <code>/api/version</code>，回来了就自己刷新。
+  <b>并且要说一句「如果没回来，去那台机器上手动启动一次」</b>——
+  没有 systemd 之类守护的装法，进程退出就真的退出了。
+</div>
+
+<h2>6. 切模式的确认框长什么样</h2>
 <div style="display:flex;gap:var(--sp-4);flex-wrap:wrap;align-items:flex-start">
   <div class="modal">
     <div class="hd"><svg width="16" height="16" viewBox="0 0 24 24" style="color:var(--warn)"><use href="#i-warn"/></svg>把这台机器改成「中心」？</div>
@@ -798,7 +940,7 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
   </ul>
 </div>
 
-<h2>5. 手机</h2>
+<h2>7. 手机</h2>
 <div class="phones">
   <div>
     <div class="phone">
@@ -847,7 +989,7 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
   </div>
 </div>
 
-<h2>6. 落地要点</h2>
+<h2>8. 落地要点</h2>
 <ul class="pts">
   <li><b>后端要一对新接口</b>：<code>GET /api/cluster/config</code> 返回当前模式 + 中心地址 + 名字 + 分组
     + <b>实时状态</b>（已连接 / 重连中 / 最后一次失败原因）；<code>PUT</code> 写回 <code>config.yaml</code> 的
