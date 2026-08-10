@@ -119,6 +119,24 @@ ul.pts b, ol.pts b { color:var(--text-bright); }
 .btn.danger { color:var(--danger); border-color:var(--danger-border); }
 .btn.ghost { color:var(--text-dimmer); }
 
+/* 起一个中心的三条路 */
+.paths { display:grid; grid-template-columns:repeat(3,1fr); gap:var(--sp-3); }
+@media (max-width:820px) { .paths { grid-template-columns:1fr; } }
+.path { border:1px solid var(--border); border-radius:var(--r-card); background:var(--bg-container); padding:13px 15px; }
+.path .h { display:flex; align-items:center; gap:8px; font-size:var(--fs-sm); font-weight:600; color:var(--text-bright); margin-bottom:6px; }
+.path .who { font-size:var(--fs-micro); color:var(--accent); margin-bottom:7px; }
+.path .d { font-size:var(--fs-meta); color:var(--text-dim); line-height:1.8; }
+.path pre { margin:8px 0 0; padding:8px 10px; background:var(--bg-base); border:1px solid var(--border-subtle);
+  border-radius:var(--r-xs); font:var(--fs-micro)/1.7 var(--mono); color:var(--text-dim); overflow:auto; }
+.path pre b { color:var(--text-bright); }
+
+/* 字段级校验/提示 */
+.chk { display:flex; align-items:flex-start; gap:7px; font-size:var(--fs-micro); line-height:1.7; padding:7px 10px;
+  border-radius:var(--r-xs); margin-top:2px; }
+.chk.warn { color:var(--warn); background:var(--warn-soft); border:1px solid var(--warn-border); }
+.chk.ok { color:var(--ok); background:var(--ok-soft); border:1px solid var(--ok-border); }
+.chk b { color:inherit; }
+
 /* ── 拓扑：你 / 中心 / 这台机器。一眼回答「我在哪、连着谁」 ───────── */
 .topo { display:flex; align-items:stretch; gap:0; flex-wrap:wrap; }
 .tnode {
@@ -622,7 +640,140 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
   <li><b>令牌有效期写在标题右边</b>，不写在说明文字里。它是个会失效的东西，得一眼看见。</li>
 </ul>
 
-<h2>3. 切模式：唯一需要拦一下的动作</h2>
+<h2>3. 中心怎么来、要配什么</h2>
+<p class="lede">
+  上一节把「中心」这一屏画出来了，但漏了更前面的一个问题：<b>中心是怎么诞生的，
+  它自己又要配什么。</b>今天的实现里这块是空的——切成中心之后那一页只有机器列表，
+  而中心至少有一样东西<b>必须能配</b>，不配就会静默地坑人（见下 §3.2）。
+</p>
+
+<h3>3.1 三条路各服务一种人，都得留</h3>
+<div class="paths">
+  <div class="path">
+    <div class="h"><svg width="15" height="15" viewBox="0 0 24 24"><use href="#i-host"/></svg>已经有一台 Roam</div>
+    <div class="who">最常见 · 想先试试</div>
+    <div class="d">在那台机器上打开<b>设置 › 多机</b>，把角色改成「中心」，重启。
+      它原来的项目和终端会停掉——所以这条路适合<b>本来就闲着</b>的那台。</div>
+  </div>
+  <div class="path">
+    <div class="h"><svg width="15" height="15" viewBox="0 0 24 24"><use href="#i-cloud"/></svg>新买一台小主机</div>
+    <div class="who">推荐 · 长期用</div>
+    <div class="d">装的时候就说清楚它是中心，装完直接是入口，不经过「先当机器再改成中心」那一步。</div>
+    <pre>curl -fsSL https://roam.sh/install.sh | bash -s -- <b>--hub</b></pre>
+  </div>
+  <div class="path">
+    <div class="h"><svg width="15" height="15" viewBox="0 0 24 24"><use href="#i-cloud"/></svg>丢进容器</div>
+    <div class="who">已经有 docker 的人</div>
+    <div class="d">中心不跑业务，没有 tmux / Chrome / adb 那些依赖，<b>是这套里唯一适合塞进容器的角色</b>。</div>
+    <pre>docker run -d -p 443:13570 \
+  -v roam-hub:/root/.roam \
+  roam/hub</pre>
+  </div>
+</div>
+<div class="note">
+  <b>为什么「装的时候就选」值得单独做一条</b>：走第一条路的人得先看着一台机器把自己的终端和项目
+  关掉，心里是发怵的——而买台小主机当中心的人，那台机器上<b>本来就什么都没有</b>，
+  让他先经历一遍「变成机器、再改成中心」纯属多余。
+</div>
+
+<h3>3.2 中心只有一样东西必须配：对外地址</h3>
+<p class="lede">
+  中心<b>不知道自己在外面叫什么</b>。它看到的是网卡上的内网地址（云主机上常是
+  <code>172.17.x</code>），而机器要拨过来用的是公网地址或域名。今天的实现是拿
+  <b>「你此刻浏览用的那个 Host」</b>去拼接入命令——
+  <b>你在局域网里管中心，生成的命令就带内网地址，外网那台机器照着做必然连不上，
+  而且失败信息里完全看不出是这个原因。</b>
+</p>
+<div class="pane">
+  <div class="body">
+    <div class="card">
+      <div class="hd">中心的对外地址<span class="sp"></span><span class="pill new">机器和浏览器都用它</span></div>
+      <div class="bd">
+        <div class="row">
+          <div class="f" style="flex:2 1 320px">
+            <label>对外地址</label>
+            <div class="box"><span class="mono">https://roam.example.com</span></div>
+            <div class="hint">默认填成<b>你现在正在用的这个地址</b>——你能打开，说明它至少对你可达。
+              只有「给机器用的地址跟你自己用的不一样」时才需要改（反代、frp、内外网双地址）。</div>
+          </div>
+          <div class="f">
+            <label>接入令牌有效期</label>
+            <div class="box">30 分钟</div>
+            <div class="hint">跨时区手动粘贴命令时可以调长。</div>
+          </div>
+        </div>
+        <div class="chk ok"><svg width="13" height="13" viewBox="0 0 24 24"><use href="#i-cloud"/></svg>
+          <span>看起来是公网地址。<b>接入命令会写成它</b>。</span></div>
+        <div class="acts"><button class="btn pri">保存</button><button class="btn">用当前地址填</button></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="hd">对外地址是内网时<span class="sp"></span><span class="pill warn">要拦一下</span></div>
+      <div class="bd">
+        <div class="row">
+          <div class="f" style="flex:2 1 320px">
+            <label>对外地址</label>
+            <div class="box"><span class="mono">https://192.168.1.9:13570</span></div>
+          </div>
+        </div>
+        <div class="chk warn"><svg width="13" height="13" viewBox="0 0 24 24"><use href="#i-warn"/></svg>
+          <span><b>这是个内网地址。</b>只有和中心在同一个局域网里的机器接得进来；
+            在别处的机器照这条命令做会连不上，而且它那边只会报「连接失败」，看不出是地址的问题。<br>
+            如果本来就只在局域网内用，忽略这条。</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+<ul class="pts">
+  <li><b>这条校验是纯本地的、能立刻做</b>：地址解析出来落在 RFC1918 / <code>localhost</code> /
+    <code>.local</code> 就提示。不用探测外网可达性——那件事中心自己做不到，
+    而这条静态判断已经能挡住绝大多数「照着命令做却连不上」。</li>
+  <li><b>「用当前地址填」是个按钮，不是默认行为</b>：默认值给一次就行，之后用户改过就别再覆盖他。</li>
+  <li><b>令牌有效期放在这里而不是「添加机器」弹窗里</b>：它是中心的策略，不是某一次添加的参数。</li>
+</ul>
+
+<h3>3.3 中心不需要配、但用户会问的几样</h3>
+<table style="width:100%;border-collapse:collapse;font-size:var(--fs-meta)">
+  <thead><tr>
+    <th style="text-align:left;padding:8px;border-bottom:1px solid var(--border-subtle);color:var(--text-dimmer);font-size:var(--fs-micro);text-transform:uppercase">问题</th>
+    <th style="text-align:left;padding:8px;border-bottom:1px solid var(--border-subtle);color:var(--text-dimmer);font-size:var(--fs-micro);text-transform:uppercase">答案 · 以及界面上摆在哪</th>
+  </tr></thead>
+  <tbody>
+    <tr><td style="padding:9px 8px;border-bottom:1px solid var(--border-subtle)"><b style="color:var(--text-bright)">谁能接进来？</b></td>
+      <td style="padding:9px 8px;border-bottom:1px solid var(--border-subtle);color:var(--text-dim)">
+        <b style="color:var(--text-bright)">只有拿到令牌的</b>。令牌一次性、有有效期、只能你在控制台里签。
+        不做「申请—审批」那一套：单用户场景下，能登进中心的人就是能签令牌的人，多一层审批只是多一步。
+        <b style="color:var(--text-bright)">团队版再说</b></td></tr>
+    <tr><td style="padding:9px 8px;border-bottom:1px solid var(--border-subtle)"><b style="color:var(--text-bright)">中心要不要开 TLS？</b></td>
+      <td style="padding:9px 8px;border-bottom:1px solid var(--border-subtle);color:var(--text-dim)">
+        <b style="color:var(--text-bright)">要，而且它比单机时更要紧</b>——中心是唯一暴露在公网的那一台。
+        沿用现有的 TLS 设置（默认自签），不在多机页里再放一份开关；
+        <b style="color:var(--text-bright)">但要在这一页提醒一句「你正暴露在公网」</b>，
+        这是单机时不存在的处境</td></tr>
+    <tr><td style="padding:9px 8px;border-bottom:1px solid var(--border-subtle)"><b style="color:var(--text-bright)">中心存了什么？</b></td>
+      <td style="padding:9px 8px;border-bottom:1px solid var(--border-subtle);color:var(--text-dim)">
+        只有<b style="color:var(--text-bright)">机器名单和凭证哈希</b>（<code>&lt;home&gt;/cluster/nodes.json</code>）。
+        你的代码、文件、会话<b style="color:var(--text-bright)">都不落在中心上</b>，它只转发。
+        这句话要写在中心页上——不写，用户会以为把代码同步到了公网机器</td></tr>
+    <tr><td style="padding:9px 8px;border-bottom:1px solid var(--border-subtle)"><b style="color:var(--text-bright)">中心挂了会怎样？</b></td>
+      <td style="padding:9px 8px;border-bottom:1px solid var(--border-subtle);color:var(--text-dim)">
+        外网访问断，<b style="color:var(--text-bright)">局域网直连照常</b>，机器上跑着的活一点没事（tmux 在各自机器上）。
+        中心恢复后机器自动重连。这句同样该写在页面上，它是这套架构最让人安心的一点</td></tr>
+    <tr><td style="padding:9px 8px"><b style="color:var(--text-bright)">中心自己能被管理吗？</b></td>
+      <td style="padding:9px 8px;color:var(--text-dim)">
+        不能，<b style="color:var(--text-bright)">中心不是一台「机器」</b>——它不在机器列表里、没有终端和文件。
+        想管它就 ssh 上去，或者把它改回「这台机器」</td></tr>
+  </tbody>
+</table>
+<div class="note warn">
+  <b>今天缺的实现</b>：① 对外地址没有配置项，接入命令用的是浏览器的 Host（<code>broker.go</code> 的
+  <code>Enroll</code>）；② 令牌有效期写死 30 分钟；③ 中心页上没有「代码不落在中心」「中心挂了不影响
+  局域网直连」这两句；④ <code>install.sh --hub</code> 与容器镜像都还不存在。
+  ①③ 便宜且收益最大，先做。
+</div>
+
+<h2>4. 切模式：唯一需要拦一下的动作</h2>
 <div style="display:flex;gap:var(--sp-4);flex-wrap:wrap;align-items:flex-start">
   <div class="modal">
     <div class="hd"><svg width="16" height="16" viewBox="0 0 24 24" style="color:var(--warn)"><use href="#i-warn"/></svg>把这台机器改成「中心」？</div>
@@ -647,7 +798,7 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
   </ul>
 </div>
 
-<h2>4. 手机</h2>
+<h2>5. 手机</h2>
 <div class="phones">
   <div>
     <div class="phone">
@@ -696,7 +847,7 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
   </div>
 </div>
 
-<h2>5. 落地要点</h2>
+<h2>6. 落地要点</h2>
 <ul class="pts">
   <li><b>后端要一对新接口</b>：<code>GET /api/cluster/config</code> 返回当前模式 + 中心地址 + 名字 + 分组
     + <b>实时状态</b>（已连接 / 重连中 / 最后一次失败原因）；<code>PUT</code> 写回 <code>config.yaml</code> 的
