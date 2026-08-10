@@ -55,6 +55,16 @@ type Cluster struct {
 	Name     string `yaml:"name"`     // 节点显示名（默认 hostname）
 	Group    string `yaml:"group"`    // 分组（可选）
 	Insecure bool   `yaml:"insecure"` // 跳过中心 TLS 校验（自签证书调试用，生产勿开）
+
+	// 以下两项只对 mode=hub 有意义。
+	//
+	// PublicURL 是**机器要拨过来用的那个地址**。中心不知道自己在外面叫什么——它看到的是
+	// 网卡上的内网地址（云主机上常是 172.17.x），而接入命令里必须写外面能到的那个。
+	// 留空则回落到「当前这次请求的 Host」，那只在「你用什么地址管它、机器就用什么地址接」
+	// 时才成立；反代/frp/内外网双地址的场景必须显式填。
+	PublicURL string `yaml:"public_url"`
+	// EnrollTTLMin 接入令牌有效期（分钟）。默认 30；跨时区手动粘贴命令时可以调长。
+	EnrollTTLMin int `yaml:"enroll_ttl_min"`
 }
 
 // Config 是解析后的配置（env 覆盖已叠加，默认值已填充）。
@@ -152,6 +162,9 @@ func (c *Config) applyDefaults() {
 	if c.Cluster.Mode == "" {
 		c.Cluster.Mode = "standard"
 	}
+	if c.Cluster.EnrollTTLMin <= 0 {
+		c.Cluster.EnrollTTLMin = 30
+	}
 	if c.Cluster.Mode == "cloud" {
 		c.Cluster.Mode = "hub" // 旧值：这个模式一度叫 cloud，但中心完全可以是家里的一台小主机
 	}
@@ -222,6 +235,9 @@ func (c *Config) applyEnv() {
 	}
 	if v := firstEnv("ROAM_CLUSTER_INSECURE"); v != "" {
 		c.Cluster.Insecure = truthy(v)
+	}
+	if v := firstEnv("ROAM_CLUSTER_PUBLIC_URL"); v != "" {
+		c.Cluster.PublicURL = v
 	}
 }
 

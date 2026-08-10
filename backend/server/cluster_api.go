@@ -40,6 +40,10 @@ type clusterView struct {
 	State *node.State `json:"state,omitempty"`
 	// 这台机器的局域网直连地址——用户配完第一个想确认的就是「那我输哪个网址」。
 	LANURLs []string `json:"lanUrls"`
+
+	// 只有 mode=hub 用得上：对外地址与令牌有效期。
+	PublicURL    string `json:"publicUrl"`
+	EnrollTTLMin int    `json:"enrollTtlMin"`
 }
 
 func (a *clusterAPI) Get(c *gin.Context) {
@@ -47,6 +51,7 @@ func (a *clusterAPI) Get(c *gin.Context) {
 		Mode: a.cluster.Mode, Hub: a.cluster.Hub, Name: a.cluster.Name,
 		Group: a.cluster.Group, Insecure: a.cluster.Insecure,
 		HasToken: a.cluster.Token != "", LANURLs: lanURLs(a.bind, a.tls),
+		PublicURL: a.cluster.PublicURL, EnrollTTLMin: a.cluster.EnrollTTLMin,
 	}
 	if v.Mode == "" {
 		v.Mode = "standard"
@@ -60,12 +65,14 @@ func (a *clusterAPI) Get(c *gin.Context) {
 
 func (a *clusterAPI) Put(c *gin.Context) {
 	var body struct {
-		Mode     string  `json:"mode"`
-		Hub      string  `json:"hub"`
-		Token    *string `json:"token"` // 指针：不传 = 保留原令牌，传空串 = 清掉
-		Name     string  `json:"name"`
-		Group    string  `json:"group"`
-		Insecure bool    `json:"insecure"`
+		Mode         string  `json:"mode"`
+		Hub          string  `json:"hub"`
+		Token        *string `json:"token"` // 指针：不传 = 保留原令牌，传空串 = 清掉
+		Name         string  `json:"name"`
+		Group        string  `json:"group"`
+		Insecure     bool    `json:"insecure"`
+		PublicURL    *string `json:"publicUrl"`
+		EnrollTTLMin *int    `json:"enrollTtlMin"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
@@ -78,7 +85,15 @@ func (a *clusterAPI) Put(c *gin.Context) {
 	next := config.Cluster{
 		Mode: body.Mode, Hub: strings.TrimSpace(body.Hub),
 		Name: body.Name, Group: body.Group, Insecure: body.Insecure,
-		Token: a.cluster.Token,
+		Token:        a.cluster.Token,
+		PublicURL:    a.cluster.PublicURL,
+		EnrollTTLMin: a.cluster.EnrollTTLMin,
+	}
+	if body.PublicURL != nil {
+		next.PublicURL = strings.TrimRight(strings.TrimSpace(*body.PublicURL), "/")
+	}
+	if body.EnrollTTLMin != nil && *body.EnrollTTLMin > 0 {
+		next.EnrollTTLMin = *body.EnrollTTLMin
 	}
 	if body.Token != nil {
 		next.Token = strings.TrimSpace(*body.Token)

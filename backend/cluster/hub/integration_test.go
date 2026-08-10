@@ -261,3 +261,68 @@ func TestNodeTokenHashNotExposed(t *testing.T) {
 		t.Fatalf("落盘丢了凭证哈希，中心重启后节点将无法重连: %s", saved)
 	}
 }
+
+// 接入命令里的地址不能想当然用请求的 Host：你在局域网里管中心，那就是内网地址，
+// 外网那台机器照着做必然连不上——而它那边只会报「连接失败」，看不出是地址的问题。
+func TestEnrollUsesPublicURL(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	brk := hub.New(t.TempDir())
+	brk.SetPublicURL("https://roam.example.com/")
+
+	r := gin.New()
+	r.POST("/api/hub/enroll", brk.Enroll)
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/api/hub/enroll", "application/json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var out struct {
+		Data struct {
+			Command string `json:"command"`
+			HubURL  string `json:"hubUrl"`
+			Private bool   `json:"private"`
+		} `json:"data"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+
+	if out.Data.HubURL != "https://roam.example.com" {
+		t.Errorf("对外地址 = %q，期望去掉尾斜杠的配置值", out.Data.HubURL)
+	}
+	if strings.Contains(out.Data.Command, srv.URL) {
+		t.Errorf("命令里混进了请求的 Host：%s", out.Data.Command)
+	}
+	if !strings.Contains(out.Data.Command, "--hub https://roam.example.com") {
+		t.Errorf("命令没用对外地址：%s", out.Data.Command)
+	}
+	if out.Data.Private {
+		t.Error("公网域名不该被判成内网地址")
+	}
+}
+
+// 没配对外地址就回落到请求 Host——而 httptest 是 127.0.0.1，正好该被标成「内网」。
+// 这条提示是纯本地判断，不探测可达性：那件事中心自己做不到。
+func TestEnrollFlagsPrivateFallback(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	brk := hub.New(t.TempDir())
+
+	r := gin.New()
+	r.POST("/api/hub/enroll", brk.Enroll)
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/api/hub/enroll", "application/json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var out struct {
+		Data struct{ Private bool } `json:"data"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	if !out.Data.Private {
+		t.Error("127.0.0.1 应被标成内网地址，好提醒「别处的机器接不进来」")
+	}
+}

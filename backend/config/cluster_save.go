@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -37,6 +38,8 @@ func SaveCluster(path string, c Cluster) error {
 		{"name", c.Name, false},
 		{"group", c.Group, false},
 		{"insecure", boolStr(c.Insecure), true},
+		{"public_url", c.PublicURL, false},
+		{"enroll_ttl_min", intStr(c.EnrollTTLMin), true},
 	}
 
 	write := func(w *bytes.Buffer, key, val string, raw bool) {
@@ -122,4 +125,12 @@ func boolStr(v bool) string {
 		return "true"
 	}
 	return ""
+}
+
+// intStr 只在非默认时落盘：30 是默认值，写出来只是噪音。
+func intStr(v int) string {
+	if v <= 0 || v == 30 {
+		return ""
+	}
+	return strconv.Itoa(v)
 }

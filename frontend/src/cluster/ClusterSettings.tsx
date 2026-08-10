@@ -18,6 +18,18 @@ type Cfg = {
   mode: 'standard' | 'hub'
   hub: string; name: string; group: string; insecure: boolean
   hasToken: boolean; state?: NodeState; lanUrls: string[]
+  publicUrl?: string; enrollTtlMin?: number
+}
+
+/** 只在局域网里有效的地址：别处的机器接不进来。纯本地判断，不探测可达性。 */
+function looksPrivate(raw: string): boolean {
+  try {
+    const h = new URL(raw).hostname
+    if (h === 'localhost' || h.endsWith('.local') || h.endsWith('.lan')) return true
+    if (/^10\./.test(h) || /^192\.168\./.test(h) || /^127\./.test(h)) return true
+    const m = /^172\.(\d+)\./.exec(h)
+    return !!m && +m[1] >= 16 && +m[1] <= 31
+  } catch { return false }
 }
 
 /**
@@ -29,6 +41,7 @@ function HubSelfCard() {
   const { t } = useI18n()
   const { message, modal } = AntApp.useApp()
   const [self, setSelf] = useState<Cfg | null>(null)
+  const [busy, setBusy] = useState(false)
   useEffect(() => {
     fetch('/api/cluster/config', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
@@ -52,18 +65,68 @@ function HubSelfCard() {
     <Card title={t('cluster.hubSelfTitle')} extra={<Tag color="processing">{t('cluster.modeHub')}</Tag>}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.9 }}>{t('cluster.hubSelfHelp')}</div>
-        <div className="tt-ways">
-          <div className="tt-way">
-            <div className="h"><CloudIcon />{t('cluster.entryForPeople')}</div>
-            {/* 中心的入口地址不能报网卡 IP：云主机上那是内网地址（172.17.x），
-                用户永远输不进去。**你正在用的这个地址**才是对的答案，就在 location 里。 */}
-            <div className="u">{location.origin}</div>
-            <div className="n">{t('cluster.entryForPeopleHelp')}</div>
-          </div>
-        </div>
+        <HubPublicFields cfg={self} saving={busy} save={async (o) => {
+          setBusy(true)
+          try {
+            await fetch('/api/cluster/config', {
+              method: 'PUT', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ mode: 'hub', hub: '', name: self.name, group: self.group, insecure: false, ...o }),
+            })
+            message.success(t('cluster.savedRestartHub'))
+          } finally { setBusy(false) }
+        }} />
         <div><Button onClick={backToNode}>{t('cluster.hubToNode')}</Button></div>
       </div>
     </Card>
+  )
+}
+
+/**
+ * 中心自己的配置。两处都要用它：
+ *   · 经中心访问某台机器时 —— 从 HubSelfCard 进（设置页看的是那台机器，够不到中心）
+ *   · 中心一台机器都还没接时 —— 当前没有 nodeId，这一页读到的就是中心自己
+ * 所以抽出来，别写两份。
+ */
+function HubPublicFields({ cfg, save, saving }: {
+  cfg: Cfg
+  save: (o: { publicUrl: string; enrollTtlMin: number }) => void
+  saving: boolean
+}) {
+  const { t } = useI18n()
+  const [pub, setPub] = useState(cfg.publicUrl || '')
+  const [ttl, setTtl] = useState(cfg.enrollTtlMin || 30)
+  const effective = pub || location.origin
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div className="tt-crow">
+        <label className="tt-cf" style={{ flex: '2 1 320px' }}>
+          <span>{t('cluster.publicUrl')}</span>
+          <Input value={pub} placeholder={location.origin} onChange={(e) => setPub(e.target.value)} />
+          <em>{t('cluster.publicUrlHelp')}</em>
+        </label>
+        <label className="tt-cf">
+          <span>{t('cluster.enrollTtl')}</span>
+          <Input type="number" value={ttl} onChange={(e) => setTtl(+e.target.value || 30)} />
+        </label>
+      </div>
+      {/* 内网地址是最常见的坑：你在局域网里管中心，签出去的命令就带内网地址，别处的
+          机器照着做必然连不上，而它那边只报「连接失败」，看不出是地址的问题。 */}
+      <div className={`tt-cstate${looksPrivate(effective) ? ' warn' : ' ok'}`}>
+        <i className="d" />
+        <span>{looksPrivate(effective) ? t('cluster.publicPrivate') : t('cluster.publicOk')}</span>
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <Button type="primary" loading={saving} onClick={() => save({ publicUrl: pub, enrollTtlMin: ttl })}>
+          {t('cluster.savePublic')}
+        </Button>
+        <Button onClick={() => setPub(location.origin)}>{t('cluster.useCurrent')}</Button>
+      </div>
+      {/* 这两句用户一定会问，不写他就会自己脑补出更坏的答案 */}
+      <div style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.9 }}>
+        <div>{t('cluster.hubStores')}</div>
+        <div>{t('cluster.hubDown')}</div>
+      </div>
+    </div>
   )
 }
 
@@ -92,7 +155,8 @@ export function ClusterSettings() {
   if (!cfg) return null
   const isHub = cfg.mode === 'hub'
 
-  const save = async (mode: 'standard' | 'hub', extra?: Partial<typeof form>) => {
+  const save = async (mode: 'standard' | 'hub', extra?: Partial<typeof form>,
+                      hubOpts?: { publicUrl?: string; enrollTtlMin?: number }) => {
     setSaving(true)
     try {
       const f = { ...form, ...extra }
@@ -102,6 +166,7 @@ export function ClusterSettings() {
         // 只在用户真填了新令牌时才传：不传 = 保留原来的
         token: f.token ? f.token.trim() : undefined,
         name: f.name, group: f.group, insecure: f.insecure,
+        ...(hubOpts || {}),
       })
       if (r?.data?.needsRestart) restartPrompt()
       else message.success(t('cluster.saved'))
@@ -225,6 +290,14 @@ export function ClusterSettings() {
               )}
             </div>
           </div>
+        </Card>
+      )}
+
+      {/* 中心一台机器都还没接时：当前没有 nodeId，这一页读到的就是中心自己，
+          于是在这里配它的对外地址。接了机器之后走 HubSelfCard 那条路。 */}
+      {isHub && (
+        <Card title={t('cluster.publicTitle')} extra={<Tag color="processing">{t('cluster.publicTag')}</Tag>}>
+          <HubPublicFields cfg={cfg} saving={saving} save={(o) => save('hub', undefined, o)} />
         </Card>
       )}
 

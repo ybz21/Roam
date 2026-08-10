@@ -791,10 +791,10 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
   </tbody>
 </table>
 <div class="note warn">
-  <b>今天缺的实现</b>：① 对外地址没有配置项，接入命令用的是浏览器的 Host（<code>hub.go</code> 的
-  <code>Enroll</code>）；② 令牌有效期写死 30 分钟；③ 中心页上没有「代码不落在中心」「中心挂了不影响
-  局域网直连」这两句；④ <code>install.sh --hub</code> 与容器镜像都还不存在。
-  ①③ 便宜且收益最大，先做。
+  <b>实现状态</b>：① <b>已做</b>——<code>cluster.public_url</code> 配置项 + 接入命令用它，
+  内网地址当场提示（纯本地判断，见 <code>isPrivateURL</code>）；② <b>已做</b>——
+  <code>cluster.enroll_ttl_min</code>，默认仍是 30；③ <b>已做</b>——那两句印在中心那张卡上。
+  <b>还缺</b>：④ <code>install.sh --hub</code> 与容器镜像。
 </div>
 
 <h2>4. 初次安装：只问一次，而且能一键跳过</h2>

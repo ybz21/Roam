@@ -22,7 +22,14 @@ import (
 type Hub struct {
 	reg *Registry
 	up  websocket.Upgrader
+
+	publicURL string        // 中心的对外地址（config: cluster.public_url）；空 = 按请求 Host 推
+	enrollTTL time.Duration // 接入令牌有效期（config: cluster.enroll_ttl_min）
 }
+
+// SetPublicURL / SetEnrollTTL 由装配处注入，免得 hub 包反过来依赖 config。
+func (b *Hub) SetPublicURL(u string)        { b.publicURL = strings.TrimRight(u, "/") }
+func (b *Hub) SetEnrollTTL(d time.Duration) { b.enrollTTL = d }
 
 // New 从 dir 加载注册表（nodes.json）。
 func New(dir string) *Hub {
@@ -186,20 +193,53 @@ func (b *Hub) Bootstrap(c *gin.Context) {
 }
 
 // Enroll 签发一次性接入令牌并给出接入命令（POST /api/hub/enroll）。
+// Enroll 签发一次性接入令牌，并把接入命令拼好。
+//
+// **命令里的地址不能想当然用请求的 Host**：你在局域网里管中心，那就是内网地址，
+// 外网那台机器照着这条命令做必然连不上，而它那边只会报「连接失败」，看不出是地址的问题。
+// 所以优先用显式配置的对外地址，没配才回落。
 func (b *Hub) Enroll(c *gin.Context) {
 	var body struct{ Name, Group string }
 	_ = c.ShouldBindJSON(&body)
-	e := b.reg.CreateEnrollment(body.Name, body.Group, 0)
-	scheme := "https"
-	if c.Request.TLS == nil && c.GetHeader("X-Forwarded-Proto") != "https" {
-		scheme = "http"
+	e := b.reg.CreateEnrollment(body.Name, body.Group, b.enrollTTL)
+	base := b.publicURL
+	if base == "" {
+		base = requestBase(c)
 	}
-	base := scheme + "://" + c.Request.Host
 	cmd := "curl -fsSL " + base + "/install.sh | bash -s -- --hub " + base + " --token " + e.Token
 	if body.Name != "" {
 		cmd += " --name " + strconv.Quote(body.Name)
 	}
-	c.JSON(http.StatusOK, gin.H{"data": gin.H{"token": e.Token, "expiresAt": e.ExpiresAt, "command": cmd}})
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{
+		"token": e.Token, "expiresAt": e.ExpiresAt, "command": cmd,
+		"hubUrl": base, "private": isPrivateURL(base),
+	}})
+}
+
+func requestBase(c *gin.Context) string {
+	scheme := "https"
+	if c.Request.TLS == nil && c.GetHeader("X-Forwarded-Proto") != "https" {
+		scheme = "http"
+	}
+	return scheme + "://" + c.Request.Host
+}
+
+// isPrivateURL 判断这个地址是不是只在局域网里有效。**纯本地判断，不去探测可达性**——
+// 那件事中心自己做不到，而这一条静态判断已经能挡住绝大多数「照着命令做却连不上」。
+func isPrivateURL(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	h := u.Hostname()
+	if h == "localhost" || strings.HasSuffix(h, ".local") || strings.HasSuffix(h, ".lan") {
+		return true
+	}
+	ip := net.ParseIP(h)
+	if ip == nil {
+		return false // 域名：假定是对外的，判不了就别乱报警
+	}
+	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast()
 }
 
 // ProxyNode 把 /n/:nodeId/*path 反代进目标节点的隧道流（REST + WebSocket 升级）。

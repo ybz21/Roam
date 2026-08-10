@@ -3,6 +3,7 @@ package server
 import (
 	"net/http"
 	"path/filepath"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"ttmux-web/auth"
@@ -21,6 +22,8 @@ func NewHub(cfg Config) *gin.Engine {
 
 	a := auth.New(cfg.Password, cfg.TOTPSecret, cfg.TOTPState, cfg.LockAfter, cfg.LockSecs, cfg.SavePassword)
 	brk := hub.New(filepath.Join(cfg.DataDir, "cluster"))
+	brk.SetPublicURL(cfg.Cluster.PublicURL)
+	brk.SetEnrollTTL(time.Duration(cfg.Cluster.EnrollTTLMin) * time.Minute)
 
 	// 公开端点（与单机一致：登录 / 首次设置 / 版本 / 证书 / 导航页）
 	mountPublic(r, a, cfg)
