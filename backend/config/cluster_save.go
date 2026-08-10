@@ -22,14 +22,17 @@ func SaveCluster(path string, c Cluster) error {
 		return err
 	}
 
-	// 写空字符串等于「删掉这个设置」：留一行 broker: "" 会让人以为配过又没生效。
+	// 写空字符串等于「删掉这个设置」：留一行 hub: "" 会让人以为配过又没生效。
 	fields := []struct {
 		key string
 		val string
 		raw bool // 布尔不加引号：insecure: "true" 是字符串，YAML 解出来不是 bool
 	}{
 		{"mode", c.Mode, false},
-		{"broker", c.Broker, false},
+		{"hub", c.Hub, false},
+		// 旧键：这套东西一度叫 broker。值恒为空 = 每次写回都把它删掉，
+		// 免得 hub: 和 broker: 并存，越留越乱。
+		{"broker", "", false},
 		{"token", c.Token, false},
 		{"name", c.Name, false},
 		{"group", c.Group, false},

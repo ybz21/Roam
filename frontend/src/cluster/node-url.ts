@@ -1,8 +1,8 @@
 // 「当前机器」与它的 URL 前缀——多机的全部寻址收口在这一个文件。
 //
 // 单机与多机走**同一份代码**：没有 currentNodeId 时 nodePath() 返回今天的路径，
-// 一个字节都不差。这就是「没连 Broker 就零变化」在实现层面的保证——不是靠两条分支，
-// 是靠一个恒等式。所以别在调用处写 `isBroker ? … : …`，那等于把分支散回去。
+// 一个字节都不差。这就是「没连中心 就零变化」在实现层面的保证——不是靠两条分支，
+// 是靠一个恒等式。所以别在调用处写 `isHub ? … : …`，那等于把分支散回去。
 //
 // 寻址只用**稳定 nodeId**，显示名可重命名、可重复，永不参与路由（见
 // docs/design/cluster/architecture.html §4）。
@@ -26,7 +26,7 @@ const MIRROR = 'roam.nodeId'
 
 // 首帧就要有值，否则第一批请求会打到错的机器上——偏好是异步到的，靠不住
 // （AGENTS.md「Preferences Arrive Late」）。所以当前机器**先读本地镜像**，
-// Broker 的推荐值只在本地没有或已失效时才用。
+// 中心的推荐值只在本地没有或已失效时才用。
 function readMirror(): string | null {
   try {
     return localStorage.getItem(MIRROR) || null
@@ -37,7 +37,7 @@ function readMirror(): string | null {
 
 let nodeId: string | null = readMirror()
 let nodes: ClusterNode[] = []
-let broker = false
+let hub = false
 const subs = new Set<() => void>()
 
 function emit() {
@@ -56,9 +56,9 @@ export function currentNodeId(): string | null {
   return nodeId
 }
 
-/** 是否连着云端 Broker。单机时为 false，此时所有多机 UI 都不渲染。 */
-export function isBrokerMode(): boolean {
-  return broker
+/** 是否连着中心。单机时为 false，此时所有多机 UI 都不渲染。 */
+export function isHubMode(): boolean {
+  return hub
 }
 
 export function clusterNodes(): ClusterNode[] {
@@ -112,26 +112,26 @@ export function useClusterNodes(): ClusterNode[] {
   return useSyncExternalStore(subscribe, clusterNodes, () => [])
 }
 
-export function useBrokerMode(): boolean {
-  return useSyncExternalStore(subscribe, isBrokerMode, () => false)
+export function useHubMode(): boolean {
+  return useSyncExternalStore(subscribe, isHubMode, () => false)
 }
 
 /**
  * 启动引导。**必须在应用发出第一条业务请求之前跑完**，否则那几条会打到 /api/*，
- * 在 Broker 上是 404。它只打一个 Broker-local 端点，不依赖 current node
+ * 在 中心上是 404。它只打一个 中心本地 端点，不依赖 current node
  * ——反过来就是死循环：要读偏好得先知道去哪台机器读。
  *
  * 单机后端没有这个路由，404 即判定为单机，此后一切照旧。
  */
 export async function bootstrapCluster(): Promise<void> {
   try {
-    const r = await fetch('/api/broker/bootstrap', { cache: 'no-store' })
+    const r = await fetch('/api/hub/bootstrap', { cache: 'no-store' })
     if (!r.ok) return // 404 = 单机；401 = 未登录，登录后 App 会再引导一次
     const data = (await r.json())?.data || {}
     nodes = data.nodes || []
-    broker = true
+    hub = true
     const online = nodes.filter((n) => n.online)
-    // 顺序：URL 深链 > 本地镜像 > Broker 推荐。前两者不发请求，所以首帧就定得下来。
+    // 顺序：URL 深链 > 本地镜像 > Hub 推荐。前两者不发请求，所以首帧就定得下来。
     const fromUrl = new URLSearchParams(location.hash.split('?')[1] || '').get('node')
     const candidates = [fromUrl, nodeId, data.recommended]
     const pick = candidates.find((id) => id && online.some((n) => n.id === id))
@@ -139,16 +139,16 @@ export async function bootstrapCluster(): Promise<void> {
     setCurrentNode(pick)
     emit()
   } catch {
-    // 网络抖动：当单机处理。真连着 Broker 的话，下一次刷新会自愈，
+    // 网络抖动：当单机处理。真连着中心 的话，下一次刷新会自愈，
     // 而误判成多机（把请求打到 /n/<不存在>）反而会让整个应用不可用。
   }
 }
 
 /** 刷新节点列表（切换器打开、掉线重连后调）。 */
 export async function refreshClusterNodes(): Promise<void> {
-  if (!broker) return
+  if (!hub) return
   try {
-    const r = await fetch('/api/broker/nodes', { cache: 'no-store' })
+    const r = await fetch('/api/hub/nodes', { cache: 'no-store' })
     if (!r.ok) return
     nodes = (await r.json())?.data || []
     emit()

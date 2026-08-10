@@ -226,7 +226,7 @@ table.mx { width:100%; border-collapse:collapse; margin:6px 0 18px; }
 .way .u { font:var(--fs-micro)/1.6 var(--mono); color:var(--accent); word-break:break-all; }
 .way .n { margin-top:5px; font-size:var(--fs-micro); color:var(--text-dimmer); line-height:1.7; }
 
-/* 机器表（Broker 模式） */
+/* 机器表（中心 模式） */
 table.nodes { width:100%; border-collapse:collapse; font-size:var(--fs-meta); }
 table.nodes th { text-align:left; padding:7px 8px; font-size:var(--fs-micro); text-transform:uppercase;
   letter-spacing:.08em; color:var(--text-dimmer); border-bottom:1px solid var(--border-subtle); font-weight:600; }
@@ -635,7 +635,7 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
           <b style="color:var(--text-bright)">方式一</b>：在那台机器上执行这条命令（没装 Roam 也能一步装好）
         </div>
         <div class="cmd">curl -fsSL <b>https://roam.example.com/install.sh</b> | bash -s -- \
-          <br>&nbsp;&nbsp;--broker <b>https://roam.example.com</b> --token <b>enr_7f3a…</b></div>
+          <br>&nbsp;&nbsp;--hub <b>https://roam.example.com</b> --token <b>enr_7f3a…</b></div>
         <div style="font-size:var(--fs-meta);color:var(--text-dim)">
           <b style="color:var(--text-bright)">方式二</b>：那台机器已经装了 Roam —— 打开它的
           <b style="color:var(--text-bright)">设置 › 多机</b>，把下面两样填进去
@@ -791,7 +791,7 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
   </tbody>
 </table>
 <div class="note warn">
-  <b>今天缺的实现</b>：① 对外地址没有配置项，接入命令用的是浏览器的 Host（<code>broker.go</code> 的
+  <b>今天缺的实现</b>：① 对外地址没有配置项，接入命令用的是浏览器的 Host（<code>hub.go</code> 的
   <code>Enroll</code>）；② 令牌有效期写死 30 分钟；③ 中心页上没有「代码不落在中心」「中心挂了不影响
   局域网直连」这两句；④ <code>install.sh --hub</code> 与容器镜像都还不存在。
   ①③ 便宜且收益最大，先做。
@@ -862,7 +862,7 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
   <li><b>为什么放在设置口令之后而不是之前</b>：口令是<b>非做不可</b>的一步（不设就没法用），
     身份是<b>可以先不管</b>的一步。把必答题放前面、选答题放后面，跳过才跳得心安。</li>
   <li><b>三个选项写的是「你现在的处境」，不是模式名</b>：「我已经有一个中心」比
-    「standard + broker」好懂一个数量级，而且它顺带告诉用户<b>得先有个中心</b>——
+    「standard + hub」好懂一个数量级，而且它顺带告诉用户<b>得先有个中心</b>——
     这正是新手最容易卡住的前置条件。</li>
   <li><b>选中心的那一路仍然要设口令</b>：中心是唯一暴露在公网的一台，口令比单机时更要紧，
     所以第 1 步一步都不能省。</li>
@@ -908,7 +908,7 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
 </table>
 <div class="note">
   <b>「要重启」这件事本身要说清楚。</b>五种转移全都要重启，因为
-  <code>cloud</code> 与 <code>standard</code> 的依赖图不同、隧道客户端也只在启动时建——
+  <code>hub</code> 与 <code>standard</code> 的依赖图不同、隧道客户端也只在启动时建——
   这不是能热切的东西。所以统一做成<b>「保存 → 自动重启 → 页面等它回来」</b>：
   前端保存后轮询 <code>/api/version</code>，回来了就自己刷新。
   <b>并且要说一句「如果没回来，去那台机器上手动启动一次」</b>——
@@ -994,7 +994,7 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
   <li><b>后端要一对新接口</b>：<code>GET /api/cluster/config</code> 返回当前模式 + 中心地址 + 名字 + 分组
     + <b>实时状态</b>（已连接 / 重连中 / 最后一次失败原因）；<code>PUT</code> 写回 <code>config.yaml</code> 的
     <code>cluster:</code> 段。令牌<b>只写不读</b>——读回来没有意义，还多一个泄漏面。</li>
-  <li><b>「最后一次失败原因」直接用节点侧已经翻好的那句</b>：令牌过期 / 凭证失效 / 地址不是 Broker，
+  <li><b>「最后一次失败原因」直接用节点侧已经翻好的那句</b>：令牌过期 / 凭证失效 / 地址不是 中心，
     三种的下一步完全不同。这句话现在只进日志，得让它进界面。</li>
   <li><b>改模式要重启服务</b>：cloud 与 standard 的依赖图不同（中心根本不构造业务 runtime）。
     所以是「保存 → 重启 → 页面自己重连」，不是热切换。前端保存后轮询 <code>/api/version</code> 等它回来。</li>

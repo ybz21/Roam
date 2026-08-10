@@ -4,7 +4,7 @@
 //   平板/手机   → 终端为全屏覆盖层；手机底部 Tab 导航
 // 终端：多标签 / 字号调节 / 复制 / 更多快捷键 / 断线自动重连。
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { bootstrapCluster, isBrokerMode, nodeApi, setCurrentNode, useClusterNodes, useCurrentNodeId } from './cluster/node-url'
+import { bootstrapCluster, isHubMode, nodeApi, setCurrentNode, useClusterNodes, useCurrentNodeId } from './cluster/node-url'
 import { NodeMark, nodeDotColor } from './cluster/NodeMark'
 import { ClusterSettings } from './cluster/ClusterSettings'
 import {
@@ -546,13 +546,13 @@ export default function App() {
   }, [authed, prefs.p2pEnabled])
 
   if (authed === null) return <div style={{ height: '100dvh', display: 'grid', placeItems: 'center' }}><Spin size="large" /></div>
-  // 登录成功要**重新引导一次**：首屏那次 bootstrap 跑在登录之前，Broker 会 401，
-  // 于是整页会当成单机、把业务请求打去 /api/*（在 Broker 上全是 404）。
+  // 登录成功要**重新引导一次**：首屏那次 bootstrap 跑在登录之前，中心会 401，
+  // 于是整页会当成单机、把业务请求打去 /api/*（在 中心上全是 404）。
   // reload 而不是 setState：拿到 nodeId 之前已经有一批组件挂上去了，重来一次最干净。
   if (!authed) {
     return <Login onOk={() => {
       bootstrapCluster().then(() => {
-        if (isBrokerMode()) { location.hash = '#/projects'; location.reload(); return }
+        if (isHubMode()) { location.hash = '#/projects'; location.reload(); return }
         setAuthed(true); loadPreferences(); go('projects')
       })
     }} />

@@ -1,5 +1,5 @@
 // Package tunnel 把一条 WebSocket 连接包成可多路复用的双向隧道（yamux over wss），
-// 供云端 Broker 与标准节点共用。一条隧道里能并发开多条逻辑流：一条终端会话、一次
+// 供中心 与标准节点共用。一条隧道里能并发开多条逻辑流：一条终端会话、一次
 // 文件下载、一次 CDP 反代各占一条流，互不阻塞；心跳走单独的控制流。
 //
 // 载体用项目已有的 gorilla/websocket（走 443/wss 对企业防火墙最友好），多路复用用
@@ -75,7 +75,7 @@ func yamuxCfg() *yamux.Config {
 	return cfg
 }
 
-// Server 在 Broker 侧把接受到的节点长连包成 yamux 会话（server 端）。
+// Server 在 中心侧把接受到的节点长连包成 yamux 会话（server 端）。
 // 返回的 *yamux.Session 既能 Open() 出流（转发前端请求给节点），也实现 net.Listener
 // 接口，Accept() 出节点主动开的控制流（心跳）。
 func Server(ws *websocket.Conn) (*yamux.Session, error) {
@@ -83,7 +83,7 @@ func Server(ws *websocket.Conn) (*yamux.Session, error) {
 }
 
 // Client 在节点侧把出站长连包成 yamux 会话（client 端）。节点用它 Accept() 出
-// Broker 转发进来的业务请求流（交给本机业务 Handler），并 Open() 控制流上报心跳。
+// 中心转发进来的业务请求流（交给本机业务 Handler），并 Open() 控制流上报心跳。
 func Client(ws *websocket.Conn) (*yamux.Session, error) {
 	return yamux.Client(&wsConn{ws: ws}, yamuxCfg())
 }

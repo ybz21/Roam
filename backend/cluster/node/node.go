@@ -1,4 +1,4 @@
-// Package node 是标准节点的出站隧道客户端：拨号云端 Broker、注册 / 重连、把 Broker
+// Package node 是标准节点的出站隧道客户端：拨号中心、注册 / 重连、把 Hub
 // 转发进来的业务请求交给本机业务 Handler、并定期上报心跳。对现有业务 handler 零改动
 // ——只是把「本机 loopback」换成「隧道」。见 docs/design/cluster/architecture.html §1。
 package node
@@ -36,11 +36,11 @@ const (
 
 // Client 是节点侧隧道客户端。
 type Client struct {
-	Broker   string       // 云端 Broker 地址，如 https://broker:443
+	Hub      string       // 中心地址，如 https://hub.example.com
 	Token    string       // 一次性 enrollment token（首次注册用）
 	Name     string       // 节点显示名
 	Group    string       // 分组
-	Insecure bool         // 跳过 Broker TLS 校验（自签调试）
+	Insecure bool         // 跳过中心 TLS 校验（自签调试）
 	Version  string       // 本机 Roam 版本
 	CredPath string       // node.json 落盘路径
 	Handler  http.Handler // 本机业务 Handler（server.New 返回的引擎）
@@ -86,7 +86,7 @@ func (cl *Client) meta() map[string]any {
 	}
 }
 
-// Run 持续维持到 Broker 的隧道：断线指数退避重连，直到 ctx 取消。
+// Run 持续维持到 中心的隧道：断线指数退避重连，直到 ctx 取消。
 func (cl *Client) Run(ctx context.Context) {
 	backoff := time.Second
 	for {
@@ -94,7 +94,7 @@ func (cl *Client) Run(ctx context.Context) {
 			return
 		}
 		if err := cl.connectOnce(ctx); err != nil {
-			log.Printf("[cluster] 连接 Broker 失败: %v（%s 后重试）", err, backoff)
+			log.Printf("[cluster] 连接 中心 失败: %v（%s 后重试）", err, backoff)
 			cl.setState(func(st *State) {
 				st.Connected, st.Retrying, st.LastError = false, true, err.Error()
 			})
@@ -114,7 +114,7 @@ func (cl *Client) Run(ctx context.Context) {
 
 // connectOnce 建立一次隧道并服务，直到会话断开才返回。
 func (cl *Client) connectOnce(ctx context.Context) error {
-	u, err := url.Parse(cl.Broker)
+	u, err := url.Parse(cl.Hub)
 	if err != nil {
 		return err
 	}
@@ -154,12 +154,12 @@ func (cl *Client) connectOnce(ctx context.Context) error {
 	ws, resp, err := d.Dial(u.String(), header)
 	if err != nil {
 		// gorilla 在非 101 时只给一句 "websocket: bad handshake"，看不出到底是令牌无效、
-		// 节点被移除还是地址写错——而这三种的处理完全不同。把 Broker 的状态码与错误码带出来。
-		// 踩过一次：改口令重启了 Broker，内存里的接入令牌全没了，节点这边只有 bad handshake。
+		// 节点被移除还是地址写错——而这三种的处理完全不同。把 中心的状态码与错误码带出来。
+		// 踩过一次：改口令重启了 中心，内存里的接入令牌全没了，节点这边只有 bad handshake。
 		if resp != nil {
 			body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 			_ = resp.Body.Close()
-			return fmt.Errorf("%w（Broker 返回 %s%s）", err, resp.Status, brokerHint(resp.StatusCode, string(body)))
+			return fmt.Errorf("%w（中心返回 %s%s）", err, resp.Status, hubHint(resp.StatusCode, string(body)))
 		}
 		return err
 	}
@@ -180,7 +180,7 @@ func (cl *Client) connectOnce(ctx context.Context) error {
 		return err
 	}
 	defer sess.Close()
-	log.Printf("[cluster] 已连上 Broker %s", cl.Broker)
+	log.Printf("[cluster] 已连上 中心 %s", cl.Hub)
 	cl.setState(func(st *State) {
 		st.Connected, st.Retrying, st.LastError = true, false, ""
 		st.Since = time.Now()
@@ -192,8 +192,8 @@ func (cl *Client) connectOnce(ctx context.Context) error {
 
 	go cl.heartbeat(ctx, sess)
 
-	// Broker 主动 Open 的流是转发进来的前端业务请求；用本机业务 Handler 服务它们。
-	// 隧道流已由 Broker 完成用户会话校验，标记为内部主体（进程内、不可伪造）后放行本地鉴权。
+	// 中心主动 Open 的流是转发进来的前端业务请求；用本机业务 Handler 服务它们。
+	// 隧道流已由 中心完成用户会话校验，标记为内部主体（进程内、不可伪造）后放行本地鉴权。
 	internal := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cl.Handler.ServeHTTP(w, auth.WithInternal(r))
 	})
@@ -201,7 +201,7 @@ func (cl *Client) connectOnce(ctx context.Context) error {
 }
 
 // heartbeat 开一条控制流，定期上报换行分隔的心跳 JSON。
-// heartbeat 开一条控制流，双向跑：定期上报心跳，并原样回 Broker 的 ping。
+// heartbeat 开一条控制流，双向跑：定期上报心跳，并原样回 中心的 ping。
 //
 // 回声必须和心跳共用**同一条**流——RTT 要量的是这条隧道的往返，另开一条量出来的是别的东西。
 // 一条流上两个 goroutine 会撞写，所以写都收口到 send()。
@@ -220,7 +220,7 @@ func (cl *Client) heartbeat(ctx context.Context, sess sessionOpener) {
 		return enc.Encode(v)
 	}
 
-	// 回声：读 Broker 的 {"ping":n}，原样回 {"pong":n}
+	// 回声：读 中心的 {"ping":n}，原样回 {"pong":n}
 	go func() {
 		sc := bufio.NewScanner(st)
 		for sc.Scan() {
@@ -253,16 +253,16 @@ func (cl *Client) heartbeat(ctx context.Context, sess sessionOpener) {
 	}
 }
 
-// brokerHint 把 Broker 的错误码翻成「下一步该干什么」。接入失败最常见的两种原因
+// hubHint 把 中心的错误码翻成「下一步该干什么」。接入失败最常见的两种原因
 // （令牌无效 / 凭证失效）都要人去控制台重新签一次，光有状态码不够。
-func brokerHint(code int, body string) string {
+func hubHint(code int, body string) string {
 	switch {
 	case strings.Contains(body, "ENROLL_INVALID"):
 		return "：接入令牌无效或已过期，去控制台「添加机器」重新签一个"
 	case strings.Contains(body, "NODE_UNAUTHORIZED"):
 		return "：节点凭证已失效（可能被移除过），删掉 <home>/cluster/node.json 后用新令牌重新接入"
 	case code == 404:
-		return "：这个地址上没有 Broker（对方是普通 Roam？检查 cluster.broker）"
+		return "：这个地址上没有 中心（对方是普通 Roam？检查 cluster.broker）"
 	case code == 401 || code == 403:
 		return "：被拒绝，检查令牌"
 	}

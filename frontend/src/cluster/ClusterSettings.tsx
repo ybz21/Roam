@@ -15,8 +15,8 @@ import { CloudIcon, HostIcon, LanIcon } from './cluster-icons'
 
 type NodeState = { connected: boolean; nodeId?: string; since?: string; lastError?: string; retrying?: boolean }
 type Cfg = {
-  mode: 'standard' | 'cloud'
-  broker: string; name: string; group: string; insecure: boolean
+  mode: 'standard' | 'hub'
+  hub: string; name: string; group: string; insecure: boolean
   hasToken: boolean; state?: NodeState; lanUrls: string[]
 }
 
@@ -35,7 +35,7 @@ function HubSelfCard() {
       .then((r) => setSelf(r?.data || null))
       .catch(() => {})
   }, [])
-  if (!self || self.mode !== 'cloud') return null
+  if (!self || self.mode !== 'hub') return null
   const backToNode = () => modal.confirm({
     title: t('cluster.hubToNodeTitle'),
     content: t('cluster.hubToNodeBody'),
@@ -43,7 +43,7 @@ function HubSelfCard() {
     onOk: async () => {
       await fetch('/api/cluster/config', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'standard', broker: '', name: self.name, group: self.group, insecure: false }),
+        body: JSON.stringify({ mode: 'standard', hub: '', name: self.name, group: self.group, insecure: false }),
       })
       message.success(t('cluster.savedRestartHub'))
     },
@@ -71,15 +71,15 @@ export function ClusterSettings() {
   const { t } = useI18n()
   const { message, modal } = AntApp.useApp()
   const [cfg, setCfg] = useState<Cfg | null>(null)
-  const [form, setForm] = useState<{ broker: string; token: string; name: string; group: string; insecure: boolean }>(
-    { broker: '', token: '', name: '', group: '', insecure: false },
+  const [form, setForm] = useState<{ hub: string; token: string; name: string; group: string; insecure: boolean }>(
+    { hub: '', token: '', name: '', group: '', insecure: false },
   )
   const [saving, setSaving] = useState(false)
 
   const load = () => api('GET', '/cluster/config').then((r) => {
     const c: Cfg = r?.data
     setCfg(c)
-    setForm({ broker: c.broker || '', token: '', name: c.name || '', group: c.group || '', insecure: !!c.insecure })
+    setForm({ hub: c.hub || '', token: '', name: c.name || '', group: c.group || '', insecure: !!c.insecure })
   }).catch(() => {})
 
   useEffect(() => { load() }, [])
@@ -90,15 +90,15 @@ export function ClusterSettings() {
   }, [])
 
   if (!cfg) return null
-  const isHub = cfg.mode === 'cloud'
+  const isHub = cfg.mode === 'hub'
 
-  const save = async (mode: 'standard' | 'cloud', extra?: Partial<typeof form>) => {
+  const save = async (mode: 'standard' | 'hub', extra?: Partial<typeof form>) => {
     setSaving(true)
     try {
       const f = { ...form, ...extra }
       const r = await api('PUT', '/cluster/config', {
         mode,
-        broker: mode === 'cloud' ? '' : f.broker.trim(),
+        hub: mode === 'hub' ? '' : f.hub.trim(),
         // 只在用户真填了新令牌时才传：不传 = 保留原来的
         token: f.token ? f.token.trim() : undefined,
         name: f.name, group: f.group, insecure: f.insecure,
@@ -129,17 +129,17 @@ export function ClusterSettings() {
     },
   })
 
-  const switchMode = (next: 'standard' | 'cloud') => {
+  const switchMode = (next: 'standard' | 'hub') => {
     if (next === cfg.mode) return
     // 只有「这台机器 → 中心」需要拦：那个方向真会丢东西（终端断、项目不见）。
     // 反过来只是把本机能力重新打开，没有东西会消失。
-    if (next === 'cloud') {
+    if (next === 'hub') {
       modal.confirm({
         title: t('cluster.toHubTitle'),
         content: <div style={{ lineHeight: 1.9 }}>{t('cluster.toHubBody')}</div>,
         okText: t('cluster.toHubOk'), cancelText: t('common.cancel'),
         okButtonProps: { danger: true },
-        onOk: () => save('cloud'),
+        onOk: () => save('hub'),
       })
       return
     }
@@ -156,7 +156,7 @@ export function ClusterSettings() {
             <span className="t"><HostIcon />{t('cluster.modeNode')}{!isHub && <Tag color="success" style={{ marginInlineStart: 4 }}>{t('cluster.current')}</Tag>}</span>
             <span className="d">{t('cluster.modeNodeDesc')}</span>
           </button>
-          <button type="button" className={`tt-mode${isHub ? ' on' : ''}`} onClick={() => switchMode('cloud')}>
+          <button type="button" className={`tt-mode${isHub ? ' on' : ''}`} onClick={() => switchMode('hub')}>
             <span className="radio" />
             <span className="t"><CloudIcon />{t('cluster.modeHub')}{isHub && <Tag color="success" style={{ marginInlineStart: 4 }}>{t('cluster.current')}</Tag>}</span>
             <span className="d">{t('cluster.modeHubDesc')}</span>
@@ -166,17 +166,17 @@ export function ClusterSettings() {
 
       {!isHub && (
         <Card title={t('cluster.joinTitle')} extra={
-          <Tag color={st?.connected ? 'success' : cfg.broker ? 'warning' : 'default'}>
-            {st?.connected ? t('cluster.connected') : cfg.broker ? t('cluster.connecting') : t('cluster.notJoined')}
+          <Tag color={st?.connected ? 'success' : cfg.hub ? 'warning' : 'default'}>
+            {st?.connected ? t('cluster.connected') : cfg.hub ? t('cluster.connecting') : t('cluster.notJoined')}
           </Tag>
         }>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div className={`tt-cstate${st?.connected ? ' ok' : cfg.broker ? ' warn' : ''}`}>
+            <div className={`tt-cstate${st?.connected ? ' ok' : cfg.hub ? ' warn' : ''}`}>
               <i className="d" />
               {st?.connected
-                ? <span>{t('cluster.joinedTo', { broker: cfg.broker })}</span>
-                : cfg.broker
-                  ? <span>{t('cluster.connectingTo', { broker: cfg.broker })}</span>
+                ? <span>{t('cluster.joinedTo', { hub: cfg.hub })}</span>
+                : cfg.hub
+                  ? <span>{t('cluster.connectingTo', { hub: cfg.hub })}</span>
                   : <span>{t('cluster.notJoinedHelp')}</span>}
               {/* 上次为什么没连上——令牌过期 / 凭证失效 / 地址不是中心，三种的下一步完全不同。
                   这句话以前只进日志，用户得去翻 journalctl 才看得到。 */}
@@ -185,10 +185,10 @@ export function ClusterSettings() {
 
             <div className="tt-crow">
               <label className="tt-cf">
-                <span>{t('cluster.brokerAddr')}</span>
-                <Input value={form.broker} placeholder="https://…"
-                  onChange={(e) => setForm({ ...form, broker: e.target.value })} />
-                <em>{t('cluster.brokerHelp')}</em>
+                <span>{t('cluster.hubAddr')}</span>
+                <Input value={form.hub} placeholder="https://…"
+                  onChange={(e) => setForm({ ...form, hub: e.target.value })} />
+                <em>{t('cluster.hubHelp')}</em>
               </label>
               <label className="tt-cf">
                 <span>{t('cluster.token')} <Tag>{t('cluster.tokenOnce')}</Tag></span>
@@ -216,11 +216,11 @@ export function ClusterSettings() {
             </label>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <Button type="primary" loading={saving} onClick={() => save('standard')}>{t('cluster.saveJoin')}</Button>
-              {cfg.broker && (
+              {cfg.hub && (
                 <Button danger onClick={() => modal.confirm({
                   title: t('cluster.leaveTitle'), content: t('cluster.leaveBody'),
                   okText: t('cluster.leave'), cancelText: t('common.cancel'), okButtonProps: { danger: true },
-                  onOk: () => save('standard', { broker: '', token: '' }),
+                  onOk: () => save('standard', { hub: '', token: '' }),
                 })}>{t('cluster.leave')}</Button>
               )}
             </div>
@@ -241,7 +241,7 @@ export function ClusterSettings() {
           {!isHub && (
             <div className="tt-way">
               <div className="h"><CloudIcon />{t('cluster.viaHub')}</div>
-              <div className="u">{cfg.broker || t('cluster.notJoined')}</div>
+              <div className="u">{cfg.hub || t('cluster.notJoined')}</div>
               <div className="n">{t('cluster.viaHubHelp')}</div>
             </div>
           )}

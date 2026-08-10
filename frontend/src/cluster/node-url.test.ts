@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // 单机与多机走同一份代码：没有 currentNodeId 时 nodePath() 必须返回**今天的路径**，
-// 一个字节都不差。这条恒等式就是「没连 Broker 就零变化」的全部保证——它一破，
+// 一个字节都不差。这条恒等式就是「没连中心 就零变化」的全部保证——它一破，
 // 单机用户的每个请求都会多一段前缀。
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -40,12 +40,12 @@ describe('机器 URL 前缀', () => {
     const m = await fresh()
     vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 404 })))
     await m.bootstrapCluster()
-    expect(m.isBrokerMode()).toBe(false)
+    expect(m.isHubMode()).toBe(false)
     expect(m.nodeApi('/sessions')).toBe('/api/sessions')
     vi.unstubAllGlobals()
   })
 
-  it('bootstrap 选节点：本地镜像优先于 Broker 推荐，且必须仍在线', async () => {
+  it('bootstrap 选节点：本地镜像优先于中心推荐，且必须仍在线', async () => {
     const m = await fresh()
     m.setCurrentNode('n_b')
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
@@ -55,7 +55,7 @@ describe('机器 URL 前缀', () => {
       },
     }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
     await m.bootstrapCluster()
-    expect(m.isBrokerMode()).toBe(true)
+    expect(m.isHubMode()).toBe(true)
     expect(m.currentNodeId()).toBe('n_b') // 上次那台，不是推荐那台
     vi.unstubAllGlobals()
   })

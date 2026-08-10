@@ -1,7 +1,7 @@
-// Package broker 是云端 Broker 的数据面 + 控制面：节点注册表、enrollment 签发、
+// Package broker 是中心 的数据面 + 控制面：节点注册表、enrollment 签发、
 // 隧道服务端、以及把带 nodeId 的前端请求反代进目标节点隧道。它只做路由 + 注册，
 // 不重实现任何业务能力。见 docs/design/cluster/architecture.html §2.3 / §7。
-package broker
+package hub
 
 import (
 	"crypto/rand"
@@ -34,7 +34,7 @@ type Node struct {
 	Load          float64   `json:"load"`
 	LatencyMs     int       `json:"latencyMs"` // control ping 的 RTT（EWMA）
 	LastHeartbeat time.Time `json:"lastHeartbeat"`
-	// sha256(nodeToken)，用于重连鉴权。**必须**随 nodes.json 落盘：Broker 重启后节点
+	// sha256(nodeToken)，用于重连鉴权。**必须**随 nodes.json 落盘：中心重启后节点
 	// 靠它重连，丢了就只能重新签发接入令牌（而令牌是一次性的，等于把机器锁在门外）。
 	// 不外发给浏览器的处理在 NodeView 里遮蔽，见下。
 	// omitempty 与 List() 里的置空配套：落盘时它有值所以照写，发给浏览器前先清掉。
@@ -65,7 +65,7 @@ type Registry struct {
 }
 
 // persisted 是 nodes.json 的形状。**接入令牌也要落盘**：它只在内存里的时候，
-// Broker 随便重启一次（比如改个口令）就把所有未使用的令牌清空了，而节点那边看到的
+// 中心随便重启一次（比如改个口令）就把所有未使用的令牌清空了，而节点那边看到的
 // 只有一句「websocket: bad handshake」——没人猜得到是令牌没了。踩过一次。
 type persisted struct {
 	Nodes  []*Node       `json:"nodes"`

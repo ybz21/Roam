@@ -30,7 +30,7 @@ type clusterAPI struct {
 
 type clusterView struct {
 	Mode     string `json:"mode"`
-	Broker   string `json:"broker"`
+	Hub      string `json:"hub"`
 	Name     string `json:"name"`
 	Group    string `json:"group"`
 	Insecure bool   `json:"insecure"`
@@ -44,7 +44,7 @@ type clusterView struct {
 
 func (a *clusterAPI) Get(c *gin.Context) {
 	v := clusterView{
-		Mode: a.cluster.Mode, Broker: a.cluster.Broker, Name: a.cluster.Name,
+		Mode: a.cluster.Mode, Hub: a.cluster.Hub, Name: a.cluster.Name,
 		Group: a.cluster.Group, Insecure: a.cluster.Insecure,
 		HasToken: a.cluster.Token != "", LANURLs: lanURLs(a.bind, a.tls),
 	}
@@ -61,7 +61,7 @@ func (a *clusterAPI) Get(c *gin.Context) {
 func (a *clusterAPI) Put(c *gin.Context) {
 	var body struct {
 		Mode     string  `json:"mode"`
-		Broker   string  `json:"broker"`
+		Hub      string  `json:"hub"`
 		Token    *string `json:"token"` // 指针：不传 = 保留原令牌，传空串 = 清掉
 		Name     string  `json:"name"`
 		Group    string  `json:"group"`
@@ -71,12 +71,12 @@ func (a *clusterAPI) Put(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
 		return
 	}
-	if body.Mode != "standard" && body.Mode != "cloud" {
+	if body.Mode != "standard" && body.Mode != "hub" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_MODE"}})
 		return
 	}
 	next := config.Cluster{
-		Mode: body.Mode, Broker: strings.TrimSpace(body.Broker),
+		Mode: body.Mode, Hub: strings.TrimSpace(body.Hub),
 		Name: body.Name, Group: body.Group, Insecure: body.Insecure,
 		Token: a.cluster.Token,
 	}
@@ -84,8 +84,8 @@ func (a *clusterAPI) Put(c *gin.Context) {
 		next.Token = strings.TrimSpace(*body.Token)
 	}
 	// 中心不接别人，留着地址只会让人以为它还连着谁
-	if next.Mode == "cloud" {
-		next.Broker, next.Token = "", ""
+	if next.Mode == "hub" {
+		next.Hub, next.Token = "", ""
 	}
 	if err := config.SaveCluster(a.cfgPath, next); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "SAVE_FAILED", "message": err.Error()}})

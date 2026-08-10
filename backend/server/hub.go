@@ -6,21 +6,21 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"ttmux-web/auth"
-	"ttmux-web/cluster/broker"
+	"ttmux-web/cluster/hub"
 )
 
-// NewBroker 装配**云端 Broker** 的 Gin 引擎。它**不复用 New()**——不构造业务 runtime、
+// NewHub 装配**中心** 的 Gin 引擎。它**不复用 New()**——不构造业务 runtime、
 // 不启动 SyncLoop、不初始化 browser / phone / pty，只做：用户认证入口、静态资源（控制台）、
-// 节点隧道接入、Broker-local API（/api/broker/*）、以及把 /n/:nodeId/* 反代进目标节点。
+// 节点隧道接入、中心本地 API（/api/hub/*）、以及把 /n/:nodeId/* 反代进目标节点。
 // 见 docs/design/cluster/architecture.html §1。
-func NewBroker(cfg Config) *gin.Engine {
+func NewHub(cfg Config) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.UseRawPath = true
 	r.Use(gin.Recovery())
 
 	a := auth.New(cfg.Password, cfg.TOTPSecret, cfg.TOTPState, cfg.LockAfter, cfg.LockSecs, cfg.SavePassword)
-	brk := broker.New(filepath.Join(cfg.DataDir, "cluster"))
+	brk := hub.New(filepath.Join(cfg.DataDir, "cluster"))
 
 	// 公开端点（与单机一致：登录 / 首次设置 / 版本 / 证书 / 导航页）
 	mountPublic(r, a, cfg)
@@ -39,8 +39,8 @@ func NewBroker(cfg Config) *gin.Engine {
 	g.PUT("/cluster/config", cl.Put)
 	g.POST("/cluster/restart", cl.Restart)
 
-	// Broker-local API：节点列表 / bootstrap / 接入签发（用户会话鉴权）。
-	bg := r.Group("/api/broker", a.Middleware())
+	// 中心本地 API：节点列表 / bootstrap / 接入签发（用户会话鉴权）。
+	bg := r.Group("/api/hub", a.Middleware())
 	bg.Use(func(c *gin.Context) { c.Header("Cache-Control", "no-store") })
 	bg.GET("/nodes", brk.Nodes)
 	bg.GET("/bootstrap", brk.Bootstrap)

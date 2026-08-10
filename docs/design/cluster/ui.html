@@ -290,10 +290,10 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
 
 <h2>0. 一分钟看懂</h2>
 <p class="lede">
-  连了云端 Broker 之后，浏览器里多出一个 <b>当前机器</b> 的概念：左侧栏底座那枚「当前设备」按钮
+  连了中心 之后，浏览器里多出一个 <b>当前机器</b> 的概念：左侧栏底座那枚「当前设备」按钮
   变成机器切换器，页头的眉标行多一枚机器芯片，终端标签前面多一枚<b>机器方章</b>。
   除此之外 <b>什么都没变</b>——没有新增顶栏、没有新增一层壳、没有第五支颜色。
-  没连 Broker 的单机用户，界面和今天像素级一致。
+  没连 中心 的单机用户，界面和今天像素级一致。
 </p>
 <ul class="pts">
   <li><b>切机器 = 换浏览范围</b>：项目 / 会话 / 文件 / Git / 浏览器 / 手机整体换到那台机器。
@@ -608,7 +608,7 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
     <tr><td><b>别台机器离线</b></td><td>切换器里灰显 + 虚线方章，不可选。<b>不弹任何提示</b>——那不是你现在的事</td></tr>
     <tr><td><b>当前机器掉线</b></td><td>顶部黄条（上图）+ 页头芯片转黄 + 侧栏状态点转红；内容置灰保留、写操作禁用；
       该机器的终端标签沿用现有断线重连提示</td></tr>
-    <tr><td><b>Broker 掉线</b></td><td>整个会话断——退回登录页/离线页，和今天后端挂掉的表现一致，不新增形态</td></tr>
+    <tr><td><b>中心 掉线</b></td><td>整个会话断——退回登录页/离线页，和今天后端挂掉的表现一致，不新增形态</td></tr>
     <tr><td><b>切到离线机器（深链）</b></td><td>页面不空白：显示该机器的卡片 + 「接入命令」+ 「换一台」，
       并把上一台记在 localStorage 里可一键退回</td></tr>
     <tr><td><b>误操作防护</b></td><td>页头芯片（每页）+ 终端头部（每个终端）+ 侧栏底座（常驻）三处同时说明「你在操作哪台」。
@@ -661,7 +661,7 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
     <tr><td><b>⌘K 跨机器搜索</b></td>
       <td><code>search/client.ts</code>（<code>searchAll</code>）、<code>search/types.ts</code>、
         <code>shell/palette/rows.ts</code>、<code>App.tsx</code> 的 <code>paletteItems</code></td>
-      <td><code>searchAll</code> 改读 Broker 的流式扇出；<code>SearchHit.id</code> / <code>action.target</code> 带 nodeId；
+      <td><code>searchAll</code> 改读 中心 的流式扇出；<code>SearchHit.id</code> / <code>action.target</code> 带 nodeId；
         <code>dedupeByKey</code> 连 nodeId 一起算；<code>mergeRows</code> 按机器分组；再多一段「机器」组做切换动作</td></tr>
     <tr><td><b>终端标签 / 头部</b></td><td><code>shell/SessionDock.tsx</code>（<code>DockTitle</code>）、<code>Terminal.tsx</code> 头部</td><td>名字前插方章；<code>title</code> 补机器全名</td></tr>
     <tr><td><b>机器页</b></td><td><code>cluster/Nodes.tsx</code></td><td>卡片墙照抄项目页构件；添加弹窗 + 轮询接入状态</td></tr>
@@ -681,7 +681,7 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
 <h3>分期</h3>
 <ol class="pts">
   <li><b>P1 · 切得动 + 看得全</b>：方章 + 侧栏切换器 + 页头芯片 + <code>/nodes</code> 基础页 + 终端标签方章
-    + <b>⌘K 名字搜索跨机器扇出</b> + <b>工作台行动队列跨机器</b>（两者共用同一套 Broker 扇出）。
+    + <b>⌘K 名字搜索跨机器扇出</b> + <b>工作台行动队列跨机器</b>（两者共用同一套 中心 扇出）。
     验收＝在 A 机器开着终端，切到 B 看文件，A 的终端还在跑；
     在 B 上搜一个只存在于 A 的文件名能搜到并一键跳过去；
     <b>A 上有个 agent 在等输入时，人在 B 的首页第一屏就能看见</b>。</li>
@@ -697,14 +697,14 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
     重点三条——芯片命中区 <code>document.elementFromPoint</code> 实测 ≥44、
     sheet 打开时底栏不被顶走、切机器后会话坞的方章跟着变。</li>
   <li><b>无 emoji / 无文字符号</b>：方章里是名字的字，不是 <code>■</code>；折角是 SVG，不是 <code>▾</code>。</li>
-  <li><b>单机基线</b>：把 <code>cluster.broker</code> 清空重启，截图与改动前逐像素比对。</li>
+  <li><b>单机基线</b>：把 <code>cluster.hub</code> 清空重启，截图与改动前逐像素比对。</li>
 </ul>
 
 <div class="note ok">
   <b>配套设置页</b>：<a href="./settings.html" style="color:var(--accent)">settings.html</a>
-  —— Client / Broker 两种模式的选择与接入配置。<br>
+  —— Client / 中心 两种模式的选择与接入配置。<br>
   <b>配套技术稿</b>：<a href="./architecture.html" style="color:var(--accent)">architecture.html</a>
-  —— Broker / 节点 / 隧道、<code>/n/&lt;nodeId&gt;/…</code> 路径契约、前端请求入口全量盘点、
+  —— 中心 / 节点 / 隧道、<code>/n/&lt;nodeId&gt;/…</code> 路径契约、前端请求入口全量盘点、
   bootstrap 与首帧、PR #116 的复用与返工。
 </div>
 

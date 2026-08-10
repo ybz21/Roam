@@ -44,17 +44,17 @@ type Web struct {
 	P2PMDNS    bool `yaml:"p2p_mdns"`
 }
 
-// Cluster 对应 config.yaml 里的 cluster: 段（横向扩展：标准节点 / 云端 Broker）。
+// Cluster 对应 config.yaml 里的 cluster: 段（横向扩展：标准节点 / 中心）。
 // mode=standard（默认）为现在的单机 Roam，填了 broker 就额外出站注册进云端；
-// mode=cloud 是云端 Broker，只做路由 + 注册表 + 控制台，不跑业务。
+// mode=cloud 是中心，只做路由 + 注册表 + 控制台，不跑业务。
 // 见 docs/design/cluster/architecture.html。
 type Cluster struct {
-	Mode     string `yaml:"mode"`     // standard（默认）| cloud
-	Broker   string `yaml:"broker"`   // 云端 Broker 地址（standard 模式填了才上云）
+	Mode     string `yaml:"mode"`     // standard（默认）| hub。旧值 cloud 仍能读
+	Hub      string `yaml:"hub"`      // 中心地址（standard 模式填了才上云）。旧键 broker: 仍能读，见 Load
 	Token    string `yaml:"token"`    // 一次性 enrollment token（首次注册用，之后换长期节点凭证）
 	Name     string `yaml:"name"`     // 节点显示名（默认 hostname）
 	Group    string `yaml:"group"`    // 分组（可选）
-	Insecure bool   `yaml:"insecure"` // 跳过 Broker TLS 校验（自签证书调试用，生产勿开）
+	Insecure bool   `yaml:"insecure"` // 跳过中心 TLS 校验（自签证书调试用，生产勿开）
 }
 
 // Config 是解析后的配置（env 覆盖已叠加，默认值已填充）。
@@ -103,6 +103,15 @@ func Load(path string) (*Config, error) {
 		Web     Web     `yaml:"web"`
 		Cluster Cluster `yaml:"cluster"`
 	}
+	// 旧键兼容：这套东西一度叫 broker / cloud。用户口径统一成「中心 / hub」之后，
+	// 配置也跟着改名——但已经写进 config.yaml 的那些不能一改就断，所以旧键仍然读，
+	// 只是不再往外写（SaveCluster 只写新键）。
+	var legacy struct {
+		Cluster struct {
+			Broker string `yaml:"broker"`
+		} `yaml:"cluster"`
+	}
+	_ = yaml.Unmarshal(b, &legacy)
 	if err := yaml.Unmarshal(b, &file); err != nil {
 		return nil, err
 	}
@@ -116,6 +125,9 @@ func Load(path string) (*Config, error) {
 	_ = yaml.Unmarshal(b, &mdnsProbe)
 	if mdnsProbe.Web.P2PMDNS == nil {
 		file.Web.P2PMDNS = true
+	}
+	if file.Cluster.Hub == "" {
+		file.Cluster.Hub = legacy.Cluster.Broker
 	}
 	c := &Config{Web: file.Web, Cluster: file.Cluster, Path: path}
 	c.applyDefaults()
@@ -139,6 +151,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Cluster.Mode == "" {
 		c.Cluster.Mode = "standard"
+	}
+	if c.Cluster.Mode == "cloud" {
+		c.Cluster.Mode = "hub" // 旧值：这个模式一度叫 cloud，但中心完全可以是家里的一台小主机
 	}
 }
 
@@ -193,8 +208,8 @@ func (c *Config) applyEnv() {
 	if v := firstEnv("ROAM_CLUSTER_MODE"); v != "" {
 		c.Cluster.Mode = v
 	}
-	if v := firstEnv("ROAM_CLUSTER_BROKER"); v != "" {
-		c.Cluster.Broker = v
+	if v := firstEnv("ROAM_CLUSTER_HUB", "ROAM_CLUSTER_BROKER"); v != "" {
+		c.Cluster.Hub = v
 	}
 	if v := firstEnv("ROAM_CLUSTER_TOKEN"); v != "" {
 		c.Cluster.Token = v

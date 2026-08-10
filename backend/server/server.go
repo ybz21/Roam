@@ -81,7 +81,7 @@ func New(cfg Config) *gin.Engine {
 	phone.InitConfig(cfg.DataDir)   // 手机后端配置（本地/远程 redroid/真机）持久化到 dataDir
 	hub := stream.New(tt, cfg.LogsDir)
 
-	// 公开端点（登录 / 首次设置 / 版本 / 证书 / 导航页）——与云端 Broker 共用
+	// 公开端点（登录 / 首次设置 / 版本 / 证书 / 导航页）——与中心 共用
 	mountPublic(r, a, cfg)
 
 	// 多机设置（设置页 › 多机）。**单机也挂**：用户就是从这一页把自己接到中心上的，
@@ -405,7 +405,7 @@ func firstNonEmptyStr(a, b string) string {
 }
 
 // mountPublic 注册免登录的公开端点（登录 / 首次设置 / 版本 / 检测更新 / 下载证书 /
-// 导航起始页）。单机（New）与云端 Broker（NewBroker）共用同一套入口。
+// 导航起始页）。单机（New）与中心（NewHub）共用同一套入口。
 func mountPublic(r *gin.Engine, a *auth.Auth, cfg Config) {
 	r.POST("/api/login", a.Login)
 	r.POST("/api/logout", a.Logout)

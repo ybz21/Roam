@@ -41,7 +41,7 @@ export function Navigation({
   dock: { count: number; open: boolean; onToggle: () => void; title: string } | null
   account: MenuProps['items']
   accountName: string
-  /** 多机（连了 Broker）时给：底座那枚按钮变成机器切换器；单机传 null */
+  /** 多机（连了中心）时给：底座那枚按钮变成机器切换器；单机传 null */
   node: { name: string; mark: ReactNode; dot: string; latency: string } | null
   onToggleRail: () => void
 }) {

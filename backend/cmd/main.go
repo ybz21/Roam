@@ -64,8 +64,8 @@ func main() {
 	if pw == "" {
 		log.Printf("⚠ 未设置登录口令，请首次打开网页时在界面上设置（也可编辑 %s 的 web.password）", cfgPath)
 	}
-	// 云端 Broker 不跑业务，自然也用不着 ttmux——不要为它解压内嵌副本，更不要报缺失。
-	if _, err := exec.LookPath(bin); err != nil && conf.Cluster.Mode != "cloud" {
+	// 中心 不跑业务，自然也用不着 ttmux——不要为它解压内嵌副本，更不要报缺失。
+	if _, err := exec.LookPath(bin); err != nil && conf.Cluster.Mode != "hub" {
 		// PATH 上没有 ttmux：单一二进制发行时用内嵌的 ttmux（解压到 <home>/bin）。
 		if p := clibin.Ensure(dataDir()); p != "" {
 			bin = p
@@ -127,19 +127,19 @@ func main() {
 	}
 
 	// 横向扩展模式分流（见 docs/design/cluster/architecture.html §1/§3）：
-	//   - cloud：云端 Broker，只做路由 + 注册表 + 控制台，不构造业务 runtime；
+	//   - cloud：中心，只做路由 + 注册表 + 控制台，不构造业务 runtime；
 	//   - standard（默认）：现在的单机 Roam；若配了 cluster.broker，则额外出站注册进云端。
 	// standard 下**本机监听口照常对外**——上云和局域网直连是两条并行的入口，不是二选一。
 	var r *gin.Engine
-	if conf.Cluster.Mode == "cloud" {
+	if conf.Cluster.Mode == "hub" {
 		log.Printf("以「中心」模式启动（只做入口 + 机器注册表 + 控制台，不跑本机业务）")
-		r = server.NewBroker(cfg)
+		r = server.NewHub(cfg)
 	} else {
 		// 隧道客户端先建出来（哪怕不启动）：设置页要靠它报接入状态。
 		var cl *node.Client
-		if conf.Cluster.Broker != "" {
+		if conf.Cluster.Hub != "" {
 			cl = &node.Client{
-				Broker:   conf.Cluster.Broker,
+				Hub:      conf.Cluster.Hub,
 				Token:    conf.Cluster.Token,
 				Name:     conf.Cluster.Name,
 				Group:    conf.Cluster.Group,
@@ -154,7 +154,7 @@ func main() {
 		if cl != nil {
 			cl.Handler = r // 业务 Handler 不变，隧道请求经内部主体放行本地鉴权
 			go cl.Run(context.Background())
-			log.Printf("这台机器：出站接入中心 %s（局域网直连口 %s 照常可用）", conf.Cluster.Broker, bind)
+			log.Printf("这台机器：出站接入中心 %s（局域网直连口 %s 照常可用）", conf.Cluster.Hub, bind)
 		}
 	}
 

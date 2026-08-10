@@ -1,4 +1,4 @@
-package broker
+package hub
 
 import (
 	"bufio"
@@ -18,15 +18,15 @@ import (
 	"ttmux-web/cluster/tunnel"
 )
 
-// Broker 组合注册表 + 隧道服务端 + 反代，暴露一组 gin.HandlerFunc。
-type Broker struct {
+// 中心 组合注册表 + 隧道服务端 + 反代，暴露一组 gin.HandlerFunc。
+type Hub struct {
 	reg *Registry
 	up  websocket.Upgrader
 }
 
 // New 从 dir 加载注册表（nodes.json）。
-func New(dir string) *Broker {
-	return &Broker{
+func New(dir string) *Hub {
+	return &Hub{
 		reg: NewRegistry(dir),
 		// 节点接入靠 token 鉴权（见 HandleTunnel），来源不是浏览器，放开 Origin 校验。
 		up: websocket.Upgrader{ReadBufferSize: 4096, WriteBufferSize: 4096, CheckOrigin: func(*http.Request) bool { return true }},
@@ -46,7 +46,7 @@ const (
 // HandleTunnel 是节点出站拨号的落点：先按 token 鉴权（enrollment 或长期凭证），
 // 再升级为 WebSocket、包成 yamux 会话并登记。**不走用户会话鉴权**——它是节点在连，
 // 不是浏览器。鉴权在 Upgrade 之前完成，避免给未授权连接升级协议。
-func (b *Broker) HandleTunnel(c *gin.Context) {
+func (b *Hub) HandleTunnel(c *gin.Context) {
 	var meta NodeMeta
 	if s := c.GetHeader(hdrMeta); s != "" {
 		_ = json.Unmarshal([]byte(s), &meta)
@@ -87,7 +87,7 @@ func (b *Broker) HandleTunnel(c *gin.Context) {
 		_ = sess.Close()
 	}()
 
-	// 节点主动开的流是控制流（心跳）；前端请求走 Broker 主动 Open 的流（见 proxyNode）。
+	// 节点主动开的流是控制流（心跳）；前端请求走 中心主动 Open 的流（见 proxyNode）。
 	for {
 		st, err := sess.Accept()
 		if err != nil {
@@ -101,9 +101,9 @@ func (b *Broker) HandleTunnel(c *gin.Context) {
 // readControl 读控制流：节点的心跳 JSON 与 ping 的回声，同时反向发 ping 测 RTT。
 //
 // 心跳是节点**单向上报**，拿不到往返时延，而界面每一处都要显示「12ms」；单向上报还让
-// 掉线只能靠超时发现。所以 Broker 主动在同一条流上发 {"ping":n}，节点原样回 {"pong":n}，
+// 掉线只能靠超时发现。所以 中心主动在同一条流上发 {"ping":n}，节点原样回 {"pong":n}，
 // 用发出时刻算 RTT 的 EWMA。见 architecture.html §3 ③。
-func (b *Broker) readControl(id string, conn net.Conn) {
+func (b *Hub) readControl(id string, conn net.Conn) {
 	defer conn.Close()
 
 	var mu sync.Mutex
@@ -165,15 +165,15 @@ func (b *Broker) readControl(id string, conn net.Conn) {
 	}
 }
 
-// Nodes 返回节点列表（/api/broker/nodes）。
-func (b *Broker) Nodes(c *gin.Context) {
+// Nodes 返回节点列表（/api/hub/nodes）。
+func (b *Hub) Nodes(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": b.reg.List()})
 }
 
-// Bootstrap 返回控制台启动所需的最小信息（/api/broker/bootstrap）：可访问节点 +
-// 推荐节点。**Broker 本地处理，不依赖 current node**，消除前端 currentNode 启动循环。
+// Bootstrap 返回控制台启动所需的最小信息（/api/hub/bootstrap）：可访问节点 +
+// 推荐节点。**Hub 本地处理，不依赖 current node**，消除前端 currentNode 启动循环。
 // 见 docs/design/cluster/architecture.html §7。
-func (b *Broker) Bootstrap(c *gin.Context) {
+func (b *Hub) Bootstrap(c *gin.Context) {
 	nodes := b.reg.List()
 	recommended := ""
 	for _, n := range nodes {
@@ -185,8 +185,8 @@ func (b *Broker) Bootstrap(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"nodes": nodes, "recommended": recommended}})
 }
 
-// Enroll 签发一次性接入令牌并给出接入命令（POST /api/broker/enroll）。
-func (b *Broker) Enroll(c *gin.Context) {
+// Enroll 签发一次性接入令牌并给出接入命令（POST /api/hub/enroll）。
+func (b *Hub) Enroll(c *gin.Context) {
 	var body struct{ Name, Group string }
 	_ = c.ShouldBindJSON(&body)
 	e := b.reg.CreateEnrollment(body.Name, body.Group, 0)
@@ -195,7 +195,7 @@ func (b *Broker) Enroll(c *gin.Context) {
 		scheme = "http"
 	}
 	base := scheme + "://" + c.Request.Host
-	cmd := "curl -fsSL " + base + "/install.sh | bash -s -- --broker " + base + " --token " + e.Token
+	cmd := "curl -fsSL " + base + "/install.sh | bash -s -- --hub " + base + " --token " + e.Token
 	if body.Name != "" {
 		cmd += " --name " + strconv.Quote(body.Name)
 	}
@@ -205,7 +205,7 @@ func (b *Broker) Enroll(c *gin.Context) {
 // ProxyNode 把 /n/:nodeId/*path 反代进目标节点的隧道流（REST + WebSocket 升级）。
 // 转发本体是 httputil.ReverseProxy（同 backend/browser/devtools.go），只是把底层连接
 // 换成该节点隧道上 Open() 出来的 yamux 流。见架构文档 §7.2。
-func (b *Broker) ProxyNode(c *gin.Context) {
+func (b *Hub) ProxyNode(c *gin.Context) {
 	id := c.Param("nodeId")
 	sess := b.reg.Session(id)
 	if sess == nil {
