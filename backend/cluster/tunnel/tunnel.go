@@ -3,7 +3,7 @@
 // 文件下载、一次 CDP 反代各占一条流，互不阻塞；心跳走单独的控制流。
 //
 // 载体用项目已有的 gorilla/websocket（走 443/wss 对企业防火墙最友好），多路复用用
-// hashicorp/yamux。见 docs/design/cluster/客户端-服务端横向扩展设计.md §7.1。
+// hashicorp/yamux。见 docs/design/cluster/architecture.html §9。
 package tunnel
 
 import (

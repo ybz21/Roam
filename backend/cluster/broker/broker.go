@@ -172,7 +172,7 @@ func (b *Broker) Nodes(c *gin.Context) {
 
 // Bootstrap 返回控制台启动所需的最小信息（/api/broker/bootstrap）：可访问节点 +
 // 推荐节点。**Broker 本地处理，不依赖 current node**，消除前端 currentNode 启动循环。
-// 见 docs/design/cluster/多机切换交互设计.md §9.1。
+// 见 docs/design/cluster/architecture.html §7。
 func (b *Broker) Bootstrap(c *gin.Context) {
 	nodes := b.reg.List()
 	recommended := ""

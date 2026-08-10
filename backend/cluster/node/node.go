@@ -1,6 +1,6 @@
 // Package node 是标准节点的出站隧道客户端：拨号云端 Broker、注册 / 重连、把 Broker
 // 转发进来的业务请求交给本机业务 Handler、并定期上报心跳。对现有业务 handler 零改动
-// ——只是把「本机 loopback」换成「隧道」。见 docs/design/cluster/客户端-服务端横向扩展设计.md §4。
+// ——只是把「本机 loopback」换成「隧道」。见 docs/design/cluster/architecture.html §1。
 package node
 
 import (

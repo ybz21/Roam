@@ -12,7 +12,7 @@ import (
 // NewBroker 装配**云端 Broker** 的 Gin 引擎。它**不复用 New()**——不构造业务 runtime、
 // 不启动 SyncLoop、不初始化 browser / phone / pty，只做：用户认证入口、静态资源（控制台）、
 // 节点隧道接入、Broker-local API（/api/broker/*）、以及把 /n/:nodeId/* 反代进目标节点。
-// 见 docs/design/cluster/客户端-服务端横向扩展设计.md §4。
+// 见 docs/design/cluster/architecture.html §1。
 func NewBroker(cfg Config) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()

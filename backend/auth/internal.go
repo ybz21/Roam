@@ -14,7 +14,7 @@ import (
 // 做法：节点在从隧道 Accept 到请求、交给业务 Handler 之前，用 WithInternal 在**进程内**
 // 的 request context 上打一个私有标记。context 值无法经 HTTP 线缆伪造，只有本进程里
 // “已从可信隧道取出该请求”的代码路径才能设置它。Middleware 见到该标记即放行。
-// 见 docs/design/cluster/客户端-服务端横向扩展设计.md §6。
+// 见 docs/design/cluster/architecture.html §8。
 type internalKey struct{}
 
 // WithInternal 标记该请求来自已认证隧道（仅限进程内调用，不可经线缆伪造）。

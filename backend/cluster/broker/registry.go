@@ -1,6 +1,6 @@
 // Package broker 是云端 Broker 的数据面 + 控制面：节点注册表、enrollment 签发、
 // 隧道服务端、以及把带 nodeId 的前端请求反代进目标节点隧道。它只做路由 + 注册，
-// 不重实现任何业务能力。见 docs/design/cluster/客户端-服务端横向扩展设计.md §2.3 / §7。
+// 不重实现任何业务能力。见 docs/design/cluster/architecture.html §2.3 / §7。
 package broker
 
 import (
