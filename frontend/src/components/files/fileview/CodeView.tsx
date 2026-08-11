@@ -1,9 +1,10 @@
 // 文本/代码/JSON/Markdown(源码) → Monaco 编辑器（行号、语法高亮、可编辑；截断的大文件只读）。
 // Monaco 很重 → 懒加载，不进首屏包。tab 语境下全屏无边框，背景由 CodeEditor 统一成应用底色。
-import { lazy, Suspense } from 'react'
+import {Suspense } from 'react'
 import { Spin } from 'antd'
+import { lazyRetry } from '../../lazy-retry'
 
-const CodeEditor = lazy(() => import('../CodeEditor'))
+const CodeEditor = lazyRetry(() => import('../CodeEditor'))
 
 export function CodeView({ value, language, dark, readOnly, tabbed, height, onChange, onSave, revealLine }: {
   value: string

@@ -4,7 +4,7 @@
 // 对比 base（仅 worktree 会话）。详情列二选一：文件差异 或 提交详情，宽屏贴面板左侧、窄屏整屏推入。
 //
 // 本文件只做编排：取数、状态、菜单、危险操作确认；渲染都在 ./git/* 里。
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Dropdown, Input, Popover, Segmented, Spin, Tag, Tooltip, App as AntApp } from 'antd'
 import type { MenuProps } from 'antd'
 import { api } from '../../api'
@@ -24,8 +24,9 @@ import { InspectorLayers, type LayerSize } from '../shell/InspectorLayers'
 import { useBackDismiss } from '../shell/useBackDismiss'
 import { CheckIcon, ChevronDown, ChevronRight, WarnIcon } from '../../icons'
 import { WindowsIcon } from '../../icons'
+import { lazyRetry } from '../lazy-retry'
 
-const WorktreePanel = lazy(() => import('./WorktreePanel'))
+const WorktreePanel = lazyRetry(() => import('./WorktreePanel'))
 
 interface GitFile { path: string; orig?: string; index: string; work: string; staged: boolean; untracked: boolean }
 interface GitCommit { hash: string; short: string; subject: string; author: string; when: string }

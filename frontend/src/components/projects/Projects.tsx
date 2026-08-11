@@ -7,7 +7,7 @@
 // 视觉基调：终端工业风的克制精修——居中 880px 阅读列、composer 是全页唯一 hero
 // （渐变卡面 + focus 辉光环）、git 数据一律等宽字、行 hover 左导轨渐显、
 // 分区头沿用设计图纸体例、入场一次性 stagger。全部颜色走 index.css token。
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import {Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { App as AntApp, AutoComplete, Button, Dropdown, Input, Modal, Popconfirm, Segmented, Select, Space, Spin, Tag, Tooltip, Typography } from 'antd'
 import type { InputRef, MenuProps } from 'antd'
@@ -35,12 +35,13 @@ import { useSwarmProjection, normDir } from './project-list/swarm-projection'
 import FileBrowser from '../files/FileBrowser'
 import { AgentLogo, ArchiveIcon, ArrowDown, ArrowUp, CheckIcon, ChevronDown, CircleIcon, CloseIcon, DiffIcon, ForkIcon, MergeIcon, PaperclipIcon, PlayIcon, PlusIcon, PushIcon, SwarmIcon, TerminalIcon, TrashIcon, WarnIcon, WindowsIcon } from '../../icons'
 import { BranchIcon } from '../git/parts'
+import { lazyRetry } from '../lazy-retry'
 
-const WorktreePanel = lazy(() => import('../git/WorktreePanel'))
-const GitPanel = lazy(() => import('../git/GitPanel'))
-const RaceCreateModal = lazy(() => import('../swarm/Race').then((m) => ({ default: m.RaceCreateModal })))
-const RaceComparePanel = lazy(() => import('../swarm/Race').then((m) => ({ default: m.RaceComparePanel })))
-const NewSwarmModal = lazy(() => import('../swarm/Swarm').then((m) => ({ default: m.NewSwarmModal })))
+const WorktreePanel = lazyRetry(() => import('../git/WorktreePanel'))
+const GitPanel = lazyRetry(() => import('../git/GitPanel'))
+const RaceCreateModal = lazyRetry(() => import('../swarm/Race').then((m) => ({ default: m.RaceCreateModal })))
+const RaceComparePanel = lazyRetry(() => import('../swarm/Race').then((m) => ({ default: m.RaceComparePanel })))
+const NewSwarmModal = lazyRetry(() => import('../swarm/Swarm').then((m) => ({ default: m.NewSwarmModal })))
 
 // 项目列表排序模式（置顶恒在最前；选择持久化）。
 // 「需要你」是默认档——概览并进来之后，首屏第一问是「该做什么」，不是「按名字排一排」。
