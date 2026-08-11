@@ -277,17 +277,20 @@ export function buildSettings(deps: {
   const byId: Record<string, SettingsPageDef> = {}
   pages.forEach((p) => { byId[p.id] = p })
 
+  // 段标题本身就把「值写在哪」说清了，不再挂第二行注解——那是设计稿里的解释文，
+  // 搬进产品就是每次开设置都要重读一遍的噪音。分段也跟着改：原来「整个集群 / 这台设备」
+  // 把两类硬塞进一个标题，才不得不写注解去解释。现在安全归「这台机器」（口令与两步验证
+  // 写的就是这台的 config.yaml），集群只剩多机，关于与安装挂在最后、不需要段标题。
   const nodes: TreeNode[] = [
-    { kind: 'section', title: t('set.secMine'), note: t('set.secMineNote') },
+    { kind: 'section', title: t('set.secMine'), note: '' },
     { kind: 'leaf', page: 'common' },
     { kind: 'parent', id: 'ui', title: t('set.groupUi'), kids: ['ui.look', 'ui.layout'] },
     { kind: 'parent', id: 'agent', title: t('set.groupAgent'), kids: ['agent.bin', 'agent.new'] },
     // 这一段的页直接摊平：段标题已经写了「这台机器」，再套一层同名的父节点是把同一件事说两遍
-    { kind: 'section', title: deps.nodeLabel ? t('set.secNode', { node: deps.nodeLabel }) : t('set.groupNode'), note: t('set.secNodeNote') },
-    ...(['node.browser', 'node.phone', 'node.speech', 'node.p2p', 'node.env'].map((page) => ({ kind: 'leaf', page } as TreeNode))),
-    { kind: 'section', title: t('set.secRest'), note: t('set.secRestNote') },
+    { kind: 'section', title: deps.nodeLabel ? t('set.secNode', { node: deps.nodeLabel }) : t('set.groupNode'), note: '' },
+    ...(['node.browser', 'node.phone', 'node.speech', 'node.p2p', 'node.env', 'sec'].map((page) => ({ kind: 'leaf', page } as TreeNode))),
+    { kind: 'section', title: t('set.secCluster'), note: '' },
     { kind: 'leaf', page: 'cluster' },
-    { kind: 'leaf', page: 'sec' },
     { kind: 'leaf', page: 'about' },
   ]
 

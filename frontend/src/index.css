@@ -3051,3 +3051,17 @@ html[data-size="compact"] .cc-run-slot { width: auto; }
 .tt-hub-banner .grow { flex: 1; }
 .tt-hub-banner.bad { border-color: var(--danger-border); background: var(--danger-soft); }
 .tt-hub-banner.bad > svg { color: var(--danger); }
+/* 切换器下拉里的「中心」那一行：给一个与机器方章同尺寸的方框，三行文字才落在同一条竖线上。
+   中心不是第 N 台机器，所以方框是虚边 + 云图标，不用方章那种实心身份记号。 */
+.tt-nodemenu .mk {
+  flex: 0 0 16px; width: 16px; height: 16px; border-radius: 5px;
+  display: grid; place-items: center; color: var(--text-dimmer);
+  border: 1px dashed var(--border);
+}
+.tt-nodemenu.hub .nm { color: var(--text-dim); }
+.tt-nodemenu.hub.alarm .mk { color: var(--danger); border-color: var(--danger-border); border-style: solid; }
+.tt-nodemenu.hub.alarm .nm { color: var(--text-bright); }
+.tt-nodemenu.hub.alarm .lat { color: var(--danger); }
+/* 节点的宿主概况：只给两个数（CPU/内存），完整曲线在那台机器的插件面板里 */
+.tt-hub-host { display: inline-flex; gap: var(--sp-2); font-family: var(--mono); }
+.tt-hub-host .hot { color: var(--warn); }

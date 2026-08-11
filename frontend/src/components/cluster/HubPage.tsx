@@ -13,6 +13,7 @@ import { relTime } from '../../time-format'
 import { NodeMark, nodeDotColor } from './NodeMark'
 import { setCurrentNode, useClusterNodes, useCurrentNodeId, type ClusterNode } from './node-url'
 import { assessHub } from './hub-health'
+import HostMonitorPanel, { type Snapshot } from '../plugins/HostMonitorPanel'
 import { WarnIcon } from '../../icons'
 
 type Sample = { at: number; rss: number; goroutines: number; heap: number; tunnels: number; requests: number }
@@ -20,6 +21,7 @@ type HubEvent = { at: number; kind: string; node?: string; secs?: number }
 type Host = {
   memTotal: number; memAvailable: number; swapTotal: number; swapFree: number
   load1: number; load5: number; load15: number; cpus: number
+  cpuPercent: number; hostname: string; uptimeSecs: number
 }
 type SelfData = {
   version: string; startedAt: number; uptimeSecs: number; pprof: string
@@ -37,6 +39,40 @@ async function getSelf(): Promise<SelfData | null> {
 }
 
 function mb(bytes: number): number { return Math.round(bytes / 1024 / 1024) }
+
+/**
+ * 把 /api/hub/self 映射成 host-monitor 插件那套 Snapshot——**为了复用同一个面板**。
+ *
+ * 中心没有插件宿主（NewHub 不构造业务 runtime），所以拿不到插件的数据；但面板只认形状，
+ * 不认来源。与其为中心重画一套监控 UI（然后两套长期不同步、术语还不一致），
+ * 不如在这里做一次映射。缺的字段照实留空：中心不采 GPU 与磁盘，disks/gpus 就是 null，
+ * 面板本来就按「没有这一节」处理；网络给 0 而不是假数，因为面板会硬取这两个字段。
+ */
+function hubSnapshot(d: SelfData): Snapshot {
+  const h = d.host || ({} as Host)
+  const used = Math.max(0, h.memTotal - h.memAvailable)
+  return {
+    time: new Date().toISOString(),
+    host: {
+      hostname: h.hostname || location.hostname,
+      uptimeSec: h.uptimeSecs, load1: h.load1, load5: h.load5, load15: h.load15,
+    },
+    cpu: { cores: h.cpus, usagePercent: h.cpuPercent || 0 },
+    memory: {
+      total: h.memTotal, used, available: h.memAvailable,
+      usagePercent: h.memTotal ? (used / h.memTotal) * 100 : 0,
+      swapTotal: h.swapTotal, swapUsed: Math.max(0, h.swapTotal - h.swapFree),
+    },
+    disks: null,
+    gpus: null,
+    network: { rxBytesPerSec: 0, txBytesPerSec: 0 },
+    // 历史直接用中心自己的采样：5 分钟一点，比插件的 3 秒粗，但它问的本来就是「有没有在爬」
+    history: (d.samples || []).map((x) => ({
+      t: x.at, cpu: 0, gpu: 0, rx: 0, tx: 0,
+      mem: h.memTotal ? (x.rss / h.memTotal) * 100 : 0,
+    })),
+  }
+}
 function gb(bytes: number): string { return (bytes / 1024 / 1024 / 1024).toFixed(1) }
 
 /** 迷你曲线。单点数字看不出「稳在 20」还是「正在爬」——曲线才是证据。
@@ -66,10 +102,46 @@ function Stat({ label, value, unit, sub, series, tone, waiting }: {
   )
 }
 
-function NodeCard({ n, current, hubVersion, onEnter }: {
-  n: ClusterNode; current: boolean; hubVersion: string; onEnter: () => void
+/**
+ * 拉某台节点的宿主机概况。**复用现成的 host-monitor 插件**，中心不重画监控——
+ * 中心本来就是反代，这条路几乎白拿：/n/<id>/api/plugins/<插件>/run 就是节点自己那套。
+ *
+ * 只取两个数（CPU% / 内存%）做摘要，完整的 CPU/GPU/磁盘/网络 + 历史曲线仍在那台机器的
+ * 插件面板里——在这里重画一遍监控 UI 是白费力气，还会和插件面板长期不同步。
+ */
+async function nodeHostSummary(nodeId: string): Promise<{ cpu: number; mem: number } | null> {
+  try {
+    const r = await fetch(`/n/${encodeURIComponent(nodeId)}/api/plugins/roam.host-monitor/run`, {
+      method: 'POST', cache: 'no-store',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command: 'host-monitor.stats', args: {} }),
+    })
+    if (!r.ok) return null // 插件没装/没开：这台就不显示，不报错
+    // 经反代回来的是插件的原始返回：Snapshot 在**顶层**，没有 data 包装
+    // （节点侧的 PluginRun 直接把插件结果写回；踩过一次，按 .data 取会永远拿到 undefined）
+    const j = await r.json()
+    const snap = (j?.data ?? j) as { cpu?: { usagePercent: number }; memory?: { usagePercent: number } }
+    if (!snap?.cpu || !snap?.memory) return null
+    return { cpu: Math.round(snap.cpu.usagePercent), mem: Math.round(snap.memory.usagePercent) }
+  } catch { return null }
+}
+
+function NodeCard({ n, current, hubVersion, onEnter, onMonitor }: {
+  n: ClusterNode; current: boolean; hubVersion: string; onEnter: () => void; onMonitor: () => void
 }) {
   const { t } = useI18n()
+  // 宿主概况按需拉，失败就当没有——插件可能没装、没开，或者那台正忙
+  const [host, setHost] = useState<{ cpu: number; mem: number } | null>(null)
+  // CPU% 是「两次取样之间的平均」，所以面板每次轮询都要真的再问一次中心，
+  // 拿 15 秒前那份缓存重算的话，这个数会永远停在上一轮（实测停在 0%）。
+  useEffect(() => {
+    if (!n.online) return
+    let stop = false
+    const load = () => nodeHostSummary(n.id).then((h) => { if (!stop) setHost(h) })
+    load()
+    const iv = setInterval(load, 30000)
+    return () => { stop = true; clearInterval(iv) }
+  }, [n.id, n.online])
   // 版本不一致会出怪事（前端和后端各说各话），而在这一页之前没有任何地方会告诉你
   const verMismatch = !!n.version && !!hubVersion && n.version !== hubVersion
   return (
@@ -89,6 +161,12 @@ function NodeCard({ n, current, hubVersion, onEnter }: {
         {n.online && <span>{t('node.sessionsN', { count: n.sessionCount })}</span>}
         {!!n.version && <span className="mono">{n.version}</span>}
         {verMismatch && <span className="tt-hub-chip warn">{t('hub.versionMismatch')}</span>}
+        {host && (
+          <span className="tt-hub-host">
+            <span className={host.cpu > 85 ? 'hot' : ''}>CPU {host.cpu}%</span>
+            <span className={host.mem > 85 ? 'hot' : ''}>{t('hub.memShort')} {host.mem}%</span>
+          </span>
+        )}
         {(n.capabilities || []).length > 0 && (
           <span className="caps">{(n.capabilities || []).map((c) => <span key={c}>{c}</span>)}</span>
         )}
@@ -97,6 +175,9 @@ function NodeCard({ n, current, hubVersion, onEnter }: {
         <button type="button" className="tt-act" disabled={!n.online || current} onClick={onEnter}>
           {current ? t('hub.enterCurrent') : t('hub.enter')}
         </button>
+        {host && (
+          <button type="button" className="tt-act" onClick={onMonitor}>{t('hub.fullMonitor')}</button>
+        )}
       </div>
     </div>
   )
@@ -109,6 +190,8 @@ export default function HubPage() {
   const curNodeId = useCurrentNodeId()
   const [self, setSelf] = useState<SelfData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [hostOpen, setHostOpen] = useState(false)
+  const [monitorNode, setMonitorNode] = useState<ClusterNode | null>(null)
 
   useEffect(() => {
     let stop = false
@@ -215,36 +298,28 @@ export default function HubPage() {
             {nodes.length === 0
             ? <div className="tt-hub-empty small">{t('hub.noNodes')}</div>
             : nodes.map((n) => (
-            <NodeCard key={n.id} n={n} current={n.id === curNodeId} hubVersion={self.version} onEnter={() => enter(n.id)} />
+            <NodeCard key={n.id} n={n} current={n.id === curNodeId} hubVersion={self.version}
+              onEnter={() => enter(n.id)} onMonitor={() => setMonitorNode(n)} />
             ))}
           </div>
-          {/* 宿主机单独一块，不混进上面四格：那四格问的是「中心这个进程」，
-              这一块问的是「它跑在什么样的机器上」。节点那边的完整资源监控由
-              roam.host-monitor 插件负责，中心不重复造——中心压根不跑插件宿主。 */}
+          {/* 宿主机这一块用的是**插件页那个面板**，不是另画一套：面板只认 Snapshot 形状，
+              中心把 /api/hub/self 映射过去即可（见 hubSnapshot）。默认收起——上面四格已经
+              给了结论，这里是「要细看时」的地方。 */}
           {!!host.memTotal && (
             <div className="tt-hub-card">
               <h4>{t('hub.host')}<span className="grow" />
-                <span className="dim">{t('hub.hostCpus', { n: host.cpus })}</span>
+                <span className="dim">
+                  {t('hub.hostBrief', { pct: Math.round(((host.memTotal - host.memAvailable) / host.memTotal) * 100), load: host.load1.toFixed(2) })}
+                </span>
+                <button type="button" className="tt-act" onClick={() => setHostOpen((v) => !v)}>
+                  {hostOpen ? t('hub.collapse') : t('hub.expand')}
+                </button>
               </h4>
-              <div className="body">
-                <div className="kv"><span>{t('hub.hostMem')}</span>
-                  <b>{gb(host.memTotal - host.memAvailable)} / {gb(host.memTotal)} GB</b>
-                  <span className="dim">{t('hub.hostAvail', { gb: gb(host.memAvailable) })}</span>
+              {hostOpen && (
+                <div className="body">
+                  <HostMonitorPanel pluginId="roam.host-monitor" enabled t={t} fetchSnapshot={async () => hubSnapshot((await getSelf()) || self)} />
                 </div>
-                {host.swapTotal > 0 && (
-                  <div className="kv"><span>Swap</span>
-                    <b>{gb(host.swapTotal - host.swapFree)} / {gb(host.swapTotal)} GB</b>
-                    <span className="dim">{host.swapTotal - host.swapFree > host.swapTotal * 0.2 ? t('hub.swapping') : ''}</span>
-                  </div>
-                )}
-                <div className="kv"><span>{t('hub.load')}</span>
-                  <b style={{ color: host.load1 > host.cpus * 2 ? 'var(--danger)' : host.load1 > host.cpus ? 'var(--warn)' : undefined }}>
-                    {host.load1.toFixed(2)}
-                  </b>
-                  <span className="dim">{host.load5.toFixed(2)} · {host.load15.toFixed(2)}</span>
-                </div>
-                <p className="hint">{t('hub.hostWhy')}</p>
-              </div>
+              )}
             </div>
           )}
 
@@ -289,6 +364,21 @@ export default function HubPage() {
           </div>
         </div>
       </div>
+      {monitorNode && (
+        <Modal open width={900} footer={null} title={monitorNode.name}
+          onCancel={() => setMonitorNode(null)} destroyOnClose>
+          {/* 同一个面板，取数换成「经中心反代拉那台的插件」——中心不重画监控 UI */}
+          <HostMonitorPanel pluginId="roam.host-monitor" enabled t={t} fetchSnapshot={async () => {
+            const r = await fetch(`/n/${encodeURIComponent(monitorNode.id)}/api/plugins/roam.host-monitor/run`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store',
+              body: JSON.stringify({ command: 'host-monitor.stats', args: {} }),
+            })
+            if (!r.ok) throw new Error(String(r.status))
+            const j = await r.json()
+            return (j?.data ?? j) as Snapshot
+          }} />
+        </Modal>
+      )}
     </div>
   )
 }

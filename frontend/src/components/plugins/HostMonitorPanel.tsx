@@ -8,7 +8,7 @@ import { ArrowDown, ArrowUp, Swatch } from '../../icons'
 
 type HistoryDot = { t: number; cpu: number; mem: number; gpu: number; rx: number; tx: number }
 
-type Snapshot = {
+export type Snapshot = {
   time: string
   host: {
     hostname: string; os?: string; kernel?: string; arch?: string
@@ -75,10 +75,19 @@ function StatCard({ title, extra, children }: {
   )
 }
 
-export default function HostMonitorPanel({ pluginId, enabled, t }: {
+/**
+ * 取数可以注入。这一层是为「中心页复用同一个面板」加的——面板本来就只认 Snapshot 这个形状，
+ * 谁回这个形状它就画谁：
+ *   · 插件页 —— 默认走 plugin run（本机）
+ *   · 中心页看某台节点 —— 经中心反代拉那台的插件
+ *   · 中心页看中心自己 —— 中心没有插件宿主，由 /api/hub/self 映射成同一形状
+ * 与其为中心重画一套监控 UI（然后两套长期不同步），不如把数据源变成参数。
+ */
+export default function HostMonitorPanel({ pluginId, enabled, t, fetchSnapshot }: {
   pluginId: string
   enabled: boolean
   t: (k: string, vars?: Record<string, string | number>) => string
+  fetchSnapshot?: () => Promise<Snapshot>
 }) {
   const [snap, setSnap] = useState<Snapshot | null>(null)
   const [error, setError] = useState('')
@@ -89,8 +98,9 @@ export default function HostMonitorPanel({ pluginId, enabled, t }: {
     if (busy.current || document.hidden) return
     busy.current = true
     try {
-      const data = await api('POST', `/plugins/${encodeURIComponent(pluginId)}/run`,
-        { command: 'host-monitor.stats', args: {} })
+      const data = fetchSnapshot
+        ? await fetchSnapshot()
+        : await api('POST', `/plugins/${encodeURIComponent(pluginId)}/run`, { command: 'host-monitor.stats', args: {} })
       setSnap(data)
       setError('')
     } catch (e: any) {
@@ -98,7 +108,7 @@ export default function HostMonitorPanel({ pluginId, enabled, t }: {
     } finally {
       busy.current = false
     }
-  }, [pluginId])
+  }, [pluginId, fetchSnapshot])
 
   useEffect(() => {
     if (!enabled) return
