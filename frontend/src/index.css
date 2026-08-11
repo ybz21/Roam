@@ -2956,7 +2956,9 @@ html[data-size="compact"] .cc-run-slot { width: auto; }
    中心是所有流量的必经之路，它手上有一堆别处看不到的东西：自己的内存/goroutine 曲线、
    经它转发的流量、每台机器的版本与能力、最近发生了什么。2026-08-11 它卡死十几个小时
    无人发现，就是因为这些在界面上一样都没有。 */
-.tt-hub { display: flex; flex-direction: column; gap: var(--sp-4); width: 100%; }
+/* 内容封顶 1400：这一页在 3840 的屏上会被拉成四个 470px 的卡片，
+   「25MB」三个字孤零零挂在左上角，曲线也拉平成一条直线——数字和曲线都要有密度才读得动。 */
+.tt-hub { display: flex; flex-direction: column; gap: var(--sp-4); width: 100%; max-width: 1400px; }
 .tt-hub-head { display: flex; align-items: center; gap: var(--sp-2); }
 .tt-hub-head .sub { font-size: var(--fs-meta); color: var(--text-dimmer); }
 .tt-hub-head .grow { flex: 1; }
@@ -2964,6 +2966,7 @@ html[data-size="compact"] .cc-run-slot { width: auto; }
 .tt-hub-empty.small { padding: 20px 12px; text-align: left; }
 
 .tt-hub-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: var(--sp-3); }
+.tt-hub-stats > * { min-width: 0; }
 .tt-hub-stat {
   border: 1px solid var(--border-subtle); border-radius: var(--r-card);
   background: var(--bg-container); padding: 12px 14px;
@@ -2980,7 +2983,10 @@ html[data-size="compact"] .cc-run-slot { width: auto; }
 .tt-hub-stat.warn .v { color: var(--warn); }
 .tt-hub-spark { margin-top: 8px; height: 26px; width: 100%; }
 
-.tt-hub-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: var(--sp-4); align-items: start; }
+/* 右栏定宽：事件行是「时间 + 一句话」，再宽也不多装一个字，宽出来的全是空白。
+   左栏跟着长——机器卡片里那排能力芯片和版本号是真的要地方。 */
+.tt-hub-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 400px); gap: var(--sp-4); align-items: start; }
+@media (max-width: 900px) { .tt-hub-cols { grid-template-columns: 1fr; } }
 .tt-hub-side { display: flex; flex-direction: column; gap: var(--sp-4); }
 .tt-hub-card { border: 1px solid var(--border-subtle); border-radius: var(--r-card); background: var(--bg-container); }
 .tt-hub-card > h4 {
@@ -3033,3 +3039,15 @@ html[data-size="compact"] .cc-run-slot { width: auto; }
 .tt-hub-spark.waiting {
   display: flex; align-items: flex-end; font-size: var(--fs-micro); color: var(--text-dimmer); opacity: .7;
 }
+/* 中心不健康：切换器那枚常驻按钮上的红点会呼吸——静止的点在余光里等于不存在 */
+.tt-nav-node.alarm .nd { animation: tt-nd-pulse 1.8s ease-in-out infinite; }
+@keyframes tt-nd-pulse { 0%, 100% { opacity: 1 } 50% { opacity: .3 } }
+@media (prefers-reduced-motion: reduce) { .tt-nav-node.alarm .nd { animation: none; } }
+.tt-hub-banner {
+  display: flex; align-items: center; gap: var(--sp-2); padding: 10px 14px;
+  border-radius: var(--r-card); border: 1px solid var(--warn-border);
+  background: var(--warn-soft); color: var(--text-bright); font-size: var(--fs-sm);
+}
+.tt-hub-banner .grow { flex: 1; }
+.tt-hub-banner.bad { border-color: var(--danger-border); background: var(--danger-soft); }
+.tt-hub-banner.bad > svg { color: var(--danger); }

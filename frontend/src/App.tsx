@@ -6,6 +6,7 @@
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { bootstrapCluster, setCurrentNode, useClusterNodes, useCurrentNodeId } from './components/cluster/node-url'
 import { NodeMark, nodeDotColor } from './components/cluster/NodeMark'
+import { useHubHealth } from './components/cluster/hub-health'
 import {
   Layout, Button, Card, List, Tag, Form, Input, Select, Segmented, Tabs, Descriptions,
   Statistic, Row, Col, Space, Popconfirm, Empty, Modal, App as AntApp, Typography, Spin, Tooltip, Dropdown, Checkbox, Progress, AutoComplete, Radio, Switch, Collapse, InputNumber,
@@ -117,6 +118,8 @@ export default function App() {
   const clusterNodes = useClusterNodes()
   const curNodeId = useCurrentNodeId()
   const curNode = clusterNodes.find((n) => n.id === curNodeId) || null
+  // 中心不健康时，切换器那枚常驻按钮亮红点——见 cluster/hub-health.ts 里为什么不用绝对阈值
+  const hubHealth = useHubHealth()
 
   const [authed, setAuthed] = useState<boolean | null>(null)
   const [route, setRoute] = useState(() => normalizeRoute(location.hash.replace(/^#\/?/, '') || 'projects'))
@@ -610,8 +613,10 @@ export default function App() {
       label: (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 168 }}>
           <span style={{ flex: 1 }}>{t('hub.title')}</span>
-          <span style={{ fontSize: 'var(--fs-micro)', color: 'var(--text-dimmer)' }}>
-            {t('hub.onlineShort', { n: clusterNodes.filter((n) => n.online).length })}
+          <span style={{ fontSize: 'var(--fs-micro)', color: hubHealth.level === 'ok' ? 'var(--text-dimmer)' : 'var(--danger)' }}>
+            {hubHealth.level === 'ok'
+              ? t('hub.onlineShort', { n: clusterNodes.filter((n) => n.online).length })
+              : t('hub.why.' + (hubHealth.reasons[0] || 'unknown'))}
           </span>
         </span>
       ),
@@ -655,6 +660,7 @@ export default function App() {
             accountName={t('nav.thisDevice')}
             account={accountMenu}
             nodeMenu={nodeItems}
+            hubAlarm={hubHealth.level === 'ok' ? undefined : t('hub.why.' + (hubHealth.reasons[0] || 'unknown'))}
             node={curNode ? {
               name: curNode.name,
               // 切换器那枚**不涂蓝**：它永远是当前机器，`current` 那层高亮不传递任何信息，

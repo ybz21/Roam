@@ -28,7 +28,7 @@ export type NavEntry = {
 export type NavGroup = { label: string; items: NavEntry[] }
 
 export function Navigation({
-  rail, active, groups, onGo, settings,
+  rail, active, groups, onGo, settings, hubAlarm,
   linkStatus, account, accountName, node, nodeMenu, onToggleRail,
 }: {
   /** 48px 轨态：用户收起 / Focus / 非 large 档 */
@@ -45,6 +45,8 @@ export function Navigation({
   node: { name: string; mark: ReactNode; dot: string; latency: string } | null
   /** 切换器下拉里的机器列表（含中心）；单机时不会用到 */
   nodeMenu: MenuProps['items']
+  /** 中心不健康时的一句话原因；给了就在切换器上亮红点（见 cluster/hub-health.ts） */
+  hubAlarm?: string
   onToggleRail: () => void
 }) {
   const { t } = useI18n()
@@ -89,12 +91,15 @@ export function Navigation({
             单机（没连中心）时整块不渲染，侧栏与今天逐像素一致。 */}
         {node && (
           <Dropdown menu={{ items: nodeMenu }} trigger={['click']} placement={rail ? 'topLeft' : 'top'}>
-            <button type="button" className="tt-nav-node"
-              title={`${node.name} · ${node.latency}`}
+            <button type="button" className={`tt-nav-node${hubAlarm ? ' alarm' : ''}`}
+              title={hubAlarm ? `${node.name} · ${hubAlarm}` : `${node.name} · ${node.latency}`}
               aria-label={t('node.aria.switcher', { name: node.name })}>
               <span className="av">{node.mark}</span>
               {!rail && <span className="nm">{node.name}</span>}
-              <i className={`nd${rail ? ' rail' : ''}`} style={{ background: node.dot }} />
+              {/* 中心不健康时这一枚亮红点：它常驻在每一页，是唯一能保证被看见的位置。
+                  2026-08-11 中心卡死十几个小时无人发现——当时就算中心页已经存在，
+                  也得先「发现打不开」才会想起去看它。 */}
+              <i className={`nd${rail ? ' rail' : ''}`} style={{ background: hubAlarm ? 'var(--danger)' : node.dot }} />
               {!rail && <span className="dots">{chevronDown}</span>}
             </button>
           </Dropdown>
