@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -324,5 +325,65 @@ func TestEnrollFlagsPrivateFallback(t *testing.T) {
 	_ = json.NewDecoder(resp.Body).Decode(&out)
 	if !out.Data.Private {
 		t.Error("127.0.0.1 应被标成内网地址，好提醒「别处的机器接不进来」")
+	}
+}
+
+// TestProxyDoesNotLeakGoroutines 盯的是一个把中心压死过的真事（2026-08-11）：
+// ProxyNode 曾经**每个请求 new 一个 http.Transport**。Transport 自带空闲连接池，请求结束后
+// 那条 yamux 流被放回池里、readLoop/writeLoop 继续挂着等数据；手写 Transport 的
+// IdleConnTimeout 默认是 0（永不超时），而 Transport 本身随请求结束被丢掉，再没人调
+// CloseIdleConnections()。于是每个经中心代理的请求都留下两个永不退出的 goroutine。
+//
+// 线上表现：19185 个 goroutine（9572 对卡在 yamux.Stream.Read，最久的挂了 661 分钟），
+// RSS 从 20MB 涨到 300MB，端口能连但不再 accept——控制台每 5 秒轮询一次，一夜就是几千个。
+//
+// 这里连打 40 个请求，断言 goroutine 增量远小于「每请求 2 个」。不卡死值：并发与运行时
+// 自己的 goroutine 都会浮动，只要不是线性增长就行（泄漏时这里会 +80 以上）。
+func TestProxyDoesNotLeakGoroutines(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	brk := hub.New(t.TempDir())
+
+	r := gin.New()
+	r.GET("/cluster/tunnel", brk.HandleTunnel)
+	r.POST("/api/hub/enroll", brk.Enroll)
+	r.GET("/api/hub/nodes", brk.Nodes)
+	r.Any("/n/:nodeId/*path", brk.ProxyNode)
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	token := enroll(t, srv.URL)
+	biz := http.NewServeMux()
+	biz.HandleFunc("/api/ping", func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "pong") })
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cl := &node.Client{
+		Hub: srv.URL, Token: token, Name: "leak-node", Version: "test",
+		CredPath: filepath.Join(t.TempDir(), "node.json"), Handler: biz,
+	}
+	go cl.Run(ctx)
+	id := waitOnline(t, srv.URL)
+
+	get := func() {
+		resp, err := http.Get(srv.URL + "/n/" + id + "/api/ping")
+		if err != nil {
+			t.Fatalf("反代请求失败: %v", err)
+		}
+		_, _ = io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+	}
+
+	get() // 预热：第一次会建隧道流、起 readLoop，那一份不算泄漏
+	time.Sleep(200 * time.Millisecond)
+	before := runtime.NumGoroutine()
+
+	const n = 40
+	for i := 0; i < n; i++ {
+		get()
+	}
+	time.Sleep(500 * time.Millisecond) // 给收尾的 goroutine 一点退出时间
+	grew := runtime.NumGoroutine() - before
+
+	if grew > n { // 泄漏时是 2n（80）；复用时基本是 0，留足并发抖动的余量
+		t.Fatalf("%d 个反代请求后 goroutine 增长 %d，疑似每请求泄漏（复用 Transport 时应接近 0）", n, grew)
 	}
 }
