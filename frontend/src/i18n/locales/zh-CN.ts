@@ -124,6 +124,7 @@ const zhCN = {
   'hub.memShort': '内存',
   'hub.hostBrief': '内存 {pct}% · 负载 {load}',
   'hub.expand': '细看',
+  'hub.caps': '项能力',
   'hub.collapse': '收起',
   'hub.fullMonitor': '完整监控',
   'hub.host': '这台机器',

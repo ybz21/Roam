@@ -81,23 +81,35 @@ function Spark({ series, tone, waiting }: { series: number[]; tone: string; wait
   if (series.length < 2) return <div className="tt-hub-spark waiting">{waiting}</div>
   const max = Math.max(...series), min = Math.min(...series)
   const span = Math.max(1e-6, max - min)
-  const pts = series.map((v, i) => `${(i / (series.length - 1)) * 200},${(24 - ((v - min) / span) * 22).toFixed(1)}`).join(' ')
+  const pts = series.map((v, i) => `${(i / (series.length - 1)) * 60},${(18 - ((v - min) / span) * 16).toFixed(1)}`).join(' ')
   return (
-    <svg className="tt-hub-spark" viewBox="0 0 200 26" preserveAspectRatio="none" aria-hidden>
+    <svg className="tt-hub-spark" viewBox="0 0 60 20" preserveAspectRatio="none" aria-hidden>
       <polyline points={pts} fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: tone }} />
     </svg>
   )
 }
 
+/**
+ * 一格指标。它们不等重要：平时你只想知道「正常吗」，异常时才想看具体数字。
+ * 所以做成一条紧凑的横条而不是四张等大的卡片——四张 133px 高的卡片占掉三分之一首屏，
+ * 却只传达了「一切正常」这一件事，而你最常看的机器列表被挤到下面去了。
+ */
 function Stat({ label, value, unit, sub, series, tone, waiting }: {
   label: string; value: string; unit?: string; sub: string; series?: number[]; tone?: string; waiting: string
 }) {
+  const bad = tone === 'var(--danger)' || tone === 'var(--warn)'
   return (
-    <div className={`tt-hub-stat${tone === 'var(--danger)' ? ' bad' : tone === 'var(--warn)' ? ' warn' : ''}`}>
-      <div className="k">{label}</div>
-      <div className="v">{value}{unit && <span className="u">{unit}</span>}</div>
-      <div className="s">{sub}</div>
-      {series && <Spark series={series} tone={tone || 'var(--ok)'} waiting={waiting} />}
+    <div className={`tt-hub-stat${bad ? ' bad' : ''}`}>
+      <div className="line">
+        <span className="k">{label}</span>
+        <span className="v" style={bad ? { color: tone } : undefined}>{value}{unit && <span className="u">{unit}</span>}</span>
+      </div>
+      <div className="line2">
+        <span className="s" title={sub}>{sub}</span>
+        {series && series.length >= 2
+          ? <Spark series={series} tone={tone || 'var(--ok)'} waiting={waiting} />
+          : <span className="wait" title={waiting} />}
+      </div>
     </div>
   )
 }
@@ -167,8 +179,12 @@ function NodeCard({ n, current, hubVersion, onEnter, onMonitor }: {
             <span className={host.mem > 85 ? 'hot' : ''}>{t('hub.memShort')} {host.mem}%</span>
           </span>
         )}
+        {/* 能力清单退到 title：六个芯片天天不变，却每台机器占一整行。
+            它回答的是「这台能干什么」——一年问一次的事，不该常驻。 */}
         {(n.capabilities || []).length > 0 && (
-          <span className="caps">{(n.capabilities || []).map((c) => <span key={c}>{c}</span>)}</span>
+          <span className="caps" title={(n.capabilities || []).join(' · ')}>
+            {(n.capabilities || []).length} {t('hub.caps')}
+          </span>
         )}
       </div>
       <div className="acts">
@@ -287,8 +303,8 @@ export default function HubPage() {
           waiting={t('hub.needTwoSamples')} />
       </div>
 
-      {/* 左栏放会长的（机器卡片里有版本、能力芯片），右栏定宽放事件——
-           事件行是「时间 + 一句话」，再宽也不多装一个字。 */}
+      {/* 左栏只放主体（机器）——那是这一页最常看的东西；右栏收次要的三块。
+           之前左栏排三块、右栏只有事件，右边空一大片而左边挤成一长条。 */}
       <div className="tt-hub-cols">
         <div className="tt-hub-side">
           <div className="tt-hub-card">
@@ -300,6 +316,21 @@ export default function HubPage() {
             : nodes.map((n) => (
             <NodeCard key={n.id} n={n} current={n.id === curNodeId} hubVersion={self.version}
               onEnter={() => enter(n.id)} onMonitor={() => setMonitorNode(n)} />
+            ))}
+          </div>
+        </div>
+
+        <div className="tt-hub-side">
+          <div className="tt-hub-card">
+            <h4>{t('hub.events')}<span className="grow" /><span className="dim">{t('hub.eventsWindow')}</span></h4>
+            {self.events.length === 0
+            ? <div className="tt-hub-empty small">{t('hub.noEvents')}</div>
+            : [...self.events].reverse().slice(0, 12).map((e, i) => (
+            <div className="tt-hub-ev" key={i}>
+            <span className="t">{relTime(e.at, t)}</span>
+            <i className="i" style={{ background: evTone(e.kind) }} />
+            <span className="x">{evText(e)}</span>
+            </div>
             ))}
           </div>
           {/* 宿主机这一块用的是**插件页那个面板**，不是另画一套：面板只认 Snapshot 形状，
@@ -322,7 +353,6 @@ export default function HubPage() {
               )}
             </div>
           )}
-
           <div className="tt-hub-card">
             <h4>{t('hub.diagnostics')}</h4>
             <div className="body">
@@ -348,22 +378,8 @@ export default function HubPage() {
             </div>
           </div>
         </div>
-
-        <div className="tt-hub-side">
-          <div className="tt-hub-card">
-            <h4>{t('hub.events')}<span className="grow" /><span className="dim">{t('hub.eventsWindow')}</span></h4>
-            {self.events.length === 0
-            ? <div className="tt-hub-empty small">{t('hub.noEvents')}</div>
-            : [...self.events].reverse().slice(0, 12).map((e, i) => (
-            <div className="tt-hub-ev" key={i}>
-            <span className="t">{relTime(e.at, t)}</span>
-            <i className="i" style={{ background: evTone(e.kind) }} />
-            <span className="x">{evText(e)}</span>
-            </div>
-            ))}
-          </div>
-        </div>
       </div>
+
       {monitorNode && (
         <Modal open width={900} footer={null} title={monitorNode.name}
           onCancel={() => setMonitorNode(null)} destroyOnClose>

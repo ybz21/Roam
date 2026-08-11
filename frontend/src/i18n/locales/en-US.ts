@@ -124,6 +124,7 @@ const enUS = {
   'hub.memShort': 'MEM',
   'hub.hostBrief': 'mem {pct}% · load {load}',
   'hub.expand': 'Details',
+  'hub.caps': 'capabilities',
   'hub.collapse': 'Collapse',
   'hub.fullMonitor': 'Full monitor',
   'hub.host': 'This machine',
