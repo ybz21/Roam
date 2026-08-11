@@ -560,6 +560,25 @@ export default function App() {
     }),
   }))
 
+  // 切机器 = 换「浏览 / 新开操作落到哪台」。整页重载是这一版的取舍：页面各自缓存着
+  // 上一台的数据，逐个清远比重来一次更容易漏。
+  //
+  // URL 上的 terms/active 是**上一台**的会话 id，原样带过去会在新机器上还原一批根本不存在
+  // 的标签（一堆打不开的窗口，同名会话还可能连错机器）。所以换成那台机器**自己上次**开着
+  // 的标签——各记各的，切回来还在（term-tabs-store）。
+  //
+  // 抽成函数是因为**入口有两个**：桌面在侧栏底座的切换器，手机在「更多」里。
+  // 手机上原来根本没有入口——切换器只挂在 <Sider> 里，而手机没有 Sider。
+  const switchNode = (id: string) => {
+    const back = loadTabs(id)
+    setCurrentNode(id)
+    setHashParams({
+      terms: back.terms.map(encodeURIComponent).join(','),
+      active: back.active ? encodeURIComponent(back.active) : '',
+    })
+    location.reload()
+  }
+
   // 多机：机器列表接在账户菜单最上面（切机器是「换浏览范围」，不是页面）。
   // 单机时 nodes 为空，这一段整个不出现，菜单与今天逐项一致。
   // 顶部切换器的下拉：就是机器列表本身，不再套一层分组标题——它已经有自己的按钮当标题了
@@ -577,22 +596,7 @@ export default function App() {
         </span>
       ),
       disabled: !n.online,
-      // 切机器 = 换「浏览 / 新开操作落到哪台」。整页重载是这一版的取舍：页面各自缓存着
-      // 上一台的数据，逐个清远比重来一次更容易漏。
-      //
-      // 切机器 = 换终端。URL 上的 terms/active 是**上一台**的会话 id，原样带过去会在新机器上
-      // 还原一批根本不存在的标签（一堆打不开的窗口，同名会话还可能连错机器）。
-      // 所以这里换成那台机器**自己上次**开着的标签——各记各的，切回来还在（term-tabs-store）。
-      // 兜底还有一层：还原时会把查无此会话的 id 丢掉，关掉的会话不会变成空标签。
-      onClick: () => {
-        const back = loadTabs(n.id)
-        setCurrentNode(n.id)
-        setHashParams({
-          terms: back.terms.map(encodeURIComponent).join(','),
-          active: back.active ? encodeURIComponent(back.active) : '',
-        })
-        location.reload()
-      },
+      onClick: () => switchNode(n.id),
     })),
   ] : []
 
@@ -748,6 +752,24 @@ export default function App() {
           <SheetRow icon={<SearchIcon size={16} />} title={t('workspace.search')}
             desc={t('workspace.searchPlaceholder')}
             onClick={() => { setMoreOpen(false); openPalette() }} />
+
+          {/* 机器排在最前：它换的是「下面这些页看哪台机器」，是别的行的前提，不是并列项。
+              桌面的切换器挂在 <Sider> 的底座里，而手机根本没有 Sider——这一段之前是缺的，
+              手机上连不上第二台机器（能看见别的机器，但切不过去）。
+              单机时 clusterNodes 为空，整段不出现，与今天逐项一致。 */}
+          {clusterNodes.length > 0 && (<>
+            <SheetSection>{t('node.switch')}</SheetSection>
+            {clusterNodes.map((n) => (
+              <SheetRow key={n.id}
+                icon={<NodeMark name={n.name} size="sm" current={n.id === curNodeId} offline={!n.online} />}
+                title={n.name}
+                desc={n.online ? t('node.sessionsN', { count: n.sessionCount }) : t('node.offline')}
+                active={n.id === curNodeId}
+                extra={<i style={{ display: 'block', width: 7, height: 7, borderRadius: '50%', background: nodeDotColor(n) }} />}
+                onClick={() => { if (!n.online || n.id === curNodeId) { setMoreOpen(false); return } switchNode(n.id) }} />
+            ))}
+          </>)}
+
           <SheetSection>{t('nav.groupWorkspace')}</SheetSection>
           {MOBILE_MORE_WORKSPACE.map((key) => {
             const n = NAV.find((x) => x.key === key)!
