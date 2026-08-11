@@ -15,6 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"github.com/hashicorp/yamux"
 	"ttmux-web/cluster/tunnel"
 )
 
@@ -25,6 +26,16 @@ type Hub struct {
 
 	publicURL string        // 中心的对外地址（config: cluster.public_url）；空 = 按请求 Host 推
 	enrollTTL time.Duration // 接入令牌有效期（config: cluster.enroll_ttl_min）
+
+	mu      sync.Mutex
+	proxies map[string]*nodeTransport // 每台节点一个复用的 Transport，见 transportFor
+}
+
+// nodeTransport 绑在**某一条隧道会话**上：节点重连会换 session，那时旧的必须整个丢掉，
+// 否则新请求会打进一条已经死掉的隧道。
+type nodeTransport struct {
+	sess *yamux.Session
+	tr   *http.Transport
 }
 
 // SetPublicURL / SetEnrollTTL 由装配处注入，免得 hub 包反过来依赖 config。
@@ -91,6 +102,7 @@ func (b *Hub) HandleTunnel(c *gin.Context) {
 	b.reg.Attach(id, sess, meta)
 	defer func() {
 		b.reg.Detach(id, sess)
+		b.dropTransport(id)
 		_ = sess.Close()
 	}()
 
@@ -242,6 +254,55 @@ func isPrivateURL(raw string) bool {
 	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast()
 }
 
+// transportFor 返回该节点**复用**的 Transport。
+//
+// 这里曾经是每个请求 new 一个 http.Transport——一个真实的 goroutine 泄漏，2026-08-11
+// 把中心压死过一次（19185 个 goroutine，其中 9572 对 readLoop/writeLoop 卡在
+// yamux.Stream.Read 上，最久的一个挂了 661 分钟；RSS 从 20MB 涨到 300MB，
+// 端口能连但不再 accept）。
+//
+// 机理：Transport 自带空闲连接池。请求结束后那条 yamux 流被放回池里，
+// readLoop/writeLoop 继续挂着等数据；手写的 Transport 的 IdleConnTimeout 默认是 0
+// （永不超时），而这个 Transport 本身又随请求结束被丢掉，没人再调 CloseIdleConnections()。
+// 于是每个经中心代理的请求都留下两个永不退出的 goroutine 和一条永不关闭的流——
+// 控制台每 5 秒轮询一次，一夜就是几千个。
+//
+// 现在按节点缓存并加上超时与上限：空闲流会自己过期回收，池子也不会无限长。
+func (b *Hub) transportFor(id string, sess *yamux.Session) *http.Transport {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.proxies == nil {
+		b.proxies = map[string]*nodeTransport{}
+	}
+	if cur := b.proxies[id]; cur != nil {
+		if cur.sess == sess {
+			return cur.tr
+		}
+		cur.tr.CloseIdleConnections() // 节点重连了：旧隧道上的流全作废
+	}
+	tr := &http.Transport{
+		DialContext:           func(context.Context, string, string) (net.Conn, error) { return sess.Open() },
+		ResponseHeaderTimeout: 30 * time.Second,
+		// 空闲的隧道流最多留 90 秒。yamux 流很便宜，宁可多开也不要攒着——
+		// 攒着的每一条都是一对活 goroutine。
+		IdleConnTimeout:     90 * time.Second,
+		MaxIdleConnsPerHost: 8,
+	}
+	b.proxies[id] = &nodeTransport{sess: sess, tr: tr}
+	return tr
+}
+
+// dropTransport 在隧道断开时清掉该节点的 Transport 与它池里的流。
+func (b *Hub) dropTransport(id string) {
+	b.mu.Lock()
+	cur := b.proxies[id]
+	delete(b.proxies, id)
+	b.mu.Unlock()
+	if cur != nil {
+		cur.tr.CloseIdleConnections()
+	}
+}
+
 // ProxyNode 把 /n/:nodeId/*path 反代进目标节点的隧道流（REST + WebSocket 升级）。
 // 转发本体是 httputil.ReverseProxy（同 backend/browser/devtools.go），只是把底层连接
 // 换成该节点隧道上 Open() 出来的 yamux 流。见架构文档 §7.2。
@@ -254,10 +315,7 @@ func (b *Hub) ProxyNode(c *gin.Context) {
 	}
 	target := &url.URL{Scheme: "http", Host: "node"}
 	rp := httputil.NewSingleHostReverseProxy(target)
-	rp.Transport = &http.Transport{
-		DialContext:           func(context.Context, string, string) (net.Conn, error) { return sess.Open() },
-		ResponseHeaderTimeout: 30 * time.Second,
-	}
+	rp.Transport = b.transportFor(id, sess)
 	rp.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, _ error) {
 		w.WriteHeader(http.StatusBadGateway)
 	}
