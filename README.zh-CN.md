@@ -30,7 +30,7 @@ Roam 不是另一个云 IDE。它连接你的真实开发机，把项目、终�
 AI Agent 放进一个可远程接管的工作空间里。你看到的是一个控制台，背后仍然是你
 熟悉的开发环境和工具链。
 
-![Roam —— 左边是工作台，右边是正在干活的 Claude Code](https://cdn.jsdelivr.net/gh/ybz21/Roam@main/docs/screenshots/hero.zh.png)
+![Roam —— 左边是工作台，右边是正在干活的 Claude Code](docs/screenshots/hero.zh.png)
 
 <sub>一个窗口装下两件事：所有项目里哪些需要你，以及此刻正在干活的那个 Agent。</sub>
 
@@ -58,47 +58,47 @@ AI Agent 放进一个可远程接管的工作空间里。你看到的是一个�
 **工作台只回答一个问题：哪些事需要我？** 等你处理的项目排在最前，每个都带着进行中的
 任务、worktree 数量和蜂群；右边是跨仓库的最近活动。
 
-![工作台：需要你的事、各项目任务、最近活动](https://cdn.jsdelivr.net/gh/ybz21/Roam@main/docs/screenshots/workbench.zh.png)
+![工作台：需要你的事、各项目任务、最近活动](docs/screenshots/workbench.zh.png)
 
 **读 Agent，不用读终端。** 同一个 Claude Code / Codex 会话可以渲染成对话：消息、代码块、
 diff、折叠成组的工具调用，底下一条状态栏给出模式、上下文占用和耗时——还有一个回话框。
 
-![把 Claude Code 会话渲染成对话](https://cdn.jsdelivr.net/gh/ybz21/Roam@main/docs/screenshots/chat.zh.png)
+![把 Claude Code 会话渲染成对话](docs/screenshots/chat.zh.png)
 
 **也可以直接要原始终端，因为它本来就是一个真 tmux 会话。** TUI 保真，标签按机器各记各的，
 文件抽屉和 Git 面板一键可达；在手机上还有按键条和语音输入。
 
-![同一个会话的终端形态，含工具栏与手机按键条](https://cdn.jsdelivr.net/gh/ybz21/Roam@main/docs/screenshots/terminal.zh.png)
+![同一个会话的终端形态，含工具栏与手机按键条](docs/screenshots/terminal.zh.png)
 
 **编队一屏看懂。** 每个成员的实时拓扑、共享协作墙（广场）、可拖拽流转的看板、
 等待处理的收件箱——一个被拆给多个 Agent 的复杂目标，依然清清楚楚。
 
-![蜂群仪表盘：拓扑、广场、看板](https://cdn.jsdelivr.net/gh/ybz21/Roam@main/docs/screenshots/swarm.zh.png)
+![蜂群仪表盘：拓扑、广场、看板](docs/screenshots/swarm.zh.png)
 
 **多台机器，一个控制台。** 中心页用一行说清中心健不健康，列出每台机器的延迟、CPU、
 内存和会话数，再给一条最近发生了什么——谁掉线了、谁回来了、断了多久。
 
-![中心页：中心健康、机器列表、最近事件](https://cdn.jsdelivr.net/gh/ybz21/Roam@main/docs/screenshots/hub.zh.png)
+![中心页：中心健康、机器列表、最近事件](docs/screenshots/hub.zh.png)
 
 **设置终于能找得到东西。** 名称、说明、键名都能搜；分类按作用域分组——哪些跟着你走、
 哪些属于这台机器、哪些是整个集群的。
 
-![设置：搜索、分类树、一类一页](https://cdn.jsdelivr.net/gh/ybz21/Roam@main/docs/screenshots/settings.zh.png)
+![设置：搜索、分类树、一类一页](docs/screenshots/settings.zh.png)
 
 **不离开控制台就能翻文件、改文件。** 文件夹和文件两栏可拖宽，悬浮即预览，
 路径可以直接拖进终端或 Agent 输入框。
 
-![文件工作区：文件夹栏、文件栏与预览](https://cdn.jsdelivr.net/gh/ybz21/Roam@main/docs/screenshots/files.zh.png)
+![文件工作区：文件夹栏、文件栏与预览](docs/screenshots/files.zh.png)
 
 **在控制台里直接操控一台真浏览器。** 开发机上的 Chrome 被镜像进控制台——开标签、
 导航、点击、输入都行。调试网页、保住登录态，或让 Agent 复现一整套流程，全在开发机上完成。
 
-![浏览器镜像：控制台里操控一个真实 Chrome 标签](https://cdn.jsdelivr.net/gh/ybz21/Roam@main/docs/screenshots/browser.zh.png)
+![浏览器镜像：控制台里操控一个真实 Chrome 标签](docs/screenshots/browser.zh.png)
 
 **在控制台里直接操控一台真手机。** 通过 adb 镜像 Android 设备——实时画面、串流指标、
 远程导航栏都在——用来复现移动端流程，或在终端旁边顺手看个 App。
 
-![手机镜像：控制台里的一台真实 Android 设备](https://cdn.jsdelivr.net/gh/ybz21/Roam@main/docs/screenshots/phone.zh.png)
+![手机镜像：控制台里的一台真实 Android 设备](docs/screenshots/phone.zh.png)
 
 ## 移动办公：随时随地接着干
 
@@ -106,12 +106,12 @@ diff、折叠成组的工具调用，底下一条状态栏给出模式、上下�
 同一批项目、任务和 Agent。底栏放着你真正会去的五个地方，会话坞让正在跑的 Agent
 永远只差一次点击。
 
-![手机上的 Roam：工作台与会话坞](https://cdn.jsdelivr.net/gh/ybz21/Roam@main/docs/screenshots/mobile-office.zh.png)
+![手机上的 Roam：工作台与会话坞](docs/screenshots/mobile-office.zh.png)
 
 **在手机上直接和 Agent 对话。** 打开一个会话就能当对话读——和桌面同一套卡片、diff
 和状态栏——然后打字或说话追加指令，把活儿往前推，不用开电脑。
 
-![在手机上和 Claude Code 对话](https://cdn.jsdelivr.net/gh/ybz21/Roam@main/docs/screenshots/mobile-chat.zh.png)
+![在手机上和 Claude Code 对话](docs/screenshots/mobile-chat.zh.png)
 
 ## 为什么需要它
 

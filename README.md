@@ -40,7 +40,7 @@ puts projects, terminals, browser, files, tasks, and AI agents into a remotely
 controllable workspace. What you see is a console; behind it is still the
 development environment and toolchain you already use.
 
-![Roam — the workbench on the left, a live Claude Code session on the right](https://cdn.jsdelivr.net/gh/ybz21/Roam@main/docs/screenshots/hero.en.png)
+![Roam — the workbench on the left, a live Claude Code session on the right](docs/screenshots/hero.en.png)
 
 <sub>One window: what needs you across every project, and the agent that is working right now.</sub>
 
@@ -76,57 +76,57 @@ development environment and toolchain you already use.
 on you come first, each with its running tasks, worktree count, and swarms —
 then recent activity across every repository.
 
-![Workbench: what needs you, per-project tasks, and recent activity](https://cdn.jsdelivr.net/gh/ybz21/Roam@main/docs/screenshots/workbench.en.png)
+![Workbench: what needs you, per-project tasks, and recent activity](docs/screenshots/workbench.en.png)
 
 **Read the agent, not the terminal.** The same Claude Code or Codex session can
 be rendered as a conversation: messages, code blocks, diffs, and folded tool runs,
 with a status bar for mode, context use, and elapsed time — and a box to reply in.
 
-![A Claude Code session rendered as a conversation](https://cdn.jsdelivr.net/gh/ybz21/Roam@main/docs/screenshots/chat.en.png)
+![A Claude Code session rendered as a conversation](docs/screenshots/chat.en.png)
 
 **Or take the raw terminal, because it is a real tmux session.** Full TUI
 fidelity, tabs that persist per machine, a file drawer and Git panel one click
 away, and — on a phone — a key bar and voice input.
 
-![The same session as a live terminal, with the toolbar and mobile key bar](https://cdn.jsdelivr.net/gh/ybz21/Roam@main/docs/screenshots/terminal.en.png)
+![The same session as a live terminal, with the toolbar and mobile key bar](docs/screenshots/terminal.en.png)
 
 **A formation, at a glance.** A live topology of every member, a shared
 collaboration wall, a drag-to-flow board, and an inbox of items waiting for
 review — a goal split across agents stays legible.
 
-![Swarm dashboard: topology, plaza, and board](https://cdn.jsdelivr.net/gh/ybz21/Roam@main/docs/screenshots/swarm.en.png)
+![Swarm dashboard: topology, plaza, and board](docs/screenshots/swarm.en.png)
 
 **Many machines, one console.** The hub page says in one line whether the hub is
 healthy, lists every machine with its latency, CPU, memory, and session count,
 and keeps a log of what happened lately — who dropped, who came back, and how
 long they were gone.
 
-![Hub page: hub health, machines, and the recent event log](https://cdn.jsdelivr.net/gh/ybz21/Roam@main/docs/screenshots/hub.en.png)
+![Hub page: hub health, machines, and the recent event log](docs/screenshots/hub.en.png)
 
 **Settings you can actually find things in.** Search across every setting by
 name, description, or key; categories are grouped by scope — what follows you
 between machines, what belongs to this machine, and what applies to the whole
 cluster.
 
-![Settings: search, category tree, and one page per category](https://cdn.jsdelivr.net/gh/ybz21/Roam@main/docs/screenshots/settings.en.png)
+![Settings: search, category tree, and one page per category](docs/screenshots/settings.en.png)
 
 **Browse and edit files without leaving the console.** Folders and files in two
 resizable columns, a preview on hover, and drag a path straight into a terminal
 or an agent prompt.
 
-![File workspace: folder column, file column, and preview](https://cdn.jsdelivr.net/gh/ybz21/Roam@main/docs/screenshots/files.en.png)
+![File workspace: folder column, file column, and preview](docs/screenshots/files.en.png)
 
 **Drive a real browser from the console.** The dev machine's Chrome is mirrored
 into the console — open tabs, navigate, click, and type. Debug a web app, keep a
 login session, or let an agent reproduce a flow, all on the development machine.
 
-![Browser mirror: a live Chrome tab driven from the console](https://cdn.jsdelivr.net/gh/ybz21/Roam@main/docs/screenshots/browser.en.png)
+![Browser mirror: a live Chrome tab driven from the console](docs/screenshots/browser.en.png)
 
 **Control a real phone from the console.** Mirror an Android device over adb — the
 live screen, streaming stats, and remote nav bar — to reproduce mobile flows or
 check an app right next to your terminals.
 
-![Phone mirror: a live Android device inside the console](https://cdn.jsdelivr.net/gh/ybz21/Roam@main/docs/screenshots/phone.en.png)
+![Phone mirror: a live Android device inside the console](docs/screenshots/phone.en.png)
 
 ## Mobile: work from anywhere
 
@@ -135,13 +135,13 @@ no app to install — and land back in the same projects, tasks, and agents.
 A bottom bar carries the five places you actually go, and a session dock keeps the
 running agent one tap away.
 
-![Roam on a phone: the workbench and the session dock](https://cdn.jsdelivr.net/gh/ybz21/Roam@main/docs/screenshots/mobile-office.en.png)
+![Roam on a phone: the workbench and the session dock](docs/screenshots/mobile-office.en.png)
 
 **Talk to an agent from your phone.** Open a session and read it as a
 conversation — the same cards, diffs, and status bar as the desktop — then type or
 dictate a follow-up and keep the task moving without a laptop.
 
-![Chatting with Claude Code on a phone](https://cdn.jsdelivr.net/gh/ybz21/Roam@main/docs/screenshots/mobile-chat.en.png)
+![Chatting with Claude Code on a phone](docs/screenshots/mobile-chat.en.png)
 
 ## Why It Exists
 
