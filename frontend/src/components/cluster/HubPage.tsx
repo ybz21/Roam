@@ -8,6 +8,7 @@
 // 所以入口是「去看中心」，当前机器不变（见 Navigation 的 hubEntry）。
 import { useEffect, useState } from 'react'
 import { App as AntApp, Modal } from 'antd'
+import { api } from '../../api'
 import { useI18n } from '../../i18n'
 import { relTime } from '../../time-format'
 import { NodeMark, nodeDotColor } from './NodeMark'
@@ -138,14 +139,12 @@ async function nodeHostSummary(nodeId: string): Promise<{ cpu: number; mem: numb
   } catch { return null }
 }
 
-function NodeCard({ n, current, hubVersion, onEnter, onMonitor }: {
+function NodeRow({ n, current, hubVersion, onEnter, onMonitor }: {
   n: ClusterNode; current: boolean; hubVersion: string; onEnter: () => void; onMonitor: () => void
 }) {
   const { t } = useI18n()
   // 宿主概况按需拉，失败就当没有——插件可能没装、没开，或者那台正忙
   const [host, setHost] = useState<{ cpu: number; mem: number } | null>(null)
-  // CPU% 是「两次取样之间的平均」，所以面板每次轮询都要真的再问一次中心，
-  // 拿 15 秒前那份缓存重算的话，这个数会永远停在上一轮（实测停在 0%）。
   useEffect(() => {
     if (!n.online) return
     let stop = false
@@ -154,59 +153,59 @@ function NodeCard({ n, current, hubVersion, onEnter, onMonitor }: {
     const iv = setInterval(load, 30000)
     return () => { stop = true; clearInterval(iv) }
   }, [n.id, n.online])
-  // 版本不一致会出怪事（前端和后端各说各话），而在这一页之前没有任何地方会告诉你
-  const verMismatch = !!n.version && !!hubVersion && n.version !== hubVersion
+
+  // 版本只在**主版本真不同**时才提示：字符串全等太脆，带个构建后缀（0083f46-mon）就误报，
+  // 两台一起亮黄反而没人再信它。完整版本进 title。
+  const mismatch = !!n.version && !!hubVersion && majorOf(n.version) !== majorOf(hubVersion)
+  const ver = n.version && n.version.length > 14 ? n.version.slice(0, 14) + '…' : n.version
+
   return (
-    <div className={`tt-hub-node${current ? ' cur' : ''}${n.online ? '' : ' off'}`}>
-      <div className="top">
-        <NodeMark name={n.name} size="sm" current={current} offline={!n.online} />
-        <span className="nm">{n.name}</span>
-        {n.group && <span className="grp">{n.group}</span>}
-        {n.hostname && <span className="grp">{n.hostname}</span>}
-        <span className="grow" />
-        {n.online
-          ? <span className="lat">{t('node.latencyMs', { ms: n.latencyMs })}</span>
-          : <span className="tt-hub-chip danger">{t('node.offline')}</span>}
-        <i className="dot" style={{ background: nodeDotColor(n) }} />
-      </div>
-      <div className="meta">
-        {n.online && <span>{t('node.sessionsN', { count: n.sessionCount })}</span>}
-        {!!n.version && <span className="mono">{n.version}</span>}
-        {verMismatch && <span className="tt-hub-chip warn">{t('hub.versionMismatch')}</span>}
-        {host && (
-          <span className="tt-hub-host">
-            <span className={host.cpu > 85 ? 'hot' : ''}>CPU {host.cpu}%</span>
-            <span className={host.mem > 85 ? 'hot' : ''}>{t('hub.memShort')} {host.mem}%</span>
-          </span>
-        )}
-        {/* 能力清单退到 title：六个芯片天天不变，却每台机器占一整行。
-            它回答的是「这台能干什么」——一年问一次的事，不该常驻。 */}
-        {(n.capabilities || []).length > 0 && (
-          <span className="caps" title={(n.capabilities || []).join(' · ')}>
-            {(n.capabilities || []).length} {t('hub.caps')}
-          </span>
-        )}
-      </div>
-      <div className="acts">
-        <button type="button" className="tt-act" disabled={!n.online || current} onClick={onEnter}>
-          {current ? t('hub.enterCurrent') : t('hub.enter')}
+    <div className={`tt-hub-node${current ? ' cur' : ''}${n.online ? '' : ' off'}`} title={n.version}>
+      <NodeMark name={n.name} size="sm" current={current} offline={!n.online} />
+      <span className="who">
+        <span className="l1">
+          <span className="nm">{n.name}</span>
+          {n.group && <span className="dim">{n.group}</span>}
+          {mismatch && <span className="tt-hub-chip warn">{t('hub.versionMismatch')}</span>}
+        </span>
+        <span className="l2">{[n.hostname, ver].filter(Boolean).join(' · ')}</span>
+      </span>
+      <span className="metrics">
+        {n.online ? <>
+          <span>{t('node.latencyMs', { ms: n.latencyMs })}</span>
+          {host && <span className={host.cpu > 85 ? 'hot' : ''}>CPU {host.cpu}%</span>}
+          {host && <span className={host.mem > 85 ? 'hot' : ''}>{t('hub.memShort')} {host.mem}%</span>}
+          <span>{t('node.sessionsN', { count: n.sessionCount })}</span>
+        </> : <span>{t('node.offline')}</span>}
+      </span>
+      <i className="dot" style={{ background: nodeDotColor(n) }} />
+      <span className="acts">
+        {host && <button type="button" className="tt-act" onClick={onMonitor}>{t('hub.fullMonitor')}</button>}
+        <button type="button" className="tt-act ico" disabled={!n.online || current} onClick={onEnter}
+          title={current ? t('hub.enterCurrent') : t('hub.enter')} aria-label={t('hub.enter')}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+            strokeLinecap="round" strokeLinejoin="round"><path d="M9 5l7 7-7 7" /></svg>
         </button>
-        {host && (
-          <button type="button" className="tt-act" onClick={onMonitor}>{t('hub.fullMonitor')}</button>
-        )}
-      </div>
+      </span>
     </div>
   )
 }
 
+/** 主版本：取 vX.Y.Z 或前 7 位 sha，忽略构建后缀（-254-gbd60090 / -mon 这类）。 */
+function majorOf(v: string): string {
+  const m = v.match(/^v?\d+\.\d+\.\d+/)
+  return m ? m[0] : v.slice(0, 7)
+}
+
 export default function HubPage() {
   const { t } = useI18n()
-  const { message } = AntApp.useApp()
+  const { message, modal } = AntApp.useApp()
   const nodes = useClusterNodes()
   const curNodeId = useCurrentNodeId()
   const [self, setSelf] = useState<SelfData | null>(null)
   const [loading, setLoading] = useState(true)
   const [hostOpen, setHostOpen] = useState(false)
+  const [diagOpen, setDiagOpen] = useState(false)
   const [monitorNode, setMonitorNode] = useState<ClusterNode | null>(null)
 
   useEffect(() => {
@@ -269,116 +268,121 @@ export default function HubPage() {
   // 进了这一页就该直接看到结论，不用自己去读四条曲线
   const health = assessHub(s, Math.max(0, self.nodes - self.nodesOnline))
 
+  // 重启中心：它是「已经出事了，先恢复」的动作，所以要二次确认并说清代价——
+  // 节点会断开重连（几秒），正在跑的会话不受影响（会话在节点上，不在中心）。
+  const restart = () => modal.confirm({
+    title: t('hub.restartTitle'),
+    content: t('hub.restartBody'),
+    okText: t('hub.restart'), cancelText: t('common.cancel'), okButtonProps: { danger: true },
+    onOk: async () => {
+      try { await api('POST', '/cluster/restart'); message.loading(t('hub.restarting'), 8) }
+      catch (e: any) { message.error(e?.message || String(e)) }
+    },
+  })
+
+  const exportDiag = () => {
+    const blob = new Blob([JSON.stringify(self, null, 2)], { type: 'application/json' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `roam-hub-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '')}.json`
+    a.click()
+    URL.revokeObjectURL(a.href)
+    message.success(t('hub.exported'))
+  }
+
   return (
     <div className="tt-hub">
-      {health.level !== 'ok' && (
-        <div className={`tt-hub-banner${health.level === 'bad' ? ' bad' : ''}`}>
-          <WarnIcon size={16} />
-          <span className="grow">{t('hub.unhealthy', { why: t('hub.why.' + health.reasons[0]) })}</span>
-        </div>
-      )}
       <div className="tt-hub-head">
         <span className="tt-pagename">{t('hub.title')}</span>
         <span className="tt-pagedivider" aria-hidden="true" />
-        <span className="sub">{location.host} · {self.version || '—'} · {uptime}</span>
+        <span className="sub">{location.host} · {uptime}</span>
         <span className="grow" />
         <button type="button" className="tt-act" onClick={() => getSelf().then(setSelf)}>{t('hub.refresh')}</button>
       </div>
 
-      <div className="tt-hub-stats">
-        <Stat label={t('hub.memory')} value={String(mb(now.rss) || '—')} unit={now.rss ? 'MB' : undefined}
-          sub={host.memTotal
-            ? t('hub.ofHost', { pct: Math.round(rssShare * 100), total: gb(host.memTotal) })
-            : t('hub.heapNow', { mb: mb(now.heap) })}
-          series={s.map((x) => x.rss)} tone={rssTone}
-          waiting={t('hub.needTwoSamples')} />
-        <Stat label="Goroutine" value={now.goroutines.toLocaleString()}
-          sub={t('hub.goroutineSub')} series={s.map((x) => x.goroutines)} tone={gorTone}
-          waiting={t('hub.needTwoSamples')} />
-        <Stat label={t('hub.tunnels')} value={String(now.tunnels)}
-          sub={t('hub.tunnelsSub', { n: self.nodes })} series={s.map((x) => x.tunnels)} tone="var(--accent)"
-          waiting={t('hub.needTwoSamples')} />
-        <Stat label={t('hub.forwarded')} value={rate === null ? '—' : rate.toFixed(1)} unit={rate === null ? undefined : t('hub.perSec')}
-          sub={t('hub.forwardedSub', { total: now.requests })} series={s.map((x) => x.requests)} tone="var(--accent)"
-          waiting={t('hub.needTwoSamples')} />
+      {/* 状态行：一行说完「好不好 + 三个数」。异常时整行变红、长出原因与动作——
+          四张等大的指标卡占掉三分之一首屏，却只为传达「一切正常」这一件事。 */}
+      <div className={`tt-hub-status${health.level !== 'ok' ? ' bad' : ''}`}>
+        <i className="d" />
+        <b>{health.level === 'ok' ? t('hub.allGood') : t('hub.why.' + health.reasons[0])}</b>
+        <span className="nums">
+          {t('hub.memory')} {mb(now.rss)}MB
+          {host.memTotal ? `（${t('hub.ofHostShort', { pct: Math.round(rssShare * 100) })}）` : ''}
+          {' · '}goroutine {now.goroutines.toLocaleString()}
+          {' · '}{now.tunnels > 0 || health.level === 'ok'
+            ? t('hub.fwd', { rate: rate === null ? '—' : rate.toFixed(1) })
+            : t('hub.queueN', { n: 0 })}
+        </span>
+        <span className="grow" />
+        {health.level !== 'ok' && (
+          <>
+            <button type="button" className="tt-act" onClick={() => setDiagOpen(true)}>{t('hub.seeDiag')}</button>
+            <button type="button" className="tt-act danger" onClick={restart}>{t('hub.restart')}</button>
+          </>
+        )}
       </div>
 
-      {/* 左栏只放主体（机器）——那是这一页最常看的东西；右栏收次要的三块。
-           之前左栏排三块、右栏只有事件，右边空一大片而左边挤成一长条。 */}
-      <div className="tt-hub-cols">
-        <div className="tt-hub-side">
-          <div className="tt-hub-card">
-            <h4>{t('hub.machines')}<span className="grow" />
-            <span className="dim">{t('hub.onlineOf', { online: self.nodesOnline, total: self.nodes })}</span>
-            </h4>
-            {nodes.length === 0
-            ? <div className="tt-hub-empty small">{t('hub.noNodes')}</div>
-            : nodes.map((n) => (
-            <NodeCard key={n.id} n={n} current={n.id === curNodeId} hubVersion={self.version}
-              onEnter={() => enter(n.id)} onMonitor={() => setMonitorNode(n)} />
-            ))}
-          </div>
-        </div>
+      <div className="tt-hub-sec">{t('hub.machines')}<span className="grow" />
+        <span className="dim">{t('hub.onlineOf', { online: self.nodesOnline, total: self.nodes })}</span>
+      </div>
+      {nodes.length === 0
+        ? <div className="tt-hub-empty small">{t('hub.noNodes')}</div>
+        : nodes.map((n) => (
+          <NodeRow key={n.id} n={n} current={n.id === curNodeId} hubVersion={self.version}
+            onEnter={() => enter(n.id)} onMonitor={() => setMonitorNode(n)} />
+        ))}
 
-        <div className="tt-hub-side">
-          <div className="tt-hub-card">
-            <h4>{t('hub.events')}<span className="grow" /><span className="dim">{t('hub.eventsWindow')}</span></h4>
-            {self.events.length === 0
-            ? <div className="tt-hub-empty small">{t('hub.noEvents')}</div>
-            : [...self.events].reverse().slice(0, 12).map((e, i) => (
-            <div className="tt-hub-ev" key={i}>
+      <div className="tt-hub-sec">{t('hub.events')}</div>
+      {self.events.length === 0
+        ? <div className="tt-hub-empty small">{t('hub.noEvents')}</div>
+        : [...self.events].reverse().slice(0, 8).map((e, i) => (
+          <div className="tt-hub-ev" key={i}>
             <span className="t">{relTime(e.at, t)}</span>
             <i className="i" style={{ background: evTone(e.kind) }} />
             <span className="x">{evText(e)}</span>
-            </div>
-            ))}
           </div>
-          {/* 宿主机这一块用的是**插件页那个面板**，不是另画一套：面板只认 Snapshot 形状，
-              中心把 /api/hub/self 映射过去即可（见 hubSnapshot）。默认收起——上面四格已经
-              给了结论，这里是「要细看时」的地方。 */}
-          {!!host.memTotal && (
-            <div className="tt-hub-card">
-              <h4>{t('hub.host')}<span className="grow" />
-                <span className="dim">
-                  {t('hub.hostBrief', { pct: Math.round(((host.memTotal - host.memAvailable) / host.memTotal) * 100), load: host.load1.toFixed(2) })}
-                </span>
-                <button type="button" className="tt-act" onClick={() => setHostOpen((v) => !v)}>
-                  {hostOpen ? t('hub.collapse') : t('hub.expand')}
-                </button>
-              </h4>
-              {hostOpen && (
-                <div className="body">
-                  <HostMonitorPanel pluginId="roam.host-monitor" enabled t={t} fetchSnapshot={async () => hubSnapshot((await getSelf()) || self)} />
-                </div>
-              )}
-            </div>
-          )}
-          <div className="tt-hub-card">
-            <h4>{t('hub.diagnostics')}</h4>
-            <div className="body">
-            <div className="kv"><span>pprof</span>
-            <b style={{ color: self.pprof ? 'var(--ok)' : 'var(--text-dimmer)' }}>
-            {self.pprof ? t('hub.pprofOn') : t('hub.pprofOff')}
-            </b>
-            <span className="dim">{self.pprof || 'ROAM_PPROF'}</span>
-            </div>
-            <div className="kv"><span>{t('hub.samples')}</span><b>{s.length}</b>
-            <span className="dim">{t('hub.samplesSub')}</span></div>
-            {self.pprof && <div className="tt-hub-cmd">ssh -L 6060:{self.pprof} &lt;user&gt;@{location.hostname}</div>}
-            <p className="hint">{t('hub.pprofWhy')}</p>
-            <button type="button" className="tt-act" onClick={() => {
-            const blob = new Blob([JSON.stringify(self, null, 2)], { type: 'application/json' })
-            const a = document.createElement('a')
-            a.href = URL.createObjectURL(blob)
-            a.download = `roam-hub-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '')}.json`
-            a.click()
-            URL.revokeObjectURL(a.href)
-            message.success(t('hub.exported'))
-            }}>{t('hub.export')}</button>
-            </div>
+        ))}
+
+      {!!host.memTotal && (<>
+        <div className="tt-hub-fold">
+          <span className="k">{t('hub.host')}</span>
+          <span className="v">{t('hub.hostBrief', {
+            pct: Math.round(((host.memTotal - host.memAvailable) / host.memTotal) * 100),
+            load: host.load1.toFixed(2),
+          })}</span>
+          <span className="grow" />
+          <button type="button" className="tt-act" onClick={() => setHostOpen((v) => !v)}>
+            {hostOpen ? t('hub.collapse') : t('hub.expand')}
+          </button>
+        </div>
+        {hostOpen && (
+          <div className="tt-hub-foldbody">
+            {/* 用的是插件页那个面板本身，不是另画一套（见 hubSnapshot） */}
+            <HostMonitorPanel pluginId="roam.host-monitor" enabled t={t}
+              fetchSnapshot={async () => hubSnapshot((await getSelf()) || self)} />
+          </div>
+        )}
+      </>)}
+
+      <div className="tt-hub-fold">
+        <span className="k">{t('hub.diagnostics')}</span>
+        <span className="v">
+          {self.pprof ? `pprof ${t('hub.pprofOn')}` : `pprof ${t('hub.pprofOff')}`} · {t('hub.samplesN', { n: s.length })}
+        </span>
+        <span className="grow" />
+        <button type="button" className="tt-act" onClick={() => setDiagOpen((v) => !v)}>
+          {diagOpen ? t('hub.collapse') : t('hub.expandDiag')}
+        </button>
+      </div>
+      {diagOpen && (
+        <div className="tt-hub-foldbody diag">
+          {self.pprof && <div className="tt-hub-cmd">ssh -L 6060:{self.pprof} &lt;user&gt;@{location.hostname}</div>}
+          <div className="row">
+            <span className="hint" title={t('hub.pprofWhy')}>{t('hub.pprofShort')}</span>
+            <button type="button" className="tt-act" onClick={exportDiag}>{t('hub.export')}</button>
           </div>
         </div>
-      </div>
+      )}
 
       {monitorNode && (
         <Modal open width={900} footer={null} title={monitorNode.name}

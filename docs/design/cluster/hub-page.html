@@ -121,6 +121,46 @@ html[data-theme="light"] .frame { box-shadow:0 12px 32px rgba(31,35,40,.10); }
 .stat.warn .v { color:var(--warn); }
 .spark { margin-top:8px; height:26px; width:100%; }
 
+.main.list { gap:0; }
+.main.list .pagehead { padding-bottom:12px; }
+.statusline { display:flex; align-items:center; gap:10px; padding:11px 2px; border-top:1px solid var(--border-subtle);
+  border-bottom:1px solid var(--border-subtle); font-size:var(--fs-sm); }
+.statusline .d { width:8px; height:8px; border-radius:50%; background:var(--ok); flex:0 0 auto; }
+.statusline b { font-weight:600; color:var(--text-bright); }
+.statusline .nums { color:var(--text-dimmer); font-size:var(--fs-meta); }
+.statusline .grow { flex:1; }
+.statusline.bad { background:var(--danger-soft); border-color:var(--danger-border); }
+.statusline.bad .d { background:var(--danger); }
+.statusline.bad b { color:var(--danger); }
+.statusline.bad .nums { color:var(--text-bright); }
+.sechead { display:flex; align-items:baseline; gap:8px; padding:18px 2px 6px; font-size:var(--fs-sm); font-weight:600; }
+.sechead .grow { flex:1; }
+.sechead .dim { font-weight:400; font-size:var(--fs-micro); color:var(--text-dimmer); }
+.nrow2 { display:flex; align-items:center; gap:10px; padding:9px 2px; border-top:1px solid var(--border-subtle); }
+.nrow2:hover { background:var(--list-hover); }
+.nrow2 .mark { width:22px; height:22px; flex:0 0 22px; border-radius:var(--r-xs); display:grid; place-items:center;
+  border:1px solid var(--border); background:var(--bg-elevated); font-size:10px; font-weight:700; color:var(--text-dim); }
+.nrow2.cur .mark { border-color:var(--accent-border); color:var(--accent); background:var(--accent-soft); }
+.nrow2 .who { flex:1 1 auto; min-width:0; }
+.nrow2 .who .n1 { display:flex; align-items:baseline; gap:8px; }
+.nrow2 .who .nm { font-size:var(--fs-body); font-weight:600; color:var(--text-bright); }
+.nrow2 .who .n2 { font-size:var(--fs-micro); color:var(--text-dimmer); margin-top:1px; }
+.nrow2 .metrics { flex:0 0 auto; display:flex; gap:14px; font:var(--fs-micro)/1.6 var(--mono); color:var(--text-dim);
+  font-variant-numeric:tabular-nums; }
+.nrow2 .metrics .hot { color:var(--warn); }
+.nrow2 .go { flex:0 0 auto; color:var(--text-dimmer); }
+.nrow2.off .nm { color:var(--text-dim); }
+.nrow2 .dotx { width:7px; height:7px; border-radius:50%; background:var(--ok); flex:0 0 auto; }
+.nrow2.off .dotx { background:var(--text-dimmer); }
+.evrow { display:flex; align-items:baseline; gap:10px; padding:5px 2px; font-size:var(--fs-meta); }
+.evrow .t { flex:0 0 66px; font:var(--fs-micro)/1.6 var(--mono); color:var(--text-dimmer); }
+.evrow .i { flex:0 0 6px; height:6px; border-radius:50%; }
+.evrow .x { color:var(--text-dim); }
+.foldrow { display:flex; align-items:center; gap:10px; padding:10px 2px; border-top:1px solid var(--border-subtle);
+  font-size:var(--fs-meta); }
+.foldrow .k { color:var(--text-bright); font-weight:600; font-size:var(--fs-sm); }
+.foldrow .v { color:var(--text-dimmer); }
+.foldrow .grow { flex:1; }
 .card { border:1px solid var(--border-subtle); border-radius:var(--r-card); background:var(--bg-container); }
 .card > h4 { margin:0; padding:11px 14px; font-size:var(--fs-sm); font-weight:600; color:var(--text-bright);
   border-bottom:1px solid var(--border-subtle); display:flex; align-items:center; gap:8px; }
@@ -264,12 +304,12 @@ html[data-theme="light"] .dd { box-shadow:0 10px 24px rgba(31,35,40,.14); }
 
 <!-- ═══════════════════════════════════════════════ -->
 <section id="s2">
-  <h2><span class="n">02</span> 中心页（可切正常 / 异常）</h2>
+  <h2><span class="n">02</span> 中心页（列表化）</h2>
   <p class="lead">
-    中心是**所有流量的必经之路**，它手上有一堆别处看不到的东西：谁在连、连得通不通、版本齐不齐、
-    谁在敲门。这一页要把它们摆出来，而不只是四个数字。
-    <b>下面的内容都是真的</b>：机器元数据取自线上注册表，事件与来源取自中心日志，
-    正常态数字取自 11:15 的 <code>health.log</code>，异常态取自当天上午那次事故。
+    第一版做成了「一堆卡片」：四张等大的指标卡 + 三个卡片框，全都是同一个灰、同一个字号、
+    同一个圆角。信息都在，但**没有一处是主角**，看上去就是七个盒子。
+    这一版换成会话页那套语言：**没有卡片框，只有分隔线和留白**；层次靠字号与颜色，不靠边框。
+    数字仍然全是真的（11:15 的 health.log + 线上注册表）。
   </p>
   <div style="margin-bottom:12px; display:flex; gap:8px">
     <button class="tt-act primary" id="b-ok" onclick="setState('ok')">正常态</button>
@@ -277,7 +317,7 @@ html[data-theme="light"] .dd { box-shadow:0 10px 24px rgba(31,35,40,.14); }
   </div>
 
   <div class="frame">
-    <div class="chrome"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="url" id="url">roam.local / #/hub</span></div>
+    <div class="chrome"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="url">roam.local / #/hub</span></div>
     <div class="shell">
       <nav class="nav">
         <div class="brand"></div>
@@ -289,104 +329,56 @@ html[data-theme="light"] .dd { box-shadow:0 10px 24px rgba(31,35,40,.14); }
         <button class="it" title="设置"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><circle cx="9" cy="7" r="2.3"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="15" cy="17" r="2.3"/></svg></button>
       </nav>
 
-      <div class="main">
-        <div class="banner hide" id="banner">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color:var(--danger);flex:0 0 auto"><path d="M10.3 4.3 2.6 17.5A2 2 0 0 0 4.3 20.5h15.4a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0Z"/><path d="M12 9.5v4"/><path d="M12 17h.01"/></svg>
-          <span class="grow" id="banner-text"></span>
-          <button class="tt-act">看诊断</button>
-          <button class="tt-act danger">重启中心</button>
-        </div>
-
+      <div class="main list">
         <div class="pagehead">
           <span class="pagename">中心</span><span class="pagedivider"></span>
-          <span style="font-size:var(--fs-meta);color:var(--text-dimmer)">47.94.183.77:13570 · v0.9.3 · <span id="head-up">已跑 16 分钟</span></span>
+          <span style="font-size:var(--fs-meta);color:var(--text-dimmer)">47.94.183.77:13570 · <span id="head-up">已跑 17 分钟</span></span>
           <span class="grow"></span>
-          <button class="tt-act">导出诊断包</button>
           <button class="tt-act">刷新</button>
-          <button class="tt-act danger">重启中心</button>
         </div>
 
-        <div class="health">
-          <div class="stat" id="st-mem"><div class="k">内存</div><div class="v"><span id="v-mem">24</span><span class="u">MB</span></div><div class="s" id="s-mem">上限 600MB</div>
-            <svg class="spark" viewBox="0 0 200 26" preserveAspectRatio="none"><polyline id="sp-mem" fill="none" stroke="currentColor" stroke-width="1.5" points=""/></svg></div>
-          <div class="stat" id="st-gor"><div class="k">Goroutine</div><div class="v" id="v-gor">21</div><div class="s" id="s-gor">稳定</div>
-            <svg class="spark" viewBox="0 0 200 26" preserveAspectRatio="none"><polyline id="sp-gor" fill="none" stroke="currentColor" stroke-width="1.5" points=""/></svg></div>
-          <div class="stat" id="st-q"><div class="k">待接连接</div><div class="v" id="v-q">0</div><div class="s" id="s-q">accept 队列</div>
-            <svg class="spark" viewBox="0 0 200 26" preserveAspectRatio="none"><polyline id="sp-q" fill="none" stroke="currentColor" stroke-width="1.5" points=""/></svg></div>
-          <div class="stat"><div class="k">经我转发</div><div class="v" id="v-rps">2.4<span class="u">/秒</span></div><div class="s" id="s-rps">活跃隧道流 6 · WS 3</div>
-            <svg class="spark" viewBox="0 0 200 26" preserveAspectRatio="none"><polyline id="sp-rps" fill="none" stroke="currentColor" stroke-width="1.5" points=""/></svg></div>
+        <!-- 状态行：一行说完「好不好 + 三个数」。异常时整行变红并长出一句原因和两个动作。 -->
+        <div class="statusline" id="statusline">
+          <i class="d" id="st-dot"></i>
+          <b id="st-title">运行正常</b>
+          <span class="nums" id="st-nums">内存 28MB · goroutine 78 · 转发 3.1/秒</span>
+          <span class="grow"></span>
+          <span class="acts" id="st-acts"></span>
         </div>
 
-        <div class="two">
-          <div style="display:flex; flex-direction:column; gap:14px">
-            <div class="card">
-              <h4>机器 <span class="grow"></span>
-                <span style="font-weight:400;color:var(--text-dimmer);font-size:var(--fs-micro)" id="node-count">2 台在线</span>
-                <button class="tt-act" style="height:24px">全部重连</button>
-              </h4>
-              <div id="nodes"></div>
-            </div>
+        <!-- 机器：这一页的主角。一台两行，右端一个箭头。 -->
+        <div class="sechead">机器<span class="grow"></span><span class="dim" id="node-count">2 台在线</span></div>
+        <div id="nodes"></div>
 
-            <div class="card">
-              <h4>最近发生了什么 <span class="grow"></span><span style="font-weight:400;color:var(--text-dimmer);font-size:var(--fs-micro)">近 24 小时</span></h4>
-              <div class="body" style="padding:6px 0"><div id="events"></div></div>
-            </div>
-          </div>
+        <div class="sechead">最近</div>
+        <div id="events"></div>
 
-          <div style="display:flex; flex-direction:column; gap:14px">
-            <div class="card">
-              <h4>接一台新机器</h4>
-              <div class="body" style="display:flex;flex-direction:column;gap:10px">
-                <div style="font-size:var(--fs-meta);color:var(--text-dim)">在那台机器上执行这条命令。令牌一次性，30 分钟内有效。</div>
-                <div class="cmd">curl -fsSL https://47.94.183.77:13570/install.sh | bash -s -- --hub https://47.94.183.77:13570 --token 7f3a…</div>
-                <div style="display:flex;gap:8px"><button class="tt-act">复制命令</button><button class="tt-act">重新签发</button></div>
-                <div class="kv"><span>待用令牌</span><b>1 张</b><span class="dim">28 分钟后过期</span></div>
-                <div style="font-size:var(--fs-micro);color:var(--text-dimmer);line-height:1.7">
-                  对外地址与令牌有效期在 设置 → 多机 里改；这里只负责签发。
-                </div>
-              </div>
-            </div>
-
-            <div class="card">
-              <h4>安全 <span class="grow"></span><span id="sec-badge" class="chip warn">391 次证书被拒</span></h4>
-              <div class="body" style="display:flex;flex-direction:column;gap:9px">
-                <div class="kv"><span>TLS 证书</span><b>自签</b><span class="dim">2036-08-08 到期</span></div>
-                <div class="kv"><span>敲门最多的来源</span><b class="mono">39.155.137.50</b><span class="dim">1107 次</span></div>
-                <div class="kv"><span>客户端拒证书</span><b class="mono">391</b><span class="dim">近 24h</span></div>
-                <div style="font-size:var(--fs-micro);color:var(--text-dimmer);line-height:1.7">
-                  自签证书没被信任时，浏览器会在**新开的连接**上拒绝——页面时好时坏正是这么来的。
-                </div>
-                <div style="display:flex;gap:8px"><button class="tt-act">下载 CA 证书</button><button class="tt-act">怎么装</button></div>
-              </div>
-            </div>
-
-            <div class="card">
-              <h4>诊断</h4>
-              <div class="body" style="display:flex;flex-direction:column;gap:9px">
-                <div class="kv"><span>pprof</span><b style="color:var(--ok)">已开</b><span class="dim">仅回环 127.0.0.1:6060</span></div>
-                <div class="kv"><span>采样</span><b>288 条</b><span class="dim">5 分钟 / 次，留 24h</span></div>
-                <div class="cmd">ssh -L 6060:127.0.0.1:6060 root@47.94.183.77</div>
-                <div style="font-size:var(--fs-micro);color:var(--text-dimmer);line-height:1.7">
-                  堆栈与内存快照**不经公网接口**：那等于把内存内容和打垮进程的入口一起送出去。
-                </div>
-              </div>
-            </div>
-          </div>
+        <div class="foldrow">
+          <span class="k">这台机器</span>
+          <span class="v" id="host-brief">内存 59% · 负载 0.12</span>
+          <span class="grow"></span>
+          <button class="tt-act">细看</button>
+        </div>
+        <div class="foldrow">
+          <span class="k">诊断</span>
+          <span class="v">pprof 已开 · 采样 4 条</span>
+          <span class="grow"></span>
+          <button class="tt-act">展开</button>
         </div>
       </div>
     </div>
   </div>
-  <p class="cap">异常态那几个数字（299MB / 18298 / 队列 153）是今早 10:25 采样里的原值；机器元数据、来源 IP、证书拒绝次数都取自线上。</p>
+  <p class="cap">异常态那几个数字（299MB / 18298 / 队列 153）取自今早 10:25 的采样；机器元数据取自线上注册表。</p>
 
-  <h3>每一块凭什么占这个位置</h3>
+  <h3>这一版删掉了什么</h3>
   <table>
-    <tr><th style="width:150px">块</th><th style="width:150px">别处看得到吗</th><th>它回答的问题</th></tr>
-    <tr><td><b>健康四格 + 曲线</b></td><td>看不到</td><td>「中心自己还好吗」。单点数字看不出「稳在 20」还是「正在爬」，所以每格都带曲线</td></tr>
-    <tr><td><b>经我转发</b></td><td>只有中心知道</td><td>请求速率 / 活跃隧道流 / WS 数——判断「是没人用还是卡住了」，两者的内存曲线长得完全不同</td></tr>
-    <tr><td><b>机器卡片</b></td><td>切换器只给名字和延迟</td><td>版本齐不齐、能力有哪些、心跳多久没来、这台在跑几个会话——<b>版本不一致会出怪事</b>，线上现在就不一致</td></tr>
-    <tr><td><b>最近发生了什么</b></td><td>只在服务器日志里</td><td>「昨晚它为什么断了」。上线/下线/重连/签发/鉴权失败/中心重启，一条时间线说完</td></tr>
-    <tr><td><b>安全</b></td><td>只在日志里</td><td>今天用户「打不开」的真因就是证书没被信任（391 次被拒）；顺带看见有人 1107 次敲门</td></tr>
-    <tr><td><b>诊断</b></td><td>要 ssh 才知道</td><td>pprof 开没开、采样攒了多少、怎么把端口转出来——今早查问题时这三件事全靠翻记忆</td></tr>
+    <tr><th style="width:190px">删掉的</th><th>为什么</th></tr>
+    <tr><td><b>七个卡片框</b></td><td>全是同一个灰、同一个圆角，边框不携带任何信息，只是把页面切成七块。层次改用字号与颜色</td></tr>
+    <tr><td><b>四张指标卡</b></td><td>133px 高 × 4，只为传达「一切正常」。收成状态行里的一句话，异常时才展开细节</td></tr>
+    <tr><td><b>长版本号</b></td><td><code>v0.1.0-rc.2-254-gbd60090</code> 占半行还最抢眼。只留短号，完整版本进 title</td></tr>
+    <tr><td><b>「与中心版本不一致」黄标</b></td><td>字符串全等太脆——带个构建后缀就误报，两台一起亮黄反而没人信。改成只在**主版本真不同**时提示</td></tr>
+    <tr><td><b>能力清单（6 项能力）</b></td><td>term/files/git/browser/phone/swarm 天天不变，一年问一次，不该常驻</td></tr>
+    <tr><td><b>诊断区那两行说明</b></td><td>「为什么 pprof 只绑回环」是设计决策，不是每天要读的东西。收进问号</td></tr>
   </table>
 </section>
 
@@ -487,14 +479,12 @@ const BAD = {
 // 线上注册表里的真实两台（版本确实不一致：中心 0083f46 vs 开发机 v0.1.0-rc.2-254-gbd60090）
 const NODES = [
   { mark:'开', name:'开发机', group:'我的机器', host:'REN7000K-26IRX', cur:true, online:true,
-    lat:5, latSeries:[6,5,7,5,6,5,5,6,5,5], ver:'v0.1.0-rc.2-254-gbd60090', verBad:true,
-    run:23, wait:2, beat:'刚刚', caps:['term','files','git','browser','phone','swarm'] },
+    lat:4, ver:'v0.1.0-rc.2-254-gbd60090', run:24, cpu:13, mem:63 },
   { mark:'JE', name:'Jetson', group:'我的机器', host:'ubuntu', cur:false, online:true,
-    lat:29, latSeries:[31,29,33,28,29,30,29,43,29,29], ver:'0083f46', verBad:false,
-    run:5, wait:0, beat:'12 秒前', caps:['term','files','git','browser','phone','swarm'] },
+    lat:22, ver:'16ca07e', run:5, cpu:2, mem:48 },
 ]
 const OFFLINE = { mark:'树', name:'树莓派', group:'家里', host:'raspberrypi', cur:false, online:false,
-  lat:null, latSeries:[], ver:'0083f46', verBad:false, run:0, wait:0, beat:'3 小时前', caps:['term','files'] }
+  lat:null, ver:'16ca07e', run:0, cpu:0, mem:0 }
 
 const EV_OK = [
   ['11:15','ok','<b>Jetson</b> 心跳正常 · 29ms'],
@@ -520,62 +510,45 @@ function spark(id, series, color) {
   el.style.color = color
 }
 
-function nodeCard(n) {
-  const line = n.latSeries.length
-    ? '<svg class="latline" viewBox="0 0 64 16" preserveAspectRatio="none"><polyline fill="none" stroke="currentColor" stroke-width="1.3" style="color:var(--text-dimmer)" points="'
-      + n.latSeries.map((v,i) => ((i/(n.latSeries.length-1))*64).toFixed(1)+','+(14-((v-Math.min(...n.latSeries))/Math.max(1,Math.max(...n.latSeries)-Math.min(...n.latSeries)))*12).toFixed(1)).join(' ') + '"/></svg>'
-    : ''
-  return `<div class="ncard${n.cur?' cur':''}${n.online?'':' off'}">
-    <div class="top">
-      <span class="mark">${n.mark}</span>
-      <span><span class="nm">${n.name}</span> <span class="grp">${n.group} · ${n.host}</span></span>
-      <span class="grow"></span>
-      ${n.online ? `<span class="lat">${n.lat}ms</span>${line}` : '<span class="chip danger">离线</span>'}
-      <i class="dot"></i>
-    </div>
-    <div class="meta">
-      <span>${n.online ? `<b style="color:var(--text-bright)">${n.run}</b> 会话在跑${n.wait ? ` · <b style="color:var(--warn)">${n.wait}</b> 等你` : ''}` : '心跳 ' + n.beat}</span>
-      <span>${n.online ? '心跳 ' + n.beat : ''}</span>
-      <span class="mono" style="font-family:var(--mono)">${n.ver}</span>
-      ${n.verBad ? '<span class="chip warn">与中心版本不一致</span>' : ''}
-      <span class="caps">${n.caps.map(c => `<span>${c}</span>`).join('')}</span>
-    </div>
-    <div class="acts">
-      <button class="tt-act">进入这台</button>
-      <button class="tt-act">重命名</button>
-      <button class="tt-act">改分组</button>
-      <button class="tt-act danger">移出集群</button>
-    </div>
+function nodeRow(n) {
+  const ver = (n.ver || '').length > 12 ? n.ver.slice(0, 12) + '…' : n.ver
+  return `<div class="nrow2${n.cur ? ' cur' : ''}${n.online ? '' : ' off'}" title="${n.ver}">
+    <span class="mark">${n.mark}</span>
+    <span class="who">
+      <span class="n1"><span class="nm">${n.name}</span><span class="n2">${n.group}</span></span>
+      <span class="n2">${n.host} · ${ver}</span>
+    </span>
+    <span class="metrics">
+      ${n.online ? `<span>${n.lat}ms</span>
+        <span class="${n.cpu > 85 ? 'hot' : ''}">CPU ${n.cpu}%</span>
+        <span class="${n.mem > 85 ? 'hot' : ''}">内存 ${n.mem}%</span>
+        <span>${n.run} 会话</span>` : '<span>离线</span>'}
+    </span>
+    <i class="dotx"></i>
+    <span class="go">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>
+    </span>
   </div>`
 }
 
-function setState(s) {
-  const d = s === 'ok' ? OK : BAD, bad = s !== 'ok'
-  document.getElementById('v-mem').textContent = d.mem
-  document.getElementById('v-gor').textContent = d.gor.toLocaleString()
-  document.getElementById('v-q').textContent = d.q
-  document.getElementById('v-rps').innerHTML = d.rps + '<span class="u">/秒</span>'
-  document.getElementById('s-mem').textContent = d.memSub
-  document.getElementById('s-gor').textContent = d.gorSub
-  document.getElementById('s-q').textContent = d.qSub
-  document.getElementById('s-rps').textContent = d.rpsSub
+function setState(st) {
+  const d = st === 'ok' ? OK : BAD, bad = st !== 'ok'
+  document.getElementById('statusline').className = 'statusline' + (bad ? ' bad' : '')
+  document.getElementById('st-title').textContent = bad ? 'Goroutine 持续增长' : '运行正常'
+  document.getElementById('st-nums').textContent = bad
+    ? `内存 ${d.mem}MB（占这台机器 18%）· goroutine ${d.gor.toLocaleString()} · 待接连接 ${d.q}`
+    : `内存 ${d.mem}MB · goroutine ${d.gor} · 转发 ${d.rps}/秒`
+  document.getElementById('st-acts').innerHTML = bad
+    ? '<button class="tt-act">看诊断</button> <button class="tt-act danger">重启中心</button>'
+    : ''
   document.getElementById('head-up').textContent = d.up
-  document.getElementById('st-mem').className = 'stat' + (bad ? ' bad' : '')
-  document.getElementById('st-gor').className = 'stat' + (bad ? ' bad' : '')
-  document.getElementById('st-q').className = 'stat' + (bad ? ' warn' : '')
-  spark('sp-mem', d.memSeries, bad ? 'var(--danger)' : 'var(--ok)')
-  spark('sp-gor', d.gorSeries, bad ? 'var(--danger)' : 'var(--ok)')
-  spark('sp-q', d.qSeries, bad ? 'var(--warn)' : 'var(--text-dimmer)')
-  spark('sp-rps', d.rpsSeries, bad ? 'var(--danger)' : 'var(--accent)')
-  document.getElementById('banner').className = 'banner' + (bad ? '' : ' hide')
-  document.getElementById('banner-text').textContent = bad
-    ? '中心内存持续增长，已经接不过来新连接（accept 队列 153）。多半是泄漏——先看诊断，或直接重启。' : ''
   document.getElementById('nav-node').className = 'node' + (bad ? ' alarm' : '')
   const list = bad ? NODES.concat([OFFLINE]) : NODES
-  document.getElementById('nodes').innerHTML = list.map(nodeCard).join('')
+  document.getElementById('nodes').innerHTML = list.map(nodeRow).join('')
   document.getElementById('node-count').textContent = bad ? '2 台在线 · 1 台离线' : '2 台在线'
   document.getElementById('events').innerHTML = (bad ? EV_BAD : EV_OK).map(([t, k, x]) =>
-    `<div class="ev"><span class="t">${t}</span><i class="i" style="background:var(--${k === 'ok' ? 'ok' : k})"></i><span class="x">${x}</span></div>`).join('')
+    `<div class="evrow"><span class="t">${t}</span><i class="i" style="background:var(--${k === 'ok' ? 'ok' : k})"></i><span class="x">${x}</span></div>`).join('')
+  document.getElementById('host-brief').textContent = bad ? '内存 96% · 负载 20.78 · 在换页' : '内存 59% · 负载 0.12'
   document.getElementById('b-ok').className = 'tt-act' + (bad ? '' : ' primary')
   document.getElementById('b-bad').className = 'tt-act' + (bad ? ' primary' : '')
 }
