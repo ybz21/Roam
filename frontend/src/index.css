@@ -2951,3 +2951,85 @@ html[data-size="compact"] .cc-run-slot { width: auto; }
 @media (pointer: coarse) {
   .ant-dropdown-menu-item:has(.tt-nodemenu) { min-height: var(--tap); }
 }
+
+/* ── 中心页（#/hub，见 components/cluster/HubPage.tsx）───────────────────────
+   中心是所有流量的必经之路，它手上有一堆别处看不到的东西：自己的内存/goroutine 曲线、
+   经它转发的流量、每台机器的版本与能力、最近发生了什么。2026-08-11 它卡死十几个小时
+   无人发现，就是因为这些在界面上一样都没有。 */
+.tt-hub { display: flex; flex-direction: column; gap: var(--sp-4); width: 100%; }
+.tt-hub-head { display: flex; align-items: center; gap: var(--sp-2); }
+.tt-hub-head .sub { font-size: var(--fs-meta); color: var(--text-dimmer); }
+.tt-hub-head .grow { flex: 1; }
+.tt-hub-empty { padding: 48px 12px; color: var(--text-dimmer); font-size: var(--fs-sm); text-align: center; }
+.tt-hub-empty.small { padding: 20px 12px; text-align: left; }
+
+.tt-hub-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: var(--sp-3); }
+.tt-hub-stat {
+  border: 1px solid var(--border-subtle); border-radius: var(--r-card);
+  background: var(--bg-container); padding: 12px 14px;
+}
+.tt-hub-stat .k {
+  font-size: var(--fs-micro); letter-spacing: .08em; text-transform: uppercase; color: var(--text-dimmer);
+}
+.tt-hub-stat .v {
+  margin-top: 4px; font: 600 24px/1.15 var(--mono); color: var(--text-bright); font-variant-numeric: tabular-nums;
+}
+.tt-hub-stat .v .u { font: 400 var(--fs-meta)/1 inherit; color: var(--text-dimmer); margin-left: 3px; }
+.tt-hub-stat .s { margin-top: 5px; font-size: var(--fs-micro); color: var(--text-dimmer); }
+.tt-hub-stat.bad .v { color: var(--danger); }
+.tt-hub-stat.warn .v { color: var(--warn); }
+.tt-hub-spark { margin-top: 8px; height: 26px; width: 100%; }
+
+.tt-hub-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: var(--sp-4); align-items: start; }
+.tt-hub-side { display: flex; flex-direction: column; gap: var(--sp-4); }
+.tt-hub-card { border: 1px solid var(--border-subtle); border-radius: var(--r-card); background: var(--bg-container); }
+.tt-hub-card > h4 {
+  margin: 0; padding: 11px 14px; font-size: var(--fs-sm); font-weight: 600; color: var(--text-bright);
+  border-bottom: 1px solid var(--border-subtle); display: flex; align-items: center; gap: var(--sp-2);
+}
+.tt-hub-card > h4 .grow { flex: 1; }
+.tt-hub-card > h4 .dim { font-weight: 400; color: var(--text-dimmer); font-size: var(--fs-micro); }
+.tt-hub-card .body { padding: 12px 14px; display: flex; flex-direction: column; gap: 9px; }
+.tt-hub-card .body .hint { margin: 0; font-size: var(--fs-micro); color: var(--text-dimmer); line-height: 1.7; }
+.tt-hub-card .kv { display: flex; align-items: baseline; gap: var(--sp-2); font-size: var(--fs-meta); color: var(--text-dimmer); }
+.tt-hub-card .kv b { color: var(--text-bright); font-weight: 600; }
+.tt-hub-card .kv .dim { margin-left: auto; font-size: var(--fs-micro); }
+.tt-hub-cmd {
+  font: var(--fs-micro)/1.7 var(--mono); background: var(--bg-base); border: 1px solid var(--border-subtle);
+  border-radius: var(--r-xs); padding: 9px 10px; color: var(--text-dim); overflow-x: auto; white-space: nowrap;
+}
+
+/* 机器卡片：比切换器里那一行多说的是版本、能力、会话数——版本不一致会出怪事 */
+.tt-hub-node { padding: 12px 14px; border-bottom: 1px solid var(--border-subtle); }
+.tt-hub-node:last-child { border-bottom: 0; }
+.tt-hub-node .top { display: flex; align-items: center; gap: var(--sp-2); }
+.tt-hub-node .nm { font-size: var(--fs-body); font-weight: 600; color: var(--text-bright); }
+.tt-hub-node .grp { font-size: var(--fs-micro); color: var(--text-dimmer); }
+.tt-hub-node .grow { flex: 1; }
+.tt-hub-node .lat { font: var(--fs-micro)/1 var(--mono); color: var(--text-dimmer); }
+.tt-hub-node .dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+.tt-hub-node.off .nm { color: var(--text-dim); }
+.tt-hub-node .meta {
+  margin-top: 7px; display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
+  font-size: var(--fs-micro); color: var(--text-dimmer);
+}
+.tt-hub-node .meta .mono { font-family: var(--mono); }
+.tt-hub-node .caps { display: flex; gap: 4px; flex-wrap: wrap; }
+.tt-hub-node .caps span { border: 1px solid var(--border-subtle); border-radius: var(--r-xs); padding: 1px 5px; }
+.tt-hub-node .acts { margin-top: 9px; display: flex; gap: 6px; }
+.tt-hub-chip {
+  font-size: var(--fs-micro); border-radius: var(--r-pill); padding: 2px 8px;
+  border: 1px solid var(--border-subtle); color: var(--text-dimmer);
+}
+.tt-hub-chip.warn { color: var(--warn); border-color: var(--warn-border); background: var(--warn-soft); }
+.tt-hub-chip.danger { color: var(--danger); border-color: var(--danger-border); background: var(--danger-soft); }
+
+/* 事件流：「昨晚它为什么断了」的答案，原来只躺在服务器日志里 */
+.tt-hub-ev { display: flex; align-items: baseline; gap: var(--sp-2); padding: 6px 14px; font-size: var(--fs-meta); }
+.tt-hub-ev .t { flex: 0 0 62px; font: var(--fs-micro)/1.6 var(--mono); color: var(--text-dimmer); }
+.tt-hub-ev .i { flex: 0 0 7px; height: 7px; border-radius: 50%; }
+.tt-hub-ev .x { flex: 1; min-width: 0; color: var(--text-dim); }
+@media (pointer: coarse) { .tt-hub-node .acts .tt-act { min-height: 36px; } }
+.tt-hub-spark.waiting {
+  display: flex; align-items: flex-end; font-size: var(--fs-micro); color: var(--text-dimmer); opacity: .7;
+}

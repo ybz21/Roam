@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"net/http"
 	"path/filepath"
 	"time"
@@ -24,6 +25,10 @@ func NewHub(cfg Config) *gin.Engine {
 	brk := hub.New(filepath.Join(cfg.DataDir, "cluster"))
 	brk.SetPublicURL(cfg.Cluster.PublicURL)
 	brk.SetEnrollTTL(time.Duration(cfg.Cluster.EnrollTTLMin) * time.Minute)
+	brk.SetVersion(cfg.Version)
+	// 采样在这里起而不是 New() 里：测试会造很多个 Hub，每个都拖一条后台 goroutine 的话，
+	// goroutine 泄漏那条回归用例自己就先花了。
+	brk.StartSampling(context.Background())
 
 	// 公开端点（与单机一致：登录 / 首次设置 / 版本 / 证书 / 导航页）
 	mountPublic(r, a, cfg)
@@ -46,6 +51,8 @@ func NewHub(cfg Config) *gin.Engine {
 	bg := r.Group("/api/hub", a.Middleware())
 	bg.Use(func(c *gin.Context) { c.Header("Cache-Control", "no-store") })
 	bg.GET("/nodes", brk.Nodes)
+	// 中心自身的健康与事件（中心页）。诊断口 pprof 不走这里：它只绑回环，见 cluster/hub/self.go
+	bg.GET("/self", brk.Self)
 	bg.GET("/bootstrap", brk.Bootstrap)
 	bg.POST("/enroll", brk.Enroll)
 

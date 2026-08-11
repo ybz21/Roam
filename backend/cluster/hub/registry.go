@@ -238,6 +238,23 @@ func (r *Registry) Session(id string) *yamux.Session {
 	return r.sessions[id]
 }
 
+// TunnelCount 是当前活着的隧道数——与「注册过几台」不是一回事（离线的仍在注册表里）。
+func (r *Registry) TunnelCount() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return len(r.sessions)
+}
+
+// NameOf 取显示名，给事件流用；查不到就回 id（总比空字符串强）。
+func (r *Registry) NameOf(id string) string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if n := r.nodes[id]; n != nil && n.Name != "" {
+		return n.Name
+	}
+	return id
+}
+
 // List 返回节点快照（含在线状态）。
 func (r *Registry) List() []NodeView {
 	r.mu.RLock()

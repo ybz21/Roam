@@ -32,6 +32,7 @@ const BrowserView = lazyRetry(() => import('./components/mirror/BrowserView'))
 const PhoneView = lazyRetry(() => import('./components/mirror/PhoneView'))
 const Swarm = lazyRetry(() => import('./components/swarm/Swarm'))
 const Projects = lazyRetry(() => import('./components/projects/Projects'))
+const HubPage = lazyRetry(() => import('./components/cluster/HubPage'))
 import UpdateBanner from './components/UpdateBanner'
 import { useThemeMode } from './theme'
 import { useI18n } from './i18n'
@@ -62,7 +63,7 @@ import { ICONS } from './components/nav-icons'
 import { normalizeRoute, setHashParams, readTermTokens } from './route-hash'
 import type { ClaudeInfo } from './components/terminal/claude-info'
 import { dropDeadTokens, loadTabs, saveTabs } from './components/terminal/term-tabs-store'
-import { ExitFullscreenIcon, FullscreenIcon, LogoutIcon, MoonIcon, MoreIcon, SearchIcon, SunIcon } from './icons'
+import { CloudIcon, ExitFullscreenIcon, FullscreenIcon, LogoutIcon, MoonIcon, MoreIcon, SearchIcon, SunIcon } from './icons'
 import { lazyRetry } from './components/lazy-retry'
 
 const { Sider, Content } = Layout
@@ -494,6 +495,7 @@ export default function App() {
     sessions: <Sessions openTerm={openTerm} closeTerm={closeTerm} activeTerm={active} />,
     files: <FilesPage openTerm={openTerm} />,
     settings: <SettingsPage sub={settingsSub} onNav={(r) => go(r)} />,
+    hub: <HubPage />,
     plugins: <PluginsPanel />,
     browser: <BrowserView />,
     phone: <PhoneView />,
@@ -599,6 +601,22 @@ export default function App() {
       disabled: !n.online,
       onClick: () => switchNode(n.id),
     })),
+    // 中心单独一条，用分隔线跟机器列表隔开：它的语义是「去看中心」，不是「把浏览范围切过去」。
+    // 中心不跑会话/项目/文件/终端，真切过去大半个应用是空的——那不是另一台机器，是另一种东西。
+    { type: 'divider' as const },
+    {
+      key: 'hub-page',
+      icon: <CloudIcon size={13} />,
+      label: (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 168 }}>
+          <span style={{ flex: 1 }}>{t('hub.title')}</span>
+          <span style={{ fontSize: 'var(--fs-micro)', color: 'var(--text-dimmer)' }}>
+            {t('hub.onlineShort', { n: clusterNodes.filter((n) => n.online).length })}
+          </span>
+        </span>
+      ),
+      onClick: () => go('hub'),
+    },
   ] : []
 
   // 设置不在这里：它在侧栏底部有自己的入口，菜单里再放一条就是同一页两个门
