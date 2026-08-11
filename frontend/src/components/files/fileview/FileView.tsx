@@ -172,8 +172,10 @@ export function FileView({
       {(isMd || isHtml) && data && !data.binary && (
         <Button size="small" onClick={() => setSource((s) => !s)}>{source ? t('file.rendered') : t('file.source')}</Button>
       )}
+      {/* 新标签同样走 serveUrl：/file/raw?path= 下，页面里的 shared.css 会被浏览器解析成
+          /api/file/shared.css 而 404，整页裸奔（设计稿只剩黑三角）。见 HtmlView 的同款理由。 */}
       {isHtml && (
-        <Button size="small" href={rawUrl} target="_blank" rel="noreferrer">{t('file.openInNewTab')}</Button>
+        <Button size="small" href={serveUrl} target="_blank" rel="noreferrer">{t('file.openInNewTab')}</Button>
       )}
       {onOpenAgent && (
         <Button size="small" onClick={() => setAgentPick(true)}>{t('file.openInAgent')}</Button>
@@ -250,7 +252,7 @@ export function FileView({
               )}
               {isHtml && (
                 <Tooltip title={t('file.openInNewTab')} placement="bottom">
-                  <Button type="text" size="small" href={rawUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--text-dim)', width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><ExternalLinkIcon /></Button>
+                  <Button type="text" size="small" href={serveUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--text-dim)', width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><ExternalLinkIcon /></Button>
                 </Tooltip>
               )}
             </div>
