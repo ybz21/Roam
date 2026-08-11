@@ -387,3 +387,96 @@ func TestProxyDoesNotLeakGoroutines(t *testing.T) {
 		t.Fatalf("%d 个反代请求后 goroutine 增长 %d，疑似每请求泄漏（复用 Transport 时应接近 0）", n, grew)
 	}
 }
+
+// TestSelfReportsHealthAndEvents 盯的是中心页的数据源。2026-08-11 中心卡死十几个小时无人知，
+// 就是因为没有任何接口回答「中心自己怎么样」——查问题只能 ssh 上去看 ps。
+// 这条用例要求 /api/hub/self 真的会动：节点上线要产生事件，反代要被计数，采样要有值。
+func TestSelfReportsHealthAndEvents(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	brk := hub.New(t.TempDir())
+	brk.SetVersion("test-ver")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	brk.StartSampling(ctx) // 起点采一次，不等 5 分钟
+
+	r := gin.New()
+	r.GET("/cluster/tunnel", brk.HandleTunnel)
+	r.POST("/api/hub/enroll", brk.Enroll)
+	r.GET("/api/hub/nodes", brk.Nodes)
+	r.GET("/api/hub/self", brk.Self)
+	r.Any("/n/:nodeId/*path", brk.ProxyNode)
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	token := enroll(t, srv.URL)
+	biz := http.NewServeMux()
+	biz.HandleFunc("/api/ping", func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "pong") })
+	cl := &node.Client{
+		Hub: srv.URL, Token: token, Name: "self-node", Version: "test",
+		CredPath: filepath.Join(t.TempDir(), "node.json"), Handler: biz,
+	}
+	go cl.Run(ctx)
+	id := waitOnline(t, srv.URL)
+
+	resp, err := http.Get(srv.URL + "/n/" + id + "/api/ping")
+	if err != nil {
+		t.Fatalf("反代失败: %v", err)
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+
+	var out struct {
+		Data struct {
+			Version     string `json:"version"`
+			UptimeSecs  int64  `json:"uptimeSecs"`
+			NodesOnline int    `json:"nodesOnline"`
+			Now         struct {
+				Goroutines int   `json:"goroutines"`
+				Tunnels    int   `json:"tunnels"`
+				Requests   int64 `json:"requests"`
+			} `json:"now"`
+			Samples []struct {
+				At int64 `json:"at"`
+			} `json:"samples"`
+			Events []struct {
+				Kind string `json:"kind"`
+				Node string `json:"node"`
+			} `json:"events"`
+		} `json:"data"`
+	}
+	sr, err := http.Get(srv.URL + "/api/hub/self")
+	if err != nil {
+		t.Fatalf("取 self 失败: %v", err)
+	}
+	defer sr.Body.Close()
+	if err := json.NewDecoder(sr.Body).Decode(&out); err != nil {
+		t.Fatalf("解析 self 失败: %v", err)
+	}
+	d := out.Data
+
+	if d.Version != "test-ver" {
+		t.Errorf("version = %q，期望 test-ver", d.Version)
+	}
+	if d.Now.Goroutines <= 0 || d.Now.Tunnels != 1 {
+		t.Errorf("goroutines=%d tunnels=%d，期望 goroutines>0 且 tunnels=1", d.Now.Goroutines, d.Now.Tunnels)
+	}
+	if d.Now.Requests < 1 {
+		t.Errorf("requests = %d，反代过一次应当被计数", d.Now.Requests)
+	}
+	if d.NodesOnline != 1 {
+		t.Errorf("nodesOnline = %d，期望 1", d.NodesOnline)
+	}
+	if len(d.Samples) == 0 || d.Samples[0].At == 0 {
+		t.Errorf("采样为空——StartSampling 应当在起点就采一次，不然新装的中心前 5 分钟没有任何曲线")
+	}
+	kinds := map[string]bool{}
+	for _, e := range d.Events {
+		kinds[e.Kind] = true
+		if e.Kind == "node_up" && e.Node != "self-node" {
+			t.Errorf("node_up 的机器名 = %q，期望显示名而不是 id", e.Node)
+		}
+	}
+	if !kinds["hub_start"] || !kinds["node_up"] {
+		t.Errorf("事件流缺东西：%v（期望至少有 hub_start 与 node_up）", kinds)
+	}
+}

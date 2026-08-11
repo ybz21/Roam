@@ -27,6 +27,9 @@ type Hub struct {
 	publicURL string        // 中心的对外地址（config: cluster.public_url）；空 = 按请求 Host 推
 	enrollTTL time.Duration // 接入令牌有效期（config: cluster.enroll_ttl_min）
 
+	version string // 注入的构建版本，/api/hub/self 回给控制台
+	self    *selfStats
+
 	mu      sync.Mutex
 	proxies map[string]*nodeTransport // 每台节点一个复用的 Transport，见 transportFor
 }
@@ -38,14 +41,16 @@ type nodeTransport struct {
 	tr   *http.Transport
 }
 
-// SetPublicURL / SetEnrollTTL 由装配处注入，免得 hub 包反过来依赖 config。
+// SetPublicURL / SetEnrollTTL / SetVersion 由装配处注入，免得 hub 包反过来依赖 config。
 func (b *Hub) SetPublicURL(u string)        { b.publicURL = strings.TrimRight(u, "/") }
+func (b *Hub) SetVersion(v string)          { b.version = v }
 func (b *Hub) SetEnrollTTL(d time.Duration) { b.enrollTTL = d }
 
 // New 从 dir 加载注册表（nodes.json）。
 func New(dir string) *Hub {
 	return &Hub{
-		reg: NewRegistry(dir),
+		reg:  NewRegistry(dir),
+		self: newSelfStats(),
 		// 节点接入靠 token 鉴权（见 HandleTunnel），来源不是浏览器，放开 Origin 校验。
 		up: websocket.Upgrader{ReadBufferSize: 4096, WriteBufferSize: 4096, CheckOrigin: func(*http.Request) bool { return true }},
 	}
@@ -100,7 +105,9 @@ func (b *Hub) HandleTunnel(c *gin.Context) {
 		return
 	}
 	b.reg.Attach(id, sess, meta)
+	b.self.nodeUp(b.reg.NameOf(id))
 	defer func() {
+		b.self.nodeDown(b.reg.NameOf(id))
 		b.reg.Detach(id, sess)
 		b.dropTransport(id)
 		_ = sess.Close()
@@ -307,6 +314,7 @@ func (b *Hub) dropTransport(id string) {
 // 转发本体是 httputil.ReverseProxy（同 backend/browser/devtools.go），只是把底层连接
 // 换成该节点隧道上 Open() 出来的 yamux 流。见架构文档 §7.2。
 func (b *Hub) ProxyNode(c *gin.Context) {
+	b.self.requests.Add(1)
 	id := c.Param("nodeId")
 	sess := b.reg.Session(id)
 	if sess == nil {

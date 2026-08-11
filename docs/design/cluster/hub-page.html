@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Roam 中心页 · 设计稿</title>
+<style>
+/* 中心页设计稿 —— 令牌取 frontend/src/theme.tsx 与 index.css 的真值，稿子和成品同源。
+ * 稿子里的数字**都是真的**：正常态取自 2026-08-11 11:15 的 health.log，
+ * 异常态取自当天上午那次事故（10:20–10:30）。编出来的数字会让人对界面产生错误的直觉。 */
+:root {
+  --bg-base:#0d1117; --bg-container:#161b22; --bg-elevated:#1b222b;
+  --border:#30363d; --border-subtle:#21262d;
+  --text-bright:#e6edf3; --text-dim:#8b949e; --text-dimmer:#6e7681;
+  --accent:#58a6ff; --accent-solid:#1f6feb; --accent-soft:rgba(31,111,235,.14); --accent-border:rgba(88,166,255,.45);
+  --ok:#3fb950; --ok-solid:#238636; --ok-soft:rgba(63,185,80,.14); --ok-border:rgba(63,185,80,.42);
+  --danger:#f85149; --danger-soft:rgba(248,81,73,.12); --danger-border:rgba(248,81,73,.40);
+  --warn:#d29922; --warn-soft:rgba(210,153,34,.12); --warn-border:rgba(210,153,34,.40);
+  --swarm:#a371f7; --swarm-soft:rgba(163,113,247,.12); --swarm-border:rgba(163,113,247,.38);
+  --list-hover:rgba(255,255,255,.025);
+  --fs-micro:11px; --fs-meta:12px; --fs-sm:13px; --fs-body:14px; --fs-lg:16px; --fs-title:22px;
+  --r-xs:6px; --r-sm:10px; --r-card:14px; --r-pill:999px;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --rail:48px; --tap:44px;
+}
+html[data-theme="light"] {
+  --bg-base:#f6f8fa; --bg-container:#ffffff; --bg-elevated:#ffffff;
+  --border:#d0d7de; --border-subtle:#e6e9ec;
+  --text-bright:#1f2328; --text-dim:#57606a; --text-dimmer:#8c959f;
+  --accent:#0969da; --accent-soft:rgba(31,111,235,.10); --accent-border:rgba(31,111,235,.40);
+  --ok:#1a7f37; --ok-soft:rgba(31,136,61,.10); --ok-border:rgba(31,136,61,.40);
+  --danger:#cf222e; --danger-soft:rgba(207,34,46,.09); --danger-border:rgba(207,34,46,.35);
+  --warn:#9a6700; --warn-soft:rgba(154,103,0,.10); --warn-border:rgba(154,103,0,.35);
+  --list-hover:rgba(27,31,36,.04);
+}
+* { box-sizing:border-box; }
+html { background:#07090d; } html[data-theme="light"] { background:#eef1f5; }
+body { margin:0; background:var(--bg-base); color:var(--text-bright);
+  font:var(--fs-body)/1.65 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased; }
+svg { display:block; } button { font:inherit; cursor:pointer; color:inherit; }
+a { color:var(--accent); text-decoration:none; }
+code { font-family:var(--mono); font-size:.92em; background:var(--bg-elevated);
+  border:1px solid var(--border-subtle); border-radius:4px; padding:1px 5px; }
+
+.doc { max-width:1180px; margin:0 auto; padding:40px 24px 120px; }
+.doc > header { border-bottom:1px solid var(--border-subtle); padding-bottom:24px; margin-bottom:32px; }
+.kick { font-size:var(--fs-micro); letter-spacing:.14em; text-transform:uppercase; color:var(--text-dimmer); }
+.doc > header h1 { margin:8px 0 6px; font-size:30px; font-weight:700; letter-spacing:-.01em; }
+.doc > header p { margin:0; color:var(--text-dim); font-size:var(--fs-sm); max-width:78ch; }
+section { margin:56px 0 0; }
+section > h2 { display:flex; align-items:baseline; gap:10px; margin:0 0 6px; font-size:var(--fs-title); font-weight:650; }
+section > h2 .n { font:600 var(--fs-meta)/1 var(--mono); color:var(--accent); border:1px solid var(--accent-border);
+  border-radius:var(--r-pill); padding:5px 9px; }
+section > .lead { margin:0 0 20px; color:var(--text-dim); font-size:var(--fs-sm); max-width:84ch; }
+h3 { margin:28px 0 10px; font-size:var(--fs-lg); font-weight:600; }
+p { max-width:84ch; }
+.note { border-left:2px solid var(--accent); background:var(--accent-soft); border-radius:0 var(--r-sm) var(--r-sm) 0;
+  padding:12px 14px; margin:16px 0; font-size:var(--fs-sm); color:var(--text-dim); }
+.note b { color:var(--text-bright); }
+.note.warn { border-color:var(--warn); background:var(--warn-soft); }
+.note.danger { border-color:var(--danger); background:var(--danger-soft); }
+.note.ok { border-color:var(--ok); background:var(--ok-soft); }
+.cap { font-size:var(--fs-meta); color:var(--text-dimmer); margin:8px 0 0; }
+ul.tight { margin:10px 0; padding-left:20px; font-size:var(--fs-sm); color:var(--text-dim); }
+ul.tight li { margin:5px 0; } ul.tight b { color:var(--text-bright); font-weight:600; }
+table { width:100%; border-collapse:collapse; font-size:var(--fs-meta); margin:14px 0; }
+th,td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--border-subtle); vertical-align:top; }
+th { color:var(--text-dimmer); font-size:var(--fs-micro); letter-spacing:.08em; text-transform:uppercase; font-weight:600; }
+td { color:var(--text-dim); } td b { color:var(--text-bright); font-weight:600; }
+td code, th code { font-size:var(--fs-micro); }
+
+.themer { position:fixed; right:16px; top:16px; z-index:50; display:flex; gap:4px; padding:4px;
+  border:1px solid var(--border); border-radius:var(--r-pill); background:var(--bg-container); }
+.themer button { border:0; background:none; color:var(--text-dimmer); border-radius:var(--r-pill); padding:5px 12px; font-size:var(--fs-micro); }
+.themer button.on { background:var(--accent-soft); color:var(--accent); }
+
+/* ══ 界面框 ══════════════════════════════════════════════ */
+.frame { border:1px solid var(--border); border-radius:var(--r-card); overflow:hidden; background:var(--bg-base);
+  box-shadow:0 16px 44px rgba(0,0,0,.36); }
+html[data-theme="light"] .frame { box-shadow:0 12px 32px rgba(31,35,40,.10); }
+.frame .chrome { height:30px; display:flex; align-items:center; gap:6px; padding:0 12px;
+  border-bottom:1px solid var(--border-subtle); background:var(--bg-container); }
+.frame .chrome .dot { width:9px; height:9px; border-radius:50%; background:var(--border); }
+.frame .chrome .url { margin-left:10px; font:var(--fs-micro)/1 var(--mono); color:var(--text-dimmer); }
+.shell { display:flex; min-height:560px; }
+.nav { width:var(--rail); flex:0 0 var(--rail); display:flex; flex-direction:column; align-items:center;
+  padding:6px 0; gap:4px; border-right:1px solid var(--border-subtle); }
+.nav .brand { width:26px; height:26px; border-radius:7px; background:linear-gradient(135deg,#1f6feb,#3fb950); margin:3px 0 6px; }
+.nav .it { width:34px; height:34px; border-radius:8px; display:grid; place-items:center; color:var(--text-dimmer); border:0; background:none; position:relative; }
+.nav .sp { flex:1; }
+.nav .sep { width:24px; height:1px; background:var(--border-subtle); margin:4px 0; }
+.nav .node { position:relative; width:34px; height:34px; border-radius:8px; background:var(--bg-elevated);
+  display:grid; place-items:center; border:0; font-size:var(--fs-micro); font-weight:700; color:var(--text-dim); }
+.nav .node .d { position:absolute; right:1px; bottom:1px; width:7px; height:7px; border-radius:50%; background:var(--ok);
+  box-shadow:0 0 0 2px var(--bg-base); }
+.nav .node.alarm .d { background:var(--danger); animation:pulse 1.6s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+.main { flex:1; min-width:0; display:flex; flex-direction:column; padding:16px; gap:14px; }
+
+/* 页头：与会话/项目/设置同一套（页名并进工具条） */
+.pagehead { display:flex; align-items:center; gap:var(--sp-2); }
+.pagename { font-size:19px; font-weight:700; letter-spacing:-.01em; }
+.pagedivider { width:1px; height:18px; background:var(--border); }
+.pagehead .grow { flex:1; }
+.tt-act { height:28px; padding:0 11px; display:inline-flex; align-items:center; gap:6px; border-radius:var(--r-xs);
+  border:1px solid var(--border-subtle); background:none; color:var(--text-dim); font-size:var(--fs-meta); }
+.tt-act:hover { border-color:var(--accent-border); color:var(--text-bright); }
+.tt-act.danger { color:var(--danger); border-color:var(--danger-border); }
+.tt-act.primary { background:var(--accent-solid); border-color:var(--accent-solid); color:#fff; }
+
+/* 健康条 */
+.health { display:grid; grid-template-columns:repeat(4,1fr); gap:var(--sp-3); }
+.stat { border:1px solid var(--border-subtle); border-radius:var(--r-card); background:var(--bg-container); padding:12px 14px; }
+.stat .k { font-size:var(--fs-micro); letter-spacing:.08em; text-transform:uppercase; color:var(--text-dimmer); }
+.stat .v { margin-top:4px; font:600 24px/1.15 var(--mono); color:var(--text-bright); font-variant-numeric:tabular-nums; }
+.stat .u { font-size:var(--fs-meta); font-family:inherit; font-weight:400; color:var(--text-dimmer); margin-left:3px; }
+.stat .s { margin-top:5px; font-size:var(--fs-micro); color:var(--text-dimmer); }
+.stat.bad .v { color:var(--danger); }
+.stat.warn .v { color:var(--warn); }
+.spark { margin-top:8px; height:26px; width:100%; }
+
+.card { border:1px solid var(--border-subtle); border-radius:var(--r-card); background:var(--bg-container); }
+.card > h4 { margin:0; padding:11px 14px; font-size:var(--fs-sm); font-weight:600; color:var(--text-bright);
+  border-bottom:1px solid var(--border-subtle); display:flex; align-items:center; gap:8px; }
+.card > h4 .grow { flex:1; }
+.card .body { padding:12px 14px; }
+
+/* 机器行 */
+.nrow { display:flex; align-items:center; gap:var(--sp-3); padding:10px 14px; border-bottom:1px solid var(--border-subtle); }
+.nrow:last-child { border-bottom:0; }
+.nrow .mark { width:24px; height:24px; flex:0 0 24px; border-radius:var(--r-xs); display:grid; place-items:center;
+  border:1px solid var(--border); background:var(--bg-elevated); font-size:var(--fs-micro); font-weight:700; color:var(--text-dim); }
+.nrow.cur .mark { border-color:var(--accent-border); color:var(--accent); background:var(--accent-soft); }
+.nrow .nm { flex:1 1 auto; min-width:72px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-bright); }
+.nrow .meta { flex:0 0 auto; font:var(--fs-micro)/1.6 var(--mono); color:var(--text-dimmer); font-variant-numeric:tabular-nums; }
+.nrow .badge { flex:0 0 auto; font-size:var(--fs-micro); border-radius:var(--r-pill); padding:2px 8px;
+  border:1px solid var(--border-subtle); color:var(--text-dimmer); }
+.nrow .badge.ok { color:var(--ok); border-color:var(--ok-border); background:var(--ok-soft); }
+.nrow .badge.off { color:var(--danger); border-color:var(--danger-border); background:var(--danger-soft); }
+.nrow .dot { flex:0 0 auto; width:7px; height:7px; border-radius:50%; background:var(--ok); }
+.nrow.offline .dot { background:var(--text-dimmer); }
+.nrow.offline .nm { color:var(--text-dim); }
+
+.banner { display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:var(--r-card);
+  border:1px solid var(--danger-border); background:var(--danger-soft); font-size:var(--fs-sm); }
+.banner .grow { flex:1; }
+.banner.hide { display:none; }
+
+/* 切换器下拉（示意） */
+.dd { width:250px; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-elevated);
+  padding:4px; box-shadow:0 12px 30px rgba(0,0,0,.4); }
+html[data-theme="light"] .dd { box-shadow:0 10px 24px rgba(31,35,40,.14); }
+.dd .row { display:flex; align-items:center; gap:var(--sp-2); padding:6px 8px; border-radius:var(--r-xs); }
+.dd .row.on { background:var(--accent-soft); }
+.dd .row .nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-dim); }
+.dd .row.on .nm { color:var(--text-bright); font-weight:500; }
+.dd .row .lat { font:var(--fs-micro)/1 var(--mono); color:var(--text-dimmer); }
+.dd .row .dot { width:7px; height:7px; border-radius:50%; background:var(--ok); }
+.dd .mark { width:20px; height:20px; flex:0 0 20px; border-radius:5px; display:grid; place-items:center;
+  border:1px solid var(--border); font-size:10px; font-weight:700; color:var(--text-dim); }
+.dd .row.on .mark { border-color:var(--accent-border); color:var(--accent); }
+.dd .sep { height:1px; background:var(--border-subtle); margin:4px 2px; }
+.dd .row.hub .mark { border-color:var(--swarm-border); color:var(--swarm); background:var(--swarm-soft); }
+.dd .row.hub .nm { color:var(--text-bright); }
+.cmd { font:var(--fs-micro)/1.7 var(--mono); background:var(--bg-base); border:1px solid var(--border-subtle);
+  border-radius:var(--r-xs); padding:9px 10px; color:var(--text-dim); overflow-x:auto; white-space:nowrap; }
+.kv { display:flex; align-items:baseline; gap:8px; font-size:var(--fs-meta); color:var(--text-dimmer); }
+.kv b { color:var(--text-bright); font-weight:600; }
+.kv b.mono, .kv .mono { font-family:var(--mono); font-size:var(--fs-micro); }
+.kv .dim { margin-left:auto; color:var(--text-dimmer); font-size:var(--fs-micro); }
+.chip { font-size:var(--fs-micro); border-radius:var(--r-pill); padding:2px 8px; border:1px solid var(--border-subtle); color:var(--text-dimmer); font-weight:400; }
+.chip.warn { color:var(--warn); border-color:var(--warn-border); background:var(--warn-soft); }
+.chip.ok { color:var(--ok); border-color:var(--ok-border); background:var(--ok-soft); }
+.chip.danger { color:var(--danger); border-color:var(--danger-border); background:var(--danger-soft); }
+
+/* 机器卡片 */
+.ncard { padding:12px 14px; border-bottom:1px solid var(--border-subtle); }
+.ncard:last-child { border-bottom:0; }
+.ncard .top { display:flex; align-items:center; gap:var(--sp-2); }
+.ncard .mark { width:26px; height:26px; flex:0 0 26px; border-radius:var(--r-xs); display:grid; place-items:center;
+  border:1px solid var(--border); background:var(--bg-elevated); font-size:var(--fs-micro); font-weight:700; color:var(--text-dim); }
+.ncard.cur .mark { border-color:var(--accent-border); color:var(--accent); background:var(--accent-soft); }
+.ncard .nm { font-size:var(--fs-body); font-weight:600; color:var(--text-bright); }
+.ncard .grp { font-size:var(--fs-micro); color:var(--text-dimmer); }
+.ncard .grow { flex:1; }
+.ncard .lat { font:var(--fs-micro)/1 var(--mono); color:var(--text-dimmer); }
+.ncard .dot { width:7px; height:7px; border-radius:50%; background:var(--ok); }
+.ncard.off .dot { background:var(--text-dimmer); }
+.ncard.off .nm { color:var(--text-dim); }
+.ncard .meta { margin-top:7px; display:flex; align-items:center; gap:var(--sp-3); flex-wrap:wrap;
+  font-size:var(--fs-micro); color:var(--text-dimmer); }
+.ncard .caps { display:flex; gap:4px; flex-wrap:wrap; }
+.ncard .caps span { border:1px solid var(--border-subtle); border-radius:var(--r-xs); padding:1px 5px; }
+.ncard .acts { margin-top:9px; display:flex; gap:6px; }
+.ncard .latline { width:64px; height:16px; }
+
+/* 事件时间线 */
+.ev { display:flex; align-items:baseline; gap:10px; padding:6px 14px; font-size:var(--fs-meta); }
+.ev:hover { background:var(--list-hover); }
+.ev .t { flex:0 0 46px; font:var(--fs-micro)/1.6 var(--mono); color:var(--text-dimmer); }
+.ev .i { flex:0 0 7px; height:7px; border-radius:50%; margin-top:6px; }
+.ev .x { flex:1; min-width:0; color:var(--text-dim); }
+.ev .x b { color:var(--text-bright); font-weight:500; }
+
+.two { display:grid; grid-template-columns:repeat(auto-fit,minmax(360px,1fr)); gap:22px; align-items:start; }
+@media (max-width:900px){ .two{grid-template-columns:1fr} .health{grid-template-columns:repeat(2,1fr)} }
+</style>
+</head>
+<body>
+<div class="themer"><button class="on" onclick="theme('dark',this)">深色</button><button onclick="theme('light',this)">浅色</button></div>
+
+<div class="doc">
+<header>
+  <div class="kick">Roam · Design · Cluster</div>
+  <h1>中心页：让中心自己能被看见</h1>
+  <p>今天中心卡死了十几个小时，是部署时碰巧撞见的 —— 界面上没有任何地方会说「中心不健康」。
+     这份稿子补的就是这个洞：中心自身的状态、它接着哪些机器、怎么再接一台，以及**出事时它自己会喊**。</p>
+</header>
+
+<!-- ═══════════════════════════════════════════════ -->
+<section id="s1">
+  <h2><span class="n">01</span> 为什么中心不该进「切换机器」</h2>
+  <p class="lead">先说一个不做的决定，它决定了后面所有形状。</p>
+  <p>中心<b>不跑会话、项目、文件、终端</b>——它只做路由、注册表和控制台。把它当作切换器里的第 N 台机器，
+     意味着切过去以后大半个应用是空的：会话页 0 条、文件页没有根、终端开不出来。那不是「另一台机器」，
+     是「另一种东西」。</p>
+  <div class="note">
+    <b>所以：机器列表照旧只列节点，中心单独一条入口，用分隔线隔开。</b>
+    它的语义是「去看中心」，不是「把浏览范围切到中心」——点它进 <code>#/hub</code>，当前机器不变。
+  </div>
+
+  <h3>切换器长这样</h3>
+  <div style="display:flex; gap:26px; align-items:flex-start; flex-wrap:wrap">
+    <div>
+      <div class="dd">
+        <div class="row on"><span class="mark">开</span><span class="nm">开发机</span><span class="lat">5ms</span><i class="dot"></i></div>
+        <div class="row"><span class="mark">JE</span><span class="nm">Jetson</span><span class="lat">29ms</span><i class="dot"></i></div>
+        <div class="sep"></div>
+        <div class="row hub">
+          <span class="mark">中</span><span class="nm">中心</span>
+          <span class="lat">2 台在线</span><i class="dot"></i>
+        </div>
+      </div>
+      <p class="cap">正常态：中心那条只是多一个入口，安静地待在分隔线下面。</p>
+    </div>
+    <div>
+      <div class="dd">
+        <div class="row on"><span class="mark">开</span><span class="nm">开发机</span><span class="lat">5ms</span><i class="dot"></i></div>
+        <div class="row"><span class="mark">JE</span><span class="nm">Jetson</span><span class="lat">离线</span><i class="dot" style="background:var(--text-dimmer)"></i></div>
+        <div class="sep"></div>
+        <div class="row hub">
+          <span class="mark" style="border-color:var(--danger-border);color:var(--danger);background:var(--danger-soft)">中</span>
+          <span class="nm">中心</span>
+          <span class="lat" style="color:var(--danger)">内存持续增长</span>
+          <i class="dot" style="background:var(--danger)"></i>
+        </div>
+      </div>
+      <p class="cap">异常态：这一条变红，<b>侧栏那枚按钮上也带一个红点</b>——见第 4 节。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<section id="s2">
+  <h2><span class="n">02</span> 中心页（可切正常 / 异常）</h2>
+  <p class="lead">
+    中心是**所有流量的必经之路**，它手上有一堆别处看不到的东西：谁在连、连得通不通、版本齐不齐、
+    谁在敲门。这一页要把它们摆出来，而不只是四个数字。
+    <b>下面的内容都是真的</b>：机器元数据取自线上注册表，事件与来源取自中心日志，
+    正常态数字取自 11:15 的 <code>health.log</code>，异常态取自当天上午那次事故。
+  </p>
+  <div style="margin-bottom:12px; display:flex; gap:8px">
+    <button class="tt-act primary" id="b-ok" onclick="setState('ok')">正常态</button>
+    <button class="tt-act" id="b-bad" onclick="setState('bad')">异常态（今早 10:25 的真实数据）</button>
+  </div>
+
+  <div class="frame">
+    <div class="chrome"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="url" id="url">roam.local / #/hub</span></div>
+    <div class="shell">
+      <nav class="nav">
+        <div class="brand"></div>
+        <button class="it" title="项目"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h6l2 2h10v10H3z"/></svg></button>
+        <button class="it" title="文件"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h4"/></svg></button>
+        <span class="sp"></span>
+        <button class="node" id="nav-node" title="开发机">开<i class="d"></i></button>
+        <div class="sep"></div>
+        <button class="it" title="设置"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><circle cx="9" cy="7" r="2.3"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="15" cy="17" r="2.3"/></svg></button>
+      </nav>
+
+      <div class="main">
+        <div class="banner hide" id="banner">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color:var(--danger);flex:0 0 auto"><path d="M10.3 4.3 2.6 17.5A2 2 0 0 0 4.3 20.5h15.4a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0Z"/><path d="M12 9.5v4"/><path d="M12 17h.01"/></svg>
+          <span class="grow" id="banner-text"></span>
+          <button class="tt-act">看诊断</button>
+          <button class="tt-act danger">重启中心</button>
+        </div>
+
+        <div class="pagehead">
+          <span class="pagename">中心</span><span class="pagedivider"></span>
+          <span style="font-size:var(--fs-meta);color:var(--text-dimmer)">47.94.183.77:13570 · v0.9.3 · <span id="head-up">已跑 16 分钟</span></span>
+          <span class="grow"></span>
+          <button class="tt-act">导出诊断包</button>
+          <button class="tt-act">刷新</button>
+          <button class="tt-act danger">重启中心</button>
+        </div>
+
+        <div class="health">
+          <div class="stat" id="st-mem"><div class="k">内存</div><div class="v"><span id="v-mem">24</span><span class="u">MB</span></div><div class="s" id="s-mem">上限 600MB</div>
+            <svg class="spark" viewBox="0 0 200 26" preserveAspectRatio="none"><polyline id="sp-mem" fill="none" stroke="currentColor" stroke-width="1.5" points=""/></svg></div>
+          <div class="stat" id="st-gor"><div class="k">Goroutine</div><div class="v" id="v-gor">21</div><div class="s" id="s-gor">稳定</div>
+            <svg class="spark" viewBox="0 0 200 26" preserveAspectRatio="none"><polyline id="sp-gor" fill="none" stroke="currentColor" stroke-width="1.5" points=""/></svg></div>
+          <div class="stat" id="st-q"><div class="k">待接连接</div><div class="v" id="v-q">0</div><div class="s" id="s-q">accept 队列</div>
+            <svg class="spark" viewBox="0 0 200 26" preserveAspectRatio="none"><polyline id="sp-q" fill="none" stroke="currentColor" stroke-width="1.5" points=""/></svg></div>
+          <div class="stat"><div class="k">经我转发</div><div class="v" id="v-rps">2.4<span class="u">/秒</span></div><div class="s" id="s-rps">活跃隧道流 6 · WS 3</div>
+            <svg class="spark" viewBox="0 0 200 26" preserveAspectRatio="none"><polyline id="sp-rps" fill="none" stroke="currentColor" stroke-width="1.5" points=""/></svg></div>
+        </div>
+
+        <div class="two">
+          <div style="display:flex; flex-direction:column; gap:14px">
+            <div class="card">
+              <h4>机器 <span class="grow"></span>
+                <span style="font-weight:400;color:var(--text-dimmer);font-size:var(--fs-micro)" id="node-count">2 台在线</span>
+                <button class="tt-act" style="height:24px">全部重连</button>
+              </h4>
+              <div id="nodes"></div>
+            </div>
+
+            <div class="card">
+              <h4>最近发生了什么 <span class="grow"></span><span style="font-weight:400;color:var(--text-dimmer);font-size:var(--fs-micro)">近 24 小时</span></h4>
+              <div class="body" style="padding:6px 0"><div id="events"></div></div>
+            </div>
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:14px">
+            <div class="card">
+              <h4>接一台新机器</h4>
+              <div class="body" style="display:flex;flex-direction:column;gap:10px">
+                <div style="font-size:var(--fs-meta);color:var(--text-dim)">在那台机器上执行这条命令。令牌一次性，30 分钟内有效。</div>
+                <div class="cmd">curl -fsSL https://47.94.183.77:13570/install.sh | bash -s -- --hub https://47.94.183.77:13570 --token 7f3a…</div>
+                <div style="display:flex;gap:8px"><button class="tt-act">复制命令</button><button class="tt-act">重新签发</button></div>
+                <div class="kv"><span>待用令牌</span><b>1 张</b><span class="dim">28 分钟后过期</span></div>
+                <div style="font-size:var(--fs-micro);color:var(--text-dimmer);line-height:1.7">
+                  对外地址与令牌有效期在 设置 → 多机 里改；这里只负责签发。
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <h4>安全 <span class="grow"></span><span id="sec-badge" class="chip warn">391 次证书被拒</span></h4>
+              <div class="body" style="display:flex;flex-direction:column;gap:9px">
+                <div class="kv"><span>TLS 证书</span><b>自签</b><span class="dim">2036-08-08 到期</span></div>
+                <div class="kv"><span>敲门最多的来源</span><b class="mono">39.155.137.50</b><span class="dim">1107 次</span></div>
+                <div class="kv"><span>客户端拒证书</span><b class="mono">391</b><span class="dim">近 24h</span></div>
+                <div style="font-size:var(--fs-micro);color:var(--text-dimmer);line-height:1.7">
+                  自签证书没被信任时，浏览器会在**新开的连接**上拒绝——页面时好时坏正是这么来的。
+                </div>
+                <div style="display:flex;gap:8px"><button class="tt-act">下载 CA 证书</button><button class="tt-act">怎么装</button></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <h4>诊断</h4>
+              <div class="body" style="display:flex;flex-direction:column;gap:9px">
+                <div class="kv"><span>pprof</span><b style="color:var(--ok)">已开</b><span class="dim">仅回环 127.0.0.1:6060</span></div>
+                <div class="kv"><span>采样</span><b>288 条</b><span class="dim">5 分钟 / 次，留 24h</span></div>
+                <div class="cmd">ssh -L 6060:127.0.0.1:6060 root@47.94.183.77</div>
+                <div style="font-size:var(--fs-micro);color:var(--text-dimmer);line-height:1.7">
+                  堆栈与内存快照**不经公网接口**：那等于把内存内容和打垮进程的入口一起送出去。
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="cap">异常态那几个数字（299MB / 18298 / 队列 153）是今早 10:25 采样里的原值；机器元数据、来源 IP、证书拒绝次数都取自线上。</p>
+
+  <h3>每一块凭什么占这个位置</h3>
+  <table>
+    <tr><th style="width:150px">块</th><th style="width:150px">别处看得到吗</th><th>它回答的问题</th></tr>
+    <tr><td><b>健康四格 + 曲线</b></td><td>看不到</td><td>「中心自己还好吗」。单点数字看不出「稳在 20」还是「正在爬」，所以每格都带曲线</td></tr>
+    <tr><td><b>经我转发</b></td><td>只有中心知道</td><td>请求速率 / 活跃隧道流 / WS 数——判断「是没人用还是卡住了」，两者的内存曲线长得完全不同</td></tr>
+    <tr><td><b>机器卡片</b></td><td>切换器只给名字和延迟</td><td>版本齐不齐、能力有哪些、心跳多久没来、这台在跑几个会话——<b>版本不一致会出怪事</b>，线上现在就不一致</td></tr>
+    <tr><td><b>最近发生了什么</b></td><td>只在服务器日志里</td><td>「昨晚它为什么断了」。上线/下线/重连/签发/鉴权失败/中心重启，一条时间线说完</td></tr>
+    <tr><td><b>安全</b></td><td>只在日志里</td><td>今天用户「打不开」的真因就是证书没被信任（391 次被拒）；顺带看见有人 1107 次敲门</td></tr>
+    <tr><td><b>诊断</b></td><td>要 ssh 才知道</td><td>pprof 开没开、采样攒了多少、怎么把端口转出来——今早查问题时这三件事全靠翻记忆</td></tr>
+  </table>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<section id="s3">
+  <h2><span class="n">03</span> 数据从哪来：<code>/api/hub/self</code></h2>
+  <p class="lead">现在中心只暴露 <code>nodes</code> / <code>bootstrap</code> / <code>enroll</code>，
+     没有一个接口回答「中心自己怎么样」。加一个。</p>
+  <table>
+    <tr><th style="width:190px">字段</th><th style="width:130px">来源</th><th>为什么要它</th></tr>
+    <tr><td><code>version</code> / <code>startedAt</code></td><td>编译期 + 进程启动</td><td>「重启过没有」——今天要不是我去 ssh，根本不知道它已经重启了几次</td></tr>
+    <tr><td><code>rssBytes</code></td><td><code>/proc/self/status</code></td><td>泄漏第一眼就看得出来</td></tr>
+    <tr><td><code>goroutines</code></td><td><code>runtime.NumGoroutine()</code></td><td>今早的元凶：19185。RSS 涨得慢，goroutine 涨得早</td></tr>
+    <tr><td><code>heapBytes</code></td><td><code>runtime.MemStats</code></td><td>跟 RSS 分开看，能区分「真占着」还是「没还给系统」</td></tr>
+    <tr><td><code>tunnels</code></td><td>注册表里活着的 session 数</td><td>节点在不在，与「注册过几台」不是一回事</td></tr>
+    <tr><td><code>samples[]</code></td><td>进程内环形缓冲（5 分钟一采，留 24h）</td><td><b>曲线才是证据</b>。单点数字看不出「稳在 20」还是「正在爬」</td></tr>
+  </table>
+  <div class="note">
+    <b>采样放进程内，别再靠 cron。</b> 现在那份 <code>health.log</code> 是我昨晚在服务器上手写的 cron + curl，
+    换台机器就没有了，重装一次就丢。放进程里，任何一台中心都自带这条曲线。
+  </div>
+  <div class="note warn">
+    <b>诊断口不进这个接口。</b> pprof 仍然只绑回环（<code>ROAM_PPROF</code>），页面上那个「看诊断」按钮只教你
+    <code>ssh -L</code> 怎么转发。把 heap/goroutine dump 挂到公网接口上，等于把内存内容和打垮进程的入口一起送出去。
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<section id="s4">
+  <h2><span class="n">04</span> 光有页面救不了今天这种事</h2>
+  <p class="lead">这一节是整份稿子里最要紧的。</p>
+  <p>今天中心卡了十几个小时。就算当时这个页面已经存在，<b>也没人会去看它</b>——你只有在「发现打不开」之后
+     才会想起有这么一页。所以异常必须<b>自己冒到眼前</b>：</p>
+  <ul class="tight">
+    <li><b>侧栏那枚按钮上的红点</b>。它常驻在每一页，是唯一能保证被看见的位置。</li>
+    <li><b>切换器下拉里那条中心变红</b>，写一句人话的原因（「内存持续增长」而不是「rss=299MB」）。</li>
+    <li>点进去才是这一页的详情与动作。</li>
+  </ul>
+  <div class="note danger">
+    <b>但阈值现在不该拍脑袋定。</b> 「内存 > 300MB」在今天这台 1.6G 的机器上合理，换台 16G 的就是误报；
+    「goroutine > 1000」在两台节点时合理，接了二十台就不一定。<b>建议先攒一周曲线再定</b>——
+    在那之前只做「有曲线可看」，不做告警。误报一次，这个红点以后就再没人信了。
+  </div>
+  <h3>那在攒够数据之前呢</h3>
+  <p>用<b>不依赖阈值</b>的信号先兜着，这三个不会误报：</p>
+  <table>
+    <tr><th style="width:200px">信号</th><th>为什么它不会误报</th></tr>
+    <tr><td>accept 队列 &gt; 0 持续两次采样</td><td>正常态恒为 0。非 0 就是真的接不过来了——今早是 73 → 153</td></tr>
+    <tr><td>控制台自检超时</td><td>中心自己每分钟打一次自己的 <code>/api/me</code>，超时说明已经不响应</td></tr>
+    <tr><td>进程重启过</td><td><code>startedAt</code> 变了就说明它崩过/被杀过，这本身值得知道</td></tr>
+  </table>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<section id="s5">
+  <h2><span class="n">05</span> 落地顺序</h2>
+  <table>
+    <tr><th style="width:60px">阶段</th><th style="width:220px">做什么</th><th>为什么这个顺序</th></tr>
+    <tr><td><b>P1</b></td><td><code>/api/hub/self</code> + 进程内采样</td><td>没有数据，页面就是个空壳。先让数据存在</td></tr>
+    <tr><td><b>P1</b></td><td>中心页 + 切换器里的入口</td><td>把已经有的 <code>nodes</code> / <code>enroll</code> 一并搬进来，设置页那张 HubSelfCard 只留配置</td></tr>
+    <tr><td><b>P2</b></td><td>三个不依赖阈值的信号 + 侧栏红点</td><td>先上不会误报的那几个，让红点从第一天起就可信</td></tr>
+    <tr><td><b>P3</b></td><td>基于一周曲线的阈值告警</td><td>数据说话，别拍脑袋</td></tr>
+  </table>
+  <div class="note ok">
+    <b>顺带一个已经验证的结论：</b>今早那个 goroutine 泄漏（每请求 new 一个 Transport）修完后，
+    线上 goroutine 从 19185 掉到 18–21，并且**会随 <code>IdleConnTimeout</code> 回落**（观察到 50 → 18）。
+    这一页要展示的曲线，正是能让这类结论一眼可见的东西。
+  </div>
+</section>
+</div>
+
+<script>
+function theme(m, el) {
+  document.documentElement.dataset.theme = m
+  document.querySelectorAll('.themer button').forEach(b => b.classList.toggle('on', b === el))
+}
+
+// 真实数据：正常态取自 2026-08-11 11:15 的 health.log；异常态取自当天 10:00–10:30 的事故采样。
+// 真实数据：正常态取自 2026-08-11 11:15 的 health.log；异常态取自当天 10:00–10:30 的事故采样。
+// 机器元数据、来源 IP、证书拒绝次数取自线上注册表与中心日志。
+const OK = {
+  mem: 24, memSeries: [22,23,22,21,25,24,22,24,21,24],
+  gor: 21, gorSeries: [18,18,18,18,50,18,21,18,20,21],
+  q: 0, qSeries: [0,0,0,0,0,0,0,0,0,0],
+  rps: '2.4', rpsSeries: [1.8,2.2,2.0,2.6,2.4,2.1,2.5,2.3,2.2,2.4],
+  up: '已跑 16 分钟', memSub: '上限 600MB', gorSub: '稳定（空闲流 90 秒过期）',
+  qSub: 'accept 队列', rpsSub: '活跃隧道流 6 · WS 3',
+}
+const BAD = {
+  mem: 299, memSeries: [38,38,38,64,148,229,222,243,294,299],
+  gor: 18298, gorSeries: [1518,1518,1518,2667,7126,12060,13312,15164,18298,18298],
+  q: 153, qSeries: [0,0,0,0,0,0,0,12,73,153],
+  rps: '0.1', rpsSeries: [2.3,2.1,2.4,1.9,1.2,0.8,0.5,0.3,0.2,0.1],
+  up: '已跑 12 小时', memSub: '30 分钟涨了 260MB', gorSub: '30 分钟从 1518 涨到 18298',
+  qSub: '已经接不过来了', rpsSub: '转发几乎停了 · WS 0',
+}
+
+// 线上注册表里的真实两台（版本确实不一致：中心 0083f46 vs 开发机 v0.1.0-rc.2-254-gbd60090）
+const NODES = [
+  { mark:'开', name:'开发机', group:'我的机器', host:'REN7000K-26IRX', cur:true, online:true,
+    lat:5, latSeries:[6,5,7,5,6,5,5,6,5,5], ver:'v0.1.0-rc.2-254-gbd60090', verBad:true,
+    run:23, wait:2, beat:'刚刚', caps:['term','files','git','browser','phone','swarm'] },
+  { mark:'JE', name:'Jetson', group:'我的机器', host:'ubuntu', cur:false, online:true,
+    lat:29, latSeries:[31,29,33,28,29,30,29,43,29,29], ver:'0083f46', verBad:false,
+    run:5, wait:0, beat:'12 秒前', caps:['term','files','git','browser','phone','swarm'] },
+]
+const OFFLINE = { mark:'树', name:'树莓派', group:'家里', host:'raspberrypi', cur:false, online:false,
+  lat:null, latSeries:[], ver:'0083f46', verBad:false, run:0, wait:0, beat:'3 小时前', caps:['term','files'] }
+
+const EV_OK = [
+  ['11:15','ok','<b>Jetson</b> 心跳正常 · 29ms'],
+  ['10:59','warn','<b>中心</b> 重启（部署新版本 0083f46）'],
+  ['10:59','ok','<b>开发机</b> 重连成功 · 中断 6 秒'],
+  ['10:59','ok','<b>Jetson</b> 重连成功 · 中断 8 秒'],
+  ['10:35','warn','<b>中心</b> 被 SIGQUIT 收掉并自动拉起'],
+  ['09:12','ok','签发接入令牌 · 30 分钟内有效'],
+]
+const EV_BAD = [
+  ['10:25','danger','<b>中心</b> 接不过来新连接 · accept 队列 153'],
+  ['10:20','danger','<b>中心</b> goroutine 18298 · 30 分钟涨了 12 倍'],
+  ['10:05','warn','<b>中心</b> 内存越过 200MB'],
+  ['09:55','warn','<b>中心</b> goroutine 开始异常增长（1518 → 2667）'],
+  ['09:41','danger','<b>树莓派</b> 掉线 · 心跳超时'],
+  ['08:17','warn','客户端拒绝证书 6 次 · 来自 221.221.148.193'],
+]
+
+function spark(id, series, color) {
+  const el = document.getElementById(id); if (!el || !series.length) { if (el) el.setAttribute('points',''); return }
+  const max = Math.max(...series), min = Math.min(...series), span = Math.max(0.001, max - min)
+  el.setAttribute('points', series.map((v,i) => ((i/(series.length-1))*200).toFixed(1) + ',' + (24 - ((v-min)/span)*22).toFixed(1)).join(' '))
+  el.style.color = color
+}
+
+function nodeCard(n) {
+  const line = n.latSeries.length
+    ? '<svg class="latline" viewBox="0 0 64 16" preserveAspectRatio="none"><polyline fill="none" stroke="currentColor" stroke-width="1.3" style="color:var(--text-dimmer)" points="'
+      + n.latSeries.map((v,i) => ((i/(n.latSeries.length-1))*64).toFixed(1)+','+(14-((v-Math.min(...n.latSeries))/Math.max(1,Math.max(...n.latSeries)-Math.min(...n.latSeries)))*12).toFixed(1)).join(' ') + '"/></svg>'
+    : ''
+  return `<div class="ncard${n.cur?' cur':''}${n.online?'':' off'}">
+    <div class="top">
+      <span class="mark">${n.mark}</span>
+      <span><span class="nm">${n.name}</span> <span class="grp">${n.group} · ${n.host}</span></span>
+      <span class="grow"></span>
+      ${n.online ? `<span class="lat">${n.lat}ms</span>${line}` : '<span class="chip danger">离线</span>'}
+      <i class="dot"></i>
+    </div>
+    <div class="meta">
+      <span>${n.online ? `<b style="color:var(--text-bright)">${n.run}</b> 会话在跑${n.wait ? ` · <b style="color:var(--warn)">${n.wait}</b> 等你` : ''}` : '心跳 ' + n.beat}</span>
+      <span>${n.online ? '心跳 ' + n.beat : ''}</span>
+      <span class="mono" style="font-family:var(--mono)">${n.ver}</span>
+      ${n.verBad ? '<span class="chip warn">与中心版本不一致</span>' : ''}
+      <span class="caps">${n.caps.map(c => `<span>${c}</span>`).join('')}</span>
+    </div>
+    <div class="acts">
+      <button class="tt-act">进入这台</button>
+      <button class="tt-act">重命名</button>
+      <button class="tt-act">改分组</button>
+      <button class="tt-act danger">移出集群</button>
+    </div>
+  </div>`
+}
+
+function setState(s) {
+  const d = s === 'ok' ? OK : BAD, bad = s !== 'ok'
+  document.getElementById('v-mem').textContent = d.mem
+  document.getElementById('v-gor').textContent = d.gor.toLocaleString()
+  document.getElementById('v-q').textContent = d.q
+  document.getElementById('v-rps').innerHTML = d.rps + '<span class="u">/秒</span>'
+  document.getElementById('s-mem').textContent = d.memSub
+  document.getElementById('s-gor').textContent = d.gorSub
+  document.getElementById('s-q').textContent = d.qSub
+  document.getElementById('s-rps').textContent = d.rpsSub
+  document.getElementById('head-up').textContent = d.up
+  document.getElementById('st-mem').className = 'stat' + (bad ? ' bad' : '')
+  document.getElementById('st-gor').className = 'stat' + (bad ? ' bad' : '')
+  document.getElementById('st-q').className = 'stat' + (bad ? ' warn' : '')
+  spark('sp-mem', d.memSeries, bad ? 'var(--danger)' : 'var(--ok)')
+  spark('sp-gor', d.gorSeries, bad ? 'var(--danger)' : 'var(--ok)')
+  spark('sp-q', d.qSeries, bad ? 'var(--warn)' : 'var(--text-dimmer)')
+  spark('sp-rps', d.rpsSeries, bad ? 'var(--danger)' : 'var(--accent)')
+  document.getElementById('banner').className = 'banner' + (bad ? '' : ' hide')
+  document.getElementById('banner-text').textContent = bad
+    ? '中心内存持续增长，已经接不过来新连接（accept 队列 153）。多半是泄漏——先看诊断，或直接重启。' : ''
+  document.getElementById('nav-node').className = 'node' + (bad ? ' alarm' : '')
+  const list = bad ? NODES.concat([OFFLINE]) : NODES
+  document.getElementById('nodes').innerHTML = list.map(nodeCard).join('')
+  document.getElementById('node-count').textContent = bad ? '2 台在线 · 1 台离线' : '2 台在线'
+  document.getElementById('events').innerHTML = (bad ? EV_BAD : EV_OK).map(([t, k, x]) =>
+    `<div class="ev"><span class="t">${t}</span><i class="i" style="background:var(--${k === 'ok' ? 'ok' : k})"></i><span class="x">${x}</span></div>`).join('')
+  document.getElementById('b-ok').className = 'tt-act' + (bad ? '' : ' primary')
+  document.getElementById('b-bad').className = 'tt-act' + (bad ? ' primary' : '')
+}
+setState('ok')
+</script>
+</body>
+</html>
