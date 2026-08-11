@@ -117,6 +117,60 @@ func (s *selfStats) push(sm Sample) {
 	}
 }
 
+// Host 是宿主机的几个数——它们决定了进程数字的**含义**。
+//
+// 今早那次：中心 RSS 299MB。单看这个数没什么感觉，直到你知道那台机器总共只有 1.6G、
+// 而且 kswapd 正在满负荷回收——同样的 299MB 放在 16G 的机器上根本不算事。
+// 进程视角说「是谁在涨」，宿主视角说「涨到什么程度了」，缺一个都拼不出全貌。
+//
+// 只读 /proc 里的几行，不引入依赖、不需要插件宿主。节点那边的完整资源监控（CPU/GPU/
+// 磁盘/网络 + 历史）由 roam.host-monitor 插件负责，中心不重复造——中心压根不跑插件宿主。
+type Host struct {
+	MemTotal     int64   `json:"memTotal"`
+	MemAvailable int64   `json:"memAvailable"`
+	SwapTotal    int64   `json:"swapTotal"`
+	SwapFree     int64   `json:"swapFree"`
+	Load1        float64 `json:"load1"`
+	Load5        float64 `json:"load5"`
+	Load15       float64 `json:"load15"`
+	CPUs         int     `json:"cpus"`
+}
+
+func readHost() Host {
+	h := Host{CPUs: runtime.NumCPU()}
+	if b, err := os.ReadFile("/proc/meminfo"); err == nil {
+		for _, line := range strings.Split(string(b), "\n") {
+			f := strings.Fields(line)
+			if len(f) < 2 {
+				continue
+			}
+			kb, err := strconv.ParseInt(f[1], 10, 64)
+			if err != nil {
+				continue
+			}
+			switch f[0] {
+			case "MemTotal:":
+				h.MemTotal = kb * 1024
+			case "MemAvailable:":
+				h.MemAvailable = kb * 1024
+			case "SwapTotal:":
+				h.SwapTotal = kb * 1024
+			case "SwapFree:":
+				h.SwapFree = kb * 1024
+			}
+		}
+	}
+	if b, err := os.ReadFile("/proc/loadavg"); err == nil {
+		f := strings.Fields(string(b))
+		if len(f) >= 3 {
+			h.Load1, _ = strconv.ParseFloat(f[0], 64)
+			h.Load5, _ = strconv.ParseFloat(f[1], 64)
+			h.Load15, _ = strconv.ParseFloat(f[2], 64)
+		}
+	}
+	return h
+}
+
 // rssBytes 读本进程的常驻内存。只有 Linux 有 /proc；别的平台返回 0，前端按「没有这项」画。
 // 不用 runtime.MemStats 代替：Go 还给系统的内存不算在 RSS 里，而卡死那次的关键正是
 // **RSS 一直不降**（被 cgroup 压在 300MB 反复回收），堆的数字反而看不出严重性。
@@ -189,6 +243,7 @@ func (b *Hub) Self(c *gin.Context) {
 		"uptimeSecs":  int64(time.Since(started).Seconds()),
 		"pprof":       os.Getenv("ROAM_PPROF"),
 		"now":         now,
+		"host":        readHost(),
 		"nodes":       len(nodes),
 		"nodesOnline": online,
 		"samples":     samples,
