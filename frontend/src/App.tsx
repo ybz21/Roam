@@ -609,11 +609,13 @@ export default function App() {
     { type: 'divider' as const },
     {
       key: 'hub-page',
-      icon: <CloudIcon size={13} />,
+      // 不走 antd 的 icon 槽：那个槽的间距归 antd 管，实测图标会贴着字，而且与上面几行
+      // 机器的方章不在同一条竖线上。这里给它一个同尺寸的方框，三行文字左边缘才对得齐。
       label: (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 168 }}>
-          <span style={{ flex: 1 }}>{t('hub.title')}</span>
-          <span style={{ fontSize: 'var(--fs-micro)', color: hubHealth.level === 'ok' ? 'var(--text-dimmer)' : 'var(--danger)' }}>
+        <span className={`tt-nodemenu hub${hubHealth.level === 'ok' ? '' : ' alarm'}`}>
+          <span className="mk"><CloudIcon size={12} /></span>
+          <span className="nm">{t('hub.title')}</span>
+          <span className="lat">
             {hubHealth.level === 'ok'
               ? t('hub.onlineShort', { n: clusterNodes.filter((n) => n.online).length })
               : t('hub.why.' + (hubHealth.reasons[0] || 'unknown'))}

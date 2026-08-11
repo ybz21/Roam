@@ -219,7 +219,7 @@ export default function SettingsPage({ sub, onNav }: { sub?: string; onNav?: (ro
         <div className="tt-set-tree">
           {model.nodes.map((n, i) => {
             if (n.kind === 'section') {
-              return <div key={i} className="grp">{n.title}<span className="m">{n.note}</span></div>
+              return <div key={i} className="grp">{n.title}</div>
             }
             if (n.kind === 'leaf') {
               const p = model.pages[n.page]

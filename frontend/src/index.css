@@ -2965,80 +2965,88 @@ html[data-size="compact"] .cc-run-slot { width: auto; }
 .tt-hub-empty { padding: 48px 12px; color: var(--text-dimmer); font-size: var(--fs-sm); text-align: center; }
 .tt-hub-empty.small { padding: 20px 12px; text-align: left; }
 
-.tt-hub-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: var(--sp-3); }
-.tt-hub-stats > * { min-width: 0; }
-.tt-hub-stat {
-  border: 1px solid var(--border-subtle); border-radius: var(--r-card);
-  background: var(--bg-container); padding: 12px 14px;
+/* 中心页是**列表**不是一堆卡片：没有卡片框，只有分隔线与留白，层次靠字号和颜色。
+   之前七个盒子全是同一个灰、同一个圆角、同一个字号——信息都在，但没有一处是主角。 */
+.tt-hub-status {
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: 11px 2px; font-size: var(--fs-sm);
+  border-top: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle);
 }
-.tt-hub-stat .k {
-  font-size: var(--fs-micro); letter-spacing: .08em; text-transform: uppercase; color: var(--text-dimmer);
+.tt-hub-status .d { flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+.tt-hub-status b { flex: 0 0 auto; font-weight: 600; color: var(--text-bright); }
+.tt-hub-status .nums { min-width: 0; color: var(--text-dimmer); font-size: var(--fs-meta); }
+.tt-hub-status .grow { flex: 1; }
+.tt-hub-status.bad {
+  background: var(--danger-soft); border-color: var(--danger-border);
+  margin: 0 calc(-1 * var(--sp-3)); padding-left: var(--sp-3); padding-right: var(--sp-3);
+  border-radius: var(--r-sm);
 }
-.tt-hub-stat .v {
-  margin-top: 4px; font: 600 24px/1.15 var(--mono); color: var(--text-bright); font-variant-numeric: tabular-nums;
-}
-.tt-hub-stat .v .u { font: 400 var(--fs-meta)/1 inherit; color: var(--text-dimmer); margin-left: 3px; }
-.tt-hub-stat .s { margin-top: 5px; font-size: var(--fs-micro); color: var(--text-dimmer); }
-.tt-hub-stat.bad .v { color: var(--danger); }
-.tt-hub-stat.warn .v { color: var(--warn); }
-.tt-hub-spark { margin-top: 8px; height: 26px; width: 100%; }
+.tt-hub-status.bad .d { background: var(--danger); }
+.tt-hub-status.bad b { color: var(--danger); }
+.tt-hub-status.bad .nums { color: var(--text-bright); }
 
-/* 右栏定宽：事件行是「时间 + 一句话」，再宽也不多装一个字，宽出来的全是空白。
-   左栏跟着长——机器卡片里那排能力芯片和版本号是真的要地方。 */
-.tt-hub-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 400px); gap: var(--sp-4); align-items: start; }
-@media (max-width: 900px) { .tt-hub-cols { grid-template-columns: 1fr; } }
-.tt-hub-side { display: flex; flex-direction: column; gap: var(--sp-4); }
-.tt-hub-card { border: 1px solid var(--border-subtle); border-radius: var(--r-card); background: var(--bg-container); }
-.tt-hub-card > h4 {
-  margin: 0; padding: 11px 14px; font-size: var(--fs-sm); font-weight: 600; color: var(--text-bright);
-  border-bottom: 1px solid var(--border-subtle); display: flex; align-items: center; gap: var(--sp-2);
+.tt-hub-sec {
+  display: flex; align-items: baseline; gap: var(--sp-2);
+  padding: 18px 2px 6px; font-size: var(--fs-sm); font-weight: 600; color: var(--text-bright);
 }
-.tt-hub-card > h4 .grow { flex: 1; }
-.tt-hub-card > h4 .dim { font-weight: 400; color: var(--text-dimmer); font-size: var(--fs-micro); }
-.tt-hub-card .body { padding: 12px 14px; display: flex; flex-direction: column; gap: 9px; }
-.tt-hub-card .body .hint { margin: 0; font-size: var(--fs-micro); color: var(--text-dimmer); line-height: 1.7; }
-.tt-hub-card .kv { display: flex; align-items: baseline; gap: var(--sp-2); font-size: var(--fs-meta); color: var(--text-dimmer); }
-.tt-hub-card .kv b { color: var(--text-bright); font-weight: 600; }
-.tt-hub-card .kv .dim { margin-left: auto; font-size: var(--fs-micro); }
+.tt-hub-sec .grow { flex: 1; }
+.tt-hub-sec .dim { font-weight: 400; font-size: var(--fs-micro); color: var(--text-dimmer); }
+
+/* 一台机器两行：主行是名字，次行是主机名与短版本号 */
+.tt-hub-node {
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: 9px 2px; border-top: 1px solid var(--border-subtle);
+}
+:where(html[data-pointer="fine"]) .tt-hub-node:hover { background: var(--list-hover); }
+.tt-hub-node .who { flex: 1 1 auto; min-width: 0; }
+.tt-hub-node .l1 { display: flex; align-items: baseline; gap: var(--sp-2); min-width: 0; }
+.tt-hub-node .nm { font-size: var(--fs-body); font-weight: 600; color: var(--text-bright); }
+.tt-hub-node .l1 .dim, .tt-hub-node .l2 { font-size: var(--fs-micro); color: var(--text-dimmer); }
+.tt-hub-node .l2 { display: block; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-hub-node .metrics {
+  flex: 0 0 auto; display: flex; gap: var(--sp-4);
+  font: var(--fs-micro)/1.6 var(--mono); color: var(--text-dim); font-variant-numeric: tabular-nums;
+}
+.tt-hub-node .metrics .hot { color: var(--warn); }
+.tt-hub-node .dot { flex: 0 0 7px; width: 7px; height: 7px; border-radius: 50%; }
+.tt-hub-node .acts { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }
+.tt-hub-node.off .nm { color: var(--text-dim); }
+@media (max-width: 760px) {
+  /* 窄屏把指标掉到第二行，别把名字挤没 */
+  .tt-hub-node { flex-wrap: wrap; }
+  .tt-hub-node .who { flex: 1 1 100%; order: 1; }
+  .tt-hub-node .metrics { order: 2; gap: var(--sp-3); }
+}
+
+.tt-hub-ev { display: flex; align-items: baseline; gap: var(--sp-2); padding: 5px 2px; font-size: var(--fs-meta); }
+.tt-hub-ev .t { flex: 0 0 66px; font: var(--fs-micro)/1.6 var(--mono); color: var(--text-dimmer); }
+.tt-hub-ev .i { flex: 0 0 6px; height: 6px; border-radius: 50%; }
+.tt-hub-ev .x { flex: 1; min-width: 0; color: var(--text-dim); }
+
+/* 折叠行：次要的东西默认只占一行 */
+.tt-hub-fold {
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: 10px 2px; margin-top: 6px; border-top: 1px solid var(--border-subtle); font-size: var(--fs-meta);
+}
+.tt-hub-fold .k { font-size: var(--fs-sm); font-weight: 600; color: var(--text-bright); }
+.tt-hub-fold .v { color: var(--text-dimmer); }
+.tt-hub-fold .grow { flex: 1; }
+.tt-hub-foldbody { padding: 4px 2px 12px; }
+.tt-hub-foldbody.diag { display: flex; flex-direction: column; gap: var(--sp-2); }
+.tt-hub-foldbody.diag .row { display: flex; align-items: center; gap: var(--sp-3); }
+.tt-hub-foldbody.diag .hint { flex: 1; min-width: 0; font-size: var(--fs-micro); color: var(--text-dimmer); cursor: help; }
 .tt-hub-cmd {
   font: var(--fs-micro)/1.7 var(--mono); background: var(--bg-base); border: 1px solid var(--border-subtle);
-  border-radius: var(--r-xs); padding: 9px 10px; color: var(--text-dim); overflow-x: auto; white-space: nowrap;
+  border-radius: var(--r-xs); padding: 8px 10px; color: var(--text-dim); overflow-x: auto; white-space: nowrap;
 }
-
-/* 机器卡片：比切换器里那一行多说的是版本、能力、会话数——版本不一致会出怪事 */
-.tt-hub-node { padding: 12px 14px; border-bottom: 1px solid var(--border-subtle); }
-.tt-hub-node:last-child { border-bottom: 0; }
-.tt-hub-node .top { display: flex; align-items: center; gap: var(--sp-2); }
-.tt-hub-node .nm { font-size: var(--fs-body); font-weight: 600; color: var(--text-bright); }
-.tt-hub-node .grp { font-size: var(--fs-micro); color: var(--text-dimmer); }
-.tt-hub-node .grow { flex: 1; }
-.tt-hub-node .lat { font: var(--fs-micro)/1 var(--mono); color: var(--text-dimmer); }
-.tt-hub-node .dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
-.tt-hub-node.off .nm { color: var(--text-dim); }
-.tt-hub-node .meta {
-  margin-top: 7px; display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
-  font-size: var(--fs-micro); color: var(--text-dimmer);
-}
-.tt-hub-node .meta .mono { font-family: var(--mono); }
-.tt-hub-node .caps { display: flex; gap: 4px; flex-wrap: wrap; }
-.tt-hub-node .caps span { border: 1px solid var(--border-subtle); border-radius: var(--r-xs); padding: 1px 5px; }
-.tt-hub-node .acts { margin-top: 9px; display: flex; gap: 6px; }
 .tt-hub-chip {
-  font-size: var(--fs-micro); border-radius: var(--r-pill); padding: 2px 8px;
+  font-size: var(--fs-micro); border-radius: var(--r-pill); padding: 1px 7px;
   border: 1px solid var(--border-subtle); color: var(--text-dimmer);
 }
 .tt-hub-chip.warn { color: var(--warn); border-color: var(--warn-border); background: var(--warn-soft); }
-.tt-hub-chip.danger { color: var(--danger); border-color: var(--danger-border); background: var(--danger-soft); }
+.tt-hub-empty { padding: 32px 2px; color: var(--text-dimmer); font-size: var(--fs-sm); }
+.tt-hub-empty.small { padding: 14px 2px; }
 
-/* 事件流：「昨晚它为什么断了」的答案，原来只躺在服务器日志里 */
-.tt-hub-ev { display: flex; align-items: baseline; gap: var(--sp-2); padding: 6px 14px; font-size: var(--fs-meta); }
-.tt-hub-ev .t { flex: 0 0 62px; font: var(--fs-micro)/1.6 var(--mono); color: var(--text-dimmer); }
-.tt-hub-ev .i { flex: 0 0 7px; height: 7px; border-radius: 50%; }
-.tt-hub-ev .x { flex: 1; min-width: 0; color: var(--text-dim); }
-@media (pointer: coarse) { .tt-hub-node .acts .tt-act { min-height: 36px; } }
-.tt-hub-spark.waiting {
-  display: flex; align-items: flex-end; font-size: var(--fs-micro); color: var(--text-dimmer); opacity: .7;
-}
 /* 中心不健康：切换器那枚常驻按钮上的红点会呼吸——静止的点在余光里等于不存在 */
 .tt-nav-node.alarm .nd { animation: tt-nd-pulse 1.8s ease-in-out infinite; }
 @keyframes tt-nd-pulse { 0%, 100% { opacity: 1 } 50% { opacity: .3 } }
@@ -3051,3 +3059,17 @@ html[data-size="compact"] .cc-run-slot { width: auto; }
 .tt-hub-banner .grow { flex: 1; }
 .tt-hub-banner.bad { border-color: var(--danger-border); background: var(--danger-soft); }
 .tt-hub-banner.bad > svg { color: var(--danger); }
+/* 切换器下拉里的「中心」那一行：给一个与机器方章同尺寸的方框，三行文字才落在同一条竖线上。
+   中心不是第 N 台机器，所以方框是虚边 + 云图标，不用方章那种实心身份记号。 */
+.tt-nodemenu .mk {
+  flex: 0 0 16px; width: 16px; height: 16px; border-radius: 5px;
+  display: grid; place-items: center; color: var(--text-dimmer);
+  border: 1px dashed var(--border);
+}
+.tt-nodemenu.hub .nm { color: var(--text-dim); }
+.tt-nodemenu.hub.alarm .mk { color: var(--danger); border-color: var(--danger-border); border-style: solid; }
+.tt-nodemenu.hub.alarm .nm { color: var(--text-bright); }
+.tt-nodemenu.hub.alarm .lat { color: var(--danger); }
+/* 节点的宿主概况：只给两个数（CPU/内存），完整曲线在那台机器的插件面板里 */
+.tt-hub-host { display: inline-flex; gap: var(--sp-2); font-family: var(--mono); }
+.tt-hub-host .hot { color: var(--warn); }

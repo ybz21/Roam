@@ -58,7 +58,9 @@ type selfStats struct {
 	started  time.Time
 	requests atomic.Int64
 	// 节点最后一次掉线时刻，用来算重连中断了多久
-	downAt map[string]time.Time
+	downAt  map[string]time.Time
+	cpuPrev cpuTotals
+	cpuHad  bool
 }
 
 func newSelfStats() *selfStats {
@@ -134,10 +136,62 @@ type Host struct {
 	Load5        float64 `json:"load5"`
 	Load15       float64 `json:"load15"`
 	CPUs         int     `json:"cpus"`
+	CPUPercent   float64 `json:"cpuPercent"` // 与上次取样之间的平均使用率；第一次为 0
+	Hostname     string  `json:"hostname"`
+	UptimeSecs   int64   `json:"uptimeSecs"` // 宿主机开机时长（不是本进程）
 }
 
-func readHost() Host {
+// cpuTotals 是 /proc/stat 第一行的累计节拍，用来做差分——CPU 使用率没有「瞬时值」，
+// 只有「两次之间的平均」。今早中心是 106%，这个数比内存更早说明它在空转。
+type cpuTotals struct{ idle, total uint64 }
+
+func readCPUTotals() (cpuTotals, bool) {
+	b, err := os.ReadFile("/proc/stat")
+	if err != nil {
+		return cpuTotals{}, false
+	}
+	line := strings.SplitN(string(b), "\n", 2)[0]
+	f := strings.Fields(line)
+	if len(f) < 5 || f[0] != "cpu" {
+		return cpuTotals{}, false
+	}
+	var c cpuTotals
+	for i, x := range f[1:] {
+		v, err := strconv.ParseUint(x, 10, 64)
+		if err != nil {
+			continue
+		}
+		c.total += v
+		if i == 3 || i == 4 { // idle + iowait
+			c.idle += v
+		}
+	}
+	return c, true
+}
+
+func (s *selfStats) readHost() Host {
 	h := Host{CPUs: runtime.NumCPU()}
+	if n, err := os.Hostname(); err == nil {
+		h.Hostname = n
+	}
+	if b, err := os.ReadFile("/proc/uptime"); err == nil {
+		if f := strings.Fields(string(b)); len(f) > 0 {
+			if v, err := strconv.ParseFloat(f[0], 64); err == nil {
+				h.UptimeSecs = int64(v)
+			}
+		}
+	}
+	if cur, ok := readCPUTotals(); ok {
+		s.mu.Lock()
+		prev, had := s.cpuPrev, s.cpuHad
+		s.cpuPrev, s.cpuHad = cur, true
+		s.mu.Unlock()
+		if had && cur.total > prev.total {
+			dt := float64(cur.total - prev.total)
+			di := float64(cur.idle - prev.idle)
+			h.CPUPercent = (1 - di/dt) * 100
+		}
+	}
 	if b, err := os.ReadFile("/proc/meminfo"); err == nil {
 		for _, line := range strings.Split(string(b), "\n") {
 			f := strings.Fields(line)
@@ -243,7 +297,7 @@ func (b *Hub) Self(c *gin.Context) {
 		"uptimeSecs":  int64(time.Since(started).Seconds()),
 		"pprof":       os.Getenv("ROAM_PPROF"),
 		"now":         now,
-		"host":        readHost(),
+		"host":        b.self.readHost(),
 		"nodes":       len(nodes),
 		"nodesOnline": online,
 		"samples":     samples,
