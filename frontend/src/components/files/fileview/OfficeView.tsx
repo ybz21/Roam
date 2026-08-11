@@ -1,15 +1,16 @@
 // Office 文档展示：docx / xlsx / pptx 各有专用前端渲染器（很重，懒加载）；其余 Office
 // 类型（doc/xls/ppt/odt…）走后端 soffice 转 PDF 再内嵌。
-import { lazy, Suspense, useEffect, useState } from 'react'
+import {Suspense, useEffect, useState } from 'react'
 import { Button, Spin } from 'antd'
 import { PreviewShell } from './PreviewShell'
 import { useI18n } from '../../../i18n'
 import { type FileKind } from '../file-utils'
+import { lazyRetry } from '../../lazy-retry'
 
 const OfficePreviewers = () => import('../OfficePreviewers')
-const DocxFilePreview = lazy(() => OfficePreviewers().then((m) => ({ default: m.DocxFilePreview })))
-const ExcelFilePreview = lazy(() => OfficePreviewers().then((m) => ({ default: m.ExcelFilePreview })))
-const PptxFilePreview = lazy(() => OfficePreviewers().then((m) => ({ default: m.PptxFilePreview })))
+const DocxFilePreview = lazyRetry(() => OfficePreviewers().then((m) => ({ default: m.DocxFilePreview })))
+const ExcelFilePreview = lazyRetry(() => OfficePreviewers().then((m) => ({ default: m.ExcelFilePreview })))
+const PptxFilePreview = lazyRetry(() => OfficePreviewers().then((m) => ({ default: m.PptxFilePreview })))
 
 // 后端 soffice 转 PDF 后内嵌（doc/xls/ppt/odt 等无专用前端渲染器的类型）。
 function OfficePdfPreview({ name, previewUrl, rawUrl, downloadUrl, downloadName, height }: { name: string; previewUrl: string; rawUrl: string; downloadUrl: string; downloadName: string; height: string }) {

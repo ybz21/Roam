@@ -4,12 +4,13 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import type { CSSProperties, MouseEvent } from 'react'
-import { lazy, Suspense } from 'react'
+import {Suspense } from 'react'
 import { CodeBox } from '../chat/blocks'
 import { useI18n } from '../../i18n'
+import { lazyRetry } from '../lazy-retry'
 
 // Mermaid 组件连同其重依赖(mermaid/d3/cytoscape…)整体懒加载，只有真渲染 ```mermaid 才拉取，不进首屏。
-const Mermaid = lazy(() => import('./Mermaid'))
+const Mermaid = lazyRetry(() => import('./Mermaid'))
 
 const mono = 'ui-monospace, SFMono-Regular, Menlo, monospace'
 

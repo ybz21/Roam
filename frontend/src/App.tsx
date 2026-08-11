@@ -3,7 +3,7 @@
 //   电脑 ≥1200 → 三栏：导航 Sider | 列表(页面) | 终端面板(常驻, 多标签)
 //   平板/手机   → 终端为全屏覆盖层；手机底部 Tab 导航
 // 终端：多标签 / 字号调节 / 复制 / 更多快捷键 / 断线自动重连。
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { bootstrapCluster, setCurrentNode, useClusterNodes, useCurrentNodeId } from './components/cluster/node-url'
 import { NodeMark, nodeDotColor } from './components/cluster/NodeMark'
 import {
@@ -23,15 +23,15 @@ import MobileSubPage from './components/MobileSubPage'
 import SettingsPage from './components/settings/SettingsPage'
 // 非首屏的重页面（蜂群/Git 面板/浏览器/手机镜像/插件）按路由懒加载：切到对应 tab 才拉 chunk，
 // 缩小首屏 index 块。都渲染在同一个 Suspense 边界内（见 lazyFallback，App 内 page）。
-const GitPanel = lazy(() => import('./components/git/GitPanel'))
-const WorktreePanel = lazy(() => import('./components/git/WorktreePanel'))
-const RaceCreateModal = lazy(() => import('./components/swarm/Race').then((m) => ({ default: m.RaceCreateModal })))
-const RaceComparePanel = lazy(() => import('./components/swarm/Race').then((m) => ({ default: m.RaceComparePanel })))
-const PluginsPanel = lazy(() => import('./components/plugins/PluginsPanel'))
-const BrowserView = lazy(() => import('./components/mirror/BrowserView'))
-const PhoneView = lazy(() => import('./components/mirror/PhoneView'))
-const Swarm = lazy(() => import('./components/swarm/Swarm'))
-const Projects = lazy(() => import('./components/projects/Projects'))
+const GitPanel = lazyRetry(() => import('./components/git/GitPanel'))
+const WorktreePanel = lazyRetry(() => import('./components/git/WorktreePanel'))
+const RaceCreateModal = lazyRetry(() => import('./components/swarm/Race').then((m) => ({ default: m.RaceCreateModal })))
+const RaceComparePanel = lazyRetry(() => import('./components/swarm/Race').then((m) => ({ default: m.RaceComparePanel })))
+const PluginsPanel = lazyRetry(() => import('./components/plugins/PluginsPanel'))
+const BrowserView = lazyRetry(() => import('./components/mirror/BrowserView'))
+const PhoneView = lazyRetry(() => import('./components/mirror/PhoneView'))
+const Swarm = lazyRetry(() => import('./components/swarm/Swarm'))
+const Projects = lazyRetry(() => import('./components/projects/Projects'))
 import UpdateBanner from './components/UpdateBanner'
 import { useThemeMode } from './theme'
 import { useI18n } from './i18n'
@@ -63,6 +63,7 @@ import { normalizeRoute, setHashParams, readTermTokens } from './route-hash'
 import type { ClaudeInfo } from './components/terminal/claude-info'
 import { dropDeadTokens, loadTabs, saveTabs } from './components/terminal/term-tabs-store'
 import { ExitFullscreenIcon, FullscreenIcon, LogoutIcon, MoonIcon, MoreIcon, SearchIcon, SunIcon } from './icons'
+import { lazyRetry } from './components/lazy-retry'
 
 const { Sider, Content } = Layout
 const { Text } = Typography
@@ -585,14 +586,14 @@ export default function App() {
   const nodeItems: MenuProps['items'] = clusterNodes.length ? [
     ...clusterNodes.map((n) => ({
       key: 'node:' + n.id,
-      icon: <NodeMark name={n.name} size="sm" current={n.id === curNodeId} offline={!n.online} />,
+      // 方章不走 antd 的 icon 槽：那个槽的间距归 antd 管，实测方章会贴着名字（「JE|Jetson」）。
+      // 整行自己排，间距用令牌，样式在 index.css 的 .tt-nodemenu 段。
       label: (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 168 }}>
-          <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{n.name}</span>
-          <span style={{ fontFamily: 'var(--mono)', fontSize: 'var(--fs-micro)', color: 'var(--text-dimmer)' }}>
-            {n.online ? t('node.latencyMs', { ms: n.latencyMs }) : t('node.offline')}
-          </span>
-          <i style={{ width: 7, height: 7, borderRadius: '50%', background: nodeDotColor(n) }} />
+        <span className={`tt-nodemenu${n.id === curNodeId ? ' on' : ''}`}>
+          <NodeMark name={n.name} size="sm" current={n.id === curNodeId} offline={!n.online} />
+          <span className="nm">{n.name}</span>
+          <span className="lat">{n.online ? t('node.latencyMs', { ms: n.latencyMs }) : t('node.offline')}</span>
+          <i className="dot" style={{ background: nodeDotColor(n) }} />
         </span>
       ),
       disabled: !n.online,

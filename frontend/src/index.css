@@ -1260,6 +1260,10 @@ html[data-size="compact"] .ant-form-item-control-input-content > .ant-picker { w
 /* 名字中间省略：头段收缩 + 尾段不收缩，省略号自然落在中间（见 session-label.tsx TabName） */
 /* 这几条对 .tt-name 通用——标签条和手机会话页胶囊共用同一个 TabName。
    之前只挂在 .tt-tab 下，胶囊里的标题就换行了，把 50px 的顶栏撑成两行。 */
+/* 行盒要给足：line-height:1 时行盒正好等于字号（12/12），而 12px 中文的实际墨迹要 13px，
+   于是 overflow:hidden 把 CJK 的下缘和 g/p/y 的降部削掉一截（真机上「config-split」缺半截）。
+   标签高度写死 34，行盒长高不会把标签条撑高。 */
+.tt-name, .tt-name .h, .tt-name .tl, .tt-name .pj { line-height: 1.45; }
 .tt-name { display: flex; min-width: 0; overflow: hidden; white-space: nowrap; }
 .tt-name .h { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tt-name .tl { flex: 0 0 auto; }
@@ -2922,3 +2926,28 @@ html[data-size="compact"] .cc-run-slot { width: auto; }
   .tt-set-row { padding: var(--sp-2) 0 var(--sp-3); }
 }
 .tt-set-bare { padding-top: var(--sp-2); }
+
+/* ── 机器切换器的下拉行（侧栏底座那枚按钮弹出来的列表）─────────────────
+   方章原来走 antd 的 icon 槽，间距归 antd 管，实测贴着名字（「JE|Jetson」）；
+   而「当前是哪台」只靠方章一圈蓝边示意，行本身毫无表达——两台机器摆在一起时
+   得眯着眼找。现在整行自己排：当前那台给 --accent-soft 底 + 亮字，
+   延迟走 mono 右对齐，状态点收尾。 */
+.tt-nodemenu {
+  display: flex; align-items: center; gap: var(--sp-2);
+  min-width: 208px; margin: 0 -4px; padding: 2px 4px; border-radius: var(--r-xs);
+}
+.tt-nodemenu .nm {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--text-dim);
+}
+.tt-nodemenu.on { background: var(--accent-soft); }
+.tt-nodemenu.on .nm { color: var(--text-bright); font-weight: 500; }
+.tt-nodemenu .lat {
+  flex: 0 0 auto; font-family: var(--mono); font-size: var(--fs-micro); color: var(--text-dimmer);
+  font-variant-numeric: tabular-nums;
+}
+.tt-nodemenu .dot { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; }
+/* 手指档：这一列是「点错就换了台机器」的地方，命中区必须到 44 */
+@media (pointer: coarse) {
+  .ant-dropdown-menu-item:has(.tt-nodemenu) { min-height: var(--tap); }
+}
