@@ -16,7 +16,6 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GODIR="$(cd "$HERE/.." && pwd)"
 REPO="$(cd "$GODIR/../.." && pwd)"
-BASH_CLI="$REPO/ttmux"
 
 # ── isolated environment ──
 SOCKET="ttmux-e2e-$$"
@@ -223,22 +222,6 @@ rc0 "archive killed sessions" bash -c "! tmux -L '$SOCKET' has-session -t feat-a
 
 # ════════════════════════════════════════════
 sec "cross-compat with bash CLI (shared DBs)"
-if [ -x "$BASH_CLI" ]; then
-  $GO swarm new xcompat --goal "互通" --no-master >/dev/null
-  $GO swarm add xcompat m1 --type task "echo M1; sleep 300" >/dev/null
-  sleep 1
-  # bash reads Go-created swarm
-  has "bash reads Go swarm" "$($BASH_CLI swarm ls --json 2>/dev/null | jget '[s["name"] for s in d]')" "xcompat"
-  eq "status --json identical" \
-     "$($GO swarm status xcompat --json | python3 -m json.tool)" \
-     "$($BASH_CLI swarm status xcompat --json 2>/dev/null | python3 -m json.tool)"
-  # bash writes, Go reads
-  $BASH_CLI swarm say xcompat --as m1 "bash发的" >/dev/null 2>&1
-  has "Go reads bash post" "$($GO swarm feed xcompat --json | jget '[p["text"] for p in d]')" "bash发的"
-  $GO swarm archive xcompat >/dev/null
-else
-  no "bash CLI present" "missing $BASH_CLI (run cli/ttmux-cli/build.sh)"
-fi
 
 # ════════════════════════════════════════════
 sec "swarm migrate (legacy file metadata)"

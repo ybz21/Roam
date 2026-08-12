@@ -1,0 +1,22 @@
+<h3>5.5 项目 ↔ 会话：一条没有外键的跨层 join</h3>
+<p class="lede">
+这是两层分裂最贵的地方。项目在 Roam 层、会话在 ttmux 层，它们之间<b>没有任何外键</b>，
+关联是每轮现算出来的一条长链：
+</p>
+<pre class="code">tmux pane cwd  <s>（运行时，会漂）</s>
+   ↓ 首次见到即钉死
+session-homes.json: <var>$N</var> → home_dir       <s>（Roam 层，键是易失的 $N —— §2.3 串档就出在这）</s>
+   ↓ ResolveRepo（git 主仓库根）
+projects.json: dir → 项目 id                <s>（Roam 层）</s>
+   ↓ 非 git 项目再按「最长前缀命中」兜底认领
+项目卡上的「N 个任务」</pre>
+<p class="lede">
+链条上任何一环断了，项目卡就空 —— 而且<b>看不出是断在哪一环</b>。
+重启后你看到的「项目卡全空」，实际断点在第一环（tmux 没了）和第二环（<code>$N</code> 失效）。
+</p>
+<div class="note good">
+<b>M2 并库要解决的正是这个。</b><code>sessions.project_id</code> 一列外键，把这条现算的长链
+换成一次 <code>JOIN</code>：会话死了行还在、项目还认得它，卡片上就能直接显示
+「3 个已结束的任务，最近一次在 <code>.worktrees/task</code>」。
+现在这条链只能回答「此刻」，答不了「有过什么」。
+</div>

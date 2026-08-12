@@ -1,0 +1,148 @@
+<h2>4. 表设计</h2>
+<p class="lede">
+单库 <code>&lt;dataDir&gt;/meta.db</code>，<code>schema_meta</code> 管版本，迁移脚本放
+<code>cli/ttmux-cli-go/internal/metadb/migrations/</code>。
+</p>
+<div class="note warn">
+<b>这一节是 M2 的目标 schema，不是现在的表结构。</b>现在只有 <code>sessions</code> 一张表
+按这个方向改到位了（主键换持久 id，加 <code>status</code> / <code>died_at</code> /
+<code>died_reason</code> / <code>tmux_id</code> / <code>tmux_epoch</code>）；
+<code>projects</code> 仍是 <code>projects.json</code>（只多了 <code>lastSessionAt</code> 一个字段），
+<code>tmux_epochs</code> / <code>project_aliases</code> / <code>archived_at</code> /
+<code>spawn_cmd</code> / <code>restored_from</code> 都还没有。逐项状态见
+<a href="#m1" style="color:var(--accent)">§10</a>。
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 1040 396" width="1040" role="img" aria-label="meta.db 表关系图">
+  <rect x="24" y="40" width="240" height="150" rx="10" class="svg-box" stroke="var(--purple-border)"/>
+  <rect x="24" y="40" width="240" height="26" rx="10" fill="var(--purple-soft)" stroke="var(--purple-border)"/>
+  <text x="36" y="58" class="svg-t">projects</text>
+  <text x="36" y="84" class="svg-m" fill="var(--purple)">id  PK</text>
+  <text x="36" y="102" class="svg-m">dir  UNIQUE</text>
+  <text x="36" y="120" class="svg-m">origin · pinned · display_name</text>
+  <text x="36" y="138" class="svg-m">first_seen · last_seen</text>
+  <text x="36" y="156" class="svg-m" fill="var(--ok)">last_session_at</text>
+  <text x="36" y="174" class="svg-m" fill="var(--ok)">archived_at</text>
+
+  <rect x="392" y="24" width="268" height="248" rx="10" class="svg-box" stroke="var(--accent-border)"/>
+  <rect x="392" y="24" width="268" height="26" rx="10" fill="var(--accent-soft)" stroke="var(--accent-border)"/>
+  <text x="404" y="42" class="svg-t">sessions</text>
+  <text x="404" y="68" class="svg-m" fill="var(--accent)">id  PK  持久会话 id</text>
+  <text x="404" y="86" class="svg-m">parent_id → sessions.id</text>
+  <text x="404" y="104" class="svg-m">project_id → projects.id</text>
+  <text x="404" y="122" class="svg-m">home_dir · worktree_dir</text>
+  <text x="404" y="140" class="svg-m">agent · kind · label</text>
+  <text x="404" y="158" class="svg-m">created_by · created_at</text>
+  <text x="404" y="176" class="svg-m" fill="var(--ok)">status  live | dead</text>
+  <text x="404" y="194" class="svg-m" fill="var(--ok)">died_at · died_reason</text>
+  <text x="404" y="212" class="svg-m" fill="var(--ok)">spawn_cmd · spawn_env</text>
+  <text x="404" y="230" class="svg-m" fill="var(--warn)">tmux_id · tmux_epoch</text>
+  <text x="404" y="252" class="svg-m" fill="var(--text-dimmer)">restored_from → sessions.id</text>
+
+  <path d="M660 92 C700 92 700 62 668 62" class="svg-line" stroke="var(--accent)" stroke-width="1.3"/>
+  <text x="676" y="80" class="svg-m" fill="var(--accent)">parent</text>
+
+  <path d="M264 110 L392 110" class="svg-line" stroke-width="1.3"/>
+  <circle cx="388" cy="110" r="3" fill="var(--border)"/>
+  <text x="300" y="102" class="svg-m">1 : N</text>
+
+  <rect x="392" y="304" width="268" height="72" rx="10" class="svg-box" stroke="var(--warn-border)"/>
+  <rect x="392" y="304" width="268" height="26" rx="10" fill="var(--warn-soft)" stroke="var(--warn-border)"/>
+  <text x="404" y="322" class="svg-t">tmux_epochs</text>
+  <text x="404" y="348" class="svg-m" fill="var(--warn)">epoch  PK  server pid</text>
+  <text x="404" y="366" class="svg-m">started_at · seen_at</text>
+  <path d="M526 272 L526 304" class="svg-line" stroke-width="1.3"/>
+
+  <rect x="788" y="24" width="228" height="62" rx="10" class="svg-box"/>
+  <rect x="788" y="24" width="228" height="26" rx="10" fill="var(--list-hover)" stroke="var(--border)"/>
+  <text x="800" y="42" class="svg-t">swarms</text>
+  <text x="800" y="68" class="svg-m">supervisor → sessions.id</text>
+
+  <rect x="788" y="102" width="228" height="62" rx="10" class="svg-box"/>
+  <rect x="788" y="102" width="228" height="26" rx="10" fill="var(--list-hover)" stroke="var(--border)"/>
+  <text x="800" y="120" class="svg-t">swarm_members</text>
+  <text x="800" y="146" class="svg-m">session → sessions.id</text>
+
+  <rect x="788" y="180" width="228" height="62" rx="10" class="svg-box"/>
+  <rect x="788" y="180" width="228" height="26" rx="10" fill="var(--list-hover)" stroke="var(--border)"/>
+  <text x="800" y="198" class="svg-t">races</text>
+  <text x="800" y="224" class="svg-m">repo → projects.dir</text>
+
+  <rect x="788" y="258" width="228" height="62" rx="10" class="svg-box"/>
+  <rect x="788" y="258" width="228" height="26" rx="10" fill="var(--list-hover)" stroke="var(--border)"/>
+  <text x="800" y="276" class="svg-t">plugin_sessions</text>
+  <text x="800" y="302" class="svg-m">session → sessions.id</text>
+
+  <path d="M660 56 L788 56" class="svg-line" stroke-width="1.2"/>
+  <path d="M660 134 L788 134" class="svg-line" stroke-width="1.2"/>
+  <path d="M660 290 L788 290" class="svg-line" stroke-width="1.2"/>
+
+  <text x="24" y="240" class="svg-k">图例 · 目标 schema（M2）</text>
+  <text x="24" y="262" class="svg-m" fill="var(--ok)">绿 = 相对现状新增的列</text>
+  <text x="24" y="280" class="svg-m" fill="var(--warn)">黄 = 运行时句柄（只在 live 时有意义）</text>
+  <text x="24" y="298" class="svg-m" fill="var(--accent)">蓝 = 主键 / 自引用</text>
+  <text x="24" y="322" class="svg-m" fill="var(--text-dimmer)">sessions 的绿色列已落地；projects</text>
+  <text x="24" y="338" class="svg-m" fill="var(--text-dimmer)">仍在 projects.json，只有 last_session_at</text>
+</svg>
+</div>
+
+<h3>4.1 DDL</h3>
+<pre class="code">CREATE TABLE <b>schema_meta</b> (version INTEGER NOT NULL);
+
+<s>-- tmux server 代次：server pid，随 server 起落而变。</s>
+<s>-- 用来把「你手动 kill 了会话」和「机器重启把整个 server 带走了」分开记。</s>
+CREATE TABLE <b>tmux_epochs</b> (
+  epoch      TEXT PRIMARY KEY,
+  started_at INTEGER NOT NULL,
+  seen_at    INTEGER NOT NULL
+);
+
+CREATE TABLE <b>projects</b> (
+  id              TEXT PRIMARY KEY,          <s>-- 沿用现有不可变 id，老链接不失效</s>
+  dir             TEXT NOT NULL UNIQUE,
+  origin          TEXT NOT NULL DEFAULT '',  <s>-- '' = discovered | 'user'</s>
+  display_name    TEXT,
+  pinned          INTEGER NOT NULL DEFAULT 0,
+  default_agent   TEXT,
+  default_base    TEXT,
+  first_seen      INTEGER NOT NULL,
+  last_seen       INTEGER NOT NULL,
+  <u>last_session_at INTEGER NOT NULL DEFAULT 0</u>,  <s>-- 最后一次有会话的时刻</s>
+  <u>archived_at     INTEGER</u>                     <s>-- 软退场，NULL = 在册</s>
+);
+CREATE TABLE <b>project_aliases</b> (alias TEXT PRIMARY KEY, project_id TEXT NOT NULL);
+
+<s>-- 主键是**持久会话 id**（= tmux 会话名，见 docs/design/session-identity.md）：</s>
+<s>-- 由创建时刻派生、不可变、跨 tmux server 重启唯一且永不复用 —— 天生就是对的主键。</s>
+CREATE TABLE <b>sessions</b> (
+  <i>id</i>           TEXT PRIMARY KEY,
+  label        TEXT,                      <s>-- 展示名快照（会话死后 @roam_name 就没了）</s>
+  parent_id    TEXT REFERENCES sessions(id),
+  project_id   TEXT REFERENCES projects(id),
+  home_dir     TEXT,                      <s>-- 归属目录（吸收 session-homes.json）</s>
+  worktree_dir TEXT,
+  agent        TEXT,                      <s>-- claude | codex | shell | …</s>
+  kind         TEXT,                      <s>-- task | swarm-member | race | plugin | plain</s>
+  created_by   TEXT,
+  created_at   INTEGER NOT NULL,
+  <u>spawn_cmd</u>    TEXT,                      <s>-- 重开所需的全部输入（§8）</s>
+  <u>spawn_env</u>    TEXT,                      <s>-- JSON</s>
+  <u>status</u>       TEXT NOT NULL DEFAULT 'live',  <s>-- live | dead</s>
+  <u>died_at</u>      INTEGER,
+  <u>died_reason</u>   TEXT,                      <s>-- killed | host-restart | unknown</s>
+  <u>restored_from</u> TEXT REFERENCES sessions(id),
+  <var>tmux_id</var>      TEXT,                      <s>-- 运行时句柄，只在 status=live 时有意义</s>
+  <var>tmux_epoch</var>   TEXT REFERENCES tmux_epochs(epoch)
+);
+CREATE INDEX sessions_project ON sessions(project_id, status);
+CREATE UNIQUE INDEX sessions_handle ON sessions(tmux_epoch, tmux_id)
+  WHERE tmux_epoch IS NOT NULL;</pre>
+
+<div class="note good">
+<b>为什么主键必须换成持久会话 id。</b><code>session-identity.md</code> 已经把会话 id 定义成
+<code>id.ForSession(session_created, session_id)</code> —— <b>它包含创建时刻</b>，所以重启后新会话
+拿到 <code>$0</code> 也撞不上旧会话。台账早就有一个跨重启唯一的键，只是没拿它当主键。换过来之后：
+重启不再是「主键全部失效」，只是 <code>tmux_id</code> 置空；<code>$N</code> 复用天然无害，
+因为 <code>(epoch, tmux_id)</code> 才是句柄；死会话的行可以安然留着，它的主键不依赖任何活着的东西。
+</div>

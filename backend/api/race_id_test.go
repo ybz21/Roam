@@ -17,7 +17,7 @@ func TestRaceStoreNormalizesLegacyIDs(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "races.json"), []byte(legacy), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s := NewRaceStore(dir)
+	s := NewRaceStore(dir, nil)
 	if len(s.races) != 1 {
 		t.Fatalf("races = %+v", s.races)
 	}
@@ -32,7 +32,7 @@ func TestRaceStoreNormalizesLegacyIDs(t *testing.T) {
 		t.Fatal("新老 id 都应能查到")
 	}
 	// 重写落盘：重开不再二次改写
-	s2 := NewRaceStore(dir)
+	s2 := NewRaceStore(dir, nil)
 	if s2.races[0].ID != r.ID {
 		t.Fatalf("重写未落盘或被二次改写: %q vs %q", s2.races[0].ID, r.ID)
 	}

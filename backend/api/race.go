@@ -4,7 +4,9 @@
 package api
 
 import (
+	"database/sql"
 	"encoding/json"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"ttmux-web/internal/id"
+	"ttmux-web/internal/metadb"
 	"ttmux-web/worktree"
 )
 
@@ -48,13 +51,21 @@ type Race struct {
 }
 
 type RaceStore struct {
+	db    *metadb.DB // 直连时的真相源；nil/降级则写 races.json
 	mu    sync.Mutex
 	path  string
 	races []*Race
 }
 
-func NewRaceStore(dataDir string) *RaceStore {
-	s := &RaceStore{}
+// NewRaceStore 建竞赛台账。db 直连可用时以库为准，否则退回 races.json。
+// 同 project.Store：只换 load/save 两端，业务方法（crown 状态机等）一行没动。
+func NewRaceStore(dataDir string, db *metadb.DB) *RaceStore {
+	s := &RaceStore{db: db}
+	if db.OK() {
+		s.loadDB()
+		s.normalizeIDs()
+		return s
+	}
 	if dataDir != "" {
 		s.path = filepath.Join(dataDir, "races.json")
 		if b, err := os.ReadFile(s.path); err == nil {
@@ -67,6 +78,10 @@ func NewRaceStore(dataDir string) *RaceStore {
 
 // save 持久化全量列表（调用方须持锁）。
 func (s *RaceStore) save() {
+	if s.db.OK() {
+		s.saveDB()
+		return
+	}
 	if s.path == "" {
 		return
 	}
@@ -77,6 +92,67 @@ func (s *RaceStore) save() {
 	tmp := s.path + ".tmp"
 	if os.WriteFile(tmp, b, 0o600) == nil {
 		_ = os.Rename(tmp, s.path)
+	}
+}
+
+// loadDB / saveDB 是 races 表这一端。contestants / crownDone 存 JSON 文本列：
+// 选手永远整体读写，唯一的聚合查询（每个 dir 有几场在跑）压根不看选手，
+// 拆子表只会多一层 join 而换不来任何东西。
+func (s *RaceStore) loadDB() {
+	rows, err := s.db.Query(`SELECT id, IFNULL(legacy_id,''), IFNULL(name,''), IFNULL(dir,''),
+		IFNULL(base,''), IFNULL(prompt,''), IFNULL(created_at,''), IFNULL(status,'running'),
+		IFNULL(winner,''), IFNULL(crown_done,''), IFNULL(contestants,'') FROM races`)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var r Race
+		var done, cts string
+		if rows.Scan(&r.ID, &r.LegacyID, &r.Name, &r.Dir, &r.Base, &r.Prompt,
+			&r.CreatedAt, &r.Status, &r.Winner, &done, &cts) != nil {
+			continue
+		}
+		if done != "" {
+			_ = json.Unmarshal([]byte(done), &r.CrownDone)
+		}
+		if cts != "" {
+			_ = json.Unmarshal([]byte(cts), &r.Contestants)
+		}
+		cp := r
+		s.races = append(s.races, &cp)
+	}
+}
+
+func (s *RaceStore) saveDB() {
+	err := s.db.Tx(func(tx *sql.Tx) error {
+		keep := make([]any, 0, len(s.races))
+		for _, r := range s.races {
+			done, _ := json.Marshal(r.CrownDone)
+			cts, _ := json.Marshal(r.Contestants)
+			if _, err := tx.Exec(`INSERT INTO races
+				(id,legacy_id,name,dir,base,prompt,created_at,status,winner,crown_done,contestants)
+				VALUES(?,?,?,?,?,?,?,?,?,?,?)
+				ON CONFLICT(id) DO UPDATE SET legacy_id=excluded.legacy_id, name=excluded.name,
+					dir=excluded.dir, base=excluded.base, prompt=excluded.prompt,
+					created_at=excluded.created_at, status=excluded.status, winner=excluded.winner,
+					crown_done=excluded.crown_done, contestants=excluded.contestants`,
+				r.ID, r.LegacyID, r.Name, r.Dir, r.Base, r.Prompt, r.CreatedAt,
+				r.Status, r.Winner, string(done), string(cts)); err != nil {
+				return err
+			}
+			keep = append(keep, r.ID)
+		}
+		if len(keep) == 0 {
+			_, err := tx.Exec(`DELETE FROM races`)
+			return err
+		}
+		ph := strings.TrimSuffix(strings.Repeat("?,", len(keep)), ",")
+		_, err := tx.Exec(`DELETE FROM races WHERE id NOT IN (`+ph+`)`, keep...)
+		return err
+	})
+	if err != nil {
+		log.Printf("竞赛台账写库失败: %v", err)
 	}
 }
 

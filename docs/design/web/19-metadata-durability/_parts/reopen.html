@@ -1,0 +1,27 @@
+<h2>8. 重开（restore），不是自动恢复</h2>
+<p class="lede">
+<code>sessions</code> 存了 <code>home_dir</code> / <code>worktree_dir</code> / <code>agent</code> /
+<code>label</code> / <code>spawn_cmd</code> / <code>spawn_env</code>，足够把壳原样重建。
+</p>
+<ul class="pts">
+  <li><b>手动重开</b>：会话列表 / 项目详情页里，<code>dead</code> 会话行末给一个「重开」动作 →
+      <code>POST /sessions/:id/restore</code> → 走现有 <code>ttmux new --json</code> 建<b>新会话</b>（新 id），
+      <code>restored_from</code> 指向旧行，归属与 label 照抄。旧行保持 dead，不复活。
+      <b>重开的是壳</b>；agent 的上下文由 agent 自己的 resume 机制负责，我们不假装能接上。</li>
+  <li><b>开机恢复</b>：设置页三档 —— <code>关</code>（默认）/ <code>仅置顶会话</code> / <code>全部</code>。
+      默认关的理由写在设置项说明里。</li>
+  <li><b>恢复哪些</b>：只考虑 <code>died_reason='host-restart'</code> 的行，且按项目去重上限（每项目 ≤3），
+      免得一次重启拉起几十个 pane 把机器再压死一次。</li>
+</ul>
+
+<h3>8.1 对话（agent transcript）怎么接回来</h3>
+<p class="lede">
+Claude Code 的对话存在 <code>~/.claude/projects/&lt;cwd-slug&gt;/&lt;uuid&gt;.jsonl</code>，
+<b>与 tmux 无关，重启一段不丢</b>（本机 1.1GB / 166 段）。缺的只是「Roam 不认识它」。
+补上一列即可：会话表记下 <code>agent_session_uuid</code>，重开时
+<code>claude --resume &lt;uuid&gt;</code>，界面上就能从「已结束的会话」直接接回原对话。
+</p>
+<div class="note">
+这是把 <b>①台账 → ③重开</b> 真正闭环的一步：没有它，重开只能给你一个空壳；
+有了它，重开等于把那天下午的活原样接着干。
+</div>

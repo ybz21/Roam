@@ -134,12 +134,12 @@ func normalizeRe(re any) any {
 
 // ActiveMembers lists launched (non-pending) member names.
 func (s *Store) ActiveMembers(swarm string) []string {
-	db, err := s.openSwarmDB(swarm)
+	db, sid, err := s.scope(swarm)
 	if err != nil {
 		return nil
 	}
 	defer db.Close()
-	rows, err := db.Query(`SELECT name FROM members WHERE IFNULL(pending,0)=0`)
+	rows, err := db.Query(`SELECT name FROM swarm_members WHERE swarm_id=? AND IFNULL(pending,0)=0`, sid)
 	if err != nil {
 		return nil
 	}
@@ -187,17 +187,18 @@ func (s *Store) LeaderMembers(swarm string) []string {
 }
 
 func (s *Store) roleMembers(swarm string, roles ...string) []string {
-	db, err := s.openSwarmDB(swarm)
+	db, sid, err := s.scope(swarm)
 	if err != nil {
 		return nil
 	}
 	defer db.Close()
 	ph := strings.TrimSuffix(strings.Repeat("?,", len(roles)), ",")
-	args := make([]any, len(roles))
-	for i, r := range roles {
-		args[i] = r
+	args := make([]any, 0, len(roles)+1)
+	args = append(args, sid)
+	for _, r := range roles {
+		args = append(args, r)
 	}
-	rows, err := db.Query(`SELECT name FROM members WHERE role IN (`+ph+`) AND IFNULL(pending,0)=0`, args...)
+	rows, err := db.Query(`SELECT name FROM swarm_members WHERE swarm_id=? AND role IN (`+ph+`) AND IFNULL(pending,0)=0`, args...)
 	if err != nil {
 		return nil
 	}

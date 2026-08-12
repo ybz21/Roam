@@ -54,8 +54,10 @@ func Show(version string, w io.Writer) {
 		g("env set"), d("<K=V>"), g("env rm"), d("<KEY>"), g("env clear"), g("env push"))
 
 	fmt.Fprintf(w, "  %s\n", b("其他"))
-	fmt.Fprintf(w, "    %s 服务器信息   %s 重载 tmux.conf   %s 安装补全   %s 显示帮助\n\n",
+	fmt.Fprintf(w, "    %s 服务器信息   %s 重载 tmux.conf   %s 安装补全   %s 显示帮助\n",
 		g("info"), g("source"), g("completion"), g("help"))
+	fmt.Fprintf(w, "    %s %s  台账库：状态 / 迁移 / 备份\n\n",
+		g("db"), d("status|migrate|backup [--json]"))
 
 	fmt.Fprintf(w, "  %s\n\n", d("未识别的命令会直接转发给 tmux"))
 }

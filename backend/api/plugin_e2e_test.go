@@ -38,7 +38,7 @@ func TestPluginRunE2E(t *testing.T) {
 	}
 
 	gin.SetMode(gin.TestMode)
-	h := New(ttmux.New(bin), "", tmp)
+	h := New(ttmux.New(bin), "", tmp, "")
 	r := gin.New()
 	r.POST("/plugins/:id/run", h.PluginRun)
 

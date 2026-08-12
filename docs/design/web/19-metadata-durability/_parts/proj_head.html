@@ -1,0 +1,28 @@
+<h2>5. 项目存储（Roam 层）</h2>
+
+<p class="lede">
+项目整个活在 <b>Roam 层</b>：ttmux 层不知道「项目」这个概念，它只管会话。
+项目台账现在是 <code>&lt;dataDir&gt;/projects.json</code> —— 一个改一个字段就全量重写的
+JSON，没有事务、没有版本号、没有任何外键把它和会话连起来。
+</p>
+
+<h3>5.1 项目是读模型，不是用户建的对象</h3>
+<p class="lede">
+这是理解它为什么会「重启后全没」的关键：<b>项目主要不是用户创建出来的，是被发现的</b>。
+聚合层每轮把会话的归属目录 join 成仓库根，join 到谁就 <code>Touch</code> 谁 ——
+入册是「看见会话」的副作用。于是两条入册通道：
+</p>
+<div class="tablewrap">
+<table>
+<thead><tr><th>通道</th><th>怎么进来的</th><th>字段</th><th>能否自动退场</th></tr></thead>
+<tbody>
+<tr><td><b>discovered</b></td><td>会话归属目录 join 命中 → <code>Touch(dir)</code></td><td><code>origin=''</code></td><td class="bad">能 —— 这就是重启后全灭的那批</td></tr>
+<tr><td><b>user</b></td><td>用户显式 <code>POST /projects</code>（项目 = 任意目录，<b>不与 git 绑定</b>）</td><td><code>origin='user'</code></td><td class="good">不能，只能显式 DELETE</td></tr>
+</tbody>
+</table>
+</div>
+<div class="note bad">
+本机实测：台账里 <b>discovered = 0 个</b>，13 个全是 <code>origin=user</code>。
+不是用户从来没在别的仓库里开过会话，是<b>发现来的那些已经被历次重启清干净了</b>——
+「发现」通道的产出，被「此刻没会话」的退场规则一轮一轮吃掉。
+</div>

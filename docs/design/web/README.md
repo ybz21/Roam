@@ -29,6 +29,8 @@
 | 17 | [17-browser-chrome/](./17-browser-chrome/index.html) | **镜像两页页头重做** — 一个 omnibox 当主角、主行只留四个可点目标、标签换「数字 + 抽屉」、Roam 专有状态收成可点芯片条；桌面标签条/分区/三档收纳/键盘，手机镜像页共用同一套语法（devbox + 应用启动器 + 按键条）|
 | 18 | [18-overview-projects-merge/](./18-overview-projects-merge/index.html) | **概览 × 项目 合并成一个工作台** — 两页画的是同一批项目卡、拉的是同一条 `/projects`；概览独有的只有问候条、「需要你」行动队列、最近活动轨。`#/projects` 成为唯一首页（`#/overview` 重定向），排序加「需要你」档并置默认，项目卡取两版并集；顺带删掉概览那套「每 6s 对 ≤14 个会话各发 3 条请求」的前端轮询 |
 
+| 19 | [19-metadata-durability/](./19-metadata-durability/index.html) | **元数据持久化与重启恢复** — 两篇：[问题](./19-metadata-durability/index.html)（ttmux 层与 Roam 层各自把什么存在哪、为什么一重启就归零：普通会话在盘上不留痕迹、`sessions` 拿 tmux `$N` 当主键被整表清空、发现型项目按「此刻没会话」退场、`$N` 跨重启复用串档；附本机实测的丢失/捞回清单）· [改进方向](./19-metadata-durability/design.html)（目标架构与数据分层设计：台账进 `meta.db`、配置留 JSON、大对象留盘、tmux 只回答「现在谁活着」；表设计与 ER 图、会话软删存历史、项目退场改判「从来没有过会话」、重开与对话回接、分期与 M1 落地记录）|
+
 > 13 与 14 是同一套壳的两端：**断点、密度与全局令牌以 13 为准，`large ≥ 1280` 之内的桌面形态以 14 为准**。
 
 ## 实现状态

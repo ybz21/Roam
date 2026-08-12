@@ -1,0 +1,64 @@
+<h3>5.4 生命周期：退场判「有没有过」，不判「此刻有没有」</h3>
+
+<div class="figure">
+<svg viewBox="0 0 1000 288" width="1000" role="img" aria-label="项目生命周期状态机">
+  <rect x="24" y="104" width="150" height="56" rx="10" class="svg-box"/>
+  <text x="99" y="128" class="svg-t" text-anchor="middle">会话 join 命中</text>
+  <text x="99" y="146" class="svg-m" text-anchor="middle">Touch(dir)</text>
+
+  <rect x="256" y="96" width="168" height="72" rx="12" class="svg-box" fill="var(--accent-soft)" stroke="var(--accent-border)"/>
+  <text x="340" y="122" class="svg-t" text-anchor="middle">discovered</text>
+  <text x="340" y="142" class="svg-m" text-anchor="middle" fill="var(--accent)">origin = ''</text>
+  <text x="340" y="158" class="svg-m" text-anchor="middle">可自动退场</text>
+
+  <rect x="256" y="12" width="168" height="60" rx="12" class="svg-box" fill="var(--purple-soft)" stroke="var(--purple-border)"/>
+  <text x="340" y="36" class="svg-t" text-anchor="middle">user / pinned</text>
+  <text x="340" y="56" class="svg-m" text-anchor="middle" fill="var(--purple)">一等对象 · 永不自动退场</text>
+
+  <rect x="536" y="96" width="168" height="72" rx="12" class="svg-box" fill="var(--warn-soft)" stroke="var(--warn-border)" stroke-dasharray="5 3"/>
+  <text x="620" y="120" class="svg-t" text-anchor="middle">archived</text>
+  <text x="620" y="138" class="svg-m" text-anchor="middle" fill="var(--warn)">有过会话，此刻空着</text>
+  <text x="620" y="154" class="svg-m" text-anchor="middle" fill="var(--text-dimmer)">M3 · 尚未实现</text>
+
+  <rect x="816" y="96" width="160" height="72" rx="12" class="svg-box" stroke="var(--danger-border)"/>
+  <text x="896" y="122" class="svg-t" text-anchor="middle" fill="var(--danger)">removed</text>
+  <text x="896" y="142" class="svg-m" text-anchor="middle">目录没了</text>
+  <text x="896" y="158" class="svg-m" text-anchor="middle">或从来没干过活</text>
+
+  <path d="M174 132 L248 132" class="svg-line" stroke-width="1.5" marker-end="url(#pa)"/>
+  <path d="M340 96 L340 76" class="svg-line" stroke="var(--purple)" stroke-width="1.5" marker-end="url(#pp)"/>
+  <text x="352" y="90" class="svg-m" fill="var(--purple)">用户转正 / 置顶</text>
+  <path d="M424 118 L528 118" class="svg-line" stroke="var(--warn)" stroke-width="1.5" marker-end="url(#pw)"/>
+  <text x="476" y="110" class="svg-m" text-anchor="middle" fill="var(--warn)">空了</text>
+  <path d="M528 150 C480 178 424 178 424 156" class="svg-line" stroke="var(--ok)" stroke-width="1.5" marker-end="url(#pg)"/>
+  <text x="476" y="194" class="svg-m" text-anchor="middle" fill="var(--ok)">又开会话</text>
+  <path d="M704 132 L808 132" class="svg-line" stroke="var(--danger)" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#pd)"/>
+
+  <text x="24" y="232" class="svg-k">关键改动 · M1 已落地</text>
+  <text x="24" y="254" class="svg-s">退场判据从 <tspan fill="var(--danger)">「此刻没会话」</tspan> 改成 <tspan fill="var(--ok)">「从来没有过会话」</tspan>（lastSessionAt == 0）。</text>
+  <text x="24" y="274" class="svg-s">重启不再让项目消失。<tspan fill="var(--text-dimmer)">虚线框 = M3 目标态，现在「干过活但此刻空着」的项目只是留在正常列表里。</tspan></text>
+
+  <defs>
+    <marker id="pa" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--border)"/></marker>
+    <marker id="pp" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--purple)"/></marker>
+    <marker id="pw" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--warn)"/></marker>
+    <marker id="pg" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--ok)"/></marker>
+    <marker id="pd" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--danger)"/></marker>
+  </defs>
+</svg>
+</div>
+
+<pre class="code"><b>现在（M1 已落地）</b>
+目录不存在                                     → 硬退场
+origin='user' 或 pinned                        → 永不退场
+roamWts=0 ∧ 活会话=0 ∧ <u>历史会话=0</u> ∧ 无竞赛/蜂群 → 退场
+roamWts=0 ∧ 活会话=0 ∧ <u>历史会话&gt;0</u>              → <u>不删</u>，留在正常列表里
+
+<b>M3 目标</b>
+最后一条改成 → <i>archived_at=now</i>，项目页收进「不活跃」分组、默认折叠</pre>
+<div class="note warn">
+<b>归档态目前只是设计，代码里还没有。</b><code>Entry</code> 现在只有 <code>LastSessionAt</code>
+（<code>backend/project/service.go</code>），聚合层据此<b>不删</b>这类项目，但它们和活跃项目
+混在同一份列表里，没有「不活跃」分组、没有折叠、也没有 <code>archived_at</code> 字段。
+<code>archived_at</code> 出现在 §4 的目标 schema 与本图的虚线框里，属于 M3。
+</div>

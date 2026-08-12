@@ -1,0 +1,65 @@
+<h2>2. 为什么重启后归零</h2>
+
+<div class="note">
+本节是<b>病根诊断，描述的是改动前的行为</b>。下面四条已经全部在 M1 修掉，
+改法与验收见 <a href="#m1" style="color:var(--accent)">§10</a>；
+留着是因为「为什么会这样」比「改成了什么」更难重建，后面每个决定都从这里长出来。
+</div>
+
+<h3>2.0 普通会话在盘上不留痕迹（根因）</h3>
+<p class="lede">
+<code>pipe-pane</code>（把 pane 输出写进 <code>logs/&lt;id&gt;.log</code>）只在三处设置：
+<code>swarm/members.go</code>、<code>spawn/spawn.go</code>、<code>plugin/hostapi.go</code>。
+<code>ttmux new</code> 与 Web「新建会话」走 <code>runtime.CreateSession</code>，
+<b>既不写 sessmeta 行、也不开 pipe-pane</b>。
+</p>
+<pre class="code">$ <b>find ~/.roam -newermt "2026-08-12 00:00" ! -newermt "2026-08-12 17:36" -type f</b>
+<em>/home/ai/.roam/browser-config.json</em>        <s># 17:36 重启前，当天唯一动过的文件</s>
+
+$ <b>ls -lt ~/.roam/logs | head -2</b>
+2026-0811-1629-0009.log   Aug 11 16:29   <s># 最新日志是前一天的</s></pre>
+<p class="lede">
+那天下午有 <b>15 个 Claude 会话</b>在跑。Roam 主目录里连「它们存在过」都无从证明。
+下面三条讲的是<b>有记录</b>的那一小撮如何被删掉；绝大多数会话根本没被记过。
+</p>
+
+<h3>2.1 <code>sessions</code> 表拿 tmux 的 <code>$N</code> 当主键</h3>
+<p class="lede">
+主键是 <code>#{session_id}</code>（<code>$0</code>/<code>$3</code>）。tmux server 随机器一起死，
+<code>$N</code> 全部消失，<code>Reconcile</code> 把「不在活会话里」的行<b>硬 DELETE</b>。
+</p>
+<pre class="code">$ <b>sqlite3 ~/.roam/meta.db "select count(*) from sessions;"</b>
+<em>0</em>
+$ <b>tmux list-sessions -F "#{session_name}\t#{session_id}"</b>
+2026-0812-1740-0000  $0        <s># 重启后新建的会话，又拿到了 $0</s>
+2026-0812-1740-0002  $2</pre>
+
+<h3>2.2 发现型项目按「此刻有没有会话」退场</h3>
+<pre class="code"><s>// backend/api/project.go</s>
+if e.Origin != "user" &amp;&amp; roamWts == 0 &amp;&amp; <em>p.Sessions == 0</em> &amp;&amp; !e.Pinned {
+    a.Projects.Remove(key)     <s>// 重启后会话恒为 0 → 发现型项目在第一次刷新时全灭</s>
+}</pre>
+<p class="lede">
+判据的前提是「会话数是项目还活着的证据」。重启把这个前提废了。
+实测台账里 <b>发现型项目 = 0 个</b>，只剩用户显式创建（<code>origin=user</code>）的那些侥幸存活。
+</p>
+
+<h3>2.3 <code>$N</code> 跨重启复用 → 静默串档</h3>
+<p class="lede">
+<code>session-homes.json</code> 以 tmux 的 <code>#{session_id}</code> 为键 ——
+<b>它渲染出来就是 <code>$0</code> / <code>$3</code>，和本文说的 <code>$N</code> 是同一个东西</b>，
+不是两种键（这点容易看岔，代码注释里写作 <code>#{session_id}（$3）</code>）。
+它相对<b>会话名</b>确实稳定（改名不变），但相对 <b>tmux server</b> 不稳定：重起后从
+<code>$0</code> 重新发号。
+</p>
+<p class="lede">
+于是<b>重启后建的第一个会话会继承上一代某个会话的归属目录</b>，静悄悄归错项目。
+<code>reconcile(alive)</code> 恰恰清不掉这种残行 —— 重启后 <code>$0</code> 又活了
+（发给了新会话），它在 <code>alive</code> 集合里，残行被当成有效的保留下来。
+这条比丢数据更难查：它给出的是<b>错误的答案</b>。
+</p>
+<div class="note good">
+<b>M1 已修：</b><code>pin()</code> 现在拿名字快照当换代探针 —— 同一个 <code>$N</code> 上
+换了会话名，就判定是 server 换代后的复用，按新会话自己的 cwd 重钉而不是继承
+（会话名是持久 id，活着的时候不会变，所以「名字变了」只可能是换了会话）。
+</div>

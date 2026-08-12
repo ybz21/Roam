@@ -26,6 +26,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"ttmux-web/internal/metadb"
 )
 
 // ── 错误模型 ──────────────────────────────────────────────
@@ -64,9 +65,10 @@ type remoteState struct {
 	heads map[string]bool
 }
 
-// New 建服务；dataDir 为空表示不持久化会话归属（测试用），生产由 api.New 传入。
-func New(dataDir string) *Service {
-	return &Service{cache: map[string]listCache{}, remote: map[string]remoteState{}, homes: newHomeStore(dataDir)}
+// New 建服务；db 直连可用时会话归属走 session_homes 表，否则退回 JSON，
+// dataDir 也为空则纯内存（测试用）。生产由 api.New 传入。
+func New(dataDir string, db *metadb.DB) *Service {
+	return &Service{cache: map[string]listCache{}, remote: map[string]remoteState{}, homes: newHomeStore(dataDir, db)}
 }
 
 const listCacheTTL = 3 * time.Second

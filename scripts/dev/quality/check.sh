@@ -30,7 +30,7 @@ tracked_source_files() {
 }
 
 section "Shell syntax"
-shell_files="$(git ls-files '*.sh' 'cli/ttmux-cli/build.sh' 'cli/ttmux-cli/lib/*.sh' 'scripts/*.sh')"
+shell_files="$(git ls-files '*.sh' 'scripts/*.sh')"
 if [ -n "$shell_files" ]; then
   while IFS= read -r f; do
     [ -f "$f" ] || continue

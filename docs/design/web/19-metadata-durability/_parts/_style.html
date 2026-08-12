@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Roam · 元数据持久化与重启恢复</title>
+<style>
+/* ── 令牌：直接取 frontend/src/theme.tsx 的真值，稿子和成品同源 ───────────── */
+:root {
+  --bg-base:#0d1117; --bg-container:#161b22; --bg-elevated:#1b222b; --bg-term:#06090d;
+  --border:#30363d; --border-subtle:#21262d;
+  --text-bright:#e6edf3; --text-dim:#8b949e; --text-dimmer:#6e7681;
+  --accent:#58a6ff; --accent-solid:#1f6feb; --accent-soft:rgba(31,111,235,.14); --accent-border:rgba(88,166,255,.45);
+  --ok:#3fb950; --ok-solid:#238636; --ok-soft:rgba(63,185,80,.14); --ok-border:rgba(63,185,80,.42);
+  --danger:#f85149; --danger-soft:rgba(248,81,73,.12); --danger-border:rgba(248,81,73,.40);
+  --warn:#d29922; --warn-soft:rgba(210,153,34,.12); --warn-border:rgba(210,153,34,.40);
+  --purple:#a371f7; --purple-soft:rgba(163,113,247,.12); --purple-border:rgba(163,113,247,.38);
+  --list-hover:rgba(255,255,255,.025);
+  --fs-micro:11px; --fs-meta:12px; --fs-sm:13px; --fs-body:14px; --fs-lg:16px; --fs-title:22px;
+  --r-xs:6px; --r-sm:10px; --r-card:14px; --r-pill:999px;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+html[data-theme="light"] {
+  --bg-base:#f6f8fa; --bg-container:#ffffff; --bg-elevated:#ffffff; --bg-term:#ffffff;
+  --border:#d0d7de; --border-subtle:#e6e9ec;
+  --text-bright:#1f2328; --text-dim:#57606a; --text-dimmer:#8c959f;
+  --accent:#0969da; --accent-solid:#1f6feb; --accent-soft:rgba(31,111,235,.10); --accent-border:rgba(31,111,235,.40);
+  --ok:#1a7f37; --ok-solid:#1f883d; --ok-soft:rgba(31,136,61,.10); --ok-border:rgba(31,136,61,.40);
+  --danger:#cf222e; --danger-soft:rgba(207,34,46,.09); --danger-border:rgba(207,34,46,.35);
+  --warn:#9a6700; --warn-soft:rgba(154,103,0,.10); --warn-border:rgba(154,103,0,.35);
+  --purple:#8250df; --purple-soft:rgba(130,80,223,.10); --purple-border:rgba(130,80,223,.35);
+  --list-hover:rgba(27,31,36,.04);
+}
+* { box-sizing:border-box; }
+html { background:#07090d; }
+html[data-theme="light"] { background:#eef1f5; }
+body {
+  margin:0; color:var(--text-bright);
+  font:var(--fs-body)/1.6 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+svg { display:block; }
+button { font:inherit; cursor:pointer; }
+
+/* ── 文档骨架（沿用 17/18 号稿体例）──────────────────────────────────────── */
+.top {
+  position:sticky; top:0; z-index:20;
+  display:flex; align-items:center; gap:var(--sp-3);
+  padding:10px clamp(16px,3vw,40px);
+  background:color-mix(in srgb, var(--bg-base) 84%, transparent);
+  border-bottom:1px solid var(--border-subtle); backdrop-filter:blur(18px);
+}
+.top .kicker { font-size:var(--fs-micro); letter-spacing:.14em; text-transform:uppercase; color:var(--text-dimmer); }
+.top h1 { margin:0; font-size:var(--fs-sm); font-weight:600; }
+.top .sp { flex:1; }
+.tbtn {
+  border:1px solid var(--border); background:var(--bg-container); color:var(--text-dim);
+  border-radius:var(--r-pill); padding:5px 14px; font-size:var(--fs-meta);
+}
+.tbtn:hover { color:var(--text-bright); border-color:var(--accent-border); }
+
+.wrap { max-width:1180px; margin:0 auto; padding:34px clamp(16px,3vw,40px) 120px; }
+h2 { margin:56px 0 6px; padding-top:26px; font-size:var(--fs-lg); font-weight:600; border-top:1px solid var(--border-subtle); }
+h2:first-of-type { margin-top:8px; border-top:0; padding-top:0; }
+h3 { margin:28px 0 8px; font-size:var(--fs-sm); font-weight:600; color:var(--text-bright); }
+.lede { max-width:78ch; margin:0 0 18px; color:var(--text-dim); font-size:var(--fs-sm); line-height:1.9; }
+.lede b { color:var(--text-bright); font-weight:600; }
+.lede code, li code, td code, p code {
+  font:var(--fs-meta)/1.4 var(--mono); background:var(--list-hover);
+  border:1px solid var(--border-subtle); border-radius:4px; padding:1px 5px; color:var(--text-bright);
+}
+ul.pts, ol.pts { max-width:80ch; margin:0 0 18px; padding-left:20px; color:var(--text-dim); font-size:var(--fs-sm); line-height:1.9; }
+ul.pts b, ol.pts b { color:var(--text-bright); }
+ul.pts li, ol.pts li { margin-bottom:4px; }
+.tablewrap { overflow-x:auto; margin:6px 0 20px; }
+table { width:100%; border-collapse:collapse; font-size:var(--fs-meta); min-width:560px; }
+th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border-subtle); vertical-align:top; }
+th { color:var(--text-dimmer); font-weight:600; font-size:var(--fs-micro); text-transform:uppercase; letter-spacing:.08em; }
+td { color:var(--text-dim); } td b { color:var(--text-bright); font-weight:600; }
+td.bad { color:var(--danger); } td.bad b { color:var(--danger); }
+td.good { color:var(--ok); } td.good b { color:var(--ok); }
+.cap { display:flex; align-items:center; gap:var(--sp-2); margin:24px 0 8px; font-size:var(--fs-meta); color:var(--text-dimmer); flex-wrap:wrap; }
+.cap b { color:var(--text-bright); font-size:var(--fs-sm); font-weight:600; }
+.pill { font-size:var(--fs-micro); padding:1px 8px; border-radius:var(--r-pill); border:1px solid var(--border); color:var(--text-dimmer); white-space:nowrap; }
+.pill.bad { color:var(--danger); border-color:var(--danger-border); background:var(--danger-soft); }
+.pill.good { color:var(--ok); border-color:var(--ok-border); background:var(--ok-soft); }
+.pill.warn { color:var(--warn); border-color:var(--warn-border); background:var(--warn-soft); }
+.pill.acc { color:var(--accent); border-color:var(--accent-border); background:var(--accent-soft); }
+.pill.pur { color:var(--purple); border-color:var(--purple-border); background:var(--purple-soft); }
+.note { border-left:2px solid var(--accent); background:var(--accent-soft); padding:11px 15px; border-radius:0 var(--r-xs) var(--r-xs) 0; color:var(--text-dim); font-size:var(--fs-meta); line-height:1.85; max-width:82ch; margin:16px 0 22px; }
+.note b { color:var(--text-bright); }
+.note.warn { border-left-color:var(--warn); background:var(--warn-soft); }
+.note.good { border-left-color:var(--ok); background:var(--ok-soft); }
+.note.bad { border-left-color:var(--danger); background:var(--danger-soft); }
+pre.code {
+  margin:8px 0 20px; padding:14px 16px; overflow-x:auto;
+  border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-base);
+  font:var(--fs-meta)/1.7 var(--mono); color:var(--text-dim);
+}
+pre.code b { color:var(--text-bright); } pre.code i { color:var(--accent); font-style:normal; }
+pre.code s { color:var(--text-dimmer); text-decoration:none; }
+pre.code em { color:var(--danger); font-style:normal; }
+pre.code u { color:var(--ok); text-decoration:none; }
+pre.code var { color:var(--purple); font-style:normal; }
+
+.figure { border:1px solid var(--border); border-radius:var(--r-card); background:var(--bg-container); padding:18px; margin:10px 0 24px; overflow-x:auto; }
+.figure svg { margin:0 auto; max-width:100%; height:auto; }
+.legend { display:flex; gap:var(--sp-4); flex-wrap:wrap; margin-top:14px; padding-top:12px; border-top:1px solid var(--border-subtle); font-size:var(--fs-micro); color:var(--text-dimmer); }
+.legend span { display:flex; align-items:center; gap:6px; }
+.legend i { width:11px; height:11px; border-radius:3px; display:block; }
+
+/* SVG 里的文字/线条统一走令牌 */
+.svg-t { fill:var(--text-bright); font:600 12px Inter,-apple-system,sans-serif; }
+.svg-s { fill:var(--text-dim); font:11px Inter,-apple-system,sans-serif; }
+.svg-m { fill:var(--text-dim); font:10px ui-monospace,Menlo,monospace; }
+.svg-k { fill:var(--text-dimmer); font:600 9px Inter,sans-serif; letter-spacing:.1em; }
+.svg-box { fill:var(--bg-elevated); stroke:var(--border); }
+.svg-line { stroke:var(--border); fill:none; }
+</style>

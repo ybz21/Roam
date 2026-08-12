@@ -1,0 +1,56 @@
+<h2>6. 会话生命周期（ttmux 层）：软删，不硬删</h2>
+
+<div class="figure">
+<svg viewBox="0 0 1000 300" width="1000" role="img" aria-label="会话状态机">
+  <rect x="20" y="120" width="130" height="52" rx="10" class="svg-box"/>
+  <text x="85" y="143" class="svg-t" text-anchor="middle">ttmux new</text>
+  <text x="85" y="160" class="svg-m" text-anchor="middle">fork / spawn</text>
+
+  <rect x="240" y="112" width="180" height="68" rx="12" class="svg-box" fill="var(--ok-soft)" stroke="var(--ok-border)"/>
+  <text x="330" y="140" class="svg-t" text-anchor="middle">status = live</text>
+  <text x="330" y="160" class="svg-m" text-anchor="middle" fill="var(--ok)">tmux_id / tmux_epoch 有值</text>
+
+  <rect x="600" y="112" width="180" height="68" rx="12" class="svg-box" fill="var(--warn-soft)" stroke="var(--warn-border)"/>
+  <text x="690" y="140" class="svg-t" text-anchor="middle">status = dead</text>
+  <text x="690" y="160" class="svg-m" text-anchor="middle" fill="var(--warn)">died_at / died_reason</text>
+
+  <rect x="860" y="112" width="120" height="68" rx="10" class="svg-box" stroke="var(--danger-border)"/>
+  <text x="920" y="140" class="svg-t" text-anchor="middle" fill="var(--danger)">DELETE</text>
+  <text x="920" y="160" class="svg-m" text-anchor="middle">超保留期</text>
+
+  <path d="M150 146 L232 146" class="svg-line" stroke-width="1.5" marker-end="url(#a19)"/>
+  <path d="M420 132 L592 132" class="svg-line" stroke="var(--warn)" stroke-width="1.5" marker-end="url(#w19)"/>
+  <path d="M592 164 C520 200 420 200 420 172" class="svg-line" stroke="var(--ok)" stroke-width="1.5" marker-end="url(#g19)"/>
+  <path d="M780 146 L852 146" class="svg-line" stroke="var(--danger)" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#d19)"/>
+
+  <text x="506" y="124" class="svg-m" text-anchor="middle" fill="var(--warn)">OnKill / Reconcile 没看见它</text>
+  <text x="506" y="216" class="svg-m" text-anchor="middle" fill="var(--ok)">Reconcile 又看见它了 → 自愈回 live</text>
+
+  <text x="60" y="52" class="svg-k">收敛口径</text>
+  <text x="60" y="74" class="svg-s">tmux 盲态（问不出会话列表）→ 一行不动。看不见的时候不下判断。</text>
+  <text x="60" y="94" class="svg-s">died_reason：tmux_epoch 还是这一代 = killed；对不上 = host-restart。</text>
+
+  <text x="60" y="262" class="svg-s">同名复用（<tspan class="svg-m">_ttmux-*</tspan> 单例、固定名插件会话）：死行上冒出同名会话 = 一个<tspan fill="var(--text-bright)">新</tspan>会话，</text>
+  <text x="60" y="280" class="svg-s">复活但<tspan fill="var(--text-bright)">不继承</tspan>旧来历（parent / initial_cwd 一律清空），否则新会话平白多出一个爹。</text>
+
+  <defs>
+    <marker id="a19" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--border)"/></marker>
+    <marker id="w19" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--warn)"/></marker>
+    <marker id="g19" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--ok)"/></marker>
+    <marker id="d19" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--danger)"/></marker>
+  </defs>
+</svg>
+</div>
+
+<pre class="code"><b>Reconcile(alive, epoch)</b>
+  对每行 status='live'：
+    命中活会话                    → 刷新 label / tmux_id / tmux_epoch
+    未命中，且 tmux_epoch = 当前   → <em>status='dead', died_reason='killed'</em>
+    未命中，且 tmux_epoch ≠ 当前   → <em>status='dead', died_reason='host-restart'</em>
+  对每行 status='dead' 且会话名又活了：
+                                  → <u>复活成一行干净的 live 记录（不继承旧来历）</u>
+  tmux 盲态                        → 一行都不动
+
+<b>一行都不 DELETE。</b>清理另起一条低频路径：status='dead' ∧ died_at 早于保留期（默认 90 天）
+∧ 不属于任何未收尾的 worktree/竞赛/蜂群 → 删除，并连带删 logs/&lt;id&gt;.log。
+条数上限默认 5000。</pre>

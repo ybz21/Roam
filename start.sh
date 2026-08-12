@@ -139,7 +139,6 @@ if [ "$DEV" = 1 ] && [ -d scripts/install ]; then
   SRC="$(pwd)"
   export SCRIPT_DIR="$SRC"
   export GO_SRC="$SRC/cli/ttmux-cli-go"
-  export TTMUX_BUILD="$SRC/cli/ttmux-cli/build.sh"
   export CHROME_BUILD="$SRC/cli/chrome-cli/build.sh"
   export INSTALL_DIR="$HOME/.local/bin"
   export SKILL_DIR="$HOME/.claude/skills"

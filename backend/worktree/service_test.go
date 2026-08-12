@@ -55,7 +55,7 @@ func commitFile(t *testing.T, dir, name, content, msg string) {
 // （很多仓库没设 origin/HEAD，旧逻辑会兜底到 HEAD 分支）。
 func TestDefaultBasePrefersMain(t *testing.T) {
 	ctx := context.Background()
-	s := New("")
+	s := New("", nil)
 	repo := mkRepo(t)
 	// 检出到 feature 分支再建 worktree（不传 base）
 	cmd := exec.Command("git", "-C", repo, "checkout", "-q", "-b", "feat/wip")
@@ -74,7 +74,7 @@ func TestDefaultBasePrefersMain(t *testing.T) {
 
 func TestCreateListRemove(t *testing.T) {
 	ctx := context.Background()
-	s := New("")
+	s := New("", nil)
 	repo := mkRepo(t)
 
 	resp, err := s.Create(ctx, CreateReq{Dir: repo, Branch: "roam/feat-x", Base: "main"})
@@ -143,7 +143,7 @@ func TestCreateListRemove(t *testing.T) {
 
 func TestExternalWorktreeBaseUnknown(t *testing.T) {
 	ctx := context.Background()
-	s := New("")
+	s := New("", nil)
 	repo := mkRepo(t)
 	ext := filepath.Join(repo, ".worktrees", "ext")
 	cmd := exec.Command("git", "-C", repo, "worktree", "add", "-b", "hand-made", ext)
@@ -175,7 +175,7 @@ func TestExternalWorktreeBaseUnknown(t *testing.T) {
 
 func TestMergeSquashAndConflict(t *testing.T) {
 	ctx := context.Background()
-	s := New("")
+	s := New("", nil)
 	repo := mkRepo(t)
 
 	resp, err := s.Create(ctx, CreateReq{Dir: repo, Branch: "roam/ok", Base: "main"})
@@ -240,7 +240,7 @@ func TestMergeSquashAndConflict(t *testing.T) {
 // 分支名不靠字符串猜），Create 可基于本地不存在、仅远端有的分支建 worktree。
 func TestBranchesAndCreateFromRemote(t *testing.T) {
 	ctx := context.Background()
-	s := New("")
+	s := New("", nil)
 	upstream := mkRepo(t)
 	gitIn := func(dir string, args ...string) string {
 		t.Helper()
@@ -304,7 +304,7 @@ func TestBranchesAndCreateFromRemote(t *testing.T) {
 
 func TestExpectedHeadGuard(t *testing.T) {
 	ctx := context.Background()
-	s := New("")
+	s := New("", nil)
 	repo := mkRepo(t)
 	resp, err := s.Create(ctx, CreateReq{Dir: repo, Branch: "roam/drift", Base: "main"})
 	if err != nil {
@@ -321,7 +321,7 @@ func TestExpectedHeadGuard(t *testing.T) {
 // 远端分支被删（branch-gone）只作佐证标记。全程用本地 bare 仓库当 origin，离线可跑。
 func TestMergedDetection(t *testing.T) {
 	ctx := context.Background()
-	s := New("")
+	s := New("", nil)
 	repo := mkRepo(t)
 	gitIn := func(dir string, args ...string) string {
 		t.Helper()
@@ -433,7 +433,7 @@ func TestMergedDetection(t *testing.T) {
 // 后与本地 base ref 是否存在无关，空 worktree 恒不合入。
 func TestMergedEmptyWorktreeRemoteOnlyBase(t *testing.T) {
 	ctx := context.Background()
-	s := New("")
+	s := New("", nil)
 	repo := mkRepo(t)
 	gitIn := func(dir string, args ...string) string {
 		t.Helper()
@@ -480,7 +480,7 @@ func TestMergedEmptyWorktreeRemoteOnlyBase(t *testing.T) {
 // 也无需 Sync 抓任务分支——本测试用本地 bare 当 origin 全程离线验证这条通路。
 func TestPushedDetection(t *testing.T) {
 	ctx := context.Background()
-	s := New("")
+	s := New("", nil)
 	repo := mkRepo(t)
 	gitIn := func(dir string, args ...string) string {
 		t.Helper()
@@ -545,7 +545,7 @@ func TestPushedDetection(t *testing.T) {
 // 还在的卡死状态——Remove(force) 应能从父目录解析仓库并 RemoveAll+prune 收干净。
 func TestRemoveHalfDeadWorktree(t *testing.T) {
 	ctx := context.Background()
-	s := New("")
+	s := New("", nil)
 	repo := mkRepo(t)
 	wt, err := s.Create(ctx, CreateReq{Dir: repo, Branch: "roam/half-dead", Base: "main"})
 	if err != nil {
@@ -577,7 +577,7 @@ func TestRemoveHalfDeadWorktree(t *testing.T) {
 // 撞了就是新旧两个任务共用一个工作区。传会话 id 后两次创建各自落在自己的目录里。
 func TestCreateDirnameSeparatesSameBranch(t *testing.T) {
 	ctx := context.Background()
-	s := New("")
+	s := New("", nil)
 	repo := mkRepo(t)
 
 	a, err := s.Create(ctx, CreateReq{Dir: repo, Branch: "task", Base: "main", Dirname: "2026-0807-2143-002m"})
@@ -611,7 +611,7 @@ func TestCreateDirnameSeparatesSameBranch(t *testing.T) {
 // 不传 Dirname 时沿用分支 slug（/git/worktree 直建口径不变）。
 func TestCreateWithoutDirnameKeepsBranchSlug(t *testing.T) {
 	ctx := context.Background()
-	s := New("")
+	s := New("", nil)
 	repo := mkRepo(t)
 	resp, err := s.Create(ctx, CreateReq{Dir: repo, Branch: "feat/x", Base: "main"})
 	if err != nil {
