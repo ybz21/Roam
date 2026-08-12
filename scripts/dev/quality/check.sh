@@ -89,6 +89,19 @@ if [ -n "$staged" ]; then
     echo ".env must not be committed. Use configs/config.yaml.template for documented config instead." >&2
     exit 1
   fi
+  # 按内容拦编译产物：上面两条按名字认，而名字永远认不出下一个意外——
+  # 一个 34MB 的后端二进制曾经落在 .gitignore 没盖住的路径上，就这么进了一次提交。
+  # 仓库里最大的正经文件也就几百 KB，1MB 以上的二进制一律当误提交。
+  while IFS= read -r f; do
+    [ -n "$f" ] && [ -f "$f" ] || continue
+    size="$(wc -c < "$f" | tr -d ' ')"
+    [ "$size" -gt 1048576 ] || continue
+    grep -Iq . "$f" 2>/dev/null && continue   # -I：二进制文件永不匹配
+    echo "$f is a $((size / 1024 / 1024))MB binary. Build output must not be committed — add it to .gitignore." >&2
+    exit 1
+  done <<EOF
+$staged
+EOF
 fi
 
 section "Quality gate passed"

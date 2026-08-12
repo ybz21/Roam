@@ -14,7 +14,9 @@
 /.worktrees/
 
 # 后端构建产物 + 单一二进制内嵌素材（构建期生成，不入库；仓库只留占位）
-/backend/ttmux-web
+# 不加前导 /：曾经在 backend/ 里再编一次，产物落到 backend/backend/ttmux-web，
+# 锚定到根的规则盖不住它，34MB 的二进制就这么混进了一次提交。
+ttmux-web
 /backend/roam
 /backend/internal/webui/site/*
 !/backend/internal/webui/site/.gitkeep
