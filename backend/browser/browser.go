@@ -48,6 +48,11 @@ var (
 
 func setLastErr(s string) { statusMu.Lock(); lastErr = s; statusMu.Unlock() }
 
+// cdpHTTP 专用于 CDP 的 HTTP 端点（/json*）。必须带超时：默认 http.Get 没有超时，端口上要是
+// 蹲了个「只监听不回话」的进程（占了 9222 的非 Chrome 程序），探活就永久挂住——alive() 在
+// /browser/tabs 轮询和 ensureChrome 的等待循环里都调，一挂就是整条请求链卡死。
+var cdpHTTP = &http.Client{Timeout: 3 * time.Second}
+
 // cdpPort 解析 CDPBase 里的端口；解析失败回落 9222。
 func cdpPort() int {
 	if u, err := url.Parse(CDPBase); err == nil {
@@ -141,7 +146,9 @@ func ensureChrome() error {
 	running := chrome != nil && chrome.Process != nil
 	procMu.Unlock()
 	if running || time.Since(lastLaunch) < 12*time.Second {
-		for i := 0; i < 30; i++ {
+		// 按总时限等而不是按次数：探活自身可能要等满超时（端口被「只监听不回话」的进程占着），
+		// 按次数写就是 30 × 超时，把整条 HTTP 请求拖成分钟级。
+		for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); {
 			if alive() {
 				return nil
 			}
@@ -150,6 +157,20 @@ func ensureChrome() error {
 		err := fmt.Errorf("Chrome 启动中或上次未就绪，调试端口 %s 暂未就绪", CDPBase)
 		setLastErr(err.Error())
 		return err
+	}
+
+	cfg := effectiveConfig() // Settings 里存的值 > env > 默认
+
+	// 单实例优先：同 profile 的 Chrome 已经在跑，只是调试端口不是我们记着的那个 → 附着它。
+	// 同 user-data-dir 的 Chrome 是单例，这时候再拉一个只会把命令行转交给它然后自己退出，
+	// 端口永远不开；与其报「启动后随即退出」，不如认下这台（chrome CLI 读同一份端口记录，
+	// 跟着一起走）。固定端口模式是用户显式钉死的地址，不替他改。
+	if !cdpFixed {
+		if p := profileInstancePort(cfg.Profile); p > 0 && p != cdpPort() && aliveAt(p) {
+			setCDPPort(p)
+			setLastErr("")
+			return nil
+		}
 	}
 
 	// 端口选择：当前端口被别的进程占着（且不是可用 Chrome，否则上面 alive 已 attach）→ 换一个空闲端口，
@@ -162,7 +183,6 @@ func ensureChrome() error {
 		}
 	}
 
-	cfg := effectiveConfig() // Settings 里存的值 > env > 默认
 	args := []string{
 		"--remote-debugging-port=" + strconv.Itoa(port),
 		"--remote-debugging-address=127.0.0.1",
@@ -220,7 +240,7 @@ func ensureChrome() error {
 		}
 		procMu.Unlock()
 	}()
-	for i := 0; i < 50; i++ { // 最多等 5s
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); { // 最多等 5s（含探活自身耗时）
 		if alive() {
 			setLastErr("") // 就绪：清掉上次错误
 			return nil
@@ -258,7 +278,7 @@ func Shutdown() {
 }
 
 func alive() bool {
-	resp, err := http.Get(CDPBase + "/json/version")
+	resp, err := cdpHTTP.Get(CDPBase + "/json/version")
 	if err != nil {
 		return false
 	}
@@ -266,10 +286,57 @@ func alive() bool {
 	return resp.StatusCode == http.StatusOK
 }
 
+// aliveAt 探某个端口上有没有在应答的 CDP（不动 CDPBase）。
+func aliveAt(port int) bool {
+	resp, err := cdpHTTP.Get(fmt.Sprintf("http://127.0.0.1:%d/json/version", port))
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
+}
+
+// profileInstancePort 找「已经在跑、且用同一个 user-data-dir 的 Chrome 浏览器进程」的调试端口，
+// 没有则 0。用 ps 而不是 /proc：macOS 也要能用。
+func profileInstancePort(profile string) int {
+	if profile == "" {
+		return 0
+	}
+	out, err := exec.Command("ps", "-eo", "args=").Output()
+	if err != nil {
+		return 0
+	}
+	return parseProfilePort(string(out), profile)
+}
+
+// parseProfilePort 从 ps 输出里挑出那台浏览器进程的 --remote-debugging-port。
+// 逐 token 精确比对 user-data-dir（子串匹配会让 /tmp/x 命中 /tmp/x-headed），并跳过
+// 带 --type= 的子进程（renderer/gpu 也带着同样的 profile 和端口参数）。
+func parseProfilePort(psOut, profile string) int {
+	want := "--user-data-dir=" + profile
+	for _, line := range strings.Split(psOut, "\n") {
+		port, hasProfile, isChild := 0, false, false
+		for _, f := range strings.Fields(line) {
+			switch {
+			case f == want:
+				hasProfile = true
+			case strings.HasPrefix(f, "--type="):
+				isChild = true
+			case strings.HasPrefix(f, "--remote-debugging-port="):
+				port, _ = strconv.Atoi(strings.TrimPrefix(f, "--remote-debugging-port="))
+			}
+		}
+		if hasProfile && !isChild && port > 0 {
+			return port
+		}
+	}
+	return 0
+}
+
 // browserUA 取这台 Chrome 的原生 User-Agent（/json/version 的 "User-Agent" 字段）。
 // 用于手机模式切回桌面时复位 UA——CDP 没有 clearUserAgentOverride，只能再 set 回默认值。
 func browserUA() string {
-	resp, err := http.Get(CDPBase + "/json/version")
+	resp, err := cdpHTTP.Get(CDPBase + "/json/version")
 	if err != nil {
 		return ""
 	}
@@ -286,7 +353,7 @@ func browserUA() string {
 
 // listPages 返回所有 page 类型的标签页（过滤掉 service worker / iframe 等其它 target）。
 func listPages() []target {
-	resp, err := http.Get(CDPBase + "/json")
+	resp, err := cdpHTTP.Get(CDPBase + "/json")
 	if err != nil {
 		return nil
 	}
@@ -354,7 +421,7 @@ func newTab(rawURL string) (string, error) {
 
 // closeTab 关闭指定标签页。
 func closeTab(id string) error {
-	resp, err := http.Get(CDPBase + "/json/close/" + id)
+	resp, err := cdpHTTP.Get(CDPBase + "/json/close/" + id)
 	if err != nil {
 		return err
 	}
@@ -393,7 +460,7 @@ func frontSnapshot() (string, uint64) {
 
 // activateTab 把指定标签页在 Chrome 里前置（让 agent 的前台焦点与正在镜像的一致）。
 func activateTab(id string) error {
-	resp, err := http.Get(CDPBase + "/json/activate/" + id)
+	resp, err := cdpHTTP.Get(CDPBase + "/json/activate/" + id)
 	if err != nil {
 		return err
 	}

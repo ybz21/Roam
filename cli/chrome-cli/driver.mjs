@@ -127,6 +127,7 @@ async function freshScreenshot(flags, pos, timeoutMs, io) {
     fresh = await chromium.launch({ ...launch, headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'], timeout: to })
     const context = await fresh.newContext({
       viewport: vp,
+      ignoreHTTPSErrors: true, // 同 allowInsecureTLS：自签 HTTPS（含 ttmux 自己）不该停在拦截页
       deviceScaleFactor: num(flags.scale, device ? device.scale : 1),
       ...(device ? { userAgent: device.ua, isMobile: true, hasTouch: true } : {}),
     })
@@ -142,6 +143,18 @@ async function freshScreenshot(flags, pos, timeoutMs, io) {
   }
 }
 
+// 自签证书：ttmux 自己就跑在自签 HTTPS 上，不放过证书错误就会停在「您的连接不是私密连接」
+// 拦截页上，连自己的 Web UI 都驱动不了。按 CDP 逐标签放行（Security 域是会话级的），而不是给
+// Chrome 加启动开关——那台 Chrome 可能是后端起的，启动开关这时根本轮不到我们加，
+// 而且它一加就是整个浏览器全站放行，把镜像里的正常上网也一起松掉了。
+async function allowInsecureTLS(ctx, page) {
+  try {
+    const s = await ctx.newCDPSession(page)
+    await s.send('Security.enable') // 少这一句 setIgnoreCertificateErrors 会静默无效（返回 {} 但照拦）
+    await s.send('Security.setIgnoreCertificateErrors', { ignore: true })
+  } catch {} // 老版本 Chrome 不支持就算了，导航照走（顶多停在拦截页）
+}
+
 // ── 主动词分发：操作一条已连好的 CDP browser。daemon 与一次性冷启动路径共用 ─────────────
 
 async function executeVerb(browser, verb, flags, pos, timeoutMs, io) {
@@ -153,7 +166,7 @@ async function executeVerb(browser, verb, flags, pos, timeoutMs, io) {
   const pickHere = () => pick(pages, flags, fail)
 
   switch (verb) {
-    case 'goto': { const p = await pickHere(); await p.goto(pos[0], { waitUntil: 'load', timeout: to }); io.log({ url: p.url(), title: await p.title() }); break }
+    case 'goto': { const p = await pickHere(); await allowInsecureTLS(ctx, p); await p.goto(pos[0], { waitUntil: 'load', timeout: to }); io.log({ url: p.url(), title: await p.title() }); break }
     case 'url': io.log((await pickHere()).url()); break
     case 'title': io.log(await (await pickHere()).title()); break
     case 'click': await (await pickHere()).click(pos[0], { timeout: to }); io.log('ok'); break
@@ -230,7 +243,7 @@ async function executeVerb(browser, verb, flags, pos, timeoutMs, io) {
     }
     case 'pdf': { const f = pos[0] || 'page.pdf'; await (await pickHere()).pdf({ path: f }); io.log(f); break }
     case 'tabs': io.log(await Promise.all(pages.map(async (pg, i) => ({ i, title: await pg.title().catch(() => ''), url: pg.url() })))); break
-    case 'new': { const np = await ctx.newPage(); if (pos[0]) await np.goto(pos[0], { waitUntil: 'load', timeout: to }); await np.bringToFront().catch(() => {}); io.log({ i: ctx.pages().indexOf(np), url: np.url() }); break }
+    case 'new': { const np = await ctx.newPage(); if (pos[0]) { await allowInsecureTLS(ctx, np); await np.goto(pos[0], { waitUntil: 'load', timeout: to }) } await np.bringToFront().catch(() => {}); io.log({ i: ctx.pages().indexOf(np), url: np.url() }); break }
     case 'close': await (await pickHere()).close(); io.log('ok'); break
     default: fail('未知命令: ' + verb)
   }
@@ -425,13 +438,19 @@ function runFFmpeg(args, fail) {
 // ── Session：daemon 里跨请求复用的 CDP 连接（一次性冷启动路径也走它，只是活不过一条命令） ──
 
 class Session {
-  constructor() { this.browser = null; this.recorder = new Recorder() }
+  constructor() { this.browser = null; this.cdp = ''; this.recorder = new Recorder() }
   async browserFor(cdp) {
-    if (this.browser && !this.browser.isConnected()) this.browser = null
+    // 换了地址就得重连：daemon 常驻、缓存的是「上一条命令那台」的连接，而目标端口是会变的
+    // （后端 9222 被占时会换端口）。不比对就会把命令继续发给旧的那台。
+    if (this.browser && (!this.browser.isConnected() || this.cdp !== cdp)) {
+      try { await this.browser.close() } catch {} // 仅断连接，不杀共享 Chrome
+      this.browser = null
+    }
     if (!this.browser) {
       try {
         const { chromium } = await import('playwright-core')
         this.browser = await chromium.connectOverCDP(cdp, { timeout: 10000 })
+        this.cdp = cdp
       } catch (e) {
         throw new ChromeError('连不上 Chrome (' + cdp + '): ' + e.message)
       }
