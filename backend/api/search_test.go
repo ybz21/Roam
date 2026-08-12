@@ -17,7 +17,7 @@ import (
 // 归 e2e 管。
 func newSearchAPI(t *testing.T, projectDir string) *API {
 	t.Helper()
-	store := project.NewStore(t.TempDir())
+	store := project.NewStore(t.TempDir(), nil)
 	store.Add(projectDir, "")
 	a := &API{Projects: store, FileIndex: search.NewFileIndex()}
 	a.FileIndex.Rebuild(projectDir) // 正常路径是后台建索引，测试里先同步建好，免得跟调度赛跑

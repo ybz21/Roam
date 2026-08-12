@@ -20,20 +20,27 @@ package worktree
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"log"
 	"os"
 	"os/exec"
+
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+	"ttmux-web/internal/metadb"
 )
 
 // homeRow 一个会话的归属。Name 只是名字快照（排障 + v1 文件认领），不参与判定。
 type homeRow struct {
 	Home string `json:"home"`
 	Name string `json:"name,omitempty"`
+	// Epoch 是钉下这一行时的 tmux server 代次。名字规则（见 pin）只能在名字取得到
+	// 的时候判换代；epoch 对不上就是直接证据，补住那个洞。
+	Epoch string `json:"epoch,omitempty"`
 }
 
 type homeFile struct {
@@ -44,6 +51,7 @@ type homeFile struct {
 type homeStore struct {
 	mu   sync.Mutex
 	path string             // 空 = 只在内存里（测试）
+	db   *metadb.DB         // 直连时的真相源（session_homes 表）
 	m    map[string]homeRow // session_id → 归属
 	// legacy v1 文件（会话名 → 归属目录）：首次见到同名会话时认领一次，认领完丢弃。
 	legacy map[string]string
@@ -52,8 +60,14 @@ type homeStore struct {
 	pending map[string]string
 }
 
-func newHomeStore(dataDir string) *homeStore {
-	h := &homeStore{m: map[string]homeRow{}, legacy: map[string]string{}, pending: map[string]string{}}
+// newHomeStore 建归属存储。db 直连可用时以库为准；db 为 nil（或降级）时退回
+// session-homes.json；dataDir 也为空则纯内存——测试靠这条路验语义，别去掉。
+func newHomeStore(dataDir string, db *metadb.DB) *homeStore {
+	h := &homeStore{m: map[string]homeRow{}, legacy: map[string]string{}, pending: map[string]string{}, db: db}
+	if db.OK() {
+		h.loadDB()
+		return h
+	}
 	if dataDir == "" {
 		return h
 	}
@@ -76,6 +90,10 @@ func newHomeStore(dataDir string) *homeStore {
 
 // save 落盘（调用方须持锁）：tmp + rename 原子替换。写失败只丢钉死关系，下次重钉。
 func (h *homeStore) save() {
+	if h.db.OK() {
+		h.saveDB()
+		return
+	}
 	if h.path == "" {
 		return
 	}
@@ -89,6 +107,51 @@ func (h *homeStore) save() {
 	}
 }
 
+// loadDB / saveDB 是 session_homes 表这一端。
+//
+// 这张表装的是**运行时绑定**：键是 tmux `$N`，pane 一死就收敛，换代即作废。
+// 台账那一半（键是持久会话 id、会话死了也要留）在 sessions.home_dir 里，由 CLI 写
+// ——两边分工不同，别混为一谈。
+func (h *homeStore) loadDB() {
+	rows, err := h.db.Query(`SELECT tmux_id, IFNULL(name,''), home, IFNULL(epoch,'') FROM session_homes`)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, name, home, epoch string
+		if rows.Scan(&id, &name, &home, &epoch) == nil && id != "" {
+			h.m[id] = homeRow{Home: home, Name: name, Epoch: epoch}
+		}
+	}
+}
+
+func (h *homeStore) saveDB() {
+	err := h.db.Tx(func(tx *sql.Tx) error {
+		keep := make([]any, 0, len(h.m))
+		for id, row := range h.m {
+			if _, err := tx.Exec(`INSERT INTO session_homes(tmux_id,epoch,name,home,pinned_at)
+				VALUES(?,NULLIF(?,''),?,?,?)
+				ON CONFLICT(tmux_id) DO UPDATE SET epoch=excluded.epoch,
+					name=excluded.name, home=excluded.home`,
+				id, row.Epoch, row.Name, row.Home, time.Now().Unix()); err != nil {
+				return err
+			}
+			keep = append(keep, id)
+		}
+		if len(keep) == 0 {
+			_, err := tx.Exec(`DELETE FROM session_homes`)
+			return err
+		}
+		ph := strings.TrimSuffix(strings.Repeat("?,", len(keep)), ",")
+		_, err := tx.Exec(`DELETE FROM session_homes WHERE tmux_id NOT IN (`+ph+`)`, keep...)
+		return err
+	})
+	if err != nil {
+		log.Printf("会话归属写库失败: %v", err)
+	}
+}
+
 // pin 首次见到即钉死并返回 home；已钉死则原样返回（cwd 漂移不改归属）。
 // 顺序：已有 > 建会话时的显式绑定(pending) > v1 老文件认领 > 当前 cwd。
 func (h *homeStore) pin(sessID, name, cwd string) string {
@@ -97,9 +160,17 @@ func (h *homeStore) pin(sessID, name, cwd string) string {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if row, ok := h.m[sessID]; ok {
-		if row.Name != name && name != "" { // 改名只更新快照，不动归属
+	// 同一个 `$N` 上换了会话名 = tmux server 换代后把 `$N` 重新发给了**另一个**会话
+	// （会话名就是持久 id，活着的时候不会变）。这种残行不能继承：不然重启后建的第一个
+	// 会话会拿到上一代某个会话的归属目录，静悄悄归错项目。当作没钉过，重钉一次。
+	//
+	// epoch 是第二道判据，补住名字规则的洞：名字取不到（name==""）时，光看名字
+	// 分不出「同一个会话」和「换代复用」，而 epoch 对不上就是直接证据。
+	ep := tmuxEpoch()
+	if row, ok := h.m[sessID]; ok && sameSession(row, name, ep) {
+		if row.Name == "" && name != "" {
 			row.Name = name
+			row.Epoch = ep
 			h.m[sessID] = row
 			h.save()
 		}
@@ -116,9 +187,33 @@ func (h *homeStore) pin(sessID, name, cwd string) string {
 	}
 	delete(h.pending, name)
 	delete(h.legacy, name)
-	h.m[sessID] = homeRow{Home: home, Name: name}
+	h.m[sessID] = homeRow{Home: home, Name: name, Epoch: ep}
 	h.save()
 	return home
+}
+
+// sameSession 判断这一行还是不是同一个会话。名字能取到就按名字（会话名是持久 id，
+// 活着不会变）；取不到就靠 epoch。两者都无从判断时保守认为是同一个——
+// 宁可偶尔多留一次归属，也不要把活会话的归属抹掉。
+func sameSession(row homeRow, name, epoch string) bool {
+	if name != "" && row.Name != "" {
+		return row.Name == name
+	}
+	if epoch != "" && row.Epoch != "" {
+		return row.Epoch == epoch
+	}
+	return true
+}
+
+// tmuxEpoch 问 tmux 要 server pid —— 它随 server 起落而变，是「换代」的直接证据。
+func tmuxEpoch() string {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, tmuxBin(), "display-message", "-p", "#{pid}").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // bind 显式绑定（创建会话时就知道它属于哪个目录）：覆盖旧值，且早于任何 pane 采样，
@@ -140,7 +235,7 @@ func (h *homeStore) bind(sessID, name, dir string) {
 		return
 	}
 	delete(h.pending, name)
-	h.m[sessID] = homeRow{Home: dir, Name: name}
+	h.m[sessID] = homeRow{Home: dir, Name: name, Epoch: tmuxEpoch()}
 	h.save()
 }
 

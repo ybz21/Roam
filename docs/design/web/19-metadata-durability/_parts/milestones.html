@@ -1,0 +1,58 @@
+<h2 id="m1">10. 分期与落地记录</h2>
+<div class="tablewrap">
+<table>
+<thead><tr><th>里程碑</th><th>内容</th><th>状态</th></tr></thead>
+<tbody>
+<tr><td><b>M1 止血</b></td><td>见下清单</td><td class="good"><span class="pill good">已落地</span></td></tr>
+<tr><td><b>M2 建库</b></td><td><code>internal/metadb</code> 连接层 + schema + 迁移（§4/§9）</td><td><span class="pill">待办</span></td></tr>
+<tr><td><b>M3 上屏</b></td><td>会话列表「已结束」分组、项目页「不活跃」分组、<code>POST /sessions/:id/restore</code> + 重开按钮 + 对话回接（§8.1）</td><td><span class="pill">待办</span></td></tr>
+<tr><td><b>M4 收编</b></td><td><code>races.json</code> / <code>meta/&lt;id&gt;/*.txt</code> 并库；保留期清理与设置项；开机恢复开关</td><td><span class="pill">待办</span></td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>M1 落地清单</h3>
+<pre class="code">cli/ttmux-cli-go/internal/sessmeta/<b>sessmeta.go</b>
+  主键 <em>$N</em> → <u>持久会话 id</u>；表加 status / died_at / died_reason / tmux_id / tmux_epoch
+  <b>Reconcile</b>  改双向自愈的软删：活的置 live、不在的置 dead，<u>一行不删</u>
+              按 tmux_epoch 区分 killed / host-restart
+  <b>OnKill</b>     软删；<b>History()</b> 读历史；<b>prune()</b> 按 5000 条收口
+  <b>OnRename</b>   主键跟着搬（MigrateSessionsToID 那类真重命名会用到）
+  v1/v2 两代迁移都<u>不再依赖 tmux</u>，一行不丢
+
+cli/ttmux-cli-go/internal/command/session/<b>commands.go</b>
+  <b>recordNewSession</b>  <u>根因修复</u>：ttmux new / Web 建会话现在写一行 sessmeta + 开 pipe-pane
+
+backend/project/<b>service.go</b> · backend/api/<b>project.go</b>
+  Entry 加 <u>LastSessionAt</u>，聚合层 <b>NoteSessions</b>
+  退场判据：<em>此刻没会话</em> → <u>从来没有过会话</u>
+
+backend/worktree/<b>sessionhome.go</b>
+  pin() 同一 $N 换了会话名 = 换代复用 → <u>重钉而非继承</u>（§2.3）
+
+scripts/dev/<b>rebuild-session-history.py</b>
+  从 logs / meta / swarms / plugin_sessions / 老备份重建历史行
+  只补不覆盖、可反复跑、默认 dry-run</pre>
+
+<h3>验收（本机实测）</h3>
+<pre class="code">$ <b>ttmux new --json "落盘验证" --dir /home/ai/codes/ttmux</b>
+$ sqlite3 meta.db "select id,created_by,status,initial_cwd from sessions where id='…'"
+2026-0812-1813-000m | new | <u>live</u> | /home/ai/codes/ttmux      <s># 台账有行</s>
+$ ls -l ~/.roam/logs/2026-0812-1813-000m.log
+-rw-rw-r-- 139 …                                              <s># 日志有内容</s>
+$ <b>ttmux kill … --yes</b> &amp;&amp; sqlite3 meta.db "select status,died_reason from sessions where id='…'"
+<u>dead | killed</u>                                                <s># 软删，行还在</s>
+
+$ python3 scripts/dev/rebuild-session-history.py --write
+残骸 150 个会话 → 已写入                                       <s># 历史从 0 条恢复到 150 条</s>
+按月分布：2026-05 → 9 · 06 → 88 · 07 → 51 · 08 → 2            <s># 时间轴对得上</s></pre>
+
+<div class="note">
+<b>M1 之后仍然存在的缺口</b>（M2/M3 收）：同名会话复用会顶掉上一条历史（<code>_ttmux-*</code> 单例、
+固定名插件会话）——需要 <code>session_runs</code> 把「一个会话的多次生命」拆开；
+项目台账仍在 <code>projects.json</code>，没有事务；对话 uuid 还没记进表，重开只能给空壳。
+</div>
+
+</div>
+</body>
+</html>

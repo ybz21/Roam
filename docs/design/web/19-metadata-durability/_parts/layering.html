@@ -1,0 +1,27 @@
+<h2>3. 分层原则：台账 / 配置 / 大对象</h2>
+<p class="lede">
+病根之一是「所有持久化都被当成同一件事」，于是台账用了改一个字段就全量重写的 JSON，
+而会话历史被交给 tmux 保管。三类数据的要求完全不同，存法也该不同：
+</p>
+
+<div class="tablewrap">
+<table>
+<thead><tr><th>类别</th><th>特征</th><th>存法</th><th>例子</th></tr></thead>
+<tbody>
+<tr><td><b>台账</b></td><td>有关系、要事务、要按条件查、会长期累积</td><td class="good"><b>SQLite</b> <code>meta.db</code>，带 schema 版本与迁移</td><td>项目、会话、归属、父子、竞赛、蜂群</td></tr>
+<tr><td><b>配置</b></td><td>单写者、无关系、<b>人手要能改</b>、量小</td><td>JSON 文件，保持现状</td><td>偏好、浏览器/手机/语音配置、导航站、TOTP</td></tr>
+<tr><td><b>大对象</b></td><td>只追加、体量大（本机 38MB 日志）、按 id 直取</td><td>文件系统，DB 里只存索引</td><td><code>logs/&lt;id&gt;.log</code>、对话 transcript</td></tr>
+</tbody>
+</table>
+</div>
+
+<p class="lede">另有一条正交的划分——<b>什么是真相源，什么是现算的</b>：</p>
+<ul class="pts">
+  <li><b>台账</b>（持久）：项目、会话、归属、父子、竞赛、蜂群 —— 存 <code>meta.db</code>。</li>
+  <li><b>运行时</b>（一次 tmux server 生命）：谁 attach、activity、pane 尺寸、<code>$N</code> —— 只问 tmux，不入库。</li>
+  <li><b>派生</b>（一次请求）：git 状态、worktree 列表、pane 内容、waiting 判定 —— 现算，入库只会不一致。</li>
+</ul>
+<div class="note">
+现在的错误在于把<b>台账的一部分（会话是否存在过）交给了运行时层保管</b>。
+tmux 只该回答「现在谁活着」，不该回答「有过什么」。
+</div>

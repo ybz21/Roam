@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"ttmux-cli-go/internal/runtime"
+	"ttmux-cli-go/internal/sessmeta"
 	"ttmux-cli-go/internal/ui"
 )
 
@@ -157,6 +159,7 @@ func New(rt runtime.Runtime, args []string, w io.Writer) error {
 	if err != nil {
 		return err
 	}
+	recordNewSession(rt, sess, opt.Dir)
 	if asJSON {
 		return json.NewEncoder(w).Encode(map[string]string{"session": sess, "label": rt.SessionLabel(sess)})
 	}
@@ -165,6 +168,52 @@ func New(rt runtime.Runtime, args []string, w io.Writer) error {
 		return nil
 	}
 	return rt.Tmux("attach-session", "-t", "="+sess)
+}
+
+// recordNewSession 给新建的会话留下**盘上的痕迹**：一行会话元数据 + 输出日志。
+//
+// 以前只有任务会话（spawn）、蜂群成员和插件会话做这件事，`ttmux new` 和 Web
+// 「新建会话」建出来的普通会话在 Roam 主目录里一个字节都不留。于是机器一重启，
+// 这些会话连「存在过」都无从证明——logs/ 里没有它们的日志，meta.db 里没有它们的
+// 行，用户看到的就是「项目全空了，而且查不到任何线索」。
+//
+// 两件事都不该让建会话失败：记不下就算了，会话本身是好的。
+func recordNewSession(rt runtime.Runtime, sess, dir string) {
+	if sess == "" {
+		return
+	}
+	if dir == "" { // 没显式指定就问 tmux 要 pane 的当前目录
+		out, err := rt.TmuxOutput("display-message", "-t", "="+sess, "-p", "#{pane_current_path}")
+		if err == nil {
+			dir = strings.TrimSpace(out)
+		}
+	}
+	meta := sessmeta.New(rt.HomeDir)
+	meta.DataDir = rt.DataDir
+	_ = meta.Put(sessmeta.Row{Session: sess, CreatedBy: "new", InitialCwd: dir})
+	// 归属目录与仓库根现在就记下来：worktree 事后会被删掉，那时再从目录反推
+	// 就永远推不出来了，而「这个会话属于哪个项目」正是靠仓库根认的。
+	_ = meta.SetHome(sess, dir, repoRootOf(dir))
+	_ = meta.SetLabel(sess, rt.SessionLabel(sess))
+	// 目标写 `=<会话>:`：`=` 关掉前缀匹配（`dev` 会命中 `dev-review`），末尾的冒号
+	// 是必须的——pipe-pane 要的是 pane，裸 `=<会话>` tmux 会报 can't find pane。
+	// -o：已经在管道就不重复开（fork/spawn 路径可能先开过）
+	_ = rt.Tmux("pipe-pane", "-t", "="+sess+":", "-o", "cat >> '"+rt.LogFile(sess)+"'")
+}
+
+// repoRootOf 求目录所属的 git 主仓库根（worktree 会归位到主仓库，不是它自己）。
+// 不是 git 目录、或者 git 不在，就返回空——这一列本来就是 best-effort。
+func repoRootOf(dir string) string {
+	if dir == "" {
+		return ""
+	}
+	out, err := exec.Command("git", "-C", dir, "rev-parse",
+		"--path-format=absolute", "--git-common-dir").Output()
+	if err != nil {
+		return ""
+	}
+	gitDir := strings.TrimSpace(string(out))
+	return strings.TrimSuffix(strings.TrimSuffix(gitDir, "/"), "/.git")
 }
 
 // Attach attaches to a session (mirrors the `a`/attach case).

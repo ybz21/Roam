@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Roam · 元数据存储：现状与病根</title>
+<style>
+/* ── 令牌：直接取 frontend/src/theme.tsx 的真值，稿子和成品同源 ───────────── */
+:root {
+  --bg-base:#0d1117; --bg-container:#161b22; --bg-elevated:#1b222b; --bg-term:#06090d;
+  --border:#30363d; --border-subtle:#21262d;
+  --text-bright:#e6edf3; --text-dim:#8b949e; --text-dimmer:#6e7681;
+  --accent:#58a6ff; --accent-solid:#1f6feb; --accent-soft:rgba(31,111,235,.14); --accent-border:rgba(88,166,255,.45);
+  --ok:#3fb950; --ok-solid:#238636; --ok-soft:rgba(63,185,80,.14); --ok-border:rgba(63,185,80,.42);
+  --danger:#f85149; --danger-soft:rgba(248,81,73,.12); --danger-border:rgba(248,81,73,.40);
+  --warn:#d29922; --warn-soft:rgba(210,153,34,.12); --warn-border:rgba(210,153,34,.40);
+  --purple:#a371f7; --purple-soft:rgba(163,113,247,.12); --purple-border:rgba(163,113,247,.38);
+  --list-hover:rgba(255,255,255,.025);
+  --fs-micro:11px; --fs-meta:12px; --fs-sm:13px; --fs-body:14px; --fs-lg:16px; --fs-title:22px;
+  --r-xs:6px; --r-sm:10px; --r-card:14px; --r-pill:999px;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+html[data-theme="light"] {
+  --bg-base:#f6f8fa; --bg-container:#ffffff; --bg-elevated:#ffffff; --bg-term:#ffffff;
+  --border:#d0d7de; --border-subtle:#e6e9ec;
+  --text-bright:#1f2328; --text-dim:#57606a; --text-dimmer:#8c959f;
+  --accent:#0969da; --accent-solid:#1f6feb; --accent-soft:rgba(31,111,235,.10); --accent-border:rgba(31,111,235,.40);
+  --ok:#1a7f37; --ok-solid:#1f883d; --ok-soft:rgba(31,136,61,.10); --ok-border:rgba(31,136,61,.40);
+  --danger:#cf222e; --danger-soft:rgba(207,34,46,.09); --danger-border:rgba(207,34,46,.35);
+  --warn:#9a6700; --warn-soft:rgba(154,103,0,.10); --warn-border:rgba(154,103,0,.35);
+  --purple:#8250df; --purple-soft:rgba(130,80,223,.10); --purple-border:rgba(130,80,223,.35);
+  --list-hover:rgba(27,31,36,.04);
+}
+* { box-sizing:border-box; }
+html { background:#07090d; }
+html[data-theme="light"] { background:#eef1f5; }
+body {
+  margin:0; color:var(--text-bright);
+  font:var(--fs-body)/1.6 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+svg { display:block; }
+button { font:inherit; cursor:pointer; }
+
+/* ── 文档骨架（沿用 17/18 号稿体例）──────────────────────────────────────── */
+.top {
+  position:sticky; top:0; z-index:20;
+  display:flex; align-items:center; gap:var(--sp-3);
+  padding:10px clamp(16px,3vw,40px);
+  background:color-mix(in srgb, var(--bg-base) 84%, transparent);
+  border-bottom:1px solid var(--border-subtle); backdrop-filter:blur(18px);
+}
+.top .kicker { font-size:var(--fs-micro); letter-spacing:.14em; text-transform:uppercase; color:var(--text-dimmer); }
+.top h1 { margin:0; font-size:var(--fs-sm); font-weight:600; }
+.top .sp { flex:1; }
+.tbtn {
+  border:1px solid var(--border); background:var(--bg-container); color:var(--text-dim);
+  border-radius:var(--r-pill); padding:5px 14px; font-size:var(--fs-meta);
+}
+.tbtn:hover { color:var(--text-bright); border-color:var(--accent-border); }
+
+.wrap { max-width:1180px; margin:0 auto; padding:34px clamp(16px,3vw,40px) 120px; }
+h2 { margin:56px 0 6px; padding-top:26px; font-size:var(--fs-lg); font-weight:600; border-top:1px solid var(--border-subtle); }
+h2:first-of-type { margin-top:8px; border-top:0; padding-top:0; }
+h3 { margin:28px 0 8px; font-size:var(--fs-sm); font-weight:600; color:var(--text-bright); }
+.lede { max-width:78ch; margin:0 0 18px; color:var(--text-dim); font-size:var(--fs-sm); line-height:1.9; }
+.lede b { color:var(--text-bright); font-weight:600; }
+.lede code, li code, td code, p code {
+  font:var(--fs-meta)/1.4 var(--mono); background:var(--list-hover);
+  border:1px solid var(--border-subtle); border-radius:4px; padding:1px 5px; color:var(--text-bright);
+}
+ul.pts, ol.pts { max-width:80ch; margin:0 0 18px; padding-left:20px; color:var(--text-dim); font-size:var(--fs-sm); line-height:1.9; }
+ul.pts b, ol.pts b { color:var(--text-bright); }
+ul.pts li, ol.pts li { margin-bottom:4px; }
+.tablewrap { overflow-x:auto; margin:6px 0 20px; }
+table { width:100%; border-collapse:collapse; font-size:var(--fs-meta); min-width:560px; }
+th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border-subtle); vertical-align:top; }
+th { color:var(--text-dimmer); font-weight:600; font-size:var(--fs-micro); text-transform:uppercase; letter-spacing:.08em; }
+td { color:var(--text-dim); } td b { color:var(--text-bright); font-weight:600; }
+td.bad { color:var(--danger); } td.bad b { color:var(--danger); }
+td.good { color:var(--ok); } td.good b { color:var(--ok); }
+.cap { display:flex; align-items:center; gap:var(--sp-2); margin:24px 0 8px; font-size:var(--fs-meta); color:var(--text-dimmer); flex-wrap:wrap; }
+.cap b { color:var(--text-bright); font-size:var(--fs-sm); font-weight:600; }
+.pill { font-size:var(--fs-micro); padding:1px 8px; border-radius:var(--r-pill); border:1px solid var(--border); color:var(--text-dimmer); white-space:nowrap; }
+.pill.bad { color:var(--danger); border-color:var(--danger-border); background:var(--danger-soft); }
+.pill.good { color:var(--ok); border-color:var(--ok-border); background:var(--ok-soft); }
+.pill.warn { color:var(--warn); border-color:var(--warn-border); background:var(--warn-soft); }
+.pill.acc { color:var(--accent); border-color:var(--accent-border); background:var(--accent-soft); }
+.pill.pur { color:var(--purple); border-color:var(--purple-border); background:var(--purple-soft); }
+.note { border-left:2px solid var(--accent); background:var(--accent-soft); padding:11px 15px; border-radius:0 var(--r-xs) var(--r-xs) 0; color:var(--text-dim); font-size:var(--fs-meta); line-height:1.85; max-width:82ch; margin:16px 0 22px; }
+.note b { color:var(--text-bright); }
+.note.warn { border-left-color:var(--warn); background:var(--warn-soft); }
+.note.good { border-left-color:var(--ok); background:var(--ok-soft); }
+.note.bad { border-left-color:var(--danger); background:var(--danger-soft); }
+pre.code {
+  margin:8px 0 20px; padding:14px 16px; overflow-x:auto;
+  border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-base);
+  font:var(--fs-meta)/1.7 var(--mono); color:var(--text-dim);
+}
+pre.code b { color:var(--text-bright); } pre.code i { color:var(--accent); font-style:normal; }
+pre.code s { color:var(--text-dimmer); text-decoration:none; }
+pre.code em { color:var(--danger); font-style:normal; }
+pre.code u { color:var(--ok); text-decoration:none; }
+pre.code var { color:var(--purple); font-style:normal; }
+
+.figure { border:1px solid var(--border); border-radius:var(--r-card); background:var(--bg-container); padding:18px; margin:10px 0 24px; overflow-x:auto; }
+.figure svg { margin:0 auto; max-width:100%; height:auto; }
+.legend { display:flex; gap:var(--sp-4); flex-wrap:wrap; margin-top:14px; padding-top:12px; border-top:1px solid var(--border-subtle); font-size:var(--fs-micro); color:var(--text-dimmer); }
+.legend span { display:flex; align-items:center; gap:6px; }
+.legend i { width:11px; height:11px; border-radius:3px; display:block; }
+
+/* SVG 里的文字/线条统一走令牌 */
+.svg-t { fill:var(--text-bright); font:600 12px Inter,-apple-system,sans-serif; }
+.svg-s { fill:var(--text-dim); font:11px Inter,-apple-system,sans-serif; }
+.svg-m { fill:var(--text-dim); font:10px ui-monospace,Menlo,monospace; }
+.svg-k { fill:var(--text-dimmer); font:600 9px Inter,sans-serif; letter-spacing:.1em; }
+.svg-box { fill:var(--bg-elevated); stroke:var(--border); }
+.svg-line { stroke:var(--border); fill:none; }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div>
+    <div class="kicker">Roam · Web · 19 · 问题</div>
+    <h1>元数据存储：现状与病根</h1>
+  </div>
+  <span class="sp"></span>
+  <a class="tbtn" href="./design.html">改进方向 →</a>
+  <button class="tbtn" onclick="document.documentElement.dataset.theme=document.documentElement.dataset.theme==='light'?'dark':'light'">切换明暗</button>
+</div>
+
+<div class="wrap">
+
+<p class="lede">
+机器重启后打开 Roam：项目卡全空、会话一个不剩、翻不到任何历史。这不是「重启当然会丢」——
+tmux 会话死掉是必然，但<b>「这个会话存在过、在哪个目录、干过什么、日志在哪」是用户数据</b>，
+不该跟着 tmux 一起消失。
+</p>
+<p class="lede">
+本篇只做一件事：<b>把数据现在存在哪、为什么一重启就没，查清楚说明白</b>。
+所有结论都带本机实测。改法在<a href="./design.html" style="color:var(--accent)">改进方向</a>那篇。
+</p>
+
+<div class="note bad">
+<b>结论先放这：</b>最要命的不是「数据被删了」，而是<b>绝大多数会话从来没往盘上写过任何东西</b>。
+写日志（<code>pipe-pane</code>）只在蜂群成员、任务会话、插件会话三条路径上设置；
+日常的 <code>ttmux new</code> 和 Web「新建会话」建出来的会话，在 Roam 主目录里一个字节都不留。
+</div>
+
+<h2>1. 现状：两层，一个目录，两套互不认识的存储</h2>
+
+<p class="lede">
+<b>ttmux 层</b>（Go CLI，编排 tmux）和 <b>Roam 层</b>（Web 后端，Gin）共用同一个主目录
+<code>~/.roam</code>（<code>ROAM_HOME</code> 可覆盖），但用的是两套完全不同的机制：
+ttmux 层有一个 SQLite（<code>meta.db</code>），Roam 层是一堆各写各的散装 JSON。
+两边谁也不读谁的表。
+</p>
+
+<div class="figure">
+<svg viewBox="0 0 1080 452" width="1080" role="img" aria-label="ttmux 层与 Roam 层的存储分布图">
+  <rect x="16" y="16" width="500" height="196" rx="12" class="svg-box" fill="var(--accent-soft)" stroke="var(--accent-border)"/>
+  <text x="34" y="42" class="svg-k">TTMUX 层 · GO CLI</text>
+  <text x="34" y="62" class="svg-t">编排 tmux · 会话/任务/蜂群/插件</text>
+
+  <rect x="34" y="76" width="220" height="52" rx="8" class="svg-box"/>
+  <text x="46" y="96" class="svg-t">meta.db</text>
+  <text x="46" y="114" class="svg-m">sqlite · 有事务</text>
+  <rect x="266" y="76" width="232" height="52" rx="8" class="svg-box"/>
+  <text x="278" y="96" class="svg-t">swarms/&lt;群&gt;/swarm.db</text>
+  <text x="278" y="114" class="svg-m">每群一个库</text>
+
+  <rect x="34" y="140" width="147" height="52" rx="8" class="svg-box"/>
+  <text x="46" y="160" class="svg-t">logs/</text>
+  <text x="46" y="178" class="svg-m">&lt;id&gt;.log 大对象</text>
+  <rect x="193" y="140" width="147" height="52" rx="8" class="svg-box"/>
+  <text x="205" y="160" class="svg-t">meta/&lt;id&gt;/</text>
+  <text x="205" y="178" class="svg-m">4 个 .txt</text>
+  <rect x="352" y="140" width="146" height="52" rx="8" class="svg-box"/>
+  <text x="364" y="160" class="svg-t">groups/</text>
+  <text x="364" y="178" class="svg-m">.group 纯文本</text>
+
+  <rect x="564" y="16" width="500" height="196" rx="12" class="svg-box" fill="var(--purple-soft)" stroke="var(--purple-border)"/>
+  <text x="582" y="42" class="svg-k">ROAM 层 · WEB 后端</text>
+  <text x="582" y="62" class="svg-t">项目/归属/竞赛/偏好/设备配置</text>
+
+  <rect x="582" y="76" width="152" height="52" rx="8" class="svg-box"/>
+  <text x="594" y="96" class="svg-t">projects.json</text>
+  <text x="594" y="114" class="svg-m">项目台账</text>
+  <rect x="746" y="76" width="164" height="52" rx="8" class="svg-box"/>
+  <text x="758" y="96" class="svg-t">session-homes.json</text>
+  <text x="758" y="114" class="svg-m">会话归属</text>
+  <rect x="922" y="76" width="124" height="52" rx="8" class="svg-box"/>
+  <text x="934" y="96" class="svg-t">races.json</text>
+  <text x="934" y="114" class="svg-m">竞赛</text>
+
+  <rect x="582" y="140" width="464" height="52" rx="8" class="svg-box"/>
+  <text x="594" y="160" class="svg-t">preferences · browser-config · phone-config · speech-config · home-sites · totp</text>
+  <text x="594" y="178" class="svg-m">配置类 JSON —— 全量读改写，无版本、无事务</text>
+
+  <path d="M266 212 L266 244 L540 244 L540 266" class="svg-line" stroke-width="1.5"/>
+  <path d="M814 212 L814 244 L540 244" class="svg-line" stroke-width="1.5"/>
+  <rect x="380" y="266" width="320" height="46" rx="9" class="svg-box" stroke="var(--border)"/>
+  <text x="540" y="288" class="svg-t" text-anchor="middle">~/.roam</text>
+  <text x="540" y="304" class="svg-m" text-anchor="middle">同一个目录，两套机制，互不知情</text>
+
+  <rect x="16" y="340" width="500" height="96" rx="12" class="svg-box" fill="var(--warn-soft)" stroke="var(--warn-border)"/>
+  <text x="34" y="366" class="svg-k">运行时 · 不是存储</text>
+  <text x="34" y="388" class="svg-t">tmux server</text>
+  <text x="34" y="408" class="svg-s">会话是否活着 · $N · activity · pane 内容</text>
+  <text x="34" y="426" class="svg-m" fill="var(--danger)">随机器重启全部消失，且 $N 从 $0 重新发号</text>
+
+  <rect x="564" y="340" width="500" height="96" rx="12" class="svg-box" fill="var(--ok-soft)" stroke="var(--ok-border)"/>
+  <text x="582" y="366" class="svg-k">第三方 · 我们不拥有</text>
+  <text x="582" y="388" class="svg-t">~/.claude/projects/&lt;slug&gt;/&lt;uuid&gt;.jsonl</text>
+  <text x="582" y="408" class="svg-s">Claude Code 的对话 transcript</text>
+  <text x="582" y="426" class="svg-m" fill="var(--ok)">重启不受影响，但 Roam 不认识它，界面上接不起来</text>
+</svg>
+<div class="legend">
+  <span><i style="background:var(--accent-soft);border:1px solid var(--accent-border)"></i>ttmux 层</span>
+  <span><i style="background:var(--purple-soft);border:1px solid var(--purple-border)"></i>Roam 层</span>
+  <span><i style="background:var(--warn-soft);border:1px solid var(--warn-border)"></i>运行时（易失）</span>
+  <span><i style="background:var(--ok-soft);border:1px solid var(--ok-border)"></i>第三方存储</span>
+</div>
+</div>
+
+<h3>1.1 逐项清单</h3>
+
+<div class="tablewrap">
+<table>
+<thead><tr><th>层</th><th>数据</th><th>载体</th><th>事务</th><th>版本</th><th>重启后</th></tr></thead>
+<tbody>
+<tr><td><span class="pill acc">ttmux</span></td><td><b>会话创建关系</b> parent / created_by / initial_cwd</td><td><code>meta.db</code> <code>sessions</code></td><td class="good">有</td><td>无</td><td class="bad"><b>整表清空</b></td></tr>
+<tr><td><span class="pill acc">ttmux</span></td><td><b>蜂群</b> 目标 / 状态 / 指挥会话</td><td><code>meta.db</code> <code>swarms</code></td><td class="good">有</td><td>无</td><td class="good">留着</td></tr>
+<tr><td><span class="pill acc">ttmux</span></td><td><b>蜂群成员</b> 分工 / workdir / 会话</td><td><code>swarms/&lt;群&gt;/swarm.db</code></td><td class="good">有</td><td>无</td><td>留着，但成员会话查不到了</td></tr>
+<tr><td><span class="pill acc">ttmux</span></td><td><b>插件会话</b> labels / 起止</td><td><code>meta.db</code> <code>plugin_sessions</code></td><td class="good">有</td><td>无</td><td class="good">留着</td></tr>
+<tr><td><span class="pill acc">ttmux</span></td><td><b>会话输出</b></td><td><code>logs/&lt;id&gt;.log</code></td><td>—</td><td>—</td><td class="bad">留着但<b>无人索引</b>；且只覆盖任务/蜂群/插件会话</td></tr>
+<tr><td><span class="pill acc">ttmux</span></td><td><b>任务描述</b> type / desc / workdir / started</td><td><code>meta/&lt;id&gt;/*.txt</code></td><td class="bad">无</td><td>无</td><td>留着，无人认领</td></tr>
+<tr><td><span class="pill acc">ttmux</span></td><td><b>任务组</b> 成员名单</td><td><code>groups/*.group</code></td><td class="bad">无</td><td>无</td><td>留着</td></tr>
+<tr><td><span class="pill pur">Roam</span></td><td><b>项目台账</b> 目录 / 置顶 / 显示名 / 默认 agent</td><td><code>projects.json</code></td><td class="bad">无</td><td>代码里 v1→v2</td><td class="bad"><b>发现型项目全删</b></td></tr>
+<tr><td><span class="pill pur">Roam</span></td><td><b>会话归属目录</b></td><td><code>session-homes.json</code></td><td class="bad">无</td><td><code>v:2</code></td><td class="bad">按 <code>$N</code> 收敛，全清；且新会话会<b>继承</b>残行</td></tr>
+<tr><td><span class="pill pur">Roam</span></td><td><b>竞赛</b></td><td><code>races.json</code></td><td class="bad">无</td><td>无</td><td>留着</td></tr>
+<tr><td><span class="pill pur">Roam</span></td><td><b>收尾留痕</b></td><td><code>activity.log</code> JSONL</td><td>追加</td><td>无</td><td class="good">留着</td></tr>
+<tr><td><span class="pill pur">Roam</span></td><td><b>配置</b> 偏好 / 浏览器 / 手机 / 语音 / 导航站 / TOTP</td><td>各自一个 JSON</td><td class="bad">无</td><td>无</td><td class="good">留着</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>2. 项目存储（Roam 层）</h2>
+
+<p class="lede">
+项目整个活在 <b>Roam 层</b>：ttmux 层不知道「项目」这个概念，它只管会话。
+项目台账现在是 <code>&lt;dataDir&gt;/projects.json</code> —— 一个改一个字段就全量重写的
+JSON，没有事务、没有版本号、没有任何外键把它和会话连起来。
+</p>
+
+<h3>2.1 项目是读模型，不是用户建的对象</h3>
+<p class="lede">
+这是理解它为什么会「重启后全没」的关键：<b>项目主要不是用户创建出来的，是被发现的</b>。
+聚合层每轮把会话的归属目录 join 成仓库根，join 到谁就 <code>Touch</code> 谁 ——
+入册是「看见会话」的副作用。于是两条入册通道：
+</p>
+<div class="tablewrap">
+<table>
+<thead><tr><th>通道</th><th>怎么进来的</th><th>字段</th><th>能否自动退场</th></tr></thead>
+<tbody>
+<tr><td><b>discovered</b></td><td>会话归属目录 join 命中 → <code>Touch(dir)</code></td><td><code>origin=''</code></td><td class="bad">能 —— 这就是重启后全灭的那批</td></tr>
+<tr><td><b>user</b></td><td>用户显式 <code>POST /projects</code>（项目 = 任意目录，<b>不与 git 绑定</b>）</td><td><code>origin='user'</code></td><td class="good">不能，只能显式 DELETE</td></tr>
+</tbody>
+</table>
+</div>
+<div class="note bad">
+本机实测：台账里 <b>discovered = 0 个</b>，13 个全是 <code>origin=user</code>。
+不是用户从来没在别的仓库里开过会话，是<b>发现来的那些已经被历次重启清干净了</b>——
+「发现」通道的产出，被「此刻没会话」的退场规则一轮一轮吃掉。
+</div>
+
+<h3>2.2 身份是不可变 id，目录只是可变属性</h3>
+<p class="lede">
+早期版本拿「目录名 slug + 路径 hash」当 key，<code>mv</code> 一下项目目录身份就变、
+置顶和显示名得靠合并搬家。现在 id 入册时生成、永不改，<code>dir</code> 只是一个字段：
+</p>
+<pre class="code"><b>项目 id</b>   2026-0728-1202-30xe      <s>// 不可变，一切 URL / 偏好 / 书签的 handle</s>
+<b>dir</b>       /home/ai/codes/ttmux     <s>// 可变属性：mv 目录、worktree 子目录归位仓库根，都只改这里</s>
+<b>aliases</b>   老 key → 现行 id          <s>// v1 的 hash key、被合并掉的 id 都记在这，老链接不失效</s>
+
+<b>SetDir(key, newDir)</b> 两种走向：
+  newDir 没被占用        → 改 dir，<u>id 不变</u>，偏好一个不丢
+  newDir 已有别的条目     → <i>mergeInto</i> 合并（置顶/显示名/最早 firstSeen 取「用户意志」的并集），
+                          旧 id 落进 aliases，指向旧 id 的别名一起改指</pre>
+<p class="lede">
+自愈也挂在这条路上：聚合时若发现条目的 <code>dir</code> 指向的是仓库<b>子目录</b>
+（历史脏数据或瞬时误判），用 <code>ResolveRepo</code> 归位到仓库根 —— id 不变，
+所以置顶、显示名、默认 agent、老链接全都不动。
+</p>
+
+<h3>2.3 存了什么</h3>
+<div class="tablewrap">
+<table>
+<thead><tr><th>字段</th><th>含义</th><th>丢了会怎样</th></tr></thead>
+<tbody>
+<tr><td><code>id</code></td><td>不可变身份</td><td class="bad">所有 <code>#/projects/&lt;id&gt;</code> 链接失效</td></tr>
+<tr><td><code>dir</code></td><td>canonical 目录（git 项目 = 主仓库根）</td><td class="bad">条目等于没有</td></tr>
+<tr><td><code>origin</code></td><td><code>''</code> discovered · <code>'user'</code> 显式创建</td><td>一等对象降级成可自动退场</td></tr>
+<tr><td><code>pinned</code> · <code>displayName</code></td><td>置顶、显示名</td><td>用户意志丢失（排序乱、名字回退成目录名）</td></tr>
+<tr><td><code>defaultAgent</code> · <code>defaultBase</code></td><td>新任务默认用哪个 agent、从哪个分支切</td><td>每次开任务都要重选</td></tr>
+<tr><td><code>firstSeen</code> · <code>lastSeen</code></td><td>入册 / 最后一次被看见（分钟粒度刷新，避免每轮写盘）</td><td>排序与「最近活动」失准</td></tr>
+<tr><td class="good"><code>lastSessionAt</code></td><td class="good"><b>最后一次有会话的时刻</b> —— 退场判据看它</td><td class="good">退场规则退回「此刻有没有会话」，重启即全灭</td></tr>
+</tbody>
+</table>
+</div>
+<p class="lede">
+另有一份<b>不是真相源</b>的旁证：<code>activity.log</code>（JSONL，只增不改，超 5MB 轮转一代）。
+它记「任务 → 动作（merged / discarded / cleaned）→ 统计」的摘要，用来在 worktree 删除后
+还能追溯「这个任务去哪了」。丢了只损失摘要，不影响任何判定。
+</p>
+
+
+<h2>3. 会话存储（ttmux 层）</h2>
+
+<p class="lede">
+会话整个活在 <b>ttmux 层</b>：Roam 层不生成会话 id、也不直接写会话台账，它调
+<code>ttmux new --json</code>，id 的唯一出处在 CLI。问题是——<b>写不写盘，取决于会话是怎么建的</b>。
+同样是一个 tmux 会话，走不同入口，留在盘上的东西差了三个数量级：
+</p>
+
+<div class="tablewrap">
+<table>
+<thead><tr><th>建会话的入口</th><th>sessmeta 行</th><th>输出日志</th><th>任务描述</th><th>代码</th></tr></thead>
+<tbody>
+<tr><td><b>任务会话</b> <code>ttmux spawn</code></td><td class="good">有</td><td class="good">有 <code>pipe-pane</code></td><td class="good"><code>meta/&lt;id&gt;/*.txt</code></td><td><code>spawn/spawn.go</code></td></tr>
+<tr><td><b>蜂群成员</b></td><td class="good">有</td><td class="good">有 <code>pipe-pane</code></td><td class="good"><code>swarm.db</code> members</td><td><code>swarm/members.go</code></td></tr>
+<tr><td><b>插件会话</b></td><td class="good">有</td><td class="good">有 <code>pipe-pane</code></td><td class="good"><code>plugin_sessions</code></td><td><code>plugin/hostapi.go</code></td></tr>
+<tr><td><b>fork 子会话</b></td><td class="good">有</td><td class="bad">无</td><td class="bad">无</td><td><code>session/fork.go</code></td></tr>
+<tr><td class="bad"><b><code>ttmux new</code> / Web「新建会话」</b></td><td class="bad"><b>无</b></td><td class="bad"><b>无</b></td><td class="bad"><b>无</b></td><td><code>runtime.CreateSession</code></td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note bad">
+最后一行就是<b>你每天用的那个入口</b>。它建出来的会话在 <code>~/.roam</code> 里彻底隐形：
+既没有 <code>sessions</code> 行，也没有 <code>logs/&lt;id&gt;.log</code>，连「它存在过」都无从证明。
+下一节 §4.1 是这条的实测。
+</div>
+
+<h3>3.1 会话 id 本身是好的</h3>
+<p class="lede">
+值得说清楚的是：<b>会话的身份设计没问题，出问题的是台账拿什么当主键</b>。
+会话 id（<code>2026-0812-1740-0000</code>）由 <code>id.ForSession(session_created, session_id)</code> 派生，
+<b>包含创建时刻</b>，因此不可变、跨 tmux server 重启唯一且永不复用 ——
+它天生就是一个可以跨重启用的键。台账早就有这个键，只是没拿它当主键（§4.2）。
+</p>
+
+<h2>4. 为什么重启后归零</h2>
+
+<div class="note">
+本节是<b>病根诊断，描述的是改动前的行为</b>。下面四条已经全部在 M1 修掉，
+改法与验收见<a href="./design.html#m1" style="color:var(--accent)">改进方向 §9</a>；
+留着是因为「为什么会这样」比「改成了什么」更难重建，后面每个决定都从这里长出来。
+</div>
+
+<h3>4.1 普通会话在盘上不留痕迹（根因）</h3>
+<p class="lede">
+<code>pipe-pane</code>（把 pane 输出写进 <code>logs/&lt;id&gt;.log</code>）只在三处设置：
+<code>swarm/members.go</code>、<code>spawn/spawn.go</code>、<code>plugin/hostapi.go</code>。
+<code>ttmux new</code> 与 Web「新建会话」走 <code>runtime.CreateSession</code>，
+<b>既不写 sessmeta 行、也不开 pipe-pane</b>。
+</p>
+<pre class="code">$ <b>find ~/.roam -newermt "2026-08-12 00:00" ! -newermt "2026-08-12 17:36" -type f</b>
+<em>/home/ai/.roam/browser-config.json</em>        <s># 17:36 重启前，当天唯一动过的文件</s>
+
+$ <b>ls -lt ~/.roam/logs | head -2</b>
+2026-0811-1629-0009.log   Aug 11 16:29   <s># 最新日志是前一天的</s></pre>
+<p class="lede">
+那天下午有 <b>15 个 Claude 会话</b>在跑。Roam 主目录里连「它们存在过」都无从证明。
+下面三条讲的是<b>有记录</b>的那一小撮如何被删掉；绝大多数会话根本没被记过。
+</p>
+
+<h3>4.2 <code>sessions</code> 表拿 tmux 的 <code>$N</code> 当主键</h3>
+<p class="lede">
+主键是 <code>#{session_id}</code>（<code>$0</code>/<code>$3</code>）。tmux server 随机器一起死，
+<code>$N</code> 全部消失，<code>Reconcile</code> 把「不在活会话里」的行<b>硬 DELETE</b>。
+</p>
+<pre class="code">$ <b>sqlite3 ~/.roam/meta.db "select count(*) from sessions;"</b>
+<em>0</em>
+$ <b>tmux list-sessions -F "#{session_name}\t#{session_id}"</b>
+2026-0812-1740-0000  $0        <s># 重启后新建的会话，又拿到了 $0</s>
+2026-0812-1740-0002  $2</pre>
+
+<h3>4.3 发现型项目按「此刻有没有会话」退场</h3>
+<pre class="code"><s>// backend/api/project.go</s>
+if e.Origin != "user" &amp;&amp; roamWts == 0 &amp;&amp; <em>p.Sessions == 0</em> &amp;&amp; !e.Pinned {
+    a.Projects.Remove(key)     <s>// 重启后会话恒为 0 → 发现型项目在第一次刷新时全灭</s>
+}</pre>
+<p class="lede">
+判据的前提是「会话数是项目还活着的证据」。重启把这个前提废了。
+实测台账里 <b>发现型项目 = 0 个</b>，只剩用户显式创建（<code>origin=user</code>）的那些侥幸存活。
+</p>
+
+<h3>4.4 <code>$N</code> 跨重启复用 → 静默串档</h3>
+<p class="lede">
+<code>session-homes.json</code> 以 tmux 的 <code>#{session_id}</code> 为键 ——
+<b>它渲染出来就是 <code>$0</code> / <code>$3</code>，和本文说的 <code>$N</code> 是同一个东西</b>，
+不是两种键（这点容易看岔，代码注释里写作 <code>#{session_id}（$3）</code>）。
+它相对<b>会话名</b>确实稳定（改名不变），但相对 <b>tmux server</b> 不稳定：重起后从
+<code>$0</code> 重新发号。
+</p>
+<p class="lede">
+于是<b>重启后建的第一个会话会继承上一代某个会话的归属目录</b>，静悄悄归错项目。
+<code>reconcile(alive)</code> 恰恰清不掉这种残行 —— 重启后 <code>$0</code> 又活了
+（发给了新会话），它在 <code>alive</code> 集合里，残行被当成有效的保留下来。
+这条比丢数据更难查：它给出的是<b>错误的答案</b>。
+</p>
+<div class="note good">
+<b>M1 已修：</b><code>pin()</code> 现在拿名字快照当换代探针 —— 同一个 <code>$N</code> 上
+换了会话名，就判定是 server 换代后的复用，按新会话自己的 cwd 重钉而不是继承
+（会话名是持久 id，活着的时候不会变，所以「名字变了」只可能是换了会话）。
+</div>
+
+<h2>5. 项目 ↔ 会话：一条没有外键的跨层 join</h2>
+<p class="lede">
+这是两层分裂最贵的地方。项目在 Roam 层、会话在 ttmux 层，它们之间<b>没有任何外键</b>，
+关联是每轮现算出来的一条长链：
+</p>
+<pre class="code">tmux pane cwd  <s>（运行时，会漂）</s>
+   ↓ 首次见到即钉死
+session-homes.json: <var>$N</var> → home_dir       <s>（Roam 层，键是易失的 $N —— §4.4 串档就出在这）</s>
+   ↓ ResolveRepo（git 主仓库根）
+projects.json: dir → 项目 id                <s>（Roam 层）</s>
+   ↓ 非 git 项目再按「最长前缀命中」兜底认领
+项目卡上的「N 个任务」</pre>
+<p class="lede">
+链条上任何一环断了，项目卡就空 —— 而且<b>看不出是断在哪一环</b>。
+重启后你看到的「项目卡全空」，实际断点在第一环（tmux 没了）和第二环（<code>$N</code> 失效）。
+</p>
+<div class="note good">
+<b>这正是<a href="./design.html" style="color:var(--accent)">改进方向</a>里 M2 并库要解决的。</b><code>sessions.project_id</code> 一列外键，把这条现算的长链
+换成一次 <code>JOIN</code>：会话死了行还在、项目还认得它，卡片上就能直接显示
+「3 个已结束的任务，最近一次在 <code>.worktrees/task</code>」。
+现在这条链只能回答「此刻」，答不了「有过什么」。
+</div>
+
+
+<h2>6. 这次实际丢了什么、捞回了什么</h2>
+
+<p class="lede">
+2026-08-12 17:36 机器重启，重启前有 <b>15 个 Claude 会话</b>在跑。事后逐项清点：
+</p>
+
+<div class="tablewrap">
+<table>
+<thead><tr><th>东西</th><th>重启后</th><th>能不能捞回来</th></tr></thead>
+<tbody>
+<tr><td><b>pane 里的 agent 进程</b></td><td class="bad">全死</td><td class="bad">不能 —— 进程就是进程</td></tr>
+<tr><td><b>会话台账</b> <code>meta.db</code> <code>sessions</code></td><td class="bad">0 行（整表被 <code>Reconcile</code> 删空）</td><td class="good">能 —— 从 logs / meta / swarms / plugin_sessions / 老备份拼回 <b>150 条</b></td></tr>
+<tr><td><b>项目台账</b></td><td>13 个，<b>discovered = 0</b></td><td>发现型的已被历次重启清干净，只能按会话历史反推</td></tr>
+<tr><td><b>会话输出日志</b></td><td class="good">38.4MB 都在</td><td class="good">在 —— 但重建索引前没人找得到它们</td></tr>
+<tr><td><b>agent 对话</b> <code>~/.claude/projects/</code></td><td class="good">1.1GB / 166 段，一段没丢</td><td class="good">在 —— 与 tmux 无关；但 Roam 不认识它，界面上接不起来</td></tr>
+</tbody>
+</table>
+</div>
+
+<pre class="code">$ <b>python3 scripts/dev/rebuild-session-history.py</b>
+残骸        150 个会话
+  有归属目录  62
+  有起始时间  64
+  有日志      115
+按月分布：2026-05 → 9 · 06 → 88 · 07 → 51 · 08 → 2      <s># 时间轴与实际使用对得上</s></pre>
+
+<div class="note">
+<b>这张表就是三条设计结论的来源：</b>
+进程救不回 → 恢复的目标是<b>壳</b>不是现场；
+日志和对话都还在、只差索引 → 台账的价值是<b>把它们指回来</b>；
+残骸能拼回 150 条 → 这些信息本来就该被<b>直接记下来</b>，而不是事后靠考古。
+</div>
+
+
+<div class="note good" style="max-width:none">
+读完这篇，接<a href="./design.html" style="color:var(--accent);font-weight:600">改进方向 —— 目标架构与数据分层设计 →</a>
+</div>
+
+</div>
+</body>
+</html>

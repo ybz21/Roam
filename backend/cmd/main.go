@@ -101,6 +101,7 @@ func main() {
 
 	cfg := server.Config{
 		TTmuxBin:    bin,
+		EmbeddedBin: embeddedBin(),
 		LogsDir:     logsDir(),
 		FrontendDir: fdir,
 		BrowserHome: homeURL,
@@ -218,6 +219,14 @@ func tlsCertPathIf(on bool, path string) string {
 
 // dataDir 返回后端数据目录（TLS 证书、totp.json 等）。默认 Roam 主目录 ~/.roam；
 // 可用 ROAM_DATA 覆盖（兼容旧 TTMUX_DATA）。
+// embeddedBin 解出内嵌的 ttmux 路径（dev 构建里内嵌的是占位符，返回空）。
+func embeddedBin() string {
+	if !clibin.Embedded() {
+		return ""
+	}
+	return clibin.Ensure(dataDir())
+}
+
 func dataDir() string {
 	if data := envOr("ROAM_DATA", os.Getenv("TTMUX_DATA")); data != "" {
 		return data

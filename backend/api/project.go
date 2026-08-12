@@ -234,9 +234,17 @@ func (a *API) ProjectsList(c *gin.Context) {
 			}
 			addSession(&p, &top, s.Name, s.Label, rawInt(s.Attached) > 0, rawInt(s.LastActivity), branch, an.Primary.Linked)
 		}
+		if p.Sessions > 0 {
+			a.Projects.NoteSessions(key)
+		}
 		// 退场 (b) 只收敛「发现」通道：不存在任何 roam worktree（clean 也算存在）
-		// ∧ 无会话 ∧ 未置顶。用户显式创建（origin=user）的是一等对象，永不自动退场。
-		if e.Origin != "user" && roamWts == 0 && p.Sessions == 0 && !e.Pinned {
+		// ∧ **从来没有过会话** ∧ 未置顶。用户显式创建（origin=user）的是一等对象，
+		// 永不自动退场。
+		//
+		// 判的是「有没有过」而不是「此刻有没有」：tmux 随机器重启清零，按当下会话数
+		// 收敛的话，重启后第一次刷新就把全部发现型项目删干净——项目是台账，不该由
+		// 运行时的生死决定存亡。干过活的项目留着（此刻空着只是没开会话）。
+		if e.Origin != "user" && roamWts == 0 && p.Sessions == 0 && e.LastSessionAt == 0 && !e.Pinned {
 			a.Projects.Remove(key)
 			continue
 		}

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"ttmux-cli-go/internal/command/completion"
+	dbcmd "ttmux-cli-go/internal/command/db"
 	envelope "ttmux-cli-go/internal/command/env"
 	"ttmux-cli-go/internal/command/group"
 	"ttmux-cli-go/internal/command/help"
@@ -135,6 +136,8 @@ func (a App) Run(args []string) error {
 		return swarmcommand.Run(a.rt, rest, out)
 
 	// ── plugins(default 分支透传 tmux,必须显式注册)──
+	case "db":
+		return dbcmd.Run(a.rt, rest, out)
 	case "plugin":
 		return plugincmd.Run(a.rt, rest, out)
 

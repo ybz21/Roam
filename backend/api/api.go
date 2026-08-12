@@ -3,6 +3,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"ttmux-web/internal/id"
+	"ttmux-web/internal/metadb"
 	"ttmux-web/project"
 	"ttmux-web/search"
 	"ttmux-web/ttmux"
@@ -35,10 +37,25 @@ type API struct {
 	Races       *RaceStore        // 竞赛（W5/W6）业务数据模型
 	Projects    *project.Store    // 项目（08）：knownRepos 弱台账 + UI 偏好
 	FileIndex   *search.FileIndex // 全局搜索（⌘K）的项目文件名索引，见 search.go
+	Meta        *metadb.DB        // 台账库直连；降级时各 store 自动退回 JSON
 }
 
-func New(tt *ttmux.Client, browserHome, dataDir string) *API {
-	return &API{TT: tt, WT: worktree.New(dataDir), BrowserHome: browserHome, Football: NewFootballStore(), Speech: NewSpeechStore(dataDir), Prefs: NewPreferencesStore(dataDir), Races: NewRaceStore(dataDir), Projects: project.NewStore(dataDir), FileIndex: search.NewFileIndex()}
+// New 组装 API。台账库的握手在这里做一次：库的位置由 ttmux 报，不是后端自己拼
+// （ROAM_DATA 与 ROAM_HOME 可以指到不同地方，自己拼会开出一个空库）。
+// 握手失败不阻断启动——终端、文件、浏览器这些和台账无关的功能不该被连坐。
+func New(tt *ttmux.Client, browserHome, dataDir, fallbackBin string) *API {
+	meta := metadb.Open(context.Background(), tt, fallbackBin)
+	// 三个 store 都从库里读到数据之后，才把旧 JSON 退休——顺序反了会让后端
+	// 下一次 save() 原地复活一个新 JSON，跟库分叉。
+	defer func() {
+		if meta.OK() {
+			metadb.RetireLegacyFiles(dataDir)
+		}
+	}()
+	return &API{TT: tt, WT: worktree.New(dataDir, meta), BrowserHome: browserHome,
+		Football: NewFootballStore(), Speech: NewSpeechStore(dataDir),
+		Prefs: NewPreferencesStore(dataDir), Races: NewRaceStore(dataDir, meta),
+		Projects: project.NewStore(dataDir, meta), FileIndex: search.NewFileIndex(), Meta: meta}
 }
 
 // json 透传 ttmux 的 --json 输出
@@ -64,7 +81,31 @@ func (a *API) text(c *gin.Context, args ...string) {
 func (a *API) Me(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"authed": true, "browserHome": a.BrowserHome}})
 }
-func (a *API) Info(c *gin.Context) { a.json(c, "info", "--json") }
+
+// Info 透传 ttmux info，并补一个 metaDb 字段说明台账走的是库还是降级的 JSON。
+// **只增字段不改既有字段**，前端不用动；降级时用户能在界面上看见原因，
+// 而不是「项目卡为什么没有历史」查不出所以然。
+func (a *API) Info(c *gin.Context) {
+	out, err := a.TT.Run("info", "--json")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "TTMUX_ERROR", "message": ttmux.StripANSI(out)}})
+		return
+	}
+	var payload map[string]any
+	if json.Unmarshal([]byte(out), &payload) != nil {
+		c.Data(http.StatusOK, "application/json", []byte(out))
+		return
+	}
+	meta := gin.H{"mode": string(a.Meta.Mode())}
+	if a.Meta.OK() {
+		meta["schemaVersion"] = a.Meta.Info().Version
+		meta["path"] = a.Meta.Info().Path
+	} else if why := a.Meta.Why(); why != "" {
+		meta["error"] = why
+	}
+	payload["metaDb"] = meta
+	c.JSON(http.StatusOK, payload)
+}
 
 // FS 列出目录下的子目录，供前端选择工作目录
 func (a *API) FS(c *gin.Context) {

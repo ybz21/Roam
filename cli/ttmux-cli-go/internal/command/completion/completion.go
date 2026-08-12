@@ -16,7 +16,7 @@ const script = `_ttmux_completions() {
     local cur prev cmds
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    cmds="ls new fork children parent a attach d detach kill killall rename nw lw kw sp split kp send info source help capture status completion swarm"
+    cmds="ls new fork children parent a attach d detach kill killall rename nw lw kw sp split kp send info source help capture status completion swarm db"
 
     case "$prev" in
         ttmux)
@@ -26,6 +26,9 @@ const script = `_ttmux_completions() {
             local sessions
             sessions=$(tmux list-sessions -F '#{session_name}' 2>/dev/null)
             COMPREPLY=($(compgen -W "$sessions" -- "$cur"))
+            return ;;
+        db)
+            COMPREPLY=($(compgen -W "status migrate backup set-home" -- "$cur"))
             return ;;
         swarm)
             COMPREPLY=($(compgen -W "new add ls status activate collect migrate adopt done say listen feed watch board task sql archive rm" -- "$cur"))

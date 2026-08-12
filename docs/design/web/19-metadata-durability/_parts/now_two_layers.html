@@ -1,0 +1,97 @@
+<h2>1. 现状：两层，一个目录，两套互不认识的存储</h2>
+
+<p class="lede">
+<b>ttmux 层</b>（Go CLI，编排 tmux）和 <b>Roam 层</b>（Web 后端，Gin）共用同一个主目录
+<code>~/.roam</code>（<code>ROAM_HOME</code> 可覆盖），但用的是两套完全不同的机制：
+ttmux 层有一个 SQLite（<code>meta.db</code>），Roam 层是一堆各写各的散装 JSON。
+两边谁也不读谁的表。
+</p>
+
+<div class="figure">
+<svg viewBox="0 0 1080 452" width="1080" role="img" aria-label="ttmux 层与 Roam 层的存储分布图">
+  <rect x="16" y="16" width="500" height="196" rx="12" class="svg-box" fill="var(--accent-soft)" stroke="var(--accent-border)"/>
+  <text x="34" y="42" class="svg-k">TTMUX 层 · GO CLI</text>
+  <text x="34" y="62" class="svg-t">编排 tmux · 会话/任务/蜂群/插件</text>
+
+  <rect x="34" y="76" width="220" height="52" rx="8" class="svg-box"/>
+  <text x="46" y="96" class="svg-t">meta.db</text>
+  <text x="46" y="114" class="svg-m">sqlite · 有事务</text>
+  <rect x="266" y="76" width="232" height="52" rx="8" class="svg-box"/>
+  <text x="278" y="96" class="svg-t">swarms/&lt;群&gt;/swarm.db</text>
+  <text x="278" y="114" class="svg-m">每群一个库</text>
+
+  <rect x="34" y="140" width="147" height="52" rx="8" class="svg-box"/>
+  <text x="46" y="160" class="svg-t">logs/</text>
+  <text x="46" y="178" class="svg-m">&lt;id&gt;.log 大对象</text>
+  <rect x="193" y="140" width="147" height="52" rx="8" class="svg-box"/>
+  <text x="205" y="160" class="svg-t">meta/&lt;id&gt;/</text>
+  <text x="205" y="178" class="svg-m">4 个 .txt</text>
+  <rect x="352" y="140" width="146" height="52" rx="8" class="svg-box"/>
+  <text x="364" y="160" class="svg-t">groups/</text>
+  <text x="364" y="178" class="svg-m">.group 纯文本</text>
+
+  <rect x="564" y="16" width="500" height="196" rx="12" class="svg-box" fill="var(--purple-soft)" stroke="var(--purple-border)"/>
+  <text x="582" y="42" class="svg-k">ROAM 层 · WEB 后端</text>
+  <text x="582" y="62" class="svg-t">项目/归属/竞赛/偏好/设备配置</text>
+
+  <rect x="582" y="76" width="152" height="52" rx="8" class="svg-box"/>
+  <text x="594" y="96" class="svg-t">projects.json</text>
+  <text x="594" y="114" class="svg-m">项目台账</text>
+  <rect x="746" y="76" width="164" height="52" rx="8" class="svg-box"/>
+  <text x="758" y="96" class="svg-t">session-homes.json</text>
+  <text x="758" y="114" class="svg-m">会话归属</text>
+  <rect x="922" y="76" width="124" height="52" rx="8" class="svg-box"/>
+  <text x="934" y="96" class="svg-t">races.json</text>
+  <text x="934" y="114" class="svg-m">竞赛</text>
+
+  <rect x="582" y="140" width="464" height="52" rx="8" class="svg-box"/>
+  <text x="594" y="160" class="svg-t">preferences · browser-config · phone-config · speech-config · home-sites · totp</text>
+  <text x="594" y="178" class="svg-m">配置类 JSON —— 全量读改写，无版本、无事务</text>
+
+  <path d="M266 212 L266 244 L540 244 L540 266" class="svg-line" stroke-width="1.5"/>
+  <path d="M814 212 L814 244 L540 244" class="svg-line" stroke-width="1.5"/>
+  <rect x="380" y="266" width="320" height="46" rx="9" class="svg-box" stroke="var(--border)"/>
+  <text x="540" y="288" class="svg-t" text-anchor="middle">~/.roam</text>
+  <text x="540" y="304" class="svg-m" text-anchor="middle">同一个目录，两套机制，互不知情</text>
+
+  <rect x="16" y="340" width="500" height="96" rx="12" class="svg-box" fill="var(--warn-soft)" stroke="var(--warn-border)"/>
+  <text x="34" y="366" class="svg-k">运行时 · 不是存储</text>
+  <text x="34" y="388" class="svg-t">tmux server</text>
+  <text x="34" y="408" class="svg-s">会话是否活着 · $N · activity · pane 内容</text>
+  <text x="34" y="426" class="svg-m" fill="var(--danger)">随机器重启全部消失，且 $N 从 $0 重新发号</text>
+
+  <rect x="564" y="340" width="500" height="96" rx="12" class="svg-box" fill="var(--ok-soft)" stroke="var(--ok-border)"/>
+  <text x="582" y="366" class="svg-k">第三方 · 我们不拥有</text>
+  <text x="582" y="388" class="svg-t">~/.claude/projects/&lt;slug&gt;/&lt;uuid&gt;.jsonl</text>
+  <text x="582" y="408" class="svg-s">Claude Code 的对话 transcript</text>
+  <text x="582" y="426" class="svg-m" fill="var(--ok)">重启不受影响，但 Roam 不认识它，界面上接不起来</text>
+</svg>
+<div class="legend">
+  <span><i style="background:var(--accent-soft);border:1px solid var(--accent-border)"></i>ttmux 层</span>
+  <span><i style="background:var(--purple-soft);border:1px solid var(--purple-border)"></i>Roam 层</span>
+  <span><i style="background:var(--warn-soft);border:1px solid var(--warn-border)"></i>运行时（易失）</span>
+  <span><i style="background:var(--ok-soft);border:1px solid var(--ok-border)"></i>第三方存储</span>
+</div>
+</div>
+
+<h3>1.1 逐项清单</h3>
+
+<div class="tablewrap">
+<table>
+<thead><tr><th>层</th><th>数据</th><th>载体</th><th>事务</th><th>版本</th><th>重启后</th></tr></thead>
+<tbody>
+<tr><td><span class="pill acc">ttmux</span></td><td><b>会话创建关系</b> parent / created_by / initial_cwd</td><td><code>meta.db</code> <code>sessions</code></td><td class="good">有</td><td>无</td><td class="bad"><b>整表清空</b></td></tr>
+<tr><td><span class="pill acc">ttmux</span></td><td><b>蜂群</b> 目标 / 状态 / 指挥会话</td><td><code>meta.db</code> <code>swarms</code></td><td class="good">有</td><td>无</td><td class="good">留着</td></tr>
+<tr><td><span class="pill acc">ttmux</span></td><td><b>蜂群成员</b> 分工 / workdir / 会话</td><td><code>swarms/&lt;群&gt;/swarm.db</code></td><td class="good">有</td><td>无</td><td>留着，但成员会话查不到了</td></tr>
+<tr><td><span class="pill acc">ttmux</span></td><td><b>插件会话</b> labels / 起止</td><td><code>meta.db</code> <code>plugin_sessions</code></td><td class="good">有</td><td>无</td><td class="good">留着</td></tr>
+<tr><td><span class="pill acc">ttmux</span></td><td><b>会话输出</b></td><td><code>logs/&lt;id&gt;.log</code></td><td>—</td><td>—</td><td class="bad">留着但<b>无人索引</b>；且只覆盖任务/蜂群/插件会话</td></tr>
+<tr><td><span class="pill acc">ttmux</span></td><td><b>任务描述</b> type / desc / workdir / started</td><td><code>meta/&lt;id&gt;/*.txt</code></td><td class="bad">无</td><td>无</td><td>留着，无人认领</td></tr>
+<tr><td><span class="pill acc">ttmux</span></td><td><b>任务组</b> 成员名单</td><td><code>groups/*.group</code></td><td class="bad">无</td><td>无</td><td>留着</td></tr>
+<tr><td><span class="pill pur">Roam</span></td><td><b>项目台账</b> 目录 / 置顶 / 显示名 / 默认 agent</td><td><code>projects.json</code></td><td class="bad">无</td><td>代码里 v1→v2</td><td class="bad"><b>发现型项目全删</b></td></tr>
+<tr><td><span class="pill pur">Roam</span></td><td><b>会话归属目录</b></td><td><code>session-homes.json</code></td><td class="bad">无</td><td><code>v:2</code></td><td class="bad">按 <code>$N</code> 收敛，全清；且新会话会<b>继承</b>残行</td></tr>
+<tr><td><span class="pill pur">Roam</span></td><td><b>竞赛</b></td><td><code>races.json</code></td><td class="bad">无</td><td>无</td><td>留着</td></tr>
+<tr><td><span class="pill pur">Roam</span></td><td><b>收尾留痕</b></td><td><code>activity.log</code> JSONL</td><td>追加</td><td>无</td><td class="good">留着</td></tr>
+<tr><td><span class="pill pur">Roam</span></td><td><b>配置</b> 偏好 / 浏览器 / 手机 / 语音 / 导航站 / TOTP</td><td>各自一个 JSON</td><td class="bad">无</td><td>无</td><td class="good">留着</td></tr>
+</tbody>
+</table>
+</div>

@@ -1,7 +1,6 @@
 package swarm
 
 import (
-	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -42,17 +41,13 @@ func (s *Store) MetaInit() error {
 	if err := os.MkdirAll(s.opt.HomeDir, 0o755); err != nil {
 		return err
 	}
-	db, err := openSQLite(s.metaPath())
+	db, err := openMeta(s.opt.HomeDir, s.opt.DataDir)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
-	if _, err = db.Exec(`CREATE TABLE IF NOT EXISTS swarms(
-		id TEXT PRIMARY KEY, name TEXT UNIQUE, goal TEXT,
-		status TEXT, supervisor TEXT, created TEXT, dir TEXT)`); err != nil {
-		return err
-	}
-	return migrateMetaDB(db)
+	// 建表与补列都在 metadb 的版本链里（baseline 那一步），开库即已就位。
+	return nil
 }
 
 // ResolveID maps a name-or-id to its id ("" if unknown).
@@ -63,7 +58,7 @@ func (s *Store) ResolveID(nameOrID string) string {
 	if _, err := os.Stat(s.metaPath()); err != nil {
 		return ""
 	}
-	db, err := openSQLite(s.metaPath())
+	db, err := openMeta(s.opt.HomeDir, s.opt.DataDir)
 	if err != nil {
 		return ""
 	}
@@ -75,7 +70,7 @@ func (s *Store) ResolveID(nameOrID string) string {
 
 // Name returns the canonical swarm name for a name-or-id.
 func (s *Store) Name(nameOrID string) string {
-	db, err := openSQLite(s.metaPath())
+	db, err := openMeta(s.opt.HomeDir, s.opt.DataDir)
 	if err != nil {
 		return ""
 	}
@@ -89,7 +84,7 @@ func (s *Store) Exists(nameOrID string) bool { return s.ResolveID(nameOrID) != "
 
 // MetaGet/MetaSet read/write a swarm-level column in meta.db.
 func (s *Store) MetaGet(nameOrID, col string) string {
-	db, err := openSQLite(s.metaPath())
+	db, err := openMeta(s.opt.HomeDir, s.opt.DataDir)
 	if err != nil {
 		return ""
 	}
@@ -102,7 +97,7 @@ func (s *Store) MetaGet(nameOrID, col string) string {
 }
 
 func (s *Store) MetaSet(nameOrID, col, val string) error {
-	db, err := openSQLite(s.metaPath())
+	db, err := openMeta(s.opt.HomeDir, s.opt.DataDir)
 	if err != nil {
 		return err
 	}
@@ -122,45 +117,28 @@ func metaCol(col string) string {
 }
 
 // openSwarmDB opens (initializing/migrating) a swarm's per-swarm db.
-func (s *Store) openSwarmDB(nameOrID string) (*sql.DB, error) {
+func (s *Store) openSwarmDB(nameOrID string) (sharedDB, error) {
 	id := s.ResolveID(nameOrID)
 	if id == "" {
-		return nil, fmt.Errorf("swarm not found: %s", nameOrID)
+		return sharedDB{}, fmt.Errorf("swarm not found: %s", nameOrID)
 	}
 	if err := os.MkdirAll(filepath.Join(s.swarmHome(id), "logs"), 0o755); err != nil {
-		return nil, err
+		return sharedDB{}, err
 	}
-	db, err := openSQLite(s.swarmDBPath(id))
-	if err != nil {
-		return nil, err
-	}
-	if err := initSwarmDB(db); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := migrateSwarmDB(db); err != nil {
-		db.Close()
-		return nil, err
-	}
-	return db, nil
+	// 建表与补列都在 swarmSteps 里，开库即已迁移——不必再 init + migrate 各跑一遍。
+	return openSwarmFile(s.swarmDBPath(id))
 }
 
-func initSwarmDB(db *sql.DB) error {
-	_, err := db.Exec(`
-		CREATE TABLE IF NOT EXISTS members(
-			name TEXT PRIMARY KEY, type TEXT, task TEXT, workdir TEXT,
-			status TEXT, deps TEXT, done INT DEFAULT 0, pending INT DEFAULT 0,
-			model TEXT, perm TEXT,
-			kind TEXT DEFAULT 'claude', role TEXT DEFAULT 'member',
-			subrole TEXT DEFAULT '', duty TEXT DEFAULT '',
-			session TEXT DEFAULT '');
-		CREATE TABLE IF NOT EXISTS posts(
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			ts TEXT, author TEXT, kind TEXT, re INTEGER, text TEXT);
-		CREATE TABLE IF NOT EXISTS cards(
-			id TEXT PRIMARY KEY, title TEXT, descr TEXT, assignee TEXT,
-			col TEXT DEFAULT 'backlog', deps TEXT, created TEXT, updated TEXT);`)
-	return err
+// scope 打开主库并解析出蜂群 id。members/cards 现在住在主库，靠 swarm_id 分群
+// ——这样成员会话能和 sessions join（成员死了还得找回它的日志）。
+// posts 仍留在每群自己的库里（见 swarmSteps 的说明），走 openSwarmDB。
+func (s *Store) scope(nameOrID string) (sharedDB, string, error) {
+	id := s.ResolveID(nameOrID)
+	if id == "" {
+		return sharedDB{}, "", fmt.Errorf("swarm not found: %s", nameOrID)
+	}
+	db, err := openMeta(s.opt.HomeDir, s.opt.DataDir)
+	return db, id, err
 }
 
 // MemberLabel 成员会话的展示名：`<群>-<成员>`。它是 @roam_name 里存的那个名字，
@@ -172,9 +150,9 @@ func MemberLabel(swarm, member string) string { return swarm + "-" + member }
 // 就是以 `<群>-<成员>` 为会话名的）。
 func (s *Store) MemberSession(swarm, member string) string {
 	label := MemberLabel(s.Name(swarm), member)
-	if db, err := s.openSwarmDB(swarm); err == nil {
+	if db, sid, err := s.scope(swarm); err == nil {
 		var sess string
-		_ = db.QueryRow(`SELECT IFNULL(session,'') FROM members WHERE name=?`, member).Scan(&sess)
+		_ = db.QueryRow(`SELECT IFNULL(session,'') FROM swarm_members WHERE swarm_id=? AND name=?`, sid, member).Scan(&sess)
 		db.Close()
 		if sess != "" {
 			return sess
@@ -185,12 +163,12 @@ func (s *Store) MemberSession(swarm, member string) string {
 
 // SetMemberSession 记住成员会话名（拉起成员时调用）。
 func (s *Store) SetMemberSession(swarm, member, sess string) error {
-	db, err := s.openSwarmDB(swarm)
+	db, sid, err := s.scope(swarm)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
-	_, err = db.Exec(`UPDATE members SET session=? WHERE name=?`, sess, member)
+	_, err = db.Exec(`UPDATE swarm_members SET session=? WHERE swarm_id=? AND name=?`, sess, sid, member)
 	return err
 }
 

@@ -10,7 +10,9 @@
 package project
 
 import (
+	"database/sql"
 	"encoding/json"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -19,6 +21,7 @@ import (
 	"time"
 
 	"ttmux-web/internal/id"
+	"ttmux-web/internal/metadb"
 )
 
 // Prefs 是项目的 UI 偏好（PATCH /projects/:key/prefs 可改）。
@@ -43,6 +46,10 @@ type Entry struct {
 	Prefs
 	FirstSeen int64 `json:"firstSeen"`
 	LastSeen  int64 `json:"lastSeen"`
+	// LastSessionAt 最后一次在这个项目里见到会话的时刻。退场规则看它而不是「此刻
+	// 有几个会话」：机器一重启 tmux 全清零，按当下会话数收敛会把所有发现型项目
+	// 一次性删光（会话是运行时，项目是台账，不能让前者的生死决定后者的存亡）。
+	LastSessionAt int64 `json:"lastSessionAt,omitempty"`
 }
 
 type fileShape struct {
@@ -55,14 +62,24 @@ type fileShape struct {
 // Store 单写者：所有变更持内存互斥锁，落盘 tmp+rename 原子替换（同 RaceStore 体例）。
 type Store struct {
 	mu      sync.Mutex
-	path    string
+	path    string            // 旧 JSON 台账；只在降级模式下写
+	db      *metadb.DB        // 直连模式下的真相源
 	repos   map[string]*Entry // id → 条目
 	aliases map[string]string // 老 key / 被合并的 id → 现行 id
 	byDir   map[string]string // dir → id（查重索引，替代原先的路径 hash key）
 }
 
-func NewStore(dataDir string) *Store {
-	s := &Store{repos: map[string]*Entry{}, aliases: map[string]string{}, byDir: map[string]string{}}
+// NewStore 建台账。db 直连可用时以库为准，否则退回旧的 projects.json。
+//
+// 台账整体仍是**内存模型 + 落盘**：项目是几十条的量级，读全在内存里，
+// 换存储只换了 load/save 两端。这样 mergeInto/resolve/退场判定/60s 节流
+// 这些语义一行没动，出了问题也只可能出在持久化这一层。
+func NewStore(dataDir string, db *metadb.DB) *Store {
+	s := &Store{repos: map[string]*Entry{}, aliases: map[string]string{}, byDir: map[string]string{}, db: db}
+	if db.OK() {
+		s.loadDB()
+		return s
+	}
 	if dataDir != "" {
 		s.path = filepath.Join(dataDir, "projects.json")
 		if b, err := os.ReadFile(s.path); err == nil {
@@ -73,6 +90,100 @@ func NewStore(dataDir string) *Store {
 		}
 	}
 	return s
+}
+
+// loadDB 从库里读全量（调用方不持锁——只在构造时调）。
+func (s *Store) loadDB() {
+	rows, err := s.db.Query(`SELECT id, dir, IFNULL(origin,''), IFNULL(display_name,''),
+		IFNULL(pinned,0), IFNULL(default_agent,''), IFNULL(default_base,''),
+		IFNULL(first_seen,0), IFNULL(last_seen,0), IFNULL(last_session_at,0) FROM projects`)
+	if err != nil {
+		return
+	}
+	for rows.Next() {
+		var e Entry
+		var pinned int
+		if rows.Scan(&e.ID, &e.Dir, &e.Origin, &e.DisplayName, &pinned, &e.DefaultAgent,
+			&e.DefaultBase, &e.FirstSeen, &e.LastSeen, &e.LastSessionAt) != nil {
+			continue
+		}
+		e.Pinned = pinned != 0
+		cp := e
+		s.repos[e.ID] = &cp
+		s.byDir[e.Dir] = e.ID
+	}
+	rows.Close()
+	arows, err := s.db.Query(`SELECT alias, project_id FROM project_aliases`)
+	if err != nil {
+		return
+	}
+	defer arows.Close()
+	for arows.Next() {
+		var a, id string
+		if arows.Scan(&a, &id) == nil {
+			s.aliases[a] = id
+		}
+	}
+}
+
+// saveDB 把内存台账写回库（调用方须持锁）。
+//
+// 整表 upsert + 删掉不在内存里的行——不是「先清空再插」：那样会让
+// project_aliases 的 ON DELETE CASCADE 把别名一起删掉，老书签当场失效。
+func (s *Store) saveDB() {
+	err := s.db.Tx(func(tx *sql.Tx) error {
+		keep := make([]any, 0, len(s.repos))
+		for id, e := range s.repos {
+			if _, err := tx.Exec(`INSERT INTO projects
+				(id,dir,origin,display_name,pinned,default_agent,default_base,
+				 first_seen,last_seen,last_session_at)
+				VALUES(?,?,?,?,?,?,?,?,?,?)
+				ON CONFLICT(id) DO UPDATE SET dir=excluded.dir, origin=excluded.origin,
+					display_name=excluded.display_name, pinned=excluded.pinned,
+					default_agent=excluded.default_agent, default_base=excluded.default_base,
+					first_seen=excluded.first_seen, last_seen=excluded.last_seen,
+					last_session_at=excluded.last_session_at`,
+				e.ID, e.Dir, e.Origin, e.DisplayName, boolInt(e.Pinned), e.DefaultAgent,
+				e.DefaultBase, e.FirstSeen, e.LastSeen, e.LastSessionAt); err != nil {
+				return err
+			}
+			keep = append(keep, id)
+		}
+		if err := deleteMissing(tx, "projects", "id", keep); err != nil {
+			return err
+		}
+		aliases := make([]any, 0, len(s.aliases))
+		for a, id := range s.aliases {
+			if _, err := tx.Exec(`INSERT INTO project_aliases(alias,project_id)
+				SELECT ?, id FROM projects WHERE id=?
+				ON CONFLICT(alias) DO UPDATE SET project_id=excluded.project_id`, a, id); err != nil {
+				return err
+			}
+			aliases = append(aliases, a)
+		}
+		return deleteMissing(tx, "project_aliases", "alias", aliases)
+	})
+	if err != nil {
+		log.Printf("项目台账写库失败: %v", err)
+	}
+}
+
+// deleteMissing 删掉 keep 之外的行。keep 为空时清表。
+func deleteMissing(tx *sql.Tx, table, key string, keep []any) error {
+	if len(keep) == 0 {
+		_, err := tx.Exec(`DELETE FROM ` + table)
+		return err
+	}
+	ph := strings.TrimSuffix(strings.Repeat("?,", len(keep)), ",")
+	_, err := tx.Exec(`DELETE FROM `+table+` WHERE `+key+` NOT IN (`+ph+`)`, keep...)
+	return err
+}
+
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // load 读入文件并就地迁移 v1（key = 路径派生 hash）→ v2（key = 不可变 id）。
@@ -141,6 +252,10 @@ func mergeInto(dst, src *Entry) {
 
 // save 持久化全量（调用方须持锁）。
 func (s *Store) save() {
+	if s.db.OK() {
+		s.saveDB()
+		return
+	}
 	if s.path == "" {
 		return
 	}
@@ -213,6 +328,22 @@ func (s *Store) Add(dir, displayName string) string {
 	}
 	s.save()
 	return key
+}
+
+// NoteSessions 记「这个项目此刻有会话」。聚合层每轮算完会话数调一次，
+// 退场判定据此区分「从来没干过活」和「干过，只是现在没开着」。
+func (s *Store) NoteSessions(key string) {
+	now := time.Now().Unix()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	k := s.resolve(key)
+	if k == "" {
+		return
+	}
+	if now-s.repos[k].LastSessionAt >= 60 { // 同 LastSeen：分钟粒度，别每轮都写盘
+		s.repos[k].LastSessionAt = now
+		s.save()
+	}
 }
 
 // Entries 返回台账快照（copy，key = 项目 id，供只读聚合遍历）。

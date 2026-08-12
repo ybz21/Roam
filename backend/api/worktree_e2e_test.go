@@ -71,7 +71,7 @@ func e2eSetup(t *testing.T) (*gin.Engine, string, func(...string) string) {
 	}
 
 	gin.SetMode(gin.TestMode)
-	h := New(ttmux.New(bin), "", tmp)
+	h := New(ttmux.New(bin), "", tmp, "")
 	r := gin.New()
 	r.POST("/worktree-sessions", h.WorktreeSessionCreate)
 	r.GET("/sessions", h.Sessions)
@@ -334,7 +334,7 @@ func TestRaceLifecycle(t *testing.T) {
 // 建 worktree 应从 origin/main 最新处开分叉（自动 fetch），而非本地旧 main。
 func TestWorktreeCreateAutoBaseFollowsRemote(t *testing.T) {
 	tmp := t.TempDir()
-	h := New(ttmux.New(filepath.Join(tmp, "ttmux-absent")), "", tmp)
+	h := New(ttmux.New(filepath.Join(tmp, "ttmux-absent")), "", tmp, "")
 	repo := e2eRepo(t, tmp)
 	gitIn := func(dir string, args ...string) string {
 		t.Helper()
@@ -389,7 +389,7 @@ func TestWorktreeCreateAutoBaseFollowsRemote(t *testing.T) {
 func TestWorktreeSyncRoute(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	tmp := t.TempDir()
-	h := New(ttmux.New(filepath.Join(tmp, "ttmux-absent")), "", tmp)
+	h := New(ttmux.New(filepath.Join(tmp, "ttmux-absent")), "", tmp, "")
 	r := gin.New()
 	r.POST("/git/worktree/sync", h.WorktreeSync)
 	r.GET("/git/worktrees", h.WorktreeList)

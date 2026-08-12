@@ -35,7 +35,7 @@ func (s *Store) NewSwarm(name, goal, dir string) (string, error) {
 	if err := s.MetaInit(); err != nil {
 		return "", err
 	}
-	db, err := openSQLite(s.metaPath())
+	db, err := openMeta(s.opt.HomeDir, s.opt.DataDir)
 	if err != nil {
 		return "", err
 	}
@@ -46,11 +46,6 @@ func (s *Store) NewSwarm(name, goal, dir string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	sdb, err := s.openSwarmDB(id)
-	if err != nil {
-		return "", err
-	}
-	sdb.Close()
 	return id, nil
 }
 
@@ -59,7 +54,7 @@ func (s *Store) ListSwarms() ([]SwarmRow, error) {
 	if err := s.MetaInit(); err != nil {
 		return nil, err
 	}
-	db, err := openSQLite(s.metaPath())
+	db, err := openMeta(s.opt.HomeDir, s.opt.DataDir)
 	if err != nil {
 		return nil, err
 	}
@@ -82,112 +77,112 @@ func (s *Store) ListSwarms() ([]SwarmRow, error) {
 
 // HasLeader reports whether a leader/master member already exists.
 func (s *Store) HasLeader(swarm string) bool {
-	db, err := s.openSwarmDB(swarm)
+	db, sid, err := s.scope(swarm)
 	if err != nil {
 		return false
 	}
 	defer db.Close()
 	var n int
-	_ = db.QueryRow(`SELECT COUNT(*) FROM members WHERE role IN ('leader','master')`).Scan(&n)
+	_ = db.QueryRow(`SELECT COUNT(*) FROM swarm_members WHERE swarm_id=? AND role IN ('leader','master')`, sid).Scan(&n)
 	return n > 0
 }
 
 // DepGet/DepSet read/write a member's dependency list.
 func (s *Store) DepGet(swarm, member string) string {
-	db, err := s.openSwarmDB(swarm)
+	db, sid, err := s.scope(swarm)
 	if err != nil {
 		return ""
 	}
 	defer db.Close()
 	var deps string
-	_ = db.QueryRow(`SELECT IFNULL(deps,'') FROM members WHERE name=?`, member).Scan(&deps)
+	_ = db.QueryRow(`SELECT IFNULL(deps,'') FROM swarm_members WHERE swarm_id=? AND name=?`, sid, member).Scan(&deps)
 	return deps
 }
 
 func (s *Store) DepSet(swarm, member, deps string) error {
-	db, err := s.openSwarmDB(swarm)
+	db, sid, err := s.scope(swarm)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
-	_, err = db.Exec(`INSERT INTO members(name,deps) VALUES(?,?)
-		ON CONFLICT(name) DO UPDATE SET deps=excluded.deps`, member, deps)
+	_, err = db.Exec(`INSERT INTO swarm_members(swarm_id,name,deps) VALUES(?,?,?)
+		ON CONFLICT(swarm_id,name) DO UPDATE SET deps=excluded.deps`, sid, member, deps)
 	return err
 }
 
 // MarkMemberDone / IsMemberMarkedDone / DoneList back the done column.
 func (s *Store) MarkMemberDone(swarm, member string) error {
-	db, err := s.openSwarmDB(swarm)
+	db, sid, err := s.scope(swarm)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
-	_, err = db.Exec(`INSERT INTO members(name,done) VALUES(?,1)
-		ON CONFLICT(name) DO UPDATE SET done=1`, member)
+	_, err = db.Exec(`INSERT INTO swarm_members(swarm_id,name,done) VALUES(?,?,1)
+		ON CONFLICT(swarm_id,name) DO UPDATE SET done=1`, sid, member)
 	return err
 }
 
 func (s *Store) isMarkedDone(swarm, member string) bool {
-	db, err := s.openSwarmDB(swarm)
+	db, sid, err := s.scope(swarm)
 	if err != nil {
 		return false
 	}
 	defer db.Close()
 	var done int
-	_ = db.QueryRow(`SELECT IFNULL(done,0) FROM members WHERE name=?`, member).Scan(&done)
+	_ = db.QueryRow(`SELECT IFNULL(done,0) FROM swarm_members WHERE swarm_id=? AND name=?`, sid, member).Scan(&done)
 	return done == 1
 }
 
 // AddMemberRow upserts a launched (non-pending) member row.
 func (s *Store) AddMemberRow(swarm string, m MemberSpec) error {
-	db, err := s.openSwarmDB(swarm)
+	db, sid, err := s.scope(swarm)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
-	_, err = db.Exec(`INSERT INTO members(name,type,task,workdir,model,perm,kind,role,subrole,duty,pending,done)
-		VALUES(?,?,?,?,?,?,?,?,?,?,0,0)
-		ON CONFLICT(name) DO UPDATE SET type=excluded.type,task=excluded.task,
+	_, err = db.Exec(`INSERT INTO swarm_members(swarm_id,name,type,task,workdir,model,perm,kind,role,subrole,duty,pending,done)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?,0,0)
+		ON CONFLICT(swarm_id,name) DO UPDATE SET type=excluded.type,task=excluded.task,
 			workdir=excluded.workdir,model=excluded.model,perm=excluded.perm,
 			kind=excluded.kind,role=excluded.role,subrole=excluded.subrole,duty=excluded.duty,pending=0`,
-		m.Name, m.Type, m.Task, m.Workdir, m.Model, m.Perm, m.Kind, m.Role, SubroleNorm(m.Subrole), m.Duty)
+		sid, m.Name, m.Type, m.Task, m.Workdir, m.Model, m.Perm, m.Kind, m.Role, SubroleNorm(m.Subrole), m.Duty)
 	return err
 }
 
 // SetPending upserts a member as pending (awaiting deps), storing its spec.
 func (s *Store) SetPending(swarm string, m MemberSpec) error {
-	db, err := s.openSwarmDB(swarm)
+	db, sid, err := s.scope(swarm)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
-	_, err = db.Exec(`INSERT INTO members(name,type,task,workdir,model,perm,kind,role,subrole,duty,pending)
-		VALUES(?,?,?,?,?,?,?,?,?,?,1)
-		ON CONFLICT(name) DO UPDATE SET type=excluded.type,task=excluded.task,
+	_, err = db.Exec(`INSERT INTO swarm_members(swarm_id,name,type,task,workdir,model,perm,kind,role,subrole,duty,pending)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?,1)
+		ON CONFLICT(swarm_id,name) DO UPDATE SET type=excluded.type,task=excluded.task,
 			workdir=excluded.workdir,model=excluded.model,perm=excluded.perm,
 			kind=excluded.kind,role=excluded.role,subrole=excluded.subrole,duty=excluded.duty,pending=1`,
-		m.Name, m.Type, m.Task, m.Workdir, m.Model, m.Perm, m.Kind, RoleNorm(m.Role), SubroleNorm(m.Subrole), m.Duty)
+		sid, m.Name, m.Type, m.Task, m.Workdir, m.Model, m.Perm, m.Kind, RoleNorm(m.Role), SubroleNorm(m.Subrole), m.Duty)
 	return err
 }
 
 func (s *Store) clearPending(swarm, member string) error {
-	db, err := s.openSwarmDB(swarm)
+	db, sid, err := s.scope(swarm)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
-	_, err = db.Exec(`UPDATE members SET pending=0 WHERE name=?`, member)
+	_, err = db.Exec(`UPDATE swarm_members SET pending=0 WHERE swarm_id=? AND name=?`, sid, member)
 	return err
 }
 
 // PendingList returns the names of members awaiting dependencies.
 func (s *Store) PendingList(swarm string) []string {
-	db, err := s.openSwarmDB(swarm)
+	db, sid, err := s.scope(swarm)
 	if err != nil {
 		return nil
 	}
 	defer db.Close()
-	rows, err := db.Query(`SELECT name FROM members WHERE pending=1 ORDER BY name`)
+	rows, err := db.Query(`SELECT name FROM swarm_members WHERE swarm_id=? AND pending=1 ORDER BY name`, sid)
 	if err != nil {
 		return nil
 	}
@@ -204,7 +199,7 @@ func (s *Store) PendingList(swarm string) []string {
 
 // pendingSpec loads the stored spec for a pending member.
 func (s *Store) pendingSpec(swarm, member string) (MemberSpec, error) {
-	db, err := s.openSwarmDB(swarm)
+	db, sid, err := s.scope(swarm)
 	if err != nil {
 		return MemberSpec{}, err
 	}
@@ -213,7 +208,7 @@ func (s *Store) pendingSpec(swarm, member string) (MemberSpec, error) {
 	err = db.QueryRow(`SELECT IFNULL(type,'agent'),IFNULL(task,''),IFNULL(workdir,''),
 		IFNULL(model,''),IFNULL(perm,''),IFNULL(kind,'claude'),IFNULL(role,'member'),
 		IFNULL(subrole,''),IFNULL(duty,'')
-		FROM members WHERE name=?`, member).
+		FROM swarm_members WHERE swarm_id=? AND name=?`, sid, member).
 		Scan(&m.Type, &m.Task, &m.Workdir, &m.Model, &m.Perm, &m.Kind, &m.Role, &m.Subrole, &m.Duty)
 	return m, err
 }
@@ -338,7 +333,7 @@ func (s *Store) migrateOne(name, created, goal, status, supervisor string) error
 	if status == "" {
 		status = "planning"
 	}
-	db, err := openSQLite(s.metaPath())
+	db, err := openMeta(s.opt.HomeDir, s.opt.DataDir)
 	if err != nil {
 		return err
 	}
@@ -363,12 +358,12 @@ func (s *Store) MigrateSessionNames(mapping map[string]string) {
 		if neu, ok := mapping[sw.Supervisor]; ok {
 			_ = s.MetaSet(sw.Name, "supervisor", neu)
 		}
-		db, err := s.openSwarmDB(sw.Name)
+		db, sid, err := s.scope(sw.Name)
 		if err != nil {
 			continue
 		}
 		// 成员会话名以前是 `<群>-<成员>`（没落过 session 列），改名后要按新名字补上
-		rows, _ := db.Query(`SELECT name, IFNULL(session,'') FROM members`)
+		rows, _ := db.Query(`SELECT name, IFNULL(session,'') FROM swarm_members WHERE swarm_id=?`, sid)
 		type pair struct{ member, sess string }
 		var todo []pair
 		if rows != nil {
@@ -386,14 +381,14 @@ func (s *Store) MigrateSessionNames(mapping map[string]string) {
 			rows.Close()
 		}
 		for _, p := range todo {
-			_, _ = db.Exec(`UPDATE members SET session=? WHERE name=?`, p.sess, p.member)
+			_, _ = db.Exec(`UPDATE swarm_members SET session=? WHERE swarm_id=? AND name=?`, p.sess, sid, p.member)
 		}
 		db.Close()
 	}
 }
 
 func (s *Store) migrateMembers(name string, groupSessions func(string) []string, taskType, taskDesc func(string) string) {
-	db, err := s.openSwarmDB(name)
+	db, sid, err := s.scope(name)
 	if err != nil {
 		return
 	}
@@ -412,12 +407,12 @@ func (s *Store) migrateMembers(name string, groupSessions func(string) []string,
 		if supervisor != "" && sess == supervisor {
 			role = "leader"
 		}
-		_, _ = db.Exec(`INSERT INTO members(name,type,task,role,session,pending,done) VALUES(?,?,?,?,?,0,0)
-			ON CONFLICT(name) DO UPDATE SET
-				type=COALESCE(NULLIF(members.type,''), excluded.type),
-				task=COALESCE(NULLIF(members.task,''), excluded.task),
-				session=COALESCE(NULLIF(members.session,''), excluded.session)`,
-			member, taskType(sess), taskDesc(sess), role, sess)
+		_, _ = db.Exec(`INSERT INTO swarm_members(swarm_id,name,type,task,role,session,pending,done) VALUES(?,?,?,?,?,?,0,0)
+			ON CONFLICT(swarm_id,name) DO UPDATE SET
+				type=COALESCE(NULLIF(swarm_members.type,''), excluded.type),
+				task=COALESCE(NULLIF(swarm_members.task,''), excluded.task),
+				session=COALESCE(NULLIF(swarm_members.session,''), excluded.session)`,
+			sid, member, taskType(sess), taskDesc(sess), role, sess)
 	}
 }
 
@@ -484,7 +479,7 @@ func (s *Store) Remove(swarm string) error {
 	if id == "" {
 		return fmt.Errorf("swarm not found: %s", swarm)
 	}
-	db, err := openSQLite(s.metaPath())
+	db, err := openMeta(s.opt.HomeDir, s.opt.DataDir)
 	if err != nil {
 		return err
 	}

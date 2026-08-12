@@ -4,6 +4,7 @@ package ttmux
 
 import (
 	"bytes"
+	"context"
 	"os/exec"
 	"regexp"
 )
@@ -18,7 +19,15 @@ func New(bin string) *Client { return &Client{Bin: bin} }
 
 // Run 执行 ttmux 子命令，返回合并的 stdout/stderr。
 func (c *Client) Run(args ...string) (string, error) {
-	cmd := exec.Command(c.Bin, args...)
+	return c.RunCtx(context.Background(), args...)
+}
+
+// RunCtx 同 Run，但可被 context 取消/超时。
+//
+// 启动期的握手必须用它：`Run` 没有超时，一个卡住的 ttmux（比如它自己在等一把
+// 数据库锁）会把整个 server 的启动挂死。
+func (c *Client) RunCtx(ctx context.Context, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, c.Bin, args...)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &out

@@ -11,7 +11,7 @@ import (
 
 func TestStorePersistAndConverge(t *testing.T) {
 	dir := t.TempDir()
-	s := NewStore(dir)
+	s := NewStore(dir, nil)
 	key := s.Touch("/tmp/demo-repo")
 	if !id.Valid(key) {
 		t.Fatalf("Touch 应发不可变 id，got %q", key)
@@ -26,7 +26,7 @@ func TestStorePersistAndConverge(t *testing.T) {
 		t.Fatal("SetPrefs 在册 key 应成功")
 	}
 	// 重新加载：台账与偏好都持久化
-	s2 := NewStore(dir)
+	s2 := NewStore(dir, nil)
 	e := s2.Entries()[key]
 	if e.Dir != "/tmp/demo-repo" || !e.Pinned || e.ID != key {
 		t.Fatalf("重载后丢数据: %+v", e)
@@ -39,13 +39,13 @@ func TestStorePersistAndConverge(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "projects.json")); err != nil {
 		t.Fatal("projects.json 应存在")
 	}
-	if s3 := NewStore(dir); len(s3.Entries()) != 0 {
+	if s3 := NewStore(dir, nil); len(s3.Entries()) != 0 {
 		t.Fatal("Remove 也要持久化")
 	}
 }
 
 func TestSetPrefsUnknownKey(t *testing.T) {
-	s := NewStore(t.TempDir())
+	s := NewStore(t.TempDir(), nil)
 	if s.SetPrefs("nope-0000", func(p *Prefs) { p.Pinned = true }) {
 		t.Fatal("不在册 key 必须拒绝（API 防任意路径探测的前提）")
 	}
@@ -53,7 +53,7 @@ func TestSetPrefsUnknownKey(t *testing.T) {
 
 // 目录搬家（mv 项目 / worktree 子目录归位仓库根）：id 不变、偏好不丢。
 func TestSetDirKeepsIdentity(t *testing.T) {
-	s := NewStore(t.TempDir())
+	s := NewStore(t.TempDir(), nil)
 	k := s.Add("/repo/old", "我的项目")
 	s.SetPrefs(k, func(p *Prefs) { p.Pinned = true })
 	if got := s.SetDir(k, "/repo/new"); got != k {
@@ -73,7 +73,7 @@ func TestSetDirKeepsIdentity(t *testing.T) {
 
 // 新目录已被别的条目占用 → 合并用户意志，被并掉的 id 变别名（老链接仍可解析）。
 func TestSetDirMergesUserIntent(t *testing.T) {
-	s := NewStore(t.TempDir())
+	s := NewStore(t.TempDir(), nil)
 	sub := s.Add("/repo/.worktrees", "")
 	s.SetPrefs(sub, func(p *Prefs) { p.Pinned = true })
 	root := s.Touch("/repo")
@@ -99,7 +99,7 @@ func TestLegacyKeyMigration(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "projects.json"), []byte(legacy), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s := NewStore(dir)
+	s := NewStore(dir, nil)
 	ents := s.Entries()
 	if len(ents) != 1 {
 		t.Fatalf("迁移后应有 1 条: %+v", ents)
@@ -123,7 +123,7 @@ func TestLegacyKeyMigration(t *testing.T) {
 		t.Fatal("老 key 也应能改偏好")
 	}
 	// 迁移结果落盘：重开仍是 id 主键 + 别名可用
-	s2 := NewStore(dir)
+	s2 := NewStore(dir, nil)
 	if _, ok := s2.Entries()[newKey]; !ok {
 		t.Fatal("迁移未落盘")
 	}
@@ -151,7 +151,7 @@ func TestLoadMergesDuplicateDirs(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "projects.json"), []byte(legacy), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s := NewStore(dir)
+	s := NewStore(dir, nil)
 	if len(s.Entries()) != 1 {
 		t.Fatalf("同目录重复条目应合并: %+v", s.Entries())
 	}

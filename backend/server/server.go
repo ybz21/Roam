@@ -36,7 +36,10 @@ import (
 var fallbackHTML []byte
 
 type Config struct {
-	TTmuxBin     string
+	TTmuxBin string
+	// EmbeddedBin 是内嵌的那份 ttmux（release 构建才有真货）。台账握手失败时用它
+	// 重试一次——救「PATH 上残留一个老 ttmux，而 roam 二进制是新的」这种情况。
+	EmbeddedBin  string
 	LogsDir      string
 	FrontendDir  string // frontend/dist 的路径；为空或不存在时用内嵌回退页
 	BrowserHome  string // 浏览器导航起始页地址（供 Chrome 当默认主页）
@@ -75,7 +78,7 @@ func New(cfg Config) *gin.Engine {
 
 	tt := ttmux.New(cfg.TTmuxBin)
 	a := auth.New(cfg.Password, cfg.TOTPSecret, cfg.TOTPState, cfg.LockAfter, cfg.LockSecs, cfg.SavePassword)
-	h := api.New(tt, cfg.BrowserHome, cfg.DataDir)
+	h := api.New(tt, cfg.BrowserHome, cfg.DataDir, cfg.EmbeddedBin)
 	go h.SyncLoop()                 // 后台兜底远端同步（10 §3 第三档），失败静默
 	browser.InitConfig(cfg.DataDir) // Chrome 启动配置持久化到 dataDir
 	phone.InitConfig(cfg.DataDir)   // 手机后端配置（本地/远程 redroid/真机）持久化到 dataDir

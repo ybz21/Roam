@@ -51,24 +51,24 @@ func ColLabel(col string) string {
 }
 
 func (s *Store) cardExists(swarm, id string) bool {
-	db, err := s.openSwarmDB(swarm)
+	db, sid, err := s.scope(swarm)
 	if err != nil {
 		return false
 	}
 	defer db.Close()
 	var n int
-	_ = db.QueryRow(`SELECT 1 FROM cards WHERE id=?`, id).Scan(&n)
+	_ = db.QueryRow(`SELECT 1 FROM swarm_cards WHERE swarm_id=? AND id=?`, sid, id).Scan(&n)
 	return n == 1
 }
 
 func (s *Store) nextCardID(swarm string) string {
-	db, err := s.openSwarmDB(swarm)
+	db, sid, err := s.scope(swarm)
 	if err != nil {
 		return "t1"
 	}
 	defer db.Close()
 	var id string
-	_ = db.QueryRow(`SELECT 't'||(COALESCE(MAX(CAST(SUBSTR(id,2) AS INTEGER)),0)+1) FROM cards`).Scan(&id)
+	_ = db.QueryRow(`SELECT 't'||(COALESCE(MAX(CAST(SUBSTR(id,2) AS INTEGER)),0)+1) FROM swarm_cards WHERE swarm_id=?`, sid).Scan(&id)
 	if id == "" {
 		return "t1"
 	}
@@ -77,65 +77,65 @@ func (s *Store) nextCardID(swarm string) string {
 
 // CardAdd inserts a card and returns its id (mirrors _board_add).
 func (s *Store) CardAdd(swarm, title, desc, assignee, deps, col string) (string, error) {
-	db, err := s.openSwarmDB(swarm)
+	db, sid, err := s.scope(swarm)
 	if err != nil {
 		return "", err
 	}
 	defer db.Close()
 	id := s.nextCardID(swarm)
-	_, err = db.Exec(`INSERT INTO cards(id,title,descr,assignee,col,deps,created,updated)
-		VALUES(?,?,?,?,?,?,datetime('now','localtime'),datetime('now','localtime'))`,
-		id, title, desc, assignee, col, deps)
+	_, err = db.Exec(`INSERT INTO swarm_cards(swarm_id,id,title,descr,assignee,col,deps,created,updated)
+		VALUES(?,?,?,?,?,?,?,datetime('now','localtime'),datetime('now','localtime'))`,
+		sid, id, title, desc, assignee, col, deps)
 	return id, err
 }
 
 // CardAssign sets assignee and promotes backlog→assigned (mirrors _board_assign).
 func (s *Store) CardAssign(swarm, id, who string) error {
-	db, err := s.openSwarmDB(swarm)
+	db, sid, err := s.scope(swarm)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
-	_, err = db.Exec(`UPDATE cards SET assignee=?,
+	_, err = db.Exec(`UPDATE swarm_cards SET assignee=?,
 		col=CASE WHEN col='backlog' THEN 'assigned' ELSE col END,
-		updated=datetime('now','localtime') WHERE id=?`, who, id)
+		updated=datetime('now','localtime') WHERE swarm_id=? AND id=?`, who, sid, id)
 	return err
 }
 
 // CardMove changes a card's column. Returns the previous column.
 func (s *Store) CardMove(swarm, id, col string) (string, error) {
-	db, err := s.openSwarmDB(swarm)
+	db, sid, err := s.scope(swarm)
 	if err != nil {
 		return "", err
 	}
 	defer db.Close()
 	var old string
-	_ = db.QueryRow(`SELECT IFNULL(col,'') FROM cards WHERE id=?`, id).Scan(&old)
-	_, err = db.Exec(`UPDATE cards SET col=?, updated=datetime('now','localtime') WHERE id=?`, col, id)
+	_ = db.QueryRow(`SELECT IFNULL(col,'') FROM swarm_cards WHERE swarm_id=? AND id=?`, sid, id).Scan(&old)
+	_, err = db.Exec(`UPDATE swarm_cards SET col=?, updated=datetime('now','localtime') WHERE swarm_id=? AND id=?`, col, sid, id)
 	return old, err
 }
 
 // CardRemove deletes a card.
 func (s *Store) CardRemove(swarm, id string) error {
-	db, err := s.openSwarmDB(swarm)
+	db, sid, err := s.scope(swarm)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
-	_, err = db.Exec(`DELETE FROM cards WHERE id=?`, id)
+	_, err = db.Exec(`DELETE FROM swarm_cards WHERE swarm_id=? AND id=?`, sid, id)
 	return err
 }
 
 // CardGet returns a single card.
 func (s *Store) CardGet(swarm, id string) (Card, error) {
-	db, err := s.openSwarmDB(swarm)
+	db, sid, err := s.scope(swarm)
 	if err != nil {
 		return Card{}, err
 	}
 	defer db.Close()
 	var c Card
 	err = db.QueryRow(`SELECT id,title,IFNULL(descr,''),IFNULL(assignee,''),col,IFNULL(deps,''),created,updated
-		FROM cards WHERE id=?`, id).Scan(&c.ID, &c.Title, &c.Descr, &c.Assignee, &c.Col, &c.Deps, &c.Created, &c.Updated)
+		FROM swarm_cards WHERE swarm_id=? AND id=?`, sid, id).Scan(&c.ID, &c.Title, &c.Descr, &c.Assignee, &c.Col, &c.Deps, &c.Created, &c.Updated)
 	return c, err
 }
 
@@ -144,13 +144,13 @@ func (s *Store) CardExists(swarm, id string) bool { return s.cardExists(swarm, i
 
 // Cards lists cards with optional column/assignee filters, ordered by id.
 func (s *Store) Cards(swarm, col, who string) ([]Card, error) {
-	db, err := s.openSwarmDB(swarm)
+	db, sid, err := s.scope(swarm)
 	if err != nil {
 		return nil, err
 	}
 	defer db.Close()
-	where := "1=1"
-	var args []any
+	where := "swarm_id=?"
+	args := []any{sid}
 	if col != "" {
 		where += " AND col=?"
 		args = append(args, col)
@@ -160,7 +160,7 @@ func (s *Store) Cards(swarm, col, who string) ([]Card, error) {
 		args = append(args, who)
 	}
 	rows, err := db.Query(`SELECT id,title,IFNULL(descr,''),IFNULL(assignee,''),col,IFNULL(deps,''),created,updated
-		FROM cards WHERE `+where+` ORDER BY id`, args...)
+		FROM swarm_cards WHERE `+where+` ORDER BY id`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -178,14 +178,14 @@ func (s *Store) Cards(swarm, col, who string) ([]Card, error) {
 
 // ColCount returns the number of cards per column for the given swarm.
 func (s *Store) ColCount(swarm string) (map[string]int, int, error) {
-	db, err := s.openSwarmDB(swarm)
+	db, sid, err := s.scope(swarm)
 	if err != nil {
 		return nil, 0, err
 	}
 	defer db.Close()
 	counts := map[string]int{}
 	total := 0
-	rows, err := db.Query(`SELECT IFNULL(col,'backlog'), COUNT(*) FROM cards GROUP BY col`)
+	rows, err := db.Query(`SELECT IFNULL(col,'backlog'), COUNT(*) FROM swarm_cards WHERE swarm_id=? GROUP BY col`, sid)
 	if err != nil {
 		return nil, 0, err
 	}

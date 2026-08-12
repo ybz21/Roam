@@ -1,7 +1,6 @@
 package plugin
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -9,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"ttmux-cli-go/internal/metadb"
 	"ttmux-cli-go/internal/runtime"
 
 	_ "modernc.org/sqlite"
@@ -38,7 +38,7 @@ func (e Env) SockPath() string {
 
 // Store wraps the plugin tables in meta.db.
 type Store struct {
-	db  *sql.DB
+	db  *metadb.DB
 	env Env
 }
 
@@ -49,52 +49,19 @@ func Open(env Env) (*Store, error) {
 			return nil, err
 		}
 	}
-	db, err := sql.Open("sqlite", "file:"+env.metaDBPath()+"?_pragma=busy_timeout(5000)")
+	// schema 与迁移都在 internal/metadb 的版本链里（baseline 那一步建的
+	// plugins / plugin_sessions / plugin_findings / plugin_notifications），
+	// 开库即已就位——原先这里那两条「裸 ALTER 忽略错误」也一并收进去了。
+	db, err := metadb.Open(env.RT.HomeDir, metadb.Options{DataDir: env.DataDir(), HomeDir: env.RT.HomeDir})
 	if err != nil {
 		return nil, err
 	}
-	if err := db.Ping(); err != nil {
-		db.Close()
-		return nil, err
-	}
-	s := &Store{db: db, env: env}
-	if err := s.migrate(); err != nil {
-		db.Close()
-		return nil, err
-	}
-	return s, nil
+	return &Store{db: db, env: env}, nil
 }
 
-func (s *Store) Close() { s.db.Close() }
-
-func (s *Store) migrate() error {
-	stmts := []string{
-		`CREATE TABLE IF NOT EXISTS plugins (
-			id TEXT PRIMARY KEY, version TEXT, kind TEXT,
-			enabled INTEGER DEFAULT 0, manifest TEXT, installed TEXT)`,
-		`CREATE TABLE IF NOT EXISTS plugin_sessions (
-			session TEXT PRIMARY KEY, plugin TEXT, job TEXT, labels TEXT,
-			status TEXT DEFAULT 'running', created TEXT, updated TEXT)`,
-		`CREATE TABLE IF NOT EXISTS plugin_findings (
-			id INTEGER PRIMARY KEY AUTOINCREMENT, plugin TEXT, job TEXT,
-			severity TEXT, title TEXT, file TEXT, line INTEGER,
-			detail TEXT, status TEXT DEFAULT 'open', created TEXT, updated TEXT)`,
-		`CREATE TABLE IF NOT EXISTS plugin_notifications (
-			id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT, severity TEXT,
-			title TEXT, body TEXT, source TEXT, dedupe TEXT, created TEXT)`,
-	}
-	for _, q := range stmts {
-		if _, err := s.db.Exec(q); err != nil {
-			return err
-		}
-	}
-	// 增量列:外部插件安装路径(旧库已有该列时 ALTER 报错,忽略)
-	_, _ = s.db.Exec(`ALTER TABLE plugins ADD COLUMN install_path TEXT`)
-	// 增量列:内置插件软删标记(编译在二进制里删不掉文件,卸载=打 tombstone,
-	// 从列表隐藏且不被 SyncBuiltins 复活;可经「安装」入口恢复)。
-	_, _ = s.db.Exec(`ALTER TABLE plugins ADD COLUMN removed INTEGER DEFAULT 0`)
-	return nil
-}
+// Close 空转：库是 metadb 的进程级共享连接，plugind 长驻着它、sessmeta 也在用。
+// 谁都不该因为自己用完了就把它关掉。真要释放走 metadb.Discard。
+func (s *Store) Close() {}
 
 func (s *Store) now() string { return s.env.RT.Now().Format(time.RFC3339) }
 

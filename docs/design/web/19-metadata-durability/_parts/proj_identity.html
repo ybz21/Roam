@@ -1,0 +1,39 @@
+<h3>5.2 身份是不可变 id，目录只是可变属性</h3>
+<p class="lede">
+早期版本拿「目录名 slug + 路径 hash」当 key，<code>mv</code> 一下项目目录身份就变、
+置顶和显示名得靠合并搬家。现在 id 入册时生成、永不改，<code>dir</code> 只是一个字段：
+</p>
+<pre class="code"><b>项目 id</b>   2026-0728-1202-30xe      <s>// 不可变，一切 URL / 偏好 / 书签的 handle</s>
+<b>dir</b>       /home/ai/codes/ttmux     <s>// 可变属性：mv 目录、worktree 子目录归位仓库根，都只改这里</s>
+<b>aliases</b>   老 key → 现行 id          <s>// v1 的 hash key、被合并掉的 id 都记在这，老链接不失效</s>
+
+<b>SetDir(key, newDir)</b> 两种走向：
+  newDir 没被占用        → 改 dir，<u>id 不变</u>，偏好一个不丢
+  newDir 已有别的条目     → <i>mergeInto</i> 合并（置顶/显示名/最早 firstSeen 取「用户意志」的并集），
+                          旧 id 落进 aliases，指向旧 id 的别名一起改指</pre>
+<p class="lede">
+自愈也挂在这条路上：聚合时若发现条目的 <code>dir</code> 指向的是仓库<b>子目录</b>
+（历史脏数据或瞬时误判），用 <code>ResolveRepo</code> 归位到仓库根 —— id 不变，
+所以置顶、显示名、默认 agent、老链接全都不动。
+</p>
+
+<h3>5.3 存了什么</h3>
+<div class="tablewrap">
+<table>
+<thead><tr><th>字段</th><th>含义</th><th>丢了会怎样</th></tr></thead>
+<tbody>
+<tr><td><code>id</code></td><td>不可变身份</td><td class="bad">所有 <code>#/projects/&lt;id&gt;</code> 链接失效</td></tr>
+<tr><td><code>dir</code></td><td>canonical 目录（git 项目 = 主仓库根）</td><td class="bad">条目等于没有</td></tr>
+<tr><td><code>origin</code></td><td><code>''</code> discovered · <code>'user'</code> 显式创建</td><td>一等对象降级成可自动退场</td></tr>
+<tr><td><code>pinned</code> · <code>displayName</code></td><td>置顶、显示名</td><td>用户意志丢失（排序乱、名字回退成目录名）</td></tr>
+<tr><td><code>defaultAgent</code> · <code>defaultBase</code></td><td>新任务默认用哪个 agent、从哪个分支切</td><td>每次开任务都要重选</td></tr>
+<tr><td><code>firstSeen</code> · <code>lastSeen</code></td><td>入册 / 最后一次被看见（分钟粒度刷新，避免每轮写盘）</td><td>排序与「最近活动」失准</td></tr>
+<tr><td class="good"><code>lastSessionAt</code></td><td class="good"><b>最后一次有会话的时刻</b> —— 退场判据看它</td><td class="good">退场规则退回「此刻有没有会话」，重启即全灭</td></tr>
+</tbody>
+</table>
+</div>
+<p class="lede">
+另有一份<b>不是真相源</b>的旁证：<code>activity.log</code>（JSONL，只增不改，超 5MB 轮转一代）。
+它记「任务 → 动作（merged / discarded / cleaned）→ 统计」的摘要，用来在 worktree 删除后
+还能追溯「这个任务去哪了」。丢了只损失摘要，不影响任何判定。
+</p>

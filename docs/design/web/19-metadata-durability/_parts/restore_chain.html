@@ -1,0 +1,68 @@
+<h2>7. 重启恢复链路</h2>
+
+<div class="figure">
+<svg viewBox="0 0 1040 340" width="1040" role="img" aria-label="重启前后的数据链路对比">
+  <text x="20" y="24" class="svg-k">现在</text>
+  <line x1="20" y1="34" x2="1020" y2="34" class="svg-line"/>
+
+  <rect x="20" y="48" width="150" height="54" rx="9" class="svg-box"/>
+  <text x="95" y="70" class="svg-t" text-anchor="middle">重启前</text>
+  <text x="95" y="88" class="svg-m" text-anchor="middle">15 个会话在跑</text>
+
+  <path d="M170 75 L226 75" class="svg-line" stroke-width="1.4" marker-end="url(#r19)"/>
+  <rect x="234" y="48" width="150" height="54" rx="9" class="svg-box" stroke="var(--danger-border)" fill="var(--danger-soft)"/>
+  <text x="309" y="70" class="svg-t" text-anchor="middle" fill="var(--danger)">reboot</text>
+  <text x="309" y="88" class="svg-m" text-anchor="middle">tmux server 消失</text>
+
+  <path d="M384 75 L440 75" class="svg-line" stroke-width="1.4" marker-end="url(#r19)"/>
+  <rect x="448" y="48" width="176" height="54" rx="9" class="svg-box" stroke="var(--danger-border)"/>
+  <text x="536" y="70" class="svg-t" text-anchor="middle">Reconcile 整表 DELETE</text>
+  <text x="536" y="88" class="svg-m" text-anchor="middle" fill="var(--danger)">sessions = 0 行</text>
+
+  <path d="M624 75 L680 75" class="svg-line" stroke-width="1.4" marker-end="url(#r19)"/>
+  <rect x="688" y="48" width="176" height="54" rx="9" class="svg-box" stroke="var(--danger-border)"/>
+  <text x="776" y="70" class="svg-t" text-anchor="middle">项目按 0 会话退场</text>
+  <text x="776" y="88" class="svg-m" text-anchor="middle" fill="var(--danger)">发现型项目全灭</text>
+
+  <text x="884" y="72" class="svg-t" fill="var(--danger)">界面全空</text>
+  <text x="884" y="90" class="svg-m">且查不到线索</text>
+
+  <text x="20" y="152" class="svg-k">改后</text>
+  <line x1="20" y1="162" x2="1020" y2="162" class="svg-line"/>
+
+  <rect x="20" y="176" width="150" height="54" rx="9" class="svg-box"/>
+  <text x="95" y="198" class="svg-t" text-anchor="middle">重启前</text>
+  <text x="95" y="216" class="svg-m" text-anchor="middle">每个会话都有行 + 日志</text>
+
+  <path d="M170 203 L226 203" class="svg-line" stroke-width="1.4" marker-end="url(#r19)"/>
+  <rect x="234" y="176" width="150" height="54" rx="9" class="svg-box" stroke="var(--warn-border)" fill="var(--warn-soft)"/>
+  <text x="309" y="198" class="svg-t" text-anchor="middle" fill="var(--warn)">reboot</text>
+  <text x="309" y="216" class="svg-m" text-anchor="middle">epoch 换代</text>
+
+  <path d="M384 203 L440 203" class="svg-line" stroke-width="1.4" marker-end="url(#r19)"/>
+  <rect x="448" y="176" width="176" height="54" rx="9" class="svg-box" stroke="var(--ok-border)"/>
+  <text x="536" y="198" class="svg-t" text-anchor="middle">Reconcile 软删</text>
+  <text x="536" y="216" class="svg-m" text-anchor="middle" fill="var(--ok)">全部置 host-restart</text>
+
+  <path d="M624 203 L680 203" class="svg-line" stroke-width="1.4" marker-end="url(#r19)"/>
+  <rect x="688" y="176" width="176" height="54" rx="9" class="svg-box" stroke="var(--ok-border)"/>
+  <text x="776" y="198" class="svg-t" text-anchor="middle">项目判「有没有过」</text>
+  <text x="776" y="216" class="svg-m" text-anchor="middle" fill="var(--ok)">一个不少，空的转归档</text>
+
+  <text x="884" y="192" class="svg-t" fill="var(--ok)">项目全在</text>
+  <text x="884" y="210" class="svg-m">会话进「已结束」</text>
+  <text x="884" y="228" class="svg-m">每条可一键重开</text>
+
+  <rect x="20" y="264" width="1000" height="60" rx="10" class="svg-box" fill="var(--list-hover)"/>
+  <text x="36" y="286" class="svg-t">恢复的三级</text>
+  <text x="36" y="308" class="svg-s">① <tspan fill="var(--text-bright)">台账在</tspan>：项目 / 会话 / 归属 / 父子 都还在，界面不空 · ② <tspan fill="var(--text-bright)">历史在</tspan>：谁在哪个目录干过什么、日志在哪，可查可搜 · ③ <tspan fill="var(--text-bright)">可重开</tspan>：按原目录/agent/label 重建一个新壳</text>
+
+  <defs><marker id="r19" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--border)"/></marker></defs>
+</svg>
+</div>
+
+<div class="note warn">
+<b>不做什么。</b>不做会话内容/进程的恢复 —— pane 里的 agent 进程死了就是死了，
+恢复的是<b>会话这个壳</b>（同目录、同 agent、同 label、同 worktree 绑定），不是现场。
+也不默认自动拉起：重启后自动跑起十几个 agent 是危险动作。
+</div>

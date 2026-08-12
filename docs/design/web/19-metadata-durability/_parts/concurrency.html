@@ -1,0 +1,107 @@
+<h2>9. 并发、写入口与迁移</h2>
+
+<h3>9.1 一套库，不分层——但要分「谁写哪张表」</h3>
+<p class="lede">
+<b>ttmux 层和 Roam 层不再各存各的，物理上就是一个 <code>meta.db</code>、一套 schema、一套迁移。</b>
+「两层」在改完之后只是<b>代码归属</b>，不再是<b>存储边界</b> —— 问题篇里那张「一个目录两套机制」的图，
+到这里就作废了。
+</p>
+<p class="lede">
+但有一件事不能跟着一起取消：<b>每张表只有一个写者</b>。两个进程写同一个 SQLite，
+WAL 能让读写并发，写本身仍然是串行的；真正省掉锁竞争的不是 WAL，是「不会有两个进程同时想改同一批行」。
+这不是把层分回来，是按<b>数据的归属</b>分：
+</p>
+
+<div class="tablewrap">
+<table>
+<thead><tr><th>表</th><th>写者</th><th>另一边怎么办</th><th>为什么</th></tr></thead>
+<tbody>
+<tr><td><code>sessions</code> · <code>tmux_epochs</code></td><td><b>ttmux CLI</b></td><td>后端只读；要写就调 <code>ttmux</code> 子命令</td><td>会话 id 的唯一出处在 CLI，编排逻辑也在 CLI（「薄封装」原则）</td></tr>
+<tr><td><code>swarms</code> · <code>swarm_members</code></td><td><b>ttmux CLI</b></td><td>同上</td><td>蜂群编排整个在 CLI</td></tr>
+<tr><td><code>plugin_sessions</code> · <code>plugin_findings</code></td><td><b>ttmux CLI</b></td><td>同上</td><td>插件宿主在 CLI</td></tr>
+<tr><td><code>projects</code> · <code>project_aliases</code></td><td><b>Roam 后端</b></td><td>CLI 不碰</td><td>项目是 Web 侧的概念，CLI 里没有</td></tr>
+<tr><td><code>races</code></td><td><b>Roam 后端</b></td><td>CLI 不碰</td><td>竞赛只有 Web 有入口</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note">
+<b>唯一的跨写者动作是「建会话时顺手 touch 项目」。</b>它现在也不是一个事务 ——
+CLI 建会话、后端下一轮轮询时才把项目记上。并库之后可以合成一个事务，
+但那要求 CLI 也能写 <code>projects</code>，就破了上面的单写者。
+<b>建议维持现状</b>：项目台账本来就是「读时收敛的读模型」，晚一轮记上没有任何影响，
+不值得为它引入双写。
+</div>
+
+<h3>9.2 后端要不要直连这个库</h3>
+<p class="lede">
+一个容易被忽略的实情：<b>后端现在连 sqlite 依赖都没有</b>（<code>backend/go.mod</code> 里没有
+<code>modernc.org/sqlite</code>），它对 <code>meta.db</code> 完全不知情，所有访问都是
+<code>exec</code> 一次 <code>ttmux ... --json</code>。所以「一套库」落地时有个明确的岔路：
+</p>
+<div class="tablewrap">
+<table>
+<thead><tr><th>方案</th><th>代价</th><th>收益</th></tr></thead>
+<tbody>
+<tr><td><b>全走 CLI</b>（不加依赖）</td><td>项目页要会话历史 → 每个项目 <code>exec</code> 一次，退化成 N 次进程启动</td><td>架构最一致，后端零 DB 知识</td></tr>
+<tr><td class="good"><b>只读直连 + 写走 CLI</b></td><td>后端多一个 sqlite 依赖，且必须守住上表的写者约定</td><td class="good">问题篇 §5 那条跨层长链换成一次 <code>JOIN</code></td></tr>
+</tbody>
+</table>
+</div>
+<div class="note good">
+<b>选后者。</b>并库的全部意义就在于「项目卡上能直接显示会话历史」——
+如果读还是一次一次 <code>exec</code>，那张表并不并在一起没有区别。
+写仍然走 CLI，所以「薄封装」原则一点没破：后端不重实现任何编排逻辑，它只是<b>换了一种更便宜的读法</b>。
+</div>
+
+<h3>9.3 一个该留在外面的例外：蜂群 posts</h3>
+<p class="lede">
+「一套库」有一处值得破例。每个蜂群现在有自己的 <code>swarms/&lt;群&gt;/swarm.db</code>，
+里面是 <code>members</code> / <code>cards</code> / <code>posts</code>：
+</p>
+<ul class="pts">
+  <li><code>members</code> / <code>cards</code> <b>并进主库</b> —— 它们要和 <code>sessions</code> join
+      （成员会话死了还得找回它的日志），正是并库要解决的问题；</li>
+  <li><code>posts</code> <b>留在每群自己的库</b> —— 它是广场聊天流，是全系统写得最频繁的表，
+      并进主库只会让主库的写锁竞争明显变差；而且「删掉一个蜂群」现在是删一个目录，
+      并进去之后要变成一串带外键的 DELETE。</li>
+</ul>
+<div class="note">
+判据不是「它属于哪一层」，而是<b>写入频率和生命周期</b>：
+需要跨实体 join 的进主库，只在自己生命周期内高频追加的留在旁边。
+这和 §2 把日志、transcript 留在文件系统是同一条原则。
+</div>
+
+<h3>9.4 连接层</h3>
+<ul class="pts">
+  <li><code>PRAGMA journal_mode=WAL</code>、<code>busy_timeout=5000</code>、<code>foreign_keys=ON</code>；</li>
+  <li>进程内单例 <code>*sql.DB</code>；单写者内部的多表写走一个事务（建会话 = 写 <code>sessions</code> + 记 <code>tmux_epochs</code>）；</li>
+  <li>统一放进新包 <code>internal/metadb</code>，<code>sessmeta</code> / <code>swarm</code> / <code>plugin</code> 都改用它；
+      后端用同一个包的只读入口。</li>
+</ul>
+<div class="note warn">
+<b>CLI 必须能独立工作。</b>库的位置、建库、迁移全部由 CLI 负责 —— 后端没起、甚至没装，
+<code>ttmux</code> 也要照常能用。所以「一套库」的落点是 <code>&lt;dataDir&gt;/meta.db</code>（CLI 的地盘），
+后端是<b>接进来的那一方</b>，不是反过来。
+</div>
+
+<h3>9.5 迁移</h3>
+<p class="lede">一次性、幂等（标记 <code>migrations/metadb-v3.done</code>）。<b>只增不减</b>：任何一步认不出来的数据，宁可留成一行 dead 记录，也不丢。</p>
+<div class="tablewrap">
+<table>
+<thead><tr><th>来源</th><th>去向</th><th>认不出来的行</th></tr></thead>
+<tbody>
+<tr><td><code>projects.json</code></td><td><code>projects</code> + <code>project_aliases</code></td><td>原文件改名 <code>.bak-&lt;时间&gt;</code></td></tr>
+<tr><td><code>session-homes.json</code></td><td><code>sessions.home_dir</code></td><td>按 <code>$N</code> 认不到会话的，用 name 快照回填成 dead 行</td></tr>
+<tr><td><code>meta/&lt;id&gt;/*.txt</code></td><td><code>sessions</code> 的 kind / home_dir / created_at</td><td>目录保留（CLI 老路径还在读）</td></tr>
+<tr><td><code>races.json</code></td><td><code>races</code></td><td>—</td></tr>
+<tr><td><code>swarms/&lt;群&gt;/swarm.db</code> 的 <code>members</code> / <code>cards</code></td><td><code>swarm_members</code> / <code>swarm_cards</code></td><td><code>posts</code> 原地不动（§9.3）</td></tr>
+<tr><td>老 <code>sessions</code> 表</td><td>v1 主键就是会话名，直搬；v2 按 name 列重建主键，parent 的 <code>$N</code> 用<b>同表内</b>映射翻译</td><td>解析不出的落成 dead 行，先整库备份</td></tr>
+</tbody>
+</table>
+</div>
+<div class="note good">
+v2 迁移<b>不再依赖 tmux</b>是关键改动。老迁移要先问 tmux 要「名字 → <code>$N</code>」才肯搬，
+tmux 一死就整批丢弃 —— 这正是重启后历史被清空的第二重原因。
+现在用同表内的 <code>id → name</code> 映射翻译 parent，tmux 死透了也搬得动。
+</div>

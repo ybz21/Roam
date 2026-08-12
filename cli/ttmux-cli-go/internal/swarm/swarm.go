@@ -14,6 +14,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
+	"ttmux-cli-go/internal/metadb"
 	"ttmux-cli-go/internal/runtime"
 )
 
@@ -133,7 +134,7 @@ func SessionNames(opt Options) map[string]bool {
 
 	metaPath := filepath.Join(opt.HomeDir, "meta.db")
 	if _, err := os.Stat(metaPath); err == nil {
-		if db, err := openSQLite(metaPath); err == nil {
+		if db, err := openMeta(opt.HomeDir, opt.DataDir); err == nil {
 			if rows, err := db.Query(`SELECT name, IFNULL(supervisor,'') FROM swarms`); err == nil {
 				for rows.Next() {
 					var name, sup string
@@ -183,7 +184,7 @@ func Names(opt Options) map[string]bool {
 	names := map[string]bool{}
 	metaPath := filepath.Join(opt.HomeDir, "meta.db")
 	if _, err := os.Stat(metaPath); err == nil {
-		if db, err := openSQLite(metaPath); err == nil {
+		if db, err := openMeta(opt.HomeDir, opt.DataDir); err == nil {
 			if rows, err := db.Query(`SELECT name FROM swarms`); err == nil {
 				for rows.Next() {
 					var n string
@@ -216,28 +217,16 @@ func StatusJSON(name string, opt Options) ([]byte, error) {
 
 func Status(name string, opt Options) (*SwarmStatus, error) {
 	opt = opt.withDefaults()
-	metaDB, err := openSQLite(filepath.Join(opt.HomeDir, "meta.db"))
+	metaDB, err := openMeta(opt.HomeDir, opt.DataDir)
 	if err != nil {
 		return nil, err
 	}
 	defer metaDB.Close()
-	// 老库没有 dir 列：读之前补一次(幂等)，否则 findSwarm 的 SELECT 会整条失败
-	if err := migrateMetaDB(metaDB); err != nil {
-		return nil, err
-	}
-
 	meta, err := findSwarm(metaDB, name)
 	if err != nil {
 		return nil, err
 	}
-	db, err := openSQLite(filepath.Join(opt.HomeDir, "swarms", meta.ID, "swarm.db"))
-	if err != nil {
-		return nil, err
-	}
-	defer db.Close()
-	if err := migrateSwarmDB(db); err != nil {
-		return nil, err
-	}
+	db := metaDB // members 已并进主库，按 swarm_id 分群
 
 	status := &SwarmStatus{
 		Name:           meta.Name,
@@ -255,7 +244,7 @@ func Status(name string, opt Options) (*SwarmStatus, error) {
 	rows, err := db.Query(`SELECT name, IFNULL(type,'agent'), IFNULL(task,''), IFNULL(deps,''), IFNULL(done,0), IFNULL(kind,'claude'),
 		CASE IFNULL(role,'member') WHEN 'master' THEN 'leader' WHEN 'worker' THEN 'member' ELSE IFNULL(role,'member') END,
 		IFNULL(subrole,''), IFNULL(duty,''), IFNULL(session,'')
-		FROM members WHERE IFNULL(pending,0)=0 ORDER BY name`)
+		FROM swarm_members WHERE swarm_id=? AND IFNULL(pending,0)=0 ORDER BY name`, meta.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -282,7 +271,7 @@ func Status(name string, opt Options) (*SwarmStatus, error) {
 		return nil, err
 	}
 
-	prows, err := db.Query(`SELECT name, IFNULL(deps,'') FROM members WHERE IFNULL(pending,0)=1 ORDER BY name`)
+	prows, err := db.Query(`SELECT name, IFNULL(deps,'') FROM swarm_members WHERE swarm_id=? AND IFNULL(pending,0)=1 ORDER BY name`, meta.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -298,7 +287,7 @@ func Status(name string, opt Options) (*SwarmStatus, error) {
 		return nil, err
 	}
 
-	drows, err := db.Query(`SELECT name FROM members WHERE IFNULL(done,0)=1 ORDER BY name`)
+	drows, err := db.Query(`SELECT name FROM swarm_members WHERE swarm_id=? AND IFNULL(done,0)=1 ORDER BY name`, meta.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -313,21 +302,81 @@ func Status(name string, opt Options) (*SwarmStatus, error) {
 	return status, drows.Err()
 }
 
-func openSQLite(path string) (*sql.DB, error) {
-	// busy_timeout lets concurrent readers (status) and writers (agents posting
-	// to plaza/board) wait briefly for the lock instead of failing immediately.
-	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=busy_timeout(5000)")
-	if err != nil {
-		return nil, err
-	}
-	if err := db.Ping(); err != nil {
-		db.Close()
-		return nil, err
-	}
-	return db, nil
+// sharedDB 是 metadb 共享连接的一层皮：Close 空转。
+//
+// 本包有几十处 `db, err := open...(); defer db.Close()` 的写法。连接层换成进程级
+// 共享池之后，那些 Close 一旦真关，就会把长驻 plugind 和其它包正在用的同一个库关掉。
+// 与其改动几十个调用点，不如让 Close 变成空操作——库的生命周期本就该由 metadb 管，
+// 不该由某一次读写决定。
+type sharedDB struct{ *metadb.DB }
+
+func (sharedDB) Close() error { return nil }
+
+// openMeta 打开主库（meta.db）。schema 与迁移都在 internal/metadb 的版本链里。
+func openMeta(homeDir, dataDir string) (sharedDB, error) {
+	d, err := metadb.Open(homeDir, metadb.Options{DataDir: dataDir, HomeDir: homeDir})
+	return sharedDB{d}, err
 }
 
-func findSwarm(db *sql.DB, name string) (swarmMeta, error) {
+// openSwarmFile 打开某个蜂群自己的库。它只装 posts（广场聊天流）——
+// members/cards 已经并进主库，好和 sessions join。
+func openSwarmFile(path string) (sharedDB, error) {
+	d, err := metadb.OpenFile(path, swarmSteps, metadb.Options{})
+	return sharedDB{d}, err
+}
+
+// swarmSteps 是每群那个库的版本链。posts 留在这里不并主库：它是全系统写得最频繁的
+// 表，并进去只会让主库写锁竞争变差；而且「删掉一个蜂群」现在是删一个目录，
+// 并进去就要变成一串带外键的 DELETE。
+var swarmSteps = []metadb.Step{
+	{Version: 1, Name: "swarm-db", SQL: `
+		CREATE TABLE IF NOT EXISTS members(
+			name TEXT PRIMARY KEY, type TEXT, task TEXT, workdir TEXT,
+			status TEXT, deps TEXT, done INT DEFAULT 0, pending INT DEFAULT 0,
+			model TEXT, perm TEXT,
+			kind TEXT DEFAULT 'claude', role TEXT DEFAULT 'member',
+			subrole TEXT DEFAULT '', duty TEXT DEFAULT '',
+			session TEXT DEFAULT '');
+		CREATE TABLE IF NOT EXISTS posts(
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			ts TEXT, author TEXT, kind TEXT, re INTEGER, text TEXT);
+		CREATE TABLE IF NOT EXISTS cards(
+			id TEXT PRIMARY KEY, title TEXT, descr TEXT, assignee TEXT,
+			col TEXT DEFAULT 'backlog', deps TEXT, created TEXT, updated TEXT);`,
+		Fn: adoptSwarmMemberColumns},
+}
+
+// adoptSwarmMemberColumns 给老的 members 表补列，并把 legacy 的 master/worker 角色归一。
+// 原先这段是每次开库都跑一遍的 migrateSwarmDB；现在只在版本链上跑一次。
+func adoptSwarmMemberColumns(tx *sql.Tx, _ metadb.Options) error {
+	cols, err := metadb.Columns(tx, "members")
+	if err != nil {
+		return err
+	}
+	add := map[string]string{
+		"kind": "TEXT DEFAULT 'claude'", "role": "TEXT DEFAULT 'member'",
+		"subrole": "TEXT DEFAULT ''", "duty": "TEXT DEFAULT ''",
+		// session：成员的 tmux 会话名(= 会话 id)。会话名不再能从 `<群>-<成员>` 推导
+		// （那只是展示名），而会话死后展示名也随之消失——必须落一列，否则「会话没了
+		// 但有日志 = 已完成」这类判定会找不到日志文件（日志按 id 命名）。
+		"session": "TEXT DEFAULT ''",
+	}
+	for _, n := range []string{"kind", "role", "subrole", "duty", "session"} {
+		if cols[n] {
+			continue
+		}
+		if _, err := tx.Exec(`ALTER TABLE members ADD COLUMN ` + n + ` ` + add[n]); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(`UPDATE members SET role='leader' WHERE role='master'`); err != nil {
+		return err
+	}
+	_, err = tx.Exec(`UPDATE members SET role='member' WHERE role='worker' OR IFNULL(role,'')=''`)
+	return err
+}
+
+func findSwarm(db sharedDB, name string) (swarmMeta, error) {
 	var m swarmMeta
 	err := db.QueryRow(`SELECT id, name, IFNULL(goal,''), IFNULL(status,''), IFNULL(supervisor,''), IFNULL(created,''), IFNULL(dir,'')
 		FROM swarms WHERE name=? OR id=? LIMIT 1`, name, name).
@@ -336,95 +385,6 @@ func findSwarm(db *sql.DB, name string) (swarmMeta, error) {
 		return m, fmt.Errorf("swarm not found: %s", name)
 	}
 	return m, err
-}
-
-// migrateMetaDB brings an existing meta.db up to the current swarms schema.
-// Only additive column migrations live here, so it is idempotent and safe to
-// run on every open: a column that already exists is simply skipped, and a
-// failing ALTER (read-only db, racing writer) degrades to the old behaviour
-// instead of breaking the read path.
-func migrateMetaDB(db *sql.DB) error {
-	cols, err := tableColumns(db, "swarms")
-	if err != nil {
-		return err
-	}
-	if !cols["dir"] {
-		if _, err := db.Exec(`ALTER TABLE swarms ADD COLUMN dir TEXT`); err != nil &&
-			!strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
-			return err
-		}
-	}
-	return nil
-}
-
-func migrateSwarmDB(db *sql.DB) error {
-	cols, err := tableColumns(db, "members")
-	if err != nil {
-		return err
-	}
-	if !cols["kind"] {
-		if _, err := db.Exec(`ALTER TABLE members ADD COLUMN kind TEXT DEFAULT 'claude'`); err != nil {
-			return err
-		}
-	}
-	if !cols["role"] {
-		if _, err := db.Exec(`ALTER TABLE members ADD COLUMN role TEXT DEFAULT 'member'`); err != nil {
-			return err
-		}
-	}
-	if !cols["subrole"] {
-		if _, err := db.Exec(`ALTER TABLE members ADD COLUMN subrole TEXT DEFAULT ''`); err != nil {
-			return err
-		}
-	}
-	if !cols["duty"] {
-		if _, err := db.Exec(`ALTER TABLE members ADD COLUMN duty TEXT DEFAULT ''`); err != nil {
-			return err
-		}
-	}
-	// session：成员的 tmux 会话名(= 会话 id)。会话名不再能从 `<群>-<成员>` 推导
-	// （那只是展示名），而会话死后展示名也随之消失——必须落一列，否则「会话没了
-	// 但有日志 = 已完成」这类判定会找不到日志文件（日志按 id 命名）。
-	if !cols["session"] {
-		if _, err := db.Exec(`ALTER TABLE members ADD COLUMN session TEXT DEFAULT ''`); err != nil {
-			return err
-		}
-	}
-	// Normalize legacy master/worker roles, but only when such rows exist — this
-	// keeps the common status read lock-free instead of writing on every call.
-	var legacy int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM members WHERE role IN ('master','worker') OR IFNULL(role,'')=''`).Scan(&legacy); err != nil {
-		return err
-	}
-	if legacy == 0 {
-		return nil
-	}
-	if _, err := db.Exec(`UPDATE members SET role='leader' WHERE role='master'`); err != nil {
-		return err
-	}
-	_, err = db.Exec(`UPDATE members SET role='member' WHERE role='worker' OR IFNULL(role,'')=''`)
-	return err
-}
-
-func tableColumns(db *sql.DB, table string) (map[string]bool, error) {
-	rows, err := db.Query(`PRAGMA table_info(` + table + `)`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	cols := map[string]bool{}
-	for rows.Next() {
-		var cid int
-		var name, typ string
-		var notNull int
-		var defaultValue sql.NullString
-		var pk int
-		if err := rows.Scan(&cid, &name, &typ, &notNull, &defaultValue, &pk); err != nil {
-			return nil, err
-		}
-		cols[name] = true
-	}
-	return cols, rows.Err()
 }
 
 func readLeaderLastPost(home, id string) int64 {

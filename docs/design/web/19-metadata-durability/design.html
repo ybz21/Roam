@@ -1,0 +1,805 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Roam · 元数据持久化：目标架构与改进方向</title>
+<style>
+/* ── 令牌：直接取 frontend/src/theme.tsx 的真值，稿子和成品同源 ───────────── */
+:root {
+  --bg-base:#0d1117; --bg-container:#161b22; --bg-elevated:#1b222b; --bg-term:#06090d;
+  --border:#30363d; --border-subtle:#21262d;
+  --text-bright:#e6edf3; --text-dim:#8b949e; --text-dimmer:#6e7681;
+  --accent:#58a6ff; --accent-solid:#1f6feb; --accent-soft:rgba(31,111,235,.14); --accent-border:rgba(88,166,255,.45);
+  --ok:#3fb950; --ok-solid:#238636; --ok-soft:rgba(63,185,80,.14); --ok-border:rgba(63,185,80,.42);
+  --danger:#f85149; --danger-soft:rgba(248,81,73,.12); --danger-border:rgba(248,81,73,.40);
+  --warn:#d29922; --warn-soft:rgba(210,153,34,.12); --warn-border:rgba(210,153,34,.40);
+  --purple:#a371f7; --purple-soft:rgba(163,113,247,.12); --purple-border:rgba(163,113,247,.38);
+  --list-hover:rgba(255,255,255,.025);
+  --fs-micro:11px; --fs-meta:12px; --fs-sm:13px; --fs-body:14px; --fs-lg:16px; --fs-title:22px;
+  --r-xs:6px; --r-sm:10px; --r-card:14px; --r-pill:999px;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+html[data-theme="light"] {
+  --bg-base:#f6f8fa; --bg-container:#ffffff; --bg-elevated:#ffffff; --bg-term:#ffffff;
+  --border:#d0d7de; --border-subtle:#e6e9ec;
+  --text-bright:#1f2328; --text-dim:#57606a; --text-dimmer:#8c959f;
+  --accent:#0969da; --accent-solid:#1f6feb; --accent-soft:rgba(31,111,235,.10); --accent-border:rgba(31,111,235,.40);
+  --ok:#1a7f37; --ok-solid:#1f883d; --ok-soft:rgba(31,136,61,.10); --ok-border:rgba(31,136,61,.40);
+  --danger:#cf222e; --danger-soft:rgba(207,34,46,.09); --danger-border:rgba(207,34,46,.35);
+  --warn:#9a6700; --warn-soft:rgba(154,103,0,.10); --warn-border:rgba(154,103,0,.35);
+  --purple:#8250df; --purple-soft:rgba(130,80,223,.10); --purple-border:rgba(130,80,223,.35);
+  --list-hover:rgba(27,31,36,.04);
+}
+* { box-sizing:border-box; }
+html { background:#07090d; }
+html[data-theme="light"] { background:#eef1f5; }
+body {
+  margin:0; color:var(--text-bright);
+  font:var(--fs-body)/1.6 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+svg { display:block; }
+button { font:inherit; cursor:pointer; }
+
+/* ── 文档骨架（沿用 17/18 号稿体例）──────────────────────────────────────── */
+.top {
+  position:sticky; top:0; z-index:20;
+  display:flex; align-items:center; gap:var(--sp-3);
+  padding:10px clamp(16px,3vw,40px);
+  background:color-mix(in srgb, var(--bg-base) 84%, transparent);
+  border-bottom:1px solid var(--border-subtle); backdrop-filter:blur(18px);
+}
+.top .kicker { font-size:var(--fs-micro); letter-spacing:.14em; text-transform:uppercase; color:var(--text-dimmer); }
+.top h1 { margin:0; font-size:var(--fs-sm); font-weight:600; }
+.top .sp { flex:1; }
+.tbtn {
+  border:1px solid var(--border); background:var(--bg-container); color:var(--text-dim);
+  border-radius:var(--r-pill); padding:5px 14px; font-size:var(--fs-meta);
+}
+.tbtn:hover { color:var(--text-bright); border-color:var(--accent-border); }
+
+.wrap { max-width:1180px; margin:0 auto; padding:34px clamp(16px,3vw,40px) 120px; }
+h2 { margin:56px 0 6px; padding-top:26px; font-size:var(--fs-lg); font-weight:600; border-top:1px solid var(--border-subtle); }
+h2:first-of-type { margin-top:8px; border-top:0; padding-top:0; }
+h3 { margin:28px 0 8px; font-size:var(--fs-sm); font-weight:600; color:var(--text-bright); }
+.lede { max-width:78ch; margin:0 0 18px; color:var(--text-dim); font-size:var(--fs-sm); line-height:1.9; }
+.lede b { color:var(--text-bright); font-weight:600; }
+.lede code, li code, td code, p code {
+  font:var(--fs-meta)/1.4 var(--mono); background:var(--list-hover);
+  border:1px solid var(--border-subtle); border-radius:4px; padding:1px 5px; color:var(--text-bright);
+}
+ul.pts, ol.pts { max-width:80ch; margin:0 0 18px; padding-left:20px; color:var(--text-dim); font-size:var(--fs-sm); line-height:1.9; }
+ul.pts b, ol.pts b { color:var(--text-bright); }
+ul.pts li, ol.pts li { margin-bottom:4px; }
+.tablewrap { overflow-x:auto; margin:6px 0 20px; }
+table { width:100%; border-collapse:collapse; font-size:var(--fs-meta); min-width:560px; }
+th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border-subtle); vertical-align:top; }
+th { color:var(--text-dimmer); font-weight:600; font-size:var(--fs-micro); text-transform:uppercase; letter-spacing:.08em; }
+td { color:var(--text-dim); } td b { color:var(--text-bright); font-weight:600; }
+td.bad { color:var(--danger); } td.bad b { color:var(--danger); }
+td.good { color:var(--ok); } td.good b { color:var(--ok); }
+.cap { display:flex; align-items:center; gap:var(--sp-2); margin:24px 0 8px; font-size:var(--fs-meta); color:var(--text-dimmer); flex-wrap:wrap; }
+.cap b { color:var(--text-bright); font-size:var(--fs-sm); font-weight:600; }
+.pill { font-size:var(--fs-micro); padding:1px 8px; border-radius:var(--r-pill); border:1px solid var(--border); color:var(--text-dimmer); white-space:nowrap; }
+.pill.bad { color:var(--danger); border-color:var(--danger-border); background:var(--danger-soft); }
+.pill.good { color:var(--ok); border-color:var(--ok-border); background:var(--ok-soft); }
+.pill.warn { color:var(--warn); border-color:var(--warn-border); background:var(--warn-soft); }
+.pill.acc { color:var(--accent); border-color:var(--accent-border); background:var(--accent-soft); }
+.pill.pur { color:var(--purple); border-color:var(--purple-border); background:var(--purple-soft); }
+.note { border-left:2px solid var(--accent); background:var(--accent-soft); padding:11px 15px; border-radius:0 var(--r-xs) var(--r-xs) 0; color:var(--text-dim); font-size:var(--fs-meta); line-height:1.85; max-width:82ch; margin:16px 0 22px; }
+.note b { color:var(--text-bright); }
+.note.warn { border-left-color:var(--warn); background:var(--warn-soft); }
+.note.good { border-left-color:var(--ok); background:var(--ok-soft); }
+.note.bad { border-left-color:var(--danger); background:var(--danger-soft); }
+pre.code {
+  margin:8px 0 20px; padding:14px 16px; overflow-x:auto;
+  border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-base);
+  font:var(--fs-meta)/1.7 var(--mono); color:var(--text-dim);
+}
+pre.code b { color:var(--text-bright); } pre.code i { color:var(--accent); font-style:normal; }
+pre.code s { color:var(--text-dimmer); text-decoration:none; }
+pre.code em { color:var(--danger); font-style:normal; }
+pre.code u { color:var(--ok); text-decoration:none; }
+pre.code var { color:var(--purple); font-style:normal; }
+
+.figure { border:1px solid var(--border); border-radius:var(--r-card); background:var(--bg-container); padding:18px; margin:10px 0 24px; overflow-x:auto; }
+.figure svg { margin:0 auto; max-width:100%; height:auto; }
+.legend { display:flex; gap:var(--sp-4); flex-wrap:wrap; margin-top:14px; padding-top:12px; border-top:1px solid var(--border-subtle); font-size:var(--fs-micro); color:var(--text-dimmer); }
+.legend span { display:flex; align-items:center; gap:6px; }
+.legend i { width:11px; height:11px; border-radius:3px; display:block; }
+
+/* SVG 里的文字/线条统一走令牌 */
+.svg-t { fill:var(--text-bright); font:600 12px Inter,-apple-system,sans-serif; }
+.svg-s { fill:var(--text-dim); font:11px Inter,-apple-system,sans-serif; }
+.svg-m { fill:var(--text-dim); font:10px ui-monospace,Menlo,monospace; }
+.svg-k { fill:var(--text-dimmer); font:600 9px Inter,sans-serif; letter-spacing:.1em; }
+.svg-box { fill:var(--bg-elevated); stroke:var(--border); }
+.svg-line { stroke:var(--border); fill:none; }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div>
+    <div class="kicker">Roam · Web · 19 · 改进方向</div>
+    <h1>目标架构与数据分层设计</h1>
+  </div>
+  <span class="sp"></span>
+  <a class="tbtn" href="./index.html">← 问题</a>
+  <button class="tbtn" onclick="document.documentElement.dataset.theme=document.documentElement.dataset.theme==='light'?'dark':'light'">切换明暗</button>
+</div>
+
+<div class="wrap">
+
+<p class="lede">
+<a href="./index.html" style="color:var(--accent)">问题篇</a>查清了四条病根：普通会话不落盘、
+<code>sessions</code> 拿 <code>$N</code> 当主键、项目按「此刻有没有会话」退场、<code>$N</code> 跨重启复用串档。
+本篇给<b>最终状态</b>：改完之后数据长什么样、分几层、谁是真相源，以及重启恢复怎么走通。
+</p>
+
+
+<h2>1. 最终状态与目标架构</h2>
+
+<p class="lede">
+一句话：<b>台账进一个库，配置留文件，大对象留盘，tmux 只回答「现在谁活着」。</b>
+</p>
+<ul class="pts">
+  <li><b>一个真相源，一套库</b>：项目、会话、归属、父子、竞赛、蜂群全在 <code>meta.db</code>，
+      有 schema 版本、有事务、有外键。<b>ttmux 层与 Roam 层不再是两套存储</b> ——
+      「两层」改完之后只是代码归属，不是存储边界。唯一保留的划分是
+      <b>每张表一个写者</b>（会话类归 CLI、项目类归后端，见 <a href="#owner" style="color:var(--accent)">§8.1</a>），
+      那是为了不让两个进程抢同一批行，不是把层分回来。</li>
+  <li><b>台账不随 tmux 生死</b>：主键是持久会话 id（含创建时刻，跨重启唯一），
+      <code>$N</code> 降级成一列运行时句柄。会话死了<b>置 dead 不删行</b>。</li>
+  <li><b>项目不因「此刻没会话」消失</b>：退场判「从来没有过会话」，干过活的转归档。</li>
+  <li><b>重启后可恢复到三级</b>：台账在 → 历史在 → 能一键重开（连带接回 agent 对话）。</li>
+</ul>
+
+<div class="figure">
+<svg viewBox="0 0 1080 460" width="1080" role="img" aria-label="目标架构：写入口、三层存储、运行时">
+  <rect x="16" y="40" width="188" height="60" rx="10" class="svg-box" fill="var(--accent-soft)" stroke="var(--accent-border)"/>
+  <text x="110" y="66" class="svg-t" text-anchor="middle">ttmux CLI</text>
+  <text x="110" y="84" class="svg-m" text-anchor="middle">建/杀会话 · 蜂群 · 插件</text>
+
+  <rect x="16" y="116" width="188" height="60" rx="10" class="svg-box" fill="var(--purple-soft)" stroke="var(--purple-border)"/>
+  <text x="110" y="142" class="svg-t" text-anchor="middle">Roam 后端</text>
+  <text x="110" y="160" class="svg-m" text-anchor="middle">项目 · 归属 · 竞赛 · 偏好</text>
+
+  <path d="M204 70 L252 70 L252 128 L268 128" class="svg-line" stroke-width="1.4" marker-end="url(#d1)"/>
+  <path d="M204 146 L252 146 L252 134 L268 134" class="svg-line" stroke-width="1.4" marker-end="url(#d1)"/>
+
+  <rect x="276" y="100" width="150" height="76" rx="10" class="svg-box" stroke="var(--ok-border)"/>
+  <text x="351" y="128" class="svg-t" text-anchor="middle">internal/metadb</text>
+  <text x="351" y="146" class="svg-m" text-anchor="middle">WAL · busy_timeout</text>
+  <text x="351" y="162" class="svg-m" text-anchor="middle">单例 · 事务 · 外键</text>
+  <text x="351" y="90" class="svg-k" text-anchor="middle">唯一写入口</text>
+
+  <path d="M426 138 L474 138" class="svg-line" stroke-width="1.4" marker-end="url(#d1)"/>
+
+  <rect x="482" y="24" width="316" height="128" rx="12" class="svg-box" fill="var(--ok-soft)" stroke="var(--ok-border)"/>
+  <text x="500" y="48" class="svg-k">台账 · SQLITE · 有事务有版本</text>
+  <text x="500" y="70" class="svg-t">meta.db</text>
+  <text x="500" y="92" class="svg-m">schema_meta · tmux_epochs</text>
+  <text x="500" y="110" class="svg-m">projects · project_aliases</text>
+  <text x="500" y="128" class="svg-m">sessions · swarms · swarm_members</text>
+  <text x="500" y="146" class="svg-m">races · plugin_sessions</text>
+
+  <rect x="482" y="168" width="316" height="72" rx="12" class="svg-box" fill="var(--purple-soft)" stroke="var(--purple-border)"/>
+  <text x="500" y="192" class="svg-k">配置 · JSON · 人手要能改</text>
+  <text x="500" y="214" class="svg-m">preferences · browser · phone · speech</text>
+  <text x="500" y="232" class="svg-m">home-sites · totp · cluster/node</text>
+
+  <rect x="482" y="256" width="316" height="72" rx="12" class="svg-box" stroke="var(--border)"/>
+  <text x="500" y="280" class="svg-k">大对象 · 文件系统 · 库里只存索引</text>
+  <text x="500" y="302" class="svg-m">logs/&lt;id&gt;.log</text>
+  <text x="500" y="320" class="svg-m">meta/&lt;id&gt;/ · activity.log</text>
+
+  <rect x="856" y="24" width="208" height="104" rx="12" class="svg-box" fill="var(--warn-soft)" stroke="var(--warn-border)"/>
+  <text x="874" y="48" class="svg-k">运行时 · 不入库</text>
+  <text x="874" y="70" class="svg-t">tmux server</text>
+  <text x="874" y="90" class="svg-s">只回答「现在谁活着」</text>
+  <text x="874" y="110" class="svg-m">$N · attached · activity</text>
+
+  <rect x="856" y="144" width="208" height="96" rx="12" class="svg-box" stroke="var(--border)"/>
+  <text x="874" y="168" class="svg-k">派生 · 一次请求</text>
+  <text x="874" y="190" class="svg-s">git 状态 · worktree 列表</text>
+  <text x="874" y="210" class="svg-s">pane 内容 · waiting 判定</text>
+  <text x="874" y="230" class="svg-m">现算，入库只会不一致</text>
+
+  <rect x="856" y="256" width="208" height="72" rx="12" class="svg-box" fill="var(--ok-soft)" stroke="var(--ok-border)"/>
+  <text x="874" y="280" class="svg-k">第三方 · 只存引用</text>
+  <text x="874" y="300" class="svg-s">agent transcript</text>
+  <text x="874" y="320" class="svg-m">sessions.agent_session_uuid</text>
+
+  <path d="M798 88 L848 88" class="svg-line" stroke="var(--warn)" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#d2)"/>
+  <text x="823" y="76" class="svg-m" text-anchor="middle" fill="var(--warn)">对账</text>
+  <path d="M798 292 L848 292" class="svg-line" stroke="var(--ok)" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#d3)"/>
+
+  <rect x="16" y="356" width="1048" height="88" rx="12" class="svg-box" fill="var(--list-hover)"/>
+  <text x="34" y="380" class="svg-t">重启之后</text>
+  <text x="34" y="404" class="svg-s">tmux 那一列清空 → <tspan fill="var(--warn)">台账里的会话置 dead（不删）</tspan> → 项目判「有没有过会话」<tspan fill="var(--ok)">一个不少</tspan></text>
+  <text x="34" y="426" class="svg-s">→ 界面上出现「已结束的会话」，每条带原目录/agent/对话引用，<tspan fill="var(--text-bright)">可一键重开</tspan></text>
+
+  <defs>
+    <marker id="d1" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--border)"/></marker>
+    <marker id="d2" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--warn)"/></marker>
+    <marker id="d3" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--ok)"/></marker>
+  </defs>
+</svg>
+<div class="legend">
+  <span><i style="background:var(--ok-soft);border:1px solid var(--ok-border)"></i>台账（真相源）</span>
+  <span><i style="background:var(--purple-soft);border:1px solid var(--purple-border)"></i>配置</span>
+  <span><i style="background:var(--warn-soft);border:1px solid var(--warn-border)"></i>运行时（易失）</span>
+  <span><i style="border:1px solid var(--border)"></i>大对象 / 派生 / 第三方</span>
+</div>
+</div>
+
+<div class="note">
+<b>和现在的差别就两处，但都是根上的：</b>
+① 写入口从「各写各的 JSON / 各开各的 sqlite 连接」收成一个 <code>internal/metadb</code>；
+② <code>tmux</code> 从「台账的一部分」降级成「一列可对账的运行时状态」。
+其余（配置留 JSON、日志留文件）保持不变 —— 它们本来就存对了地方。
+</div>
+
+<h2>2. 数据分层设计：台账 / 配置 / 大对象</h2>
+<p class="lede">
+病根之一是「所有持久化都被当成同一件事」，于是台账用了改一个字段就全量重写的 JSON，
+而会话历史被交给 tmux 保管。三类数据的要求完全不同，存法也该不同：
+</p>
+
+<div class="tablewrap">
+<table>
+<thead><tr><th>类别</th><th>特征</th><th>存法</th><th>例子</th></tr></thead>
+<tbody>
+<tr><td><b>台账</b></td><td>有关系、要事务、要按条件查、会长期累积</td><td class="good"><b>SQLite</b> <code>meta.db</code>，带 schema 版本与迁移</td><td>项目、会话、归属、父子、竞赛、蜂群</td></tr>
+<tr><td><b>配置</b></td><td>单写者、无关系、<b>人手要能改</b>、量小</td><td>JSON 文件，保持现状</td><td>偏好、浏览器/手机/语音配置、导航站、TOTP</td></tr>
+<tr><td><b>大对象</b></td><td>只追加、体量大（本机 38MB 日志）、按 id 直取</td><td>文件系统，DB 里只存索引</td><td><code>logs/&lt;id&gt;.log</code>、对话 transcript</td></tr>
+</tbody>
+</table>
+</div>
+
+<p class="lede">另有一条正交的划分——<b>什么是真相源，什么是现算的</b>：</p>
+<ul class="pts">
+  <li><b>台账</b>（持久）：项目、会话、归属、父子、竞赛、蜂群 —— 存 <code>meta.db</code>。</li>
+  <li><b>运行时</b>（一次 tmux server 生命）：谁 attach、activity、pane 尺寸、<code>$N</code> —— 只问 tmux，不入库。</li>
+  <li><b>派生</b>（一次请求）：git 状态、worktree 列表、pane 内容、waiting 判定 —— 现算，入库只会不一致。</li>
+</ul>
+<div class="note">
+现在的错误在于把<b>台账的一部分（会话是否存在过）交给了运行时层保管</b>。
+tmux 只该回答「现在谁活着」，不该回答「有过什么」。
+</div>
+
+<h2>3. 目标 schema</h2>
+<p class="lede">
+单库 <code>&lt;dataDir&gt;/meta.db</code>，<code>schema_meta</code> 管版本，迁移脚本放
+<code>cli/ttmux-cli-go/internal/metadb/migrations/</code>。
+</p>
+<div class="note warn">
+<b>这一节是 M2 的目标 schema，不是现在的表结构。</b>现在只有 <code>sessions</code> 一张表
+按这个方向改到位了（主键换持久 id，加 <code>status</code> / <code>died_at</code> /
+<code>died_reason</code> / <code>tmux_id</code> / <code>tmux_epoch</code>）；
+<code>projects</code> 仍是 <code>projects.json</code>（只多了 <code>lastSessionAt</code> 一个字段），
+<code>tmux_epochs</code> / <code>project_aliases</code> / <code>archived_at</code> /
+<code>spawn_cmd</code> / <code>restored_from</code> 都还没有。逐项状态见 <a href="#m1" style="color:var(--accent)">§9</a>。
+</div>
+
+<div class="figure">
+<svg viewBox="0 0 1040 396" width="1040" role="img" aria-label="meta.db 表关系图">
+  <rect x="24" y="40" width="240" height="150" rx="10" class="svg-box" stroke="var(--purple-border)"/>
+  <rect x="24" y="40" width="240" height="26" rx="10" fill="var(--purple-soft)" stroke="var(--purple-border)"/>
+  <text x="36" y="58" class="svg-t">projects</text>
+  <text x="36" y="84" class="svg-m" fill="var(--purple)">id  PK</text>
+  <text x="36" y="102" class="svg-m">dir  UNIQUE</text>
+  <text x="36" y="120" class="svg-m">origin · pinned · display_name</text>
+  <text x="36" y="138" class="svg-m">first_seen · last_seen</text>
+  <text x="36" y="156" class="svg-m" fill="var(--ok)">last_session_at</text>
+  <text x="36" y="174" class="svg-m" fill="var(--ok)">archived_at</text>
+
+  <rect x="392" y="24" width="268" height="248" rx="10" class="svg-box" stroke="var(--accent-border)"/>
+  <rect x="392" y="24" width="268" height="26" rx="10" fill="var(--accent-soft)" stroke="var(--accent-border)"/>
+  <text x="404" y="42" class="svg-t">sessions</text>
+  <text x="404" y="68" class="svg-m" fill="var(--accent)">id  PK  持久会话 id</text>
+  <text x="404" y="86" class="svg-m">parent_id → sessions.id</text>
+  <text x="404" y="104" class="svg-m">project_id → projects.id</text>
+  <text x="404" y="122" class="svg-m">home_dir · worktree_dir</text>
+  <text x="404" y="140" class="svg-m">agent · kind · label</text>
+  <text x="404" y="158" class="svg-m">created_by · created_at</text>
+  <text x="404" y="176" class="svg-m" fill="var(--ok)">status  live | dead</text>
+  <text x="404" y="194" class="svg-m" fill="var(--ok)">died_at · died_reason</text>
+  <text x="404" y="212" class="svg-m" fill="var(--ok)">spawn_cmd · spawn_env</text>
+  <text x="404" y="230" class="svg-m" fill="var(--warn)">tmux_id · tmux_epoch</text>
+  <text x="404" y="252" class="svg-m" fill="var(--text-dimmer)">restored_from → sessions.id</text>
+
+  <path d="M660 92 C700 92 700 62 668 62" class="svg-line" stroke="var(--accent)" stroke-width="1.3"/>
+  <text x="676" y="80" class="svg-m" fill="var(--accent)">parent</text>
+
+  <path d="M264 110 L392 110" class="svg-line" stroke-width="1.3"/>
+  <circle cx="388" cy="110" r="3" fill="var(--border)"/>
+  <text x="300" y="102" class="svg-m">1 : N</text>
+
+  <rect x="392" y="304" width="268" height="72" rx="10" class="svg-box" stroke="var(--warn-border)"/>
+  <rect x="392" y="304" width="268" height="26" rx="10" fill="var(--warn-soft)" stroke="var(--warn-border)"/>
+  <text x="404" y="322" class="svg-t">tmux_epochs</text>
+  <text x="404" y="348" class="svg-m" fill="var(--warn)">epoch  PK  server pid</text>
+  <text x="404" y="366" class="svg-m">started_at · seen_at</text>
+  <path d="M526 272 L526 304" class="svg-line" stroke-width="1.3"/>
+
+  <rect x="788" y="24" width="228" height="62" rx="10" class="svg-box"/>
+  <rect x="788" y="24" width="228" height="26" rx="10" fill="var(--list-hover)" stroke="var(--border)"/>
+  <text x="800" y="42" class="svg-t">swarms</text>
+  <text x="800" y="68" class="svg-m">supervisor → sessions.id</text>
+
+  <rect x="788" y="102" width="228" height="62" rx="10" class="svg-box"/>
+  <rect x="788" y="102" width="228" height="26" rx="10" fill="var(--list-hover)" stroke="var(--border)"/>
+  <text x="800" y="120" class="svg-t">swarm_members</text>
+  <text x="800" y="146" class="svg-m">session → sessions.id</text>
+
+  <rect x="788" y="180" width="228" height="62" rx="10" class="svg-box"/>
+  <rect x="788" y="180" width="228" height="26" rx="10" fill="var(--list-hover)" stroke="var(--border)"/>
+  <text x="800" y="198" class="svg-t">races</text>
+  <text x="800" y="224" class="svg-m">repo → projects.dir</text>
+
+  <rect x="788" y="258" width="228" height="62" rx="10" class="svg-box"/>
+  <rect x="788" y="258" width="228" height="26" rx="10" fill="var(--list-hover)" stroke="var(--border)"/>
+  <text x="800" y="276" class="svg-t">plugin_sessions</text>
+  <text x="800" y="302" class="svg-m">session → sessions.id</text>
+
+  <path d="M660 56 L788 56" class="svg-line" stroke-width="1.2"/>
+  <path d="M660 134 L788 134" class="svg-line" stroke-width="1.2"/>
+  <path d="M660 290 L788 290" class="svg-line" stroke-width="1.2"/>
+
+  <text x="24" y="240" class="svg-k">图例 · 目标 schema（M2）</text>
+  <text x="24" y="262" class="svg-m" fill="var(--ok)">绿 = 相对现状新增的列</text>
+  <text x="24" y="280" class="svg-m" fill="var(--warn)">黄 = 运行时句柄（只在 live 时有意义）</text>
+  <text x="24" y="298" class="svg-m" fill="var(--accent)">蓝 = 主键 / 自引用</text>
+  <text x="24" y="322" class="svg-m" fill="var(--text-dimmer)">sessions 的绿色列已落地；projects</text>
+  <text x="24" y="338" class="svg-m" fill="var(--text-dimmer)">仍在 projects.json，只有 last_session_at</text>
+</svg>
+</div>
+
+<h3>3.1 DDL</h3>
+<pre class="code">CREATE TABLE <b>schema_meta</b> (version INTEGER NOT NULL);
+
+<s>-- tmux server 代次：server pid，随 server 起落而变。</s>
+<s>-- 用来把「你手动 kill 了会话」和「机器重启把整个 server 带走了」分开记。</s>
+CREATE TABLE <b>tmux_epochs</b> (
+  epoch      TEXT PRIMARY KEY,
+  started_at INTEGER NOT NULL,
+  seen_at    INTEGER NOT NULL
+);
+
+CREATE TABLE <b>projects</b> (
+  id              TEXT PRIMARY KEY,          <s>-- 沿用现有不可变 id，老链接不失效</s>
+  dir             TEXT NOT NULL UNIQUE,
+  origin          TEXT NOT NULL DEFAULT '',  <s>-- '' = discovered | 'user'</s>
+  display_name    TEXT,
+  pinned          INTEGER NOT NULL DEFAULT 0,
+  default_agent   TEXT,
+  default_base    TEXT,
+  first_seen      INTEGER NOT NULL,
+  last_seen       INTEGER NOT NULL,
+  <u>last_session_at INTEGER NOT NULL DEFAULT 0</u>,  <s>-- 最后一次有会话的时刻</s>
+  <u>archived_at     INTEGER</u>                     <s>-- 软退场，NULL = 在册</s>
+);
+CREATE TABLE <b>project_aliases</b> (alias TEXT PRIMARY KEY, project_id TEXT NOT NULL);
+
+<s>-- 主键是**持久会话 id**（= tmux 会话名，见 docs/design/session-identity.md）：</s>
+<s>-- 由创建时刻派生、不可变、跨 tmux server 重启唯一且永不复用 —— 天生就是对的主键。</s>
+CREATE TABLE <b>sessions</b> (
+  <i>id</i>           TEXT PRIMARY KEY,
+  label        TEXT,                      <s>-- 展示名快照（会话死后 @roam_name 就没了）</s>
+  parent_id    TEXT REFERENCES sessions(id),
+  project_id   TEXT REFERENCES projects(id),
+  home_dir     TEXT,                      <s>-- 归属目录（吸收 session-homes.json）</s>
+  worktree_dir TEXT,
+  agent        TEXT,                      <s>-- claude | codex | shell | …</s>
+  kind         TEXT,                      <s>-- task | swarm-member | race | plugin | plain</s>
+  created_by   TEXT,
+  created_at   INTEGER NOT NULL,
+  <u>spawn_cmd</u>    TEXT,                      <s>-- 重开所需的全部输入（§7）</s>
+  <u>spawn_env</u>    TEXT,                      <s>-- JSON</s>
+  <u>status</u>       TEXT NOT NULL DEFAULT 'live',  <s>-- live | dead</s>
+  <u>died_at</u>      INTEGER,
+  <u>died_reason</u>   TEXT,                      <s>-- killed | host-restart | unknown</s>
+  <u>restored_from</u> TEXT REFERENCES sessions(id),
+  <var>tmux_id</var>      TEXT,                      <s>-- 运行时句柄，只在 status=live 时有意义</s>
+  <var>tmux_epoch</var>   TEXT REFERENCES tmux_epochs(epoch)
+);
+CREATE INDEX sessions_project ON sessions(project_id, status);
+CREATE UNIQUE INDEX sessions_handle ON sessions(tmux_epoch, tmux_id)
+  WHERE tmux_epoch IS NOT NULL;</pre>
+
+<div class="note good">
+<b>为什么主键必须换成持久会话 id。</b><code>session-identity.md</code> 已经把会话 id 定义成
+<code>id.ForSession(session_created, session_id)</code> —— <b>它包含创建时刻</b>，所以重启后新会话
+拿到 <code>$0</code> 也撞不上旧会话。台账早就有一个跨重启唯一的键，只是没拿它当主键。换过来之后：
+重启不再是「主键全部失效」，只是 <code>tmux_id</code> 置空；<code>$N</code> 复用天然无害，
+因为 <code>(epoch, tmux_id)</code> 才是句柄；死会话的行可以安然留着，它的主键不依赖任何活着的东西。
+</div>
+
+<h2>4. 项目生命周期：退场判「有没有过」，不判「此刻有没有」</h2>
+
+<div class="figure">
+<svg viewBox="0 0 1000 288" width="1000" role="img" aria-label="项目生命周期状态机">
+  <rect x="24" y="104" width="150" height="56" rx="10" class="svg-box"/>
+  <text x="99" y="128" class="svg-t" text-anchor="middle">会话 join 命中</text>
+  <text x="99" y="146" class="svg-m" text-anchor="middle">Touch(dir)</text>
+
+  <rect x="256" y="96" width="168" height="72" rx="12" class="svg-box" fill="var(--accent-soft)" stroke="var(--accent-border)"/>
+  <text x="340" y="122" class="svg-t" text-anchor="middle">discovered</text>
+  <text x="340" y="142" class="svg-m" text-anchor="middle" fill="var(--accent)">origin = ''</text>
+  <text x="340" y="158" class="svg-m" text-anchor="middle">可自动退场</text>
+
+  <rect x="256" y="12" width="168" height="60" rx="12" class="svg-box" fill="var(--purple-soft)" stroke="var(--purple-border)"/>
+  <text x="340" y="36" class="svg-t" text-anchor="middle">user / pinned</text>
+  <text x="340" y="56" class="svg-m" text-anchor="middle" fill="var(--purple)">一等对象 · 永不自动退场</text>
+
+  <rect x="536" y="96" width="168" height="72" rx="12" class="svg-box" fill="var(--warn-soft)" stroke="var(--warn-border)" stroke-dasharray="5 3"/>
+  <text x="620" y="120" class="svg-t" text-anchor="middle">archived</text>
+  <text x="620" y="138" class="svg-m" text-anchor="middle" fill="var(--warn)">有过会话，此刻空着</text>
+  <text x="620" y="154" class="svg-m" text-anchor="middle" fill="var(--text-dimmer)">M3 · 尚未实现</text>
+
+  <rect x="816" y="96" width="160" height="72" rx="12" class="svg-box" stroke="var(--danger-border)"/>
+  <text x="896" y="122" class="svg-t" text-anchor="middle" fill="var(--danger)">removed</text>
+  <text x="896" y="142" class="svg-m" text-anchor="middle">目录没了</text>
+  <text x="896" y="158" class="svg-m" text-anchor="middle">或从来没干过活</text>
+
+  <path d="M174 132 L248 132" class="svg-line" stroke-width="1.5" marker-end="url(#pa)"/>
+  <path d="M340 96 L340 76" class="svg-line" stroke="var(--purple)" stroke-width="1.5" marker-end="url(#pp)"/>
+  <text x="352" y="90" class="svg-m" fill="var(--purple)">用户转正 / 置顶</text>
+  <path d="M424 118 L528 118" class="svg-line" stroke="var(--warn)" stroke-width="1.5" marker-end="url(#pw)"/>
+  <text x="476" y="110" class="svg-m" text-anchor="middle" fill="var(--warn)">空了</text>
+  <path d="M528 150 C480 178 424 178 424 156" class="svg-line" stroke="var(--ok)" stroke-width="1.5" marker-end="url(#pg)"/>
+  <text x="476" y="194" class="svg-m" text-anchor="middle" fill="var(--ok)">又开会话</text>
+  <path d="M704 132 L808 132" class="svg-line" stroke="var(--danger)" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#pd)"/>
+
+  <text x="24" y="232" class="svg-k">关键改动 · M1 已落地</text>
+  <text x="24" y="254" class="svg-s">退场判据从 <tspan fill="var(--danger)">「此刻没会话」</tspan> 改成 <tspan fill="var(--ok)">「从来没有过会话」</tspan>（lastSessionAt == 0）。</text>
+  <text x="24" y="274" class="svg-s">重启不再让项目消失。<tspan fill="var(--text-dimmer)">虚线框 = M3 目标态，现在「干过活但此刻空着」的项目只是留在正常列表里。</tspan></text>
+
+  <defs>
+    <marker id="pa" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--border)"/></marker>
+    <marker id="pp" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--purple)"/></marker>
+    <marker id="pw" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--warn)"/></marker>
+    <marker id="pg" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--ok)"/></marker>
+    <marker id="pd" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--danger)"/></marker>
+  </defs>
+</svg>
+</div>
+
+<pre class="code"><b>现在（M1 已落地）</b>
+目录不存在                                     → 硬退场
+origin='user' 或 pinned                        → 永不退场
+roamWts=0 ∧ 活会话=0 ∧ <u>历史会话=0</u> ∧ 无竞赛/蜂群 → 退场
+roamWts=0 ∧ 活会话=0 ∧ <u>历史会话&gt;0</u>              → <u>不删</u>，留在正常列表里
+
+<b>M3 目标</b>
+最后一条改成 → <i>archived_at=now</i>，项目页收进「不活跃」分组、默认折叠</pre>
+<div class="note warn">
+<b>归档态目前只是设计，代码里还没有。</b><code>Entry</code> 现在只有 <code>LastSessionAt</code>
+（<code>backend/project/service.go</code>），聚合层据此<b>不删</b>这类项目，但它们和活跃项目
+混在同一份列表里，没有「不活跃」分组、没有折叠、也没有 <code>archived_at</code> 字段。
+<code>archived_at</code> 出现在 §3 的目标 schema 与本图的虚线框里，属于 M3。
+</div>
+
+<h2>5. 会话生命周期：软删，不硬删</h2>
+
+<div class="figure">
+<svg viewBox="0 0 1000 300" width="1000" role="img" aria-label="会话状态机">
+  <rect x="20" y="120" width="130" height="52" rx="10" class="svg-box"/>
+  <text x="85" y="143" class="svg-t" text-anchor="middle">ttmux new</text>
+  <text x="85" y="160" class="svg-m" text-anchor="middle">fork / spawn</text>
+
+  <rect x="240" y="112" width="180" height="68" rx="12" class="svg-box" fill="var(--ok-soft)" stroke="var(--ok-border)"/>
+  <text x="330" y="140" class="svg-t" text-anchor="middle">status = live</text>
+  <text x="330" y="160" class="svg-m" text-anchor="middle" fill="var(--ok)">tmux_id / tmux_epoch 有值</text>
+
+  <rect x="600" y="112" width="180" height="68" rx="12" class="svg-box" fill="var(--warn-soft)" stroke="var(--warn-border)"/>
+  <text x="690" y="140" class="svg-t" text-anchor="middle">status = dead</text>
+  <text x="690" y="160" class="svg-m" text-anchor="middle" fill="var(--warn)">died_at / died_reason</text>
+
+  <rect x="860" y="112" width="120" height="68" rx="10" class="svg-box" stroke="var(--danger-border)"/>
+  <text x="920" y="140" class="svg-t" text-anchor="middle" fill="var(--danger)">DELETE</text>
+  <text x="920" y="160" class="svg-m" text-anchor="middle">超保留期</text>
+
+  <path d="M150 146 L232 146" class="svg-line" stroke-width="1.5" marker-end="url(#a19)"/>
+  <path d="M420 132 L592 132" class="svg-line" stroke="var(--warn)" stroke-width="1.5" marker-end="url(#w19)"/>
+  <path d="M592 164 C520 200 420 200 420 172" class="svg-line" stroke="var(--ok)" stroke-width="1.5" marker-end="url(#g19)"/>
+  <path d="M780 146 L852 146" class="svg-line" stroke="var(--danger)" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#d19)"/>
+
+  <text x="506" y="124" class="svg-m" text-anchor="middle" fill="var(--warn)">OnKill / Reconcile 没看见它</text>
+  <text x="506" y="216" class="svg-m" text-anchor="middle" fill="var(--ok)">Reconcile 又看见它了 → 自愈回 live</text>
+
+  <text x="60" y="52" class="svg-k">收敛口径</text>
+  <text x="60" y="74" class="svg-s">tmux 盲态（问不出会话列表）→ 一行不动。看不见的时候不下判断。</text>
+  <text x="60" y="94" class="svg-s">died_reason：tmux_epoch 还是这一代 = killed；对不上 = host-restart。</text>
+
+  <text x="60" y="262" class="svg-s">同名复用（<tspan class="svg-m">_ttmux-*</tspan> 单例、固定名插件会话）：死行上冒出同名会话 = 一个<tspan fill="var(--text-bright)">新</tspan>会话，</text>
+  <text x="60" y="280" class="svg-s">复活但<tspan fill="var(--text-bright)">不继承</tspan>旧来历（parent / initial_cwd 一律清空），否则新会话平白多出一个爹。</text>
+
+  <defs>
+    <marker id="a19" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--border)"/></marker>
+    <marker id="w19" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--warn)"/></marker>
+    <marker id="g19" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--ok)"/></marker>
+    <marker id="d19" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--danger)"/></marker>
+  </defs>
+</svg>
+</div>
+
+<pre class="code"><b>Reconcile(alive, epoch)</b>
+  对每行 status='live'：
+    命中活会话                    → 刷新 label / tmux_id / tmux_epoch
+    未命中，且 tmux_epoch = 当前   → <em>status='dead', died_reason='killed'</em>
+    未命中，且 tmux_epoch ≠ 当前   → <em>status='dead', died_reason='host-restart'</em>
+  对每行 status='dead' 且会话名又活了：
+                                  → <u>复活成一行干净的 live 记录（不继承旧来历）</u>
+  tmux 盲态                        → 一行都不动
+
+<b>一行都不 DELETE。</b>清理另起一条低频路径：status='dead' ∧ died_at 早于保留期（默认 90 天）
+∧ 不属于任何未收尾的 worktree/竞赛/蜂群 → 删除，并连带删 logs/&lt;id&gt;.log。
+条数上限默认 5000。</pre>
+
+<h2>6. 重启恢复链路</h2>
+
+<div class="figure">
+<svg viewBox="0 0 1040 340" width="1040" role="img" aria-label="重启前后的数据链路对比">
+  <text x="20" y="24" class="svg-k">现在</text>
+  <line x1="20" y1="34" x2="1020" y2="34" class="svg-line"/>
+
+  <rect x="20" y="48" width="150" height="54" rx="9" class="svg-box"/>
+  <text x="95" y="70" class="svg-t" text-anchor="middle">重启前</text>
+  <text x="95" y="88" class="svg-m" text-anchor="middle">15 个会话在跑</text>
+
+  <path d="M170 75 L226 75" class="svg-line" stroke-width="1.4" marker-end="url(#r19)"/>
+  <rect x="234" y="48" width="150" height="54" rx="9" class="svg-box" stroke="var(--danger-border)" fill="var(--danger-soft)"/>
+  <text x="309" y="70" class="svg-t" text-anchor="middle" fill="var(--danger)">reboot</text>
+  <text x="309" y="88" class="svg-m" text-anchor="middle">tmux server 消失</text>
+
+  <path d="M384 75 L440 75" class="svg-line" stroke-width="1.4" marker-end="url(#r19)"/>
+  <rect x="448" y="48" width="176" height="54" rx="9" class="svg-box" stroke="var(--danger-border)"/>
+  <text x="536" y="70" class="svg-t" text-anchor="middle">Reconcile 整表 DELETE</text>
+  <text x="536" y="88" class="svg-m" text-anchor="middle" fill="var(--danger)">sessions = 0 行</text>
+
+  <path d="M624 75 L680 75" class="svg-line" stroke-width="1.4" marker-end="url(#r19)"/>
+  <rect x="688" y="48" width="176" height="54" rx="9" class="svg-box" stroke="var(--danger-border)"/>
+  <text x="776" y="70" class="svg-t" text-anchor="middle">项目按 0 会话退场</text>
+  <text x="776" y="88" class="svg-m" text-anchor="middle" fill="var(--danger)">发现型项目全灭</text>
+
+  <text x="884" y="72" class="svg-t" fill="var(--danger)">界面全空</text>
+  <text x="884" y="90" class="svg-m">且查不到线索</text>
+
+  <text x="20" y="152" class="svg-k">改后</text>
+  <line x1="20" y1="162" x2="1020" y2="162" class="svg-line"/>
+
+  <rect x="20" y="176" width="150" height="54" rx="9" class="svg-box"/>
+  <text x="95" y="198" class="svg-t" text-anchor="middle">重启前</text>
+  <text x="95" y="216" class="svg-m" text-anchor="middle">每个会话都有行 + 日志</text>
+
+  <path d="M170 203 L226 203" class="svg-line" stroke-width="1.4" marker-end="url(#r19)"/>
+  <rect x="234" y="176" width="150" height="54" rx="9" class="svg-box" stroke="var(--warn-border)" fill="var(--warn-soft)"/>
+  <text x="309" y="198" class="svg-t" text-anchor="middle" fill="var(--warn)">reboot</text>
+  <text x="309" y="216" class="svg-m" text-anchor="middle">epoch 换代</text>
+
+  <path d="M384 203 L440 203" class="svg-line" stroke-width="1.4" marker-end="url(#r19)"/>
+  <rect x="448" y="176" width="176" height="54" rx="9" class="svg-box" stroke="var(--ok-border)"/>
+  <text x="536" y="198" class="svg-t" text-anchor="middle">Reconcile 软删</text>
+  <text x="536" y="216" class="svg-m" text-anchor="middle" fill="var(--ok)">全部置 host-restart</text>
+
+  <path d="M624 203 L680 203" class="svg-line" stroke-width="1.4" marker-end="url(#r19)"/>
+  <rect x="688" y="176" width="176" height="54" rx="9" class="svg-box" stroke="var(--ok-border)"/>
+  <text x="776" y="198" class="svg-t" text-anchor="middle">项目判「有没有过」</text>
+  <text x="776" y="216" class="svg-m" text-anchor="middle" fill="var(--ok)">一个不少，空的转归档</text>
+
+  <text x="884" y="192" class="svg-t" fill="var(--ok)">项目全在</text>
+  <text x="884" y="210" class="svg-m">会话进「已结束」</text>
+  <text x="884" y="228" class="svg-m">每条可一键重开</text>
+
+  <rect x="20" y="264" width="1000" height="60" rx="10" class="svg-box" fill="var(--list-hover)"/>
+  <text x="36" y="286" class="svg-t">恢复的三级</text>
+  <text x="36" y="308" class="svg-s">① <tspan fill="var(--text-bright)">台账在</tspan>：项目 / 会话 / 归属 / 父子 都还在，界面不空 · ② <tspan fill="var(--text-bright)">历史在</tspan>：谁在哪个目录干过什么、日志在哪，可查可搜 · ③ <tspan fill="var(--text-bright)">可重开</tspan>：按原目录/agent/label 重建一个新壳</text>
+
+  <defs><marker id="r19" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--border)"/></marker></defs>
+</svg>
+</div>
+
+<div class="note warn">
+<b>不做什么。</b>不做会话内容/进程的恢复 —— pane 里的 agent 进程死了就是死了，
+恢复的是<b>会话这个壳</b>（同目录、同 agent、同 label、同 worktree 绑定），不是现场。
+也不默认自动拉起：重启后自动跑起十几个 agent 是危险动作。
+</div>
+
+<h2>7. 重开（restore），不是自动恢复</h2>
+<p class="lede">
+<code>sessions</code> 存了 <code>home_dir</code> / <code>worktree_dir</code> / <code>agent</code> /
+<code>label</code> / <code>spawn_cmd</code> / <code>spawn_env</code>，足够把壳原样重建。
+</p>
+<ul class="pts">
+  <li><b>手动重开</b>：会话列表 / 项目详情页里，<code>dead</code> 会话行末给一个「重开」动作 →
+      <code>POST /sessions/:id/restore</code> → 走现有 <code>ttmux new --json</code> 建<b>新会话</b>（新 id），
+      <code>restored_from</code> 指向旧行，归属与 label 照抄。旧行保持 dead，不复活。
+      <b>重开的是壳</b>；agent 的上下文由 agent 自己的 resume 机制负责，我们不假装能接上。</li>
+  <li><b>开机恢复</b>：设置页三档 —— <code>关</code>（默认）/ <code>仅置顶会话</code> / <code>全部</code>。
+      默认关的理由写在设置项说明里。</li>
+  <li><b>恢复哪些</b>：只考虑 <code>died_reason='host-restart'</code> 的行，且按项目去重上限（每项目 ≤3），
+      免得一次重启拉起几十个 pane 把机器再压死一次。</li>
+</ul>
+
+<h3>7.1 对话（agent transcript）怎么接回来</h3>
+<p class="lede">
+Claude Code 的对话存在 <code>~/.claude/projects/&lt;cwd-slug&gt;/&lt;uuid&gt;.jsonl</code>，
+<b>与 tmux 无关，重启一段不丢</b>（本机 1.1GB / 166 段）。缺的只是「Roam 不认识它」。
+补上一列即可：会话表记下 <code>agent_session_uuid</code>，重开时
+<code>claude --resume &lt;uuid&gt;</code>，界面上就能从「已结束的会话」直接接回原对话。
+</p>
+<div class="note">
+这是把 <b>①台账 → ③重开</b> 真正闭环的一步：没有它，重开只能给你一个空壳；
+有了它，重开等于把那天下午的活原样接着干。
+</div>
+
+<h2>8. 一套库：写者、直连与迁移</h2>
+
+<h3 id="owner">8.1 一套库，不分层——但要分「谁写哪张表」</h3>
+<p class="lede">
+<b>ttmux 层和 Roam 层不再各存各的，物理上就是一个 <code>meta.db</code>、一套 schema、一套迁移。</b>
+「两层」在改完之后只是<b>代码归属</b>，不再是<b>存储边界</b> —— 问题篇里那张「一个目录两套机制」的图，
+到这里就作废了。
+</p>
+<p class="lede">
+但有一件事不能跟着一起取消：<b>每张表只有一个写者</b>。两个进程写同一个 SQLite，
+WAL 能让读写并发，写本身仍然是串行的；真正省掉锁竞争的不是 WAL，是「不会有两个进程同时想改同一批行」。
+这不是把层分回来，是按<b>数据的归属</b>分：
+</p>
+
+<div class="tablewrap">
+<table>
+<thead><tr><th>表</th><th>写者</th><th>另一边怎么办</th><th>为什么</th></tr></thead>
+<tbody>
+<tr><td><code>sessions</code> · <code>tmux_epochs</code></td><td><b>ttmux CLI</b></td><td>后端只读；要写就调 <code>ttmux</code> 子命令</td><td>会话 id 的唯一出处在 CLI，编排逻辑也在 CLI（「薄封装」原则）</td></tr>
+<tr><td><code>swarms</code> · <code>swarm_members</code></td><td><b>ttmux CLI</b></td><td>同上</td><td>蜂群编排整个在 CLI</td></tr>
+<tr><td><code>plugin_sessions</code> · <code>plugin_findings</code></td><td><b>ttmux CLI</b></td><td>同上</td><td>插件宿主在 CLI</td></tr>
+<tr><td><code>projects</code> · <code>project_aliases</code></td><td><b>Roam 后端</b></td><td>CLI 不碰</td><td>项目是 Web 侧的概念，CLI 里没有</td></tr>
+<tr><td><code>races</code></td><td><b>Roam 后端</b></td><td>CLI 不碰</td><td>竞赛只有 Web 有入口</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note">
+<b>唯一的跨写者动作是「建会话时顺手 touch 项目」。</b>它现在也不是一个事务 ——
+CLI 建会话、后端下一轮轮询时才把项目记上。并库之后可以合成一个事务，
+但那要求 CLI 也能写 <code>projects</code>，就破了上面的单写者。
+<b>建议维持现状</b>：项目台账本来就是「读时收敛的读模型」，晚一轮记上没有任何影响，
+不值得为它引入双写。
+</div>
+
+<h3>8.2 后端要不要直连这个库</h3>
+<p class="lede">
+一个容易被忽略的实情：<b>后端现在连 sqlite 依赖都没有</b>（<code>backend/go.mod</code> 里没有
+<code>modernc.org/sqlite</code>），它对 <code>meta.db</code> 完全不知情，所有访问都是
+<code>exec</code> 一次 <code>ttmux ... --json</code>。所以「一套库」落地时有个明确的岔路：
+</p>
+<div class="tablewrap">
+<table>
+<thead><tr><th>方案</th><th>代价</th><th>收益</th></tr></thead>
+<tbody>
+<tr><td><b>全走 CLI</b>（不加依赖）</td><td>项目页要会话历史 → 每个项目 <code>exec</code> 一次，退化成 N 次进程启动</td><td>架构最一致，后端零 DB 知识</td></tr>
+<tr><td class="good"><b>只读直连 + 写走 CLI</b></td><td>后端多一个 sqlite 依赖，且必须守住上表的写者约定</td><td class="good"><a href="./index.html" style="color:var(--accent)">问题篇 §5</a> 那条跨层长链换成一次 <code>JOIN</code></td></tr>
+</tbody>
+</table>
+</div>
+<div class="note good">
+<b>选后者。</b>并库的全部意义就在于「项目卡上能直接显示会话历史」——
+如果读还是一次一次 <code>exec</code>，那张表并不并在一起没有区别。
+写仍然走 CLI，所以「薄封装」原则一点没破：后端不重实现任何编排逻辑，它只是<b>换了一种更便宜的读法</b>。
+</div>
+
+<h3>8.3 一个该留在外面的例外：蜂群 posts</h3>
+<p class="lede">
+「一套库」有一处值得破例。每个蜂群现在有自己的 <code>swarms/&lt;群&gt;/swarm.db</code>，
+里面是 <code>members</code> / <code>cards</code> / <code>posts</code>：
+</p>
+<ul class="pts">
+  <li><code>members</code> / <code>cards</code> <b>并进主库</b> —— 它们要和 <code>sessions</code> join
+      （成员会话死了还得找回它的日志），正是并库要解决的问题；</li>
+  <li><code>posts</code> <b>留在每群自己的库</b> —— 它是广场聊天流，是全系统写得最频繁的表，
+      并进主库只会让主库的写锁竞争明显变差；而且「删掉一个蜂群」现在是删一个目录，
+      并进去之后要变成一串带外键的 DELETE。</li>
+</ul>
+<div class="note">
+判据不是「它属于哪一层」，而是<b>写入频率和生命周期</b>：
+需要跨实体 join 的进主库，只在自己生命周期内高频追加的留在旁边。
+这和 §2 把日志、transcript 留在文件系统是同一条原则。
+</div>
+
+<h3>8.4 连接层</h3>
+<ul class="pts">
+  <li><code>PRAGMA journal_mode=WAL</code>、<code>busy_timeout=5000</code>、<code>foreign_keys=ON</code>；</li>
+  <li>进程内单例 <code>*sql.DB</code>；单写者内部的多表写走一个事务（建会话 = 写 <code>sessions</code> + 记 <code>tmux_epochs</code>）；</li>
+  <li>统一放进新包 <code>internal/metadb</code>，<code>sessmeta</code> / <code>swarm</code> / <code>plugin</code> 都改用它；
+      后端用同一个包的只读入口。</li>
+</ul>
+<div class="note warn">
+<b>CLI 必须能独立工作。</b>库的位置、建库、迁移全部由 CLI 负责 —— 后端没起、甚至没装，
+<code>ttmux</code> 也要照常能用。所以「一套库」的落点是 <code>&lt;dataDir&gt;/meta.db</code>（CLI 的地盘），
+后端是<b>接进来的那一方</b>，不是反过来。
+</div>
+
+<h3>8.5 迁移</h3>
+<p class="lede">一次性、幂等（标记 <code>migrations/metadb-v3.done</code>）。<b>只增不减</b>：任何一步认不出来的数据，宁可留成一行 dead 记录，也不丢。</p>
+<div class="tablewrap">
+<table>
+<thead><tr><th>来源</th><th>去向</th><th>认不出来的行</th></tr></thead>
+<tbody>
+<tr><td><code>projects.json</code></td><td><code>projects</code> + <code>project_aliases</code></td><td>原文件改名 <code>.bak-&lt;时间&gt;</code></td></tr>
+<tr><td><code>session-homes.json</code></td><td><code>sessions.home_dir</code></td><td>按 <code>$N</code> 认不到会话的，用 name 快照回填成 dead 行</td></tr>
+<tr><td><code>meta/&lt;id&gt;/*.txt</code></td><td><code>sessions</code> 的 kind / home_dir / created_at</td><td>目录保留（CLI 老路径还在读）</td></tr>
+<tr><td><code>races.json</code></td><td><code>races</code></td><td>—</td></tr>
+<tr><td><code>swarms/&lt;群&gt;/swarm.db</code> 的 <code>members</code> / <code>cards</code></td><td><code>swarm_members</code> / <code>swarm_cards</code></td><td><code>posts</code> 原地不动（§8.3）</td></tr>
+<tr><td>老 <code>sessions</code> 表</td><td>v1 主键就是会话名，直搬；v2 按 name 列重建主键，parent 的 <code>$N</code> 用<b>同表内</b>映射翻译</td><td>解析不出的落成 dead 行，先整库备份</td></tr>
+</tbody>
+</table>
+</div>
+<div class="note good">
+v2 迁移<b>不再依赖 tmux</b>是关键改动。老迁移要先问 tmux 要「名字 → <code>$N</code>」才肯搬，
+tmux 一死就整批丢弃 —— 这正是重启后历史被清空的第二重原因。
+现在用同表内的 <code>id → name</code> 映射翻译 parent，tmux 死透了也搬得动。
+</div>
+
+<h2 id="m1">9. 分期与落地记录</h2>
+<div class="tablewrap">
+<table>
+<thead><tr><th>里程碑</th><th>内容</th><th>状态</th></tr></thead>
+<tbody>
+<tr><td><b>M1 止血</b></td><td>见下清单</td><td class="good"><span class="pill good">已落地</span></td></tr>
+<tr><td><b>M2 建库</b></td><td><code>internal/metadb</code> 连接层 + schema + 迁移（§3/§8）</td><td><span class="pill">待办</span></td></tr>
+<tr><td><b>M3 上屏</b></td><td>会话列表「已结束」分组、项目页「不活跃」分组、<code>POST /sessions/:id/restore</code> + 重开按钮 + 对话回接（§7.1）</td><td><span class="pill">待办</span></td></tr>
+<tr><td><b>M4 收编</b></td><td><code>races.json</code> / <code>meta/&lt;id&gt;/*.txt</code> 并库；保留期清理与设置项；开机恢复开关</td><td><span class="pill">待办</span></td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>M1 落地清单</h3>
+<pre class="code">cli/ttmux-cli-go/internal/sessmeta/<b>sessmeta.go</b>
+  主键 <em>$N</em> → <u>持久会话 id</u>；表加 status / died_at / died_reason / tmux_id / tmux_epoch
+  <b>Reconcile</b>  改双向自愈的软删：活的置 live、不在的置 dead，<u>一行不删</u>
+              按 tmux_epoch 区分 killed / host-restart
+  <b>OnKill</b>     软删；<b>History()</b> 读历史；<b>prune()</b> 按 5000 条收口
+  <b>OnRename</b>   主键跟着搬（MigrateSessionsToID 那类真重命名会用到）
+  v1/v2 两代迁移都<u>不再依赖 tmux</u>，一行不丢
+
+cli/ttmux-cli-go/internal/command/session/<b>commands.go</b>
+  <b>recordNewSession</b>  <u>根因修复</u>：ttmux new / Web 建会话现在写一行 sessmeta + 开 pipe-pane
+
+backend/project/<b>service.go</b> · backend/api/<b>project.go</b>
+  Entry 加 <u>LastSessionAt</u>，聚合层 <b>NoteSessions</b>
+  退场判据：<em>此刻没会话</em> → <u>从来没有过会话</u>
+
+backend/worktree/<b>sessionhome.go</b>
+  pin() 同一 $N 换了会话名 = 换代复用 → <u>重钉而非继承</u>（§2.3）
+
+scripts/dev/<b>rebuild-session-history.py</b>
+  从 logs / meta / swarms / plugin_sessions / 老备份重建历史行
+  只补不覆盖、可反复跑、默认 dry-run</pre>
+
+<h3>验收（本机实测）</h3>
+<pre class="code">$ <b>ttmux new --json "落盘验证" --dir /home/ai/codes/ttmux</b>
+$ sqlite3 meta.db "select id,created_by,status,initial_cwd from sessions where id='…'"
+2026-0812-1813-000m | new | <u>live</u> | /home/ai/codes/ttmux      <s># 台账有行</s>
+$ ls -l ~/.roam/logs/2026-0812-1813-000m.log
+-rw-rw-r-- 139 …                                              <s># 日志有内容</s>
+$ <b>ttmux kill … --yes</b> &amp;&amp; sqlite3 meta.db "select status,died_reason from sessions where id='…'"
+<u>dead | killed</u>                                                <s># 软删，行还在</s>
+
+$ python3 scripts/dev/rebuild-session-history.py --write
+残骸 150 个会话 → 已写入                                       <s># 历史从 0 条恢复到 150 条</s>
+按月分布：2026-05 → 9 · 06 → 88 · 07 → 51 · 08 → 2            <s># 时间轴对得上</s></pre>
+
+<div class="note">
+<b>M1 之后仍然存在的缺口</b>（M2/M3 收）：同名会话复用会顶掉上一条历史（<code>_ttmux-*</code> 单例、
+固定名插件会话）——需要 <code>session_runs</code> 把「一个会话的多次生命」拆开；
+项目台账仍在 <code>projects.json</code>，没有事务；对话 uuid 还没记进表，重开只能给空壳。
+</div>
+</div>
+</body>
+</html>
