@@ -9,6 +9,7 @@ import type { MenuProps } from 'antd'
 import { api } from '../../api'
 import { useI18n } from '../../i18n'
 import { connect, type DuplexTransport } from '../../p2p/transport'
+import { devKindText, devStateText, listPhoneDevices, selectPhoneDevice, type PhoneDevice } from '../../phone-devices'
 import { AppsIcon, DeviceIcon, PhoneAssistIcon, PhoneBackIcon, PhoneHomeIcon, PhoneRecentsIcon, PowerIcon, RefreshIcon, SearchIcon } from '../../icons'
 import { fmtRate, IconBtn, MirrorChrome, MirrorMenu, Omnibox, StatusChip, StreamControl, useShelf, type Quality } from './mirror'
 
@@ -44,6 +45,7 @@ export default function PhoneView() {
   const [shelf, shelfRef] = useShelf()
   const [reconnectKey, setReconnectKey] = useState(0)
   const [platform, setPlatform] = useState<'android' | 'ios'>('android')
+  const [devices, setDevices] = useState<PhoneDevice[]>([])
   const [latency, setLatency] = useState<number | null>(null)
   const [bw, setBw] = useState(0)
   const [fps, setFps] = useState(0)
@@ -123,7 +125,7 @@ export default function PhoneView() {
   useEffect(() => { loadApps() }, [])
 
   // 平台（android/ios）→ 底部导航键自适应。取 health.platform；连不上回落看 config.mode。
-  useEffect(() => {
+  const loadIdentity = () => {
     api('GET', '/phone/health').then((r) => {
       const p = r?.data?.platform
       if (p === 'ios' || p === 'android') setPlatform(p)
@@ -131,10 +133,24 @@ export default function PhoneView() {
       setDevName(String(r?.data?.model || r?.data?.device || r?.data?.serial || ''))
       setDevOs(String(r?.data?.release ? `Android ${r.data.release}` : r?.data?.version || ''))
     }).catch(() => {})
+  }
+  useEffect(() => {
+    loadIdentity()
     api('GET', '/phone/config').then((r) => {
       if (r?.data?.platform === 'ios') setPlatform('ios')
     }).catch(() => {})
   }, [])
+
+  // 设备芯片＝切换器：一台机器上模拟器和真机常常同时挂着，换设备不该只能回设置页。
+  const loadDevices = () => listPhoneDevices(platform).then(setDevices)
+  useEffect(() => { loadDevices() }, [platform]) // 芯片上「这是哪一类设备」不能等到点开下拉才有
+  const switchDevice = async (id: string) => {
+    if (id === devices.find((d) => d.current)?.id) return
+    setDevices((ds) => ds.map((d) => ({ ...d, current: d.id === id })))
+    try { await selectPhoneDevice(platform, id) } catch (e: any) { message.error(e?.message || String(e)) }
+    loadIdentity(); loadDevices() // 回读一遍：连不上的话「当前是哪台」得按后端的说法回正
+    setReconnectKey((n) => n + 1) // 换了画面源：重连一遍，尺寸/健康都按新设备重来
+  }
 
   const launch = (id: string) => { if (id) api('POST', `/phone/apps/${encodeURIComponent(id)}/launch`).catch(() => {}) }
   const pressKey = (name: string) => api('POST', '/phone/key', { name }).catch(() => {})
@@ -213,6 +229,29 @@ export default function PhoneView() {
     { key: 'reconnect', icon: <RefreshIcon size={14} />, label: t('phone.reconnect'), onClick: () => setReconnectKey((n) => n + 1) },
   ]
 
+  // 设备芯片：一眼是哪台，点开换一台（浏览器页的设备芯片同一套写法）。
+  const cur = devices.find((d) => d.current)
+  const deviceChip = (
+    <Dropdown trigger={['click']} placement="bottomRight"
+      onOpenChange={(v) => { if (v) loadDevices() }}
+      menu={{
+        selectedKeys: cur ? [cur.id] : [],
+        items: devices.length ? devices.map((d) => {
+          const why = devStateText(d, t)
+          return {
+            key: d.id,
+            icon: <DeviceIcon size={14} />,
+            label: <span>{d.name}<span style={{ color: 'var(--text-dimmer)' }}>{` · ${devKindText(d, t)}${why ? ' · ' + why : ''}`}</span></span>,
+            onClick: () => switchDevice(d.id),
+          }
+        }) : [{ key: 'none', disabled: true, label: t('phone.devNone') }],
+      }}>
+      {/* onClick 空实现是给 StatusChip 要一个真 <button>（可聚焦、看着能点）——开合由 Dropdown 接冒泡管。 */}
+      <span><StatusChip icon={<DeviceIcon />} text={platform === 'ios' ? 'iOS' : 'Android'}
+        strong={cur ? devKindText(cur, t) : undefined} onClick={() => {}} /></span>
+    </Dropdown>
+  )
+
   // 设备按键：Android=返回/主屏/多任务；iOS=主屏/锁屏/Siri（iOS 无系统返回键）。
   // 桌面浮在画面底部——竖屏画面两侧本来就是大片黑边，按键条不该再占一整条；
   // 窄档反过来贴底成实条，浮层会压住已经顶到边的画面。
@@ -255,7 +294,7 @@ export default function PhoneView() {
               ? <span className="mc-omni-num">{`${latency == null ? '—' : latency + 'ms'} · ${fmtRate(bw)} · ${fps}fps`}</span>
               : undefined}
           />
-          {shelf !== 'narrow' && <StatusChip icon={<DeviceIcon />} text={platform === 'ios' ? 'iOS' : 'Android'} />}
+          {shelf !== 'narrow' && deviceChip}
           {/* 应用启动器：从前是个 160px 的 Select，窄屏上要独占一整行 */}
           <Dropdown trigger={['click']} placement="bottomRight" open={appsOpen} onOpenChange={(v) => { setAppsOpen(v); if (v) loadApps() }}
             popupRender={() => (
@@ -284,7 +323,7 @@ export default function PhoneView() {
           <MirrorMenu label={t('common.more')} items={menuItems} />
         </>}
         chips={shelf === 'narrow' ? <>
-          <StatusChip icon={<DeviceIcon />} text={platform === 'ios' ? 'iOS' : 'Android'} />
+          {deviceChip}
           {!!devOs && <StatusChip text={devOs} />}
         </> : undefined}
       />

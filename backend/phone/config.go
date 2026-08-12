@@ -115,8 +115,9 @@ func InitConfig(dataDir string) {
 // sanitizeAndroid 归一化 Android 子配置，消除模式/地址/分辨率互相串档导致的连不上或分辨率错乱。
 // 幂等：加载(InitConfig)与保存(setConfig)都调，脏配置无需任何 UI 操作即自愈。
 //   - 全字段去空白："localhost:5555  " 这类尾随空格会让 adb connect / adb -s 失败。
-//   - 真机(device)：地址必须是 USB serial(无冒号)或空；带 host:port 是 redroid 残留 → 丢弃回落默认设备。
-//   - 真机(device)：不套平板分辨率档(会把物理屏改成怪比例) → 恒原生。
+//   - 本机设备(device)：地址必须是 USB serial / emulator-xxxx(无冒号)或空；带 host:port 是 redroid 残留
+//     → 丢弃回落默认设备。
+//   - 本机设备(device)：不套平板分辨率档(会把物理屏改成怪比例) → 恒原生。
 func sanitizeAndroid(a AndroidCfg) AndroidCfg {
 	a.Mode = strings.TrimSpace(a.Mode)
 	a.Address = strings.TrimSpace(a.Address)
