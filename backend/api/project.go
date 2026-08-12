@@ -116,14 +116,7 @@ func (a *API) ProjectsList(c *gin.Context) {
 		}
 	}
 
-	races := map[string]int{} // dir → running 竞赛数
-	a.Races.mu.Lock()
-	for _, r := range a.Races.races {
-		if r.Status == "running" {
-			races[filepath.Clean(r.Dir)]++
-		}
-	}
-	a.Races.mu.Unlock()
+	races := a.Races.RunningByDir() // dir → running 竞赛数
 
 	list := []projectSummary{}
 	loose := []projectSession{}
