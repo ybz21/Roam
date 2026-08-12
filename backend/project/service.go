@@ -10,6 +10,7 @@
 package project
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"log"
@@ -470,33 +471,75 @@ func (s *Store) Trace(e TraceEntry) {
 }
 
 // ReadTrace 读某仓库的留痕（两代合并、新在前、上限 limit）。
+// ReadTrace 读某仓库最近的留痕（新在前，最多 limit 条）。
+//
+// **从文件尾部往回读**：留痕是只追加的 JSONL，要的永远是最新那几条，而文件会长到
+// 5MB 才轮转一代。原先每次都把两代整个读进来解析（最多 10MB），只为挑出 50 条——
+// 项目活动页每打开一次就付一遍这个代价。现在按块回读，凑够就停。
 func (s *Store) ReadTrace(repoDir string, limit int) []TraceEntry {
 	p := s.tracePath()
-	if p == "" {
+	if p == "" || limit <= 0 {
 		return nil
 	}
 	var out []TraceEntry
-	for _, f := range []string{p + ".1", p} {
-		b, err := os.ReadFile(f)
-		if err != nil {
-			continue
+	// 先读当前这代，不够再往上一代找
+	for _, f := range []string{p, p + ".1"} {
+		if len(out) >= limit {
+			break
 		}
-		for _, line := range strings.Split(string(b), "\n") {
-			if strings.TrimSpace(line) == "" {
+		out = append(out, tailTrace(f, repoDir, limit-len(out))...)
+	}
+	return out
+}
+
+// traceChunk 每次回读的块大小。留痕一行 200 字节上下，64KB 够覆盖几百条，
+// 绝大多数情况一块就够。
+const traceChunk = 64 << 10
+
+// tailTrace 从文件末尾往回扫，收集属于 repoDir 的留痕（新在前），最多 want 条。
+func tailTrace(path, repoDir string, want int) []TraceEntry {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		return nil
+	}
+	var (
+		out  []TraceEntry
+		pos  = st.Size()
+		rest []byte // 上一块开头那半行，拼到下一块（往回读）的末尾
+	)
+	for pos > 0 && len(out) < want {
+		n := int64(traceChunk)
+		if n > pos {
+			n = pos
+		}
+		pos -= n
+		buf := make([]byte, n)
+		if _, err := f.ReadAt(buf, pos); err != nil {
+			return out
+		}
+		buf = append(buf, rest...)
+		lines := bytes.Split(buf, []byte("\n"))
+		// 第一段可能是半行（除非已读到文件开头），留给下一块拼
+		if pos > 0 {
+			rest, lines = lines[0], lines[1:]
+		} else {
+			rest = nil
+		}
+		for i := len(lines) - 1; i >= 0 && len(out) < want; i-- {
+			line := bytes.TrimSpace(lines[i])
+			if len(line) == 0 {
 				continue
 			}
 			var e TraceEntry
-			if json.Unmarshal([]byte(line), &e) == nil && e.Repo == repoDir {
+			if json.Unmarshal(line, &e) == nil && e.Repo == repoDir {
 				out = append(out, e)
 			}
 		}
-	}
-	// 文件本身按时间追加，倒序 = 新在前
-	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
-		out[i], out[j] = out[j], out[i]
-	}
-	if len(out) > limit {
-		out = out[:limit]
 	}
 	return out
 }

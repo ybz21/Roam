@@ -2,8 +2,10 @@ package project
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"ttmux-web/internal/id"
@@ -164,5 +166,73 @@ func TestLoadMergesDuplicateDirs(t *testing.T) {
 		if d, ok := s.Dir(k); !ok || d != "/x" {
 			t.Fatalf("老 key %s 应仍解析到 /x", k)
 		}
+	}
+}
+
+// 留痕从文件尾部回读：要的永远是最新那几条，而文件会长到 5MB 才轮转。
+// 这几条同时钉住「新在前」「按仓库过滤」「跨块边界不丢行」「够了就不再往回读」。
+func TestReadTraceReturnsNewestFirst(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir, nil)
+	for i := 0; i < 5; i++ {
+		s.Trace(TraceEntry{Repo: "/repo/a", Branch: fmt.Sprintf("b%d", i), Action: "merged"})
+		s.Trace(TraceEntry{Repo: "/repo/other", Branch: "noise", Action: "cleaned"})
+	}
+	got := s.ReadTrace("/repo/a", 3)
+	if len(got) != 3 {
+		t.Fatalf("要 3 条, got %d", len(got))
+	}
+	for i, want := range []string{"b4", "b3", "b2"} {
+		if got[i].Branch != want {
+			t.Fatalf("第 %d 条 = %q, want %q（新在前）", i, got[i].Branch, want)
+		}
+	}
+	for _, e := range got {
+		if e.Repo != "/repo/a" {
+			t.Fatalf("串了别的仓库: %+v", e)
+		}
+	}
+}
+
+// 单条留痕远小于块大小，但总量要能跨过 64KB 的块边界——回读时那里最容易丢行。
+func TestReadTraceAcrossChunkBoundary(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir, nil)
+	// 每条塞一段长 branch 名，几百条就能跨过 64KB
+	pad := strings.Repeat("x", 300)
+	const n = 400
+	for i := 0; i < n; i++ {
+		s.Trace(TraceEntry{Repo: "/repo/a", Branch: fmt.Sprintf("%s-%d", pad, i), Action: "merged"})
+	}
+	got := s.ReadTrace("/repo/a", n)
+	if len(got) != n {
+		t.Fatalf("跨块回读丢了行: got %d, want %d", len(got), n)
+	}
+	if !strings.HasSuffix(got[0].Branch, fmt.Sprintf("-%d", n-1)) {
+		t.Fatalf("最新那条不对: %q", got[0].Branch)
+	}
+	if !strings.HasSuffix(got[n-1].Branch, "-0") {
+		t.Fatalf("最老那条不对: %q", got[n-1].Branch)
+	}
+}
+
+// 轮转过一代之后，当前这代不够就该往上一代找。
+func TestReadTraceFallsBackToRotated(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir, nil)
+	old := filepath.Join(dir, "activity.log.1")
+	line, _ := json.Marshal(TraceEntry{Repo: "/repo/a", Branch: "ancient", Action: "merged"})
+	if err := os.WriteFile(old, append(line, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s.Trace(TraceEntry{Repo: "/repo/a", Branch: "fresh", Action: "merged"})
+
+	got := s.ReadTrace("/repo/a", 10)
+	if len(got) != 2 || got[0].Branch != "fresh" || got[1].Branch != "ancient" {
+		t.Fatalf("轮转两代应当都读到且新在前: %+v", got)
+	}
+	// 当前这代就够了的话，不必去翻上一代
+	if one := s.ReadTrace("/repo/a", 1); len(one) != 1 || one[0].Branch != "fresh" {
+		t.Fatalf("limit=1 应当只给最新那条: %+v", one)
 	}
 }
