@@ -14,6 +14,9 @@ export type Proj = {
   key: string; name: string; dir: string; git: boolean; pinned: boolean
   sessions: number; attached: number; worktrees: number; unfinished: number; cleanable: number; races: number
   lastActivity: number; firstSeen: number
+  /** 归档时刻（秒，0/缺省 = 在册）。「不活跃」那节靠它排序并显示空了多久——
+      少了它，5 分钟前空下来的和三个月没动的长得一模一样。 */
+  archivedAt?: number
   /** 卡片「进行中」三行——**被后端截断过，不能拿它数数**。计数用 running/waiting，队列用 needs。 */
   top: ProjSession[] | null
   running?: number

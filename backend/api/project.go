@@ -55,7 +55,8 @@ type projectSummary struct {
 	Races        int              `json:"races"`      // running 状态的竞赛数
 	LastActivity int64            `json:"lastActivity"`
 	FirstSeen    int64            `json:"firstSeen"`
-	Top          []projectSession `json:"top"` // 活跃会话前 3（列表卡「进行中」三行）
+	Archived     bool             `json:"archived,omitempty"` // 干过活但此刻空着：收进「不活跃」分组
+	Top          []projectSession `json:"top"`                // 活跃会话前 3（列表卡「进行中」三行）
 
 	// Top 是**给卡片画三行用的**，被截断过，所以它算不出总数——前端拿它数 waiting/running
 	// 会漏掉第 4 个以后的会话。下面这三样在截断**之前**统计，是完整的：
@@ -89,6 +90,22 @@ var (
 )
 
 // ProjectsList GET /projects
+// noteArchived 判定并回写归档态，返回这个项目此刻算不算「不活跃」。
+//
+// 归档不是删除，也不是用户动作：它是读时收敛的判定结果——「干过活，但此刻既没有
+// 会话、也没有 roam worktree」。置顶的永远算活跃（用户明说要盯着它）。
+// 一旦又开了会话就自动回到活跃，不需要谁去「取消归档」。
+func (a *API) noteArchived(key string, e project.Entry, roamWts, sessions int) bool {
+	idle := roamWts == 0 && sessions == 0 && !e.Pinned
+	switch {
+	case idle && e.ArchivedAt == 0:
+		a.Projects.SetArchived(key, time.Now().Unix())
+	case !idle && e.ArchivedAt != 0:
+		a.Projects.SetArchived(key, 0)
+	}
+	return idle
+}
+
 func (a *API) ProjectsList(c *gin.Context) {
 	projRespMu.Lock()
 	if projResp != nil && time.Since(projRespAt) < 5*time.Second {
@@ -248,6 +265,7 @@ func (a *API) ProjectsList(c *gin.Context) {
 			a.Projects.Remove(key)
 			continue
 		}
+		p.Archived = a.noteArchived(key, e, roamWts, p.Sessions)
 		finish(&p, top)
 	}
 

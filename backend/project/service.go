@@ -50,6 +50,10 @@ type Entry struct {
 	// 有几个会话」：机器一重启 tmux 全清零，按当下会话数收敛会把所有发现型项目
 	// 一次性删光（会话是运行时，项目是台账，不能让前者的生死决定后者的存亡）。
 	LastSessionAt int64 `json:"lastSessionAt,omitempty"`
+	// ArchivedAt 归档时刻（0 = 在册）。「干过活但此刻空着」的项目转到这里，
+	// 而不是继续和活跃项目挤在同一份列表里——它们只是没开会话，不是没了。
+	// 一旦又开了会话就自动回到活跃。
+	ArchivedAt int64 `json:"archivedAt,omitempty"`
 }
 
 type fileShape struct {
@@ -96,7 +100,8 @@ func NewStore(dataDir string, db *metadb.DB) *Store {
 func (s *Store) loadDB() {
 	rows, err := s.db.Query(`SELECT id, dir, IFNULL(origin,''), IFNULL(display_name,''),
 		IFNULL(pinned,0), IFNULL(default_agent,''), IFNULL(default_base,''),
-		IFNULL(first_seen,0), IFNULL(last_seen,0), IFNULL(last_session_at,0) FROM projects`)
+		IFNULL(first_seen,0), IFNULL(last_seen,0), IFNULL(last_session_at,0),
+		IFNULL(archived_at,0) FROM projects`)
 	if err != nil {
 		return
 	}
@@ -104,7 +109,7 @@ func (s *Store) loadDB() {
 		var e Entry
 		var pinned int
 		if rows.Scan(&e.ID, &e.Dir, &e.Origin, &e.DisplayName, &pinned, &e.DefaultAgent,
-			&e.DefaultBase, &e.FirstSeen, &e.LastSeen, &e.LastSessionAt) != nil {
+			&e.DefaultBase, &e.FirstSeen, &e.LastSeen, &e.LastSessionAt, &e.ArchivedAt) != nil {
 			continue
 		}
 		e.Pinned = pinned != 0
@@ -136,15 +141,15 @@ func (s *Store) saveDB() {
 		for id, e := range s.repos {
 			if _, err := tx.Exec(`INSERT INTO projects
 				(id,dir,origin,display_name,pinned,default_agent,default_base,
-				 first_seen,last_seen,last_session_at)
-				VALUES(?,?,?,?,?,?,?,?,?,?)
+				 first_seen,last_seen,last_session_at,archived_at)
+				VALUES(?,?,?,?,?,?,?,?,?,?,?)
 				ON CONFLICT(id) DO UPDATE SET dir=excluded.dir, origin=excluded.origin,
 					display_name=excluded.display_name, pinned=excluded.pinned,
 					default_agent=excluded.default_agent, default_base=excluded.default_base,
 					first_seen=excluded.first_seen, last_seen=excluded.last_seen,
-					last_session_at=excluded.last_session_at`,
+					last_session_at=excluded.last_session_at, archived_at=excluded.archived_at`,
 				e.ID, e.Dir, e.Origin, e.DisplayName, boolInt(e.Pinned), e.DefaultAgent,
-				e.DefaultBase, e.FirstSeen, e.LastSeen, e.LastSessionAt); err != nil {
+				e.DefaultBase, e.FirstSeen, e.LastSeen, e.LastSessionAt, e.ArchivedAt); err != nil {
 				return err
 			}
 			keep = append(keep, id)
@@ -344,6 +349,19 @@ func (s *Store) NoteSessions(key string) {
 		s.repos[k].LastSessionAt = now
 		s.save()
 	}
+}
+
+// SetArchived 置/清归档。归档是**读时收敛的判定结果**，不是用户动作：
+// 聚合层每轮算完就把它写回来，所以只在真的变了的时候落盘。
+func (s *Store) SetArchived(key string, at int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	k := s.resolve(key)
+	if k == "" || s.repos[k].ArchivedAt == at {
+		return
+	}
+	s.repos[k].ArchivedAt = at
+	s.save()
 }
 
 // Entries 返回台账快照（copy，key = 项目 id，供只读聚合遍历）。

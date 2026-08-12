@@ -177,6 +177,8 @@ html[data-size="compact"] .prj-subbar.searching .prj-iconbtn.find{display:none}
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 html[data-size="compact"] .prj-quiet{grid-template-columns:minmax(0,1fr) auto;min-height:44px}
 html[data-size="compact"] .prj-quiet .p{display:none}
+/* 右列：可清理标签或「空闲多久」。两者互斥——有活要干时不必再说它闲着。 */
+.prj-quiet .qt{font-size:var(--fs-micro);color:var(--text-dimmer);white-space:nowrap}
 
 .prj-panel{background:var(--bg-container);border:1px solid var(--border-subtle);border-radius:12px;margin-top:8px}
 .prj-wtrow{padding:13px 16px}
@@ -419,7 +421,10 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
   // 两个任务」的项目占同样大的卡，还被同一行最高的卡撑高，页面下三分之一因此全是空卡。
   const isQuiet = (p: Proj) => p.sessions <= 0 && p.unfinished <= 0 && p.races <= 0
   const rest = visible.filter((p) => !p.pinned && !isQuiet(p))
+  // 不活跃那节按「什么时候空下来的」排：刚空的在前，久无人问津的沉底。
+  // 跟着上面的通用排序走的话，这一节读起来没有次序感。
   const quiet = visible.filter((p) => !p.pinned && isQuiet(p))
+    .sort((a, b) => (b.archivedAt || b.lastActivity || 0) - (a.archivedAt || a.lastActivity || 0))
 
   // 行动队列与状态条：跨项目，不吃搜索/筛选（它们只作用于下面的栅格）
   const goProject = (key: string) => { location.hash = '#/projects/' + encodeURIComponent(key) }
@@ -551,7 +556,11 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
                     role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); goProject(p.key) } }}>
                     <span className="nm">{p.name}</span>
                     <span className="p" title={p.dir}>{p.dir}</span>
-                    <span>{p.cleanable > 0 && <Tag color="success" style={{ margin: 0 }}>{t('project.cleanableCount', { count: p.cleanable })}</Tag>}</span>
+                    <span className="qt">
+                      {p.cleanable > 0
+                        ? <Tag color="success" style={{ margin: 0 }}>{t('project.cleanableCount', { count: p.cleanable })}</Tag>
+                        : (p.archivedAt ? t('project.quietSince', { when: relTime(p.archivedAt, t) }) : null)}
+                    </span>
                   </div>
                 ))}
               </div>
