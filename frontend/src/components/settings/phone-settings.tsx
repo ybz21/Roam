@@ -1,9 +1,11 @@
-// 手机/Android 后端配置：本地 redroid / 远程 redroid / 真机 三选一 + adb 地址。
+// 手机/Android 后端配置：本地 redroid / 远程 redroid / 本机设备 三选一 + 设备列表(点一下换目标)。
 // Android 与 iOS 互斥（active 决定哪个驱动镜像页），未装依赖时开关会先自动装。
 import { useEffect, useRef, useState } from 'react'
-import { App as AntApp, AutoComplete, Button, Card, Segmented, Space, Switch, Tag } from 'antd'
+import { App as AntApp, Button, Card, Input, Segmented, Space, Switch, Tag } from 'antd'
 import { api } from '../../api'
 import { useI18n } from '../../i18n'
+import { DeviceIcon } from '../../icons'
+import { androidTargetOf, devKindText, devStateText, listPhoneDevices, type PhoneDevice } from '../../phone-devices'
 
 type PhoneCfg = { active: '' | 'android' | 'ios'; android: { mode: string; address: string; resolution: string }; ios: { mode: string; address: string } }
 const PHONE_DEFAULT: PhoneCfg = { active: 'android', android: { mode: 'local', address: 'localhost:5555', resolution: '' }, ios: { mode: 'simulator', address: '' } }
@@ -15,7 +17,7 @@ export function PhoneSettings() {
   const [cfg, setCfg] = useState<PhoneCfg>(PHONE_DEFAULT)
   const cfgRef = useRef(cfg)
   const [status, setStatus] = useState<any>({})
-  const [devs, setDevs] = useState<{ android: any[]; ios: any[] }>({ android: [], ios: [] })
+  const [devs, setDevs] = useState<{ android: PhoneDevice[]; ios: PhoneDevice[] }>({ android: [], ios: [] })
   const [plat, setPlat] = useState<{ android: { installed: boolean }; ios: { installed: boolean; supported: boolean } }>({ android: { installed: false }, ios: { installed: false, supported: false } })
   const [installing, setInstalling] = useState<'android' | 'ios' | null>(null)
   const [busy, setBusy] = useState('')
@@ -23,13 +25,15 @@ export function PhoneSettings() {
   useEffect(() => { cfgRef.current = cfg }, [cfg])
 
   const loadStatus = () => api('GET', '/phone/status').then((r) => { if (r?.data) setStatus(r.data) }).catch(() => {})
-  const loadDevices = (p: 'android' | 'ios') => api('GET', `/phone/devices?platform=${p}`).then((r) => { if (r?.data) setDevs((s) => ({ ...s, [p]: r.data })) }).catch(() => {})
+  const loadDevices = (p: 'android' | 'ios') => listPhoneDevices(p).then((list) => setDevs((s) => ({ ...s, [p]: list })))
   const loadPlatforms = () => api('GET', '/phone/platforms').then((r) => { if (r?.data) setPlat({ android: { installed: !!r.data.android?.installed }, ios: { installed: !!r.data.ios?.installed, supported: !!r.data.ios?.supported } }) }).catch(() => {})
   useEffect(() => {
     api('GET', '/phone/config').then((r) => { if (r?.data) setCfg({ ...PHONE_DEFAULT, ...r.data, android: { ...PHONE_DEFAULT.android, ...r.data.android }, ios: { ...PHONE_DEFAULT.ios, ...r.data.ios } }) }).catch(() => {})
     loadPlatforms(); loadStatus(); loadDevices('android'); loadDevices('ios')
     const iv = setInterval(loadStatus, 3000) // 状态灯后台自动刷新
-    return () => clearInterval(iv)
+    // 设备列表也自动刷：插上 USB 真机 / 起了模拟器之后不该还要人去点「刷新设备」。
+    const dv = setInterval(() => { loadDevices('android'); loadDevices('ios') }, 6000)
+    return () => { clearInterval(iv); clearInterval(dv) }
   }, [])
 
   const persist = (next: PhoneCfg) => { setCfg(next); cfgRef.current = next; return api('PUT', '/phone/config', next).then(loadStatus).catch((e: any) => message.error(e.message)) }
@@ -78,10 +82,16 @@ export function PhoneSettings() {
     const sources = isA
       ? [{ label: t('phone.mode.local'), value: 'local' }, { label: t('phone.mode.remote'), value: 'remote' }, { label: t('phone.mode.device'), value: 'device' }]
       : [{ label: t('phone.ios.simulator'), value: 'simulator' }, { label: t('phone.ios.device'), value: 'device' }]
-    const opts = (devs[p] || []).map((d: any) => ({ value: d.id, label: `${d.name} (${d.id})${d.kind && d.kind !== 'android' ? ' · ' + d.kind : ''}` }))
+    const list = devs[p] || []
     // 切来源要连地址一起换：每种来源的目标地址各自独立(本地 redroid=loopback / 远程=待填 / 真机=默认设备)。
     // 否则从「本地 redroid」切到「真机」会把 localhost:5555 带过去，adb 一直连不存在的 loopback，真机被忽略→连不上。
     const changeSrc = (m: string) => patch(p, isA ? { mode: m, address: m === 'local' ? 'localhost:5555' : '' } : { mode: m, address: '' })
+    // 点一台设备＝换目标。Android 连来源一起换（地址形状决定怎么连），否则会被后端判成串档丢弃；
+    // iOS 同理：选中真机时来源也要从「模拟器」挪走，不然 simctl 那条路根本不认这个 UDID。
+    const pick = (d: PhoneDevice) => patch(p, isA ? androidTargetOf(d.id)
+      : { mode: d.kind === 'simulator' ? 'simulator' : 'device', address: d.id })
+    // 地址留空=后端用 adb 默认设备：那台由后端标 current，否则「默认单设备」下一台都不选中。
+    const isPicked = (d: PhoneDevice) => (c.address ? d.id === c.address : !!d.current)
     return (
       <Card size="small" title={
         <Space align="center">
@@ -96,14 +106,35 @@ export function PhoneSettings() {
             <span style={dim}>{t('phone.source')}</span>
             <Segmented value={c.mode} onChange={(v) => changeSrc(v as string)} options={sources} />
           </Space>
+          {/* 设备列表：一台机器上模拟器和真机常常同时挂着——两台都摆出来，点一下就换。
+              从前这里只有一个 AutoComplete，下拉按框里已有的文字过滤：选中一台之后列表里
+              就只剩它自己，另一台既看不见也选不了。 */}
+          <Space direction="vertical" size={6} style={{ width: '100%' }}>
+            <Space align="center" size={8}>
+              <span style={dim}>{t('phone.devices')}</span>
+              {/* 安静的行尾动作用 .tt-act：antd 的 size="small" 是 24px，手指档够不着(全站按钮不随 --ctl-h 长) */}
+              <button type="button" className="tt-act" onClick={() => loadDevices(p)}>{t('phone.refreshDevices')}</button>
+            </Space>
+            {list.length === 0 ? <span style={dim}>{isA ? t('phone.devNone') : t('phone.devNoneIOS')}</span> : (
+              <div className="tt-modes">
+                {list.map((d) => {
+                  const why = devStateText(d, t)
+                  return (
+                    <button type="button" key={d.id} className={`tt-mode${isPicked(d) ? ' on' : ''}`} onClick={() => pick(d)}>
+                      <i className="radio" aria-hidden />
+                      <span className="t"><DeviceIcon size={15} />{d.name}</span>
+                      <span className="d">{d.id} · {devKindText(d, t)}{why ? ' · ' : ''}{why && <em style={{ fontStyle: 'normal', color: 'var(--warn)' }}>{why}</em>}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </Space>
           {needAddr && (
             <Space direction="vertical" size={4} style={{ width: '100%' }}>
-              <Space.Compact style={{ width: '100%', maxWidth: 380 }}>
-                <AutoComplete value={c.address} onChange={(a) => editAddr(p, a)} onBlur={blurPersist} options={opts} style={{ width: '100%' }}
-                  placeholder={isA ? t('phone.addrPlaceholder') : t('phone.addrPlaceholderIOS')}
-                  filterOption={(i, o) => String(o?.value || '').toLowerCase().includes(i.toLowerCase())} />
-                <Button onClick={() => loadDevices(p)}>{t('phone.refreshDevices')}</Button>
-              </Space.Compact>
+              <span style={dim}>{t('phone.addrManual')}</span>
+              <Input value={c.address} onChange={(e) => editAddr(p, e.target.value)} onBlur={blurPersist} onPressEnter={blurPersist}
+                style={{ maxWidth: 380 }} placeholder={isA ? t('phone.addrPlaceholder') : t('phone.addrPlaceholderIOS')} />
               <span style={dim}>{isA ? (c.mode === 'remote' ? t('phone.addrHelpRemote') : t('phone.addrHelpDevice')) : t('phone.addrHelpIOS')}</span>
             </Space>
           )}

@@ -113,7 +113,13 @@ POST   /phone/text       {text}
 POST   /phone/key        {name: back|home|enter}
 GET    /phone/apps                // 列表
 POST   /phone/apps/:id/launch     // 启动
+GET    /phone/devices?platform=   // 目标设备列表(设置页与镜像页共用)
 ```
+
+`/phone/devices` 回 `{id,name,kind,state,current}`：`kind` 按 serial 形状分
+（`emulator-*`→emulator / 含冒号→network / 其余→usb），**不筛 state**——`offline`/`unauthorized`
+的那台也要列出来，否则真机没授权 USB 调试时用户只看到「少了一台」，不知道少的是哪台、为什么。
+`current` 认「实际会被操作的那台」：地址留空时=adb 默认设备（唯一就绪的那台），否则=地址匹配的那台。
 
 ## 5. 前端 `frontend/src/PhoneView.tsx`
 
@@ -194,8 +200,12 @@ xcrun simctl io booted screenshot shot.png
 | mode | 含义 | 地址 |
 |---|---|---|
 | `local` | 本地 redroid（同机容器） | 默认 `localhost:5555` |
-| `remote` | 远程 redroid（**ARM 主机原生跑 arm App，绕反模拟器**） | 它的 adb `host:port` |
-| `device` | 真机（**Linux/Mac 都支持**，adb 在 Mac 也有） | 无线 `host:port`；USB 填 serial（空=默认） |
+| `remote` | 远程 redroid / 经网络连的 adb 目标（**ARM 主机原生跑 arm App，绕反模拟器**；无线调试的手机也走这档） | 它的 adb `host:port` |
+| `device` | 本机设备：USB 真机或本机模拟器（**Linux/Mac 都支持**，adb 在 Mac 也有） | adb serial（空=默认单设备） |
+
+mode 由地址形状决定，不是两个独立选择：带冒号=网络（loopback→`local`，其余→`remote`），
+裸 serial=`device`。设置页/镜像页点设备时连 mode 一起换（`frontend/src/phone-devices.ts`
+的 `androidTargetOf`），否则会被 `sanitizeAndroid` 判成串档丢弃。
 
 **平台 iOS**（仅 macOS）：`address` = 模拟器 UDID（空=已 booted）；需 Xcode + idb。
 

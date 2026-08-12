@@ -170,7 +170,7 @@ func Start(c *gin.Context) {
 		o2, _ := runCmd(120*time.Second, "xcrun", "simctl", "bootstatus", udid, "-b")
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"log": string(o1) + string(o2), "running": iosSimBooted()}})
 	default:
-		c.JSON(http.StatusOK, gin.H{"error": "该来源无需启动（真机/远程在外部运行）"})
+		c.JSON(http.StatusOK, gin.H{"error": "该来源无需启动（本机设备/远程在外部运行）"})
 	}
 }
 
@@ -253,46 +253,54 @@ func Auto(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"log": log, "health": Current().Health()}})
 }
 
-// Devices 列出当前平台可用的目标设备（给设置页下拉选，免手敲 UDID/serial）。
+// Devices 列出当前平台的目标设备（设置页与镜像页据此把设备摆出来、点一下就换）。
+//
+// Android 一台机器上模拟器与真机常常同时挂着，所以这里不做筛选：
+//   - 未就绪的也报（offline / unauthorized），否则真机没授权 USB 调试时列表里凭空少一台，
+//     用户只看到「连不上」而不知道是哪台、为什么；
+//   - 配置里的目标即使 adb 看不见（远程 redroid 还没 connect）也补一条，
+//     不然「当前用的是哪台」会从 UI 上消失。
 func Devices(c *gin.Context) {
 	type dev struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
-		Kind string `json:"kind"` // android | simulator | device
+		ID      string `json:"id"`
+		Name    string `json:"name"`
+		Kind    string `json:"kind"`            // android: emulator|network|usb；ios: simulator|device
+		State   string `json:"state,omitempty"` // device | offline | unauthorized
+		Current bool   `json:"current,omitempty"`
 	}
-	var list []dev
+	list := []dev{}
 	plat := c.Query("platform")
 	if plat == "" {
 		plat = getConfig().Active
 	}
 	if plat == "ios" {
+		cur := strings.TrimSpace(getConfig().IOS.Address)
 		if inPath("idb") { // idb list-targets：Name | UDID | state | type | os
 			out, _ := runCmd(8*time.Second, "idb", "list-targets")
 			for _, ln := range strings.Split(string(out), "\n") {
 				p := strings.Split(ln, "|")
 				if len(p) >= 4 {
-					list = append(list, dev{ID: strings.TrimSpace(p[1]), Name: strings.TrimSpace(p[0]), Kind: strings.TrimSpace(p[3])})
+					id := strings.TrimSpace(p[1])
+					list = append(list, dev{ID: id, Name: strings.TrimSpace(p[0]), Kind: strings.TrimSpace(p[3]),
+						State: strings.TrimSpace(p[2]), Current: id != "" && id == cur})
 				}
 			}
 		}
-	} else {
-		out, _ := runCmd(5*time.Second, "adb", "devices", "-l")
-		for _, ln := range strings.Split(string(out), "\n") {
-			ln = strings.TrimSpace(ln)
-			if ln == "" || strings.HasPrefix(ln, "List of") {
-				continue
-			}
-			f := strings.Fields(ln)
-			if len(f) >= 2 && f[1] == "device" {
-				name := f[0]
-				for _, x := range f {
-					if strings.HasPrefix(x, "model:") {
-						name = strings.TrimPrefix(x, "model:")
-					}
-				}
-				list = append(list, dev{ID: f[0], Name: name, Kind: "android"})
-			}
-		}
+		c.JSON(http.StatusOK, gin.H{"data": list})
+		return
+	}
+	// 目标留空=adb 默认设备：把实际那台标成当前，否则「默认单设备」下列表里一台都不选中。
+	cur := androidImpl.target()
+	if cur == "" {
+		cur = androidImpl.soleReadySerial()
+	}
+	seen := map[string]bool{}
+	for _, a := range androidImpl.devices() {
+		seen[a.Serial] = true
+		list = append(list, dev{ID: a.Serial, Name: a.Model, Kind: androidKind(a.Serial), State: a.State, Current: a.Serial == cur})
+	}
+	if cur != "" && !seen[cur] {
+		list = append(list, dev{ID: cur, Name: cur, Kind: androidKind(cur), State: "offline", Current: true})
 	}
 	c.JSON(http.StatusOK, gin.H{"data": list})
 }

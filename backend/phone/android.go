@@ -34,6 +34,89 @@ func (d *androidDevice) target() string {
 	return os.Getenv("ANDROID_SERIAL")
 }
 
+// androidDev 是 `adb devices -l` 里的一行。
+type androidDev struct {
+	Serial string
+	Model  string
+	State  string // device | offline | unauthorized
+}
+
+// devices 解析 adb devices -l：本机挂着的全部设备（含未就绪的）。全局命令，不带 -s。
+// 不筛 state——没授权/离线的那台也要能在 UI 上看见，否则用户只看到「少了一台」。
+func (d *androidDevice) devices() []androidDev {
+	out, err := d.execAdb(5*time.Second, false, "devices", "-l")
+	if err != nil {
+		return nil
+	}
+	var list []androidDev
+	for _, ln := range strings.Split(string(out), "\n") {
+		ln = strings.TrimSpace(ln)
+		// "List of devices attached" 与 "* daemon started successfully" 都不是设备行
+		if ln == "" || strings.HasPrefix(ln, "List of") || strings.HasPrefix(ln, "*") {
+			continue
+		}
+		f := strings.Fields(ln)
+		if len(f) < 2 {
+			continue
+		}
+		one := androidDev{Serial: f[0], Model: f[0], State: f[1]}
+		for _, x := range f[2:] {
+			if strings.HasPrefix(x, "model:") {
+				// adb 把 ro.product.model 里的空格编码成下划线：Redmi_Note_8 → Redmi Note 8。
+				one.Model = strings.ReplaceAll(strings.TrimPrefix(x, "model:"), "_", " ")
+			}
+		}
+		list = append(list, one)
+	}
+	return list
+}
+
+// soleReadySerial：目标留空(=adb 默认设备)时，实际会被操作的那台 serial；不唯一则空。
+func (d *androidDevice) soleReadySerial() string {
+	got := ""
+	for _, a := range d.devices() {
+		if a.State != "device" {
+			continue
+		}
+		if got != "" {
+			return ""
+		}
+		got = a.Serial
+	}
+	return got
+}
+
+// ambiguousTargetErr：没指定目标 + 挂着多台就绪设备时，adb 一律以「more than one device」失败，
+// 此时说「连不上」等于没说。返回空串表示目标不含糊。
+func (d *androidDevice) ambiguousTargetErr() string {
+	if d.target() != "" || d.soleReadySerial() != "" {
+		return ""
+	}
+	n := 0
+	for _, a := range d.devices() {
+		if a.State == "device" {
+			n++
+		}
+	}
+	if n > 1 {
+		return "本机挂着多台 Android 设备，请先选一台"
+	}
+	return ""
+}
+
+// androidKind 按 serial 的形状分类设备：adb 只报 serial，形状就是唯一线索。
+// emulator-5554=本机模拟器、host:port=网络(redroid / 无线调试)、其余=USB 直连。
+func androidKind(serial string) string {
+	switch {
+	case strings.HasPrefix(serial, "emulator-"):
+		return "emulator"
+	case strings.Contains(serial, ":"):
+		return "network"
+	default:
+		return "usb"
+	}
+}
+
 // adbArgs 在命令前插入 -s <target>（有目标才插）。
 func (d *androidDevice) adbArgs(args ...string) []string {
 	if t := d.target(); t != "" {
@@ -136,6 +219,9 @@ func (d *androidDevice) Ensure() error {
 		d.connectIfNetwork()
 		_, _ = d.run(8*time.Second, "wait-for-device")
 		if d.state() != "device" {
+			if err := d.ambiguousTargetErr(); err != "" {
+				return errors.New(err)
+			}
 			return errors.New("无已就绪的 Android 设备（adb devices 看不到 device；先连真机或起模拟器/redroid）")
 		}
 		// 等开机完成，避免黑屏帧
@@ -163,6 +249,9 @@ func (d *androidDevice) Health() Status {
 	// Health 只查状态、不主动 adb connect（保持轻快，供状态轮询）；连接由 /phone/connect 或 Ensure 做。
 	ac := androidCfg()
 	if d.state() != "device" {
+		if err := d.ambiguousTargetErr(); err != "" {
+			return Status{OK: false, Platform: "android", Error: err}
+		}
 		where := ac.Address
 		if where == "" {
 			where = "默认设备"
@@ -173,9 +262,16 @@ func (d *androidDevice) Health() Status {
 	if out, err := d.shell(3*time.Second, "getprop", "ro.product.model"); err == nil {
 		model = strings.TrimSpace(string(out))
 	}
+	// 目标留空=adb 默认设备：把实际那台的 serial 找回来，否则显示成「Redmi Note 8 ()」。
 	id := d.target()
-	if model != "" {
+	if id == "" {
+		id = d.soleReadySerial()
+	}
+	switch {
+	case model != "" && id != "":
 		id = model + " (" + id + ")"
+	case model != "":
+		id = model
 	}
 	return Status{OK: true, Platform: "android", Device: id}
 }
@@ -185,7 +281,7 @@ func modeLabel(m string) string {
 	case "remote":
 		return "远程 redroid"
 	case "device":
-		return "真机"
+		return "本机设备"
 	default:
 		return "本地 redroid"
 	}
