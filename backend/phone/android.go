@@ -48,8 +48,13 @@ func (d *androidDevice) devices() []androidDev {
 	if err != nil {
 		return nil
 	}
+	return parseAdbDevices(string(out))
+}
+
+// parseAdbDevices 解析 `adb devices -l` 的输出（纯函数，便于测试）。
+func parseAdbDevices(out string) []androidDev {
 	var list []androidDev
-	for _, ln := range strings.Split(string(out), "\n") {
+	for _, ln := range strings.Split(out, "\n") {
 		ln = strings.TrimSpace(ln)
 		// "List of devices attached" 与 "* daemon started successfully" 都不是设备行
 		if ln == "" || strings.HasPrefix(ln, "List of") || strings.HasPrefix(ln, "*") {
@@ -71,10 +76,10 @@ func (d *androidDevice) devices() []androidDev {
 	return list
 }
 
-// soleReadySerial：目标留空(=adb 默认设备)时，实际会被操作的那台 serial；不唯一则空。
-func (d *androidDevice) soleReadySerial() string {
+// soleReady：唯一一台就绪设备的 serial；没有或不止一台都回空。
+func soleReady(list []androidDev) string {
 	got := ""
-	for _, a := range d.devices() {
+	for _, a := range list {
 		if a.State != "device" {
 			continue
 		}
@@ -86,14 +91,14 @@ func (d *androidDevice) soleReadySerial() string {
 	return got
 }
 
-// ambiguousTargetErr：没指定目标 + 挂着多台就绪设备时，adb 一律以「more than one device」失败，
+// ambiguousTarget：没指定目标 + 挂着多台就绪设备时，adb 一律以「more than one device」失败，
 // 此时说「连不上」等于没说。返回空串表示目标不含糊。
-func (d *androidDevice) ambiguousTargetErr() string {
-	if d.target() != "" || d.soleReadySerial() != "" {
+func ambiguousTarget(target string, list []androidDev) string {
+	if target != "" || soleReady(list) != "" {
 		return ""
 	}
 	n := 0
-	for _, a := range d.devices() {
+	for _, a := range list {
 		if a.State == "device" {
 			n++
 		}
@@ -102,6 +107,13 @@ func (d *androidDevice) ambiguousTargetErr() string {
 		return "本机挂着多台 Android 设备，请先选一台"
 	}
 	return ""
+}
+
+// soleReadySerial：目标留空(=adb 默认设备)时，实际会被操作的那台 serial。
+func (d *androidDevice) soleReadySerial() string { return soleReady(d.devices()) }
+
+func (d *androidDevice) ambiguousTargetErr() string {
+	return ambiguousTarget(d.target(), d.devices())
 }
 
 // androidKind 按 serial 的形状分类设备：adb 只报 serial，形状就是唯一线索。
