@@ -82,45 +82,14 @@ eq "info --json sessions=0 (no server)" "0" "$($GO info --json | jget 'd["sessio
 eq "ls --json empty (no server)" "0" "$($GO ls --json | jget 'len(d)')"
 
 # ════════════════════════════════════════════
-sec "tasks: spawn / status / collect / group"
-$GO spawn build "lint" "echo LINT_OK; sleep 300" "test" "echo TEST_OK; sleep 300" >/dev/null
-eq "spawn created group file" "2" "$(wc -l < "$TTMUX_DATA/groups/build.group" | tr -d ' ')"
-rc0 "session build-lint exists" tmux -L "$SOCKET" has-session -t build-lint
-eq "status --json task count" "2" "$($GO status build --json | jget 'len(d["tasks"])')"
-eq "status --json running" "running" "$($GO status build --json | jget 'd["tasks"][0]["status"]')"
-has "status pretty" "$($GO status build)" "运行中"
-eq "group ls --json" "build" "$($GO group ls --json | jget 'd[0]["group"]')"
-has "group ls pretty" "$($GO group ls)" "build"
-eq "collect --json prompt" "echo LINT_OK; sleep 300" "$($GO collect build --json | jget 'd["results"][0]["prompt"].strip()')"
-has "collect text" "$($GO collect build)" "build-lint"
-eq "task meta type=cmd" "cmd" "$(cat "$TTMUX_DATA/meta/build-lint/type.txt")"
+sec "sessions: send / capture / windows"
+# 自己建一个会话：这几条以前搭 `spawn` 建出来的任务会话的便车，而 spawn 作为
+# 用户级命令在迁到 Go 时就有意去掉了（内部仍被蜂群/插件用着）。
+SESS=$($GO new --json probe --dir "$SANDBOX" | jget 'd["session"]')
+$GO send "$SESS" "echo INJECTED_CMD" >/dev/null; sleep 1
+has "capture shows injected" "$($GO capture "$SESS" --lines 50)" "INJECTED_CMD"
+has "lw lists window on session" "$($GO lw -t "$SESS")" "◻"
 
-sec "tasks: send / capture"
-$GO send build-lint "echo INJECTED_CMD" >/dev/null; sleep 1
-has "capture shows injected" "$($GO capture build-lint --lines 50)" "INJECTED_CMD"
-
-sec "windows: list"
-has "lw lists window on session" "$($GO lw -t build-lint)" "◻"
-
-sec "tasks: spawn --file + --agent"
-printf 'a echo A; sleep 300\nb echo B; sleep 300\n' > "$SANDBOX/tasks.txt"
-$GO spawn --file fromfile "$SANDBOX/tasks.txt" >/dev/null
-eq "spawn --file 2 tasks" "2" "$(wc -l < "$TTMUX_DATA/groups/fromfile.group" | tr -d ' ')"
-$GO spawn --agent ai "api" "实现登录" --dir /tmp --perm auto >/dev/null; sleep 1
-eq "agent meta type=agent" "agent" "$(cat "$TTMUX_DATA/meta/ai-api/type.txt")"
-has "agent pane runs fake claude" "$(tmux -L "$SOCKET" capture-pane -t ai-api -p)" "[fake claude]"
-
-sec "tasks: wait (task that exits) + group kill"
-$GO spawn quick "q1" "echo QUICKDONE; exit" >/dev/null
-$GO wait quick --timeout 10 >/tmp/e2e-wait 2>&1
-has "wait completes" "$(cat /tmp/e2e-wait)" "全部完成"
-$GO group kill build >/dev/null
-rc0 "group kill removed file" bash -c "[ ! -f '$TTMUX_DATA/groups/build.group' ]"
-rc0 "group kill removed session" bash -c "! tmux -L '$SOCKET' has-session -t build-lint 2>/dev/null"
-
-# ════════════════════════════════════════════
-# 会话身份：tmux 会话名 = 会话 id（2026-0728-1808-0000），用户起的名字降级为
-# 展示名，存 tmux 用户选项 @roam_name。ttmux 一律显示「名字(id)」。
 sec "session identity: id as tmux name, label for display"
 $GO new "我的 会话" --detach >/dev/null
 SID="$($GO resolve "我的 会话")"
@@ -157,8 +126,11 @@ $GO swarm add feat api --type task "echo API; sleep 300" >/dev/null
 $GO swarm add feat web --type task "echo WEB; sleep 300" >/dev/null
 $GO swarm add feat qa --type task --depends-on api "echo QA; sleep 300" >/dev/null
 sleep 1
-eq "members launched" "2" "$($GO swarm status feat --json | jget 'len(d["members"])')"
-eq "qa pending on api" "qa" "$($GO swarm status feat --json | jget 'd["pending"][0]["name"]')"
+# 依赖是**软**的：记录关系供拓扑连线与 prompt 协调，但不挂起——成员一建出来就
+# 起会话开工，缺上游产出时自己去广场等/问（见 cmdAdd 的注释与 worker.md.tmpl）。
+# 这里断言的正是「三个都起来了、没有谁被扣住」。
+eq "members launched" "3" "$($GO swarm status feat --json | jget 'len(d["members"])')"
+eq "soft deps recorded" "api" "$($GO swarm sql feat --json "SELECT deps FROM members WHERE name='qa'" | jget 'd[0]["deps"]')"
 eq "goal stored" "登录功能" "$($GO swarm status feat --json | jget 'd["goal"]')"
 has "swarm ls --json" "$($GO swarm ls --json | jget '[s["name"] for s in d]')" "feat"
 has "swarm ls pretty" "$($GO swarm ls)" "feat"

@@ -1,6 +1,7 @@
 package swarm
 
 import (
+	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -430,11 +431,34 @@ func readFirst(path string) string {
 // ReadQuery runs a read-only query against a swarm's db and returns the column
 // names and string rows (backs `swarm sql`).
 func (s *Store) ReadQuery(swarm, query string) ([]string, [][]string, error) {
-	db, err := s.openSwarmDB(swarm)
+	id := s.ResolveID(swarm)
+	if id == "" {
+		return nil, nil, fmt.Errorf("swarm not found: %s", swarm)
+	}
+	// 专用只读连接，不走共享池：下面要建临时视图，而临时对象是**按连接**的，
+	// 落在池里会随机漏给别的调用方。这条命令是人手敲的，不在热路径上，多开一条不心疼。
+	db, err := sql.Open("sqlite", "file:"+s.metaPath()+"?_pragma=busy_timeout(5000)&mode=ro")
 	if err != nil {
 		return nil, nil, err
 	}
+	db.SetMaxOpenConns(1)
 	defer db.Close()
+
+	// members / cards 现在住在主库、靠 swarm_id 分群。用按群限定的临时视图把老名字
+	// 还回去：`SELECT ... FROM members` 这类既有查询照常能用，而且看不到别的群。
+	// posts 仍在每群自己的库里，attach 进来。
+	for _, q := range []string{
+		`CREATE TEMP VIEW members AS SELECT * FROM swarm_members WHERE swarm_id=` + sqlLiteral(id),
+		`CREATE TEMP VIEW cards AS SELECT * FROM swarm_cards WHERE swarm_id=` + sqlLiteral(id),
+		`ATTACH DATABASE ` + sqlLiteral(s.swarmDBPath(id)) + ` AS perswarm`,
+	} {
+		if _, err := db.Exec(q); err != nil && !strings.Contains(err.Error(), "unable to open") {
+			return nil, nil, err
+		}
+	}
+	// posts 视图单独建：库不存在时（从没发过帖）上面的 ATTACH 会失败，那就跳过。
+	_, _ = db.Exec(`CREATE TEMP VIEW posts AS SELECT * FROM perswarm.posts`)
+
 	rows, err := db.Query(query)
 	if err != nil {
 		return nil, nil, err
@@ -490,3 +514,7 @@ func (s *Store) Remove(swarm string) error {
 	}
 	return os.RemoveAll(s.swarmHome(id))
 }
+
+// sqlLiteral 把字符串包成 SQL 字面量（临时视图的定义不能用占位符）。
+// 输入是我们自己解析出来的蜂群 id 与库路径，不是用户串；转义单引号只为稳妥。
+func sqlLiteral(v string) string { return "'" + strings.ReplaceAll(v, "'", "''") + "'" }
