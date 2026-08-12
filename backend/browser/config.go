@@ -106,6 +106,22 @@ func saveConfig(c Config) error {
 	return os.Rename(tmp, f)
 }
 
+// normalizeHeadless 把模式收敛到 auto/on/off（无法识别返回空 = 未设，交给 pick 回落）。
+// 配置文件是手可以改的，历史上也出现过 "new"（照着 --headless=new 写）这种野值：不收敛的话
+// Settings 的分段控件选不中任何一项，而 ensureChrome 把它当成「非 off」照样按无头跑
+// —— 界面和实际就此对不上，还看不出为什么。
+func normalizeHeadless(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "auto":
+		return "auto"
+	case "on", "new", "true", "1":
+		return "on"
+	case "off", "false", "0":
+		return "off"
+	}
+	return ""
+}
+
 func pick(stored, env, def string) string {
 	if stored != "" {
 		return stored
@@ -126,7 +142,7 @@ func effectiveConfig() Config {
 		fs = false
 	}
 	return Config{
-		Headless:   pick(c.Headless, "", "auto"),
+		Headless:   pick(normalizeHeadless(c.Headless), "", "auto"),
 		WindowSize: pick(c.WindowSize, os.Getenv("TTMUX_CHROME_WINDOW"), "1920,1080"),
 		Fullscreen: &fs,
 		Scale:      pick(c.Scale, os.Getenv("TTMUX_CHROME_SCALE"), "2"),
@@ -159,6 +175,7 @@ func SetConfig(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
 		return
 	}
+	in.Headless = normalizeHeadless(in.Headless) // 落盘的就是干净值，chrome CLI 也读同一份文件
 	if err := saveConfig(in); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "WRITE_ERROR", "message": err.Error()}})
 		return
