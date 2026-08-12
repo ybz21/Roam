@@ -7,6 +7,7 @@ package id
 
 import (
 	"crypto/rand"
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -70,3 +71,18 @@ func base36pad4(n uint64) string {
 
 // Valid 判断字符串是否本格式的 id。
 func Valid(s string) bool { return re.MatchString(s) }
+
+// UUID 生成一个 v4 UUID。
+//
+// 用处只有一个：Claude Code 的 --session-id 要求合法 UUID。我们自己指定它，
+// 「哪份 transcript 属于哪个会话」就由构造保证，不用靠 cwd + 最新文件去猜
+// （那个猜法在会话死后必然失准——同目录的别的会话会赢）。
+func UUID() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return ""
+	}
+	b[6] = (b[6] & 0x0f) | 0x40 // version 4
+	b[8] = (b[8] & 0x3f) | 0x80 // variant 10
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}

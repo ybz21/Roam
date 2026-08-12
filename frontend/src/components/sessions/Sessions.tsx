@@ -6,6 +6,7 @@ import { api } from '../../api'
 import { CloseWorktreeModal } from './CloseWorktreeModal'
 import { NewSessionModal } from './NewSessionModal'
 import { useI18n } from '../../i18n'
+import { SessionHistory } from './SessionHistory'
 import { useLayout } from '../../layout'
 import { detectPrompt } from '../prompt'
 import { sessionDisplay, setSessionLabels } from './session-label'
@@ -503,6 +504,9 @@ export default function Sessions({ openTerm, closeTerm, activeTerm, embedded }: 
               )
             }} />
           )}
+      {/* 已结束的会话（M3）：默认折叠，展开才拉数据。放在列表尾部——
+          它是「要找的时候能找到」，不该跟活着的会话抢位置。 */}
+      <SessionHistory onRestored={(name) => { load(); openTerm(name) }} />
       <NewSessionModal open={newOpen || !!forking} parent={forking}
         onClose={() => { setNewOpen(false); setForking(null) }} onDone={(name) => { load(); openTerm(name) }} />
       <CloseWorktreeModal info={closing} onClose={() => setClosing(null)} onDone={(name) => { closeTerm(name); load() }} />

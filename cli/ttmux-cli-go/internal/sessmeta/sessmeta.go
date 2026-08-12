@@ -61,10 +61,14 @@ type Row struct {
 	CreatedBy  string `json:"created_by,omitempty"`
 	CreatedAt  string `json:"created_at,omitempty"`
 	InitialCwd string `json:"initial_cwd,omitempty"`
-	// 以下三列只在读历史时有意义，Put 不吃。
+	// 以下几列只在读历史时有意义，Put 不吃。
 	Status     string `json:"status,omitempty"`      // live | dead
 	DiedAt     string `json:"died_at,omitempty"`     //
 	DiedReason string `json:"died_reason,omitempty"` // killed | host-restart
+	Label      string `json:"label,omitempty"`       // 展示名快照（会话死后 @roam_name 就没了）
+	Home       string `json:"home,omitempty"`        // 归属目录
+	RepoRoot   string `json:"repo_root,omitempty"`   // 所属仓库根（建会话时算好的）
+	AgentUUID  string `json:"agent_uuid,omitempty"`  // agent 那一侧的对话 id
 }
 
 func New(homeDir string) *Store { return &Store{HomeDir: homeDir, Now: time.Now} }
@@ -209,6 +213,54 @@ func (s *Store) SetLabel(session, label string) error {
 	return err
 }
 
+// Get 读单个会话的台账行（活的死的都能读）。
+func (s *Store) Get(session string) (Row, bool) {
+	if session == "" {
+		return Row{}, false
+	}
+	db, err := s.db()
+	if err != nil {
+		return Row{}, false
+	}
+	r := Row{Session: session}
+	err = db.QueryRow(`SELECT IFNULL(parent_id,''), IFNULL(created_by,''), IFNULL(created_at,''),
+		IFNULL(initial_cwd,''), status, IFNULL(died_at,''), IFNULL(died_reason,''),
+		IFNULL(label,''), IFNULL(home_dir,''), IFNULL(repo_root,''), IFNULL(agent_session_uuid,'')
+		FROM sessions WHERE id=?`, session).
+		Scan(&r.Parent, &r.CreatedBy, &r.CreatedAt, &r.InitialCwd, &r.Status,
+			&r.DiedAt, &r.DiedReason, &r.Label, &r.Home, &r.RepoRoot, &r.AgentUUID)
+	return r, err == nil
+}
+
+// SetRestoredFrom 记「这个会话是谁重开出来的」。旧行保持 dead 不复活——
+// 重开的是壳不是现场，历史不该被改写。
+func (s *Store) SetRestoredFrom(session, from string) error {
+	if session == "" || from == "" {
+		return nil
+	}
+	db, err := s.db()
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`UPDATE sessions SET restored_from=? WHERE id=?`, from, session)
+	return err
+}
+
+// SetAgentSession 记 agent 那一侧的对话 id（Claude Code 的 <uuid>.jsonl）。
+// 拉起 agent 时传了 --session-id，这里把同一个 uuid 落进台账——「重开并接回原对话」
+// 全靠它，而它必须在会话还活着的时候记下来。
+func (s *Store) SetAgentSession(session, uuid string) error {
+	if session == "" || uuid == "" {
+		return nil
+	}
+	db, err := s.db()
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`UPDATE sessions SET agent_session_uuid=? WHERE id=?`, uuid, session)
+	return err
+}
+
 // SetParent 设置/清空 parent；设置前做环检测（沿新父链上溯不得遇到 child）。
 func (s *Store) SetParent(child, parent string) error {
 	s.invalidate()
@@ -322,7 +374,8 @@ func (s *Store) History(limit int) []Row {
 		return nil
 	}
 	q := `SELECT id, IFNULL(parent_id,''), IFNULL(created_by,''), IFNULL(created_at,''),
-		IFNULL(initial_cwd,''), IFNULL(died_at,''), IFNULL(died_reason,'')
+		IFNULL(initial_cwd,''), IFNULL(died_at,''), IFNULL(died_reason,''),
+		IFNULL(label,''), IFNULL(home_dir,''), IFNULL(repo_root,''), IFNULL(agent_session_uuid,'')
 		FROM sessions WHERE status='dead' ORDER BY IFNULL(died_at,created_at) DESC`
 	args := []any{}
 	if limit > 0 {
@@ -338,7 +391,7 @@ func (s *Store) History(limit int) []Row {
 	for rows.Next() {
 		r := Row{Status: "dead"}
 		if rows.Scan(&r.Session, &r.Parent, &r.CreatedBy, &r.CreatedAt, &r.InitialCwd,
-			&r.DiedAt, &r.DiedReason) == nil {
+			&r.DiedAt, &r.DiedReason, &r.Label, &r.Home, &r.RepoRoot, &r.AgentUUID) == nil {
 			out = append(out, r)
 		}
 	}

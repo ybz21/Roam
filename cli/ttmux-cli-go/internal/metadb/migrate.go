@@ -29,14 +29,39 @@ const createSchemaMeta = `CREATE TABLE IF NOT EXISTS schema_meta(
 // Version 返回库当前的 schema 版本（没有账本表时为 0）。
 func (d *DB) Version() (int, error) { return currentVersion(d.DB) }
 
-func currentVersion(q interface {
-	QueryRow(string, ...any) *sql.Row
-}) (int, error) {
+func currentVersion(q rowQuerier) (int, error) {
 	var v sql.NullInt64
 	if err := q.QueryRow(`SELECT MAX(version) FROM schema_meta`).Scan(&v); err != nil {
 		return 0, err
 	}
 	return int(v.Int64), nil
+}
+
+type rowQuerier interface {
+	QueryRow(string, ...any) *sql.Row
+}
+
+// applied 返回已经盖过章的版本集合。
+//
+// 判「这一步做没做」用集合而不是 MAX(version)：有的步骤前提不齐会被推迟
+// （见 ErrStepDeferred），若按 MAX 判定，一个推迟的步骤就会把它后面所有步骤
+// 永远挡在门外。账本表本来就是一行一步，正是为这个留的。
+func appliedSteps(q interface {
+	Query(string, ...any) (*sql.Rows, error)
+}) (map[int]bool, error) {
+	rows, err := q.Query(`SELECT version FROM schema_meta`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int]bool{}
+	for rows.Next() {
+		var v int
+		if rows.Scan(&v) == nil {
+			out[v] = true
+		}
+	}
+	return out, rows.Err()
 }
 
 // needsAdoptBackup 报告这是不是一个「有数据但还没被本包接管过」的老库。
@@ -60,23 +85,22 @@ func migrate(d *DB, steps []Step, opt Options) error {
 	if _, err := d.DB.Exec(createSchemaMeta); err != nil {
 		return err
 	}
-	cur, err := currentVersion(d.DB)
+	done, err := appliedSteps(d.DB)
 	if err != nil {
 		return err
 	}
-	if len(steps) > 0 && cur >= steps[len(steps)-1].Version {
+	if len(done) >= len(steps) {
 		return nil // 常态：一次 SELECT 走人
 	}
 	for _, st := range steps {
-		if st.Version <= cur {
+		if done[st.Version] {
 			continue
 		}
 		err := applyStep(d, st, opt)
 		if errors.Is(err, ErrStepDeferred) {
 			// 这一步的前提还不齐（典型：plugind 先开了库，没带 DataDir，收编没法做）。
-			// 不盖章、不报错、就停在这个版本——下一次带全 Options 的 Open 会补上。
-			// 因此需要外部输入的 step 必须排在最后，前面的不能被它挡住。
-			return nil
+			// 不盖章、不报错，**继续做后面的**——下一次带全 Options 的 Open 会把它补上。
+			continue
 		}
 		if err != nil {
 			return fmt.Errorf("metadb: step %d(%s): %w", st.Version, st.Name, err)
@@ -90,11 +114,11 @@ var ErrStepDeferred = errors.New("metadb: 前提不齐，本步推迟")
 
 func applyStep(d *DB, st Step, opt Options) error {
 	return d.Tx(func(tx *sql.Tx) error {
-		again, err := currentVersion(tx)
-		if err != nil {
+		var n int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM schema_meta WHERE version=?`, st.Version).Scan(&n); err != nil {
 			return err
 		}
-		if again >= st.Version {
+		if n > 0 {
 			return nil // 另一个进程赢了，让路
 		}
 		if st.SQL != "" {
@@ -107,7 +131,7 @@ func applyStep(d *DB, st Step, opt Options) error {
 				return err
 			}
 		}
-		_, err = tx.Exec(`INSERT INTO schema_meta(version,name,applied_at) VALUES(?,?,?)`,
+		_, err := tx.Exec(`INSERT INTO schema_meta(version,name,applied_at) VALUES(?,?,?)`,
 			st.Version, st.Name, opt.now().Format("2006-01-02T15:04:05Z07:00"))
 		return err
 	})

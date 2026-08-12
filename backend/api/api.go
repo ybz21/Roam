@@ -229,6 +229,38 @@ func (a *API) newSession(label, dir string) (string, error) {
 	return res.Session, nil
 }
 
+// SessionHistory GET /sessions/history —— 已结束的会话。
+//
+// 会话死了行不删（M2），所以「那天下午干了什么」翻得回来：每条带着原归属目录、
+// 展示名快照、结束原因，以及 agent 那一侧的对话 id。
+func (a *API) SessionHistory(c *gin.Context) {
+	args := []string{"db", "history", "--json"}
+	if n := c.Query("limit"); n != "" {
+		args = append(args, "--limit", n)
+	}
+	a.json(c, args...)
+}
+
+// SessionRestore POST /sessions/:name/restore —— 按台账重开一个壳。
+//
+// 重开的是**壳**不是现场：pane 里的进程死了就是死了。同目录、同展示名，
+// 有 agent 对话 id 就顺带接回原对话；旧行保持 dead，新会话是新 id。
+func (a *API) SessionRestore(c *gin.Context) {
+	out, err := a.TT.Run("db", "restore", c.Param("name"), "--json")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{
+			"code": "RESTORE_FAILED", "message": ttmux.StripANSI(out)}})
+		return
+	}
+	var res map[string]string
+	if json.Unmarshal([]byte(out), &res) != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{
+			"code": "RESTORE_FAILED", "message": ttmux.StripANSI(out)}})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": res})
+}
+
 // RenameSession PATCH /sessions/:name {name} —— 改会话的**展示名**。
 // tmux 会话名是 id、永远不动：终端标签、URL、归属、meta 外键、logs/meta 路径
 // 一个都不用跟着搬，重名也无所谓。

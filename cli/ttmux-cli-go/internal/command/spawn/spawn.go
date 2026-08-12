@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 
 	"ttmux-cli-go/internal/runtime"
+	"ttmux-cli-go/internal/sessmeta"
 	"ttmux-cli-go/internal/ui"
 )
 
@@ -36,6 +38,7 @@ func spawnOne(rt runtime.Runtime, group, name, taskType, payload string, ac Agen
 	rt.InjectEnv(sess)
 	_ = rt.Tmux("pipe-pane", "-t", sess, "-o", "cat >> '"+rt.LogFile(sess)+"'")
 	_ = os.WriteFile(rt.LogFile(sess), nil, 0o644)
+	recordAgentSession(rt, sess, ac)
 	if err := rt.WriteTaskMeta(sess, taskType, payload, ac.Workdir, label); err != nil {
 		return false, sess, err
 	}
@@ -251,4 +254,32 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n]
+}
+
+// recordAgentSession 把这次启动的归属目录、仓库根与 agent 对话 id 落进台账。
+// 都是「现在不记，以后就永远算不出来」的东西：worktree 会被删、
+// transcript 会被同目录的别的会话盖过去。
+func recordAgentSession(rt runtime.Runtime, sess string, ac AgentConfig) {
+	if sess == "" {
+		return
+	}
+	meta := sessmeta.New(rt.HomeDir)
+	meta.DataDir = rt.DataDir
+	_ = meta.SetHome(sess, ac.Workdir, repoRootOf(ac.Workdir))
+	if ac.Kind != "codex" {
+		_ = meta.SetAgentSession(sess, ac.SessionUUID)
+	}
+}
+
+// repoRootOf 求目录所属的 git 主仓库根（worktree 归位到主仓库）。
+func repoRootOf(dir string) string {
+	if dir == "" {
+		return ""
+	}
+	out, err := exec.Command("git", "-C", dir, "rev-parse",
+		"--path-format=absolute", "--git-common-dir").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSuffix(strings.TrimSuffix(strings.TrimSpace(string(out)), "/"), "/.git")
 }

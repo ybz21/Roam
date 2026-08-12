@@ -16,6 +16,22 @@ var mainSteps = []Step{
 	{Version: 1, Name: "baseline", Fn: baseline},
 	{Version: 2, Name: "ledger-tables", SQL: ledgerTables},
 	{Version: 3, Name: "import-legacy", Fn: importLegacy},
+	{Version: 4, Name: "agent-session", Fn: addAgentSession},
+}
+
+// addAgentSession 给 sessions 加 agent_session_uuid：agent 那一侧的对话 id。
+//
+// Claude Code 的对话存在 ~/.claude/projects/<cwd-slug>/<uuid>.jsonl，与 tmux 无关，
+// 重启一段不丢——缺的只是「哪份 transcript 属于哪个会话」。靠 cwd + 取最新文件猜
+// 只在会话活着时勉强成立，会话一死就失准（同目录的别的会话会赢）。
+// 所以改成由我们**指定**：拉起 agent 时传 --session-id，关联由构造保证。
+func addAgentSession(tx *sql.Tx, _ Options) error {
+	// restored_from 是软引用（只存 id、不加 FK）：被重开的那一行可能已经过了
+	// 保留期被清掉，而「这个会话是重开出来的」这个事实本身仍然成立。
+	return addColumns(tx, "sessions", map[string]string{
+		"agent_session_uuid": "TEXT",
+		"restored_from":      "TEXT",
+	})
 }
 
 // ── step 1 ──────────────────────────────────────────────────────────────
