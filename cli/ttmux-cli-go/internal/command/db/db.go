@@ -9,7 +9,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"sort"
+	"strconv"
 
 	"ttmux-cli-go/internal/metadb"
 	"ttmux-cli-go/internal/runtime"
@@ -42,8 +44,12 @@ func Run(rt runtime.Runtime, args []string, w io.Writer) error {
 		return backup(rt, rest, asJSON, w)
 	case "set-home":
 		return setHome(rt, rest, w)
+	case "history":
+		return history(rt, rest, asJSON, w)
+	case "restore":
+		return restore(rt, rest, asJSON, w)
 	default:
-		return fmt.Errorf("未知子命令 %q（可用：status | migrate | backup | set-home）", sub)
+		return fmt.Errorf("未知子命令 %q（可用：status | migrate | backup | history | restore | set-home）", sub)
 	}
 }
 
@@ -133,6 +139,104 @@ func migrate(rt runtime.Runtime, asJSON bool, w io.Writer) error {
 	return nil
 }
 
+// history 列出已结束的会话。这是「重启后还能找回那天下午干了什么」的读口：
+// 日志还躺在 logs/<id>.log，这张表是找回它们的唯一索引。
+func history(rt runtime.Runtime, rest []string, asJSON bool, w io.Writer) error {
+	limit := 200
+	for i, a := range rest {
+		if a == "--limit" && i+1 < len(rest) {
+			if n, err := strconv.Atoi(rest[i+1]); err == nil && n > 0 {
+				limit = n
+			}
+		}
+	}
+	meta := sessmeta.New(rt.HomeDir)
+	meta.DataDir = rt.DataDir
+	rows := meta.History(limit)
+	if asJSON {
+		if rows == nil {
+			rows = []sessmeta.Row{}
+		}
+		return json.NewEncoder(w).Encode(rows)
+	}
+	if len(rows) == 0 {
+		ui.Info(w, "没有已结束的会话")
+		return nil
+	}
+	fmt.Fprintln(w)
+	for _, r := range rows {
+		name := r.Label
+		if name == "" {
+			name = r.Session
+		}
+		fmt.Fprintf(w, "   %s %s  %s  %s\n", ui.IconSession, ui.Bold(name),
+			ui.Dim(r.DiedAt), ui.Dim(r.Home))
+	}
+	fmt.Fprintf(w, "\n   共 %d 个已结束会话\n\n", len(rows))
+	return nil
+}
+
+// restore 按台账把一个已结束的会话**重新开一个壳**：同目录、同展示名，
+// 有 agent 对话 id 就顺带 `claude --resume` 接回原对话。
+//
+// 重开的是壳，不是现场：pane 里的进程死了就是死了。旧行保持 dead 不复活，
+// 新会话是新 id——「谁是谁的重开」由 restored_from 记着，历史不被改写。
+func restore(rt runtime.Runtime, rest []string, asJSON bool, w io.Writer) error {
+	if len(rest) < 1 {
+		return fmt.Errorf("用法：ttmux db restore <会话id> [--json]")
+	}
+	meta := sessmeta.New(rt.HomeDir)
+	meta.DataDir = rt.DataDir
+	old, ok := meta.Get(rest[0])
+	if !ok {
+		return fmt.Errorf("台账里没有会话 %s", rest[0])
+	}
+	dir := old.Home
+	if dir == "" {
+		dir = old.InitialCwd
+	}
+	if dir == "" {
+		return fmt.Errorf("会话 %s 没有记下归属目录，无法重开", rest[0])
+	}
+	if _, err := os.Stat(dir); err != nil {
+		// worktree 被清掉是常事。据实报错，别糊里糊涂在别处建个会话。
+		return fmt.Errorf("原目录已不存在：%s", dir)
+	}
+	// 老行没有展示名就别造一个：拿老会话的 id 当新会话的名字，列表里会出现
+	// 两行顶着同一个 id，看着像重复数据。没有名字就让它显示自己的 id。
+	label := old.Label
+	sess, err := rt.CreateSession(runtime.CreateOpts{Label: label, Dir: dir})
+	if err != nil {
+		return err
+	}
+	_ = meta.Put(sessmeta.Row{Session: sess, CreatedBy: "restore", InitialCwd: dir})
+	_ = meta.SetHome(sess, dir, old.RepoRoot)
+	if label != "" {
+		_ = meta.SetLabel(sess, label)
+	}
+	_ = meta.SetRestoredFrom(sess, old.Session)
+	_ = rt.Tmux("pipe-pane", "-t", "="+sess+":", "-o", "cat >> '"+rt.LogFile(sess)+"'")
+
+	resumed := ""
+	if old.AgentUUID != "" {
+		resumed = old.AgentUUID
+		// 走 send-keys 而不是 CreateSession 的启动命令：会话已经建好了，
+		// 这里只是在它的 shell 里敲一行。
+		_ = rt.Tmux("send-keys", "-t", "="+sess+":", "claude --resume "+resumed, "C-m")
+	}
+	if asJSON {
+		return json.NewEncoder(w).Encode(map[string]string{
+			"session": sess, "label": orSelf(label, sess), "dir": dir,
+			"restoredFrom": old.Session, "resumedAgent": resumed,
+		})
+	}
+	ui.Ok(w, "已重开 %s → %s", ui.Bold(old.Session), ui.Bold(sess))
+	if resumed != "" {
+		ui.Info(w, "已接回原对话 %s", ui.Dim(resumed))
+	}
+	return nil
+}
+
 func backup(rt runtime.Runtime, rest []string, asJSON bool, w io.Writer) error {
 	dest := ""
 	for i, a := range rest {
@@ -168,4 +272,12 @@ func setHome(rt runtime.Runtime, rest []string, w io.Writer) error {
 	meta := sessmeta.New(rt.HomeDir)
 	meta.DataDir = rt.DataDir
 	return meta.SetHome(sess, rest[1], "")
+}
+
+// orSelf 展示名为空时退回会话自己的 id。
+func orSelf(label, sess string) string {
+	if label == "" {
+		return sess
+	}
+	return label
 }

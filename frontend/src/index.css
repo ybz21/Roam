@@ -3073,3 +3073,21 @@ html[data-size="compact"] .cc-run-slot { width: auto; }
 /* 节点的宿主概况：只给两个数（CPU/内存），完整曲线在那台机器的插件面板里 */
 .tt-hub-host { display: inline-flex; gap: var(--sp-2); font-family: var(--mono); }
 .tt-hub-host .hot { color: var(--warn); }
+
+/* ── 已结束的会话（M3）─────────────────────────────────────────────────
+   一行放下：名字 + 目录 + 结束原因 + 时间 + 重开。目录用等宽并允许收缩，
+   窄屏先挤它——名字和「重开」是永远要看得见的两样。 */
+.tt-histrow {
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: 6px var(--sp-2); border-radius: var(--r-xs);
+  color: var(--text-dim); font-size: var(--fs-meta); min-width: 0;
+}
+:where(html[data-pointer="fine"]) .tt-histrow:hover { background: var(--list-hover); }
+.tt-histname { color: var(--text-bright); font-weight: 500; flex: 0 0 auto; max-width: 34%; }
+.tt-histname, .tt-histdir { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-histdir { flex: 1 1 auto; min-width: 0; color: var(--text-dimmer); font-size: var(--fs-micro); }
+.tt-histmeta { flex: 0 0 auto; color: var(--text-dimmer); font-size: var(--fs-micro); }
+/* 窄屏先挤目录：名字和「重开」是永远要看得见的两样。目录一隐，名字接手撑开，
+   否则右侧按钮会跟着名字长短左右参差。 */
+html[data-size="compact"] .tt-histdir { display: none; }
+html[data-size="compact"] .tt-histname { flex: 1 1 auto; max-width: none; }

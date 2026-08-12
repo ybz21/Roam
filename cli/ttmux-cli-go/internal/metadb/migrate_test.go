@@ -222,3 +222,61 @@ func writeV2(t *testing.T, path string, rows []v2row) {
 			r.id, r.name, r.parentID, r.by, r.at, r.cwd)
 	}
 }
+
+// 被推迟的步骤**不能挡住后面的步骤**。
+//
+// 收编那一步在缺 DataDir 时会推迟（plugind 之类的入口开库时给不全）。如果驱动
+// 按 MAX(version) 判「做到哪了」，这一推迟就会把它后面所有步骤永远关在门外——
+// 实际踩到过：sessions 少了一列，History() 整条 SELECT 失败、历史读出来是空的。
+func TestDeferredStepDoesNotBlockLaterOnes(t *testing.T) {
+	dir := t.TempDir()
+	// 不给 DataDir → 收编那一步推迟
+	d, err := Open(dir, Options{Now: fixedNow})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer Discard(d.Path())
+
+	done, err := appliedSteps(d.DB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := mainSteps[len(mainSteps)-1].Version
+	if !done[last] {
+		t.Fatalf("最后一步（v%d）应当照常应用，实际已应用 %v", last, done)
+	}
+	// 推迟的那步确实没盖章，留着下次补
+	var deferred int
+	for _, st := range mainSteps {
+		if st.Name == "import-legacy" {
+			deferred = st.Version
+		}
+	}
+	if done[deferred] {
+		t.Fatal("缺 DataDir 时收编不该盖章")
+	}
+	// sessions 的列必须齐 —— History() 依赖它们
+	cols, err := Columns(d.DB, "sessions")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []string{"home_dir", "repo_root", "label", "agent_session_uuid"} {
+		if !cols[c] {
+			t.Errorf("sessions 缺列 %s（被推迟的步骤挡住了？）", c)
+		}
+	}
+
+	// 下次带上 DataDir → 补做
+	if err := Discard(d.Path()); err != nil {
+		t.Fatal(err)
+	}
+	again, err := Open(dir, Options{DataDir: dir, Now: fixedNow})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer Discard(again.Path())
+	done2, _ := appliedSteps(again.DB)
+	if !done2[deferred] {
+		t.Fatal("带上 DataDir 后应当把推迟的那步补上")
+	}
+}

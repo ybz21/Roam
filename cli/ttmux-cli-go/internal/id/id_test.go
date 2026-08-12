@@ -1,6 +1,7 @@
 package id
 
 import (
+	"regexp"
 	"testing"
 	"time"
 )
@@ -52,5 +53,22 @@ func TestForSession(t *testing.T) {
 	}
 	if v := ForSession(at, ""); v != "" {
 		t.Fatalf("缺 tmux id 应回落空串, got %q", v)
+	}
+}
+
+// UUID 必须是合法 v4 —— Claude Code 的 --session-id 只认合法 UUID，
+// 格式不对会话就起不来，而这条链路是「重开并接回原对话」的地基。
+func TestUUIDIsValidV4(t *testing.T) {
+	re := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+	seen := map[string]bool{}
+	for i := 0; i < 200; i++ {
+		u := UUID()
+		if !re.MatchString(u) {
+			t.Fatalf("不是合法 v4 UUID: %q", u)
+		}
+		if seen[u] {
+			t.Fatalf("重复: %q", u)
+		}
+		seen[u] = true
 	}
 }

@@ -2,7 +2,9 @@ package spawn
 
 import (
 	"os/exec"
+
 	"strings"
+	"ttmux-cli-go/internal/id"
 )
 
 // AgentConfig captures the knobs lib/agent.sh exposed via AGENT_* env vars.
@@ -15,6 +17,18 @@ type AgentConfig struct {
 	Model       string
 	Workdir     string
 	MaxTurns    string
+	// SessionUUID 让我们**指定** Claude Code 那一侧的对话 id（--session-id）。
+	// 不指定的话，「哪份 transcript 属于哪个会话」只能靠 cwd + 取最新文件猜，
+	// 而会话一死这个猜法就失准（同目录的别的会话会赢）。指定之后关联由构造保证，
+	// 台账把它记下来，M3 的「重开并接回原对话」才有依据。codex 没有对应参数，忽略。
+	SessionUUID string
+}
+
+// withSessionID 在 claude 命令后追加 --session-id（只对 claude 有意义）。
+func (c AgentConfig) withSessionID(b *strings.Builder) {
+	if c.Kind != "codex" && c.SessionUUID != "" {
+		b.WriteString(" --session-id " + c.SessionUUID)
+	}
 }
 
 // DefaultAgentConfig mirrors _agent_defaults.
@@ -25,6 +39,9 @@ func DefaultAgentConfig(workdir string) AgentConfig {
 		Kind:       "claude",
 		Permission: "dangerously-skip-permissions",
 		Workdir:    workdir,
+		// 每个 agent 会话都自带一个对话 id。生成成本为零，而少了它，
+		// 会话死后就再也认不出「那段对话是哪一份 jsonl」。
+		SessionUUID: id.UUID(),
 	}
 }
 
@@ -77,6 +94,7 @@ func (c AgentConfig) InteractiveFromPromptFile(path string) string {
 			b.WriteString(" --permission-mode " + c.Permission)
 		}
 	}
+	c.withSessionID(&b)
 	b.WriteString(` "$(cat ` + shellQuote(path) + `)"`)
 	return b.String()
 }
@@ -94,6 +112,7 @@ func (c AgentConfig) claudeCommand(task string) string {
 		} else {
 			b.WriteString(" --permission-mode " + c.Permission)
 		}
+		c.withSessionID(&b)
 		b.WriteString(" " + shellQuote(task))
 		return b.String()
 	}
