@@ -1612,6 +1612,7 @@ const enUS = {
   'project.looseHint': 'Not in any project',
   'project.remove': 'Remove project',
   'project.quietSection': 'Other projects',
+  'project.quietSince': 'idle {when}',
   'project.quietHint': 'no sessions running',
   'project.enter': 'Enter',
   'project.forkTask': 'Fork',

@@ -1617,6 +1617,7 @@ const zhCN = {
   'project.looseHint': '不属于任何项目',
   'project.remove': '移除项目',
   'project.quietSection': '其他项目',
+  'project.quietSince': '空闲 {when}',
   'project.quietHint': '没有会话在跑',
   'project.enter': '进入',
   'project.forkTask': '派生',
