@@ -150,6 +150,9 @@ func (a *API) ProjectsList(c *gin.Context) {
 	var cwds map[string][]string // 懒取：有非 git 项目才拉
 
 	agentRunning := runningAgentSessions() // 一次进程树扫描，供绿点判活跃（设计 W2）
+	// 顺带认一次「刚开始跑 claude 的会话 ↔ 它那段对话」。挂在这里是因为进程树
+	// 已经扫过了，不额外付代价；只在完全无歧义时才记（见 agent-transcript-link.go）。
+	a.agentLink.note(agentRunning, a.WT.SessionHome, a.linkAgentSession)
 
 	addSession := func(p *projectSummary, top *[]projectSession, name, label string, attached bool, last int64, branch string, linked bool) {
 		claimed[name] = true

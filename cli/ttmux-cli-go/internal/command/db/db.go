@@ -46,10 +46,12 @@ func Run(rt runtime.Runtime, args []string, w io.Writer) error {
 		return setHome(rt, rest, w)
 	case "history":
 		return history(rt, rest, asJSON, w)
+	case "link-agent":
+		return linkAgent(rt, rest, w)
 	case "restore":
 		return restore(rt, rest, asJSON, w)
 	default:
-		return fmt.Errorf("未知子命令 %q（可用：status | migrate | backup | history | restore | set-home）", sub)
+		return fmt.Errorf("未知子命令 %q（可用：status | migrate | backup | history | restore | set-home | link-agent）", sub)
 	}
 }
 
@@ -257,6 +259,24 @@ func backup(rt runtime.Runtime, rest []string, asJSON bool, w io.Writer) error {
 	}
 	ui.Ok(w, "已备份到 %s", ui.Bold(path))
 	return nil
+}
+
+// linkAgent 把会话和它那段 agent 对话（Claude Code 的 <uuid>.jsonl）关联起来。
+//
+// ttmux 自己拉起的 agent 靠 --session-id，关联由构造保证；用户在会话里手敲
+// `claude` 的那些只能由上层推断，所以这里**只记一次不覆盖**——先前确定下来的
+// 那次比后来推断的更可信。
+func linkAgent(rt runtime.Runtime, rest []string, w io.Writer) error {
+	if len(rest) < 2 {
+		return fmt.Errorf("用法：ttmux db link-agent <会话> <对话uuid>")
+	}
+	sess := rt.Resolve(rest[0])
+	if sess == "" {
+		sess = rest[0]
+	}
+	meta := sessmeta.New(rt.HomeDir)
+	meta.DataDir = rt.DataDir
+	return meta.SetAgentSession(sess, rest[1])
 }
 
 // setHome 记会话归属的**台账事实**。后端事后改钉（cdInto 之后、fork 继承父归属）
