@@ -1,6 +1,8 @@
 package project
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -8,7 +10,11 @@ import (
 	"strings"
 	"testing"
 
+	_ "modernc.org/sqlite"
+
 	"ttmux-web/internal/id"
+	"ttmux-web/internal/metadb"
+	"ttmux-web/ttmux"
 )
 
 func TestStorePersistAndConverge(t *testing.T) {
@@ -234,5 +240,117 @@ func TestReadTraceFallsBackToRotated(t *testing.T) {
 	// 当前这代就够了的话，不必去翻上一代
 	if one := s.ReadTrace("/repo/a", 1); len(one) != 1 || one[0].Branch != "fresh" {
 		t.Fatalf("limit=1 应当只给最新那条: %+v", one)
+	}
+}
+
+// ── 直连模式下的留痕 ─────────────────────────────────────────────────────
+
+// dbStore 造一个直连模式的 Store：真 sqlite 文件 + 真握手路径（假 CLI 只负责报路径）。
+// 走 metadb.Open 而不是自己拼一个 DB，是为了让「库路径只能来自握手」那条约束在这里也成立。
+func dbStore(t *testing.T) *Store {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "meta.db")
+	raw, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.Exec(metadb.TestSchema); err != nil {
+		t.Fatal(err)
+	}
+	raw.Close()
+
+	bin := filepath.Join(dir, "ttmux")
+	script := "#!/bin/sh\nif [ \"$1\" = db ]; then printf '%s' '" +
+		`{"path":"` + path + `","schemaVersion":6,"minCompatible":1,"journalMode":"wal"}` + "'; fi\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	db := metadb.Open(context.Background(), ttmux.New(bin), "")
+	if !db.OK() {
+		t.Fatalf("应当直连成功: %s", db.Why())
+	}
+	t.Cleanup(func() { db.Close() })
+	return NewStore(dir, db)
+}
+
+// 直连模式下留痕必须真的落库。
+//
+// 这是一条**回归**测试：并库之后 Store 在直连模式下不再有文件路径（path 只在降级
+// 分支赋值），而 Trace/ReadTrace 当时还只认文件——于是每一条留痕都被静默丢掉、
+// 项目活动恒空，还不报错。
+func TestTraceGoesToDBWhenConnected(t *testing.T) {
+	s := dbStore(t)
+	if s.tracePath() != "" {
+		t.Fatal("直连模式不该再有留痕文件路径")
+	}
+	s.Trace(TraceEntry{Repo: "/repo/a", Branch: "b1", Action: "merged"})
+	s.Trace(TraceEntry{Repo: "/repo/other", Branch: "noise", Action: "cleaned"})
+	s.Trace(TraceEntry{Repo: "/repo/a", Branch: "b2", Action: "discarded", MergedInto: "main", MergedKind: "squash"})
+
+	got := s.ReadTrace("/repo/a", 10)
+	if len(got) != 2 {
+		t.Fatalf("要 2 条（本仓库的）, got %d: %+v", len(got), got)
+	}
+	if got[0].Branch != "b2" || got[1].Branch != "b1" {
+		t.Fatalf("应当新在前: %+v", got)
+	}
+	if got[0].MergedInto != "main" || got[0].MergedKind != "squash" || got[0].Action != "discarded" {
+		t.Fatalf("字段丢了: %+v", got[0])
+	}
+	if got[0].At == 0 || got[0].ID == "" {
+		t.Fatalf("时间/id 应当写入时补上: %+v", got[0])
+	}
+}
+
+// 同一秒里连着落的几条（一次清理会一口气写好几条）光看 at 分不出先后，
+// 得靠 rowid 兜底定序，否则活动列表的顺序会随查询计划漂。
+func TestTraceOrdersWithinSameSecond(t *testing.T) {
+	s := dbStore(t)
+	for i := 0; i < 5; i++ {
+		s.Trace(TraceEntry{Repo: "/repo/a", Branch: fmt.Sprintf("b%d", i), Action: "cleaned"})
+	}
+	got := s.ReadTrace("/repo/a", 3)
+	for i, want := range []string{"b4", "b3", "b2"} {
+		if got[i].Branch != want {
+			t.Fatalf("第 %d 条 = %q, want %q", i, got[i].Branch, want)
+		}
+	}
+}
+
+// 文件形态靠 5MB 轮转给读放大封顶；进了库要自己修剪，否则只增不减。
+func TestTraceTrimsPerRepo(t *testing.T) {
+	s := dbStore(t)
+	// 先灌满（直接写库，省掉一千次 autocommit），再让 Trace 走一次真实写入
+	if _, err := s.db.Exec(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<?)
+		INSERT INTO project_traces(id,repo,branch,action,at) SELECT 'old-'||i,'/repo/a','b'||i,'merged',i FROM n`,
+		traceKeep+19); err != nil {
+		t.Fatal(err)
+	}
+	s.Trace(TraceEntry{Repo: "/repo/b", Branch: "keep-me", Action: "merged"})
+	s.Trace(TraceEntry{Repo: "/repo/a", Branch: "newest", Action: "merged"})
+
+	var n int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM project_traces WHERE repo='/repo/a'`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != traceKeep {
+		t.Fatalf("应当修剪到 %d 条, got %d", traceKeep, n)
+	}
+	// 修剪掉的必须是最老的那些，而且别动别的仓库
+	if got := s.ReadTrace("/repo/a", 1); len(got) != 1 || got[0].Branch != "newest" {
+		t.Fatalf("最新那条不该被修剪掉: %+v", got)
+	}
+	// 被砍掉的是最老的那 20 条
+	var oldest string
+	if err := s.db.QueryRow(`SELECT branch FROM project_traces WHERE repo='/repo/a'
+		ORDER BY at ASC LIMIT 1`).Scan(&oldest); err != nil {
+		t.Fatal(err)
+	}
+	if oldest != "b21" {
+		t.Fatalf("砍掉的应当是最老的那些，现存最老是 %q", oldest)
+	}
+	if got := s.ReadTrace("/repo/b", 10); len(got) != 1 {
+		t.Fatalf("修剪串到别的仓库了: %+v", got)
 	}
 }

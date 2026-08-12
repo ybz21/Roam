@@ -31,7 +31,7 @@ func makeSchema(t *testing.T, path string) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(testSchema); err != nil {
+	if _, err := db.Exec(TestSchema); err != nil {
 		t.Fatal(err)
 	}
 }

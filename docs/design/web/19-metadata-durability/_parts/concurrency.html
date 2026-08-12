@@ -19,7 +19,7 @@ WAL 能让读写并发，写本身仍然是串行的；真正省掉锁竞争的�
 <tr><td><code>sessions</code> · <code>tmux_epochs</code></td><td><b>ttmux CLI</b></td><td>后端只读；要写就调 <code>ttmux</code> 子命令</td><td>会话 id 的唯一出处在 CLI，编排逻辑也在 CLI（「薄封装」原则）</td></tr>
 <tr><td><code>swarms</code> · <code>swarm_members</code></td><td><b>ttmux CLI</b></td><td>同上</td><td>蜂群编排整个在 CLI</td></tr>
 <tr><td><code>plugin_sessions</code> · <code>plugin_findings</code></td><td><b>ttmux CLI</b></td><td>同上</td><td>插件宿主在 CLI</td></tr>
-<tr><td><code>projects</code> · <code>project_aliases</code></td><td><b>Roam 后端</b></td><td>CLI 不碰</td><td>项目是 Web 侧的概念，CLI 里没有</td></tr>
+<tr><td><code>projects</code> · <code>project_aliases</code> · <code>project_traces</code></td><td><b>Roam 后端</b></td><td>CLI 不碰</td><td>项目是 Web 侧的概念，CLI 里没有</td></tr>
 <tr><td><code>races</code></td><td><b>Roam 后端</b></td><td>CLI 不碰</td><td>竞赛只有 Web 有入口</td></tr>
 </tbody>
 </table>
@@ -95,6 +95,7 @@ CLI 建会话、后端下一轮轮询时才把项目记上。并库之后可以�
 <tr><td><code>session-homes.json</code></td><td><code>sessions.home_dir</code></td><td>按 <code>$N</code> 认不到会话的，用 name 快照回填成 dead 行</td></tr>
 <tr><td><code>meta/&lt;id&gt;/*.txt</code></td><td><code>sessions</code> 的 kind / home_dir / created_at</td><td>目录保留（CLI 老路径还在读）</td></tr>
 <tr><td><code>races.json</code></td><td><code>races</code></td><td>—</td></tr>
+<tr><td><code>activity.log</code>（两代）</td><td><code>project_traces</code></td><td>JSONL 坏行只丢自己那一行；没有 <code>id</code> 的老行按内容派一个稳定 id，重跑不翻倍。标记单独一个 <code>metadb-traces.done</code>——共用 v3 的标记，老机器就永远轮不到退休它</td></tr>
 <tr><td><code>swarms/&lt;群&gt;/swarm.db</code> 的 <code>members</code> / <code>cards</code></td><td><code>swarm_members</code> / <code>swarm_cards</code></td><td><code>posts</code> 原地不动（§9.3）</td></tr>
 <tr><td>老 <code>sessions</code> 表</td><td>v1 主键就是会话名，直搬；v2 按 name 列重建主键，parent 的 <code>$N</code> 用<b>同表内</b>映射翻译</td><td>解析不出的落成 dead 行，先整库备份</td></tr>
 </tbody>

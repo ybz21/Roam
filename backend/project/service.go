@@ -445,18 +445,50 @@ func (s *Store) tracePath() string {
 	return filepath.Join(filepath.Dir(s.path), "activity.log")
 }
 
-// Trace 追加留痕；超 5MB 轮转一代（.1），读放大有界。写失败只丢摘要，不影响主流程。
+// Trace 记一条留痕。写失败只丢摘要，不影响主流程。
 func (s *Store) Trace(e TraceEntry) {
+	e.At = time.Now().Unix()
+	if e.ID == "" {
+		e.ID = id.New()
+	}
+	if s.db.OK() {
+		s.traceDB(e)
+		return
+	}
+	s.traceFile(e)
+}
+
+// traceDB 落库，并把这个仓库的留痕修剪到 traceKeep 条。
+//
+// 文件形态靠「5MB 轮转一代」给读放大封顶；进了库那条机制就没了，可留痕仍是只增的。
+// 按仓库各留最近 traceKeep 条：修剪只在写时发生（合入/丢弃/清理都是人的动作，稀疏），
+// 而项目活动页要的永远是最近那几十条。
+func (s *Store) traceDB(e TraceEntry) {
+	if _, err := s.db.Exec(`INSERT OR REPLACE INTO project_traces
+		(id,repo,branch,head_oid,base,action,strategy,at,merged_into,merged_kind)
+		VALUES(?,?,?,?,?,?,?,?,?,?)`,
+		e.ID, e.Repo, e.Branch, e.HeadOid, e.Base, e.Action, e.Strategy, e.At,
+		e.MergedInto, e.MergedKind); err != nil {
+		log.Printf("留痕写库失败（只丢这条摘要）: %v", err)
+		return
+	}
+	_, _ = s.db.Exec(`DELETE FROM project_traces WHERE repo=? AND id NOT IN
+		(SELECT id FROM project_traces WHERE repo=? ORDER BY at DESC, rowid DESC LIMIT ?)`,
+		e.Repo, e.Repo, traceKeep)
+}
+
+// traceKeep 每个仓库保留的留痕条数。UI 一次读 50，留 1000 条足够往回翻，
+// 也远到不了让「读最近 50 条」变慢的量级。
+const traceKeep = 1000
+
+// traceFile 是降级模式（开不了库）下的老路：JSONL 追加，超 5MB 轮转一代。
+func (s *Store) traceFile(e TraceEntry) {
 	p := s.tracePath()
 	if p == "" {
 		return
 	}
 	if st, err := os.Stat(p); err == nil && st.Size() > 5<<20 {
 		_ = os.Rename(p, p+".1")
-	}
-	e.At = time.Now().Unix()
-	if e.ID == "" {
-		e.ID = id.New()
 	}
 	b, err := json.Marshal(e)
 	if err != nil {
@@ -470,13 +502,44 @@ func (s *Store) Trace(e TraceEntry) {
 	_, _ = f.Write(append(b, '\n'))
 }
 
-// ReadTrace 读某仓库的留痕（两代合并、新在前、上限 limit）。
 // ReadTrace 读某仓库最近的留痕（新在前，最多 limit 条）。
-//
-// **从文件尾部往回读**：留痕是只追加的 JSONL，要的永远是最新那几条，而文件会长到
-// 5MB 才轮转一代。原先每次都把两代整个读进来解析（最多 10MB），只为挑出 50 条——
-// 项目活动页每打开一次就付一遍这个代价。现在按块回读，凑够就停。
 func (s *Store) ReadTrace(repoDir string, limit int) []TraceEntry {
+	if limit <= 0 {
+		return nil
+	}
+	if s.db.OK() {
+		return s.readTraceDB(repoDir, limit)
+	}
+	return s.readTraceFile(repoDir, limit)
+}
+
+// readTraceDB 按 (repo, at DESC) 走索引取最近几条。rowid 兜底定序：同一秒里
+// 连着落的几条（一次清理会一口气写好几条）光看 at 分不出先后。
+func (s *Store) readTraceDB(repoDir string, limit int) []TraceEntry {
+	rows, err := s.db.Query(`SELECT id, repo, IFNULL(branch,''), IFNULL(head_oid,''),
+		IFNULL(base,''), IFNULL(action,''), IFNULL(strategy,''), at,
+		IFNULL(merged_into,''), IFNULL(merged_kind,'')
+		FROM project_traces WHERE repo=? ORDER BY at DESC, rowid DESC LIMIT ?`, repoDir, limit)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []TraceEntry
+	for rows.Next() {
+		var e TraceEntry
+		if rows.Scan(&e.ID, &e.Repo, &e.Branch, &e.HeadOid, &e.Base, &e.Action,
+			&e.Strategy, &e.At, &e.MergedInto, &e.MergedKind) != nil {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+// readTraceFile 是降级模式下的老路：**从文件尾部往回读**。留痕是只追加的 JSONL，
+// 要的永远是最新那几条，而文件会长到 5MB 才轮转一代。整个读进来解析（最多 10MB）
+// 只为挑出 50 条，代价按打开次数付。按块回读，凑够就停。
+func (s *Store) readTraceFile(repoDir string, limit int) []TraceEntry {
 	p := s.tracePath()
 	if p == "" || limit <= 0 {
 		return nil

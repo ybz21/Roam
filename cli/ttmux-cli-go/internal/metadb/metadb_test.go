@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -35,7 +36,8 @@ func TestFreshDBReachesLatestVersion(t *testing.T) {
 		t.Fatalf("版本 = %d, want %d", v, want)
 	}
 	for _, tb := range []string{"sessions", "swarms", "plugins", "projects",
-		"project_aliases", "races", "session_homes", "swarm_members", "swarm_cards", "tmux_epochs"} {
+		"project_aliases", "races", "session_homes", "swarm_members", "swarm_cards",
+		"tmux_epochs", "project_traces"} {
 		if !HasTable(d.DB, tb) {
 			t.Errorf("表 %s 没建出来", tb)
 		}
@@ -285,4 +287,68 @@ func TestNewerDBVersionIsTolerated(t *testing.T) {
 		t.Fatalf("版本比本二进制新时不该报错: %v", err)
 	}
 	defer Discard(again.Path())
+}
+
+// activity.log 收编：两代都要收，坏行只丢自己，重跑不翻倍。
+func TestImportsActivityLog(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name string, lines ...string) {
+		if err := os.WriteFile(filepath.Join(dir, name),
+			[]byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("activity.log.1", `{"id":"t-old","repo":"/repo/a","branch":"ancient","action":"merged","at":100}`)
+	write("activity.log",
+		`{"id":"t-new","repo":"/repo/a","branch":"fresh","action":"discarded","at":200,"mergedInto":"main","mergedKind":"squash"}`,
+		`{"repo":"/repo/b","branch":"noid","action":"cleaned","at":150}`, // 老行没有 id
+		`{"repo":"/repo/b","branch":"半`, // 坏行：只丢它一条
+	)
+
+	d, err := Open(dir, Options{DataDir: dir, Now: func() time.Time { return time.Unix(0, 0) }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer Discard(d.Path())
+
+	var n int
+	if err := d.QueryRow(`SELECT COUNT(*) FROM project_traces`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 3 {
+		t.Fatalf("应当收 3 条（坏行丢掉）, got %d", n)
+	}
+	var branch, into, kind string
+	if err := d.QueryRow(`SELECT branch, IFNULL(merged_into,''), IFNULL(merged_kind,'')
+		FROM project_traces WHERE id='t-new'`).Scan(&branch, &into, &kind); err != nil {
+		t.Fatal(err)
+	}
+	if branch != "fresh" || into != "main" || kind != "squash" {
+		t.Fatalf("字段没搬全: %s %s %s", branch, into, kind)
+	}
+	// 没有 id 的老行按内容派了一个稳定 id
+	var noid string
+	if err := d.QueryRow(`SELECT id FROM project_traces WHERE branch='noid'`).Scan(&noid); err != nil {
+		t.Fatal(err)
+	}
+	if noid == "" {
+		t.Fatal("老行应当派到 id")
+	}
+
+	// 再跑一遍收编（模拟「导到一半崩了」重来）：不该翻倍
+	if err := importTraces2(d, dir); err != nil {
+		t.Fatal(err)
+	}
+	var again int
+	if err := d.QueryRow(`SELECT COUNT(*) FROM project_traces`).Scan(&again); err != nil {
+		t.Fatal(err)
+	}
+	if again != n {
+		t.Fatalf("重跑翻倍了: %d → %d", n, again)
+	}
+}
+
+// importTraces2 手动再跑一次收编（版本链已盖章，正常路径不会再跑）。
+func importTraces2(d *DB, dataDir string) error {
+	return d.Tx(func(tx *sql.Tx) error { return importTraces(tx, Options{DataDir: dataDir}) })
 }

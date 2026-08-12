@@ -17,19 +17,32 @@ import (
 
 const legacyMark = "metadb-v3.done"
 
+// traceMark 单独一个标记：留痕（activity.log）是后来才收编的，那时 v3 的标记
+// 在老机器上早就落下了。共用一个标记等于「这台机器永远轮不到退休 activity.log」。
+const traceMark = "metadb-traces.done"
+
 var legacyFiles = []string{"projects.json", "races.json", "session-homes.json"}
 
+// traceFiles 是两代留痕（当代 + 轮转出去的那一代）。
+var traceFiles = []string{"activity.log", "activity.log.1"}
+
 // RetireLegacyFiles 把已收编的旧台账改名 <文件>.bak-<时间>，并落一个幂等标记。
+func RetireLegacyFiles(dataDir string) {
+	retire(dataDir, legacyMark, legacyFiles)
+	retire(dataDir, traceMark, traceFiles)
+}
+
+// retire 退休一组已收编的源文件。
 //
 // **标记在 + 文件又出现 → 不重导也不再改名**，只告警：用户可能是从备份恢复了旧文件，
 // 重来一遍会把已经删掉的项目、已经清理的竞赛统统复活。想强来设 ROAM_METADB_REIMPORT=1。
-func RetireLegacyFiles(dataDir string) {
+func retire(dataDir, markName string, files []string) {
 	if dataDir == "" {
 		return
 	}
-	mark := filepath.Join(dataDir, "migrations", legacyMark)
+	mark := filepath.Join(dataDir, "migrations", markName)
 	_, marked := os.Stat(mark)
-	present := existing(dataDir)
+	present := existing(dataDir, files)
 
 	if marked == nil { // 标记已在
 		if len(present) > 0 && !Reimport() {
@@ -51,12 +64,12 @@ func RetireLegacyFiles(dataDir string) {
 	if err := os.MkdirAll(filepath.Dir(mark), 0o755); err != nil {
 		return
 	}
-	_ = os.WriteFile(mark, []byte(fmt.Sprintf("v3 %s\n", stamp)), 0o644)
+	_ = os.WriteFile(mark, []byte(fmt.Sprintf("%s %s\n", markName, stamp)), 0o644)
 }
 
-func existing(dataDir string) []string {
+func existing(dataDir string, files []string) []string {
 	var out []string
-	for _, name := range legacyFiles {
+	for _, name := range files {
 		if _, err := os.Stat(filepath.Join(dataDir, name)); err == nil {
 			out = append(out, name)
 		}
