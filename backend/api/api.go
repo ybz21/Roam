@@ -17,6 +17,7 @@ import (
 	"ttmux-web/internal/id"
 	"ttmux-web/internal/metadb"
 	"ttmux-web/project"
+	"ttmux-web/race"
 	"ttmux-web/search"
 	"ttmux-web/ttmux"
 	"ttmux-web/worktree"
@@ -34,7 +35,7 @@ type API struct {
 	Football    *FootballStore
 	Speech      *SpeechStore      // 语音识别(ASR)配置 + 转录
 	Prefs       *PreferencesStore // 用户偏好（主题/语言/Agent 命令等）
-	Races       *RaceStore        // 竞赛（W5/W6）业务数据模型
+	Races       *race.Store       // 竞赛（W5/W6）业务数据模型
 	Projects    *project.Store    // 项目（08）：knownRepos 弱台账 + UI 偏好
 	FileIndex   *search.FileIndex // 全局搜索（⌘K）的项目文件名索引，见 search.go
 	Meta        *metadb.DB        // 台账库直连；降级时各 store 自动退回 JSON
@@ -54,7 +55,7 @@ func New(tt *ttmux.Client, browserHome, dataDir, fallbackBin string) *API {
 	}()
 	return &API{TT: tt, WT: worktree.New(dataDir, meta), BrowserHome: browserHome,
 		Football: NewFootballStore(), Speech: NewSpeechStore(dataDir),
-		Prefs: NewPreferencesStore(dataDir), Races: NewRaceStore(dataDir, meta),
+		Prefs: NewPreferencesStore(dataDir), Races: race.NewStore(dataDir, meta),
 		Projects: project.NewStore(dataDir, meta), FileIndex: search.NewFileIndex(), Meta: meta}
 }
 
