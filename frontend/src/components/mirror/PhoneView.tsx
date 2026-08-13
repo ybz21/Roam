@@ -147,7 +147,9 @@ export default function PhoneView() {
   const switchDevice = async (id: string) => {
     if (id === devices.find((d) => d.current)?.id) return
     setDevices((ds) => ds.map((d) => ({ ...d, current: d.id === id })))
-    try { await selectPhoneDevice(platform, id) } catch (e: any) { message.error(e?.message || String(e)) }
+    // 名字要一起传：模拟器停掉之后只有 AVD 名指得动它，光有 serial 会指空
+    const avdName = devices.find((d) => d.id === id)?.name
+    try { await selectPhoneDevice(platform, id, avdName) } catch (e: any) { message.error(e?.message || String(e)) }
     loadIdentity(); loadDevices() // 回读一遍：连不上的话「当前是哪台」得按后端的说法回正
     setReconnectKey((n) => n + 1) // 换了画面源：重连一遍，尺寸/健康都按新设备重来
   }
@@ -155,7 +157,7 @@ export default function PhoneView() {
   const launch = (id: string) => { if (id) api('POST', `/phone/apps/${encodeURIComponent(id)}/launch`).catch(() => {}) }
   const pressKey = (name: string) => api('POST', '/phone/key', { name }).catch(() => {})
 
-  // quality 变化才重建连接；断开(掉线/切设备/redroid 停起)自动重连，画面自愈无需刷新。
+  // quality 变化才重建连接；断开(掉线/切设备/模拟器停起)自动重连，画面自愈无需刷新。
   useEffect(() => {
     let stopped = false
     let tp: DuplexTransport | null = null

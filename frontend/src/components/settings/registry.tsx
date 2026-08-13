@@ -219,7 +219,7 @@ export function buildSettings(deps: {
       id: 'node.phone', name: t('settings.phoneTitle'), parent: t('set.groupNode'), scope: 'node',
       items: [{
         id: 'phone', label: t('settings.phoneTitle'), bare: true, control: { kind: 'custom', node: <PhoneSettings /> },
-        keywords: 'android ios adb redroid 模拟器 真机 镜像',
+        keywords: 'android ios adb avd emulator 模拟器 真机 镜像',
       }],
     },
     {

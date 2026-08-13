@@ -1,7 +1,7 @@
 // Package phone 把一台「手机」（虚拟机/模拟器/真机）的画面镜像到浏览器端，并转发点按/输入。
 //
 // 与 browser 包同构：browser 镜像 Chrome（CDP），phone 镜像手机。后端由设置页选的「模式」决定：
-//   - local/remote/device → Android（adb；本地/远程 redroid、Android 真机）
+//   - avd/network/device  → Android（adb；本机模拟器、远程 adb 目标、USB 真机）
 //   - ios                 → iOS 模拟器（simctl + idb，仅 macOS）
 //
 // 不自造 CLI：agent 直接用原生 adb/simctl/idb（模型对其理解更好）。本包只做「画面镜像 +
@@ -58,9 +58,9 @@ var (
 
 // Current 按设置页选的模式返回设备后端：
 //   - mode=ios          → iOS（simctl + idb，仅 macOS 可用）
-//   - local/remote/device → Android（adb，Linux/macOS 均有 adb）
+//   - avd/network/device  → Android（adb，Linux/macOS 均有 adb）
 //
-// 注意：后端由「模式」决定而非主机系统——这样 Mac 上既能选 iOS 模拟器，也能选远程 redroid/Android 真机；
+// 注意：后端由「模式」决定而非主机系统——这样 Mac 上既能选 iOS 模拟器，也能选远程安卓/Android 真机；
 // Linux 上选 iOS 会在 Ensure/Health 明确报「未找到 xcrun」。
 func Current() Device {
 	switch getConfig().Active {

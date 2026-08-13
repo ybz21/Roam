@@ -1,6 +1,6 @@
 # 手机 (Phone) 接入方案 — MVP
 
-状态：**Android(Linux) 已实现并真机(redroid)联调通过**；**iOS(macOS) 后端已实现(代码完成，Linux 下编译 + darwin 交叉编译均通过，未在真 Mac 上联调)**。后端 `backend/phone/`(`android.go`+`ios.go`，按 `runtime.GOOS` 路由) + 前端 `frontend/src/PhoneView.tsx` + 「手机」标签 + 设置页「手机」标签三选一。本文档既是设计依据，也记录已落地的结构。
+状态：**Android 已实现并联调通过（本机模拟器 AVD / USB 真机）**；**iOS(macOS) 后端已实现(代码完成，Linux 下编译 + darwin 交叉编译均通过，未在真 Mac 上联调)**。后端 `backend/phone/`(`android.go`+`ios.go`，按 `runtime.GOOS` 路由) + 前端 `frontend/src/PhoneView.tsx` + 「手机」标签 + 设置页「手机」标签三选一。本文档既是设计依据，也记录已落地的结构。
 
 ## 0. 目标与设计原则
 
@@ -8,7 +8,7 @@
 
 一个抽象、两个后端实现，前端 / CLI / 路由共用一套。按宿主平台路由：
 
-- **Linux → Android**（`adb`，redroid 容器 / 官方模拟器）
+- **Linux → Android**（`adb`，Android SDK 模拟器 / 真机）
 - **macOS → iOS**（`simctl` + `idb`，Xcode Simulator）
 
 完全复刻 `backend/browser/` 的三支柱（生命周期 / 画面镜像 / 远程操作），只把底层换成平台原生的手机工具链。平台选择在后端启动时按 `runtime.GOOS` 决定，前端无感知——前端只跟「一台手机」对话。
@@ -34,7 +34,7 @@
 
 | 能力 | Android (Linux) | iOS (macOS) |
 |---|---|---|
-| 实例 | `redroid` Docker 容器 / 官方 `emulator -no-window` | `xcrun simctl boot <udid>`（Xcode 自带 Simulator） |
+| 实例 | 官方 `emulator -avd <名> -no-window`（ttmux 负责起停/新建） | `xcrun simctl boot <udid>`（Xcode 自带 Simulator） |
 | 控制通道 | `adb`（自带） | `simctl` + **`idb`**（Facebook iOS Bridge，需装） |
 | 截屏 | `adb exec-out screencap`（裸 RGBA，免 PNG 解码） | `xcrun simctl io booted screenshot --type=jpeg -` |
 | 点按/滑动 | `adb shell input tap/swipe` | `idb ui tap/swipe` |
@@ -45,7 +45,7 @@
 
 **依赖闸门：**
 
-- **Linux：** Docker + redroid 内核模块（`binder`/`ashmem`），或 Android SDK + KVM。
+- **Linux：** Android SDK（`emulator` + `platform-tools`，新建另需 `cmdline-tools`）+ KVM（`/dev/kvm`，用户在 `kvm` 组）。
 - **macOS：** Xcode（Simulator）+ `idb`（`brew install idb-companion` + `pip install fb-idb`）。**simctl 自身无通用 tap**，所以 iOS 的输入强依赖 idb——这是 macOS 侧的硬依赖。无 idb 时 MVP 可降级为「只镜像 + simctl 启动 App，不能 tap」。
 
 ## 3. 后端结构
@@ -127,7 +127,7 @@ GET    /phone/devices?platform=   // 目标设备列表(设置页与镜像页共
 
 - 一块手机画面 canvas（竖屏比例），点击 → `tap`，拖动 → `swipe`，键盘输入 → `text` / `key`。
 - 顶部一行：返回 / Home / App 抽屉（列 `/phone/apps`，点一个 `launch`）。
-- `health` 不可用时显示原因（如「未装 idb」「redroid 未就绪」）。
+- `health` 不可用时显示原因（如「未装 idb」「模拟器未启动」）。
 
 **i18n 必走**（见 [i18n.md](i18n.md)）：所有按钮 / 状态 / 空态文案进 `frontend/src/i18n/locales`，key 前缀 `phone.*`。
 
@@ -199,13 +199,23 @@ xcrun simctl io booted screenshot shot.png
 
 | mode | 含义 | 地址 |
 |---|---|---|
-| `local` | 本地 redroid（同机容器） | 默认 `localhost:5555` |
-| `remote` | 远程 redroid / 经网络连的 adb 目标（**ARM 主机原生跑 arm App，绕反模拟器**；无线调试的手机也走这档） | 它的 adb `host:port` |
-| `device` | 本机设备：USB 真机或本机模拟器（**Linux/Mac 都支持**，adb 在 Mac 也有） | adb serial（空=默认单设备） |
+| `avd` | 本机模拟器（Android SDK 的 AVD）：**能起停、能新建、能改分辨率** | `emulator-xxxx`；没运行时靠 `avd` 字段存名字 |
+| `network` | 经网络连的 adb 目标：无线调试的手机、别的机器上的安卓（**ARM 主机原生跑 arm App，绕反模拟器**） | 它的 adb `host:port` |
+| `device` | 本机真机（USB，**Linux/Mac 都支持**，adb 在 Mac 也有）：恒原生，不动 `wm size/density` | adb serial（空=默认单设备） |
 
-mode 由地址形状决定，不是两个独立选择：带冒号=网络（loopback→`local`，其余→`remote`），
-裸 serial=`device`。设置页/镜像页点设备时连 mode 一起换（`frontend/src/phone-devices.ts`
+三档的分界线是「谁能起停它」：`avd` 能起能停，`network` 只能连和断，`device` 只能连。
+mode 由地址形状决定，不是两个独立选择：`avd:<名>`/`emulator-xxxx`→`avd`，其余带冒号→`network`，
+裸 serial→`device`。设置页/镜像页点设备时连 mode 一起换（`frontend/src/phone-devices.ts`
 的 `androidTargetOf`），否则会被 `sanitizeAndroid` 判成串档丢弃。
+
+**redroid 下线**：早先的 `local`/`remote` 两档是 Docker 里的 redroid，已移除——它把成本压在宿主内核上
+（`binder` 要 `sudo modprobe`，无 `ashmem` 就封顶 Android 15），却拿不出 TV/Wear/Google Play 镜像，且仅 Linux。
+旧配置在 `sanitizeAndroid` 里自动迁移：`local`→`avd`（丢掉 loopback 地址）、`remote`→`network`（地址原样留着）、
+`device`+`emulator-*`→`avd`。遗留容器与数据不自动删，设置页提示一句由用户自己清理。
+
+**新建模拟器**：`backend/phone/android_avd_create.go` + 设置页抽屉。`POST /phone/avd` 只发号，
+下载系统镜像（1.5–2.5G）等真活在后台任务里跑，进度走 `GET /phone/avd/tasks/:id` 的 SSE——
+关抽屉/切页面都不影响它。删除走 `DELETE /phone/avd/:name`，运行中的拒绝，且从不 `--force` 覆盖同名。
 
 **平台 iOS**（仅 macOS）：`address` = 模拟器 UDID（空=已 booted）；需 Xcode + idb。
 
@@ -214,8 +224,8 @@ mode 由地址形状决定，不是两个独立选择：带冒号=网络（loopb
 
 **依赖按平台自适应安装**：`scripts/phone/install-phone.sh`（已并入 `install.sh`）——Linux 装 `adb`；macOS 装 `idb`+`adb`（Mac 同时支持 iOS 模拟器与接 Android 真机）。
 
-> **反模拟器 App（同花顺/东方财富等）的正解 = 远程 redroid 跑在 ARM64 主机**，或真机。x86 上 arm 翻译会被 native 检测识破（详见调研记录）。
-> **Jetson 实测**：ARM64 合适,但 NVIDIA L4T 内核 `CONFIG_KPROBES` 未开、无 `CONFIG_ANDROID_BINDER` → 现成内核装不了 binder（anbox 模块需 kprobes），**要重编内核**(加 `CONFIG_ANDROID_BINDER_IPC=m`+`CONFIG_ANDROID_BINDERFS=m`+`CONFIG_KPROBES=y`)才能跑 redroid。
+> **反模拟器 App（同花顺/东方财富等）的正解 = ARM64 主机上的安卓（走 `network` 档连过来）**，或真机。x86 上 arm 翻译会被 native 检测识破（详见调研记录）。
+> **Jetson 实测（历史记录，redroid 时代）**：ARM64 主机合适，但 NVIDIA L4T 内核 `CONFIG_KPROBES` 未开、无 `CONFIG_ANDROID_BINDER`，容器化安卓装不了 binder，要重编内核。现在这条路不归 ttmux 管——那台机器上自己起好安卓，这边走 `network` 档连过去即可。
 
 ## 7. 生命周期细节
 
@@ -236,7 +246,7 @@ mode 由地址形状决定，不是两个独立选择：带冒号=网络（loopb
 > 剩余：步骤 5（iOS）+ 真机联调（步骤 0 闸门）。
 
 **步骤 0 — 可行性闸门（0.5 天）**
-- 做：Linux 起 redroid/模拟器，手敲 `adb exec-out screencap -p > a.png` 出图、`adb shell input tap` 有反应；macOS `simctl boot` 一台、`idb ui tap` 跑通。
+- 做：Linux 起模拟器，手敲 `adb exec-out screencap -p > a.png` 出图、`adb shell input tap` 有反应；macOS `simctl boot` 一台、`idb ui tap` 跑通。
 - 验收：两台宿主各能手动截一张图 + 点一下。**这是最大不确定性，过不了就先解决宿主，不写代码。**
 
 **步骤 1 — Device 接口 + Android 实现（2 天）**
@@ -263,7 +273,7 @@ mode 由地址形状决定，不是两个独立选择：带冒号=网络（loopb
 
 ## 9. 风险 / 闸门
 
-- **Linux：** redroid 需内核模块 + x86_64/ARM；无则退官方模拟器，但云机常无 KVM → 慢到不可用。**先测**。
+- **Linux：** 官方模拟器需 KVM；云机常无 KVM → 慢到不可用。**先测**。
 - **macOS：** `idb` 安装链（idb_companion + fb-idb）较脆，是 iOS 输入的单点依赖；无 idb 时 MVP 降级为「只镜像 + simctl 启动 App，不能 tap」。
 - **画面：** screencap 轮询 CPU 偏高、帧率低 —— MVP 可接受，产品验证后再上 scrcpy / idb 视频流（v2）。
 

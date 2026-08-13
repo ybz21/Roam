@@ -367,6 +367,24 @@ html[data-pointer="coarse"] .tt-rail-btn::after {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 /* ── 设置 › 多机：模式二选一 + 接入状态 + 两条入口 ───────────────── */
+/* 表单里的小标题 / 灰色说明 / 日志块：设置页多处手写同一套内联样式，收在这里。 */
+.tt-lbl { font-size: var(--fs-meta); color: var(--text-dim); margin-bottom: 6px; }
+.tt-hint { font-size: var(--fs-meta); color: var(--text-dimmer); margin-top: 6px; }
+.tt-log {
+  max-height: 200px; overflow: auto; margin: 8px 0 0; padding: var(--sp-2);
+  font-size: var(--fs-micro); line-height: 1.6; white-space: pre-wrap; word-break: break-all;
+  background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: var(--r-sm);
+  color: var(--text-dim);
+}
+/* 设备卡右上角的起停/删除。不能塞进 .tt-mode 里——那本身就是个 <button>，按钮套按钮
+   在 HTML 里非法，浏览器会把内层拆出去，于是点哪儿都变成「选中这台」。 */
+.tt-devrow { position: relative; }
+.tt-devrow > .tt-mode { width: 100%; }
+.tt-devrow.acts > .tt-mode { padding-right: 120px; }
+.tt-devacts { position: absolute; right: 12px; top: 12px; display: flex; gap: var(--sp-1); }
+/* 手指档按钮更高，压在标题上就挡住名字了 —— 挪到卡片底部，卡片相应留白 */
+html[data-pointer="coarse"] .tt-devrow.acts > .tt-mode { padding-right: 16px; padding-bottom: 54px; }
+html[data-pointer="coarse"] .tt-devacts { top: auto; bottom: 10px; }
 .tt-modes { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); }
 @media (max-width: 720px) { .tt-modes { grid-template-columns: 1fr; } }
 .tt-mode {

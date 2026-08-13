@@ -25,11 +25,21 @@ type androidDevice struct{}
 func newAndroidDevice() *androidDevice { return &androidDevice{} }
 
 // target 返回当前要操作的 adb 设备标识：
-// 配置里的 Address（host:port 即 adb connect 后的 serial，或 USB serial）；
-// 留空则回落 ANDROID_SERIAL（device 模式默认单设备时为空 = adb 默认设备）。
+// 配置里的 Address（emulator-xxxx / host:port / USB serial）；
+// avd 模式下只选了名字（那台还没跑起来）时，按名字反查 serial；
+// 都没有则回落 ANDROID_SERIAL（为空 = adb 默认设备）。
 func (d *androidDevice) target() string {
-	if a := androidCfg().Address; a != "" {
-		return a
+	a := androidCfg()
+	if a.Address != "" {
+		return a.Address
+	}
+	if a.Mode == "avd" && a.Avd != "" {
+		if s := serialOfAVD(a.Avd); s != "" {
+			return s
+		}
+		// 没跑起来就给个必然连不上的目标，而不是留空：留空会落到 adb 默认设备，
+		// 于是「点了模拟器却操作了旁边插着的真机」。
+		return avdRef(a.Avd)
 	}
 	return os.Getenv("ANDROID_SERIAL")
 }
@@ -117,11 +127,11 @@ func (d *androidDevice) ambiguousTargetErr() string {
 }
 
 // androidKind 按 serial 的形状分类设备：adb 只报 serial，形状就是唯一线索。
-// emulator-5554=本机模拟器、host:port=网络(redroid / 无线调试)、其余=USB 直连。
+// avd:<名>=还没起的本机模拟器、emulator-5554=在跑的本机模拟器、host:port=网络(无线调试/远端)、其余=USB 直连。
 func androidKind(serial string) string {
 	switch {
-	case strings.HasPrefix(serial, "emulator-"):
-		return "emulator"
+	case strings.HasPrefix(serial, "avd:"), strings.HasPrefix(serial, "emulator-"):
+		return "avd"
 	case strings.Contains(serial, ":"):
 		return "network"
 	default:
@@ -247,7 +257,8 @@ func (d *androidDevice) Ensure() error {
 	}
 	d.keepAwake() // 连上即设常亮，镜像不因锁屏黑屏
 	if androidCfg().Mode == "device" {
-		// 真机恒原生：清掉可能残留的 redroid 平板档 override，自愈物理屏尺寸/密度。
+		// 真机恒原生：清掉可能残留的平板档 override，自愈物理屏尺寸/密度。
+		// 只对真机做——模拟器上这么干等于每次连接都抹掉用户特意设的画布尺寸。
 		_, _ = d.shell(6*time.Second, "wm", "size", "reset")
 		_, _ = d.shell(6*time.Second, "wm", "density", "reset")
 	}
@@ -263,6 +274,11 @@ func (d *androidDevice) Health() Status {
 	if d.state() != "device" {
 		if err := d.ambiguousTargetErr(); err != "" {
 			return Status{OK: false, Platform: "android", Error: err}
+		}
+		// 选中的模拟器压根没起：说清是「没启动」而不是「连不上」，后者会让人去查网络。
+		if ac.Mode == "avd" && ac.Avd != "" && serialOfAVD(ac.Avd) == "" {
+			return Status{OK: false, Platform: "android",
+				Error: "模拟器 " + ac.Avd + " 未启动（在设置里点启动）"}
 		}
 		where := ac.Address
 		if where == "" {
@@ -290,12 +306,12 @@ func (d *androidDevice) Health() Status {
 
 func modeLabel(m string) string {
 	switch m {
-	case "remote":
-		return "远程 redroid"
+	case "network":
+		return "远程设备"
 	case "device":
-		return "本机设备"
+		return "本机真机"
 	default:
-		return "本地 redroid"
+		return "本机模拟器"
 	}
 }
 

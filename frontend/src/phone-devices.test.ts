@@ -7,19 +7,22 @@ vi.mock('./api', () => ({ api: vi.fn() }))
 const { androidTargetOf, devStateText, devKindText } = await import('./phone-devices')
 
 describe('androidTargetOf', () => {
-  it('裸 serial = 本机设备（USB 真机 / 本机模拟器）', () => {
-    expect(androidTargetOf('216d6a43')).toEqual({ mode: 'device', address: '216d6a43' })
-    expect(androidTargetOf('emulator-5554')).toEqual({ mode: 'device', address: 'emulator-5554' })
+  it('裸 serial = 本机真机', () => {
+    expect(androidTargetOf('216d6a43')).toEqual({ mode: 'device', address: '216d6a43', avd: '' })
   })
-  it('loopback host:port = 本地 redroid', () => {
-    expect(androidTargetOf('localhost:5555')).toEqual({ mode: 'local', address: 'localhost:5555' })
-    expect(androidTargetOf('127.0.0.1:5555')).toEqual({ mode: 'local', address: '127.0.0.1:5555' })
+  it('emulator-xxxx = 在跑的本机模拟器，顺带记下 AVD 名', () => {
+    expect(androidTargetOf('emulator-5554', 'xh_tv1080p'))
+      .toEqual({ mode: 'avd', address: 'emulator-5554', avd: 'xh_tv1080p' })
   })
-  it('其它 host:port = 远程（另一台机器的 redroid，或开了无线调试的手机）', () => {
-    expect(androidTargetOf('192.168.120.241:5555')).toEqual({ mode: 'remote', address: '192.168.120.241:5555' })
+  it('avd:<名> = 还没起的模拟器：只有名字指得动它', () => {
+    expect(androidTargetOf('avd:Pixel_7_API_36')).toEqual({ mode: 'avd', address: '', avd: 'Pixel_7_API_36' })
+  })
+  it('host:port = 远程设备（无线调试的手机，或另一台机器上的安卓）', () => {
+    expect(androidTargetOf('192.168.120.241:5555')).toEqual({ mode: 'network', address: '192.168.120.241:5555', avd: '' })
+    expect(androidTargetOf('localhost:5555')).toEqual({ mode: 'network', address: 'localhost:5555', avd: '' })
   })
   it('去空白：尾随空格会让 adb connect / adb -s 失败', () => {
-    expect(androidTargetOf('  216d6a43 ')).toEqual({ mode: 'device', address: '216d6a43' })
+    expect(androidTargetOf('  216d6a43 ')).toEqual({ mode: 'device', address: '216d6a43', avd: '' })
   })
 })
 
@@ -37,6 +40,6 @@ describe('设备状态文案', () => {
   it('表里没有的原样显示：idb 的 type/state 是自由文本，硬翻会把 key 印到界面上', () => {
     expect(devStateText(dev('usb', 'booting(53%)'), t)).toBe('booting(53%)')
     expect(devKindText(dev('macOS'), t)).toBe('macOS')
-    expect(devKindText(dev('emulator'), t)).toBe('phone.dev.emulator')
+    expect(devKindText(dev('avd'), t)).toBe('phone.dev.avd')
   })
 })

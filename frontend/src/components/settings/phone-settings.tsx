@@ -1,14 +1,16 @@
-// 手机/Android 后端配置：本地 redroid / 远程 redroid / 本机设备 三选一 + 设备列表(点一下换目标)。
+// 手机/Android 后端配置：本机模拟器(AVD) / 远程设备 / 本机真机 三选一 + 设备列表(点一下换目标)。
+// 三档的分界线是「谁能起停它」：模拟器能起能停能新建，远程只能连断，真机只能连。
 // Android 与 iOS 互斥（active 决定哪个驱动镜像页），未装依赖时开关会先自动装。
 import { useEffect, useRef, useState } from 'react'
-import { App as AntApp, Button, Card, Input, Segmented, Space, Switch, Tag } from 'antd'
+import { App as AntApp, Button, Card, Input, Popconfirm, Segmented, Space, Switch, Tag } from 'antd'
 import { api } from '../../api'
 import { useI18n } from '../../i18n'
-import { DeviceIcon } from '../../icons'
+import { DeviceIcon, PlusIcon } from '../../icons'
 import { androidTargetOf, devKindText, devStateText, listPhoneDevices, type PhoneDevice } from '../../phone-devices'
+import { AvdCreateDrawer } from './avd-create'
 
-type PhoneCfg = { active: '' | 'android' | 'ios'; android: { mode: string; address: string; resolution: string }; ios: { mode: string; address: string } }
-const PHONE_DEFAULT: PhoneCfg = { active: 'android', android: { mode: 'local', address: 'localhost:5555', resolution: '' }, ios: { mode: 'simulator', address: '' } }
+type PhoneCfg = { active: '' | 'android' | 'ios'; android: { mode: string; address: string; avd: string; resolution: string }; ios: { mode: string; address: string } }
+const PHONE_DEFAULT: PhoneCfg = { active: 'android', android: { mode: 'avd', address: '', avd: '', resolution: '' }, ios: { mode: 'simulator', address: '' } }
 
 export function PhoneSettings() {
   // 两张卡片：Android / iOS，各自配置(互不覆盖)；active 决定哪个驱动镜像。
@@ -22,6 +24,8 @@ export function PhoneSettings() {
   const [installing, setInstalling] = useState<'android' | 'ios' | null>(null)
   const [busy, setBusy] = useState('')
   const [log, setLog] = useState('')
+  const [avdBusy, setAvdBusy] = useState('') // 正在起/停的 AVD 名：起一台要几十秒，按钮期间禁用
+  const [createOpen, setCreateOpen] = useState(false)
   useEffect(() => { cfgRef.current = cfg }, [cfg])
 
   const loadStatus = () => api('GET', '/phone/status').then((r) => { if (r?.data) setStatus(r.data) }).catch(() => {})
@@ -70,25 +74,54 @@ export function PhoneSettings() {
   const dim = { color: 'var(--text-dim)', fontSize: 12 }
   const st = status || {}
 
+  // 一台 AVD 的名字：没跑起来的条目 id 是 avd:<名>，跑着的那条 name 就是 AVD 名。
+  const avdNameOf = (d: PhoneDevice) => (d.id.startsWith('avd:') ? d.id.slice(4) : d.name)
+  // 起/停某台模拟器。先把它选成当前目标——/phone/start 作用于当前配置，
+  // 否则在「真机」来源下点启动会被后端回一句「该来源无需启动」。
+  const avdAction = async (kind: 'start' | 'stop', d: PhoneDevice) => {
+    const name = avdNameOf(d)
+    setAvdBusy(name); setLog('')
+    try {
+      await patch('android', androidTargetOf(d.id, d.name))
+      const r = await api('POST', kind === 'start' ? '/phone/start' : '/phone/stop', { name })
+      if (r?.error) { message.error(r.error); setLog(r?.data?.log || r.error) }
+    } catch (e: any) { message.error(e.message) } finally {
+      setAvdBusy(''); loadDevices('android'); loadStatus()
+    }
+  }
+  const avdDelete = async (d: PhoneDevice) => {
+    const name = avdNameOf(d)
+    setAvdBusy(name)
+    try {
+      const r = await api('DELETE', '/phone/avd/' + encodeURIComponent(name))
+      if (r?.error) message.error(r.error)
+      else message.success(t('phone.avd.deleted', { name }))
+    } catch (e: any) { message.error(e.message) } finally {
+      setAvdBusy('')
+      api('GET', '/phone/config').then((r) => { if (r?.data) setCfg((c) => ({ ...c, ...r.data })) }).catch(() => {})
+      loadDevices('android'); loadStatus()
+    }
+  }
+
   const renderCard = (p: 'android' | 'ios') => {
     const c = cfg[p] as any
     const active = cfg.active === p
     const inst = plat[p].installed
     const sup = p === 'ios' ? plat.ios.supported : true
     const isA = p === 'android'
-    const needAddr = isA ? c.mode !== 'local' : true
-    const isNet = isA && (c.address || '').includes(':')
-    const canSS = (isA && c.mode === 'local') || (!isA && c.mode === 'simulator')
+    const needAddr = isA ? c.mode !== 'avd' : true // 模拟器的目标从列表里点，没有手填地址这回事
+    const isNet = isA && c.mode === 'network' && (c.address || '').includes(':')
+    const canSS = (isA && c.mode === 'avd') || (!isA && c.mode === 'simulator')
     const sources = isA
-      ? [{ label: t('phone.mode.local'), value: 'local' }, { label: t('phone.mode.remote'), value: 'remote' }, { label: t('phone.mode.device'), value: 'device' }]
+      ? [{ label: t('phone.mode.avd'), value: 'avd' }, { label: t('phone.mode.network'), value: 'network' }, { label: t('phone.mode.device'), value: 'device' }]
       : [{ label: t('phone.ios.simulator'), value: 'simulator' }, { label: t('phone.ios.device'), value: 'device' }]
     const list = devs[p] || []
-    // 切来源要连地址一起换：每种来源的目标地址各自独立(本地 redroid=loopback / 远程=待填 / 真机=默认设备)。
-    // 否则从「本地 redroid」切到「真机」会把 localhost:5555 带过去，adb 一直连不存在的 loopback，真机被忽略→连不上。
-    const changeSrc = (m: string) => patch(p, isA ? { mode: m, address: m === 'local' ? 'localhost:5555' : '' } : { mode: m, address: '' })
+    // 切来源要连地址一起清：每种来源的目标形状不同(模拟器=emulator-xxxx / 远程=host:port / 真机=USB serial)。
+    // 不清的话，从「远程设备」切到「真机」会把 host:port 带过去，被后端判成串档丢弃→连不上。
+    const changeSrc = (m: string) => patch(p, isA ? { mode: m, address: '', avd: '' } : { mode: m, address: '' })
     // 点一台设备＝换目标。Android 连来源一起换（地址形状决定怎么连），否则会被后端判成串档丢弃；
     // iOS 同理：选中真机时来源也要从「模拟器」挪走，不然 simctl 那条路根本不认这个 UDID。
-    const pick = (d: PhoneDevice) => patch(p, isA ? androidTargetOf(d.id)
+    const pick = (d: PhoneDevice) => patch(p, isA ? androidTargetOf(d.id, d.name)
       : { mode: d.kind === 'simulator' ? 'simulator' : 'device', address: d.id })
     // 地址留空=后端用 adb 默认设备：那台由后端标 current，否则「默认单设备」下一台都不选中。
     const isPicked = (d: PhoneDevice) => (c.address ? d.id === c.address : !!d.current)
@@ -114,17 +147,53 @@ export function PhoneSettings() {
               <span style={dim}>{t('phone.devices')}</span>
               {/* 安静的行尾动作用 .tt-act：antd 的 size="small" 是 24px，手指档够不着(全站按钮不随 --ctl-h 长) */}
               <button type="button" className="tt-act" onClick={() => loadDevices(p)}>{t('phone.refreshDevices')}</button>
+              {isA && (
+                <button type="button" className="tt-act" onClick={() => setCreateOpen(true)}>
+                  <PlusIcon size={13} />{t('phone.avd.new')}
+                </button>
+              )}
             </Space>
             {list.length === 0 ? <span style={dim}>{isA ? t('phone.devNone') : t('phone.devNoneIOS')}</span> : (
               <div className="tt-modes">
                 {list.map((d) => {
                   const why = devStateText(d, t)
+                  // 只有本机模拟器有起停/删除；远程与真机不归我们管生死。
+                  const isAvd = isA && d.kind === 'avd'
+                  const stopped = (d.state || '') === 'stopped'
+                  const wait = avdBusy === avdNameOf(d)
                   return (
-                    <button type="button" key={d.id} className={`tt-mode${isPicked(d) ? ' on' : ''}`} onClick={() => pick(d)}>
-                      <i className="radio" aria-hidden />
-                      <span className="t"><DeviceIcon size={15} />{d.name}</span>
-                      <span className="d">{d.id} · {devKindText(d, t)}{why ? ' · ' : ''}{why && <em style={{ fontStyle: 'normal', color: 'var(--warn)' }}>{why}</em>}</span>
-                    </button>
+                    <div key={d.id} className={`tt-devrow${isAvd ? ' acts' : ''}`}>
+                      <button type="button" className={`tt-mode${isPicked(d) ? ' on' : ''}`} onClick={() => pick(d)}>
+                        <i className="radio" aria-hidden />
+                        <span className="t"><DeviceIcon size={15} />{d.name}</span>
+                        <span className="d">{d.id} · {devKindText(d, t)}{why ? ' · ' : ''}{why && <em style={{ fontStyle: 'normal', color: 'var(--warn)' }}>{why}</em>}</span>
+                      </button>
+                      {isAvd && (
+                        <span className="tt-devacts">
+                          {stopped ? (
+                            <>
+                              <button type="button" className="tt-act ok" disabled={!!avdBusy}
+                                onClick={() => avdAction('start', d)}>
+                                {wait ? t('phone.avd.starting') : t('phone.avd.start')}
+                              </button>
+                              {/* 删除是真删：连 ~/.android/avd/<名>.avd 里的应用和数据一起没 */}
+                              <Popconfirm title={t('phone.avd.deleteAsk', { name: avdNameOf(d) })}
+                                description={t('phone.avd.deleteWarn')} okButtonProps={{ danger: true }}
+                                onConfirm={() => avdDelete(d)}>
+                                <button type="button" className="tt-act danger" disabled={!!avdBusy}>
+                                  {t('phone.avd.delete')}
+                                </button>
+                              </Popconfirm>
+                            </>
+                          ) : (
+                            <button type="button" className="tt-act" disabled={!!avdBusy}
+                              onClick={() => avdAction('stop', d)}>
+                              {wait ? t('phone.avd.stopping') : t('phone.avd.stop')}
+                            </button>
+                          )}
+                        </span>
+                      )}
+                    </div>
                   )
                 })}
               </div>
@@ -143,7 +212,8 @@ export function PhoneSettings() {
               <span style={dim}>{t('phone.resolution')}</span>
               <Segmented value={c.resolution || 'phone'} onChange={(v) => patch(p, { resolution: (v as string) === 'phone' ? '' : v })}
                 options={[{ label: t('phone.res.phone'), value: 'phone' }, { label: t('phone.res.tablet'), value: 'tablet' },
-                  { label: t('phone.res.tabletLand'), value: 'tablet-land' }, { label: t('phone.res.tabletLarge'), value: 'tablet-large' }]} />
+                  { label: t('phone.res.tabletLand'), value: 'tablet-land' }, { label: t('phone.res.tabletLarge'), value: 'tablet-large' },
+                  { label: t('phone.res.tv'), value: 'tv' }]} />
             </Space>
           )}
           {/* 动作条 + 状态：仅激活卡片（动作作用于当前激活平台） */}
@@ -151,8 +221,8 @@ export function PhoneSettings() {
             <>
               <Space wrap>
                 <Button type="primary" loading={busy === 'auto'} onClick={() => act('auto', '/phone/auto')}>{t('phone.auto')}</Button>
-                {canSS && <Button loading={busy === 'start'} disabled={st.running === true} onClick={() => act('start', '/phone/start')}>{t('phone.redroidStart')}</Button>}
-                {canSS && <Button loading={busy === 'stop'} disabled={st.running === false} onClick={() => act('stop', '/phone/stop')}>{t('phone.redroidStop')}</Button>}
+                {canSS && <Button loading={busy === 'start'} disabled={st.running === true} onClick={() => act('start', '/phone/start')}>{t('phone.avd.start')}</Button>}
+                {canSS && <Button loading={busy === 'stop'} disabled={st.running === false} onClick={() => act('stop', '/phone/stop')}>{t('phone.avd.stop')}</Button>}
                 {isNet && <Button loading={busy === 'connect'} onClick={() => act('connect', '/phone/connect')}>{t('phone.connect')}</Button>}
                 {isNet && <Button loading={busy === 'disconnect'} onClick={() => act('disconnect', '/phone/disconnect')}>{t('phone.disconnect2')}</Button>}
                 <Button loading={busy === 'test'} onClick={() => act('test', '/phone/test')}>{t('phone.test')}</Button>
@@ -161,8 +231,15 @@ export function PhoneSettings() {
                 <Tag color={st.connected ? 'green' : (st.error ? 'red' : 'default')}>
                   {st.connected ? (st.device || t('phone.connected')) : (st.error || t('phone.disconnected'))}
                 </Tag>
-                {canSS && st.running != null && <Tag color={st.running ? 'blue' : 'default'}>{st.running ? t('phone.redroidRunning') : t('phone.redroidStopped')}</Tag>}
+                {canSS && st.running != null && <Tag color={st.running ? 'blue' : 'default'}>{st.running ? t('phone.avd.running') : t('phone.avd.stopped')}</Tag>}
               </Space>
+              {/* 升级后可能还留着一个旧的 redroid 容器在跑：ttmux 已经不管它了，说一声，删不删是用户的事 */}
+              {isA && st.legacyRedroid && (
+                <div className="tt-cstate warn">
+                  <i className="d" aria-hidden />
+                  <span>{t('phone.legacyRedroid')} <code>docker rm -f ttmux-redroid</code></span>
+                </div>
+              )}
             </>
           ) : <span style={dim}>{t('phone.enableHint')}</span>}
         </Space>
@@ -174,6 +251,8 @@ export function PhoneSettings() {
     <Space direction="vertical" size="middle" style={{ width: '100%' }}>
       {renderCard('android')}
       {renderCard('ios')}
+      <AvdCreateDrawer open={createOpen} onClose={() => setCreateOpen(false)}
+        onCreated={() => { loadDevices('android'); loadStatus() }} />
       {log && <pre style={{ maxHeight: 160, overflow: 'auto', margin: 0, padding: 8, fontSize: 11, lineHeight: 1.5, background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 6, whiteSpace: 'pre-wrap' }}>{log}</pre>}
     </Space>
   )

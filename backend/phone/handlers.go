@@ -3,6 +3,8 @@
 package phone
 
 import (
+	"encoding/json"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -86,25 +88,43 @@ func Install(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"installed": platformInstalled(body.Platform), "log": string(out)}})
 }
 
-// redroidRunning 判断本地 redroid 容器是否在运行。
-func redroidRunning() bool {
+// legacyRedroidRunning 探测遗留的 redroid 容器。ttmux 已不再管理它（那条路下线了），
+// 但用户机器上可能还跑着一个占着 5555 端口——设置页据此提示一句，删不删由用户决定。
+func legacyRedroidRunning() bool {
+	if !inPath("docker") {
+		return false
+	}
 	out, err := runCmd(5*time.Second, "docker", "ps", "--filter", "name=ttmux-redroid", "--format", "{{.Names}}")
 	return err == nil && strings.Contains(string(out), "ttmux-redroid")
 }
 
-// runRedroid 跑 scripts/phone/android-redroid.sh <action>（up 含开机等待故超时给足）。
-func runRedroid(c *gin.Context, action string, timeout time.Duration) {
-	if !inPath("docker") {
-		c.JSON(http.StatusOK, gin.H{"error": "未找到 docker（本地 redroid 需要）"})
+// currentAVD 返回当前配置指向的 AVD 名：显式选的优先，否则从 serial 反查。
+func currentAVD(cfg Config) string {
+	a := cfg.Android
+	if a.Avd != "" {
+		return a.Avd
+	}
+	if strings.HasPrefix(a.Address, "avd:") {
+		return avdNameFromRef(a.Address)
+	}
+	if strings.HasPrefix(a.Address, "emulator-") {
+		return avdOfSerial(a.Address)
+	}
+	return ""
+}
+
+// rememberAVDSerial 把刚起来的 serial 写回配置：后续每条 adb 命令就不必再问一遍控制台
+// 「这台 AVD 现在是哪个 serial」（镜像按帧调 target()，那两次 adb 往返省不得）。
+func rememberAVDSerial(name, serial string) {
+	c := getConfig()
+	if c.Android.Mode != "avd" || serial == "" {
 		return
 	}
-	s := findScript("phone/android-redroid.sh")
-	if s == "" {
-		c.JSON(http.StatusOK, gin.H{"error": "找不到 scripts/phone/android-redroid.sh"})
+	if c.Android.Address == serial && c.Android.Avd == name {
 		return
 	}
-	out, _ := runCmd(timeout, "bash", s, action)
-	c.JSON(http.StatusOK, gin.H{"data": gin.H{"log": string(out), "running": redroidRunning()}})
+	c.Android.Avd, c.Android.Address = name, serial
+	setConfig(c)
 }
 
 // iosSimBooted 当前是否有已启动的 iOS 模拟器。
@@ -113,14 +133,17 @@ func iosSimBooted() bool {
 	return err == nil && strings.Contains(string(out), "Booted")
 }
 
-// canStartStop：只有「本机能起停的设备」才有启动/停止语义——本地 redroid 容器、iOS 模拟器。
+// canStartStop：只有「本机能起停的设备」才有启动/停止语义——本机模拟器(AVD)、iOS 模拟器。
+// 这也是三种 Android 来源的分界线：avd 能起停，network 只能连断，device 只能连。
 func canStartStop(cfg Config) bool {
-	return (cfg.Active == "android" && cfg.Android.Mode == "local") || (cfg.Active == "ios" && cfg.IOS.Mode == "simulator")
+	return (cfg.Active == "android" && cfg.Android.Mode == "avd") || (cfg.Active == "ios" && cfg.IOS.Mode == "simulator")
 }
 
-// isNetworkTarget：host:port 形式（远程 redroid / 无线真机 / 本地 redroid）需要 adb connect/disconnect。
+// isNetworkTarget：host:port 形式（无线调试真机 / 另一台机器上的安卓）需要 adb connect/disconnect。
+// avd:<名> 也含冒号但不是网络目标，排除掉。
 func isNetworkTarget(cfg Config) bool {
-	return cfg.Active == "android" && strings.Contains(cfg.Android.Address, ":")
+	a := cfg.Android.Address
+	return cfg.Active == "android" && strings.Contains(a, ":") && !strings.HasPrefix(a, "avd:")
 }
 
 // activeSource 返回当前激活平台的来源(mode)。
@@ -142,8 +165,12 @@ func StatusInfo(c *gin.Context) {
 		"canStartStop": canStartStop(cfg),
 		"running":      nil,
 	}
-	if cfg.Active == "android" && cfg.Android.Mode == "local" {
-		data["running"] = redroidRunning()
+	if cfg.Active == "android" && cfg.Android.Mode == "avd" {
+		if name := currentAVD(cfg); name != "" {
+			data["running"] = serialOfAVD(name) != ""
+			data["avd"] = name
+		}
+		data["legacyRedroid"] = legacyRedroidRunning()
 	} else if cfg.Active == "ios" && cfg.IOS.Mode == "simulator" {
 		data["running"] = iosSimBooted()
 	}
@@ -154,12 +181,32 @@ func StatusInfo(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": data})
 }
 
-// Start 运行层：起设备。本地 redroid→脚本 up；iOS 模拟器→simctl boot；其余来源无此语义。
+// Start 运行层：起设备。本机模拟器→emulator -avd；iOS 模拟器→simctl boot；其余来源无此语义。
+// body 可带 {"name":"<AVD>","wipe":true}：不带就起当前选中的那台。
 func Start(c *gin.Context) {
 	cfg := getConfig()
 	switch {
-	case cfg.Active == "android" && cfg.Android.Mode == "local":
-		runRedroid(c, "up", 240*time.Second)
+	case cfg.Active == "android" && cfg.Android.Mode == "avd":
+		var body struct {
+			Name string `json:"name"`
+			Wipe bool   `json:"wipe"`
+		}
+		_ = c.ShouldBindJSON(&body)
+		name := strings.TrimSpace(body.Name)
+		if name == "" {
+			name = currentAVD(cfg)
+		}
+		if name == "" {
+			c.JSON(http.StatusOK, gin.H{"error": "请先从设备列表选择一台模拟器"})
+			return
+		}
+		serial, err := startAVD(name, body.Wipe)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{"error": err.Error(), "data": gin.H{"log": avdLogTail(name, 4000)}})
+			return
+		}
+		rememberAVDSerial(name, serial)
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"running": true, "device": serial, "health": Current().Health()}})
 	case cfg.Active == "ios" && cfg.IOS.Mode == "simulator":
 		udid := strings.TrimSpace(cfg.IOS.Address)
 		if udid == "" {
@@ -170,16 +217,33 @@ func Start(c *gin.Context) {
 		o2, _ := runCmd(120*time.Second, "xcrun", "simctl", "bootstatus", udid, "-b")
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"log": string(o1) + string(o2), "running": iosSimBooted()}})
 	default:
-		c.JSON(http.StatusOK, gin.H{"error": "该来源无需启动（本机设备/远程在外部运行）"})
+		c.JSON(http.StatusOK, gin.H{"error": "该来源无需启动（真机与远程设备在外部运行）"})
 	}
 }
 
-// Stop 运行层：停设备。本地 redroid→脚本 down；iOS 模拟器→simctl shutdown。
+// Stop 运行层：停设备。本机模拟器→adb emu kill（整机关机）；iOS 模拟器→simctl shutdown。
 func Stop(c *gin.Context) {
 	cfg := getConfig()
 	switch {
-	case cfg.Active == "android" && cfg.Android.Mode == "local":
-		runRedroid(c, "down", 30*time.Second)
+	case cfg.Active == "android" && cfg.Android.Mode == "avd":
+		var body struct {
+			Name string `json:"name"`
+		}
+		_ = c.ShouldBindJSON(&body)
+		name := strings.TrimSpace(body.Name)
+		if name == "" {
+			name = currentAVD(cfg)
+		}
+		serial := serialOfAVD(name)
+		if serial == "" {
+			c.JSON(http.StatusOK, gin.H{"error": "该模拟器没有在运行"})
+			return
+		}
+		if err := stopAVD(serial); err != nil {
+			c.JSON(http.StatusOK, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"running": false}})
 	case cfg.Active == "ios" && cfg.IOS.Mode == "simulator":
 		udid := strings.TrimSpace(cfg.IOS.Address)
 		if udid == "" {
@@ -233,10 +297,15 @@ func Auto(c *gin.Context) {
 		}
 	}
 	// 2. 起设备（仅能起停的来源）
-	if cfg.Active == "android" && cfg.Android.Mode == "local" && !redroidRunning() {
-		if s := findScript("phone/android-redroid.sh"); s != "" {
-			out, _ := runCmd(240*time.Second, "bash", s, "up")
-			log += string(out) + "\n"
+	if cfg.Active == "android" && cfg.Android.Mode == "avd" {
+		if name := currentAVD(cfg); name != "" && serialOfAVD(name) == "" {
+			serial, err := startAVD(name, false)
+			if err != nil {
+				log += err.Error() + "\n" + avdLogTail(name, 2000)
+			} else {
+				rememberAVDSerial(name, serial)
+				log += "模拟器 " + name + " 已就绪（" + serial + "）\n"
+			}
 		}
 	} else if cfg.Active == "ios" && cfg.IOS.Mode == "simulator" {
 		if udid := strings.TrimSpace(cfg.IOS.Address); udid != "" {
@@ -258,7 +327,7 @@ func Auto(c *gin.Context) {
 // Android 一台机器上模拟器与真机常常同时挂着，所以这里不做筛选：
 //   - 未就绪的也报（offline / unauthorized），否则真机没授权 USB 调试时列表里凭空少一台，
 //     用户只看到「连不上」而不知道是哪台、为什么；
-//   - 配置里的目标即使 adb 看不见（远程 redroid 还没 connect）也补一条，
+//   - 配置里的目标即使 adb 看不见（远程设备还没 connect）也补一条，
 //     不然「当前用的是哪台」会从 UI 上消失。
 func Devices(c *gin.Context) {
 	type dev struct {
@@ -294,12 +363,31 @@ func Devices(c *gin.Context) {
 	if cur == "" {
 		cur = androidImpl.soleReadySerial()
 	}
-	seen := map[string]bool{}
-	for _, a := range androidImpl.devices() {
-		seen[a.Serial] = true
-		list = append(list, dev{ID: a.Serial, Name: a.Model, Kind: androidKind(a.Serial), State: a.State, Current: a.Serial == cur})
+	attached := androidImpl.devices()
+	running := runningAVDs(attached) // AVD 名 → serial
+	bySerial := map[string]string{}
+	for name, serial := range running {
+		bySerial[serial] = name
 	}
-	if cur != "" && !seen[cur] {
+	curAVD := currentAVD(getConfig())
+	seen := map[string]bool{}
+	for _, a := range attached {
+		seen[a.Serial] = true
+		name := a.Model
+		if n := bySerial[a.Serial]; n != "" {
+			name = n // 模拟器报 AVD 名（xh_tv1080p）比报机型名（sdk_google_atv64_x86_64）认得出
+		}
+		list = append(list, dev{ID: a.Serial, Name: name, Kind: androidKind(a.Serial), State: a.State, Current: a.Serial == cur})
+	}
+	// 没跑起来的 AVD 也摆出来：只列 adb 看得见的，等于「停掉一台就从界面上消失」，
+	// 用户于是又得回命令行去起它。
+	for _, n := range listAVDs() {
+		if _, on := running[n]; on {
+			continue
+		}
+		list = append(list, dev{ID: avdRef(n), Name: n, Kind: "avd", State: "stopped", Current: n == curAVD})
+	}
+	if cur != "" && !seen[cur] && !strings.HasPrefix(cur, "avd:") {
 		list = append(list, dev{ID: cur, Name: cur, Kind: androidKind(cur), State: "offline", Current: true})
 	}
 	c.JSON(http.StatusOK, gin.H{"data": list})
@@ -360,6 +448,104 @@ func SetConfig(c *gin.Context) {
 		_ = androidImpl.SetResolution(getConfig().Android.Resolution)
 	}
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"config": getConfig(), "health": Current().Health()}})
+}
+
+// ── 本机模拟器(AVD)：目录 / 新建 / 进度 / 删除 ──
+
+// AVDCatalog 回新建向导要的全部选项：机型档、系统镜像、已有 AVD、工具链是否就位。
+// ?remote=1 才去拉远端镜像目录（那趟要几十秒），默认只回本地扫得到的。
+func AVDCatalog(c *gin.Context) {
+	withRemote := c.Query("remote") == "1"
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{
+		"devices": deviceProfiles(),
+		"images":  avdCatalog(withRemote),
+		"avds":    listAVDs(),
+		"remote":  withRemote,
+		"abi":     hostABI(),
+		"tools": gin.H{
+			"emulator":   sdkTool("emulator") != "",
+			"sdkmanager": sdkTool("sdkmanager") != "",
+			"avdmanager": sdkTool("avdmanager") != "",
+			"sdkRoot":    sdkRoot(),
+		},
+	}})
+}
+
+// AVDCreate 发号即返回：真正的活（下载镜像动辄几 GB）在后台任务里跑，进度走 AVDTask 的 SSE。
+func AVDCreate(c *gin.Context) {
+	var req avdCreateReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusOK, gin.H{"error": "无效参数"})
+		return
+	}
+	req.Name = strings.TrimSpace(req.Name)
+	req.Pkg = strings.TrimSpace(req.Pkg)
+	if err := validateCreate(req, listAVDs(), imageInstalled(req.Pkg)); err != nil {
+		c.JSON(http.StatusOK, gin.H{"error": err.Error()})
+		return
+	}
+	t := newTask()
+	go runCreate(t, req)
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"taskId": t.ID}})
+}
+
+// AVDTask 用 SSE 推创建进度：客户端关掉抽屉、重连、换页面都不影响后台任务，重连后从头补齐日志。
+// 线格式与 /stream/status 一致（event + 多行 data），另起一份是为了不让 phone 依赖 stream 包。
+func AVDTask(c *gin.Context) {
+	t := getTask(c.Param("id"))
+	if t == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "任务不存在或已过期"})
+		return
+	}
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	sent := 0
+	for {
+		lines, pct, status, errMsg, wait := t.snapshot(sent)
+		sent += len(lines)
+		payload, _ := json.Marshal(gin.H{"lines": lines, "pct": pct, "status": status, "error": errMsg})
+		writeAVDEvent(c, "task", string(payload))
+		flusher.Flush()
+		if status != "running" {
+			return
+		}
+		select {
+		case <-c.Request.Context().Done():
+			return
+		case <-wait:
+		case <-time.After(20 * time.Second): // 心跳：别让中间代理掐掉闲置连接
+		}
+	}
+}
+
+func writeAVDEvent(c *gin.Context, event, data string) {
+	io.WriteString(c.Writer, "event: "+event+"\n")
+	for _, line := range strings.Split(data, "\n") {
+		io.WriteString(c.Writer, "data: "+line+"\n")
+	}
+	io.WriteString(c.Writer, "\n")
+}
+
+// AVDDelete 删除一台模拟器（连同它的应用与数据）。运行中的会被拒绝。
+func AVDDelete(c *gin.Context) {
+	name := c.Param("name")
+	if err := deleteAVD(name); err != nil {
+		c.JSON(http.StatusOK, gin.H{"error": err.Error()})
+		return
+	}
+	// 删的正好是当前选中的那台：把配置指针挪开，否则设置页会一直指着一台不存在的机器。
+	cfg := getConfig()
+	if currentAVD(cfg) == name {
+		cfg.Android.Avd, cfg.Android.Address = "", ""
+		setConfig(cfg)
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"ok": true}})
 }
 
 // UI 返回当前屏幕的元素结构（给 agent 看结构算坐标）。
