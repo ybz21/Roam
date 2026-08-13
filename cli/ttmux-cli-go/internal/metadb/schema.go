@@ -17,7 +17,34 @@ var mainSteps = []Step{
 	{Version: 2, Name: "ledger-tables", SQL: ledgerTables},
 	{Version: 3, Name: "import-legacy", Fn: importLegacy},
 	{Version: 4, Name: "agent-session", Fn: addAgentSession},
+	{Version: 5, Name: "project-traces", SQL: createProjectTraces},
+	{Version: 6, Name: "import-traces", Fn: importTraces},
 }
+
+// createProjectTraces 收尾留痕（合入 / 丢弃 / 清理）进表。
+//
+// 它原先是 <dataDir>/activity.log —— 一个只追加的 JSONL，5MB 轮转一代。那形态在
+// M2 并库时被漏下了，代价是双重的：一来重启后它跟别的台账不在同一份快照里，
+// 备份/恢复各走各的；二来 M2 之后 Store 在直连模式下压根不再有文件路径，
+// 于是每一条留痕都被静默丢弃、项目活动恒空（这个洞由本步骤连带堵上）。
+//
+// 建表与收编分成两步：DataDir 拿不到时收编那步会推迟（plugind 之类的入口开库
+// 时就没有），但表必须先建出来 —— 否则后端接上库却无处可写。
+const createProjectTraces = `
+CREATE TABLE IF NOT EXISTS project_traces(
+	id          TEXT PRIMARY KEY,
+	repo        TEXT NOT NULL DEFAULT '',
+	branch      TEXT,
+	head_oid    TEXT,
+	base        TEXT,
+	action      TEXT,
+	strategy    TEXT,
+	at          INTEGER NOT NULL DEFAULT 0,
+	merged_into TEXT,
+	merged_kind TEXT
+);
+CREATE INDEX IF NOT EXISTS project_traces_repo ON project_traces(repo, at DESC);
+`
 
 // addAgentSession 给 sessions 加 agent_session_uuid：agent 那一侧的对话 id。
 //

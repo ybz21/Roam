@@ -249,6 +249,8 @@ func (s *Store) SetRestoredFrom(session, from string) error {
 // SetAgentSession 记 agent 那一侧的对话 id（Claude Code 的 <uuid>.jsonl）。
 // 拉起 agent 时传了 --session-id，这里把同一个 uuid 落进台账——「重开并接回原对话」
 // 全靠它，而它必须在会话还活着的时候记下来。
+// **只记一次，不覆盖**：一个会话里可能先后跑过好几段 claude，我们要的是它自己
+// 那一段的起点；而上层的关联多少带点推断成分，覆盖只会让先前确定的那次变得不确定。
 func (s *Store) SetAgentSession(session, uuid string) error {
 	if session == "" || uuid == "" {
 		return nil
@@ -257,7 +259,8 @@ func (s *Store) SetAgentSession(session, uuid string) error {
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(`UPDATE sessions SET agent_session_uuid=? WHERE id=?`, uuid, session)
+	_, err = db.Exec(`UPDATE sessions SET agent_session_uuid=?
+		WHERE id=? AND IFNULL(agent_session_uuid,'')=''`, uuid, session)
 	return err
 }
 

@@ -39,6 +39,7 @@ type API struct {
 	Projects    *project.Store    // 项目（08）：knownRepos 弱台账 + UI 偏好
 	FileIndex   *search.FileIndex // 全局搜索（⌘K）的项目文件名索引，见 search.go
 	Meta        *metadb.DB        // 台账库直连；降级时各 store 自动退回 JSON
+	agentLink   *agentLinker      // 把手敲起来的 claude 会话认到它那段对话上
 }
 
 // New 组装 API。台账库的握手在这里做一次：库的位置由 ttmux 报，不是后端自己拼
@@ -56,7 +57,8 @@ func New(tt *ttmux.Client, browserHome, dataDir, fallbackBin string) *API {
 	return &API{TT: tt, WT: worktree.New(dataDir, meta), BrowserHome: browserHome,
 		Football: NewFootballStore(), Speech: NewSpeechStore(dataDir),
 		Prefs: NewPreferencesStore(dataDir), Races: race.NewStore(dataDir, meta),
-		Projects: project.NewStore(dataDir, meta), FileIndex: search.NewFileIndex(), Meta: meta}
+		Projects: project.NewStore(dataDir, meta), FileIndex: search.NewFileIndex(), Meta: meta,
+		agentLink: newAgentLinker()}
 }
 
 // json 透传 ttmux 的 --json 输出

@@ -241,9 +241,13 @@ func TestDeferredStepDoesNotBlockLaterOnes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	last := mainSteps[len(mainSteps)-1].Version
-	if !done[last] {
-		t.Fatalf("最后一步（v%d）应当照常应用，实际已应用 %v", last, done)
+	// 收编类的步骤都吃 DataDir，缺它就该推迟；**其余每一步都必须照常应用**——
+	// 尤其是排在推迟那步后面的。
+	needsDataDir := map[string]bool{"import-legacy": true, "import-traces": true}
+	for _, st := range mainSteps {
+		if !needsDataDir[st.Name] && !done[st.Version] {
+			t.Fatalf("v%d(%s) 应当照常应用，实际已应用 %v", st.Version, st.Name, done)
+		}
 	}
 	// 推迟的那步确实没盖章，留着下次补
 	var deferred int

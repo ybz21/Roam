@@ -113,6 +113,20 @@ CREATE TABLE <b>projects</b> (
 );
 CREATE TABLE <b>project_aliases</b> (alias TEXT PRIMARY KEY, project_id TEXT NOT NULL);
 
+<s>-- 收尾留痕（merged / discarded / cleaned）。原先是 activity.log（JSONL，5MB 轮转一代）。</s>
+<s>-- 并库时被漏下，代价是双重的：它与别的台账不在同一份快照里，备份/恢复各走各的；</s>
+<s>-- 而后端一旦直连就没有文件路径了，于是每条留痕都被静默丢弃、项目活动恒空。</s>
+CREATE TABLE <b>project_traces</b> (
+  <i>id</i>          TEXT PRIMARY KEY,
+  repo        TEXT NOT NULL DEFAULT '',  <s>-- = projects.dir</s>
+  branch      TEXT, head_oid TEXT, base TEXT,
+  action      TEXT,                      <s>-- merged | discarded | cleaned</s>
+  strategy    TEXT, merged_into TEXT, merged_kind TEXT,
+  at          INTEGER NOT NULL DEFAULT 0
+);
+<s>-- 文件形态靠轮转给读放大封顶；进了库改成按仓库各留最近 1000 条，写时修剪。</s>
+CREATE INDEX project_traces_repo ON project_traces(repo, at DESC);
+
 <s>-- 主键是**持久会话 id**（= tmux 会话名，见 docs/design/session-identity.md）：</s>
 <s>-- 由创建时刻派生、不可变、跨 tmux server 重启唯一且永不复用 —— 天生就是对的主键。</s>
 CREATE TABLE <b>sessions</b> (

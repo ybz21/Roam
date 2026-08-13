@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"os"
 	"path/filepath"
 	"sort"
@@ -30,14 +31,14 @@ var errNoDataDir = fmt.Errorf("缺 DataDir，跳过旧台账收编: %w", ErrStep
 
 // Report 说明这次收编搬了什么，给 `ttmux db migrate` 打印、也进测试断言。
 type Report struct {
-	Projects, Aliases, Races, Homes, Members, Cards int
+	Projects, Aliases, Races, Homes, Members, Cards, Traces int
 	// SkippedSwarms 是磁盘上有目录、swarms 表里却没有登记的孤儿群。
 	SkippedSwarms []string
 }
 
 func (r Report) String() string {
-	s := fmt.Sprintf("项目 %d · 别名 %d · 竞赛 %d · 会话归属 %d · 蜂群成员 %d · 卡片 %d",
-		r.Projects, r.Aliases, r.Races, r.Homes, r.Members, r.Cards)
+	s := fmt.Sprintf("项目 %d · 别名 %d · 竞赛 %d · 会话归属 %d · 蜂群成员 %d · 卡片 %d · 留痕 %d",
+		r.Projects, r.Aliases, r.Races, r.Homes, r.Members, r.Cards, r.Traces)
 	if len(r.SkippedSwarms) > 0 {
 		s += fmt.Sprintf("（跳过 %d 个孤儿蜂群目录）", len(r.SkippedSwarms))
 	}
@@ -423,4 +424,76 @@ func copySwarmDetail(tx *sql.Tx, dbPath, swarmID string, rep *Report) error {
 		}
 	}
 	return nil
+}
+
+// ── activity.log ────────────────────────────────────────────────────────
+
+type legacyTrace struct {
+	ID         string `json:"id"`
+	Repo       string `json:"repo"`
+	Branch     string `json:"branch"`
+	HeadOid    string `json:"headOid"`
+	Base       string `json:"base"`
+	Action     string `json:"action"`
+	Strategy   string `json:"strategy"`
+	At         int64  `json:"at"`
+	MergedInto string `json:"mergedInto"`
+	MergedKind string `json:"mergedKind"`
+}
+
+// importTraces 收编 activity.log（两代）。
+//
+// 与别的收编不同，这份是 **JSONL 而非 JSON**：一行坏了只丢那一行，不该让整个文件
+// 作废——留痕本来就是「尽力而为的摘要」，半条记录不值得挡住迁移。
+func importTraces(tx *sql.Tx, opt Options) error {
+	if opt.DataDir == "" {
+		return errNoDataDir
+	}
+	n := 0
+	// 先老（.1）后新：同 id 撞上时 INSERT OR IGNORE 保留先插进去的那条，
+	// 而两代之间本来就不会有同 id，顺序只是让 rowid 与时间同向。
+	for _, name := range []string{"activity.log.1", "activity.log"} {
+		b, err := os.ReadFile(filepath.Join(opt.DataDir, name))
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		for _, line := range strings.Split(string(b), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			var e legacyTrace
+			if json.Unmarshal([]byte(line), &e) != nil {
+				continue // 半条/坏行：丢它一条，别丢整个文件
+			}
+			if e.ID == "" {
+				e.ID = traceID(line) // 老行没有 id 字段；按内容派一个，重跑不会翻倍
+			}
+			res, err := tx.Exec(`INSERT OR IGNORE INTO project_traces
+				(id,repo,branch,head_oid,base,action,strategy,at,merged_into,merged_kind)
+				VALUES(?,?,?,?,?,?,?,?,?,?)`,
+				e.ID, e.Repo, e.Branch, e.HeadOid, e.Base, e.Action, e.Strategy, e.At,
+				e.MergedInto, e.MergedKind)
+			if err != nil {
+				return err
+			}
+			if aff, _ := res.RowsAffected(); aff > 0 {
+				n++
+			}
+		}
+	}
+	// 收编那步（v3）在老机器上早已盖过章，这里只补自己这一格。
+	lastReport.Traces = n
+	return nil
+}
+
+// traceID 给没有 id 的老留痕派一个稳定 id：同一行内容永远得到同一个 id，
+// 于是「导一半崩了再来一遍」不会把已经进库的那些翻倍。
+func traceID(line string) string {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(line))
+	return fmt.Sprintf("t-%016x", h.Sum64())
 }
