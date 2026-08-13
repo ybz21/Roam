@@ -859,6 +859,7 @@ const zhCN = {
   'phone.avd.variant.google_apis': 'Google APIs',
   'phone.avd.variant.google_apis_playstore': 'Google Play',
   'phone.avd.variant.android-tv': 'Android TV',
+  'phone.avd.variant.google-tv': 'Google TV',
   'phone.avd.variant.android-wear': 'Wear OS',
   'phone.avd.variant.android-automotive': '车机',
   'phone.avd.variant.android-automotive-playstore': '车机 + Google Play',

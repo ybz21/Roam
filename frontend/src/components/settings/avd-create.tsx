@@ -18,20 +18,21 @@ type Catalog = {
 
 type Purpose = 'phone' | 'tablet' | 'tv' | 'custom'
 
-// 手机/平板用的镜像变体；电视与手表各有自己的 tag。
-const PHONE_VARIANTS = ['default', 'google_apis', 'google_apis_playstore']
+// 变体按关键字认，不按白名单：Google 一直在加新档（google-tv、google_apis_ps16k、
+// *_tablet、aosp_atd…），写死名单等于每出一个新档就漏一个。
+const NON_HANDHELD = /tv|wear|automotive|desktop|xr/
 
 const purposeFilter = (p: Purpose) => ({
   device: (d: DeviceProfile) => {
     const tablet = /tablet|nexus (7|9|10)/i.test(d.id + ' ' + d.name)
-    if (p === 'tv') return d.tag === 'android-tv'
+    if (p === 'tv') return /tv/.test(d.tag || '')
     if (p === 'tablet') return !d.tag && tablet
     if (p === 'phone') return !d.tag && !tablet
     return true
   },
   image: (i: Image) => {
-    if (p === 'tv') return i.variant === 'android-tv'
-    if (p === 'phone' || p === 'tablet') return PHONE_VARIANTS.includes(i.variant)
+    if (p === 'tv') return /tv/.test(i.variant)
+    if (p === 'phone' || p === 'tablet') return !NON_HANDHELD.test(i.variant)
     return true
   },
 })
