@@ -1520,6 +1520,7 @@ const enUS = {
   'plugins.monitor.pollFailed': 'Refresh failed',
   'plugins.monitor.cpu': 'CPU',
   'plugins.monitor.memory': 'Memory',
+  'plugins.monitor.swapCritical': 'Swap is nearly exhausted — more pressure will hang the whole machine (ping still replies, SSH will not).',
   'plugins.monitor.gpu': 'GPU',
   'plugins.monitor.disk': 'Disk',
   'plugins.monitor.network': 'Network',
