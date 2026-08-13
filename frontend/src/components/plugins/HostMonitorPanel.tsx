@@ -38,9 +38,35 @@ function fmtBytes(n: number, perSec = false): string {
 }
 
 function usageColor(p: number): string {
-  if (p >= 90) return '#f5222d'
-  if (p >= 70) return '#faad14'
+  if (p >= 90) return 'var(--danger)'
+  if (p >= 70) return 'var(--warn)'
   return 'var(--ok)'
+}
+
+// SwapBar 交换空间。
+//
+// 它和上面那个内存表盘不是一回事：内存用到 70% 很正常，交换空间用满则是**整机卡死的
+// 前兆**——一旦换页无处可去，内核就在直接回收里空转，ping 还通（内核收发 ICMP 不换页）
+// 但 ssh 再也进不来，只能按电源键。本机 2026-08-12 那次就是这么冻的，而那三天里 swap
+// 一直贴着 98%——数字一直在这块面板上，只是画成了一根永不变色的灰条，和 5% 长得一样。
+function SwapBar({ used, total, t }: {
+  used: number; total: number
+  t: (k: string, vars?: Record<string, string | number>) => string
+}) {
+  const pct = Math.round((used / total) * 100)
+  return (
+    <div style={{ marginTop: 'var(--sp-2)' }}>
+      <Typography.Text type="secondary" style={{ fontSize: 'var(--fs-meta)' }}>
+        Swap {fmtBytes(used)} / {fmtBytes(total)}
+      </Typography.Text>
+      <Progress percent={pct} showInfo={false} size="small" strokeColor={usageColor(pct)} />
+      {pct >= 90 && (
+        <div style={{ color: 'var(--danger)', fontSize: 'var(--fs-micro)' }}>
+          {t('plugins.monitor.swapCritical')}
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ── 轻量 SVG 面积走势图(不引图表库) ──
@@ -180,18 +206,10 @@ export default function HostMonitorPanel({ pluginId, enabled, t, fetchSnapshot }
             <Progress type="dashboard" size={88} percent={Math.round(memory.usagePercent)}
               strokeColor={usageColor(memory.usagePercent)} />
             <div style={{ flex: 1, minWidth: 0, alignSelf: 'stretch', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
-              <Sparkline series={history.map((h) => h.mem)} color="#d2a8ff" max={100} />
+              <Sparkline series={history.map((h) => h.mem)} color="var(--hl-title)" max={100} />
             </div>
           </Space>
-          {memory.swapTotal > 0 && (
-            <div style={{ marginTop: 8 }}>
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                Swap {fmtBytes(memory.swapUsed)} / {fmtBytes(memory.swapTotal)}
-              </Typography.Text>
-              <Progress percent={Math.round((memory.swapUsed / memory.swapTotal) * 100)}
-                showInfo={false} size="small" strokeColor="#8b949e" />
-            </div>
-          )}
+          {memory.swapTotal > 0 && <SwapBar used={memory.swapUsed} total={memory.swapTotal} t={t} />}
         </StatCard>
 
         {/* GPU */}
