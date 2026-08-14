@@ -737,6 +737,18 @@ html[data-pointer="coarse"] .mc { --ctl-h: 36px; }
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-variant-numeric: tabular-nums; white-space: nowrap; padding-right: 6px;
 }
+/* 岛内的设备身份：名字 + 它是什么 + 一个下拉角标，整条可点（点开换一台）。
+   类型是名字的注脚，所以压暗、贴着名字走，不另起一枚胶囊——那样等于把同一台机器说两遍。 */
+.mc-omni-id {
+  display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+  color: var(--text-dimmer);
+}
+.mc-omni-id .host { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-bright); }
+.mc-omni-id .kind {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px;
+  font-size: var(--fs-micro); color: var(--text-dim); white-space: nowrap;
+}
+:where(html[data-pointer="fine"]) .mc-omni-id:hover .kind { color: var(--text-bright); }
 .mc-omni-input {
   flex: 1 1 auto; min-width: 0; border: 0; outline: none; background: transparent;
   color: var(--text-bright); font-size: var(--fs-sm);
@@ -1155,6 +1167,12 @@ html[data-pointer="coarse"] .tt-srow .acts { opacity: 1; }
   min-height: 0;
   overflow: hidden;
 }
+/* 手机镜像页满幅：这一页的主角是一块画面，四周留白只是把它按比例缩小一圈，
+   什么也没多说明。工具条自带底边框，不靠外边距跟画布分开。
+   底部例外——手机上要给底栏/会话坞让位，否则画面被压在它们下面。 */
+.tt-page-phone { padding: 0; }
+.tt-page-phone.tt-page-mobile { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+.tt-page-phone.tt-page-mobile.has-dock { padding-bottom: calc(126px + env(safe-area-inset-bottom)); }
 .tt-page-files > *,
 .tt-page-phone > *,
 .tt-page-browser > *,
