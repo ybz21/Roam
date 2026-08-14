@@ -11,8 +11,8 @@ import '@xterm/xterm/css/xterm.css'
 // 终端符号补字集（约 46KB，仅覆盖框线/箭头/技术符号等区段）：见 FONT_FAMILY 的说明
 import '../../assets/fonts/roam-symbols.css'
 import { paneCellsToPixelRect } from './terminal-geometry'
-import { shouldJiggleAfterAttach } from './terminal-resize'
-import type { TerminalDimensions } from './terminal-resize'
+import { RESUME_RESYNC_MS, resumeHealFor, shouldJiggleAfterAttach } from './terminal-resize'
+import type { ResumeHeal, TerminalDimensions } from './terminal-resize'
 import { parseTerminalPong } from './terminal-lifecycle'
 
 export type TermStatus = 'connecting' | 'connected' | 'closed'
@@ -35,8 +35,9 @@ export interface TermHandle {
   selectPaneAt: (clientX: number, clientY: number) => void
   // 把后端返回的 pane 几何（tmux cell 坐标）换算成视口像素矩形，供目标高亮/就地确认卡定位
   paneScreenRect: (pane: { left: number; top: number; width: number; height: number }) => { x: number; y: number; width: number; height: number } | null
-  // 尺寸抖动(cols−1→cols)触发两次 SIGWINCH，逼全屏 TUI 整屏重排重绘。
-  // 窄屏(手机)下 Claude Code 等 ink TUI 折行重绘错位会满屏堆叠垃圾行，等价于「拖一下窗口就好了」。
+  // 「重绘」把两层花屏一起修：先就地重建渲染器（画布/纹理图集坏了那类），再抖一次尺寸
+  // (cols−1→cols，两次 SIGWINCH) 逼全屏 TUI 整屏重排（TUI 自己把版排坏了那类）。
+  // 只修一层的话，用户按了没反应，只能去找「重连」——那等于让人自己去猜是哪一类。
   redraw: () => void
   // 外层布局即将一次性提交新尺寸时，先冻结当前终端帧；新尺寸完成绘制后组件会自动交接。
   beginVisualHandoff: () => void
@@ -204,7 +205,9 @@ const Term = forwardRef<TermHandle, {
   const resumeProbeID = useRef('')
   const resumeProbeSeq = useRef(0)
   const silentReconnect = useRef(false)
-  const resumeHealPending = useRef(false)
+  // 久置回前台时这个标签还没被打开：先记下要修到哪一层，等它真被切到前台再修。
+  // 用户报的花屏正是这条路径——手机长期不用，回来「进入 session」才看见。
+  const resumeHealPending = useRef<ResumeHeal>('none')
   const rebuildRendererRef = useRef<() => void>()
   // 自增一次 = 拆掉 xterm 实例重建（渲染器/纹理图集/WebSocket 全新），效果等同刷新整页
   const [gen, setGen] = useState(0)
@@ -315,7 +318,8 @@ const Term = forwardRef<TermHandle, {
 
   // 上次 attach 成功时的尺寸，用于判断重连后是否真需要抖动重绘（见 ws.onopen）
   const lastAttach = useRef<{ cols: number; rows: number } | null>(null)
-  // 置位后，下一次 attach 无条件抖动重绘（久置回前台的整链路重同步，见 onVisibility）
+  // 置位后，下一次 attach 无条件抖动重绘。置位的两处：探测失败的静默重连，以及久置回来时
+  // socket 恰好不在（repaintContent 记账，等 attach 完再抖）。
   const forceRepaint = useRef(false)
 
   // 尺寸抖动重绘：cols−1 再复原，两次 SIGWINCH 让 TUI(ink) 整屏重排、清掉错位堆积的垃圾行。
@@ -329,6 +333,22 @@ const Term = forwardRef<TermHandle, {
       if (!t2 || !ws2 || ws2.readyState !== 1) return
       ws2.send(JSON.stringify({ type: 'resize', cols: t2.cols, rows: t2.rows }))
     }, 150)
+  }
+
+  // 内容层重绘：让远端 TUI 自己整屏重排。socket 还活着就当场抖尺寸；正在重连（或刚被
+  // 静默重连关掉）则记账，等这次 attach 完成后再抖——那时才有人收得到 SIGWINCH。
+  const repaintContent = () => {
+    const ws = wsRef.current
+    if (ws && ws.readyState === 1) jiggleResize()
+    else forceRepaint.current = true
+  }
+
+  // 久置回前台的自愈：按离开时长决定修到哪一层（见 resumeHealFor）。
+  const runResumeHeal = (heal: ResumeHeal) => {
+    if (heal === 'none') return
+    setTimeout(() => rebuildRendererRef.current?.(), 60)
+    // 内容层排在渲染器重建之后：重建里有一次 applyResize，先抖会被它的尺寸盖回去。
+    if (heal === 'renderer+content') setTimeout(repaintContent, 300)
   }
 
   // 后端 pane 几何是 tmux cell 坐标(#{pane_left}/#{pane_top}/#{pane_width}/#{pane_height})，
@@ -517,6 +537,9 @@ const Term = forwardRef<TermHandle, {
       if (resumeProbeID.current !== id || wsRef.current !== ws) return
       resumeProbeID.current = ''
       beginVisualHandoff()
+      // 探测不通 = 这条链路已经死了，重连换来的是一次全新 attach（整屏重画）。但 tmux 只
+      // 重画它手里的内容，TUI 自己排坏的版还在，所以这次 attach 完成后必须再抖一次尺寸。
+      forceRepaint.current = true
       silentReconnect.current = true
       onStatus?.('connecting')
       try { ws.close() } catch {}
@@ -541,7 +564,7 @@ const Term = forwardRef<TermHandle, {
     toBottom: () => sendScroll('bottom', 0),
     selectPaneAt: (clientX, clientY) => selectPaneAtClient(clientX, clientY),
     paneScreenRect: (pane) => paneScreenRect(pane),
-    redraw: () => jiggleResize(),
+    redraw: () => runResumeHeal('renderer+content'),
     beginVisualHandoff,
   }))
 
@@ -636,16 +659,20 @@ const Term = forwardRef<TermHandle, {
     //   ② 内容本身就是坏的：安卓会把后台页整个冻住，WebSocket 常常「半死」——readyState 还是 1，
     //      数据其实早就断了；tmux 那头也不会主动重画，于是回来看到的是「旧内容 + 半截新内容」。
     //      这种只重建渲染器没用（把错的东西再画一遍），必须整条链路重来。
-    // 旧实现按离开时长无条件关闭每一个 WS，导致全部绿点先变红、随后集体重连闪屏。现在渲染器
-    // 只在真正可见的终端上通过帧交接重建；连接一律先 ping 探测，失败才静默重连。
+    // 旧实现按离开时长无条件关闭每一个 WS，导致全部绿点先变红、随后集体重连闪屏。现在改成
+    // 分层自愈：渲染器只在真正可见的终端上通过帧交接重建；连接一律先 ping 探测，失败才静默
+    // 重连。但「探测通过」只证明这条桥还能双向说话，**不证明屏幕上那一版是对的**——离开期间
+    // 别的客户端（桌面/CLI）把 tmux 窗口改过尺寸，TUI 早就在无人观看时重排坏了。所以久置
+    // (>10s) 回来还要补一次内容层重排（见 runResumeHeal），否则用户看到的就是：连着、绿点
+    // 正常、屏幕是花的。
     let hiddenAt = 0
     const healAfterAway = (away: number) => {
-      if (away <= 1500) return
-      resumeHealPending.current = true
-      if (activeRef.current) {
-        resumeHealPending.current = false
-        setTimeout(rebuildRenderer, 60)
-      }
+      const heal = resumeHealFor(away)
+      if (heal === 'none') return
+      // 不可见的标签先记账：现在重建渲染器/抖尺寸都白做（画不出来、尺寸还是折叠态的），
+      // 等它被切到前台再修。
+      if (activeRef.current) runResumeHeal(heal)
+      else resumeHealPending.current = heal
       probeConnection()
     }
     const onVisibility = () => {
@@ -657,7 +684,7 @@ const Term = forwardRef<TermHandle, {
     }
     document.addEventListener('visibilitychange', onVisibility)
     // 从 bfcache 恢复（安卓返回键、iOS 侧滑返回）不一定走 visibilitychange。
-    const onPageShow = (e: PageTransitionEvent) => { if (e.persisted) healAfterAway(1501) }
+    const onPageShow = (e: PageTransitionEvent) => { if (e.persisted) healAfterAway(RESUME_RESYNC_MS + 1) }
     window.addEventListener('pageshow', onPageShow)
 
     // 硬刷新会销毁整个 document，运行时的覆盖层无法跨文档存在。离开前仅为当前终端保存一张
@@ -1041,9 +1068,10 @@ const Term = forwardRef<TermHandle, {
   // 非当前标签用 visibility 隐藏但始终保留相同布局尺寸，切回时不需要再次 fit，只需聚焦。
   useEffect(() => {
     if (!active) return
-    if (resumeHealPending.current) {
-      resumeHealPending.current = false
-      setTimeout(() => rebuildRendererRef.current?.(), 60)
+    if (resumeHealPending.current !== 'none') {
+      const heal = resumeHealPending.current
+      resumeHealPending.current = 'none'
+      runResumeHeal(heal)
     }
     const raf = requestAnimationFrame(() => termRef.current?.focus())
     return () => cancelAnimationFrame(raf)
