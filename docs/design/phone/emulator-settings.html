@@ -199,7 +199,8 @@
       <div class="box out"><div class="t">本机真机</div><div class="d">USB serial · 恒原生（不动 wm）</div></div>
       <div class="box out"><div class="t">远程设备</div><div class="d">adb connect host:port<br>无线真机 / 别处的安卓</div></div>
     </div>
-    <p class="note">三档的分界线是<b>「谁能起停它」</b>：AVD 我们能起能停；远程设备只能连和断；本机真机只能连。设置页的动作条据此显隐，不再有第四种解释。</p>
+    <p class="note">三种目标的分界线是<b>「谁能起停它」</b>：AVD 我们能起能停；远程设备只能连和断；本机真机只能连。
+      它决定的是<b>每台设备行尾摆哪些动作</b>——而不是页面顶上再摆一个让人先选一遍的分段。</p>
   </div>
 
   <h3>3.1 老配置怎么落地（<code>sanitizeAndroid</code> 里做，幂等，无需用户操作）</h3>
@@ -227,10 +228,8 @@
   <h3>3.2 设置页长这样</h3>
   <div class="mock">
     <div class="title">设置 · 手机 · Android 卡片</div>
-    <div class="lbl">来源</div>
-    <div class="seg"><span class="on new">本机模拟器</span><span>本机真机</span><span>远程设备</span></div>
-
-    <div class="lbl">设备 &nbsp;<span style="color:var(--muted)">刷新设备</span> &nbsp;<span style="color:#7ff0ef">新建模拟器</span><span class="dim" style="font-size:11px"> （图标取 icons.tsx 的 PlusIcon，不写进文案）</span></div>
+    <div class="lbl">设备 &nbsp;<span style="color:var(--muted)">刷新设备</span> &nbsp;<span style="color:#7ff0ef">新建模拟器</span>
+      &nbsp;<span style="color:#7ff0ef">远程设备</span><span class="dim" style="font-size:11px"> （图标取 icons.tsx 的 PlusIcon，不写进文案）</span></div>
     <div class="devlist">
       <div class="dev on">
         <i class="radio"></i>
@@ -250,16 +249,21 @@
       </div>
     </div>
 
-    <div class="btnrow">
-      <span class="btn primary">一键连接</span><span class="btn">启动</span><span class="btn">停止</span><span class="btn">测试连接</span>
+    <div style="margin-top:14px;display:flex;align-items:center;gap:10px;border:1px solid #1f7a53;background:#0f2a20;border-radius:10px;padding:10px 12px;font-size:13px;color:#9ff0cf">
+      <span style="width:8px;height:8px;border-radius:50%;background:#34d399"></span>
+      <span style="flex:1">sdk_google_atv64_x86_64 (emulator-5554)</span><span class="act">重试</span>
     </div>
+    <p class="note">没选设备时这行写「选一台设备开始」——原先是一句红色报错「本机挂着多台 Android 设备，请先选一台」，
+      那是在讲 adb 的约束，不是讲用户该做什么。</p>
 
     <div class="banner">检测到遗留的 redroid 容器 <b>ttmux-redroid</b>。ttmux 已不再管理它，可手动清理：
       <code>docker rm -f ttmux-redroid</code>（数据仍在 <code>~/.roam/android/data</code>）</div>
 
-    <p class="note">变化点：① 来源三档，redroid 字样从 UI 上彻底消失；② 未运行的 AVD 也在列表里（灰态 + 行尾「启动」）；
-      ③ 选中的 AVD 行尾给「停止 / 删除」；④ 顶部「启动/停止」现在属于 AVD；⑤ 分辨率档整块去掉——尺寸在新建模拟器时定，
-      连接设置里不该再放一个能改物理屏的开关。</p>
+    <p class="note">变化点：① <b>没有「来源」这一档</b>——设备列表就是选择器，来源由所选设备的形状定（后端本来就这么判），
+      redroid 字样也从 UI 上彻底消失；② 未运行的 AVD 也在列表里（灰态 + 行尾「启动」）；
+      ③ 每台设备的动作贴在它自己那行：模拟器「停止 / 删除」，远程「断开」；
+      ④ 底下只剩一条「现在连的是谁」+「重试」，原先那排说不清关系的六个按钮撤掉；
+      ⑤ 分辨率档整块去掉——尺寸在新建模拟器时定，连接设置里不该再放一个能改物理屏的开关。</p>
   </div>
 
   <!-- ─────────── 四、新建模拟器 ─────────── -->
