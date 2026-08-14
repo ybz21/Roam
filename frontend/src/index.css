@@ -378,9 +378,15 @@ html[data-pointer="coarse"] .tt-rail-btn::after {
 }
 /* 设备卡右上角的起停/删除。不能塞进 .tt-mode 里——那本身就是个 <button>，按钮套按钮
    在 HTML 里非法，浏览器会把内层拆出去，于是点哪儿都变成「选中这台」。 */
+/* 设备清单排成一列：每行右端还挂着起停/删除，两列一挤，名字和状态就断成
+   「已连 / 接」这种样子。设置页那一栏本来就窄，横着塞两张没有好处。 */
+.tt-modes.tt-devices { grid-template-columns: 1fr; gap: var(--sp-2); }
 .tt-devrow { position: relative; }
 .tt-devrow > .tt-mode { width: 100%; }
-.tt-devrow.acts > .tt-mode { padding-right: 120px; }
+.tt-devrow.acts > .tt-mode { padding-right: 108px; }
+/* 中文默认可在任意字之间断行，窄栏里就断出「本 / 机模拟器」这种。keep-all 让整段
+   词组一起走，宁可换整行也不从词中间劈开。 */
+.tt-devrow .tt-mode .d { word-break: keep-all; }
 .tt-devacts { position: absolute; right: 12px; top: 12px; display: flex; gap: var(--sp-1); }
 /* 手指档按钮更高，压在标题上就挡住名字了 —— 挪到卡片底部，卡片相应留白 */
 html[data-pointer="coarse"] .tt-devrow.acts > .tt-mode { padding-right: 16px; padding-bottom: 54px; }

@@ -2,7 +2,7 @@
 // 三档的分界线是「谁能起停它」：模拟器能起能停能新建，远程只能连断，真机只能连。
 // Android 与 iOS 互斥（active 决定哪个驱动镜像页），未装依赖时开关会先自动装。
 import { useEffect, useRef, useState } from 'react'
-import { App as AntApp, Button, Card, Input, Popconfirm, Segmented, Space, Switch, Tag } from 'antd'
+import { App as AntApp, Button, Card, Input, Modal, Popconfirm, Segmented, Space, Switch, Tag } from 'antd'
 import { api } from '../../api'
 import { useI18n } from '../../i18n'
 import { DeviceIcon, PlusIcon } from '../../icons'
@@ -26,6 +26,8 @@ export function PhoneSettings() {
   const [log, setLog] = useState('')
   const [avdBusy, setAvdBusy] = useState('') // 正在起/停的 AVD 名：起一台要几十秒，按钮期间禁用
   const [createOpen, setCreateOpen] = useState(false)
+  const [remoteOpen, setRemoteOpen] = useState(false)
+  const [remoteAddr, setRemoteAddr] = useState('')
   useEffect(() => { cfgRef.current = cfg }, [cfg])
 
   const loadStatus = () => api('GET', '/phone/status').then((r) => { if (r?.data) setStatus(r.data) }).catch(() => {})
@@ -109,20 +111,27 @@ export function PhoneSettings() {
     const inst = plat[p].installed
     const sup = p === 'ios' ? plat.ios.supported : true
     const isA = p === 'android'
-    const needAddr = isA ? c.mode !== 'avd' : true // 模拟器的目标从列表里点，没有手填地址这回事
-    const isNet = isA && c.mode === 'network' && (c.address || '').includes(':')
+    const needAddr = !isA // Android 的目标一律从列表里点；远程设备走「＋远程设备」进来
     const canSS = (isA && c.mode === 'avd') || (!isA && c.mode === 'simulator')
     const sources = isA
       ? [{ label: t('phone.mode.avd'), value: 'avd' }, { label: t('phone.mode.device'), value: 'device' }, { label: t('phone.mode.network'), value: 'network' }]
       : [{ label: t('phone.ios.simulator'), value: 'simulator' }, { label: t('phone.ios.device'), value: 'device' }]
     const list = devs[p] || []
+    const picked = list.some((d) => (c.address ? d.id === c.address : !!d.current)) || !!c.avd
     // 切来源要连地址一起清：每种来源的目标形状不同(模拟器=emulator-xxxx / 远程=host:port / 真机=USB serial)。
     // 不清的话，从「远程设备」切到「真机」会把 host:port 带过去，被后端判成串档丢弃→连不上。
     const changeSrc = (m: string) => patch(p, isA ? { mode: m, address: '', avd: '' } : { mode: m, address: '' })
     // 点一台设备＝换目标。Android 连来源一起换（地址形状决定怎么连），否则会被后端判成串档丢弃；
     // iOS 同理：选中真机时来源也要从「模拟器」挪走，不然 simctl 那条路根本不认这个 UDID。
-    const pick = (d: PhoneDevice) => patch(p, isA ? androidTargetOf(d.id, d.name)
-      : { mode: d.kind === 'simulator' ? 'simulator' : 'device', address: d.id })
+    // 点一台设备＝换目标并当场连上。选完再让人找一个「连接」按钮是多余的一步——
+    // 选它就是为了用它。网络目标尤其需要：不 adb connect 就永远是 offline。
+    const pick = async (d: PhoneDevice) => {
+      await patch(p, isA ? androidTargetOf(d.id, d.name)
+        : { mode: d.kind === 'simulator' ? 'simulator' : 'device', address: d.id })
+      if (!isA || (d.state || '') === 'stopped') return // 没跑起来的模拟器先等它启动
+      try { await api('POST', '/phone/connect', {}) } catch {}
+      loadStatus()
+    }
     // 地址留空=后端用 adb 默认设备：那台由后端标 current，否则「默认单设备」下一台都不选中。
     const isPicked = (d: PhoneDevice) => (c.address ? d.id === c.address : !!d.current)
     return (
@@ -135,10 +144,16 @@ export function PhoneSettings() {
         </Space>
       }>
         <Space direction="vertical" size={10} style={{ width: '100%' }}>
-          <Space direction="vertical" size={4} style={{ width: '100%' }}>
-            <span style={dim}>{t('phone.source')}</span>
-            <Segmented value={c.mode} onChange={(v) => changeSrc(v as string)} options={sources} />
-          </Space>
+          {/* Android 没有「来源」这一档：设备列表就是选择器，来源由所选设备的形状定
+              （后端本来就按 serial 形状判）。两处并存时它们互相打架——选了「本机模拟器」，
+              列表里却照样列着 USB 真机，而那个分段实际只控制「有没有启动按钮」。
+              iOS 那边留着：模拟器与真机在 simctl/idb 是两条命令，不是同一份清单。 */}
+          {!isA && (
+            <Space direction="vertical" size={4} style={{ width: '100%' }}>
+              <span style={dim}>{t('phone.source')}</span>
+              <Segmented value={c.mode} onChange={(v) => changeSrc(v as string)} options={sources} />
+            </Space>
+          )}
           {/* 设备列表：一台机器上模拟器和真机常常同时挂着——两台都摆出来，点一下就换。
               从前这里只有一个 AutoComplete，下拉按框里已有的文字过滤：选中一台之后列表里
               就只剩它自己，另一台既看不见也选不了。 */}
@@ -148,26 +163,47 @@ export function PhoneSettings() {
               {/* 安静的行尾动作用 .tt-act：antd 的 size="small" 是 24px，手指档够不着(全站按钮不随 --ctl-h 长) */}
               <button type="button" className="tt-act" onClick={() => loadDevices(p)}>{t('phone.refreshDevices')}</button>
               {isA && (
-                <button type="button" className="tt-act" onClick={() => setCreateOpen(true)}>
-                  <PlusIcon size={13} />{t('phone.avd.new')}
-                </button>
+                <>
+                  <button type="button" className="tt-act" onClick={() => setCreateOpen(true)}>
+                    <PlusIcon size={13} />{t('phone.avd.new')}
+                  </button>
+                  {/* 远程设备连上之前 adb 看不见它，列表里自然没有——所以它只能从这里进来 */}
+                  <button type="button" className="tt-act" onClick={() => { setRemoteAddr(''); setRemoteOpen(true) }}>
+                    <PlusIcon size={13} />{t('phone.remote.add')}
+                  </button>
+                </>
               )}
             </Space>
             {list.length === 0 ? <span style={dim}>{isA ? t('phone.devNone') : t('phone.devNoneIOS')}</span> : (
-              <div className="tt-modes">
+              <div className="tt-modes tt-devices">
                 {list.map((d) => {
                   const why = devStateText(d, t)
-                  // 只有本机模拟器有起停/删除；远程与真机不归我们管生死。
+                  // 只有本机模拟器有起停/删除；真机不归我们管生死，远程只能连和断。
                   const isAvd = isA && d.kind === 'avd'
+                  const isNetRow = isA && d.kind === 'network'
                   const stopped = (d.state || '') === 'stopped'
                   const wait = avdBusy === avdNameOf(d)
+                  // 每行自己说清楚现在什么状态：不就绪说原因，选中且连上了写「已连接」，
+                  // 在跑的模拟器写「运行中」。底下那条状态灯只说当前这台，不必逐行猜。
+                  const live = !why && isPicked(d) && st.connected ? t('phone.connected')
+                    : !why && isAvd ? t('phone.avd.running') : ''
                   return (
-                    <div key={d.id} className={`tt-devrow${isAvd ? ' acts' : ''}`}>
+                    <div key={d.id} className={`tt-devrow${isAvd || isNetRow ? ' acts' : ''}`}>
                       <button type="button" className={`tt-mode${isPicked(d) ? ' on' : ''}`} onClick={() => pick(d)}>
                         <i className="radio" aria-hidden />
                         <span className="t"><DeviceIcon size={15} />{d.name}</span>
-                        <span className="d">{d.id} · {devKindText(d, t)}{why ? ' · ' : ''}{why && <em style={{ fontStyle: 'normal', color: 'var(--warn)' }}>{why}</em>}</span>
+                        <span className="d">{d.id} · {devKindText(d, t)}
+                          {why && <> · <em style={{ fontStyle: 'normal', color: 'var(--warn)' }}>{why}</em></>}
+                          {live && <> · <em style={{ fontStyle: 'normal', color: 'var(--ok)' }}>{live}</em></>}
+                        </span>
                       </button>
+                      {isNetRow && (
+                        <span className="tt-devacts">
+                          <button type="button" className="tt-act" onClick={() => act('disconnect', '/phone/disconnect')}>
+                            {t('phone.disconnect2')}
+                          </button>
+                        </span>
+                      )}
                       {isAvd && (
                         <span className="tt-devacts">
                           {stopped ? (
@@ -210,20 +246,39 @@ export function PhoneSettings() {
           {/* 动作条 + 状态：仅激活卡片（动作作用于当前激活平台） */}
           {active ? (
             <>
-              <Space wrap>
-                <Button type="primary" loading={busy === 'auto'} onClick={() => act('auto', '/phone/auto')}>{t('phone.auto')}</Button>
-                {canSS && <Button loading={busy === 'start'} disabled={st.running === true} onClick={() => act('start', '/phone/start')}>{t('phone.avd.start')}</Button>}
-                {canSS && <Button loading={busy === 'stop'} disabled={st.running === false} onClick={() => act('stop', '/phone/stop')}>{t('phone.avd.stop')}</Button>}
-                {isNet && <Button loading={busy === 'connect'} onClick={() => act('connect', '/phone/connect')}>{t('phone.connect')}</Button>}
-                {isNet && <Button loading={busy === 'disconnect'} onClick={() => act('disconnect', '/phone/disconnect')}>{t('phone.disconnect2')}</Button>}
-                <Button loading={busy === 'test'} onClick={() => act('test', '/phone/test')}>{t('phone.test')}</Button>
-              </Space>
-              <Space wrap size={8}>
-                <Tag color={st.connected ? 'green' : (st.error ? 'red' : 'default')}>
-                  {st.connected ? (st.device || t('phone.connected')) : (st.error || t('phone.disconnected'))}
-                </Tag>
-                {canSS && st.running != null && <Tag color={st.running ? 'blue' : 'default'}>{st.running ? t('phone.avd.running') : t('phone.avd.stopped')}</Tag>}
-              </Space>
+              {/* Android：一台设备的所有动作都贴在它自己那行上，底下只剩「现在连的是谁」。
+                  原来那排「一键连接 / 启动 / 停止 / 连接 / 断开 / 测试连接」说不清彼此关系，
+                  而且启动/停止作用于「当前选中的那台」——一台都没选中时尤其费解。 */}
+              {isA ? (
+                <div className={`tt-cstate${st.connected ? ' ok' : (picked ? ' warn' : '')}`}>
+                  <i className="d" aria-hidden />
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    {!picked ? t('phone.pickToStart')
+                      : st.connected ? (st.device || t('phone.connected'))
+                      : (st.error || t('phone.disconnected'))}
+                  </span>
+                  {picked && (
+                    <button type="button" className="tt-act" disabled={busy === 'auto'}
+                      onClick={() => act('auto', '/phone/auto')}>
+                      {busy === 'auto' ? t('phone.retrying') : t('phone.retry')}
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <Space wrap>
+                    <Button type="primary" loading={busy === 'auto'} onClick={() => act('auto', '/phone/auto')}>{t('phone.auto')}</Button>
+                    {canSS && <Button loading={busy === 'start'} disabled={st.running === true} onClick={() => act('start', '/phone/start')}>{t('phone.avd.start')}</Button>}
+                    {canSS && <Button loading={busy === 'stop'} disabled={st.running === false} onClick={() => act('stop', '/phone/stop')}>{t('phone.avd.stop')}</Button>}
+                    <Button loading={busy === 'test'} onClick={() => act('test', '/phone/test')}>{t('phone.test')}</Button>
+                  </Space>
+                  <Space wrap size={8}>
+                    <Tag color={st.connected ? 'green' : (st.error ? 'red' : 'default')}>
+                      {st.connected ? (st.device || t('phone.connected')) : (st.error || t('phone.disconnected'))}
+                    </Tag>
+                  </Space>
+                </>
+              )}
               {/* 升级后可能还留着一个旧的 redroid 容器在跑：ttmux 已经不管它了，说一声，删不删是用户的事 */}
               {isA && st.legacyRedroid && (
                 <div className="tt-cstate warn">
@@ -242,6 +297,20 @@ export function PhoneSettings() {
     <Space direction="vertical" size="middle" style={{ width: '100%' }}>
       {renderCard('android')}
       {renderCard('ios')}
+      <Modal open={remoteOpen} title={t('phone.remote.title')} okText={t('phone.remote.connect')}
+        onCancel={() => setRemoteOpen(false)}
+        onOk={async () => {
+          const addr = remoteAddr.trim()
+          if (!addr.includes(':')) { message.warning(t('phone.remote.needPort')); return }
+          setRemoteOpen(false)
+          await persist({ ...cfgRef.current, active: 'android', android: { ...cfgRef.current.android, mode: 'network', address: addr, avd: '' } })
+          await act('connect', '/phone/connect')
+          loadDevices('android')
+        }}>
+        <Input value={remoteAddr} onChange={(e) => setRemoteAddr(e.target.value)} placeholder={t('phone.addrPlaceholder')}
+          onPressEnter={(e) => (e.target as HTMLInputElement).blur()} />
+        <div className="tt-hint">{t('phone.remote.help')}</div>
+      </Modal>
       <AvdCreateDrawer open={createOpen} onClose={() => setCreateOpen(false)}
         onCreated={() => { loadDevices('android'); loadStatus() }} />
       {log && <pre style={{ maxHeight: 160, overflow: 'auto', margin: 0, padding: 8, fontSize: 11, lineHeight: 1.5, background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 6, whiteSpace: 'pre-wrap' }}>{log}</pre>}
