@@ -17,6 +17,7 @@ import { MarkdownView } from './MarkdownView'
 import { CsvView } from './CsvView'
 import { CodeView } from './CodeView'
 import { OfficeView } from './OfficeView'
+import { MediaView } from './MediaView'
 import { ChevronRight, WarnIcon } from '../../../icons'
 
 export function FileView({
@@ -57,7 +58,10 @@ export function FileView({
   revealLine?: { line: number; nonce: number }
 }) {
   const kind = fileKind(path)
-  const { isImg, isMd, isHtml, isPdf, isOffice, isSheet } = kind
+  const { isImg, isVideo, isAudio, isMd, isHtml, isPdf, isOffice, isSheet } = kind
+  // 二进制里能就地播/看的那几类：都不走 /file 取正文（取回来是一大坨乱码），直接交给 raw。
+  const isMedia = isVideo || isAudio
+  const rawOnly = isImg || isMedia || isPdf || isOffice
   const rawUrl = nodeApi(`/file/raw?path=${encodeURIComponent(path)}`)
   // HTML 预览专用：绝对路径编进 URL 路径（逐段转义、保留斜杠），让 iframe 里同目录相对引用能解析
   const serveUrl = nodeApi(`/file/serve${path.split('/').map(encodeURIComponent).join('/')}`)
@@ -77,7 +81,7 @@ export function FileView({
   const { mode } = useThemeMode()
 
   // 可编辑：文本/代码/JSON/Markdown（源码）；二进制、被截断的大文件、表格/图片/PDF/Office 不可编辑。
-  const editable = !!data && !data.binary && !data.truncated && !isSheet && !isImg && !isPdf && !isOffice
+  const editable = !!data && !data.binary && !data.truncated && !isSheet && !rawOnly
   const dirty = editable && data ? draft !== data.content : false
   useEffect(() => { onDirtyChange?.(path, dirty); return () => onDirtyChange?.(path, false) }, [dirty, path])
 
@@ -100,12 +104,12 @@ export function FileView({
   saveRef.current = save
 
   useEffect(() => {
-    if (isImg || isPdf || isOffice) return // 图片/PDF/Office 直接走 raw 或专用面板
+    if (rawOnly) return // 图片/音视频/PDF/Office 直接走 raw 或专用面板
     // tab 语境的 markdown 默认进编辑器(源码)、点预览才渲染;HTML 则默认直接渲染
     // (打开网页多是想看效果,不是编辑),两者都可用「源码/渲染」钮切换。
     setData(null); setErr(''); setStale(false); setSource(!!tabbed && MD_EXT.includes(extOf(path))); setDraft('')
     api('GET', `/file?path=${encodeURIComponent(path)}`).then((r) => { setData(r.data); setDraft(r.data?.content || '') }).catch((e) => setErr(e.message))
-  }, [path, isImg, isPdf, isOffice])
+  }, [path, rawOnly])
 
   // 从磁盘重载（放弃本地未保存改动）
   const reloadFromDisk = () => {
@@ -113,7 +117,7 @@ export function FileView({
   }
   // 外部(cc/codex 等)改动已打开的文件 → 轮询 mtime：无本地改动自动重载渲染；有未保存改动只提示不覆盖。
   useEffect(() => {
-    if (!active || !data || err || isImg || isPdf || isOffice) return
+    if (!active || !data || err || rawOnly) return
     let stop = false
     const h = setInterval(async () => {
       try {
@@ -125,7 +129,7 @@ export function FileView({
       } catch {}
     }, 2000)
     return () => { stop = true; clearInterval(h) }
-  }, [active, data?.mtime, dirty, path, isImg, isPdf, isOffice, err])
+  }, [active, data?.mtime, dirty, path, rawOnly, err])
 
   // 非激活 tab：只占位、不挂载重型 Monaco/预览（state 已在上面 hook 里保留，切回来不丢编辑）。
   if (!active) return <div style={{ height: '100%' }} />
@@ -190,6 +194,8 @@ export function FileView({
     <>
       {isImg ? (
         <ImageView rawUrl={rawUrl} name={name} />
+      ) : isMedia ? (
+        <MediaView path={path} rawUrl={rawUrl} name={name} audio={isAudio} inline={inline} />
       ) : isPdf ? (
         <PdfView path={path} rawUrl={rawUrl} name={name} inline={inline} truncated={data?.truncated} />
       ) : isOffice ? (

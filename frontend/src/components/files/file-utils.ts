@@ -3,6 +3,10 @@
 
 export const IMG_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'avif', 'svg']
 export const MD_EXT = ['md', 'markdown', 'mdx']
+// 浏览器自己能放的容器格式。mkv/avi/flv 等不在其列——它们只能下载后用本地播放器开，
+// 硬塞进 <video> 只会得到一块黑底，比「二进制文件」的提示更让人以为是坏了。
+export const VIDEO_EXT = ['mp4', 'm4v', 'webm', 'ogv', 'mov']
+export const AUDIO_EXT = ['mp3', 'm4a', 'aac', 'wav', 'ogg', 'oga', 'opus', 'flac']
 
 export const CODE_LANG: Record<string, string> = {
   py: 'python', pyw: 'python', sh: 'bash', bash: 'bash', zsh: 'bash', fish: 'bash', ps1: 'powershell',
@@ -104,6 +108,8 @@ export function parseDelimited(text: string, sep: ',' | '\t'): string[][] {
 // 文件类型分类：一次算好各 preview 分支要的布尔位，容器与子组件共用同一判定。
 export interface FileKind {
   isImg: boolean
+  isVideo: boolean
+  isAudio: boolean
   isMd: boolean
   isHtml: boolean
   isPdf: boolean
@@ -118,6 +124,8 @@ export function fileKind(path: string): FileKind {
   const ext = extOf(path)
   return {
     isImg: IMG_EXT.includes(ext),
+    isVideo: VIDEO_EXT.includes(ext),
+    isAudio: AUDIO_EXT.includes(ext),
     isMd: MD_EXT.includes(ext),
     isHtml: ext === 'html' || ext === 'htm',
     isPdf: ext === 'pdf',
