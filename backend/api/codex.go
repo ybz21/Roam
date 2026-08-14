@@ -367,27 +367,46 @@ func (a *API) CodexTranscript(c *gin.Context) {
 	}
 	defer f.Close()
 
-	msgs := []cMsg{}
+	tail := tailLimit(c, offset)
+	win := newTranscriptWindow(tail)
 	st := cStatus{}
 	quota := 0.0
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 1024*1024), 8*1024*1024)
 	n := 0
-	for sc.Scan() {
-		n++
-		if n <= offset {
-			continue
-		}
-		line := sc.Text()
-		st = scanCodexStatus(line, st, &quota)
-		if m := parseCodexLine(line); m != nil {
-			if m.ID == "" { // 行号作稳定 key（前端窗口化/折叠态持久化用）
-				m.ID = strconv.Itoa(n)
+	if tail > 0 {
+		lines, first, total := tailLines(sc, tail*tailLineFactor) // 首屏只解析尾部，见 transcript-window.go
+		for i, line := range lines {
+			st = scanCodexStatus(line, st, &quota)
+			if m := parseCodexLine(line); m != nil {
+				if m.ID == "" {
+					m.ID = strconv.Itoa(first + i)
+				}
+				win.add(*m)
 			}
-			msgs = append(msgs, *m)
+		}
+		n = total
+		if first > 1 {
+			win.dropped = true
+		}
+	} else {
+		for sc.Scan() {
+			n++
+			if n <= offset {
+				continue
+			}
+			line := sc.Text()
+			st = scanCodexStatus(line, st, &quota)
+			if m := parseCodexLine(line); m != nil {
+				if m.ID == "" { // 行号作稳定 key（前端窗口化/折叠态持久化用）
+					m.ID = strconv.Itoa(n)
+				}
+				win.add(*m)
+			}
 		}
 	}
-	data := gin.H{"messages": msgs, "nextOffset": n, "file": file, "status": st}
+	msgs, truncated := win.out()
+	data := gin.H{"messages": msgs, "nextOffset": n, "file": file, "status": st, "truncated": truncated}
 	if quota > 0 {
 		data["quota"] = quota
 	}

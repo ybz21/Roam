@@ -5,6 +5,9 @@ import { api } from '../../api'
 import type { Block, Msg } from './types'
 import type { RawStatus } from './status'
 
+/** 首屏只取最近这么多条。整卷搬过来的代价见 backend/api/transcript-window.go。 */
+export const FIRST_PAGE = 200
+
 export function useTranscript(name: string, file: string | undefined, path: string, interval = 1500) {
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [err, setErr] = useState('')
@@ -12,7 +15,12 @@ export function useTranscript(name: string, file: string | undefined, path: stri
   // 会话闲着不动百分比就不动——那是对的，没发生新对话上下文确实没变。
   const [status, setStatus] = useState<RawStatus>({})
   const [refreshKey, setRefreshKey] = useState(0)
+  // 还有更早的没取：后端截过头才为真。前端不再自己算「隐藏了几条」——它手里根本没有全量。
+  const [hasEarlier, setHasEarlier] = useState(false)
+  const [tail, setTail] = useState(FIRST_PAGE)
   const refresh = useCallback(() => setRefreshKey((n) => n + 1), [])
+  // 加载更早：把首屏窗口放大一档重取。往回翻是低频动作，值得用一次全量重取换实现上的简单。
+  const loadEarlier = useCallback(() => setTail((n) => n + 400), [])
   useEffect(() => {
     let stop = false
     let offset = 0
@@ -22,6 +30,8 @@ export function useTranscript(name: string, file: string | undefined, path: stri
     const poll = async () => {
       try {
         const q = new URLSearchParams({ offset: String(offset) })
+        // 只有首屏带 tail：增量轮询要的是「新行」，一条都不能丢。
+        if (offset === 0) q.set('tail', String(tail))
         if (f) q.set('file', f)
         const r = await api('GET', `/sessions/${encodeURIComponent(name)}/${path}?${q.toString()}`)
         const d = r.data
@@ -41,6 +51,7 @@ export function useTranscript(name: string, file: string | undefined, path: stri
         if (d.status || typeof d.quota === 'number') {
           setStatus((prev) => mergeStatus(prev, d.status, d.quota))
         }
+        if (typeof d.truncated === 'boolean') setHasEarlier(d.truncated)
         if (d.messages?.length) { setMsgs((m) => [...m, ...d.messages]); offset = d.nextOffset }
         else if (typeof d.nextOffset === 'number') offset = d.nextOffset
       } catch (e: any) { if (!stop) setErr(e.message) }
@@ -49,18 +60,21 @@ export function useTranscript(name: string, file: string | undefined, path: stri
     const t = setInterval(poll, interval)
     return () => { stop = true; clearInterval(t) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, file, path, refreshKey])
-  return { msgs, err, refresh, status }
+  }, [name, file, path, refreshKey, tail])
+  return { msgs, err, refresh, status, hasEarlier, loadEarlier }
 }
 
 // 只有非空字段才覆盖：后端每轮只回它这次扫到的东西，缺的字段不该把已知值抹掉。
+// 没有任何字段变化时返回 prev 本身：React 靠引用相等跳过整棵对话树的重渲染，
+// 而这个函数每 1.5s 被调一次——每次都造新对象等于每 1.5s 白重渲染一次几百条消息。
 function mergeStatus(prev: RawStatus, next: RawStatus | undefined, quota?: number): RawStatus {
   const out: RawStatus = { ...prev }
+  let changed = false
   for (const [k, v] of Object.entries(next || {})) {
-    if (v !== '' && v !== 0 && v != null) (out as any)[k] = v
+    if (v !== '' && v !== 0 && v != null && (prev as any)[k] !== v) { (out as any)[k] = v; changed = true }
   }
-  if (typeof quota === 'number' && quota > 0) out.quota = quota
-  return out
+  if (typeof quota === 'number' && quota > 0 && prev.quota !== quota) { out.quota = quota; changed = true }
+  return changed ? out : prev
 }
 
 // 把 tool_result 按 tool_use_id 挂回对应 tool_use，并从消息流里隐去已收纳的独立结果气泡。

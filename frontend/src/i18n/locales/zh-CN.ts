@@ -476,6 +476,7 @@ const zhCN = {
   'chat.dropUpload': '松开上传到工作目录',
   'chat.loadingTranscript': '加载对话记录…',
   'chat.loadEarlier': '加载更早 {count} 条',
+  'chat.loadEarlierMore': '加载更早的消息',
   'chat.jumpToBottom': '回到底部',
   'chat.uploadToCwd': '上传文件到工作目录',
   'chat.stopTitle': '发送 Esc 打断当前生成',

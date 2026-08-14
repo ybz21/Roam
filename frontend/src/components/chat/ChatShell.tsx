@@ -1,7 +1,7 @@
 // 对话页外壳：滚动区 / 交互选择框 / 输入发送。
 // 会话名、切回终端、文件面板都在上方的会话工具条里，这里不再重复一行头部。
 // Claude、Codex 共用，差异只在 accent、占位文案与消息渲染(renderMessage)。
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Button, Input, App as AntApp } from 'antd'
 import { api, upload, makeClipboardImageFile } from '../../api'
 import { PromptPanel } from '../prompt'
@@ -19,7 +19,7 @@ import type { TaskIndex } from './tasks'
 import { StatusBar, type StatusActions } from './StatusBar'
 import type { AgentStatus } from './status'
 
-export function ChatShell({ name, accent, placeholder, messages, results, renderMessage, pending, busy, error, onOpenFile, tasks, status, onOpenGit, lastErrorId }: {
+export function ChatShell({ name, accent, placeholder, messages, results, renderMessage, pending, busy, error, onOpenFile, tasks, status, onOpenGit, lastErrorId, hasEarlier, onLoadEarlier }: {
   name: string
   accent: string
   placeholder: string
@@ -35,6 +35,10 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
   status?: AgentStatus
   onOpenGit?: () => void
   lastErrorId?: string
+  /** 后端首屏截过头：还有更早的没取过来 */
+  hasEarlier?: boolean
+  /** 把首屏窗口放大一档重取（往回翻） */
+  onLoadEarlier?: () => void
 }) {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -134,16 +138,30 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
   // 单独成一条消息，一串 5 条命令就是 5 条消息，消息内部的分段对它无能为力。
   const items = useMemo(() => (results ? groupRuns(visible, results) : null), [visible, results])
 
-  // 贴底时自动跟随新消息；用户上滚后不打扰，改成累计未读
-  useEffect(() => {
+  // 贴底时自动跟随新消息；用户上滚后不打扰，改成累计未读。
+  //
+  // 离底时还要「锚住」：新消息一来，只渲染最近 N 条的窗口就往前滑，顶上那几条被摘掉，
+  // 剩下的内容整体上移——你读着读着字自己往上跑，手感就是「滚不上去、老被拽回底部」。
+  // 所以顶部身份一变就按高度差回补 scrollTop，让眼皮底下那段纹丝不动。
+  // 必须是 useLayoutEffect：它在 paint 之前跑完，补位是「本来就没动过」；
+  // 放在 useEffect 里补，用户会先看见跳一下再跳回来。
+  const anchor = useRef({ height: 0, top: 0, firstId: '' })
+  useLayoutEffect(() => {
+    const el = boxRef.current
+    if (!el) return
+    const firstId = visible[0]?.id || ''
     if (atBottom.current) {
-      if (boxRef.current) boxRef.current.scrollTop = boxRef.current.scrollHeight
+      el.scrollTop = el.scrollHeight
       seenCount.current = messages.length
       setUnread(0)
     } else {
+      if (anchor.current.firstId && firstId !== anchor.current.firstId) {
+        el.scrollTop = anchor.current.top + (el.scrollHeight - anchor.current.height)
+      }
       setUnread(Math.max(0, messages.length - seenCount.current))
     }
-  }, [messages, pending])
+    anchor.current = { height: el.scrollHeight, top: el.scrollTop, firstId }
+  }, [messages, pending, visible])
 
   const onScroll = () => {
     const el = boxRef.current
@@ -238,11 +256,12 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
         <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex' }}>
           <div ref={boxRef} onScroll={onScroll} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', padding: '8px 12px' }}>
             {messages.length === 0 && !pending && <div style={{ color: 'var(--text-dim)', textAlign: 'center', marginTop: 30 }}>{t('chat.loadingTranscript')}</div>}
-            {hidden > 0 && (
+            {(hidden > 0 || hasEarlier) && (
               <div style={{ textAlign: 'center', margin: '2px 0 8px' }}>
-                <a onClick={() => setLimit((l) => l + 200)} style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--sp-1)', color: 'var(--text-dim)', fontSize: 'var(--fs-meta)' }}>
-                  <ArrowUp size={12} />{t('chat.loadEarlier', { count: hidden })}
-                </a>
+                {/* 先放本地渲染窗口(手里已有的)，手里这些都放完了再回后端要更早的 */}
+                <button type="button" className="tt-act" onClick={() => (hidden > 0 ? setLimit((l) => l + 200) : onLoadEarlier?.())}>
+                  <ArrowUp size={12} />{hidden > 0 ? t('chat.loadEarlier', { count: hidden }) : t('chat.loadEarlierMore')}
+                </button>
               </div>
             )}
             {items
