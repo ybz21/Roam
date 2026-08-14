@@ -12,7 +12,7 @@ import { useI18n } from '../../i18n'
 
 export default function ClaudeChat({ name, file, onOpenFile, onOpenGit }: { name: string; file?: string; onOpenFile?: (path: string, line?: number) => void; onOpenGit?: () => void }) {
   const { t } = useI18n()
-  const { msgs, err, status: raw } = useTranscript(name, file, 'transcript')
+  const { msgs, err, status: raw, hasEarlier, loadEarlier } = useTranscript(name, file, 'transcript')
   const { results, view } = useMemo(() => pairToolResults(msgs), [msgs])
   const pending = isPending(view)
   // TaskUpdate 只给 {taskId,status}，标题在更早那次 TaskCreate 的结果里 —— 跨消息扫一遍才接得上
@@ -25,7 +25,7 @@ export default function ClaudeChat({ name, file, onOpenFile, onOpenGit }: { name
     <ChatShell
       name={name} accent="var(--accent)" error={err} onOpenFile={onOpenFile} tasks={tasks} status={status} onOpenGit={onOpenGit} lastErrorId={derived.lastErrorId}
       placeholder={t('chat.claudePlaceholder')}
-      messages={view} results={results}
+      messages={view} results={results} hasEarlier={hasEarlier} onLoadEarlier={loadEarlier}
       renderMessage={(m, i) => <ChatMessage key={m.id || i} m={m} results={results} side="claude" />}
       pending={pending ? <Typing color="var(--accent)" /> : undefined}
       busy={pending}

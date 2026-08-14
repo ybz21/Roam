@@ -475,6 +475,7 @@ const enUS = {
   'chat.dropUpload': 'Drop to upload to working directory',
   'chat.loadingTranscript': 'Loading transcript…',
   'chat.loadEarlier': 'Load {count} earlier',
+  'chat.loadEarlierMore': 'Load earlier messages',
   'chat.jumpToBottom': 'Jump to bottom',
   'chat.uploadToCwd': 'Upload files to working directory',
   'chat.stopTitle': 'Send Esc to stop the current response',

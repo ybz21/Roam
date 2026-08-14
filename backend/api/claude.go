@@ -538,25 +538,46 @@ func (a *API) ClaudeTranscript(c *gin.Context) {
 	}
 	defer f.Close()
 
-	msgs := []cMsg{}
+	tail := tailLimit(c, offset)
+	win := newTranscriptWindow(tail)
 	st := cStatus{}
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 1024*1024), 8*1024*1024) // 容纳长行
 	n := 0
-	for sc.Scan() {
-		n++
-		if n <= offset {
-			continue
-		}
-		line := sc.Text()
-		st = scanStatus(line, st)
-		if m := parseLine(line); m != nil {
-			if m.ID == "" { // uuid 缺失时用行号兜底，保证稳定 key
-				m.ID = strconv.Itoa(n)
+	if tail > 0 {
+		// 首屏：只解析尾部那几百行。状态字段(cwd/model/branch/mode)每行都带，尾部就够。
+		lines, first, total := tailLines(sc, tail*tailLineFactor)
+		for i, line := range lines {
+			st = scanStatus(line, st)
+			if m := parseLine(line); m != nil {
+				if m.ID == "" {
+					m.ID = strconv.Itoa(first + i)
+				}
+				win.add(*m)
 			}
-			msgs = append(msgs, *m)
+		}
+		n = total
+		if first > 1 {
+			win.dropped = true // 前面还有整整一截没读，别让前端以为这就是全部
+		}
+	} else {
+		for sc.Scan() {
+			n++
+			if n <= offset {
+				continue
+			}
+			line := sc.Text()
+			st = scanStatus(line, st)
+			if m := parseLine(line); m != nil {
+				if m.ID == "" { // uuid 缺失时用行号兜底，保证稳定 key
+					m.ID = strconv.Itoa(n)
+				}
+				win.add(*m)
+			}
 		}
 	}
+	msgs, truncated := win.out()
 	// 这一轮没扫到新行时 status 是空的；前端 sticky 保留上一次的值。
-	c.JSON(http.StatusOK, gin.H{"data": gin.H{"messages": msgs, "nextOffset": n, "file": file, "status": st}})
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{
+		"messages": msgs, "nextOffset": n, "file": file, "status": st, "truncated": truncated}})
 }
