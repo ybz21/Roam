@@ -383,14 +383,15 @@ html[data-pointer="coarse"] .tt-rail-btn::after {
 .tt-modes.tt-devices { grid-template-columns: 1fr; gap: var(--sp-2); }
 .tt-devrow { position: relative; }
 .tt-devrow > .tt-mode { width: 100%; }
-.tt-devrow.acts > .tt-mode { padding-right: 108px; }
+/* 动作单独占卡片底部一行，不在右侧挖走一块。设置页那一栏本来就窄：右侧留够两颗
+   按钮（重连 + 转无线）之后，剩给名字的宽度会把「Redmi Note 8」断成两行。 */
+.tt-devrow.acts > .tt-mode { padding-right: 16px; padding-bottom: 46px; }
 /* 中文默认可在任意字之间断行，窄栏里就断出「本 / 机模拟器」这种。keep-all 让整段
    词组一起走，宁可换整行也不从词中间劈开。 */
 .tt-devrow .tt-mode .d { word-break: keep-all; }
-.tt-devacts { position: absolute; right: 12px; top: 12px; display: flex; gap: var(--sp-1); }
-/* 手指档按钮更高，压在标题上就挡住名字了 —— 挪到卡片底部，卡片相应留白 */
-html[data-pointer="coarse"] .tt-devrow.acts > .tt-mode { padding-right: 16px; padding-bottom: 54px; }
-html[data-pointer="coarse"] .tt-devacts { top: auto; bottom: 10px; }
+.tt-devacts { position: absolute; right: 12px; bottom: 10px; display: flex; gap: var(--sp-1); }
+/* 手指档按钮更高（36px），底部留白跟着加 */
+html[data-pointer="coarse"] .tt-devrow.acts > .tt-mode { padding-bottom: 58px; }
 .tt-modes { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); }
 @media (max-width: 720px) { .tt-modes { grid-template-columns: 1fr; } }
 .tt-mode {

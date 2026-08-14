@@ -545,6 +545,38 @@ func AVDDelete(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"ok": true}})
 }
 
+// ── USB 真机：救连接 / 转无线 ──
+
+// DeviceReconnect POST /phone/device/reconnect {serial,state}
+// 未授权/离线时让手机重弹授权框，其余情况让这台自己重连一次。
+func DeviceReconnect(c *gin.Context) {
+	var body struct{ Serial, State string }
+	_ = c.ShouldBindJSON(&body)
+	log, err := reconnectDevice(strings.TrimSpace(body.Serial), body.State)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"error": err.Error(), "data": gin.H{"log": log}})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"log": log}})
+}
+
+// DeviceWireless POST /phone/device/wireless {serial}
+// 把 USB 真机切到无线调试并连上；成功后把配置指向新地址，用户可以拔线了。
+func DeviceWireless(c *gin.Context) {
+	var body struct{ Serial string }
+	_ = c.ShouldBindJSON(&body)
+	addr, err := switchToWireless(strings.TrimSpace(body.Serial))
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"error": err.Error()})
+		return
+	}
+	cfg := getConfig()
+	cfg.Active = "android"
+	cfg.Android.Mode, cfg.Android.Address, cfg.Android.Avd = "network", addr, ""
+	setConfig(cfg)
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"address": addr, "health": Current().Health()}})
+}
+
 // UI 返回当前屏幕的元素结构（给 agent 看结构算坐标）。
 func UI(c *gin.Context) {
 	els, err := Current().UIDump()

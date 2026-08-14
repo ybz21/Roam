@@ -91,6 +91,23 @@ export function PhoneSettings() {
       setAvdBusy(''); loadDevices('android'); loadStatus()
     }
   }
+  // USB 真机的两个动作。真机的生死不归我们管，但「插着却用不了」的两种状态能从这头救：
+  // 授权弹窗错过了(unauthorized)、线松或 adbd 卡了(offline)。转无线之后它就成了远程设备，线可以拔。
+  const usbAction = async (kind: 'reconnect' | 'wireless', d: PhoneDevice) => {
+    setAvdBusy(d.id); setLog('')
+    try {
+      const r = kind === 'reconnect'
+        ? await api('POST', '/phone/device/reconnect', { serial: d.id, state: d.state || '' })
+        : await api('POST', '/phone/device/wireless', { serial: d.id })
+      if (r?.error) { message.error(r.error); setLog(r?.data?.log || r.error) }
+      else if (kind === 'wireless') {
+        message.success(t('phone.usb.wirelessOk', { addr: r.data.address }))
+        api('GET', '/phone/config').then((x) => { if (x?.data) setCfg((cc) => ({ ...cc, ...x.data })) }).catch(() => {})
+      }
+    } catch (e: any) { message.error(e.message) } finally {
+      setAvdBusy(''); loadDevices('android'); loadStatus()
+    }
+  }
   const avdDelete = async (d: PhoneDevice) => {
     const name = avdNameOf(d)
     setAvdBusy(name)
@@ -181,6 +198,8 @@ export function PhoneSettings() {
                   // 只有本机模拟器有起停/删除；真机不归我们管生死，远程只能连和断。
                   const isAvd = isA && d.kind === 'avd'
                   const isNetRow = isA && d.kind === 'network'
+                  const isUsb = isA && d.kind === 'usb'
+                  const stuck = ['unauthorized', 'offline'].includes((d.state || '').toLowerCase())
                   const stopped = (d.state || '') === 'stopped'
                   const wait = avdBusy === avdNameOf(d)
                   // 每行自己说清楚现在什么状态：不就绪说原因，选中且连上了写「已连接」，
@@ -188,7 +207,7 @@ export function PhoneSettings() {
                   const live = !why && isPicked(d) && st.connected ? t('phone.connected')
                     : !why && isAvd ? t('phone.avd.running') : ''
                   return (
-                    <div key={d.id} className={`tt-devrow${isAvd || isNetRow ? ' acts' : ''}`}>
+                    <div key={d.id} className={`tt-devrow${isAvd || isNetRow || isUsb ? ' acts' : ''}`}>
                       <button type="button" className={`tt-mode${isPicked(d) ? ' on' : ''}`} onClick={() => pick(d)}>
                         <i className="radio" aria-hidden />
                         <span className="t"><DeviceIcon size={15} />{d.name}</span>
@@ -197,6 +216,21 @@ export function PhoneSettings() {
                           {live && <> · <em style={{ fontStyle: 'normal', color: 'var(--ok)' }}>{live}</em></>}
                         </span>
                       </button>
+                      {isUsb && (
+                        <span className="tt-devacts">
+                          <button type="button" className="tt-act" disabled={!!avdBusy}
+                            onClick={() => usbAction('reconnect', d)}>
+                            {stuck ? t('phone.usb.reauth') : t('phone.usb.reconnect')}
+                          </button>
+                          {/* 转无线要先握上手才做得了：未授权/离线时这颗按了也是白按 */}
+                          {!stuck && (
+                            <button type="button" className="tt-act" disabled={!!avdBusy}
+                              onClick={() => usbAction('wireless', d)}>
+                              {avdBusy === d.id ? t('phone.usb.switching') : t('phone.usb.wireless')}
+                            </button>
+                          )}
+                        </span>
+                      )}
                       {isNetRow && (
                         <span className="tt-devacts">
                           <button type="button" className="tt-act" onClick={() => act('disconnect', '/phone/disconnect')}>
