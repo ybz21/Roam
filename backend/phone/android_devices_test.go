@@ -33,7 +33,8 @@ func TestParseAdbDevices(t *testing.T) {
 
 func TestAndroidKind(t *testing.T) {
 	for serial, want := range map[string]string{
-		"emulator-5554":        "emulator",
+		"emulator-5554":        "avd", // 在跑的本机模拟器
+		"avd:xh_tv1080p":       "avd", // 还没起的本机模拟器：带前缀，不能被当成 host:port
 		"192.168.120.241:5555": "network",
 		"localhost:5555":       "network",
 		"216d6a43":             "usb",

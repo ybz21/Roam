@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roam · 手机设置：redroid 下线 · AVD 上位</title>
+<style>
+  :root{
+    --bg:#0a0e16; --panel:#111826; --panel2:#0e1420; --line:#1f2a3b;
+    --text:#e6ebf2; --muted:#94a3b8; --dim:#64748b;
+    --cyan:#22d3ee; --violet:#a78bfa; --green:#34d399; --amber:#f59e0b; --red:#f87171;
+    --grad:linear-gradient(90deg,#22d3ee,#a78bfa);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 70% -10%,#152033 0,var(--bg) 55%);
+    color:var(--text);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;padding:32px 20px 72px}
+  .wrap{max-width:1080px;margin:0 auto}
+  code,.mono{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.86em;
+    background:#0d1420;border:1px solid var(--line);border-radius:5px;padding:1px 5px;color:#c7d6ea}
+  pre{margin:10px 0 0;background:#0b1119;border:1px solid var(--line);border-radius:10px;padding:12px 14px;
+    overflow-x:auto;font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;line-height:1.65;color:#c7d6ea}
+  pre code{background:none;border:0;padding:0}
+  h1{font-size:26px;margin:0 0 6px;letter-spacing:.3px}
+  h1 .g{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--muted);margin:0 0 14px}
+  .pills{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 26px}
+  .pill{font-size:12.5px;padding:5px 11px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--muted)}
+  .pill b{color:var(--text)}
+  .pill.ok{border-color:#1f7a53;background:#0f2a20;color:#9ff0cf}
+  .pill.warn{border-color:#7a5a1f;background:#2a2110;color:#f4d18c}
+  .pill.bad{border-color:#7a2f2f;background:#2a1414;color:#f6b3b3}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:2px;color:var(--dim);margin:40px 0 14px;font-weight:600}
+  h3{font-size:15px;margin:24px 0 8px}
+  p{margin:8px 0}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+  .card + .card{margin-top:12px}
+  .card.kill{border-color:#5a2a2a;background:linear-gradient(180deg,#1a1218,#111826)}
+  .card.keep{border-color:#1f6f6f;background:linear-gradient(180deg,#0f2024,#111826)}
+  .muted{color:var(--muted)}
+  .dim{color:var(--dim)}
+  .flow{display:flex;flex-wrap:wrap;align-items:stretch;gap:10px}
+  .flow .box{flex:1 1 180px;border:1px solid var(--line);border-radius:12px;
+    background:linear-gradient(180deg,#141c2b,#101724);padding:11px 13px;min-width:170px}
+  .flow .box .t{font-weight:600;font-size:13.5px;margin-bottom:4px}
+  .flow .box .d{font-size:12px;color:var(--muted)}
+  .flow .arrow{align-self:center;color:var(--dim)}
+  .box.out{border-color:#3a4a6b}
+  .box.us{border-color:#1f6f6f;background:linear-gradient(180deg,#0f2a2c,#0c1f22)}
+  .box.us .t{color:#7ff0ef}
+  .box.gone{border-color:#5a2a2a;background:linear-gradient(180deg,#1e1418,#161018)}
+  .box.gone .t{color:#f6b3b3;text-decoration:line-through;text-decoration-color:#7a3a3a}
+  table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13.5px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:11.5px;letter-spacing:1px;text-transform:uppercase;color:var(--dim);font-weight:600}
+  td.n{color:var(--dim);width:34px}
+  tr:last-child td{border-bottom:0}
+  .win{color:#9ff0cf}.lose{color:#f6b3b3}
+  .sev{font-size:11px;padding:2px 7px;border-radius:6px;border:1px solid var(--line);white-space:nowrap}
+  .sev.p0{border-color:#7a2f2f;background:#2a1414;color:#f6b3b3}
+  .sev.p1{border-color:#7a5a1f;background:#2a2110;color:#f4d18c}
+  .sev.p2{border-color:#2a3550;background:#131c2b;color:#9db4d6}
+  .tagd{font-size:11px;padding:2px 7px;border-radius:6px;border:1px solid #5a2a2a;background:#2a1414;color:#f6b3b3;white-space:nowrap}
+  .tagn{font-size:11px;padding:2px 7px;border-radius:6px;border:1px solid #1f7a53;background:#0f2a20;color:#9ff0cf;white-space:nowrap}
+  .tagm{font-size:11px;padding:2px 7px;border-radius:6px;border:1px solid #2a3550;background:#131c2b;color:#9db4d6;white-space:nowrap}
+  ul{margin:8px 0 0;padding-left:20px}
+  li{margin:5px 0}
+  li::marker{color:var(--dim)}
+  .hdr{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:2px}
+  .hdr .t{font-weight:600;font-size:15px}
+  .mock{background:var(--panel2);border:1px solid var(--line);border-radius:16px;padding:16px}
+  .mock .title{font-size:12px;letter-spacing:1px;color:var(--dim);text-transform:uppercase;margin-bottom:12px}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:#0d1420}
+  .seg span{padding:6px 13px;font-size:13px;color:var(--muted);border-right:1px solid var(--line)}
+  .seg span:last-child{border-right:0}
+  .seg span.on{background:#16223a;color:#cfe6ff}
+  .seg span.new{color:#7ff0ef}
+  .lbl{font-size:12px;color:var(--dim);margin:14px 0 6px}
+  .devlist{display:flex;flex-direction:column;gap:8px}
+  .dev{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:10px;padding:9px 11px;background:#0d1420}
+  .dev.on{border-color:#2f6f8f;background:#101e2c}
+  .dev .radio{width:12px;height:12px;border-radius:50%;border:1px solid #3a4a6b;flex:none}
+  .dev.on .radio{border-color:var(--cyan);box-shadow:inset 0 0 0 3px var(--cyan)}
+  .dev .meta{flex:1;min-width:0}
+  .dev .nm{font-size:13.5px}
+  .dev .sd{font-size:11.5px;color:var(--dim);font-family:"SF Mono",ui-monospace,Menlo,monospace}
+  .dev.off .nm,.dev.off .sd{color:var(--dim)}
+  .act{font-size:12px;padding:4px 10px;border-radius:8px;border:1px solid var(--line);color:var(--muted);background:transparent;flex:none}
+  .act.ok{border-color:#1f7a53;color:#9ff0cf}
+  .btnrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+  .btn{font-size:13px;padding:6px 13px;border-radius:9px;border:1px solid var(--line);background:#0d1420;color:var(--muted)}
+  .btn.primary{border-color:#2f6f8f;background:#12293c;color:#cfe6ff}
+  .note{font-size:12.5px;color:var(--dim);margin-top:10px}
+  .banner{margin-top:12px;border:1px solid #7a5a1f;background:#221a0e;border-radius:10px;padding:10px 12px;font-size:12.5px;color:#f4d18c}
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media (max-width:760px){.split{grid-template-columns:1fr}}
+  .kv{display:grid;grid-template-columns:96px 1fr;gap:4px 12px;font-size:13px;margin-top:8px}
+  .kv .k{color:var(--dim)}
+  .foot{margin-top:44px;padding-top:16px;border-top:1px solid var(--line);color:var(--dim);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1><span class="g">手机设置</span> · redroid 下线 · AVD 上位</h1>
+  <p class="sub">决策：不再维护 redroid 容器这条路，Android 侧的「虚拟机」统一由 Android SDK 的 AVD 承担。本文是改造前的方案与迁移路径。</p>
+
+  <div class="pills">
+    <span class="pill">勘察于 <b>2026-08-13</b></span>
+    <span class="pill">主机 <b>Linux 7.0.0-28 · 30G RAM</b></span>
+    <span class="pill ok">在跑 <b>emulator-5554 / xh_tv1080p</b></span>
+    <span class="pill bad">移除 <b>local / remote redroid</b></span>
+    <span class="pill ok">新增 <b>本机模拟器 (AVD)</b></span>
+    <span class="pill ok">新增 <b>从 Web 新建模拟器</b></span>
+    <span class="pill warn">代码触点 <b>67 处</b></span>
+  </div>
+
+  <!-- ─────────── 一、现状 ─────────── -->
+  <h2>一 · 现状：那台 TV 模拟器不是 ttmux 起的</h2>
+
+  <div class="card">
+    <p><code>sdk_google_atv64_x86_64</code> 是 adb 报的 <code>ro.product.model</code>，不是 AVD 名。它的真身是 AVD
+      <b>xh_tv1080p</b>，由<b>另一个项目</b>（XiaoHui 电视端）的脚本拉起，与 ttmux 无关。</p>
+    <div class="kv">
+      <span class="k">拉起者</span><span><code>/home/ai/codes/ybz/xh/XiaoHui/scripts/tv_emulator.sh start</code></span>
+      <span class="k">进程</span><span>pid 211482，<code>qemu-system-x86_64-headless</code>，已连续跑 1 天，RSS ≈ 4.9G</span>
+      <span class="k">AVD</span><span><code>~/.android/avd/xh_tv1080p.avd</code>，android-36，profile <code>tv_1080p</code>，1920×1080@320dpi = 960×540dp</span>
+      <span class="k">镜像</span><span><code>system-images;android-36;android-tv;x86_64</code>（<code>leanback_only</code>，无触摸屏）</span>
+    </div>
+    <pre><code>nohup $ANDROID_SDK_ROOT/emulator/emulator -avd xh_tv1080p \
+      -no-window -no-audio -no-boot-anim \
+      -gpu swiftshader_indirect -no-snapshot -accel on >/tmp/xh_tv_emu.log 2>&1 &</code></pre>
+    <p class="note">ttmux 这边 <code>backend/phone/android.go</code> 开篇就写着「MVP 不负责拉起模拟器/容器，只附着 + 操作」。
+      落盘配置 <code>~/.roam/phone-config.json</code> 就是附着结果：<code>{"mode":"device","address":"emulator-5554"}</code> —— 一台模拟器被记成了「本机设备」。</p>
+  </div>
+
+  <div class="card">
+    <div class="hdr"><span class="t">而 redroid 那条路在这台机器上的真实处境</span></div>
+    <ul>
+      <li><b>没在跑</b>：无 <code>ttmux-redroid</code> 容器；<code>binder</code> 未加载（模块在 <code>/lib/modules/7.0.0-28-generic/…/binder_linux.ko.zst</code>，每次起都要 <code>sudo modprobe</code>）。</li>
+      <li><b>封顶 Android 15</b>：内核 7.0 已移除 <code>ashmem</code>，脚本会自动把目标从 16 回退到 15。</li>
+      <li><b>磁盘已经压了 7.3G</b>：<code>redroid/redroid</code> 的 13 / 15 / 16 三个镜像都拉过（2.29 + 2.41 + 2.57 GB）。</li>
+      <li><b>拿不出 TV 镜像</b>：redroid 只有纯 AOSP 手机镜像，而当前要验的正是 Android TV。</li>
+    </ul>
+  </div>
+
+  <!-- ─────────── 二、决策 ─────────── -->
+  <h2>二 · 决策：为什么是「换掉」而不是「并列」</h2>
+
+  <div class="card">
+    <p>两者不是同一类东西：<b>redroid 是容器</b>（Android 用户态直接跑在宿主内核上），<b>AVD 是虚拟机</b>（QEMU + KVM，自带 Android 内核）。
+      差别几乎全从这一点派生 —— 也正是这一点，让 redroid 的成本落在了「宿主内核」上，而这恰恰是我们最不该去要求用户改的地方。</p>
+    <table>
+      <thead><tr><th style="width:22%">维度</th><th style="width:39%">本地 redroid（移除）</th><th>AVD（保留并接管）</th></tr></thead>
+      <tbody>
+        <tr><td>宿主依赖</td><td class="lose">内核要有 binder（<code>sudo modprobe</code>）+ ashmem；本机无 ashmem → 封顶 A15</td><td class="win">只要 <code>/dev/kvm</code>（本机已有，属 <code>kvm</code> 组）</td></tr>
+        <tr><td>平台</td><td class="lose">仅 Linux</td><td class="win">Linux / macOS / Windows</td></tr>
+        <tr><td>系统镜像</td><td class="lose">纯 AOSP 手机，无 GMS / 无 TV / 无 Wear</td><td class="win">Google APIs、Play Store、<b>Android TV</b>、Wear、API 21–36、官方机型档</td></tr>
+        <tr><td>ARM 应用</td><td class="lose">要专门的 arm-translation 镜像，且不稳</td><td class="win">自带 ARM 转译，arm64-only 的包照装</td></tr>
+        <tr><td>分辨率</td><td class="lose">容器创建参数，改一次要重建容器</td><td class="win"><code>wm size/density</code> 随时改，AVD 配置里也能定死</td></tr>
+        <tr><td>传感器/相机/来电/GPS</td><td class="lose">基本没有</td><td class="win">全套 extended controls + 控制台 API</td></tr>
+        <tr><td>快照</td><td class="lose">无（容器 stop/start 秒级，<code>/data</code> 持久）</td><td class="win">snapshot / quick boot</td></tr>
+        <tr><td>内存 / 启动</td><td class="win">~1–2G，秒级</td><td class="lose">本机实测 <b>4.9G</b>，冷启 30–60s（快照 ~10s）</td></tr>
+        <tr><td>密度</td><td class="win">一台服务器十几个</td><td class="lose">三四个吃满 30G</td></tr>
+        <tr><td>维护方</td><td class="lose">我们自己写的 165 行自适应脚本</td><td class="win">Google 官方工具链</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="split" style="margin-top:12px">
+    <div class="card kill">
+      <div class="hdr"><span class="t lose">我们放弃了什么</span></div>
+      <ul>
+        <li><b>实例密度</b>：将来做「安卓池 / 蜂群一人一台」时，AVD 的 5G/台会先撞上内存墙。</li>
+        <li><b>秒级起停</b>：AVD 即便走快照也要十来秒。</li>
+        <li>已拉的 <b>7.3G 镜像</b>与 <code>~/.roam/android/data</code> 里的容器数据 —— 不自动删，见迁移一节。</li>
+      </ul>
+      <p class="note">这三条都不影响当下：本机内存 30G、真正要验的是 TV，而密度是个还没到来的需求。真到那天，它该以「远程安卓池」的形态回来，而不是塞回设置页的一档。</p>
+    </div>
+    <div class="card keep">
+      <div class="hdr"><span class="t win">我们没有丢的东西</span></div>
+      <ul>
+        <li><b>网络 adb 这条传输</b>照旧：原「远程 redroid」改名<b>「远程设备」</b>，仍是 <code>adb connect host:port</code> —— 无线调试的真机、别人机器上的模拟器、乃至别人自己起的 redroid，都还连得上。</li>
+        <li><b>本机真机</b>（USB）不动。</li>
+        <li>换句话说：删掉的只是<b>「由 ttmux 用 docker 拉起并管理一个 redroid 容器」</b>这套生命周期，不是「连接一台远端安卓」的能力。</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ─────────── 三、新模型 ─────────── -->
+  <h2>三 · 新的来源模型与迁移</h2>
+
+  <div class="card">
+    <div class="flow" style="margin-top:4px">
+      <div class="box gone"><div class="t">本地 redroid</div><div class="d">docker 容器 · localhost:5555</div></div>
+      <div class="box gone"><div class="t">远程 redroid</div><div class="d">改名保留传输</div></div>
+      <div class="arrow">⇒</div>
+      <div class="box us"><div class="t">本机模拟器 (AVD)</div><div class="d">起停 · 冷启 · 新建 · 停着也列出来</div></div>
+      <div class="box out"><div class="t">本机真机</div><div class="d">USB serial · 恒原生（不动 wm）</div></div>
+      <div class="box out"><div class="t">远程设备</div><div class="d">adb connect host:port<br>无线真机 / 别处的安卓</div></div>
+    </div>
+    <p class="note">三种目标的分界线是<b>「谁能起停它」</b>：AVD 我们能起能停；远程设备只能连和断；本机真机只能连。
+      它决定的是<b>每台设备行尾摆哪些动作</b>——而不是页面顶上再摆一个让人先选一遍的分段。</p>
+  </div>
+
+  <h3>3.1 老配置怎么落地（<code>sanitizeAndroid</code> 里做，幂等，无需用户操作）</h3>
+  <div class="card">
+    <table>
+      <thead><tr><th style="width:36%">旧配置</th><th style="width:30%">新配置</th><th>理由</th></tr></thead>
+      <tbody>
+        <tr><td><code>mode=local, addr=localhost:5555</code></td>
+            <td><code>mode=avd, addr=""</code></td>
+            <td>容器不再受 ttmux 管理，指着 loopback 的地址已无意义。留空即 adb 默认设备，同时保住「能起停」这层语义
+              （sanitizeAndroid 是纯函数，不去探测宿主上有没有 AVD）</td></tr>
+        <tr><td><code>mode=remote, addr=host:port</code></td>
+            <td><code>mode=network, addr</code> 原样保留</td>
+            <td>传输方式完全没变，只是不再叫 redroid —— 用户的远端设备不该因为改名而断</td></tr>
+        <tr><td><code>mode=device, addr=emulator-5554</code><br><span class="dim">← 本机现在就是这条</span></td>
+            <td><code>mode=avd, addr=emulator-5554</code></td>
+            <td>它本来就是模拟器，只是过去无处安放</td></tr>
+        <tr><td><code>mode=device, addr=</code>裸 serial 或空</td><td>不变</td><td>真机语义没动</td></tr>
+      </tbody>
+    </table>
+    <p class="note">遗留容器<b>不自动清理</b>：升级后若 <code>ttmux-redroid</code> 仍在跑，设置页给一条黄条提示 + 可复制命令，删不删是用户的事 ——
+      <code>~/.roam/android/data</code> 里是他的应用与数据，我们没有资格替他 <code>rm</code>。</p>
+  </div>
+
+  <h3>3.2 设置页长这样</h3>
+  <div class="mock">
+    <div class="title">设置 · 手机 · Android 卡片</div>
+    <div class="lbl">设备 &nbsp;<span style="color:var(--muted)">刷新设备</span> &nbsp;<span style="color:#7ff0ef">新建模拟器</span>
+      &nbsp;<span style="color:#7ff0ef">远程设备</span><span class="dim" style="font-size:11px"> （图标取 icons.tsx 的 PlusIcon，不写进文案）</span></div>
+    <div class="devlist">
+      <div class="dev on">
+        <i class="radio"></i>
+        <div class="meta"><div class="nm">xh_tv1080p</div>
+          <div class="sd">emulator-5554 · 模拟器 · Android TV · 1920×1080@320</div></div>
+        <span class="act">停止</span><span class="act">冷启动</span>
+      </div>
+      <div class="dev off">
+        <i class="radio"></i>
+        <div class="meta"><div class="nm">Pixel_7_API_35</div><div class="sd">未运行 · AVD</div></div>
+        <span class="act ok">启动</span>
+      </div>
+      <div class="dev off">
+        <i class="radio"></i>
+        <div class="meta"><div class="nm">Redmi Note 8</div>
+          <div class="sd">a1b2c3d4 · USB 真机 · 未授权：去手机上允许 USB 调试</div></div>
+      </div>
+    </div>
+
+    <div style="margin-top:14px;display:flex;align-items:center;gap:10px;border:1px solid #1f7a53;background:#0f2a20;border-radius:10px;padding:10px 12px;font-size:13px;color:#9ff0cf">
+      <span style="width:8px;height:8px;border-radius:50%;background:#34d399"></span>
+      <span style="flex:1">sdk_google_atv64_x86_64 (emulator-5554)</span><span class="act">重试</span>
+    </div>
+    <p class="note">没选设备时这行写「选一台设备开始」——原先是一句红色报错「本机挂着多台 Android 设备，请先选一台」，
+      那是在讲 adb 的约束，不是讲用户该做什么。</p>
+
+    <div class="banner">检测到遗留的 redroid 容器 <b>ttmux-redroid</b>。ttmux 已不再管理它，可手动清理：
+      <code>docker rm -f ttmux-redroid</code>（数据仍在 <code>~/.roam/android/data</code>）</div>
+
+    <p class="note">变化点：① <b>没有「来源」这一档</b>——设备列表就是选择器，来源由所选设备的形状定（后端本来就这么判），
+      redroid 字样也从 UI 上彻底消失；② 未运行的 AVD 也在列表里（灰态 + 行尾「启动」）；
+      ③ 每台设备的动作贴在它自己那行：模拟器「停止 / 删除」，远程「断开」；
+      ④ 底下只剩一条「现在连的是谁」+「重试」，原先那排说不清关系的六个按钮撤掉；
+      ⑤ 分辨率档整块去掉——尺寸在新建模拟器时定，连接设置里不该再放一个能改物理屏的开关。</p>
+  </div>
+
+  <!-- ─────────── 四、新建模拟器 ─────────── -->
+  <h2>四 · 新建模拟器（不只是接管现有的）</h2>
+
+  <div class="card">
+    <p>只能用「已经存在的 AVD」是半个功能：新机器上一台都没有，用户还是得回命令行。所以设置页要能<b>从零建出一台</b>。
+      难点不在表单，在于<b>它不是一个秒回的操作</b> —— 本机就是活证据：</p>
+    <pre><code>$ sdkmanager --list_installed
+system-images;android-36;android-tv;x86_64   # ← 全机唯一一个系统镜像（8.2G）</code></pre>
+    <p>要建一台<b>手机</b> AVD，第一步必然是下载一个 1.5–2.5G 的系统镜像。所以「新建」必须按<b>下载任务</b>来设计，
+      不能是个转圈的 Modal —— 这决定了它的实现形态，也决定了它排在接管功能之后。</p>
+  </div>
+
+  <h3>4.1 向导长这样</h3>
+  <div class="mock">
+    <div class="title">新建模拟器 · 抽屉</div>
+
+    <div class="lbl">用途</div>
+    <div class="seg"><span class="on">手机</span><span>平板</span><span class="new">电视 (TV)</span><span>自定义</span></div>
+    <p class="note" style="margin-top:8px">用途决定后面两项的默认值与过滤：TV 只列 <code>android-tv</code> 镜像与 <code>tv_*</code> 机型档，不必让用户自己去匹配 tag。</p>
+
+    <div class="lbl">机型 <span class="dim">（来自 <code>avdmanager list device</code>）</span></div>
+    <div class="seg"><span class="on">Medium Phone</span><span>Pixel 7</span><span>Nexus 5X</span><span>…</span></div>
+
+    <div class="lbl">系统版本</div>
+    <div class="devlist">
+      <div class="dev on"><i class="radio"></i>
+        <div class="meta"><div class="nm">Android 16 · Google APIs</div>
+          <div class="sd">system-images;android-36;google_apis;x86_64 · 需下载 ≈ 2.3G</div></div>
+        <span class="act">下载并创建</span></div>
+      <div class="dev"><i class="radio"></i>
+        <div class="meta"><div class="nm">Android 16 · Android TV</div>
+          <div class="sd">system-images;android-36;android-tv;x86_64 · <span style="color:#9ff0cf">已下载</span></div></div>
+        <span class="act ok">直接创建</span></div>
+    </div>
+
+    <div class="lbl">名称</div>
+    <div class="seg"><span class="on mono">medium_phone_api36</span></div>
+    <p class="note" style="margin-top:8px"><code>avdmanager</code> 只收 <code>[a-zA-Z0-9._-]</code>：空格和中文直接失败。前端就地 slug 化 + 查重，不把这种错留给后端报。</p>
+
+    <div class="lbl">高级 <span class="dim">（折叠，默认跟随机型档）</span></div>
+    <div class="seg"><span>RAM 3072M</span><span>数据分区 6G</span><span>1920×1080 @ 320</span><span>快照 开</span></div>
+
+    <div class="btnrow">
+      <span class="btn primary">创建</span><span class="btn">创建并启动</span><span class="btn">取消</span>
+    </div>
+
+    <div class="banner" style="border-color:#2f6f8f;background:#101e2c;color:#cfe6ff">
+      下载 system-images;android-36;google_apis;x86_64 &nbsp;·&nbsp; 1.4G / 2.3G &nbsp;·&nbsp; 61%<br>
+      <span class="dim">可关闭抽屉，任务在后台继续；完成后设备列表自动出现新机器</span></div>
+  </div>
+
+  <h3>4.2 接口与实现</h3>
+  <div class="card">
+    <div class="hdr"><span class="tagn">新增</span><span class="t"><code>backend/phone/android_avd_create.go</code></span><span class="dim">与 <code>android_avd.go</code>（发现/起停）分开：一个管生命周期，一个管目录与创建</span></div>
+    <table>
+      <thead><tr><th style="width:30%">接口</th><th>做什么</th></tr></thead>
+      <tbody>
+        <tr><td><code>GET /phone/avd/catalog</code></td>
+          <td>机型档（<code>avdmanager list device</code>）+ 系统镜像目录（<code>sdkmanager --list</code>，分「已安装 / 可下载」并标包大小）。
+            远程 fetch 实测要好几秒 → <b>缓存 10 分钟</b>，带 <code>?refresh=1</code> 强制刷新。</td></tr>
+        <tr><td><code>POST /phone/avd</code></td>
+          <td>立即返回 <code>taskId</code>，后台跑：① 缺镜像则 <code>sdkmanager &lt;pkg&gt;</code> 下载 → ② <code>avdmanager create avd -n … -k … -d …</code>
+            → ③ 改写 <code>config.ini</code> → ④ 可选立即启动。</td></tr>
+        <tr><td><code>GET /phone/avd/tasks/:id</code></td>
+          <td>SSE 流式回日志与百分比。<b>复用 <code>backend/stream/stream.go</code> 的 <code>writeSSE()</code></b>，不新造一套推送。
+            <code>sdkmanager</code> 的进度行形如 <code>[====   ] 45% Downloading …</code>，按 <code>(\d+)%</code> 抽百分比，原始行照样进日志区。</td></tr>
+        <tr><td><code>DELETE /phone/avd/:name</code></td>
+          <td><code>avdmanager delete avd -n &lt;名&gt;</code>。<b>破坏性</b>：二次确认，说明会连 <code>~/.android/avd/&lt;名&gt;.avd</code> 里的应用数据一起删；
+            正在运行的先拒绝，要求先停。</td></tr>
+      </tbody>
+    </table>
+    <p class="note"><code>config.ini</code> 改写照搬 <code>tv_emulator.sh</code> 里那段 python 的语义（读成 kv、覆盖、写回），用 Go 实现：
+      <code>hw.ramSize</code> / <code>vm.heapSize</code> / <code>disk.dataPartition.size</code> / <code>hw.gpu.enabled|mode</code> /
+      <code>hw.dPad</code> / <code>hw.keyboard</code> / <code>hw.lcd.width|height|density</code>。
+      <b>这一步不能省</b>：<code>avdmanager</code> 建出来的 TV AVD 未必带 dPad，而没有方向键的电视等于砖头 —— XiaoHui 的脚本当初要多写那段 python，就是为这个。</p>
+  </div>
+
+  <div class="card">
+    <div class="hdr"><span class="t">六个必须处理的坑</span><span class="dim">全部有本机实测依据</span></div>
+    <table>
+      <tbody>
+        <tr><td class="n">1</td><td style="width:30%"><b>许可未接受会卡死</b></td>
+          <td><code>sdkmanager</code> 未接受许可时进入交互式 <code>y/N</code> 等待，后台任务就此挂住直到超时。必须先 <code>--licenses</code> 预接受；
+            且这一步<b>要用户在 UI 上明确点</b>「接受 Google Android SDK 许可」，不能替他默默 <code>yes |</code> 过去。</td></tr>
+        <tr><td class="n">2</td><td><b>cmdline-tools 可能落后</b></td>
+          <td>本机实测告警：<code>This version only understands SDK XML versions up to 3 but an SDK XML file of version 4 was encountered</code>
+            （装的是 <code>commandlinetools-linux-11076708</code>）。目前仍能工作，但 catalog 接口要探测并提示升级。</td></tr>
+        <tr><td class="n">3</td><td><b>cmdline-tools 可能压根没有</b></td>
+          <td>只装 Android Studio 的人常常没有它。需要一条引导安装路径 —— 蓝本就是 <code>tv_emulator.sh setup</code> 里那段
+            curl <code>commandlinetools-linux-*.zip</code> 解压到 <code>$SDK/cmdline-tools/latest</code>。</td></tr>
+        <tr><td class="n">4</td><td><b>不要用 <code>--force</code></b></td>
+          <td><code>avdmanager create avd --force</code> 会<b>覆盖同名 AVD 连同其数据</b>。必须先查重、报错让用户改名，绝不代他覆盖。</td></tr>
+        <tr><td class="n">5</td><td><b>磁盘</b></td>
+          <td>一个镜像 2–3G + data 分区 6G。创建前查可用空间，不足就拦下并说清缺多少（本机 <code>/</code> 余 474G，宽裕；
+            现有 <code>~/Android/Sdk/system-images</code> 已占 8.2G）。</td></tr>
+        <tr><td class="n">6</td><td><b>任务不能绑在请求上</b></td>
+          <td>下载 2.3G 视网速要几分钟到几十分钟，远超任何 HTTP 超时，用户还会关抽屉、切页面、锁手机。
+            所以 <code>POST</code> 只发号，进度走 SSE，任务活在后端；抽屉关了任务继续，完成后设备列表自动多出一台。</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ─────────── 五、改动清单 ─────────── -->
+  <h2>五 · 改动清单（67 处触点，逐文件）</h2>
+
+  <div class="card">
+    <div class="hdr"><span class="tagn">新增</span><span class="t"><code>backend/phone/android_avd.go</code></span><span class="dim">按内容命名，不叫 helpers/utils</span></div>
+    <ul>
+      <li><code>listAVDs()</code> — <code>emulator -list-avds</code>。二进制定位：<code>$ANDROID_SDK_ROOT</code> → <code>$ANDROID_HOME</code> → <code>~/Android/Sdk/emulator/emulator</code> → PATH。</li>
+      <li><code>avdNameOf(serial)</code> — <code>adb -s &lt;serial&gt; emu avd name</code>，把运行中的 <code>emulator-*</code> 映射回 AVD 名。
+        <b>整套方案的支点</b>：没有它就分不清「这台 AVD 是不是已经在跑」，列表会同时冒出「运行中的 emulator-5554」和「未运行的 xh_tv1080p」两条幽灵。实测本机可用。</li>
+      <li><code>startAVD(name)</code> — <code>emulator -avd &lt;name&gt; -no-window -no-audio -no-boot-anim -accel on -gpu &lt;探测&gt;</code>，
+        <b>detached</b>（<code>Setsid</code> 脱离后端进程组）：ttmux 重启不能把用户的 VM 带走。日志落 <code>~/.roam/android/avd-&lt;name&gt;.log</code>，随后轮询 <code>sys.boot_completed</code>。</li>
+      <li><code>stopAVD(serial)</code> — <code>adb -s &lt;serial&gt; emu kill</code>。</li>
+      <li>GPU 探测规则从将被删除的 <code>android-redroid.sh</code> <b>搬进 Go</b>（这是那个脚本里唯一值得留下的东西）：
+        renderD 节点是 Intel(0x8086)/AMD(0x1002) → <code>-gpu host</code>，跳过 NVIDIA(0x10de)，都没有才 <code>swiftshader_indirect</code>。
+        本机 <code>renderD128</code>=Intel、<code>renderD129</code>=NVIDIA，规则命中前者 —— 比 XiaoHui 脚本写死的软件渲染快一截。</li>
+      <li>启动串行化：沿用 <code>installMu</code> 的 <code>TryLock</code> 写法，重复点击快速返回「启动进行中」。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <div class="hdr"><span class="tagm">改写</span><span class="t"><code>backend/phone/config.go</code></span></div>
+    <ul>
+      <li><code>Mode</code> 取值改为 <code>avd | network | device</code>；新增 <code>Avd string</code>（未运行时没有 serial，只有名字能指认目标）。</li>
+      <li><code>defaultConfig()</code>：删掉 <code>{mode:"local", address:"localhost:5555"}</code> 这个 Linux 默认 —— 它在没有 redroid 的机器上等于开箱即「连不上」。改为 <code>mode:"avd"</code> + 空地址。</li>
+      <li><code>sanitizeAndroid()</code> 重写为三条模式规则 + 上一节的迁移矩阵，保持幂等（<code>InitConfig</code>/<code>setConfig</code> 都跑）：
+        <ul>
+          <li><code>avd</code>：<code>Address</code> 必须 <code>emulator-*</code> 或空，含冒号=旧 redroid 残留 → 丢弃；<code>Resolution</code> <b>保留</b>。</li>
+          <li><code>network</code>：<code>Address</code> 必须含冒号，否则清空。</li>
+          <li><code>device</code>：维持现状（无冒号、恒原生）。</li>
+        </ul></li>
+      <li><code>ResolutionPresets</code> / <code>SetResolution</code> 一并删除：UI 没了还留着，就成了没人能改的死配置。TV 画布（1920×1080@320 = 960×540dp）改在新建向导里写进 <code>config.ini</code>。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <div class="hdr"><span class="tagm">改写</span><span class="t"><code>backend/phone/handlers.go</code></span></div>
+    <ul>
+      <li><span class="tagd">删</span> <code>redroidRunning()</code>、<code>runRedroid()</code>、<code>Start</code>/<code>Stop</code> 的 local 分支、<code>Auto</code> 里的 redroid 步骤。</li>
+      <li><code>canStartStop()</code> 改为 <code>Android.Mode == "avd"</code>（iOS 模拟器那半边不动）。</li>
+      <li><code>StatusInfo.running</code>：avd 模式 = 该 AVD 名是否解析得到在跑的 serial。</li>
+      <li><code>Devices</code> 合并两个来源 —— <code>adb devices -l</code> 的在线设备 + <code>listAVDs()</code> 里<b>没跑起来</b>的那些
+        （<code>kind:"avd"</code>、<code>state:"stopped"</code>、<code>id:"avd:&lt;名&gt;"</code>），靠 <code>avdNameOf()</code> 去重。
+        沿用现有原则：不筛状态，「少的那台在哪」必须看得见。</li>
+      <li><span class="tagn">新</span> <code>GET /phone/legacy-redroid</code>（或并进 <code>StatusInfo</code>）：报一句「遗留容器是否还在跑」，供设置页那条黄条。只读，不提供删除动作。</li>
+      <li><code>Health</code> 增 <code>leanback bool</code>（<code>pm has-feature android.software.leanback</code>），供镜像页切 D-pad。</li>
+      <li><span class="tagn">新</span> 路由注册（<code>server.go</code>）：<code>GET /phone/avd/catalog</code>、<code>POST /phone/avd</code>、
+        <code>GET /phone/avd/tasks/:id</code>（SSE）、<code>DELETE /phone/avd/:name</code> —— 见第四节。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <div class="hdr"><span class="tagm">改写</span><span class="t"><code>backend/phone/android.go</code></span></div>
+    <ul>
+      <li><code>Ensure()</code> 里的 <code>wm size/density reset</code> 收窄到 <code>mode == "device"</code>。
+        它本来只为「自愈真机上的 redroid 平板档残留」而写，套到 AVD 上就是单方面抹掉用户特意设的尺寸 —— 本机这台 TV AVD 原生恰好就是 1920×1080@320 才侥幸无害。</li>
+      <li><code>modeLabel()</code>：<code>本地 redroid / 远程 redroid / 本机设备</code> → <code>本机模拟器 / 远程设备 / 本机真机</code>。</li>
+      <li>文件头注释、<code>androidKind()</code> 的分类注释同步（<code>emulator-</code> 前缀现在有了正式归属）。</li>
+    </ul>
+  </div>
+
+  <div class="split" style="margin-top:12px">
+    <div class="card">
+      <div class="hdr"><span class="tagm">改写</span><span class="t"><code>frontend/src/phone-devices.ts</code></span></div>
+      <ul>
+        <li><code>androidTargetOf()</code> 重写：<code>emulator-*</code> → <code>avd</code>；<code>avd:&lt;名&gt;</code> → <code>{mode:'avd', avd:名}</code>；含冒号 → <code>network</code>（不再区分 loopback）；其余 → <code>device</code>。</li>
+        <li><code>KIND_KEY</code> 增 <code>avd</code>，<code>STATE_KEY</code> 增 <code>stopped</code>。</li>
+        <li><code>phone-devices.test.ts</code> 两条 redroid 用例改写为 network / avd。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="hdr"><span class="tagm">改写</span><span class="t"><code>…/settings/phone-settings.tsx</code></span></div>
+      <ul>
+        <li>来源 Segmented 三档，按「能起停 → 插着的 → 远端的」排：模拟器 / 真机 / 远程设备。
+          原先那排分辨率档整块去掉：尺寸在新建模拟器时定，连接设置里不该再放一个能改物理屏的开关。</li>
+        <li>设备行尾「启动 / 停止 / 冷启动」用 <code>.tt-act</code> + <code>&lt;button type="button"&gt;</code>，<b>不是</b> <code>&lt;a onClick&gt;</code>；
+          图标取 <code>icons.tsx</code> 现成件，不画一次性 inline SVG、不用 emoji。</li>
+        <li>启动耗时以十秒计：按钮 <code>loading</code> + 复用现有 <code>&lt;pre&gt;</code> 日志区回显 <code>avd-&lt;name&gt;.log</code> 尾部。</li>
+        <li>遗留容器黄条（一次性提示，命令可复制）。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="hdr"><span class="tagd">删除 / 退场</span></div>
+    <table>
+      <thead><tr><th style="width:44%">对象</th><th>处置</th></tr></thead>
+      <tbody>
+        <tr><td><code>scripts/phone/android-redroid.sh</code>（165 行）</td><td>删。GPU 探测那段搬进 <code>android_avd.go</code>。</td></tr>
+        <tr><td><code>scripts/phone/android/README.md</code></td><td>整篇重写为 AVD 说明（安装镜像、建 AVD、起停、TV 画布）。</td></tr>
+        <tr><td><code>docs/development/phone.md</code>（11 处 redroid）</td><td>同步改写。</td></tr>
+        <tr><td>i18n <code>phone.mode.local</code> / <code>phone.mode.remote</code> / <code>phone.localContainer</code> / <code>phone.redroid*</code>（5 个）/ <code>phone.devNone</code> / <code>phone.addrHelpRemote</code> / <code>phone.addrHelpDevice</code></td>
+            <td>删或改名为 <code>phone.mode.avd|network|device</code> 与 <code>phone.avdStart|avdStop|avdRunning|avdStopped</code>；
+              <b>zh-CN 与 en-US 两份同步</b>，<code>npm run i18n:check</code> 守门。</td></tr>
+        <tr><td><code>registry.tsx</code> 搜索关键词 <code>… redroid …</code></td><td>换成 <code>avd emulator</code>。</td></tr>
+        <tr><td><code>server.go</code> 两处注释、<code>phone.go</code> 文件头</td><td>同步。</td></tr>
+        <tr><td>docker 镜像 7.3G、<code>~/.roam/android/data</code>、<code>ttmux-redroid</code> 容器</td><td><b>不动</b>。设置页提示 + 命令，由用户决定。</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ─────────── 五、节奏 ─────────── -->
+  <h2>六 · 落地节奏</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th style="width:60px">阶段</th><th style="width:34%">内容</th><th>验收</th></tr></thead>
+      <tbody>
+        <tr><td><span class="sev p0">P0</span></td>
+          <td><b>接管现有 AVD</b>：三档来源 + <code>android_avd.go</code> + 未运行 AVD 列表 + 起停 + 收窄 wm reset + 老配置迁移 + i18n 双语</td>
+          <td>停掉 <code>xh_tv1080p</code> 后设置页仍能看见它并一键起回来；起来后镜像页出画面；
+            本机 <code>phone-config.json</code> 升级后自动从 <code>device</code> 变 <code>avd</code>，用户无感</td></tr>
+        <tr><td><span class="sev p1">P1a</span></td>
+          <td><b>新建（用已装镜像）</b>：catalog 接口 + 向导 + <code>avdmanager create</code> + <code>config.ini</code> 改写 + 删除 AVD。
+            <span class="dim">先不碰下载，链路短、当天可验 —— 本机已有 TV 镜像，正好拿来建第二台。</span></td>
+          <td>用已装的 <code>android-36;android-tv</code> 建出一台新 TV AVD（带 dPad、960×540dp），直接启动出画面；重名被拦而非覆盖</td></tr>
+        <tr><td><span class="sev p1">P1b</span></td>
+          <td><b>新建（含下载）</b>：许可确认 + <code>sdkmanager</code> 下载 + SSE 任务通道 + 断线续看 + 磁盘/工具链预检</td>
+          <td>从零建一台<b>手机</b> AVD（本机必然触发 ≈2.3G 下载）：关掉抽屉任务继续，回来还能看到进度，完成后设备列表自动多一台</td></tr>
+        <tr><td><span class="sev p1">P1c</span></td>
+          <td>删脚本与文档、遗留容器提示、GPU 自适应（本机吃上 Intel <code>-gpu host</code>）、冷启动 / <code>-wipe-data</code></td>
+          <td>全仓 <code>grep -i redroid</code> 只剩迁移说明；启动耗时相对 swiftshader 明显下降</td></tr>
+        <tr><td><span class="sev p2">P2</span></td>
+          <td>leanback D-pad 档（上19/下20/左21/右22/OK23/返回4/菜单82，走现有 <code>/phone/key</code>）；
+            cmdline-tools 缺失时的引导安装</td>
+          <td>TV 上焦点走得动；一台只装了 Android Studio、没有 cmdline-tools 的机器也能走完新建流程</td></tr>
+      </tbody>
+    </table>
+    <p class="note">门禁：<code>scripts/dev/quality/check.sh full</code>（有运行时行为变更）+
+      <code>npm run typecheck &amp;&amp; npm run i18n:check &amp;&amp; npm run hover:check &amp;&amp; npx vitest run &amp;&amp; npm run build</code>，
+      前端改动另按 <code>docs/development/web-ui-checklist.md</code> 过一遍真机。</p>
+  </div>
+
+  <div class="card">
+    <div class="hdr"><span class="t">风险</span></div>
+    <ul>
+      <li><b>别把用户的 VM 带走</b>：后端起的 emulator 必须 detached，ttmux 重启/退出不得连带 kill；反过来「停止」只作用于当前选中目标，UI 上要说清它会关掉整台机器。</li>
+      <li><b>不是我们起的也能停</b>：本机这台是 XiaoHui 脚本起的，接管后 ttmux 照样能 <code>emu kill</code> 它 —— 这是能力也是脚，按钮文案要写明白。</li>
+      <li><b>KVM 权限</b>：Linux 上用户须在 <code>kvm</code> 组，否则 <code>-accel on</code> 直接失败；启动失败时把 <code>/dev/kvm</code> 的检查结论写进日志区，别只回一句「启动失败」。</li>
+      <li><b>无 GUI 的服务器</b>：必须 <code>-no-window</code>，这也是我们默认加的。</li>
+      <li><b>删除模拟器是真删</b>：<code>avdmanager delete avd</code> 连同 <code>~/.android/avd/&lt;名&gt;.avd</code> 里的应用与数据一起没。
+        二次确认要写清删的是什么，且运行中的一律先拒绝 —— 不做「帮你先停再删」这种贴心。</li>
+      <li><b>不代替用户同意许可</b>：Google Android SDK 的许可必须由用户在 UI 上点过，后端才 <code>--licenses</code>。这一步不做「静默通过」。</li>
+      <li><b>下线是单向的</b>：redroid 的价值在「多实例安卓池」，真需要时应以远程服务的形态回来（走「远程设备」那档连过来即可），而不是把这一档再塞回设置页。</li>
+    </ul>
+  </div>
+
+  <div class="foot">
+    勘察证据：<code>ps 211482</code> · <code>adb devices -l</code> · <code>adb -s emulator-5554 emu avd name</code> · <code>emulator -list-avds</code> ·
+    <code>sdkmanager --list_installed</code> · <code>avdmanager list device</code> · <code>df -h /home/ai</code> ·
+    <code>/dev/kvm</code> · <code>modinfo binder_linux</code> · <code>/proc/filesystems</code> · <code>docker images | grep redroid</code> ·
+    <code>~/.android/avd/xh_tv1080p.avd/config.ini</code> · <code>~/.roam/phone-config.json</code> ·
+    <code>backend/phone/{config,android,handlers,phone}.go</code> · <code>frontend/src/{phone-devices.ts,components/settings/phone-settings.tsx}</code>
+  </div>
+
+</div>
+</body>
+</html>

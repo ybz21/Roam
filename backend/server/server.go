@@ -81,7 +81,7 @@ func New(cfg Config) *gin.Engine {
 	h := api.New(tt, cfg.BrowserHome, cfg.DataDir, cfg.EmbeddedBin)
 	go h.SyncLoop()                 // 后台兜底远端同步（10 §3 第三档），失败静默
 	browser.InitConfig(cfg.DataDir) // Chrome 启动配置持久化到 dataDir
-	phone.InitConfig(cfg.DataDir)   // 手机后端配置（本地/远程 redroid/真机）持久化到 dataDir
+	phone.InitConfig(cfg.DataDir)   // 手机后端配置（本机模拟器/远程设备/真机）持久化到 dataDir
 	hub := stream.New(tt, cfg.LogsDir)
 
 	// 公开端点（登录 / 首次设置 / 版本 / 证书 / 导航页）——与中心 共用
@@ -308,24 +308,30 @@ func New(cfg Config) *gin.Engine {
 		g.POST("/browser/open-external", browser.OpenExternal)    // 甩给宿主机真实浏览器打开（WSL 下唤起 Windows 浏览器）
 
 		// 手机镜像（Linux→Android adb；其它平台 health 明示不支持）
-		g.GET("/phone/stream", phone.Handler)          // 镜像手机画面 + 转发输入
-		g.GET("/phone/health", phone.Health)           // 设备可用性 + 平台 + 目标
-		g.GET("/phone/apps", phone.Apps)               // 列出 App
-		g.POST("/phone/apps/:id/launch", phone.Launch) // 启动 App
-		g.POST("/phone/key", phone.Key)                // 系统键 back/home/enter...
-		g.GET("/phone/ui", phone.UI)                   // 当前屏幕元素结构
-		g.GET("/phone/config", phone.GetConfig)        // 后端目标配置：读
-		g.PUT("/phone/config", phone.SetConfig)        // 后端目标配置：存（不自动连接）
-		g.GET("/phone/status", phone.StatusInfo)       // 单一状态源：依赖/运行/连接
-		g.GET("/phone/devices", phone.Devices)         // 可用目标设备列表(adb/idb)
-		g.GET("/phone/platforms", phone.Platforms)     // 各平台安装/支持状态(开关)
-		g.POST("/phone/install", phone.Install)        // 按需(插件化)安装依赖
-		g.POST("/phone/start", phone.Start)            // 运行层：起设备(本地 redroid/iOS 模拟器)
-		g.POST("/phone/stop", phone.Stop)              // 运行层：停设备
-		g.POST("/phone/connect", phone.Connect)        // 连接层：adb connect(网络目标)
-		g.POST("/phone/disconnect", phone.Disconnect)  // 连接层：adb disconnect
-		g.POST("/phone/test", phone.Test)              // 测试连接(Ensure+Health)
-		g.POST("/phone/auto", phone.Auto)              // 一键：装依赖→起设备→连接→测试
+		g.GET("/phone/stream", phone.Handler)                    // 镜像手机画面 + 转发输入
+		g.GET("/phone/health", phone.Health)                     // 设备可用性 + 平台 + 目标
+		g.GET("/phone/apps", phone.Apps)                         // 列出 App
+		g.POST("/phone/apps/:id/launch", phone.Launch)           // 启动 App
+		g.POST("/phone/key", phone.Key)                          // 系统键 back/home/enter...
+		g.GET("/phone/ui", phone.UI)                             // 当前屏幕元素结构
+		g.GET("/phone/config", phone.GetConfig)                  // 后端目标配置：读
+		g.PUT("/phone/config", phone.SetConfig)                  // 后端目标配置：存（不自动连接）
+		g.GET("/phone/status", phone.StatusInfo)                 // 单一状态源：依赖/运行/连接
+		g.GET("/phone/devices", phone.Devices)                   // 可用目标设备列表(adb/idb)
+		g.GET("/phone/platforms", phone.Platforms)               // 各平台安装/支持状态(开关)
+		g.POST("/phone/install", phone.Install)                  // 按需(插件化)安装依赖
+		g.POST("/phone/start", phone.Start)                      // 运行层：起设备(本机模拟器/iOS 模拟器)
+		g.POST("/phone/stop", phone.Stop)                        // 运行层：停设备
+		g.POST("/phone/connect", phone.Connect)                  // 连接层：adb connect(网络目标)
+		g.POST("/phone/disconnect", phone.Disconnect)            // 连接层：adb disconnect
+		g.POST("/phone/test", phone.Test)                        // 测试连接(Ensure+Health)
+		g.POST("/phone/auto", phone.Auto)                        // 一键：装依赖→起设备→连接→测试
+		g.GET("/phone/avd/catalog", phone.AVDCatalog)            // 新建向导：机型档 + 系统镜像目录
+		g.POST("/phone/avd", phone.AVDCreate)                    // 新建模拟器(发号，后台跑)
+		g.GET("/phone/avd/tasks/:id", phone.AVDTask)             // 新建进度(SSE)
+		g.DELETE("/phone/avd/:name", phone.AVDDelete)            // 删除模拟器(连数据一起)
+		g.POST("/phone/device/reconnect", phone.DeviceReconnect) // USB 真机：救回未授权/离线
+		g.POST("/phone/device/wireless", phone.DeviceWireless)   // USB 真机：转无线调试，之后可拔线
 
 		g.GET("/stream/status", hub.Status)
 		g.GET("/logs/:name", hub.Logs)
