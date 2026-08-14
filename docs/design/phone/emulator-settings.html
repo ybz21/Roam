@@ -195,9 +195,9 @@
       <div class="box gone"><div class="t">本地 redroid</div><div class="d">docker 容器 · localhost:5555</div></div>
       <div class="box gone"><div class="t">远程 redroid</div><div class="d">改名保留传输</div></div>
       <div class="arrow">⇒</div>
-      <div class="box us"><div class="t">本机模拟器 (AVD)</div><div class="d">起停 · 冷启 · 分辨率 · 停着也列出来</div></div>
-      <div class="box out"><div class="t">远程设备</div><div class="d">adb connect host:port<br>无线真机 / 别处的模拟器</div></div>
+      <div class="box us"><div class="t">本机模拟器 (AVD)</div><div class="d">起停 · 冷启 · 新建 · 停着也列出来</div></div>
       <div class="box out"><div class="t">本机真机</div><div class="d">USB serial · 恒原生（不动 wm）</div></div>
+      <div class="box out"><div class="t">远程设备</div><div class="d">adb connect host:port<br>无线真机 / 别处的安卓</div></div>
     </div>
     <p class="note">三档的分界线是<b>「谁能起停它」</b>：AVD 我们能起能停；远程设备只能连和断；本机真机只能连。设置页的动作条据此显隐，不再有第四种解释。</p>
   </div>
@@ -228,7 +228,7 @@
   <div class="mock">
     <div class="title">设置 · 手机 · Android 卡片</div>
     <div class="lbl">来源</div>
-    <div class="seg"><span class="on new">本机模拟器</span><span>远程设备</span><span>本机真机</span></div>
+    <div class="seg"><span class="on new">本机模拟器</span><span>本机真机</span><span>远程设备</span></div>
 
     <div class="lbl">设备 &nbsp;<span style="color:var(--muted)">刷新设备</span> &nbsp;<span style="color:#7ff0ef">新建模拟器</span><span class="dim" style="font-size:11px"> （图标取 icons.tsx 的 PlusIcon，不写进文案）</span></div>
     <div class="devlist">
@@ -250,9 +250,6 @@
       </div>
     </div>
 
-    <div class="lbl">分辨率 <span class="dim">（模拟器可改，真机恒原生）</span></div>
-    <div class="seg"><span class="on">原生</span><span>平板竖屏</span><span>平板横屏</span><span>大平板</span><span class="new">TV 960×540dp</span></div>
-
     <div class="btnrow">
       <span class="btn primary">一键连接</span><span class="btn">启动</span><span class="btn">停止</span><span class="btn">测试连接</span>
     </div>
@@ -261,7 +258,8 @@
       <code>docker rm -f ttmux-redroid</code>（数据仍在 <code>~/.roam/android/data</code>）</div>
 
     <p class="note">变化点：① 来源三档，redroid 字样从 UI 上彻底消失；② 未运行的 AVD 也在列表里（灰态 + 行尾「启动」）；
-      ③ 选中的 AVD 行尾给「停止 / 冷启动」；④ 分辨率档对模拟器解禁并补一档 TV 画布；⑤ 顶部「启动/停止」现在属于 AVD。</p>
+      ③ 选中的 AVD 行尾给「停止 / 删除」；④ 顶部「启动/停止」现在属于 AVD；⑤ 分辨率档整块去掉——尺寸在新建模拟器时定，
+      连接设置里不该再放一个能改物理屏的开关。</p>
   </div>
 
   <!-- ─────────── 四、新建模拟器 ─────────── -->
@@ -396,7 +394,7 @@ system-images;android-36;android-tv;x86_64   # ← 全机唯一一个系统镜�
           <li><code>network</code>：<code>Address</code> 必须含冒号，否则清空。</li>
           <li><code>device</code>：维持现状（无冒号、恒原生）。</li>
         </ul></li>
-      <li><code>ResolutionPresets</code> 补一档 <code>tv</code> = <code>1920x1080 / 320</code>（= 960×540dp，和 <code>android-tv-design</code> 技能的 TV 画布逐 dp 对齐）。</li>
+      <li><code>ResolutionPresets</code> / <code>SetResolution</code> 一并删除：UI 没了还留着，就成了没人能改的死配置。TV 画布（1920×1080@320 = 960×540dp）改在新建向导里写进 <code>config.ini</code>。</li>
     </ul>
   </div>
 
@@ -438,8 +436,8 @@ system-images;android-36;android-tv;x86_64   # ← 全机唯一一个系统镜�
     <div class="card">
       <div class="hdr"><span class="tagm">改写</span><span class="t"><code>…/settings/phone-settings.tsx</code></span></div>
       <ul>
-        <li>来源 Segmented 三档；分辨率档仍是 <code>mode !== 'device'</code>——对模拟器解禁，对真机恒原生，
-          远程目标（可能就是别人机器上的模拟器）保留原有能力，不做无谓的收缩。</li>
+        <li>来源 Segmented 三档，按「能起停 → 插着的 → 远端的」排：模拟器 / 真机 / 远程设备。
+          原先那排分辨率档整块去掉：尺寸在新建模拟器时定，连接设置里不该再放一个能改物理屏的开关。</li>
         <li>设备行尾「启动 / 停止 / 冷启动」用 <code>.tt-act</code> + <code>&lt;button type="button"&gt;</code>，<b>不是</b> <code>&lt;a onClick&gt;</code>；
           图标取 <code>icons.tsx</code> 现成件，不画一次性 inline SVG、不用 emoji。</li>
         <li>启动耗时以十秒计：按钮 <code>loading</code> + 复用现有 <code>&lt;pre&gt;</code> 日志区回显 <code>avd-&lt;name&gt;.log</code> 尾部。</li>
@@ -473,8 +471,8 @@ system-images;android-36;android-tv;x86_64   # ← 全机唯一一个系统镜�
       <thead><tr><th style="width:60px">阶段</th><th style="width:34%">内容</th><th>验收</th></tr></thead>
       <tbody>
         <tr><td><span class="sev p0">P0</span></td>
-          <td><b>接管现有 AVD</b>：三档来源 + <code>android_avd.go</code> + 未运行 AVD 列表 + 起停 + 分辨率解禁 + 收窄 wm reset + 老配置迁移 + i18n 双语</td>
-          <td>停掉 <code>xh_tv1080p</code> 后设置页仍能看见它并一键起回来；起来后镜像页出画面；改平板/TV 档生效且不被下次连接抹掉；
+          <td><b>接管现有 AVD</b>：三档来源 + <code>android_avd.go</code> + 未运行 AVD 列表 + 起停 + 收窄 wm reset + 老配置迁移 + i18n 双语</td>
+          <td>停掉 <code>xh_tv1080p</code> 后设置页仍能看见它并一键起回来；起来后镜像页出画面；
             本机 <code>phone-config.json</code> 升级后自动从 <code>device</code> 变 <code>avd</code>，用户无感</td></tr>
         <tr><td><span class="sev p1">P1a</span></td>
           <td><b>新建（用已装镜像）</b>：catalog 接口 + 向导 + <code>avdmanager create</code> + <code>config.ini</code> 改写 + 删除 AVD。

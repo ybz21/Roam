@@ -9,8 +9,8 @@ import { DeviceIcon, PlusIcon } from '../../icons'
 import { androidTargetOf, devKindText, devStateText, listPhoneDevices, type PhoneDevice } from '../../phone-devices'
 import { AvdCreateDrawer } from './avd-create'
 
-type PhoneCfg = { active: '' | 'android' | 'ios'; android: { mode: string; address: string; avd: string; resolution: string }; ios: { mode: string; address: string } }
-const PHONE_DEFAULT: PhoneCfg = { active: 'android', android: { mode: 'avd', address: '', avd: '', resolution: '' }, ios: { mode: 'simulator', address: '' } }
+type PhoneCfg = { active: '' | 'android' | 'ios'; android: { mode: string; address: string; avd: string }; ios: { mode: string; address: string } }
+const PHONE_DEFAULT: PhoneCfg = { active: 'android', android: { mode: 'avd', address: '', avd: '' }, ios: { mode: 'simulator', address: '' } }
 
 export function PhoneSettings() {
   // 两张卡片：Android / iOS，各自配置(互不覆盖)；active 决定哪个驱动镜像。
@@ -113,7 +113,7 @@ export function PhoneSettings() {
     const isNet = isA && c.mode === 'network' && (c.address || '').includes(':')
     const canSS = (isA && c.mode === 'avd') || (!isA && c.mode === 'simulator')
     const sources = isA
-      ? [{ label: t('phone.mode.avd'), value: 'avd' }, { label: t('phone.mode.network'), value: 'network' }, { label: t('phone.mode.device'), value: 'device' }]
+      ? [{ label: t('phone.mode.avd'), value: 'avd' }, { label: t('phone.mode.device'), value: 'device' }, { label: t('phone.mode.network'), value: 'network' }]
       : [{ label: t('phone.ios.simulator'), value: 'simulator' }, { label: t('phone.ios.device'), value: 'device' }]
     const list = devs[p] || []
     // 切来源要连地址一起清：每种来源的目标形状不同(模拟器=emulator-xxxx / 远程=host:port / 真机=USB serial)。
@@ -204,16 +204,7 @@ export function PhoneSettings() {
               <span style={dim}>{t('phone.addrManual')}</span>
               <Input value={c.address} onChange={(e) => editAddr(p, e.target.value)} onBlur={blurPersist} onPressEnter={blurPersist}
                 style={{ maxWidth: 380 }} placeholder={isA ? t('phone.addrPlaceholder') : t('phone.addrPlaceholderIOS')} />
-              <span style={dim}>{isA ? (c.mode === 'remote' ? t('phone.addrHelpRemote') : t('phone.addrHelpDevice')) : t('phone.addrHelpIOS')}</span>
-            </Space>
-          )}
-          {isA && c.mode !== 'device' && (
-            <Space direction="vertical" size={4} style={{ width: '100%' }}>
-              <span style={dim}>{t('phone.resolution')}</span>
-              <Segmented value={c.resolution || 'phone'} onChange={(v) => patch(p, { resolution: (v as string) === 'phone' ? '' : v })}
-                options={[{ label: t('phone.res.phone'), value: 'phone' }, { label: t('phone.res.tablet'), value: 'tablet' },
-                  { label: t('phone.res.tabletLand'), value: 'tablet-land' }, { label: t('phone.res.tabletLarge'), value: 'tablet-large' },
-                  { label: t('phone.res.tv'), value: 'tv' }]} />
+              <span style={dim}>{isA ? (c.mode === 'network' ? t('phone.addrHelpRemote') : t('phone.addrHelpDevice')) : t('phone.addrHelpIOS')}</span>
             </Space>
           )}
           {/* 动作条 + 状态：仅激活卡片（动作作用于当前激活平台） */}

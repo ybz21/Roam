@@ -2,7 +2,7 @@
 //
 // 嵌套结构：Android 与 iOS 各存各的设置（互不覆盖），Active 决定哪个平台在驱动镜像。
 //
-//	Android: mode=avd|network|device + address(adb serial/host:port) + avd(AVD 名) + resolution
+//	Android: mode=avd|network|device + address(adb serial/host:port) + avd(AVD 名)
 //	iOS:     mode=simulator|device + address(模拟器/设备 UDID)
 //	Active:  android|ios|""（空=都不启用）
 //
@@ -26,8 +26,7 @@ type AndroidCfg struct {
 	Mode    string `json:"mode"`    // avd | network | device
 	Address string `json:"address"` // adb serial：emulator-xxxx / host:port / USB serial
 	// Avd 是 AVD 名。没跑起来的模拟器没有 serial，只有名字指得动它——所以 Address 之外还要这一个。
-	Avd        string `json:"avd,omitempty"`
-	Resolution string `json:"resolution,omitempty"`
+	Avd string `json:"avd,omitempty"`
 }
 
 // IOSCfg 是 iOS 卡片的设置。
@@ -40,18 +39,6 @@ type Config struct {
 	Active  string     `json:"active"` // android | ios | ""（驱动镜像的平台）
 	Android AndroidCfg `json:"android"`
 	IOS     IOSCfg     `json:"ios"`
-}
-
-// resPreset 是一组 adb wm size/density 取值。
-type resPreset struct{ Size, Density string }
-
-// ResolutionPresets: 设置页可选的设备分辨率档(平板/电视等)。key 不在表里(含 "" / "phone")= 还原原生。
-// tv 档的 1920x1080@320 正好是 960x540dp——TV 设计画布就按这个 dp 尺寸画。
-var ResolutionPresets = map[string]resPreset{
-	"tablet":       {Size: "1200x1920", Density: "240"},
-	"tablet-land":  {Size: "1920x1200", Density: "240"},
-	"tablet-large": {Size: "2560x1600", Density: "280"},
-	"tv":           {Size: "1920x1080", Density: "320"},
 }
 
 var cfgStore struct {
@@ -101,7 +88,7 @@ func InitConfig(dataDir string) {
 		return
 	}
 	if _, isOld := probe["platform"]; isOld { // 迁移旧扁平 {platform,mode,address,resolution}
-		var old struct{ Platform, Mode, Address, Resolution string }
+		var old struct{ Platform, Mode, Address string }
 		_ = json.Unmarshal(b, &old)
 		c := defaultConfig()
 		c.Active = old.Platform // ""→未启用
@@ -116,7 +103,6 @@ func InitConfig(dataDir string) {
 			if old.Address != "" {
 				c.Android.Address = old.Address
 			}
-			c.Android.Resolution = old.Resolution
 		}
 		cfgStore.cur = c
 	}
@@ -136,12 +122,11 @@ func InitConfig(dataDir string) {
 //   - 全字段去空白："localhost:5555  " 这类尾随空格会让 adb connect / adb -s 失败。
 //   - avd：地址只收 emulator-xxxx 或空，带冒号是 redroid 残留 → 丢弃。
 //   - network：地址必须带冒号，否则不是网络目标 → 丢弃。
-//   - device(真机)：地址不收 host:port，且不套分辨率档(会把物理屏改成怪比例) → 恒原生。
+//   - device(真机)：地址不收 host:port。
 func sanitizeAndroid(a AndroidCfg) AndroidCfg {
 	a.Mode = strings.TrimSpace(a.Mode)
 	a.Address = strings.TrimSpace(a.Address)
 	a.Avd = strings.TrimSpace(a.Avd)
-	a.Resolution = strings.TrimSpace(a.Resolution)
 	switch a.Mode {
 	case "local":
 		a.Mode, a.Address = "avd", ""
@@ -163,7 +148,6 @@ func sanitizeAndroid(a AndroidCfg) AndroidCfg {
 			a.Address = ""
 		}
 		a.Avd = ""
-		a.Resolution = ""
 	default: // avd（也兜住空串与任何没见过的取值）
 		a.Mode = "avd"
 		if strings.Contains(a.Address, ":") {

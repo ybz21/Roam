@@ -187,26 +187,6 @@ func (d *androidDevice) shell(timeout time.Duration, args ...string) ([]byte, er
 	return d.run(timeout, append([]string{"shell"}, args...)...)
 }
 
-// SetResolution 按预设改设备显示尺寸/密度(adb wm size/density)。
-// preset 空 / "phone" → 还原原生(wm size/density reset)；未知预设忽略。
-// 密度要随分辨率一起调，否则只放大尺寸 UI 会被等比放大，得不到平板版式。
-func (d *androidDevice) SetResolution(preset string) error {
-	if preset == "" || preset == "phone" {
-		_, _ = d.shell(6*time.Second, "wm", "size", "reset")
-		_, err := d.shell(6*time.Second, "wm", "density", "reset")
-		return err
-	}
-	p, ok := ResolutionPresets[preset]
-	if !ok {
-		return nil
-	}
-	if _, err := d.shell(6*time.Second, "wm", "size", p.Size); err != nil {
-		return err
-	}
-	_, err := d.shell(6*time.Second, "wm", "density", p.Density)
-	return err
-}
-
 // state 返回 adb get-state（device 表示已就绪）。
 func (d *androidDevice) state() string {
 	out, err := d.run(3*time.Second, "get-state")

@@ -443,10 +443,7 @@ func SetConfig(c *gin.Context) {
 		return
 	}
 	setConfig(body)
-	// 只存配置 + 应用分辨率，不主动连接（连接交给 /phone/connect 或 /phone/auto）。
-	if getConfig().Active == "android" {
-		_ = androidImpl.SetResolution(getConfig().Android.Resolution)
-	}
+	// 只存配置，不主动连接（连接交给 /phone/connect 或 /phone/auto）。
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"config": getConfig(), "health": Current().Health()}})
 }
 
