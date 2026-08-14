@@ -10,8 +10,8 @@ import { api } from '../../api'
 import { useI18n } from '../../i18n'
 import { connect, type DuplexTransport } from '../../p2p/transport'
 import { devKindText, devStateText, listPhoneDevices, selectPhoneDevice, type PhoneDevice } from '../../phone-devices'
-import { AppsIcon, DeviceIcon, PhoneAssistIcon, PhoneBackIcon, PhoneHomeIcon, PhoneRecentsIcon, PowerIcon, RefreshIcon, SearchIcon } from '../../icons'
-import { fmtRate, IconBtn, MirrorChrome, MirrorMenu, Omnibox, StatusChip, StreamControl, useShelf, type Quality } from './mirror'
+import { AppsIcon, ChevronDown, DeviceIcon, PhoneAssistIcon, PhoneBackIcon, PhoneHomeIcon, PhoneRecentsIcon, PowerIcon, RefreshIcon, SearchIcon } from '../../icons'
+import { fmtRate, IconBtn, MirrorChrome, MirrorMenu, Omnibox, StreamControl, useShelf, type Quality } from './mirror'
 
 interface PhoneApp { id: string; name?: string }
 
@@ -231,9 +231,10 @@ export default function PhoneView() {
     { key: 'reconnect', icon: <RefreshIcon size={14} />, label: t('phone.reconnect'), onClick: () => setReconnectKey((n) => n + 1) },
   ]
 
-  // 设备芯片：一眼是哪台，点开换一台（浏览器页的设备芯片同一套写法）。
+  // 设备身份：名字 + 它是什么（本机模拟器/真机/远程），点开换一台。
+  // 名字和类型说的是同一台机器，所以是一枚可点的整体，不是并排两枚胶囊。
   const cur = devices.find((d) => d.current)
-  const deviceChip = (
+  const deviceIdentity = (
     <Dropdown trigger={['click']} placement="bottomRight"
       onOpenChange={(v) => { if (v) loadDevices() }}
       menu={{
@@ -248,9 +249,11 @@ export default function PhoneView() {
           }
         }) : [{ key: 'none', disabled: true, label: t('phone.devNone') }],
       }}>
-      {/* onClick 空实现是给 StatusChip 要一个真 <button>（可聚焦、看着能点）——开合由 Dropdown 接冒泡管。 */}
-      <span><StatusChip icon={<DeviceIcon />} text={platform === 'ios' ? 'iOS' : 'Android'}
-        strong={cur ? devKindText(cur, t) : undefined} onClick={() => {}} /></span>
+      <button type="button" className="mc-omni-txt mc-omni-id" title={`${devName || t('nav.phone')}${cur ? ' · ' + devKindText(cur, t) : ''}`}>
+        <span className="host">{devName || t('nav.phone')}</span>
+        {cur && <span className="kind"><DeviceIcon size={12} />{devKindText(cur, t)}</span>}
+        <ChevronDown size={10} />
+      </button>
     </Dropdown>
   )
 
@@ -285,6 +288,7 @@ export default function PhoneView() {
           <Omnibox
             readOnly
             value={devName || t('nav.phone')}
+            identity={deviceIdentity}
             sub={[devOs, `${sizeRef.current.w}×${sizeRef.current.h}`].filter(Boolean).join(' · ')}
             lead={<StreamControl
               connected={connected} label={connected ? t('phone.connected') : t('phone.disconnected')}
@@ -296,7 +300,6 @@ export default function PhoneView() {
               ? <span className="mc-omni-num">{`${latency == null ? '—' : latency + 'ms'} · ${fmtRate(bw)} · ${fps}fps`}</span>
               : undefined}
           />
-          {shelf !== 'narrow' && deviceChip}
           {/* 应用启动器：从前是个 160px 的 Select，窄屏上要独占一整行 */}
           <Dropdown trigger={['click']} placement="bottomRight" open={appsOpen} onOpenChange={(v) => { setAppsOpen(v); if (v) loadApps() }}
             popupRender={() => (
@@ -324,10 +327,6 @@ export default function PhoneView() {
           </Dropdown>
           <MirrorMenu label={t('common.more')} items={menuItems} />
         </>}
-        chips={shelf === 'narrow' ? <>
-          {deviceChip}
-          {!!devOs && <StatusChip text={devOs} />}
-        </> : undefined}
       />
 
       <style>{`

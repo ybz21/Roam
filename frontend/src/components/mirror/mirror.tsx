@@ -140,7 +140,7 @@ export function splitUrl(raw: string): { host: string; rest: string } {
  * 浏览器页：可编辑地址（失焦＝域名亮/路径灰；聚焦＝全选整条 + ✕ 清空 + 「前往」）。
  * 手机页：`readOnly` ＝ 只读 devbox（设备名 + 系统/分辨率）——它是身份不是输入。
  */
-export function Omnibox({ value, onChange, onSubmit, onFocusChange, lead, trailing, sub, readOnly, placeholder, goLabel }: {
+export function Omnibox({ value, onChange, onSubmit, onFocusChange, lead, trailing, sub, identity, readOnly, placeholder, goLabel }: {
   value: string
   onChange?: (v: string) => void
   onSubmit?: () => void
@@ -151,6 +151,8 @@ export function Omnibox({ value, onChange, onSubmit, onFocusChange, lead, traili
   trailing?: ReactNode
   /** 只读态右侧的次要信息（系统、分辨率） */
   sub?: string
+  /** 只读态的主体：给得出更多的（可点开换一台的设备身份）就用它，代替那行纯文本 */
+  identity?: ReactNode
   readOnly?: boolean
   placeholder?: string
   goLabel?: string
@@ -172,7 +174,7 @@ export function Omnibox({ value, onChange, onSubmit, onFocusChange, lead, traili
     return (
       <div className="mc-omni is-readonly">
         {lead}
-        <span className="mc-omni-txt" title={value}><span className="host">{value}</span></span>
+        {identity || <span className="mc-omni-txt" title={value}><span className="host">{value}</span></span>}
         {sub && <span className="mc-omni-sub">{sub}</span>}
         {trailing}
       </div>
