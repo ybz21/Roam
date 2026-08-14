@@ -62,6 +62,15 @@ func SanitizeSessionName(name string) string {
 // 这一条在 AGENTS.md 里写死了，本文件从前只有 exists() 遵守。
 func target(name string) string { return "=" + name }
 
+// paneTarget 是「这个会话当前窗口的活动 pane」。
+//
+// 那个尾冒号不是可有可无：tmux 3.4 下 `-t "=name"` 会被当成 **pane** 目标去解析，
+// 直接 `can't find pane: =name`，于是 copy-mode / send-keys -X / display-message 的
+// pane 变量全都静默失效——表现就是「终端翻不动页」：普通屏进不去 copy-mode，
+// 备用屏那边 paneState 拿回一片空、alternate_on 判成 false，于是又走去 copy-mode。
+// `=name` 只适合 has-session / set-option 这类会话级命令。
+func paneTarget(name string) string { return "=" + name + ":" }
+
 // sessionExists 判断会话是否真的还在（精确匹配，见 target）。
 func sessionExists(name string) bool {
 	return exec.Command("tmux", "has-session", "-t", target(name)).Run() == nil
@@ -75,7 +84,7 @@ func sessionExists(name string) bool {
 //     表现就是命令行被 "65;137;33M65;137;33M…" 灌满、整屏花掉。
 //   - sgr：应用用 SGR(1006) 扩展坐标编码；否则回退 X10 编码。
 func paneState(name string) (alt, mouseOn, sgr bool, w, h int) {
-	out, err := exec.Command("tmux", "display-message", "-p", "-t", target(name), "-F",
+	out, err := exec.Command("tmux", "display-message", "-p", "-t", paneTarget(name), "-F",
 		"#{alternate_on} #{pane_width} #{pane_height} #{mouse_any_flag} #{mouse_standard_flag} #{mouse_button_flag} #{mouse_all_flag} #{mouse_sgr_flag}").Output()
 	if err != nil {
 		return false, false, false, 0, 0
@@ -124,7 +133,7 @@ func altScreenWheel(name, dir string, notches, w, h int, sgr bool) {
 		}
 		seq = fmt.Sprintf("\x1b[M%c%c%c", rune(32+btn), rune(32+col), rune(32+row))
 	}
-	_ = exec.Command("tmux", "send-keys", "-t", target(name), "-l", "--", strings.Repeat(seq, notches)).Run()
+	_ = exec.Command("tmux", "send-keys", "-t", paneTarget(name), "-l", "--", strings.Repeat(seq, notches)).Run()
 }
 
 // tmuxScroll 滚动会话历史，返回本连接是否仍停在 tmux copy-mode（供 handler 决定真实键入前是否需退出）。
@@ -155,14 +164,14 @@ func tmuxScroll(name, dir string, lines int) (inCopyMode bool) {
 	n := strconv.Itoa(lines)
 	switch dir {
 	case "up":
-		_ = exec.Command("tmux", "copy-mode", "-t", target(name)).Run()
-		_ = exec.Command("tmux", "send-keys", "-t", target(name), "-N", n, "-X", "scroll-up").Run()
+		_ = exec.Command("tmux", "copy-mode", "-t", paneTarget(name)).Run()
+		_ = exec.Command("tmux", "send-keys", "-t", paneTarget(name), "-N", n, "-X", "scroll-up").Run()
 		return true
 	case "down":
-		_ = exec.Command("tmux", "send-keys", "-t", target(name), "-N", n, "-X", "scroll-down").Run()
+		_ = exec.Command("tmux", "send-keys", "-t", paneTarget(name), "-N", n, "-X", "scroll-down").Run()
 		return true
 	case "bottom":
-		_ = exec.Command("tmux", "send-keys", "-t", target(name), "-X", "cancel").Run() // 退出 copy-mode 回到最新
+		_ = exec.Command("tmux", "send-keys", "-t", paneTarget(name), "-X", "cancel").Run() // 退出 copy-mode 回到最新
 	}
 	return false
 }
@@ -336,7 +345,7 @@ func Handler(c *gin.Context) {
 	// 上次滚动历史进了 copy-mode 后断线重连时，本连接的 inCopy 会重置为 false，但 tmux 仍停在
 	// copy-mode，键入被导航键吃掉到不了 shell（表现为「要先按底才能输入」）。这里让新客户端
 	// 一律从实时提示符开始。
-	_ = exec.Command("tmux", "send-keys", "-t", target(name), "-X", "cancel").Run()
+	_ = exec.Command("tmux", "send-keys", "-t", paneTarget(name), "-X", "cancel").Run()
 
 	cmd := exec.Command("tmux", "attach", "-t", target(name))
 	cmd.Env = utf8Env(append(os.Environ(), "TERM=xterm-256color"))

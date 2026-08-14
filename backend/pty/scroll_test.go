@@ -35,6 +35,16 @@ func newSession(t *testing.T, name, cmdline string) string {
 	return name
 }
 
+// tmuxProp 问 tmux 要某个 pane 变量的真值（断言「真的滚了」用，不看被吞掉的返回码）。
+func tmuxProp(t *testing.T, name, format string) string {
+	t.Helper()
+	out, err := exec.Command("tmux", "display-message", "-p", "-t", "="+name+":", format).Output()
+	if err != nil {
+		t.Fatalf("display-message %s: %v", format, err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
 func capture(t *testing.T, name string) string {
 	t.Helper()
 	out, err := exec.Command("tmux", "capture-pane", "-t", "="+name+":", "-p").Output()
@@ -112,6 +122,15 @@ func TestScrollNormalScreenUsesCopyModeNotWheel(t *testing.T) {
 
 	if !inCopy {
 		t.Error("普通屏向上滚应进入 copy-mode")
+	}
+	// 只信返回值不够：tmuxScroll 里的 tmux 命令是 `_ =` 吞掉错误的，目标写错时它
+	// 照样报「进了 copy-mode」，而实际上 tmux 回的是 can't find pane，屏幕一动不动。
+	// 这里问 tmux 要真相——翻页失效那次就是这么漏过去的。
+	if mode := tmuxProp(t, name, "#{pane_in_mode}"); mode != "1" {
+		t.Errorf("tmux 说自己没在 copy-mode(pane_in_mode=%q)：命令根本没落到 pane 上", mode)
+	}
+	if pos := tmuxProp(t, name, "#{scroll_position}"); pos == "" || pos == "0" {
+		t.Errorf("scroll_position=%q，说明没真的往上滚", pos)
 	}
 	for _, junk := range []string{"64;", "65;", "33M", "M64", "M65"} {
 		if strings.Contains(after, junk) {
