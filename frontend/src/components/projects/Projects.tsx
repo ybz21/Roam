@@ -244,11 +244,15 @@ export const ActBtn = ({ icon, label, tone, onClick }: {
   return coarse ? btn : <Tooltip title={label}>{btn}</Tooltip>
 }
 
-export const dot = (on: boolean, color?: string) => (
+// hollow：休眠会话（台账里还认得它，点开即恢复）。空心而不是灰色实心——
+// 灰色实心已经是「活着但空闲」，而这两者的区别是能不能直接用。
+export const dot = (on: boolean, color?: string, hollow?: boolean) => (
   <span style={{
     width: 8, height: 8, borderRadius: '50%', flex: '0 0 8px', display: 'inline-block',
-    background: color || (on ? 'var(--ok)' : 'var(--text-dimmer)'),
-    boxShadow: color || on ? `0 0 0 3px ${color ? 'rgba(210,153,34,.12)' : 'rgba(63,185,80,.12)'}` : undefined,
+    background: hollow ? 'transparent' : color || (on ? 'var(--ok)' : 'var(--text-dimmer)'),
+    boxShadow: hollow
+      ? 'inset 0 0 0 1.5px var(--text-dimmer)'
+      : color || on ? `0 0 0 3px ${color ? 'rgba(210,153,34,.12)' : 'rgba(63,185,80,.12)'}` : undefined,
   }} />
 )
 
@@ -1239,6 +1243,9 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
     const merged = gs === 'merged'
     const running = cc[s.name] || cx[s.name]
     const waiting = needsInput[s.name]
+    // 休眠：机器重启带走了 tmux 那一半，点开即恢复。它没有进程，
+    // 所以生命周期导轨/未提交改动那些运行时判断对它都不适用。
+    const dormant = s.state === 'dormant' 
     let done = 2, cur: number | undefined, stage = t('project.stage.idle')
     if (running && !waiting) { done = 1; cur = 2; stage = t('project.stage.doing') }
     else if (waiting) { done = 2; cur = 3; stage = t('project.stage.review') }
@@ -1251,11 +1258,16 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
         aria-current={activeTerm === s.name ? 'true' : undefined}
         style={{ marginLeft: isChild ? 22 : 0, animationDelay: `${Math.min(i, 8) * 40}ms` }}
         onClick={() => openTerm(s.name)}>
-        <span style={{ marginTop: 7, display: 'inline-flex' }}>{dot(false, waiting ? '#d29922' : running ? 'var(--ok)' : undefined)}</span>
+        <span style={{ marginTop: 7, display: 'inline-flex' }}>{dot(false, waiting ? '#d29922' : running ? 'var(--ok)' : undefined, dormant)}</span>
         {isChild && <span style={{ color: 'var(--swarm)', marginTop: 3, display: 'inline-flex' }}><BranchIcon size={12} /></span>}
         <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 700 }} title={s.name}>{s.label || sessionLabel(s.name)}</span>
+            <span style={{ fontWeight: 700, color: dormant ? 'var(--text-dim)' : undefined }} title={s.name}>{s.label || sessionLabel(s.name)}</span>
+            {dormant && (
+              <Tag style={{ margin: 0 }} color={s.resumable ? 'blue' : undefined}>
+                {t(s.resumable ? 'session.dormant.resumable' : 'session.dormant.hint')}
+              </Tag>
+            )}
             {hit.linked && hit.branch && <span className="tt-branch" title={hit.branch}><BranchIcon size={10} />{hit.branch}</span>}
             {hit.external && hit.linked && <Tag style={{ margin: 0 }}><WindowsIcon size={11} /></Tag>}
             {swarmMap[s.name]?.role === 'leader' && <Tag color="purple" style={{ margin: 0 }}>{t('project.swarm.leaderTag')}</Tag>}
@@ -1271,7 +1283,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
             )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)' }}>
-            <Lifec done={done} cur={cur} /><span>{stage}</span>
+            {!dormant && <><Lifec done={done} cur={cur} /><span>{stage}</span></>}
             {/* 已合入后 ↑n 不再展示（对比远端已零领先，只会误导）；未提交改动照常提示 */}
             {merged && (
               <Tooltip title={`${w.mergedInto} · ${w.mergedKind}`}>

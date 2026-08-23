@@ -86,7 +86,7 @@ func (a App) Run(args []string) error {
 	case "parent":
 		return session.ParentCmd(a.rt, a.meta(), rest, out)
 	case "a", "attach":
-		return session.Attach(a.rt, a.swarmSessions(), rest, out)
+		return session.Attach(a.rt, a.meta(), a.swarmSessions(), rest, out)
 	case "d", "detach":
 		return session.Detach(a.rt, rest, out)
 	case "kill":

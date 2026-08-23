@@ -54,6 +54,11 @@ type Store struct {
 	IDs func() map[string]string
 	// Epoch 返回当前 tmux server 代次；nil 时问 tmux 要 server pid。同样是测试注入点。
 	Epoch func() string
+	// MemStat 给一个会话名，返回它的峰值内存（字节）与 cgroup OOM 次数。
+	// 由调用方注入（Collect 用 runtime.PanePIDs + memguard 实现）——
+	// 台账层不该知道 cgroup 长什么样，注入还让 Reconcile 的行为可测。
+	// nil = 不采集内存，其余逻辑照常。
+	MemStat func(session string) (peakRSS, oomKills int64, ok bool)
 
 	names map[string]string // 本进程内的 name→$N 备忘（写操作后失效）
 }
@@ -601,6 +606,28 @@ func (s *Store) Reconcile(alive map[string]bool) {
 	}
 	epoch := s.epoch()
 	now := s.Now().Format(time.RFC3339)
+	// 活着的时候就把「最后一次看见」和峰值内存记下来。
+	//
+	// died_at 从前一律取「现在」，而 Reconcile 是开机后才跑的——于是重启带走的
+	// 那一批全部记成开机时刻，跟真实结束时刻差了整整一夜（本机 17 条都是 10:43:33）。
+	// peak_rss 同理：会话一没，cgroup 目录跟着消失，那时再问已经晚了。
+	for name := range alive {
+		if s.MemStat == nil {
+			break
+		}
+		peak, ooms, ok := s.MemStat(name)
+		if !ok {
+			continue
+		}
+		// peak / oom 计数都取历史最大：cgroup 的 memory.peak 本身就是峰值，
+		// 但会话可能跨过一次 revive，别让新一段的低水位把旧记录抹掉。
+		_, _ = db.Exec(`UPDATE sessions SET peak_rss=MAX(IFNULL(peak_rss,0),?),
+			oom_kills=MAX(IFNULL(oom_kills,0),?) WHERE id=?`, peak, ooms, name)
+	}
+	for name := range alive {
+		_, _ = db.Exec(`UPDATE sessions SET last_seen=? WHERE id=? AND status='live'`, now, name)
+	}
+
 	for name := range alive {
 		id, ok := ids[name]
 		if !ok {
@@ -615,27 +642,45 @@ func (s *Store) Reconcile(alive map[string]bool) {
 		_, _ = db.Exec(`UPDATE sessions SET tmux_id=?, tmux_epoch=NULLIF(?,'')
 			WHERE id=? AND status='live'`, id, epoch, name)
 	}
-	rows, err := db.Query(`SELECT id, IFNULL(tmux_epoch,'') FROM sessions WHERE status='live'`)
+	// oom_kills 读的是**上一轮采集**落下的值：cgroup 目录随会话一起消失，
+	// 等发现它没了再去读已经晚了（实测 scope 当场就没）。
+	//
+	// 局限说清楚：如果 OOM 把 shell 也一起带走、且两次 Reconcile 之间没采到，
+	// 这一条会退回记成 killed。主场景（失控的 agent 被杀、shell 和会话都还活着）
+	// 采得到，因为会话还在，下一轮照常遍历它。
+	rows, err := db.Query(`SELECT id, IFNULL(tmux_epoch,''), IFNULL(last_seen,''), IFNULL(oom_kills,0)
+		FROM sessions WHERE status='live'`)
 	if err != nil {
 		return
 	}
-	type goner struct{ id, reason string }
+	type goner struct{ id, reason, at string }
 	var dead []goner
 	for rows.Next() {
-		var id, was string
-		if rows.Scan(&id, &was) != nil || alive[id] {
+		var id, was, seen string
+		var ooms int64
+		if rows.Scan(&id, &was, &seen, &ooms) != nil || alive[id] {
 			continue
 		}
-		reason := "killed"
-		if was != "" && epoch != "" && was != epoch {
+		reason, at := "killed", now
+		switch {
+		case ooms > 0:
+			// 撞了自己的内存上限：cgroup 在这个 scope 里选 victim 杀掉了它。
+			// 这一条最值钱——下次「机器怎么又卡了」不用再去翻内核 OOM dump。
+			reason = "oom"
+		case was != "" && epoch != "" && was != epoch:
+			// server 换代了 = 机器重启把它带走的。真实结束时刻是最后一次看见它，
+			// 不是「现在」（现在是开机后第一次 Reconcile，晚了一整夜）。
 			reason = "host-restart"
+			if seen != "" {
+				at = seen
+			}
 		}
-		dead = append(dead, goner{id, reason})
+		dead = append(dead, goner{id, reason, at})
 	}
 	rows.Close()
 	for _, g := range dead {
 		_, _ = db.Exec(`UPDATE sessions SET status='dead', died_at=?, died_reason=?, tmux_id=NULL
-			WHERE id=?`, now, g.reason, g.id)
+			WHERE id=?`, g.at, g.reason, g.id)
 	}
 	s.prune(db, deadKeep)
 }

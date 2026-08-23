@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"strings"
 
+	"ttmux-cli-go/internal/memguard"
 	"ttmux-cli-go/internal/runtime"
 	"ttmux-cli-go/internal/sessmeta"
 )
@@ -39,9 +40,29 @@ func Collect(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool) 
 		for _, s := range live {
 			alive[s.Name] = true
 		}
+		// 把「这个会话吃了多少内存」接给台账。cgroup 按 pane 分好了，
+		// 一次读两个文件，比轮询 ps 聚合整棵进程树便宜也准。
+		meta.MemStat = func(sess string) (int64, int64, bool) { return sessionMem(rt, sess) }
 		meta.Reconcile(alive)
 	}
 	return appendDormant(live, meta, exclude)
+}
+
+// sessionMem 一个会话的峰值内存与 cgroup OOM 次数。
+//
+// 一个会话可能有多个 pane，各在自己的 scope 里：峰值取最大的那个（谁涨谁是主因），
+// OOM 次数求和（任一 pane 撞顶都算这个会话撞了顶）。
+func sessionMem(rt runtime.Runtime, sess string) (peak, ooms int64, ok bool) {
+	for _, pid := range rt.PanePIDs(sess) {
+		if _, p, got := memguard.Current(pid); got {
+			ok = true
+			if p > peak {
+				peak = p
+			}
+		}
+		ooms += memguard.OOMKilled(pid)
+	}
+	return peak, ooms, ok
 }
 
 // parseSessionLines 解析 list-sessions 的输出。

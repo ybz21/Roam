@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"ttmux-cli-go/internal/revive"
 	"ttmux-cli-go/internal/runtime"
 	"ttmux-cli-go/internal/sessmeta"
 	"ttmux-cli-go/internal/ui"
@@ -222,7 +223,7 @@ func repoRootOf(dir string) string {
 }
 
 // Attach attaches to a session (mirrors the `a`/attach case).
-func Attach(rt runtime.Runtime, exclude map[string]bool, args []string, w io.Writer) error {
+func Attach(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool, args []string, w io.Writer) error {
 	var target string
 	if len(args) >= 1 {
 		target = rt.Resolve(args[0])
@@ -234,8 +235,19 @@ func Attach(rt runtime.Runtime, exclude map[string]bool, args []string, w io.Wri
 		target = t
 	}
 	if !rt.HasSession(target) {
-		ui.Err(w, "会话 %s 不存在", ui.Bold(target))
-		return fmt.Errorf("session not found: %s", target)
+		// tmux 里没有，但台账可能还认得它：机器重启带走的会话在这里当场重开，
+		// 然后照常 attach 下去。与 Web 端点开一个休眠会话走的是同一段代码
+		// （backend/pty 那边也调 ttmux db revive），命令行不该是另一套行为。
+		res, err := revive.ReviveDormant(rt, meta, target)
+		if err != nil {
+			ui.Err(w, "会话 %s 不存在", ui.Bold(target))
+			return fmt.Errorf("session not found: %s", target)
+		}
+		ui.Ok(w, "已恢复 %s → %s", ui.Bold(target), ui.Bold(res.Session))
+		if res.Resumed != "" {
+			ui.Info(w, "已接回原对话 %s", ui.Dim(res.Resumed))
+		}
+		target = res.Session
 	}
 	ui.Info(w, "附加到 %s", ui.Bold(Display(rt, target)))
 	return rt.Tmux("attach-session", "-t", "="+target)

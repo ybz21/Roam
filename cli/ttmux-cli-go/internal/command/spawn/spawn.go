@@ -266,6 +266,9 @@ func recordAgentSession(rt runtime.Runtime, sess string, ac AgentConfig) {
 	meta := sessmeta.New(rt.HomeDir)
 	meta.DataDir = rt.DataDir
 	_ = meta.SetHome(sess, ac.Workdir, repoRootOf(ac.Workdir))
+	// 记下是哪种 agent：会话被机器重启带走后，恢复时靠它决定敲 claude 还是 codex。
+	// 不记的话这一列永远是空，「按类型分派」就是一段永远走不到的代码。
+	_ = meta.SetAgentKind(sess, ac.Kind)
 	if ac.Kind != "codex" {
 		_ = meta.SetAgentSession(sess, ac.SessionUUID)
 	}

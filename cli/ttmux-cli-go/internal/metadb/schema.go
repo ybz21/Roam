@@ -20,6 +20,33 @@ var mainSteps = []Step{
 	{Version: 5, Name: "project-traces", SQL: createProjectTraces},
 	{Version: 6, Name: "import-traces", Fn: importTraces},
 	{Version: 7, Name: "lazy-revive", Fn: addLazyRevive},
+	{Version: 8, Name: "session-memory", Fn: addSessionMemory},
+	{Version: 9, Name: "session-oom", Fn: addSessionOOM},
+}
+
+// addSessionOOM 给 sessions 加 oom_kills：这个会话撞过几次自己的内存上限。
+//
+// 和 peak_rss 一样必须**趁会话活着时**落库。一开始想的是「发现它没了的时候
+// 读一眼 memory.events」——读不到：cgroup 目录随最后一个进程退出就消失，
+// 那时已经没地方问了（实测把会话压到撞顶，scope 目录当场没，只能记成 killed）。
+//
+// 单独开一个 step 而不是塞进 step 8：step 8 已经在本机跑过，schema_meta 记着 8
+// 就不会重跑，往里加列等于白加——今天刚在 restored_from 上栽过一次
+// （见 addLazyRevive 的注释），这里立刻又差点重演。
+func addSessionOOM(tx *sql.Tx, _ Options) error {
+	return addColumns(tx, "sessions", map[string]string{"oom_kills": "INTEGER"})
+}
+
+// addSessionMemory 给 sessions 加 peak_rss：这个会话峰值吃了多少内存。
+//
+// 会话没了之后 cgroup 目录跟着消失，那时再想知道「它涨到过多少」已经晚了——
+// 2026-08-22 那次得靠翻内核 OOM dump 才查出是哪个进程。所以在它还活着的时候
+// 就把 memory.peak 抄进台账，配合 died_reason='oom' 就能直接回答
+// 「机器怎么又卡了」：哪个会话、涨到多少、是不是撞了上限。
+func addSessionMemory(tx *sql.Tx, _ Options) error {
+	return addColumns(tx, "sessions", map[string]string{
+		"peak_rss": "INTEGER",
+	})
 }
 
 // addLazyRevive 补齐「会话懒恢复」要用的三列，顺带修一个静默了很久的洞。
