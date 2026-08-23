@@ -94,8 +94,8 @@ export function canvasFitsWith(o: {
  * Inspector 打开时 Dock 实际渲染多宽。让位次序三步，一步比一步肉疼：
  *
  *   1. 保得住 Canvas 560 → 从 Dock 借到刚好（不低于 480、不超过用户拖出来的宽度）；
- *   2. 保不住 → Canvas 让位，终端一寸不动（「终端窄 13%」不如「页面整个消失」难受，
- *      但页面反正要让掉，就别再折腾终端）；
+ *   2. 保不住 → Canvas 让位，终端**长满**它腾出来的宽度（页面反正要让掉，
+ *      就别再折腾终端；也别让那条宽度谁都不要，空在右边成一道黑边）；
  *   3. Canvas 让光了还不够 → **终端跟着让**，让到 480 为止。
  *
  * 第 3 步是「抽屉向左长」这件事的地基：抽屉两层加起来能到一千出头，终端一寸不让的话
@@ -109,7 +109,11 @@ export function effectiveDockWidth(o: {
   // 三步共用的硬底线：Dock + Inspector 不许撑破工作区（撑破 = 文档横向溢出 = 10px 滚动条）
   const hard = o.workspaceWidth - SPLIT_RAIL * 2 - o.inspectorWidth
   if (!canvasFitsWith({ workspaceWidth: o.workspaceWidth, inspectorWidth: o.inspectorWidth, hasDock: true })) {
-    return Math.max(DOCK_MIN, Math.min(o.dockWidth, hard))
+    // Canvas 已经让光，这条剩余宽度没有第三者要用 —— 终端把它吃满。
+    // 从前这里是 min(dockWidth, hard)：终端守着自己拖出来的宽度不动，
+    // Inspector 守着自己的，两者加起来不满工作区，右边就空出一条黑边
+    // （1366 的笔记本上实测 192px）。「终端一寸不让」说的是不缩，不是不长。
+    return Math.max(DOCK_MIN, hard)
   }
   const room = o.workspaceWidth - CANVAS_MIN - SPLIT_RAIL * 2 - o.inspectorWidth
   return Math.max(DOCK_MIN, Math.min(o.dockWidth, room, hard))
