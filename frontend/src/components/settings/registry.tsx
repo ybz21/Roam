@@ -13,6 +13,7 @@ import { PhoneSettings } from './phone-settings'
 import { SpeechSettings } from './speech-settings'
 import { P2PSettings } from './p2p-settings'
 import { EnvVarsSettings } from './env-vars'
+import { MemoryGuardSettings } from './memory-settings'
 import { QuickCommandsSettings } from './quick-commands'
 import { ChangePasswordSettings, TwoFactorSettings, CertDownloadButton } from './security-settings'
 import { AboutSettings } from './about-settings'
@@ -235,6 +236,15 @@ export function buildSettings(deps: {
       items: [{
         id: 'p2p', label: t('settings.p2p'), bare: true, control: { kind: 'custom', node: <P2PSettings /> },
         keywords: 'p2p stun ice webrtc 直连 中转 frp 超时 速率 下载',
+      }],
+    },
+    {
+      id: 'node.memory', name: t('set.pageMemory'), parent: t('set.groupNode'), scope: 'node',
+      note: t('set.memoryNote'),
+      items: [{
+        id: 'sessionMemory', label: t('set.mem.limit'), bare: true,
+        control: { kind: 'custom', node: <MemoryGuardSettings /> },
+        keywords: 'memory oom cgroup 内存 上限 护栏 限制 kill',
       }],
     },
     {

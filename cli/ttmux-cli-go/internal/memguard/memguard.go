@@ -54,12 +54,25 @@ type Limits struct {
 // Off 表示显式不限（用户在设置里关掉，或环境变量设成 0/off）。
 func (l Limits) Off() bool { return l.Max == "" }
 
-// FromEnv 读全局默认额度。
-//
-// ROAM_SESSION_MEM_MAX=0 / off / none 表示不限——给「我就是要跑个吃 20G 的东西」
-// 留门，但那得是明确的选择，不能是默认。
+// 配置项名。设置页写进 ttmux 的全局 env 文件，环境变量可临时覆盖。
+const (
+	EnvMax  = "ROAM_SESSION_MEM_MAX"
+	EnvHigh = "ROAM_SESSION_MEM_HIGH"
+	EnvSwap = "ROAM_SESSION_MEM_SWAP"
+)
+
+// FromEnv 读全局默认额度（只看进程环境变量）。
+// 会话路径走 From()——那里还会读设置页写的 env 文件。
 func FromEnv() Limits {
-	max := strings.TrimSpace(os.Getenv("ROAM_SESSION_MEM_MAX"))
+	return From(os.Getenv(EnvMax), os.Getenv(EnvHigh), os.Getenv(EnvSwap))
+}
+
+// From 由三个配置值算出额度。空值走默认，high/swap 空则按比例从 max 推。
+//
+// max = 0 / off / none / unlimited 表示不限——给「我就是要跑个吃 20G 的东西」
+// 留门，但那得是明确的选择，不能是默认。
+func From(max, high, swap string) Limits {
+	max = strings.TrimSpace(max)
 	if max == "" {
 		max = DefaultMax()
 	}
@@ -67,11 +80,11 @@ func FromEnv() Limits {
 	case "0", "off", "none", "unlimited":
 		return Limits{}
 	}
-	swap := strings.TrimSpace(os.Getenv("ROAM_SESSION_MEM_SWAP"))
+	swap = strings.TrimSpace(swap)
 	if swap == "" {
 		swap = scaleBytes(max, swapRatio)
 	}
-	high := strings.TrimSpace(os.Getenv("ROAM_SESSION_MEM_HIGH"))
+	high = strings.TrimSpace(high)
 	if high == "" {
 		high = scaleBytes(max, highRatio)
 	}
@@ -344,19 +357,15 @@ func readInt(path string) (int64, bool) {
 	return n, err == nil
 }
 
-// scaleBytes 把 "8G" 这样的额度按比例缩小，保持同一个单位后缀。
-// 认不出的写法原样返回——宁可不设软限，也别把 MemoryHigh 设成一个错的值。
+// scaleBytes 把 "8G" 这样的额度按比例缩小，返回**字节数**（systemd 认纯数字）。
+//
+// 不保留原单位：那样得在单位上做整数除法，6G 的 75% 会被截成 "4G" 而不是 4.5G
+// ——软限凭空少了半个 G，而且只在不整除的额度上出错（8G→6G 正好整除，看不出来）。
+// 认不出的写法返回空串：宁可不设软限，也别把 MemoryHigh 设成一个错的值。
 func scaleBytes(s string, ratio float64) string {
-	i := 0
-	for i < len(s) && (s[i] >= '0' && s[i] <= '9') {
-		i++
-	}
-	if i == 0 {
+	n, ok := parseBytes(s)
+	if !ok {
 		return ""
 	}
-	n, err := strconv.ParseFloat(s[:i], 64)
-	if err != nil {
-		return ""
-	}
-	return strconv.FormatInt(int64(n*ratio), 10) + s[i:]
+	return strconv.FormatInt(int64(float64(n)*ratio), 10)
 }

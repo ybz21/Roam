@@ -245,7 +245,8 @@ func (r Runtime) CreateSession(opt CreateOpts) (string, error) {
 // 新 pane（split-window / new-window）有自己的 scope，也得补设，所以这里按会话
 // 遍历而不是只管第一个 pane；调用方在建会话后、以及 Reconcile 巡检时都会经过。
 func (r Runtime) GuardMemory(sess string) {
-	l := memguard.FromEnv()
+	// 额度来自设置页写的 env 文件，环境变量可临时覆盖（见 EnvValue）。
+	l := memguard.From(r.EnvValue(memguard.EnvMax), r.EnvValue(memguard.EnvHigh), r.EnvValue(memguard.EnvSwap))
 	if l.Off() {
 		return
 	}

@@ -64,19 +64,50 @@ func TestFromEnvOverride(t *testing.T) {
 }
 
 func TestScaleBytes(t *testing.T) {
-	cases := []struct{ in, want string }{
-		{"8G", "6G"},
-		{"4G", "3G"},
-		{"2000M", "1500M"},
-		{"1G", "0G"}, // 太小的额度缩完是 0——调用方给的值本身就不合理，不在这里替他兜
-		{"", ""},
-		{"G", ""},   // 认不出就返回空，宁可不设软限也别设错
-		{"abc", ""}, //
-		{"8GiB", "6GiB"},
+	G := int64(1) << 30
+	cases := []struct {
+		in   string
+		want int64 // 字节；-1 = 期望空串
+	}{
+		{"8G", 6 * G},
+		{"4G", 3 * G},
+		// 不整除的额度是这个函数最容易出错的地方：按单位做整数除法会把
+		// 6G 的 75% 截成 4G，凭空少半个 G，而 8G 正好整除时看不出来。
+		{"6G", 6 * G * 3 / 4},
+		{"2000M", 2000 * (1 << 20) * 3 / 4},
+		{"1G", G * 3 / 4},
+		{"8GiB", 6 * G},
+		{"", -1},
+		{"G", -1},   // 认不出就返回空，宁可不设软限也别设错
+		{"abc", -1}, //
 	}
 	for _, c := range cases {
-		if got := scaleBytes(c.in, highRatio); got != c.want {
-			t.Errorf("scaleBytes(%q) = %q, want %q", c.in, got, c.want)
+		got := scaleBytes(c.in, highRatio)
+		if c.want < 0 {
+			if got != "" {
+				t.Errorf("scaleBytes(%q) = %q, want empty", c.in, got)
+			}
+			continue
+		}
+		n, ok := parseBytes(got)
+		if !ok || n != c.want {
+			t.Errorf("scaleBytes(%q) = %q (%d), want %d", c.in, got, n, c.want)
+		}
+	}
+}
+
+// 软限必须严格低于硬顶，否则先撞硬顶、根本没有 throttle 的窗口。
+// 各种额度写法都要成立，不只是正好整除的那些。
+func TestHighAlwaysBelowMax(t *testing.T) {
+	for _, max := range []string{"8G", "6G", "12G", "3500M", "1G", "13304680448"} {
+		l := From(max, "", "")
+		m, ok1 := parseBytes(l.Max)
+		h, ok2 := parseBytes(l.High)
+		if !ok1 || !ok2 {
+			t.Fatalf("max=%q 解析失败: %+v", max, l)
+		}
+		if h >= m {
+			t.Errorf("max=%q → High=%d 不低于 Max=%d", max, h, m)
 		}
 	}
 }

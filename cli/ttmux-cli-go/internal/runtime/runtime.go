@@ -137,6 +137,23 @@ func (r Runtime) Sessions() []string {
 	return names
 }
 
+// EnvValue 读一个全局配置项：**进程环境变量优先**，然后才是 env 文件。
+//
+// 顺序不能反。env 文件是设置页写的持久配置，而进程环境变量是临时覆盖
+// （`ROAM_SESSION_MEM_MAX=200M ttmux new ...` 这种一次性的口子）——
+// 临时的压不过持久的，那就没有「临时」可言了。
+func (r Runtime) EnvValue(key string) string {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		return v
+	}
+	for _, line := range r.EnvPairs() {
+		if k, v, ok := strings.Cut(line, "="); ok && strings.TrimSpace(k) == key {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
+}
+
 // EnvPairs reads the global env file as KEY=VALUE lines (comments/blanks skipped).
 func (r Runtime) EnvPairs() []string {
 	b, err := os.ReadFile(r.EnvFile)
