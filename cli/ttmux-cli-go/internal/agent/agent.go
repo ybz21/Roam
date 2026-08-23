@@ -12,7 +12,15 @@
 // codex 的 resume 早就能用了，而 revive 里一直写着「codex 没有对应参数」把它跳过。
 //
 // 现在收成一个接口 + 一张注册表：**新增一型只要实现 Agent 并 Register，
-// 恢复、列表、spawn 三条路自动都认得它。**
+// 启动、恢复、列表、swarm 校验四条路自动都认得它。**
+//
+// # 还没收进来的
+//
+// 「从 pane 屏幕内容判断它是在干活还是在等输入」——那是另一个维度的差异
+// （提示符长什么样、认不出时该偏向哪边），目前还留在 internal/swarm 里的
+// 一处 `if m.Kind == "codex"`。它值得单独设计一组接口（提示符特征 + 未知时的
+// 默认判断），硬塞进本接口只会让「启动/恢复」这件事变得不清楚。
+// 新增一型时如果发现它的状态判断也不对，那就是该动那一块的信号。
 package agent
 
 import (
@@ -40,9 +48,16 @@ type Agent interface {
 	// 那样这一型的会话恢复出来就只有壳，没有对话。
 	PinsConversationID() bool
 
-	// StartArgs 拉起它的参数（不含 Bin 本身）。
+	// InteractiveArgs 常驻 TUI 的参数（不含 Bin、不含 prompt 本身）。
 	// convID 非空且 PinsConversationID() 为真时，实现要把它注入进去。
-	StartArgs(opt StartOpts) []string
+	InteractiveArgs(opt StartOpts) []string
+
+	// OneShotArgs 一次性任务的参数（不含 Bin、不含 prompt 本身）。
+	//
+	// 返回的参数**必须已经让它从 stdin 读 prompt** —— 调用方只负责在后面接
+	// `< 文件` 或一段 heredoc，不知道该给谁加 `-`。两型的做法就不一样：
+	// claude 的 `-p` 本身就读 stdin，codex 要显式的位置参数 `-`。
+	OneShotArgs(opt StartOpts) []string
 
 	// ResumeCommand 在 shell 里敲什么能接回 convID 那段对话。
 	// 返回空串 = 这一型接不回（调用方据此只开壳，不硬编一条命令上去）。
@@ -62,12 +77,12 @@ type StartOpts struct {
 	ConvID string
 	// Model 模型名，空则用 agent 自己的默认。
 	Model string
-	// Permission 权限档（claude 的 --dangerously-skip-permissions 之类）。
+	// Permission 权限档。取值是 Roam 这一侧的口径（"auto" /
+	// "dangerously-skip-permissions"），**怎么翻译成自家参数由各型自己决定** ——
+	// claude 有 --permission-mode，codex 只有一个 bypass 开关，没有档位概念。
 	Permission string
-	// Interactive 常驻 TUI（true）还是一次性任务（false）。
-	Interactive bool
-	// Prompt 首个提示词，可空。
-	Prompt string
+	// MaxTurns 一次性任务的最大轮次；空 = 不限。支持不了的型忽略它。
+	MaxTurns string
 }
 
 var (
