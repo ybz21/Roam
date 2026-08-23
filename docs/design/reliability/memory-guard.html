@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Roam · 会话内存护栏（R1 v0.1）</title>
+<title>Roam · 会话内存护栏（R1 v0.2）</title>
 <style>
 /* ── 令牌：直接取 frontend/src/theme.tsx 的真值 ─────────────────────────── */
 :root {
@@ -441,13 +441,18 @@ scope 目录随进程消失，所以这一眼得赶在 systemd 回收之前—�
 
 <h2><span class="n">08</span>与「会话恢复」的交汇</h2>
 
-<div class="card bad">
-  <h4>一键恢复 17 个 agent 会话 = 下一次 OOM</h4>
-  <p>姊妹稿 <a href="session-restore.html">R2 宿主重启后的会话续接</a> 要做「批量恢复」。
-  这次重启带走了 17 个会话——如果批量恢复把 17 个 claude 同时拉起来，那正是造成这次事故的
-  同一种局面，而且是一瞬间造成的。</p>
-  <p><b>硬约束：批量恢复必须限流（建议并发 ≤3、逐个等 agent 起稳），且每个恢复出来的会话
-  必须走 L1 上限。</b>R2 的实现不得绕过本稿的 <code>memguard.Wrap</code>。</p>
+<p>姊妹稿 <a href="session-restore.html">R2 会话懒恢复</a> 要解决「重启后会话全消失」。
+它的最终方案（v0.3）是<b>懒恢复</b>：开机什么都不建，会话从台账渲染在列表里，
+点哪个哪个才真正起来。所以<b>开机时的内存成本是 0</b>——早期方案里
+「一键恢复 17 个 agent = 一键复现这次 OOM」的冲突，已经被设计消解掉了。</p>
+
+<div class="card warn">
+  <h4>但 L1 仍然是 R2 的前置依赖</h4>
+  <p>懒恢复只是把 agent 冷启动从「开机那一刻」挪到了「你点击的那一刻」。
+  连着点开 5 个会话，5 个 agent 照样一起起来；而 8/22 打爆机器的那个 claude，
+  正是跑在一个这样被点开的会话里。</p>
+  <p><b>硬约束：R2 恢复出来的会话必须走本稿的 <code>memguard.Wrap</code>，不得绕过。</b>
+  落地顺序上，L1 应当先于懒恢复上线。</p>
 </div>
 
 <h2><span class="n">09</span>落地顺序</h2>
@@ -483,10 +488,10 @@ scope 目录随进程消失，所以这一眼得赶在 systemd 回收之前—�
 </ul>
 
 <div class="foot">
-  Roam · docs/design/reliability/memory-guard.html · v0.1 · 2026-08-23<br>
+  Roam · docs/design/reliability/memory-guard.html · v0.2 · 2026-08-23<br>
   证据来源：<code>journalctl -k -b -1</code>（2026-08-22 21:51:23 OOM dump）、
   <code>~/.roam/meta.db</code> sessions 表、本机 cgroup v2 实测。
-  姊妹稿：<a href="session-restore.html">R2 宿主重启后的会话续接</a>。
+  姊妹稿：<a href="session-restore.html">R2 会话懒恢复</a>。
 </div>
 
 </div>
