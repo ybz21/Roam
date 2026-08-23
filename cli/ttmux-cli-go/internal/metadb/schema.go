@@ -22,6 +22,23 @@ var mainSteps = []Step{
 	{Version: 7, Name: "lazy-revive", Fn: addLazyRevive},
 	{Version: 8, Name: "session-memory", Fn: addSessionMemory},
 	{Version: 9, Name: "session-oom", Fn: addSessionOOM},
+	{Version: 10, Name: "session-mem-alert", Fn: addSessionMemAlert},
+}
+
+// addSessionMemAlert 记「已经就这个会话的内存提醒过什么」，用来只提醒一次。
+//
+// 两列而不是一列：一个会话可能先在 85% 档被提醒过，后来又真的撞顶被杀——
+// 那是两件事，各自都该说一次。挤进一列就得编码，编码就会有人看不懂。
+//
+//   - mem_alert_level：已提醒过的档位（0 = 没提醒过 / 85 = 提醒过 85% 档）。
+//     跌回阈值以下会清零，于是再涨上去会重新提醒——这是想要的：它又涨回来了。
+//   - mem_alert_ooms：已就「撞顶被杀」提醒到第几次。cgroup 的 oom_kill 是累计值，
+//     记下已通知到哪一次，新增的才提醒。
+func addSessionMemAlert(tx *sql.Tx, _ Options) error {
+	return addColumns(tx, "sessions", map[string]string{
+		"mem_alert_level": "INTEGER",
+		"mem_alert_ooms":  "INTEGER",
+	})
 }
 
 // addSessionOOM 给 sessions 加 oom_kills：这个会话撞过几次自己的内存上限。

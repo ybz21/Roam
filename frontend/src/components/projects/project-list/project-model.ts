@@ -6,7 +6,9 @@ export type ProjSession = {
   name: string; label?: string; attached: boolean
   running?: boolean; waiting?: boolean
   // dormant：机器重启带走了 tmux 那一半，台账还认得它，点开即恢复（懒恢复，见 R2 设计稿）。
-  state?: 'live' | 'dormant' 
+  state?: 'live' | 'dormant'
+  // 只有逼近内存上限时后端才带这一段——平时不占位置。
+  mem?: { cur: number; peak?: number; limit?: number }
   agent?: 'claude' | 'codex'  // 品牌标；后端进程树扫描分得出，不再前端逐会话问
   tail?: string               // 仅 waiting 时非空：那一屏最后一行，给行动卡当摘要
   lastActivity: number; branch?: string; linked?: boolean

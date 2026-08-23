@@ -6,6 +6,7 @@
 // 点击语义：整张卡就是「进入项目」的按钮——原来右上角那条「进入项目 ›」是全卡唯一入口，
 // 把一个 300px 宽的目标缩成了 60px 的小链接。卡内的会话行/看板/去收尾各自 stopPropagation。
 import { App as AntApp, Popconfirm, Tag, Tooltip } from 'antd'
+import { MemBar } from '../../sessions/session-memory'
 import { api } from '../../../api'
 import { useI18n } from '../../../i18n'
 import { useLayout } from '../../../layout'
@@ -109,6 +110,7 @@ export function ProjectCard({ p, swarms, index, openTerm, refresh }: {
                   <AgentLogo kind={s.agent} size={12} />
                 </span>
               )}
+              <MemBar mem={s.mem} compact />
               <span className="tm">{relTime(s.lastActivity, t)}</span>
             </div>
           ))}

@@ -420,6 +420,8 @@ const enUS = {
   'session.type.agent': 'Agent',
   'session.type.command': 'Command',
   'session.waiting': 'Waiting',
+  'session.mem.tip': 'Memory {cur} / {limit} ({pct}%)',
+  'session.mem.tipNoLimit': 'Memory {cur} (no limit set)',
   'session.dormant.hint': 'Dormant · opens to restore',
   'session.dormant.resumable': 'Dormant · conversation can resume',
   'session.runningClaude': 'Running Claude Code',

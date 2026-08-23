@@ -8,6 +8,7 @@
 // （渐变卡面 + focus 辉光环）、git 数据一律等宽字、行 hover 左导轨渐显、
 // 分区头沿用设计图纸体例、入场一次性 stagger。全部颜色走 index.css token。
 import {Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { MemBar } from '../sessions/session-memory'
 import type { ReactNode } from 'react'
 import { App as AntApp, AutoComplete, Button, Dropdown, Input, Modal, Popconfirm, Segmented, Select, Space, Spin, Tag, Tooltip, Typography } from 'antd'
 import type { InputRef, MenuProps } from 'antd'
@@ -1276,6 +1277,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
             {cc[s.name] && <span className="tt-agentmark" title={t('session.runningClaude')}><AgentLogo kind="claude" size={13} /></span>}
             {cx[s.name] && <span className="tt-agentmark" title={t('session.runningCodex')}><AgentLogo kind="codex" size={13} /></span>}
             {waiting && <Tag color="warning" style={{ margin: 0 }}>{t('session.waiting')}</Tag>}
+            <MemBar mem={s.mem} />
             {a.ambiguous && (
               <Tooltip title={(a.matches || []).map((m: any) => m.worktree).join('\n')}>
                 <span style={{ color: '#d29922', display: 'inline-flex' }}><WarnIcon size={13} /></span>

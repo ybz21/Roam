@@ -4,7 +4,9 @@ import (
 	"strconv"
 	"strings"
 
+	"ttmux-cli-go/internal/memalert"
 	"ttmux-cli-go/internal/memguard"
+	"ttmux-cli-go/internal/metadb"
 	"ttmux-cli-go/internal/runtime"
 	"ttmux-cli-go/internal/sessmeta"
 )
@@ -33,6 +35,20 @@ func Collect(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool) 
 	if err == nil {
 		live = parseSessionLines(out, exclude)
 	}
+	// 内存画像：会话列表上那条内存条的数据源。cgroup 按 pane 分好了，
+	// 一次读两个文件，比轮询 ps 聚合整棵进程树便宜也准（含子进程全部后代）。
+	samples := make([]memalert.Sample, 0, len(live))
+	for i := range live {
+		m := sampleMem(rt, live[i].Name)
+		if !m.OK {
+			continue
+		}
+		live[i].Mem = &memInfo{Cur: m.Cur, Peak: m.Peak, Limit: m.Limit}
+		samples = append(samples, memalert.Sample{
+			Session: live[i].Name, Label: live[i].Label,
+			Cur: m.Cur, Peak: m.Peak, Limit: m.Limit, OOMKills: m.OOMKills,
+		})
+	}
 	// tmux 盲态（server 没起）时 alive 为空，Reconcile 内部会一行不动——
 	// 「看不见的时候不下判断」。这里照常调用，让它自己决定。
 	if meta != nil {
@@ -44,25 +60,48 @@ func Collect(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool) 
 		// 一次读两个文件，比轮询 ps 聚合整棵进程树便宜也准。
 		meta.MemStat = func(sess string) (int64, int64, bool) { return sessionMem(rt, sess) }
 		meta.Reconcile(alive)
+		// 看门狗：逼近上限 / 撞顶被杀各说一次。列会话本来就在采内存，顺手判一下，
+		// 不必再养一个采集器（这也是它没做成 hostmonitor 插件的原因——
+		// 数据跟着会话列表走，插件那条路要再建一条通路）。
+		if db, err := metadb.Open(rt.HomeDir, metadb.Options{DataDir: rt.DataDir}); err == nil {
+			memalert.Check(db, rt.Now(), samples)
+		}
 	}
 	return appendDormant(live, meta, exclude)
 }
 
-// sessionMem 一个会话的峰值内存与 cgroup OOM 次数。
+// memSample 一个会话此刻的内存画像。
 //
-// 一个会话可能有多个 pane，各在自己的 scope 里：峰值取最大的那个（谁涨谁是主因），
-// OOM 次数求和（任一 pane 撞顶都算这个会话撞了顶）。
-func sessionMem(rt runtime.Runtime, sess string) (peak, ooms int64, ok bool) {
+// 一个会话可能有多个 pane，各在自己的 scope 里：当前用量求和（整个会话吃了多少），
+// 峰值取最大的那个（谁涨谁是主因），OOM 次数求和（任一 pane 撞顶都算它撞了顶）。
+// 上限取最大的那个——多 pane 时各自有各自的天花板，展示按最宽的算。
+type memSample struct {
+	Cur, Peak, Limit, OOMKills int64
+	OK                         bool
+}
+
+func sampleMem(rt runtime.Runtime, sess string) memSample {
+	var m memSample
 	for _, pid := range rt.PanePIDs(sess) {
-		if _, p, got := memguard.Current(pid); got {
-			ok = true
-			if p > peak {
-				peak = p
+		if c, p, got := memguard.Current(pid); got {
+			m.OK = true
+			m.Cur += c
+			if p > m.Peak {
+				m.Peak = p
 			}
 		}
-		ooms += memguard.OOMKilled(pid)
+		if l := memguard.Limit(pid); l > m.Limit {
+			m.Limit = l
+		}
+		m.OOMKills += memguard.OOMKilled(pid)
 	}
-	return peak, ooms, ok
+	return m
+}
+
+// sessionMem 供 sessmeta.Reconcile 落台账用（峰值 + OOM 次数）。
+func sessionMem(rt runtime.Runtime, sess string) (peak, ooms int64, ok bool) {
+	m := sampleMem(rt, sess)
+	return m.Peak, m.OOMKills, m.OK
 }
 
 // parseSessionLines 解析 list-sessions 的输出。

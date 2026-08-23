@@ -420,6 +420,8 @@ const zhCN = {
   'session.type.agent': 'Agent',
   'session.type.command': '命令',
   'session.waiting': '待确认',
+  'session.mem.tip': '内存 {cur} / {limit}（{pct}%）',
+  'session.mem.tipNoLimit': '内存 {cur}（未设上限）',
   'session.dormant.hint': '休眠 · 点开即恢复',
   'session.dormant.resumable': '休眠 · 可接回对话',
   'session.runningClaude': '正在运行 Claude Code',

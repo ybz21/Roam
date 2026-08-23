@@ -8,6 +8,7 @@ import { NewSessionModal } from './NewSessionModal'
 import { useI18n } from '../../i18n'
 import { SessionHistory } from './SessionHistory'
 import { useLayout } from '../../layout'
+import { MemBar } from './session-memory'
 import { detectPrompt } from '../prompt'
 import { sessionDisplay, setSessionLabels } from './session-label'
 import { sessionLocation, useSessionProjects } from './session-project'
@@ -460,6 +461,7 @@ export default function Sessions({ openTerm, closeTerm, activeTerm, embedded }: 
                       )
                     })()}
                     <span className="tags">
+                      <MemBar mem={s.mem} compact={!wide} />
                       {(() => { // 窄档只留一枚 ⎇ 图标（桌面由位置列接管）；外部 worktree 加 ⧉
                         const ann = wtAnn[s.name]
                         if (!ann?.primary?.linked) return null

@@ -244,6 +244,13 @@ func setProperty(unit string, l Limits) error {
 	return exec.Command("systemctl", args...).Run()
 }
 
+// Limit 这个 pane 所在 cgroup 的内存上限（字节）。0 = 未设限（cgroup 里写着 "max"）。
+// 会话列表的内存条要拿它当分母，看门狗要拿它算百分比。
+func Limit(pid int) int64 {
+	n, _ := currentMax(pid)
+	return n
+}
+
 // currentMax 回读这个 pane 所在 cgroup 的 memory.max（"max" = 未设限）。
 func currentMax(pid int) (int64, bool) {
 	dir := cgroupDir(pid)

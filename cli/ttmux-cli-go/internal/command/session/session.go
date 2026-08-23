@@ -41,9 +41,18 @@ type sessionInfo struct {
 	// 项目归属算不出来（Annotations 那条路只认活会话），只能靠这一列——
 	// 少了它，重启后所有会话都掉进「散会话·不属于任何项目」。
 	Repo string `json:"repo,omitempty"`
+	// Mem 这个会话此刻吃了多少（字节）。休眠会话没有进程，恒为 nil。
+	Mem *memInfo `json:"mem,omitempty"`
 	// 下面两列供 ls --tree 建父子投影，平铺输出时省略。
 	Parent    string `json:"parent,omitempty"`
 	CreatedBy string `json:"created_by,omitempty"`
+}
+
+// memInfo 会话内存画像。Limit=0 表示没设上限（护栏关掉或装不上）。
+type memInfo struct {
+	Cur   int64 `json:"cur"`
+	Peak  int64 `json:"peak,omitempty"`
+	Limit int64 `json:"limit,omitempty"`
 }
 
 type infoJSON struct {
