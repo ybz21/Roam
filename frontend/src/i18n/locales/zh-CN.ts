@@ -673,6 +673,7 @@ const zhCN = {
   'file.forward': '前进',
   'file.up': '返回上级目录',
   'file.refreshDir': '重新读取当前目录',
+  'file.newFolderPlaceholder': '目录名',
   'file.newFolder': '新建目录',
   'file.uploadHere': '上传到当前目录',
   'file.open': '打开',

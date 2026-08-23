@@ -671,6 +671,7 @@ const enUS = {
   'file.forward': 'Forward',
   'file.up': 'Go to parent folder',
   'file.refreshDir': 'Reload current folder',
+  'file.newFolderPlaceholder': 'Folder name',
   'file.newFolder': 'New folder',
   'file.uploadHere': 'Upload to current folder',
   'file.open': 'Open',
