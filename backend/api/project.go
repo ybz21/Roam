@@ -37,6 +37,11 @@ type projectSession struct {
 	LastActivity int64  `json:"lastActivity"`
 	Branch       string `json:"branch,omitempty"` // 落在 worktree 里才有
 	Linked       bool   `json:"linked,omitempty"`
+	// State: 空/live = 真的活着；dormant = 台账里还认得它，点开即恢复。
+	State string `json:"state,omitempty"`
+	// Mem 只在**逼近上限**时带出来。项目卡和详情页的信息密度已经很高，
+	// 内存平时不该占位置——涨起来了才值得跳出来（看门狗的阈值同一个数）。
+	Mem *sessMem `json:"mem,omitempty"`
 }
 
 type projectSummary struct {
@@ -60,6 +65,7 @@ type projectSummary struct {
 
 	// Top 是**给卡片画三行用的**，被截断过，所以它算不出总数——前端拿它数 waiting/running
 	// 会漏掉第 4 个以后的会话。下面这三样在截断**之前**统计，是完整的：
+	Dormant int              `json:"dormant"` // 休眠会话数（重启带走、点开即恢复）
 	Running int              `json:"running"` // 跑着 agent 的会话数（全量）
 	Waiting int              `json:"waiting"` // 等待输入的会话数（全量）
 	Needs   []projectSession `json:"needs"`   // 全部等待输入的会话——「需要你」队列要的是它，不是 Top
@@ -71,6 +77,44 @@ type sessListItem struct {
 	Label        string          `json:"label"`
 	Attached     json.RawMessage `json:"attached"`
 	LastActivity json.RawMessage `json:"last_activity"`
+	// State: live | dormant。dormant = 机器重启带走了，点开即恢复（懒恢复，见 R2 设计稿）。
+	State string `json:"state,omitempty"`
+	// Mem 此刻吃了多少（cgroup 读数，含子进程全部后代）。休眠会话没有进程，为 nil。
+	Mem *sessMem `json:"mem,omitempty"`
+	// Dir/Repo 只有 dormant 会话带：它们没有 tmux 句柄，Annotations 那条归属路走不通，
+	// 只能靠台账里记下的目录。少了这一步，重启后所有会话都掉进「散会话」。
+	Dir  string `json:"dir,omitempty"`
+	Repo string `json:"repo,omitempty"`
+}
+
+// sessMem 会话内存画像，原样从 ttmux ls --json 透传给前端。
+type sessMem struct {
+	Cur   int64 `json:"cur"`
+	Peak  int64 `json:"peak,omitempty"`
+	Limit int64 `json:"limit,omitempty"`
+}
+
+// dormant 这个会话是不是「点开才恢复」的休眠会话。
+func (s sessListItem) dormant() bool { return s.State == "dormant" }
+
+// homeDir 休眠会话记在台账里的归属目录（活会话为空——它们走 Annotations/SessionCwds）。
+func (s sessListItem) homeDir() string {
+	if s.Repo != "" {
+		return s.Repo
+	}
+	return s.Dir
+}
+
+// memWarnPercent 内存占到上限这个比例才值得在项目卡/详情页占一个位置。
+// 与看门狗发预警的阈值同源——两处说的是同一件事，不该各有各的数。
+const memWarnPercent = 60
+
+// noteworthyMem 没到警示线就返回 nil：平时安静，涨起来才跳出来。
+func noteworthyMem(m *sessMem) *sessMem {
+	if m == nil || m.Limit <= 0 || m.Cur*100/m.Limit < memWarnPercent {
+		return nil
+	}
+	return m
 }
 
 func rawInt(r json.RawMessage) int64 {
@@ -149,15 +193,28 @@ func (a *API) ProjectsList(c *gin.Context) {
 	var nonGit []pending
 	var cwds map[string][]string // 懒取：有非 git 项目才拉
 
+	sessMemOf := make(map[string]*sessMem, len(sessions))
+	for _, s := range sessions {
+		if s.Mem != nil {
+			sessMemOf[s.Name] = s.Mem
+		}
+	}
+
 	agentRunning := runningAgentSessions() // 一次进程树扫描，供绿点判活跃（设计 W2）
 	// 顺带认一次「刚开始跑 claude 的会话 ↔ 它那段对话」。挂在这里是因为进程树
 	// 已经扫过了，不额外付代价；只在完全无歧义时才记（见 agent-transcript-link.go）。
 	a.agentLink.note(agentRunning, a.WT.SessionHome, a.linkAgentSession)
 
-	addSession := func(p *projectSummary, top *[]projectSession, name, label string, attached bool, last int64, branch string, linked bool) {
+	addSession := func(p *projectSummary, top *[]projectSession, name, label string, attached bool, last int64, branch string, linked, dormant bool) {
 		claimed[name] = true
 		p.Sessions++
 		ps := projectSession{Name: name, Label: label, Attached: attached, Agent: agentRunning[name], Running: agentRunning[name] != "", LastActivity: last, Linked: linked, Branch: branch}
+		ps.Mem = noteworthyMem(sessMemOf[name])
+		if dormant {
+			// 休眠会话没有进程：绿点/待输入一律不适用，更不该去 capture-pane 一个不存在的 pane。
+			ps = projectSession{Name: name, Label: label, LastActivity: last, State: "dormant"}
+			p.Dormant++
+		}
 		if ps.Running { // 只对在跑的会话抓屏判待输入，省掉给 idle 会话的 capture-pane
 			screen := sessionCapture(name, 50)
 			if ps.Waiting = sessionWaiting(screen); ps.Waiting {
@@ -245,7 +302,7 @@ func (a *API) ProjectsList(c *gin.Context) {
 			if an.Primary.Linked {
 				branch = an.Primary.Branch
 			}
-			addSession(&p, &top, s.Name, s.Label, rawInt(s.Attached) > 0, rawInt(s.LastActivity), branch, an.Primary.Linked)
+			addSession(&p, &top, s.Name, s.Label, rawInt(s.Attached) > 0, rawInt(s.LastActivity), branch, an.Primary.Linked, an.Dormant)
 		}
 		if p.Sessions > 0 {
 			a.Projects.NoteSessions(key)
@@ -289,7 +346,7 @@ func (a *API) ProjectsList(c *gin.Context) {
 			}
 			if best >= 0 {
 				ng := nonGit[best]
-				addSession(ng.p, &tops[best], s.Name, s.Label, rawInt(s.Attached) > 0, rawInt(s.LastActivity), "", false)
+				addSession(ng.p, &tops[best], s.Name, s.Label, rawInt(s.Attached) > 0, rawInt(s.LastActivity), "", false, ann[s.Name] != nil && ann[s.Name].Dormant)
 			}
 		}
 		for i, ng := range nonGit {
@@ -299,7 +356,11 @@ func (a *API) ProjectsList(c *gin.Context) {
 
 	for _, s := range sessions {
 		if !claimed[s.Name] {
-			ls := projectSession{Name: s.Name, Label: s.Label, Attached: rawInt(s.Attached) > 0, Agent: agentRunning[s.Name], Running: agentRunning[s.Name] != "", LastActivity: rawInt(s.LastActivity)}
+			ls := projectSession{Name: s.Name, Label: s.Label, Attached: rawInt(s.Attached) > 0, Agent: agentRunning[s.Name], Running: agentRunning[s.Name] != "", LastActivity: rawInt(s.LastActivity), Mem: noteworthyMem(s.Mem)}
+			if s.dormant() {
+				// 休眠会话不跑进程，绿点/待输入一律不适用，也不该去 capture-pane。
+				ls = projectSession{Name: s.Name, Label: s.Label, LastActivity: rawInt(s.LastActivity), State: "dormant"}
+			}
 			if ls.Running {
 				screen := sessionCapture(s.Name, 50)
 				if ls.Waiting = sessionWaiting(screen); ls.Waiting {

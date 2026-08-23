@@ -185,6 +185,9 @@ func (s *Service) invalidate(repo Repo) {
 type SessRef struct {
 	Session string `json:"session"`
 	Primary bool   `json:"primary"` // 该会话的 active pane 是否落在此 worktree
+	// Dormant 会话被机器重启带走了，但台账还认得它，点开即恢复。
+	// 它照样算「这个 worktree 有人用着」——清掉目录，会话就再也恢复不出来了。
+	Dormant bool `json:"dormant,omitempty"`
 }
 
 type Worktree struct {
@@ -664,6 +667,9 @@ type pane struct {
 	Session string
 	Active  bool
 	Cwd     string
+	// Dormant 只有 homePanes 造出来的「归属 pane」会置位：那不是真 pane，
+	// 是台账里一个等着被点开恢复的会话。
+	Dormant bool
 }
 
 func tmuxBin() string {
@@ -721,7 +727,7 @@ func (s *Service) joinSessions(ctx context.Context, list []Worktree) []Worktree 
 			}
 		}
 		if !found {
-			out[best].Sessions = append(out[best].Sessions, SessRef{Session: p.Session, Primary: p.Active})
+			out[best].Sessions = append(out[best].Sessions, SessRef{Session: p.Session, Primary: p.Active, Dormant: p.Dormant})
 		}
 	}
 	return out
@@ -735,6 +741,9 @@ type Annotation struct {
 	Primary   *AnnotationHit  `json:"primary,omitempty"`
 	Matches   []AnnotationHit `json:"matches"`
 	Ambiguous bool            `json:"ambiguous"` // 保留字段：归属已钉死为单一 home，恒 false
+	// Dormant 会话只存在于台账里（机器重启带走了 tmux 那一半），点开即恢复。
+	// 归属照常算，但它没有 pane、没有进程——绿点/待输入一类的判断都不适用。
+	Dormant bool `json:"dormant,omitempty"`
 }
 
 type AnnotationHit struct {
@@ -840,7 +849,7 @@ func (s *Service) SessionCwds(ctx context.Context) map[string][]string {
 func (s *Service) Annotations(ctx context.Context) map[string]*Annotation {
 	res := map[string]*Annotation{}
 	for _, sh := range s.sessionHomes(ctx) {
-		a := &Annotation{SessionID: sh.ID, Home: sh.Home, Matches: []AnnotationHit{}}
+		a := &Annotation{SessionID: sh.ID, Home: sh.Home, Dormant: sh.Dormant, Matches: []AnnotationHit{}}
 		if hit := resolveCwd(ctx, sh.Home); hit != nil {
 			h := *hit
 			a.Primary = &h

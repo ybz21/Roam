@@ -19,6 +19,70 @@ var mainSteps = []Step{
 	{Version: 4, Name: "agent-session", Fn: addAgentSession},
 	{Version: 5, Name: "project-traces", SQL: createProjectTraces},
 	{Version: 6, Name: "import-traces", Fn: importTraces},
+	{Version: 7, Name: "lazy-revive", Fn: addLazyRevive},
+	{Version: 8, Name: "session-memory", Fn: addSessionMemory},
+	{Version: 9, Name: "session-oom", Fn: addSessionOOM},
+	{Version: 10, Name: "session-mem-alert", Fn: addSessionMemAlert},
+}
+
+// addSessionMemAlert 记「已经就这个会话的内存提醒过什么」，用来只提醒一次。
+//
+// 两列而不是一列：一个会话可能先在 85% 档被提醒过，后来又真的撞顶被杀——
+// 那是两件事，各自都该说一次。挤进一列就得编码，编码就会有人看不懂。
+//
+//   - mem_alert_level：已提醒过的档位（0 = 没提醒过 / 85 = 提醒过 85% 档）。
+//     跌回阈值以下会清零，于是再涨上去会重新提醒——这是想要的：它又涨回来了。
+//   - mem_alert_ooms：已就「撞顶被杀」提醒到第几次。cgroup 的 oom_kill 是累计值，
+//     记下已通知到哪一次，新增的才提醒。
+func addSessionMemAlert(tx *sql.Tx, _ Options) error {
+	return addColumns(tx, "sessions", map[string]string{
+		"mem_alert_level": "INTEGER",
+		"mem_alert_ooms":  "INTEGER",
+	})
+}
+
+// addSessionOOM 给 sessions 加 oom_kills：这个会话撞过几次自己的内存上限。
+//
+// 和 peak_rss 一样必须**趁会话活着时**落库。一开始想的是「发现它没了的时候
+// 读一眼 memory.events」——读不到：cgroup 目录随最后一个进程退出就消失，
+// 那时已经没地方问了（实测把会话压到撞顶，scope 目录当场没，只能记成 killed）。
+//
+// 单独开一个 step 而不是塞进 step 8：step 8 已经在本机跑过，schema_meta 记着 8
+// 就不会重跑，往里加列等于白加——今天刚在 restored_from 上栽过一次
+// （见 addLazyRevive 的注释），这里立刻又差点重演。
+func addSessionOOM(tx *sql.Tx, _ Options) error {
+	return addColumns(tx, "sessions", map[string]string{"oom_kills": "INTEGER"})
+}
+
+// addSessionMemory 给 sessions 加 peak_rss：这个会话峰值吃了多少内存。
+//
+// 会话没了之后 cgroup 目录跟着消失，那时再想知道「它涨到过多少」已经晚了——
+// 2026-08-22 那次得靠翻内核 OOM dump 才查出是哪个进程。所以在它还活着的时候
+// 就把 memory.peak 抄进台账，配合 died_reason='oom' 就能直接回答
+// 「机器怎么又卡了」：哪个会话、涨到多少、是不是撞了上限。
+func addSessionMemory(tx *sql.Tx, _ Options) error {
+	return addColumns(tx, "sessions", map[string]string{
+		"peak_rss": "INTEGER",
+	})
+}
+
+// addLazyRevive 补齐「会话懒恢复」要用的三列，顺带修一个静默了很久的洞。
+//
+// restored_from 本该由 step 4 建出来，但它是**后来**被加进那个已发布步骤的：
+// 库跑过 step 4 之后 schema_meta 就记了 4，再改 addAgentSession 也不会重跑。
+// 于是所有 2026-08-12 之后升级的库都没有这一列，SetRestoredFrom 一直在
+// 静默失败（调用方 `_ =` 吞了错）。addColumns 是幂等的，这里无条件补一次。
+// —— 这正是文件开头那句「只增不改，永远不要改动已发布的那些」防的事。
+func addLazyRevive(tx *sql.Tx, _ Options) error {
+	return addColumns(tx, "sessions", map[string]string{
+		"restored_from": "TEXT",
+		// agent_kind 决定恢复时敲哪个命令。没有它就只能硬编码 claude，
+		// 于是 codex 会话会被敲成 `claude --resume <codex的对话id>`。
+		"agent_kind": "TEXT",
+		// last_seen 让 host-restart 的 died_at 能取「最后一次看见它」而不是
+		// 「开机后第一次 Reconcile」——后者差了整整一夜。
+		"last_seen": "TEXT",
+	})
 }
 
 // createProjectTraces 收尾留痕（合入 / 丢弃 / 清理）进表。

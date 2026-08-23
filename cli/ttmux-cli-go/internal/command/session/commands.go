@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"ttmux-cli-go/internal/revive"
 	"ttmux-cli-go/internal/runtime"
 	"ttmux-cli-go/internal/sessmeta"
 	"ttmux-cli-go/internal/ui"
@@ -18,65 +19,53 @@ import (
 
 // List renders the human-readable session table (mirrors _pretty_sessions),
 // hiding swarm-owned sessions via exclude.
-func List(rt runtime.Runtime, exclude map[string]bool, w io.Writer) error {
-	// 展示口径「名字(会话 id)」：名字取会话的展示名（@roam_name），id 就是 tmux 会话名
-	// 本身（迁移前的老会话由 session_created + session_id 现算派生）。
-	out, err := rt.TmuxOutput("list-sessions", "-F", "#{session_name}\t#{session_windows}\t#{session_created}\t#{session_attached}\t#{session_id}\t#{"+runtime.LabelOption+"}")
-	if err != nil {
-		// tmux server 未启动时输出的是 stderr 错误文本，不能当会话数据解析
-		out = ""
-	}
+//
+// 会话集合来自 Collect —— 与 `ls --json` / `ls --tree` 同一个出处，所以
+// **休眠会话（机器重启带走的）在命令行这边也看得见**，attach 一下就回来。
+func List(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool, w io.Writer) error {
+	sessions := Collect(rt, meta, exclude)
 	p := ui.P()
 	fmt.Fprintln(w)
-	count := 0
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-		parts := strings.Split(line, "\t")
-		if len(parts) < 4 {
-			continue
-		}
-		name := parts[0]
-		if exclude[name] {
-			continue
-		}
-		att := ui.Dim("[空闲]")
-		if parts[3] != "0" && parts[3] != "" {
-			att = p.Green + "[已连接]" + p.Reset
-		}
-		ts := parts[2]
-		created, _ := strconv.ParseInt(parts[2], 10, 64)
+	live, dormant := 0, 0
+	for _, s := range sessions {
+		ts := s.Created
+		created, _ := strconv.ParseInt(s.Created, 10, 64)
 		if created > 0 {
 			ts = time.Unix(created, 0).Format("01-02 15:04")
 		}
-		row := runtime.SessionRow{Name: name, Created: created}
-		if len(parts) > 4 {
-			row.TmuxID = parts[4]
+		label := ui.Bold(s.Label)
+		if s.ID != "" && s.ID != s.Label {
+			label += p.Dim + "(" + s.ID + ")" + p.Reset
 		}
-		if len(parts) > 5 {
-			row.Label = strings.TrimSpace(parts[5])
+		if s.State == "dormant" {
+			hint := "休眠 · attach 即恢复"
+			if s.Resumable {
+				hint = "休眠 · 可接回对话"
+			}
+			fmt.Fprintf(w, "   %s %s  %s%s  [%s]%s\n", ui.IconSessionDormant, label, p.Dim, ts, hint, p.Reset)
+			dormant++
+			continue
 		}
-		label := ui.Bold(row.DisplayLabel())
-		if sid := row.ID(); sid != "" && sid != row.DisplayLabel() {
-			label += p.Dim + "(" + sid + ")" + p.Reset
+		att := ui.Dim("[空闲]")
+		if s.Attached > 0 {
+			att = p.Green + "[已连接]" + p.Reset
 		}
-		fmt.Fprintf(w, "   %s %s  %s%s 个窗口  %s%s  %s\n",
-			ui.IconSession, label, p.Dim, parts[1], ts, p.Reset, att)
-		count++
+		fmt.Fprintf(w, "   %s %s  %s%d 个窗口  %s%s  %s\n",
+			ui.IconSession, label, p.Dim, s.Windows, ts, p.Reset, att)
+		live++
 	}
-	if count == 0 {
+	if live == 0 && dormant == 0 {
 		ui.Info(w, "没有活跃会话")
 		return nil
 	}
 	fmt.Fprintln(w)
-	fmt.Fprintf(w, "   %s共 %d 个会话%s\n\n", p.Dim, count, p.Reset)
+	if dormant > 0 {
+		fmt.Fprintf(w, "   %s共 %d 个会话 · %d 个休眠（attach 即恢复）%s\n\n", p.Dim, live, dormant, p.Reset)
+	} else {
+		fmt.Fprintf(w, "   %s共 %d 个会话%s\n\n", p.Dim, live, p.Reset)
+	}
 	return nil
 }
-
-// PickSession reproduces _pick_session: a single non-swarm session is returned
-// directly; otherwise the user chooses on /dev/tty. 返回的永远是 tmux 会话名
-// （= 会话 id）；用户可以输编号，也可以输展示名/id，后者走 Resolve。
 func PickSession(rt runtime.Runtime, exclude map[string]bool, prompt string, w io.Writer) (string, error) {
 	var rows []runtime.SessionRow
 	for _, s := range rt.SessionRows() {
@@ -183,7 +172,10 @@ func recordNewSession(rt runtime.Runtime, sess, dir string) {
 		return
 	}
 	if dir == "" { // 没显式指定就问 tmux 要 pane 的当前目录
-		out, err := rt.TmuxOutput("display-message", "-t", "="+sess, "-p", "#{pane_current_path}")
+		// 目标必须写 `=<会话>:`——pane_current_path 是 **pane 级**属性，
+		// 裸 `=<会话>` 时 tmux 静默返回空串（不报错、退出码 0），于是 dir 恒空、
+		// SetHome 存了个空目录，这个会话就再也算不出项目归属了。同 #214。
+		out, err := rt.TmuxOutput("display-message", "-t", "="+sess+":", "-p", "#{pane_current_path}")
 		if err == nil {
 			dir = strings.TrimSpace(out)
 		}
@@ -194,7 +186,21 @@ func recordNewSession(rt runtime.Runtime, sess, dir string) {
 	// 归属目录与仓库根现在就记下来：worktree 事后会被删掉，那时再从目录反推
 	// 就永远推不出来了，而「这个会话属于哪个项目」正是靠仓库根认的。
 	_ = meta.SetHome(sess, dir, repoRootOf(dir))
-	_ = meta.SetLabel(sess, rt.SessionLabel(sess))
+	// 名字要**有意义**且**落库**。
+	//
+	// 从前这里落的是 rt.SessionLabel()，而它在没设 @roam_name 时退回会话名——
+	// 于是台账里存进一个「名字就是 id」的假名字，列表上是一排 2026-0812-1811-000f。
+	// 没起名就用归属目录名认人，并且 tmux 那边也设上：@roam_name 随会话生死，
+	// 台账 label 是会话死后唯一还认得出它的东西，两边得是同一个名字。
+	if label := rt.SessionLabel(sess); label == "" || label == sess {
+		if dir != "" {
+			auto := filepath.Base(dir)
+			_ = rt.SetSessionLabel(sess, auto)
+			_ = meta.SetLabel(sess, auto)
+		}
+	} else {
+		_ = meta.SetLabel(sess, label)
+	}
 	// 目标写 `=<会话>:`：`=` 关掉前缀匹配（`dev` 会命中 `dev-review`），末尾的冒号
 	// 是必须的——pipe-pane 要的是 pane，裸 `=<会话>` tmux 会报 can't find pane。
 	// -o：已经在管道就不重复开（fork/spawn 路径可能先开过）
@@ -217,7 +223,7 @@ func repoRootOf(dir string) string {
 }
 
 // Attach attaches to a session (mirrors the `a`/attach case).
-func Attach(rt runtime.Runtime, exclude map[string]bool, args []string, w io.Writer) error {
+func Attach(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool, args []string, w io.Writer) error {
 	var target string
 	if len(args) >= 1 {
 		target = rt.Resolve(args[0])
@@ -229,8 +235,19 @@ func Attach(rt runtime.Runtime, exclude map[string]bool, args []string, w io.Wri
 		target = t
 	}
 	if !rt.HasSession(target) {
-		ui.Err(w, "会话 %s 不存在", ui.Bold(target))
-		return fmt.Errorf("session not found: %s", target)
+		// tmux 里没有，但台账可能还认得它：机器重启带走的会话在这里当场重开，
+		// 然后照常 attach 下去。与 Web 端点开一个休眠会话走的是同一段代码
+		// （backend/pty 那边也调 ttmux db revive），命令行不该是另一套行为。
+		res, err := revive.ReviveDormant(rt, meta, target)
+		if err != nil {
+			ui.Err(w, "会话 %s 不存在", ui.Bold(target))
+			return fmt.Errorf("session not found: %s", target)
+		}
+		ui.Ok(w, "已恢复 %s → %s", ui.Bold(target), ui.Bold(res.Session))
+		if res.Resumed != "" {
+			ui.Info(w, "已接回原对话 %s", ui.Dim(res.Resumed))
+		}
+		target = res.Session
 	}
 	ui.Info(w, "附加到 %s", ui.Bold(Display(rt, target)))
 	return rt.Tmux("attach-session", "-t", "="+target)
@@ -307,7 +324,7 @@ func KillAll(rt runtime.Runtime, exclude map[string]bool, w io.Writer) error {
 // Rename 改会话的**展示名**（@roam_name）——tmux 会话名是 id，永远不动。
 // 于是改名不再牵动任何按名字定位的东西：meta 外键、logs/meta 路径、group 台账、
 // 前端标签与 URL 全都不受影响，重名也随便。
-func Rename(rt runtime.Runtime, exclude map[string]bool, args []string, w io.Writer) (string, string, error) {
+func Rename(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool, args []string, w io.Writer) (string, string, error) {
 	var target, neu string
 	switch {
 	case len(args) >= 2:
@@ -336,6 +353,12 @@ func Rename(rt runtime.Runtime, exclude map[string]bool, args []string, w io.Wri
 	old := rt.SessionLabel(target)
 	if err := rt.SetSessionLabel(target, neu); err != nil {
 		return "", "", err
+	}
+	// **名字也要落台账**：@roam_name 是 tmux 会话级选项，会话一死就跟着没了。
+	// 只改 tmux 的话，机器重启后这个会话在历史/休眠列表里就退回一串裸 id——
+	// 用户明明起过名字，却在最需要认人的时候看不到。
+	if meta != nil {
+		_ = meta.SetLabel(target, runtime.SanitizeLabel(neu))
 	}
 	ui.Ok(w, "%s → %s%s", ui.Bold(old), ui.Bold(runtime.SanitizeLabel(neu)), ui.Dim("("+target+")"))
 	return target, neu, nil

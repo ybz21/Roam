@@ -1,0 +1,371 @@
+// Package memguard 给会话套一层内存天花板，让失控的 agent 只杀死自己。
+//
+// 2026-08-22 21:51，一个跑在 Roam 会话里的 Claude Code 进程涨到 15.5 GB，
+// 把整台 30 GB 的机器打爆（global_oom，内核在全机范围选 victim，桌面整个僵住）。
+// 后端自己当时只有 38 MB——问题不是哪里漏了，是**编排器对被编排的进程没有任何约束**。
+//
+// 隔离边界其实早就在：本机 tmux 带 systemd 支持，每个 pane 自动落进一个
+// tmux-spawn-<uuid>.scope；memory 控制器也已委派到用户切片。所以只要在会话建好后
+// 给那个 scope 设一次 MemoryMax，撞顶时 cgroup OOM 只在该 scope 内选 victim——
+// 被杀的是失控的 agent，shell 和会话都还活着。不需要 root，不改进程树。
+//
+// 见 docs/design/reliability/memory-guard.html。
+package memguard
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+)
+
+// 默认额度按**物理内存的比例**算，不写死一个数。
+//
+// 一开始写死 8G，理由是 agent 健康态实测 180–600 MB、8G 是 20× 余量。
+// 但同一个会话里也会跑构建：本仓库 `npm run build` 实测峰值 **7.4 GB**
+// （monaco 4.3 MB + mermaid 3.4 MB 那几个大 chunk），8G 当场把它压死——
+// 而且死法很隐蔽：`memory.events` 里 oom_kill=0，是 Node 读到 cgroup 限额后
+// 自己把 V8 堆设小、然后在 V8 层 abort，看起来完全不像内存上限干的。
+//
+// 40% 在这台 30 GB 机器上是 12 GB：拦得住 15.5 GB 那种失控，放得过 7.4 GB 的构建。
+// 上下限兜住极端机型：小内存机器至少给 4G，大内存机器不必给到几十 G。
+const (
+	defaultRatio = 0.40
+	defaultFloor = 4 << 30  // 4G
+	defaultCeil  = 24 << 30 // 24G
+	// swapRatio swap 额度占内存额度的比例。给一点缓冲，但别让它把 swap 吃穿。
+	swapRatio = 0.25
+	// highRatio 软限占硬限的比例。先到软限时内核激进回收并 throttle，
+	// 进程变慢但不死，给看门狗留出反应时间。
+	highRatio = 0.75
+)
+
+// Limits 是一个会话的内存额度。空串 = 不设那一项。
+type Limits struct {
+	Max  string // MemoryMax，硬顶，撞到就 cgroup OOM
+	High string // MemoryHigh，软限，撞到只回收+throttle
+	Swap string // MemorySwapMax，别让它把 swap 也吃穿
+}
+
+// Off 表示显式不限（用户在设置里关掉，或环境变量设成 0/off）。
+func (l Limits) Off() bool { return l.Max == "" }
+
+// 配置项名。设置页写进 ttmux 的全局 env 文件，环境变量可临时覆盖。
+const (
+	EnvMax  = "ROAM_SESSION_MEM_MAX"
+	EnvHigh = "ROAM_SESSION_MEM_HIGH"
+	EnvSwap = "ROAM_SESSION_MEM_SWAP"
+)
+
+// FromEnv 读全局默认额度（只看进程环境变量）。
+// 会话路径走 From()——那里还会读设置页写的 env 文件。
+func FromEnv() Limits {
+	return From(os.Getenv(EnvMax), os.Getenv(EnvHigh), os.Getenv(EnvSwap))
+}
+
+// From 由三个配置值算出额度。空值走默认，high/swap 空则按比例从 max 推。
+//
+// max = 0 / off / none / unlimited 表示不限——给「我就是要跑个吃 20G 的东西」
+// 留门，但那得是明确的选择，不能是默认。
+func From(max, high, swap string) Limits {
+	max = strings.TrimSpace(max)
+	if max == "" {
+		max = DefaultMax()
+	}
+	switch strings.ToLower(max) {
+	case "0", "off", "none", "unlimited":
+		return Limits{}
+	}
+	swap = strings.TrimSpace(swap)
+	if swap == "" {
+		swap = scaleBytes(max, swapRatio)
+	}
+	high = strings.TrimSpace(high)
+	if high == "" {
+		high = scaleBytes(max, highRatio)
+	}
+	return Limits{Max: max, High: high, Swap: swap}
+}
+
+// DefaultMax 本机的默认单会话上限（字节数的十进制串，systemd 认）。
+// 读不出物理内存就退回下限——宁可管得松些，也不能因为读不到就不设防。
+func DefaultMax() string {
+	total := totalMemory()
+	if total <= 0 {
+		return strconv.FormatInt(defaultFloor, 10)
+	}
+	n := int64(float64(total) * defaultRatio)
+	if n < defaultFloor {
+		n = defaultFloor
+	}
+	if n > defaultCeil {
+		n = defaultCeil
+	}
+	return strconv.FormatInt(n, 10)
+}
+
+// totalMemory 物理内存字节数（读不到返回 0）。
+func totalMemory() int64 {
+	b, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		return 0
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		if !strings.HasPrefix(line, "MemTotal:") {
+			continue
+		}
+		f := strings.Fields(line)
+		if len(f) < 2 {
+			return 0
+		}
+		kb, err := strconv.ParseInt(f[1], 10, 64)
+		if err != nil {
+			return 0
+		}
+		return kb << 10
+	}
+	return 0
+}
+
+// available 缓存「这台机器能不能设上限」。判定要便宜：护栏装不上应当降级成
+// 「和以前一样」，绝不能变成「开不出会话」。
+var (
+	availOnce sync.Once
+	availOK   bool
+)
+
+func available() bool {
+	availOnce.Do(func() {
+		if _, err := exec.LookPath("systemctl"); err != nil {
+			return
+		}
+		if os.Getenv("XDG_RUNTIME_DIR") == "" {
+			return
+		}
+		// memory 控制器必须已经委派到用户切片，否则 set-property 会失败
+		b, err := os.ReadFile("/sys/fs/cgroup/user.slice/user-" +
+			strconv.Itoa(os.Getuid()) + ".slice/user@" +
+			strconv.Itoa(os.Getuid()) + ".service/cgroup.controllers")
+		availOK = err == nil && strings.Contains(string(b), "memory")
+	})
+	return availOK
+}
+
+// cgroupPath 读进程的 cgroup v2 路径（形如 /user.slice/.../tmux-spawn-<uuid>.scope）。
+// cgroup v2 的 /proc/<pid>/cgroup 只有一行 `0::<path>`。
+func cgroupPath(pid int) string {
+	b, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/cgroup")
+	if err != nil {
+		return ""
+	}
+	line := strings.TrimSpace(string(b))
+	i := strings.LastIndex(line, ":")
+	if i < 0 {
+		return ""
+	}
+	return strings.TrimSpace(line[i+1:])
+}
+
+// cgroupDir 该进程 cgroup 在 sysfs 里的目录（拿不到返回空串）。
+func cgroupDir(pid int) string {
+	p := cgroupPath(pid)
+	if p == "" {
+		return ""
+	}
+	return "/sys/fs/cgroup" + p
+}
+
+// ScopeOf 返回一个进程所属的 systemd scope 单元名（拿不到返回空串）。
+// tmux 给每个 pane 建一个 tmux-spawn-<uuid>.scope，pane 里的所有后代都在里面。
+func ScopeOf(pid int) string {
+	p := cgroupPath(pid)
+	if p == "" {
+		return ""
+	}
+	unit := filepath.Base(p)
+	if !strings.HasSuffix(unit, ".scope") {
+		return "" // 不在 scope 里（容器、非 systemd 环境）就别硬套
+	}
+	return unit
+}
+
+// 设上限要重试，而且**只能以回读的结果为准**。
+//
+// tmux 建 pane 和 systemd 注册那个 scope 是异步的，而且两边不同步：内核层面的
+// cgroup 目录先建好（此刻 /proc/<pid>/cgroup 已经指向新 scope，ScopeOf 拿得到名字），
+// systemd 那边的 unit 却还没注册完。这个窗口里 `systemctl set-property` 会
+// **静默成功**——exit 0、无输出，但属性落在一个 systemd 还不认识的名字上，
+// unit 真正创建时并不继承。实测表现就是「同一段代码，四次里成两次」。
+//
+// 所以判据不是「命令返回 0」，也不是「拿到 scope 名了」，而是
+// **memory.max 真的变成了我们要的值**。
+const (
+	applyWait  = 2 * time.Second
+	applyRetry = 25 * time.Millisecond
+)
+
+// Apply 给一个 pane 所在的 scope 设上限，并确认真的生效。
+//
+// 装不上就静默跳过：返回 error 只为让调用方能记一行日志，绝不该因此中断建会话。
+// 重复调用安全（set-property 幂等），所以除了建会话，attach 时也会再补一次——
+// split-window / new-window 开出来的新 pane 有自己的 scope，只在建会话时设一次会漏掉。
+func Apply(pid int, l Limits) error {
+	if l.Off() || !available() {
+		return nil
+	}
+	want, ok := parseBytes(l.Max)
+	if !ok {
+		return fmt.Errorf("memguard: 认不出的额度 %q", l.Max)
+	}
+	deadline := time.Now().Add(applyWait)
+	var lastErr error
+	for {
+		// 进程没了就没什么好设的：直接走人，别干等满 applyWait。
+		// 会话建完立刻被 kill、或 pid 压根不存在，都会走到这里。
+		if cgroupPath(pid) == "" {
+			return nil
+		}
+		if unit := ScopeOf(pid); unit != "" {
+			if err := setProperty(unit, l); err != nil {
+				lastErr = err
+			} else if got, ok := currentMax(pid); ok && got == want {
+				return nil // 回读确认：这一次是真的设上了
+			}
+		}
+		if time.Now().After(deadline) {
+			if lastErr != nil {
+				return lastErr
+			}
+			return fmt.Errorf("memguard: %s 上限未在 %v 内生效", l.Max, applyWait)
+		}
+		time.Sleep(applyRetry)
+	}
+}
+
+func setProperty(unit string, l Limits) error {
+	args := []string{"--user", "set-property", unit, "MemoryMax=" + l.Max}
+	if l.High != "" {
+		args = append(args, "MemoryHigh="+l.High)
+	}
+	if l.Swap != "" {
+		args = append(args, "MemorySwapMax="+l.Swap)
+	}
+	return exec.Command("systemctl", args...).Run()
+}
+
+// Limit 这个 pane 所在 cgroup 的内存上限（字节）。0 = 未设限（cgroup 里写着 "max"）。
+// 会话列表的内存条要拿它当分母，看门狗要拿它算百分比。
+func Limit(pid int) int64 {
+	n, _ := currentMax(pid)
+	return n
+}
+
+// currentMax 回读这个 pane 所在 cgroup 的 memory.max（"max" = 未设限）。
+func currentMax(pid int) (int64, bool) {
+	dir := cgroupDir(pid)
+	if dir == "" {
+		return 0, false
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "memory.max"))
+	if err != nil {
+		return 0, false
+	}
+	s := strings.TrimSpace(string(b))
+	if s == "max" {
+		return 0, true // 读到了，只是还没设限
+	}
+	n, err := strconv.ParseInt(s, 10, 64)
+	return n, err == nil
+}
+
+// parseBytes 把 "8G" / "6442450944" / "2000M" 解析成字节数。
+// systemd 的额度写法用 1024 进制（G = GiB），这里与它保持一致。
+func parseBytes(s string) (int64, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, false
+	}
+	i := 0
+	for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+		i++
+	}
+	if i == 0 {
+		return 0, false
+	}
+	n, err := strconv.ParseInt(s[:i], 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	switch strings.ToUpper(strings.TrimSuffix(strings.TrimSpace(s[i:]), "iB")) {
+	case "":
+		return n, true
+	case "K":
+		return n << 10, true
+	case "M":
+		return n << 20, true
+	case "G":
+		return n << 30, true
+	case "T":
+		return n << 40, true
+	}
+	return 0, false
+}
+
+// Current 读一个 pane 所在 scope 的当前用量与峰值（字节）。ok=false 表示读不到。
+// 会话列表的内存条和台账的 peak_rss 都从这里取——cgroup 本来就按 pane 分好了，
+// 一次读一个文件，比轮询 ps 聚合整棵进程树便宜得多也准得多。
+func Current(pid int) (cur, peak int64, ok bool) {
+	dir := cgroupDir(pid)
+	if dir == "" {
+		return 0, 0, false
+	}
+	cur, ok1 := readInt(filepath.Join(dir, "memory.current"))
+	peak, _ = readInt(filepath.Join(dir, "memory.peak")) // 老内核没有 memory.peak，缺了不算失败
+	return cur, peak, ok1
+}
+
+// OOMKilled 返回这个 scope 里发生过几次 cgroup OOM。
+// 会话没了时用它区分「撞了内存上限」和「被杀/正常退出」——台账据此记 died_reason='oom'。
+func OOMKilled(pid int) int64 {
+	dir := cgroupDir(pid)
+	if dir == "" {
+		return 0
+	}
+	ev, err := os.ReadFile(filepath.Join(dir, "memory.events"))
+	if err != nil {
+		return 0
+	}
+	for _, ln := range strings.Split(string(ev), "\n") {
+		if k, v, ok := strings.Cut(strings.TrimSpace(ln), " "); ok && k == "oom_kill" {
+			n, _ := strconv.ParseInt(v, 10, 64)
+			return n
+		}
+	}
+	return 0
+}
+
+func readInt(path string) (int64, bool) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return 0, false
+	}
+	n, err := strconv.ParseInt(strings.TrimSpace(string(b)), 10, 64)
+	return n, err == nil
+}
+
+// scaleBytes 把 "8G" 这样的额度按比例缩小，返回**字节数**（systemd 认纯数字）。
+//
+// 不保留原单位：那样得在单位上做整数除法，6G 的 75% 会被截成 "4G" 而不是 4.5G
+// ——软限凭空少了半个 G，而且只在不整除的额度上出错（8G→6G 正好整除，看不出来）。
+// 认不出的写法返回空串：宁可不设软限，也别把 MemoryHigh 设成一个错的值。
+func scaleBytes(s string, ratio float64) string {
+	n, ok := parseBytes(s)
+	if !ok {
+		return ""
+	}
+	return strconv.FormatInt(int64(float64(n)*ratio), 10)
+}

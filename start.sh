@@ -176,7 +176,11 @@ if [ "$DEV" = 1 ]; then
   ensure_frontend_deps
   if [ ! -f dist/index.html ] || [ "$(find src index.html vite.config.ts -newer dist/index.html 2>/dev/null | head -1)" ]; then
     echo "==> 编译前端 (frontend/)..."
-    npx vite build
+    # 走 npm run build 而不是裸 npx vite build：堆上限(NODE_OPTIONS)、i18n/hover 守门、
+    # 产物预压缩(.gz) 都定义在 package.json 那一处。绕过去就会各缺一块——
+    # 尤其是堆上限：会话有了内存护栏之后，Node 会按 cgroup 限额把默认堆砍到 2GB，
+    # 这个前端(monaco 4.3M + mermaid 3.4M)当场 OOM。
+    npm run build
     echo "==> 前端编译完成 → frontend/dist/"
   else
     echo "==> 前端无变更，跳过编译"
@@ -184,10 +188,10 @@ if [ "$DEV" = 1 ]; then
   cd ..
 elif [ ! -f frontend/dist/index.html ]; then
   echo "==> 未找到 frontend/dist，自动编译前端..."
-  (cd frontend && ensure_frontend_deps && npx vite build)
+  (cd frontend && ensure_frontend_deps && npm run build)
 elif [ "$(find frontend/src frontend/index.html frontend/vite.config.ts -newer frontend/dist/index.html 2>/dev/null | head -1)" ]; then
   echo "==> 检测到前端源码变更，自动重新编译..."
-  (cd frontend && ensure_frontend_deps && npx vite build)
+  (cd frontend && ensure_frontend_deps && npm run build)
 fi
 
 # ── 杀掉旧进程 ───────────────────────────────────────────────────

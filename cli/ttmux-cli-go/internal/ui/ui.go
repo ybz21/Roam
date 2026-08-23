@@ -59,14 +59,17 @@ func P() Palette {
 // Icons used across the CLI, mirroring lib/core.sh.
 const (
 	IconSession = "▸"
-	IconWindow  = "◻"
-	IconOK      = "✔"
-	IconErr     = "✘"
-	IconInfo    = "●"
-	IconWarn    = "⚠"
-	IconRun     = "⟳"
-	IconDone    = "■"
-	IconGroup   = "◆"
+	// IconSessionDormant 休眠会话：台账里还认得它，attach 一下就回来。
+	// 空心与 IconSession 的实心相对，一眼分得出「在」和「活」。
+	IconSessionDormant = "▹"
+	IconWindow         = "◻"
+	IconOK             = "✔"
+	IconErr            = "✘"
+	IconInfo           = "●"
+	IconWarn           = "⚠"
+	IconRun            = "⟳"
+	IconDone           = "■"
+	IconGroup          = "◆"
 )
 
 // msgTarget routes status/info/warn messages: stderr in agent mode (keeping

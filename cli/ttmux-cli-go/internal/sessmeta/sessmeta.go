@@ -39,6 +39,10 @@ import (
 // deadKeep 保留的死会话行数上限（超出按 died_at 从旧到新删）。
 const deadKeep = 5000
 
+// dormantCap 会话列表最多带几个休眠会话。上一代 epoch 那批本来就不会太多，
+// 这个上限只是兜底：真遇上一台开了几百个会话的机器，列表不该被它淹掉。
+const dormantCap = 200
+
 type Store struct {
 	HomeDir string
 	// DataDir 是旧 JSON 台账所在目录（ROAM_DATA 可与 HomeDir 不同）。
@@ -50,6 +54,11 @@ type Store struct {
 	IDs func() map[string]string
 	// Epoch 返回当前 tmux server 代次；nil 时问 tmux 要 server pid。同样是测试注入点。
 	Epoch func() string
+	// MemStat 给一个会话名，返回它的峰值内存（字节）与 cgroup OOM 次数。
+	// 由调用方注入（Collect 用 runtime.PanePIDs + memguard 实现）——
+	// 台账层不该知道 cgroup 长什么样，注入还让 Reconcile 的行为可测。
+	// nil = 不采集内存，其余逻辑照常。
+	MemStat func(session string) (peakRSS, oomKills int64, ok bool)
 
 	names map[string]string // 本进程内的 name→$N 备忘（写操作后失效）
 }
@@ -69,6 +78,40 @@ type Row struct {
 	Home       string `json:"home,omitempty"`        // 归属目录
 	RepoRoot   string `json:"repo_root,omitempty"`   // 所属仓库根（建会话时算好的）
 	AgentUUID  string `json:"agent_uuid,omitempty"`  // agent 那一侧的对话 id
+	AgentKind  string `json:"agent_kind,omitempty"`  // claude | codex：恢复时敲哪个命令
+	LastSeen   string `json:"last_seen,omitempty"`   // 最后一次被 Reconcile 看见（host-restart 的 died_at 取它）
+}
+
+// DisplayLabel 这一行该显示成什么名字。
+//
+// **兜底规则只此一份**：会话列表、休眠列表、恢复出来的新会话都用它，
+// 否则就会出现「列表里叫 XiaoHui，点开恢复后变成一串裸 id」——
+// 名字是现算的、没落库，两处各算各的就对不上。
+//
+// 恢复时算出来的名字要 SetLabel 落库（见 revive.Revive）：从那一刻起
+// 它就是真名字，不再依赖谁去现算。
+func (r Row) DisplayLabel() string {
+	// label 等于会话 id 的，视同没起过名字。
+	// recordNewSession 落库时用的是 rt.SessionLabel()，而它在没设 @roam_name 时
+	// **退回会话名**——于是台账里存着一个「名字就是 id」的假名字，
+	// 光判空串的话目录兜底永远不触发，列表上就是一排 2026-0812-1811-000f。
+	if r.Label != "" && r.Label != r.Session {
+		return r.Label
+	}
+	// 没显式改过名的会话（本机 17 个休眠会话里有 11 个）用归属目录名认人，
+	// 比一串 2026-0812-1811-000f 强得多。
+	if dir := r.Dir(); dir != "" {
+		return filepath.Base(dir)
+	}
+	return r.Session
+}
+
+// Dir 会话的归属目录：钉死的 home 优先，退回建会话时的 cwd。
+func (r Row) Dir() string {
+	if r.Home != "" {
+		return r.Home
+	}
+	return r.InitialCwd
 }
 
 func New(homeDir string) *Store { return &Store{HomeDir: homeDir, Now: time.Now} }
@@ -225,10 +268,11 @@ func (s *Store) Get(session string) (Row, bool) {
 	r := Row{Session: session}
 	err = db.QueryRow(`SELECT IFNULL(parent_id,''), IFNULL(created_by,''), IFNULL(created_at,''),
 		IFNULL(initial_cwd,''), status, IFNULL(died_at,''), IFNULL(died_reason,''),
-		IFNULL(label,''), IFNULL(home_dir,''), IFNULL(repo_root,''), IFNULL(agent_session_uuid,'')
+		IFNULL(label,''), IFNULL(home_dir,''), IFNULL(repo_root,''), IFNULL(agent_session_uuid,''),
+		IFNULL(agent_kind,'')
 		FROM sessions WHERE id=?`, session).
 		Scan(&r.Parent, &r.CreatedBy, &r.CreatedAt, &r.InitialCwd, &r.Status,
-			&r.DiedAt, &r.DiedReason, &r.Label, &r.Home, &r.RepoRoot, &r.AgentUUID)
+			&r.DiedAt, &r.DiedReason, &r.Label, &r.Home, &r.RepoRoot, &r.AgentUUID, &r.AgentKind)
 	return r, err == nil
 }
 
@@ -401,6 +445,103 @@ func (s *Store) History(limit int) []Row {
 	return out
 }
 
+// Dormant 返回「休眠」会话：机器重启带走了，但随时可以点开重来的那些。
+//
+// 会话的「在」和「活」是两件事——「在」（目录、名字、对话 id）一直在台账里，
+// 重启带不走；「活」（tmux 会话和 pane 里的进程）确实没了。列表要显示的是
+// 「在」的全集，所以这批得跟活会话一起出现在 ls 里，用户点哪个哪个才真正起来。
+//
+// 筛选条件一个都不能少，每一条都对应一类实测出来的噪音：
+//
+//   - died_reason='host-restart'：你**显式 kill** 的会话就该是死的，
+//     它在列表里再冒出来比消失更让人恼火。
+//   - 只取**上一代 tmux server**（最新的那个 tmux_epoch）带走的那批。
+//     不加这条就是「历史上所有被重启带走过的会话」——本机实测 73 条，
+//     混着七月份的测试会话和早就删掉的 /tmp 目录。上上次重启带走、
+//     隔了这么久都没去恢复的，本来就不需要了，留在列表里只是噪音。
+//   - tmux_epoch 非空：迁移前的老行没记 epoch（本机 150 条），
+//     判不出属于哪次重启，一律不认。
+//   - restored_from 没被占用：已经重开过的不再出现，否则点一次多一个。
+//   - 有归属目录，且**目录还在**：worktree 被清是常事，无处可开的不该出现在
+//     列表里诱人点一下（目录存在性在 Go 侧查，SQL 做不到）。
+//
+// 见 docs/design/reliability/session-restore.html。
+func (s *Store) Dormant() []Row {
+	db, err := s.db()
+	if err != nil {
+		return nil
+	}
+	rows, err := db.Query(`SELECT d.id, IFNULL(d.created_at,''), IFNULL(d.initial_cwd,''),
+		IFNULL(d.died_at,''), IFNULL(d.label,''), IFNULL(d.home_dir,''),
+		IFNULL(d.repo_root,''), IFNULL(d.agent_session_uuid,''), IFNULL(d.agent_kind,'')
+		FROM sessions d
+		WHERE d.status='dead' AND d.died_reason='host-restart'
+		  AND IFNULL(d.tmux_epoch,'') <> ''
+		  AND d.tmux_epoch = (SELECT tmux_epoch FROM sessions
+		        WHERE status='dead' AND died_reason='host-restart' AND IFNULL(tmux_epoch,'') <> ''
+		        ORDER BY IFNULL(died_at,created_at) DESC LIMIT 1)
+		  AND IFNULL(d.home_dir,IFNULL(d.initial_cwd,'')) <> ''
+		  AND NOT EXISTS (SELECT 1 FROM sessions r WHERE r.restored_from = d.id)
+		ORDER BY IFNULL(d.died_at,d.created_at) DESC
+		LIMIT ?`, dormantCap)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []Row
+	for rows.Next() {
+		r := Row{Status: "dead", DiedReason: "host-restart"}
+		if rows.Scan(&r.Session, &r.CreatedAt, &r.InitialCwd, &r.DiedAt,
+			&r.Label, &r.Home, &r.RepoRoot, &r.AgentUUID, &r.AgentKind) != nil {
+			continue
+		}
+		dir := r.Home
+		if dir == "" {
+			dir = r.InitialCwd
+		}
+		if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
+			continue
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
+// RestoredAs 反查一个休眠会话已经被重开成了哪个会话（没有则空串）。
+// 它是懒恢复的幂等键：点两次不该长出两个会话。
+func (s *Store) RestoredAs(dormant string) string {
+	if dormant == "" {
+		return ""
+	}
+	db, err := s.db()
+	if err != nil {
+		return ""
+	}
+	var id string
+	// 同一行理论上只会被重开一次；真出现多行（并发穿透）也取最新那个，
+	// 让调用方收敛到同一个会话上，而不是随机挑一个。
+	if db.QueryRow(`SELECT id FROM sessions WHERE restored_from=?
+		ORDER BY IFNULL(created_at,'') DESC LIMIT 1`, dormant).Scan(&id) != nil {
+		return ""
+	}
+	return id
+}
+
+// SetAgentKind 记这个会话跑的是哪种 agent（claude / codex）。
+// 恢复时靠它决定敲什么命令；**只记一次不覆盖**，理由同 SetAgentSession。
+func (s *Store) SetAgentKind(session, kind string) error {
+	if session == "" || kind == "" {
+		return nil
+	}
+	db, err := s.db()
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`UPDATE sessions SET agent_kind=?
+		WHERE id=? AND IFNULL(agent_kind,'')=''`, kind, session)
+	return err
+}
+
 // OnRename 会话名变了 → 主键跟着搬（连带所有指向它的 parent_id）。
 //
 // 日常改名只动 @roam_name 展示名，会话名（= 持久 id）不动，这个入口就是空转。
@@ -465,6 +606,28 @@ func (s *Store) Reconcile(alive map[string]bool) {
 	}
 	epoch := s.epoch()
 	now := s.Now().Format(time.RFC3339)
+	// 活着的时候就把「最后一次看见」和峰值内存记下来。
+	//
+	// died_at 从前一律取「现在」，而 Reconcile 是开机后才跑的——于是重启带走的
+	// 那一批全部记成开机时刻，跟真实结束时刻差了整整一夜（本机 17 条都是 10:43:33）。
+	// peak_rss 同理：会话一没，cgroup 目录跟着消失，那时再问已经晚了。
+	for name := range alive {
+		if s.MemStat == nil {
+			break
+		}
+		peak, ooms, ok := s.MemStat(name)
+		if !ok {
+			continue
+		}
+		// peak / oom 计数都取历史最大：cgroup 的 memory.peak 本身就是峰值，
+		// 但会话可能跨过一次 revive，别让新一段的低水位把旧记录抹掉。
+		_, _ = db.Exec(`UPDATE sessions SET peak_rss=MAX(IFNULL(peak_rss,0),?),
+			oom_kills=MAX(IFNULL(oom_kills,0),?) WHERE id=?`, peak, ooms, name)
+	}
+	for name := range alive {
+		_, _ = db.Exec(`UPDATE sessions SET last_seen=? WHERE id=? AND status='live'`, now, name)
+	}
+
 	for name := range alive {
 		id, ok := ids[name]
 		if !ok {
@@ -479,27 +642,45 @@ func (s *Store) Reconcile(alive map[string]bool) {
 		_, _ = db.Exec(`UPDATE sessions SET tmux_id=?, tmux_epoch=NULLIF(?,'')
 			WHERE id=? AND status='live'`, id, epoch, name)
 	}
-	rows, err := db.Query(`SELECT id, IFNULL(tmux_epoch,'') FROM sessions WHERE status='live'`)
+	// oom_kills 读的是**上一轮采集**落下的值：cgroup 目录随会话一起消失，
+	// 等发现它没了再去读已经晚了（实测 scope 当场就没）。
+	//
+	// 局限说清楚：如果 OOM 把 shell 也一起带走、且两次 Reconcile 之间没采到，
+	// 这一条会退回记成 killed。主场景（失控的 agent 被杀、shell 和会话都还活着）
+	// 采得到，因为会话还在，下一轮照常遍历它。
+	rows, err := db.Query(`SELECT id, IFNULL(tmux_epoch,''), IFNULL(last_seen,''), IFNULL(oom_kills,0)
+		FROM sessions WHERE status='live'`)
 	if err != nil {
 		return
 	}
-	type goner struct{ id, reason string }
+	type goner struct{ id, reason, at string }
 	var dead []goner
 	for rows.Next() {
-		var id, was string
-		if rows.Scan(&id, &was) != nil || alive[id] {
+		var id, was, seen string
+		var ooms int64
+		if rows.Scan(&id, &was, &seen, &ooms) != nil || alive[id] {
 			continue
 		}
-		reason := "killed"
-		if was != "" && epoch != "" && was != epoch {
+		reason, at := "killed", now
+		switch {
+		case ooms > 0:
+			// 撞了自己的内存上限：cgroup 在这个 scope 里选 victim 杀掉了它。
+			// 这一条最值钱——下次「机器怎么又卡了」不用再去翻内核 OOM dump。
+			reason = "oom"
+		case was != "" && epoch != "" && was != epoch:
+			// server 换代了 = 机器重启把它带走的。真实结束时刻是最后一次看见它，
+			// 不是「现在」（现在是开机后第一次 Reconcile，晚了一整夜）。
 			reason = "host-restart"
+			if seen != "" {
+				at = seen
+			}
 		}
-		dead = append(dead, goner{id, reason})
+		dead = append(dead, goner{id, reason, at})
 	}
 	rows.Close()
 	for _, g := range dead {
 		_, _ = db.Exec(`UPDATE sessions SET status='dead', died_at=?, died_reason=?, tmux_id=NULL
-			WHERE id=?`, now, g.reason, g.id)
+			WHERE id=?`, g.at, g.reason, g.id)
 	}
 	s.prune(db, deadKeep)
 }

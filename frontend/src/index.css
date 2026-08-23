@@ -969,6 +969,19 @@ html[data-pointer="coarse"] .mc { --ctl-h: 36px; }
 /* 手指档没有 hover，操作必须常驻 */
 html[data-pointer="coarse"] .tt-srow .acts { opacity: 1; }
 
+/* 会话内存条：平时一条安静的细线，涨起来自己会跳出来（L3「预防」那一半）。
+   放在 tags 列里而不是新开一格——.tt-srow 的七列是恒定的，多一格桌面上整行错列。 */
+.tt-membar { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto;
+  font-size: var(--fs-micro); color: var(--text-dimmer); white-space: nowrap; }
+.tt-membar .tr { display: block; width: 34px; height: 4px; border-radius: var(--r-pill);
+  background: var(--bg-elevated); overflow: hidden; flex: 0 0 34px; }
+.tt-membar .fi { display: block; height: 100%; border-radius: var(--r-pill); transition: width .3s ease; }
+.tt-membar b { font-weight: 600; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+.tt-membar .lim { opacity: .65; }
+/* 撞线了就别再安静：整条亮起来，扫一眼列表就知道是哪一行 */
+.tt-membar[data-hot] { color: var(--danger); }
+.tt-membar[data-hot] .tr { background: var(--danger-soft); }
+
 .tt-seg-scroll { scrollbar-width: none; }
 .tt-seg-scroll::-webkit-scrollbar { height: 0; }
 .tt-seg-scroll > .ant-segmented { min-width: max-content; }

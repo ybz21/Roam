@@ -404,7 +404,7 @@ func liveStatus(opt Options, meta swarmMeta, m SwarmMember) string {
 		}
 		return "exited"
 	}
-	dead := strings.TrimSpace(runTmux(opt.TmuxBin, "display-message", "-t", "="+m.Session, "-p", "#{pane_dead}"))
+	dead := strings.TrimSpace(runTmux(opt.TmuxBin, "display-message", "-t", "="+m.Session+":", "-p", "#{pane_dead}"))
 	if dead == "1" {
 		return "done"
 	}

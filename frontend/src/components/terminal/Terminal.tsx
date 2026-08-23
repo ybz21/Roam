@@ -13,7 +13,7 @@ import '../../assets/fonts/roam-symbols.css'
 import { paneCellsToPixelRect } from './terminal-geometry'
 import { RESUME_RESYNC_MS, resumeHealFor, shouldJiggleAfterAttach } from './terminal-resize'
 import type { ResumeHeal, TerminalDimensions } from './terminal-resize'
-import { parseTerminalPong } from './terminal-lifecycle'
+import { parseTerminalPong, parseTerminalRevived } from './terminal-lifecycle'
 
 export type TermStatus = 'connecting' | 'connected' | 'closed'
 
@@ -175,11 +175,13 @@ const Term = forwardRef<TermHandle, {
   fontSize: number
   active: boolean
   onStatus?: (s: TermStatus) => void
+  // 后端懒恢复了一个被机器重启带走的会话：它换了新 id，标签/URL/后续请求都得跟着换。
+  onRevived?: (from: string, to: string) => void
   onContextMenu?: (e: { x: number; y: number; selection: string }) => void
   onSelectionMenu?: (e: { x: number; y: number; selection: string }) => void
   onPaste?: () => void // Ctrl+Shift+V / Cmd+V：交父组件走应用粘贴（读剪贴板→失败弹手动框）
   onImagePaste?: (files: File[]) => void // 粘贴事件含图片时回调（绕过键盘拦截时的兜底）
-}>(function Term({ name, fontSize, active, onStatus, onContextMenu, onSelectionMenu, onPaste, onImagePaste }, ref) {
+}>(function Term({ name, fontSize, active, onStatus, onRevived, onContextMenu, onSelectionMenu, onPaste, onImagePaste }, ref) {
   const elRef = useRef<HTMLDivElement>(null)
   const handoffCanvasRef = useRef<HTMLCanvasElement>(null)
   const restoredFrameRef = useRef<HTMLImageElement>(null)
@@ -494,6 +496,14 @@ const Term = forwardRef<TermHandle, {
         const pong = parseTerminalPong(e.data)
         if (pong) {
           if (pong.id === resumeProbeID.current) acknowledgeConnection()
+          return
+        }
+        const revived = parseTerminalRevived(e.data)
+        if (revived) {
+          // 会话刚被按台账重开：本条 WS 已经接到新会话上了，但上层还拿着旧名字。
+          // 交给上层搬家（terms / active / 各种按会话名索引的 map），name 变了会重连一次。
+          acknowledgeConnection()
+          onRevived?.(revived.from, revived.to)
           return
         }
       }

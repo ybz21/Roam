@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"ttmux-cli-go/internal/runtime"
+	"ttmux-cli-go/internal/sessmeta"
 )
 
 type sessionInfo struct {
@@ -27,6 +28,31 @@ type sessionInfo struct {
 	Created      string `json:"created"`
 	Attached     int    `json:"attached"`
 	LastActivity string `json:"last_activity"`
+	// State 是会话的「在」与「活」：live = tmux 里真的有；dormant = 台账里还认得它，
+	// 机器重启带走了 tmux 那一半，点开即恢复。前端据此渲染，也据此决定标签留不留。
+	State string `json:"state,omitempty"`
+	// Agent 这个会话跑的是哪种 agent（claude / codex），空 = 不是 agent 会话。
+	Agent string `json:"agent,omitempty"`
+	// Resumable 休眠会话点开后能不能连对话一起接回（有 agent 对话 id）。
+	Resumable bool `json:"resumable,omitempty"`
+	// Dir 归属目录。休眠会话在列表里得靠它认人——很多老会话连展示名都没有。
+	Dir string `json:"dir,omitempty"`
+	// Repo 所属仓库根，建会话时就算好落进台账的。休眠会话没有 tmux 句柄，
+	// 项目归属算不出来（Annotations 那条路只认活会话），只能靠这一列——
+	// 少了它，重启后所有会话都掉进「散会话·不属于任何项目」。
+	Repo string `json:"repo,omitempty"`
+	// Mem 这个会话此刻吃了多少（字节）。休眠会话没有进程，恒为 nil。
+	Mem *memInfo `json:"mem,omitempty"`
+	// 下面两列供 ls --tree 建父子投影，平铺输出时省略。
+	Parent    string `json:"parent,omitempty"`
+	CreatedBy string `json:"created_by,omitempty"`
+}
+
+// memInfo 会话内存画像。Limit=0 表示没设上限（护栏关掉或装不上）。
+type memInfo struct {
+	Cur   int64 `json:"cur"`
+	Peak  int64 `json:"peak,omitempty"`
+	Limit int64 `json:"limit,omitempty"`
 }
 
 type infoJSON struct {
@@ -37,59 +63,8 @@ type infoJSON struct {
 	Groups   int    `json:"groups"`
 }
 
-func ListJSON(rt runtime.Runtime, exclude map[string]bool, w io.Writer) error {
-	// window_activity 补上 session_activity 的盲区：tmux 只在 attach/输入/焦点变化时
-	// 刷新 session_activity,后台无人 attach 的会话即便一直有输出(agent 干活)也不动;
-	// window_activity 会随前台窗口的 pane 输出走。取两者较大值 = 真正的「最近活跃」。
-	out, err := rt.TmuxOutput("list-sessions", "-F", "#{session_name}\t#{session_windows}\t#{session_created}\t#{session_attached}\t#{session_activity}\t#{window_activity}\t#{session_id}\t#{"+runtime.LabelOption+"}")
-	if err != nil {
-		// tmux server 未启动时输出的是 stderr 错误文本（out 非空），只看 err
-		_, _ = io.WriteString(w, "[]\n")
-		return nil
-	}
-	sessions := []sessionInfo{}
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-		parts := strings.Split(line, "\t")
-		if len(parts) < 4 {
-			continue
-		}
-		if exclude[parts[0]] {
-			continue
-		}
-		windows, _ := strconv.Atoi(parts[1])
-		attached, _ := strconv.Atoi(parts[3])
-		lastActivity := ""
-		if len(parts) > 4 {
-			lastActivity = parts[4]
-		}
-		if len(parts) > 5 {
-			lastActivity = maxNumeric(lastActivity, parts[5]) // max(session_activity, window_activity)
-		}
-		tmuxID := ""
-		if len(parts) > 6 {
-			tmuxID = parts[6]
-		}
-		label := ""
-		if len(parts) > 7 {
-			label = strings.TrimSpace(parts[7])
-		}
-		created, _ := strconv.ParseInt(parts[2], 10, 64)
-		row := runtime.SessionRow{Name: parts[0], Label: label, TmuxID: tmuxID, Created: created}
-		sessions = append(sessions, sessionInfo{
-			Name:         row.Name,
-			Label:        row.DisplayLabel(),
-			ID:           row.ID(),
-			TmuxID:       tmuxID,
-			Windows:      windows,
-			Created:      parts[2],
-			Attached:     attached,
-			LastActivity: lastActivity,
-		})
-	}
-	return json.NewEncoder(w).Encode(sessions)
+func ListJSON(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool, w io.Writer) error {
+	return json.NewEncoder(w).Encode(Collect(rt, meta, exclude))
 }
 
 func InfoJSON(rt runtime.Runtime, version string, exclude map[string]bool, w io.Writer) error {

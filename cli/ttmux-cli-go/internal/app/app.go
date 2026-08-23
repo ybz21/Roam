@@ -73,9 +73,9 @@ func (a App) Run(args []string) error {
 			return session.Tree(a.rt, a.meta(), a.swarmSessions(), out)
 		}
 		if has(rest, "--json") {
-			return session.ListJSON(a.rt, a.swarmSessions(), out)
+			return session.ListJSON(a.rt, a.meta(), a.swarmSessions(), out)
 		}
-		return session.List(a.rt, a.swarmSessions(), out)
+		return session.List(a.rt, a.meta(), a.swarmSessions(), out)
 	case "new":
 		return session.New(a.rt, rest, out)
 	// ── subSession（fork/树/parent，设计 07 §2.1）──
@@ -86,7 +86,7 @@ func (a App) Run(args []string) error {
 	case "parent":
 		return session.ParentCmd(a.rt, a.meta(), rest, out)
 	case "a", "attach":
-		return session.Attach(a.rt, a.swarmSessions(), rest, out)
+		return session.Attach(a.rt, a.meta(), a.swarmSessions(), rest, out)
 	case "d", "detach":
 		return session.Detach(a.rt, rest, out)
 	case "kill":
@@ -94,8 +94,10 @@ func (a App) Run(args []string) error {
 	case "killall":
 		return session.KillAll(a.rt, a.swarmSessions(), out)
 	case "rename":
-		// 改名 = 改展示名(@roam_name)，tmux 会话名(id)不动 → meta/台账/路径全都不用跟着搬
-		_, _, err := session.Rename(a.rt, a.swarmSessions(), rest, out)
+		// 改名 = 改展示名，tmux 会话名(id)不动 → meta 外键/路径全都不用跟着搬。
+		// 但名字本身要**同时**写 tmux 的 @roam_name 和台账的 label：
+		// 前者随会话生死，后者是会话死后唯一还认得出它的东西。
+		_, _, err := session.Rename(a.rt, a.meta(), a.swarmSessions(), rest, out)
 		return err
 	case "resolve": // 把展示名/id/老名字解析成 tmux 会话名（后端与脚本用）
 		return session.Resolve(a.rt, rest, out)
@@ -148,7 +150,7 @@ func (a App) Run(args []string) error {
 
 func (a App) runStatus(args []string) error {
 	if len(args) < 1 {
-		_ = session.List(a.rt, a.swarmSessions(), os.Stdout)
+		_ = session.List(a.rt, a.meta(), a.swarmSessions(), os.Stdout)
 		fmt.Fprintln(os.Stdout)
 		return group.List(a.rt, a.swarmNames(), os.Stdout)
 	}
