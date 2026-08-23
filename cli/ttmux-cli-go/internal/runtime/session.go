@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"ttmux-cli-go/internal/id"
+	"ttmux-cli-go/internal/memguard"
 )
 
 // LabelOption 会话展示名所在的 tmux 用户选项名。
@@ -233,7 +234,40 @@ func (r Runtime) CreateSession(opt CreateOpts) (string, error) {
 	if opt.Label != "" {
 		_ = r.SetSessionLabel(tmuxID, opt.Label)
 	}
+	// 内存天花板：撞顶时 cgroup OOM 只杀这个会话里的进程，不再把整台机器带走。
+	// 装不上（无 systemd / 控制器没委派）就静默跳过——护栏失效该降级成「和以前一样」。
+	r.GuardMemory(sess)
 	return sess, nil
+}
+
+// GuardMemory 给会话的所有 pane 套上内存上限。
+//
+// 新 pane（split-window / new-window）有自己的 scope，也得补设，所以这里按会话
+// 遍历而不是只管第一个 pane；调用方在建会话后、以及 Reconcile 巡检时都会经过。
+func (r Runtime) GuardMemory(sess string) {
+	l := memguard.FromEnv()
+	if l.Off() {
+		return
+	}
+	for _, pid := range r.PanePIDs(sess) {
+		_ = memguard.Apply(pid, l)
+	}
+}
+
+// PanePIDs 返回会话里每个 pane 的进程号。
+// -s = 这个会话内的所有 pane（不是 -a，那是整个 server 的，会把别人的 pane 也算进来）。
+func (r Runtime) PanePIDs(sess string) []int {
+	out, err := r.TmuxOutput("list-panes", "-s", "-t", "="+sess, "-F", "#{pane_pid}")
+	if err != nil {
+		return nil
+	}
+	var pids []int
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		if n, err := strconv.Atoi(strings.TrimSpace(line)); err == nil && n > 0 {
+			pids = append(pids, n)
+		}
+	}
+	return pids
 }
 
 // sessionNameByID 反查 tmux id 现在的会话名（查不到返回空串）。

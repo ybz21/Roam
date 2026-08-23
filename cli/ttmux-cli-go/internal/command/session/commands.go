@@ -18,65 +18,53 @@ import (
 
 // List renders the human-readable session table (mirrors _pretty_sessions),
 // hiding swarm-owned sessions via exclude.
-func List(rt runtime.Runtime, exclude map[string]bool, w io.Writer) error {
-	// 展示口径「名字(会话 id)」：名字取会话的展示名（@roam_name），id 就是 tmux 会话名
-	// 本身（迁移前的老会话由 session_created + session_id 现算派生）。
-	out, err := rt.TmuxOutput("list-sessions", "-F", "#{session_name}\t#{session_windows}\t#{session_created}\t#{session_attached}\t#{session_id}\t#{"+runtime.LabelOption+"}")
-	if err != nil {
-		// tmux server 未启动时输出的是 stderr 错误文本，不能当会话数据解析
-		out = ""
-	}
+//
+// 会话集合来自 Collect —— 与 `ls --json` / `ls --tree` 同一个出处，所以
+// **休眠会话（机器重启带走的）在命令行这边也看得见**，attach 一下就回来。
+func List(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool, w io.Writer) error {
+	sessions := Collect(rt, meta, exclude)
 	p := ui.P()
 	fmt.Fprintln(w)
-	count := 0
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-		parts := strings.Split(line, "\t")
-		if len(parts) < 4 {
-			continue
-		}
-		name := parts[0]
-		if exclude[name] {
-			continue
-		}
-		att := ui.Dim("[空闲]")
-		if parts[3] != "0" && parts[3] != "" {
-			att = p.Green + "[已连接]" + p.Reset
-		}
-		ts := parts[2]
-		created, _ := strconv.ParseInt(parts[2], 10, 64)
+	live, dormant := 0, 0
+	for _, s := range sessions {
+		ts := s.Created
+		created, _ := strconv.ParseInt(s.Created, 10, 64)
 		if created > 0 {
 			ts = time.Unix(created, 0).Format("01-02 15:04")
 		}
-		row := runtime.SessionRow{Name: name, Created: created}
-		if len(parts) > 4 {
-			row.TmuxID = parts[4]
+		label := ui.Bold(s.Label)
+		if s.ID != "" && s.ID != s.Label {
+			label += p.Dim + "(" + s.ID + ")" + p.Reset
 		}
-		if len(parts) > 5 {
-			row.Label = strings.TrimSpace(parts[5])
+		if s.State == "dormant" {
+			hint := "休眠 · attach 即恢复"
+			if s.Resumable {
+				hint = "休眠 · 可接回对话"
+			}
+			fmt.Fprintf(w, "   %s %s  %s%s  [%s]%s\n", ui.IconSessionDormant, label, p.Dim, ts, hint, p.Reset)
+			dormant++
+			continue
 		}
-		label := ui.Bold(row.DisplayLabel())
-		if sid := row.ID(); sid != "" && sid != row.DisplayLabel() {
-			label += p.Dim + "(" + sid + ")" + p.Reset
+		att := ui.Dim("[空闲]")
+		if s.Attached > 0 {
+			att = p.Green + "[已连接]" + p.Reset
 		}
-		fmt.Fprintf(w, "   %s %s  %s%s 个窗口  %s%s  %s\n",
-			ui.IconSession, label, p.Dim, parts[1], ts, p.Reset, att)
-		count++
+		fmt.Fprintf(w, "   %s %s  %s%d 个窗口  %s%s  %s\n",
+			ui.IconSession, label, p.Dim, s.Windows, ts, p.Reset, att)
+		live++
 	}
-	if count == 0 {
+	if live == 0 && dormant == 0 {
 		ui.Info(w, "没有活跃会话")
 		return nil
 	}
 	fmt.Fprintln(w)
-	fmt.Fprintf(w, "   %s共 %d 个会话%s\n\n", p.Dim, count, p.Reset)
+	if dormant > 0 {
+		fmt.Fprintf(w, "   %s共 %d 个会话 · %d 个休眠（attach 即恢复）%s\n\n", p.Dim, live, dormant, p.Reset)
+	} else {
+		fmt.Fprintf(w, "   %s共 %d 个会话%s\n\n", p.Dim, live, p.Reset)
+	}
 	return nil
 }
-
-// PickSession reproduces _pick_session: a single non-swarm session is returned
-// directly; otherwise the user chooses on /dev/tty. 返回的永远是 tmux 会话名
-// （= 会话 id）；用户可以输编号，也可以输展示名/id，后者走 Resolve。
 func PickSession(rt runtime.Runtime, exclude map[string]bool, prompt string, w io.Writer) (string, error) {
 	var rows []runtime.SessionRow
 	for _, s := range rt.SessionRows() {

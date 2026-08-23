@@ -10,7 +10,6 @@ import (
 	"io"
 	"os"
 	"sort"
-	"strconv"
 	"strings"
 
 	"ttmux-cli-go/internal/runtime"
@@ -181,6 +180,11 @@ type treeNode struct {
 	Parent       string      `json:"parent,omitempty"`
 	CreatedBy    string      `json:"created_by,omitempty"`
 	Children     []*treeNode `json:"children,omitempty"`
+	// 与 sessionInfo 同义：live | dormant，以及休眠会话点开后能不能接回对话。
+	State     string `json:"state,omitempty"`
+	Agent     string `json:"agent,omitempty"`
+	Resumable bool   `json:"resumable,omitempty"`
+	Repo      string `json:"repo,omitempty"`
 }
 
 // TreeJSON 输出 parent 投影的会话森林（含每会话活动 pane cwd）。
@@ -222,45 +226,34 @@ func Tree(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool, w i
 	return nil
 }
 
+// buildTree 把 Collect 给的会话集合投影成 parent 森林。
+//
+// **不再自己跑一遍 list-sessions**：从前它和 ListJSON 各解析一次同样的字段，
+// 于是「概览里有、点进项目又没了」——加一类会话只在一处补，另一处就静默漏掉。
 func buildTree(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool) (map[string]*treeNode, []*treeNode) {
-	alive := aliveSet(rt)
-	meta.Reconcile(alive)
+	sessions := Collect(rt, meta, exclude)
 	rows := meta.All()
 
-	// 会话基础信息（一次 list-sessions）
-	// window_activity 补 session_activity 盲区（后台有输出但无人 attach 时不动),取较大值。
-	out, _ := rt.TmuxOutput("list-sessions", "-F", "#{session_name}\t#{session_windows}\t#{session_created}\t#{session_attached}\t#{session_activity}\t#{window_activity}\t#{session_id}\t#{"+runtime.LabelOption+"}")
 	nodes := map[string]*treeNode{}
 	var order []string
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		parts := strings.Split(line, "\t")
-		if len(parts) < 4 || exclude[parts[0]] {
-			continue
+	for _, s := range sessions {
+		n := &treeNode{
+			Name: s.Name, Label: s.Label, ID: s.ID, TmuxID: s.TmuxID,
+			Windows: s.Windows, Created: s.Created, Attached: s.Attached,
+			LastActivity: s.LastActivity, State: s.State, Agent: s.Agent,
+			Resumable: s.Resumable, Repo: s.Repo,
 		}
-		n := &treeNode{Name: parts[0], Created: parts[2]}
-		fmt.Sscanf(parts[1], "%d", &n.Windows)
-		fmt.Sscanf(parts[3], "%d", &n.Attached)
-		if len(parts) > 4 {
-			n.LastActivity = parts[4]
+		// 休眠会话没有 pane，cwd 只能取台账里记下的归属目录——项目详情页正是靠它归位。
+		if s.State == "dormant" {
+			n.Cwd = s.Dir
+			n.CreatedBy = s.CreatedBy
+			n.Parent = s.Parent
 		}
-		if len(parts) > 5 {
-			n.LastActivity = maxNumeric(n.LastActivity, parts[5])
-		}
-		created, _ := strconv.ParseInt(parts[2], 10, 64)
-		row := runtime.SessionRow{Name: parts[0], Created: created}
-		if len(parts) > 6 {
-			row.TmuxID = parts[6]
-			n.TmuxID = parts[6]
-		}
-		if len(parts) > 7 {
-			row.Label = strings.TrimSpace(parts[7])
-		}
-		n.ID = row.ID()
-		n.Label = row.DisplayLabel()
 		nodes[n.Name] = n
 		order = append(order, n.Name)
 	}
-	// pane cwd（一次 list-panes -a，取每会话 active pane）
+
+	// 活会话的 cwd 取自活动 pane（一次 list-panes -a）。休眠会话上面已经填过，不覆盖。
 	if pout, err := rt.TmuxOutput("list-panes", "-a", "-F", "#{session_name}\t#{pane_active}\t#{pane_current_path}"); err == nil {
 		for _, line := range strings.Split(strings.TrimSpace(pout), "\n") {
 			parts := strings.Split(line, "\t")
@@ -272,6 +265,7 @@ func buildTree(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool
 			}
 		}
 	}
+
 	var roots []*treeNode
 	for _, name := range order {
 		n := nodes[name]

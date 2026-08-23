@@ -19,6 +19,26 @@ var mainSteps = []Step{
 	{Version: 4, Name: "agent-session", Fn: addAgentSession},
 	{Version: 5, Name: "project-traces", SQL: createProjectTraces},
 	{Version: 6, Name: "import-traces", Fn: importTraces},
+	{Version: 7, Name: "lazy-revive", Fn: addLazyRevive},
+}
+
+// addLazyRevive 补齐「会话懒恢复」要用的三列，顺带修一个静默了很久的洞。
+//
+// restored_from 本该由 step 4 建出来，但它是**后来**被加进那个已发布步骤的：
+// 库跑过 step 4 之后 schema_meta 就记了 4，再改 addAgentSession 也不会重跑。
+// 于是所有 2026-08-12 之后升级的库都没有这一列，SetRestoredFrom 一直在
+// 静默失败（调用方 `_ =` 吞了错）。addColumns 是幂等的，这里无条件补一次。
+// —— 这正是文件开头那句「只增不改，永远不要改动已发布的那些」防的事。
+func addLazyRevive(tx *sql.Tx, _ Options) error {
+	return addColumns(tx, "sessions", map[string]string{
+		"restored_from": "TEXT",
+		// agent_kind 决定恢复时敲哪个命令。没有它就只能硬编码 claude，
+		// 于是 codex 会话会被敲成 `claude --resume <codex的对话id>`。
+		"agent_kind": "TEXT",
+		// last_seen 让 host-restart 的 died_at 能取「最后一次看见它」而不是
+		// 「开机后第一次 Reconcile」——后者差了整整一夜。
+		"last_seen": "TEXT",
+	})
 }
 
 // createProjectTraces 收尾留痕（合入 / 丢弃 / 清理）进表。

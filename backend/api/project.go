@@ -37,6 +37,8 @@ type projectSession struct {
 	LastActivity int64  `json:"lastActivity"`
 	Branch       string `json:"branch,omitempty"` // 落在 worktree 里才有
 	Linked       bool   `json:"linked,omitempty"`
+	// State: 空/live = 真的活着；dormant = 台账里还认得它，点开即恢复。
+	State string `json:"state,omitempty"`
 }
 
 type projectSummary struct {
@@ -60,6 +62,7 @@ type projectSummary struct {
 
 	// Top 是**给卡片画三行用的**，被截断过，所以它算不出总数——前端拿它数 waiting/running
 	// 会漏掉第 4 个以后的会话。下面这三样在截断**之前**统计，是完整的：
+	Dormant int              `json:"dormant"` // 休眠会话数（重启带走、点开即恢复）
 	Running int              `json:"running"` // 跑着 agent 的会话数（全量）
 	Waiting int              `json:"waiting"` // 等待输入的会话数（全量）
 	Needs   []projectSession `json:"needs"`   // 全部等待输入的会话——「需要你」队列要的是它，不是 Top
@@ -71,6 +74,23 @@ type sessListItem struct {
 	Label        string          `json:"label"`
 	Attached     json.RawMessage `json:"attached"`
 	LastActivity json.RawMessage `json:"last_activity"`
+	// State: live | dormant。dormant = 机器重启带走了，点开即恢复（懒恢复，见 R2 设计稿）。
+	State string `json:"state,omitempty"`
+	// Dir/Repo 只有 dormant 会话带：它们没有 tmux 句柄，Annotations 那条归属路走不通，
+	// 只能靠台账里记下的目录。少了这一步，重启后所有会话都掉进「散会话」。
+	Dir  string `json:"dir,omitempty"`
+	Repo string `json:"repo,omitempty"`
+}
+
+// dormant 这个会话是不是「点开才恢复」的休眠会话。
+func (s sessListItem) dormant() bool { return s.State == "dormant" }
+
+// homeDir 休眠会话记在台账里的归属目录（活会话为空——它们走 Annotations/SessionCwds）。
+func (s sessListItem) homeDir() string {
+	if s.Repo != "" {
+		return s.Repo
+	}
+	return s.Dir
 }
 
 func rawInt(r json.RawMessage) int64 {
@@ -154,10 +174,15 @@ func (a *API) ProjectsList(c *gin.Context) {
 	// 已经扫过了，不额外付代价；只在完全无歧义时才记（见 agent-transcript-link.go）。
 	a.agentLink.note(agentRunning, a.WT.SessionHome, a.linkAgentSession)
 
-	addSession := func(p *projectSummary, top *[]projectSession, name, label string, attached bool, last int64, branch string, linked bool) {
+	addSession := func(p *projectSummary, top *[]projectSession, name, label string, attached bool, last int64, branch string, linked, dormant bool) {
 		claimed[name] = true
 		p.Sessions++
 		ps := projectSession{Name: name, Label: label, Attached: attached, Agent: agentRunning[name], Running: agentRunning[name] != "", LastActivity: last, Linked: linked, Branch: branch}
+		if dormant {
+			// 休眠会话没有进程：绿点/待输入一律不适用，更不该去 capture-pane 一个不存在的 pane。
+			ps = projectSession{Name: name, Label: label, LastActivity: last, State: "dormant"}
+			p.Dormant++
+		}
 		if ps.Running { // 只对在跑的会话抓屏判待输入，省掉给 idle 会话的 capture-pane
 			screen := sessionCapture(name, 50)
 			if ps.Waiting = sessionWaiting(screen); ps.Waiting {
@@ -245,7 +270,7 @@ func (a *API) ProjectsList(c *gin.Context) {
 			if an.Primary.Linked {
 				branch = an.Primary.Branch
 			}
-			addSession(&p, &top, s.Name, s.Label, rawInt(s.Attached) > 0, rawInt(s.LastActivity), branch, an.Primary.Linked)
+			addSession(&p, &top, s.Name, s.Label, rawInt(s.Attached) > 0, rawInt(s.LastActivity), branch, an.Primary.Linked, an.Dormant)
 		}
 		if p.Sessions > 0 {
 			a.Projects.NoteSessions(key)
@@ -289,7 +314,7 @@ func (a *API) ProjectsList(c *gin.Context) {
 			}
 			if best >= 0 {
 				ng := nonGit[best]
-				addSession(ng.p, &tops[best], s.Name, s.Label, rawInt(s.Attached) > 0, rawInt(s.LastActivity), "", false)
+				addSession(ng.p, &tops[best], s.Name, s.Label, rawInt(s.Attached) > 0, rawInt(s.LastActivity), "", false, ann[s.Name] != nil && ann[s.Name].Dormant)
 			}
 		}
 		for i, ng := range nonGit {
@@ -300,6 +325,10 @@ func (a *API) ProjectsList(c *gin.Context) {
 	for _, s := range sessions {
 		if !claimed[s.Name] {
 			ls := projectSession{Name: s.Name, Label: s.Label, Attached: rawInt(s.Attached) > 0, Agent: agentRunning[s.Name], Running: agentRunning[s.Name] != "", LastActivity: rawInt(s.LastActivity)}
+			if s.dormant() {
+				// 休眠会话不跑进程，绿点/待输入一律不适用，也不该去 capture-pane。
+				ls = projectSession{Name: s.Name, Label: s.Label, LastActivity: rawInt(s.LastActivity), State: "dormant"}
+			}
 			if ls.Running {
 				screen := sessionCapture(s.Name, 50)
 				if ls.Waiting = sessionWaiting(screen); ls.Waiting {

@@ -755,7 +755,7 @@ export default function TerminalPane(props: {
             pointerEvents: termName === active ? 'auto' : 'none',
             zIndex: termName === active ? 1 : 0,
           }}>
-            <Term ref={(h) => { termRefs.current[termName] = h }} name={termName} fontSize={fontSize} active={termName === active} onStatus={(s) => setStatus(termName, s)}
+            <Term ref={(h) => { termRefs.current[termName] = h }} name={termName} fontSize={fontSize} active={termName === active} onStatus={(s) => setStatus(termName, s)} onRevived={onRename}
               onContextMenu={({ x, y, selection }) => { setActive(termName); setCtx({ x, y, session: termName, selection }) }}
               onSelectionMenu={({ selection }) => { setActive(termName); setCtx(null); if (selection.trim()) { copyText(selection); message.success(t('common.copied')) } }}
               onPaste={() => { setActive(termName); pasteClipboard(termName) }}

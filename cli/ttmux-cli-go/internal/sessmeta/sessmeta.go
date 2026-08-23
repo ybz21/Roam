@@ -39,6 +39,10 @@ import (
 // deadKeep 保留的死会话行数上限（超出按 died_at 从旧到新删）。
 const deadKeep = 5000
 
+// dormantCap 会话列表最多带几个休眠会话。上一代 epoch 那批本来就不会太多，
+// 这个上限只是兜底：真遇上一台开了几百个会话的机器，列表不该被它淹掉。
+const dormantCap = 200
+
 type Store struct {
 	HomeDir string
 	// DataDir 是旧 JSON 台账所在目录（ROAM_DATA 可与 HomeDir 不同）。
@@ -69,6 +73,8 @@ type Row struct {
 	Home       string `json:"home,omitempty"`        // 归属目录
 	RepoRoot   string `json:"repo_root,omitempty"`   // 所属仓库根（建会话时算好的）
 	AgentUUID  string `json:"agent_uuid,omitempty"`  // agent 那一侧的对话 id
+	AgentKind  string `json:"agent_kind,omitempty"`  // claude | codex：恢复时敲哪个命令
+	LastSeen   string `json:"last_seen,omitempty"`   // 最后一次被 Reconcile 看见（host-restart 的 died_at 取它）
 }
 
 func New(homeDir string) *Store { return &Store{HomeDir: homeDir, Now: time.Now} }
@@ -225,10 +231,11 @@ func (s *Store) Get(session string) (Row, bool) {
 	r := Row{Session: session}
 	err = db.QueryRow(`SELECT IFNULL(parent_id,''), IFNULL(created_by,''), IFNULL(created_at,''),
 		IFNULL(initial_cwd,''), status, IFNULL(died_at,''), IFNULL(died_reason,''),
-		IFNULL(label,''), IFNULL(home_dir,''), IFNULL(repo_root,''), IFNULL(agent_session_uuid,'')
+		IFNULL(label,''), IFNULL(home_dir,''), IFNULL(repo_root,''), IFNULL(agent_session_uuid,''),
+		IFNULL(agent_kind,'')
 		FROM sessions WHERE id=?`, session).
 		Scan(&r.Parent, &r.CreatedBy, &r.CreatedAt, &r.InitialCwd, &r.Status,
-			&r.DiedAt, &r.DiedReason, &r.Label, &r.Home, &r.RepoRoot, &r.AgentUUID)
+			&r.DiedAt, &r.DiedReason, &r.Label, &r.Home, &r.RepoRoot, &r.AgentUUID, &r.AgentKind)
 	return r, err == nil
 }
 
@@ -399,6 +406,103 @@ func (s *Store) History(limit int) []Row {
 		}
 	}
 	return out
+}
+
+// Dormant 返回「休眠」会话：机器重启带走了，但随时可以点开重来的那些。
+//
+// 会话的「在」和「活」是两件事——「在」（目录、名字、对话 id）一直在台账里，
+// 重启带不走；「活」（tmux 会话和 pane 里的进程）确实没了。列表要显示的是
+// 「在」的全集，所以这批得跟活会话一起出现在 ls 里，用户点哪个哪个才真正起来。
+//
+// 筛选条件一个都不能少，每一条都对应一类实测出来的噪音：
+//
+//   - died_reason='host-restart'：你**显式 kill** 的会话就该是死的，
+//     它在列表里再冒出来比消失更让人恼火。
+//   - 只取**上一代 tmux server**（最新的那个 tmux_epoch）带走的那批。
+//     不加这条就是「历史上所有被重启带走过的会话」——本机实测 73 条，
+//     混着七月份的测试会话和早就删掉的 /tmp 目录。上上次重启带走、
+//     隔了这么久都没去恢复的，本来就不需要了，留在列表里只是噪音。
+//   - tmux_epoch 非空：迁移前的老行没记 epoch（本机 150 条），
+//     判不出属于哪次重启，一律不认。
+//   - restored_from 没被占用：已经重开过的不再出现，否则点一次多一个。
+//   - 有归属目录，且**目录还在**：worktree 被清是常事，无处可开的不该出现在
+//     列表里诱人点一下（目录存在性在 Go 侧查，SQL 做不到）。
+//
+// 见 docs/design/reliability/session-restore.html。
+func (s *Store) Dormant() []Row {
+	db, err := s.db()
+	if err != nil {
+		return nil
+	}
+	rows, err := db.Query(`SELECT d.id, IFNULL(d.created_at,''), IFNULL(d.initial_cwd,''),
+		IFNULL(d.died_at,''), IFNULL(d.label,''), IFNULL(d.home_dir,''),
+		IFNULL(d.repo_root,''), IFNULL(d.agent_session_uuid,''), IFNULL(d.agent_kind,'')
+		FROM sessions d
+		WHERE d.status='dead' AND d.died_reason='host-restart'
+		  AND IFNULL(d.tmux_epoch,'') <> ''
+		  AND d.tmux_epoch = (SELECT tmux_epoch FROM sessions
+		        WHERE status='dead' AND died_reason='host-restart' AND IFNULL(tmux_epoch,'') <> ''
+		        ORDER BY IFNULL(died_at,created_at) DESC LIMIT 1)
+		  AND IFNULL(d.home_dir,IFNULL(d.initial_cwd,'')) <> ''
+		  AND NOT EXISTS (SELECT 1 FROM sessions r WHERE r.restored_from = d.id)
+		ORDER BY IFNULL(d.died_at,d.created_at) DESC
+		LIMIT ?`, dormantCap)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []Row
+	for rows.Next() {
+		r := Row{Status: "dead", DiedReason: "host-restart"}
+		if rows.Scan(&r.Session, &r.CreatedAt, &r.InitialCwd, &r.DiedAt,
+			&r.Label, &r.Home, &r.RepoRoot, &r.AgentUUID, &r.AgentKind) != nil {
+			continue
+		}
+		dir := r.Home
+		if dir == "" {
+			dir = r.InitialCwd
+		}
+		if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
+			continue
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
+// RestoredAs 反查一个休眠会话已经被重开成了哪个会话（没有则空串）。
+// 它是懒恢复的幂等键：点两次不该长出两个会话。
+func (s *Store) RestoredAs(dormant string) string {
+	if dormant == "" {
+		return ""
+	}
+	db, err := s.db()
+	if err != nil {
+		return ""
+	}
+	var id string
+	// 同一行理论上只会被重开一次；真出现多行（并发穿透）也取最新那个，
+	// 让调用方收敛到同一个会话上，而不是随机挑一个。
+	if db.QueryRow(`SELECT id FROM sessions WHERE restored_from=?
+		ORDER BY IFNULL(created_at,'') DESC LIMIT 1`, dormant).Scan(&id) != nil {
+		return ""
+	}
+	return id
+}
+
+// SetAgentKind 记这个会话跑的是哪种 agent（claude / codex）。
+// 恢复时靠它决定敲什么命令；**只记一次不覆盖**，理由同 SetAgentSession。
+func (s *Store) SetAgentKind(session, kind string) error {
+	if session == "" || kind == "" {
+		return nil
+	}
+	db, err := s.db()
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`UPDATE sessions SET agent_kind=?
+		WHERE id=? AND IFNULL(agent_kind,'')=''`, kind, session)
+	return err
 }
 
 // OnRename 会话名变了 → 主键跟着搬（连带所有指向它的 parent_id）。

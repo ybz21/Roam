@@ -281,6 +281,50 @@ func (h *homeStore) reconcile(alive map[string]bool) {
 	}
 }
 
+// dormantSQL 休眠会话：机器重启带走、点开即恢复的那批。
+//
+// **与 CLI 侧 sessmeta.Store.Dormant() 是同一个口径**，改一处就要改另一处
+// （两个 module 读同一张 sessions 表，没法共享代码）。逐条筛选条件的理由写在
+// cli/ttmux-cli-go/internal/sessmeta/sessmeta.go 的 Dormant() 上，此处不再抄一遍。
+const dormantSQL = `SELECT d.id, IFNULL(d.home_dir,IFNULL(d.initial_cwd,''))
+	FROM sessions d
+	WHERE d.status='dead' AND d.died_reason='host-restart'
+	  AND IFNULL(d.tmux_epoch,'') <> ''
+	  AND d.tmux_epoch = (SELECT tmux_epoch FROM sessions
+	        WHERE status='dead' AND died_reason='host-restart' AND IFNULL(tmux_epoch,'') <> ''
+	        ORDER BY IFNULL(died_at,created_at) DESC LIMIT 1)
+	  AND IFNULL(d.home_dir,IFNULL(d.initial_cwd,'')) <> ''
+	  AND NOT EXISTS (SELECT 1 FROM sessions r WHERE r.restored_from = d.id)
+	ORDER BY IFNULL(d.died_at,d.created_at) DESC
+	LIMIT 200`
+
+// dormantHomes 休眠会话的归属。让它们和活会话走**同一条**归属通道，
+// 于是 Annotations / SessionCwds / worktree join / 项目详情全都自动认得它们——
+// 否则就会出现「概览卡里有、点进项目又没了」这种数据不一致。
+func (h *homeStore) dormantHomes() []sessionHome {
+	if h.db == nil {
+		return nil
+	}
+	rows, err := h.db.Query(dormantSQL)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []sessionHome
+	for rows.Next() {
+		var name, home string
+		if rows.Scan(&name, &home) != nil || home == "" {
+			continue
+		}
+		// 目录没了就不算数：worktree 被清是常事，恢复不出来的不该占着归属。
+		if fi, err := os.Stat(home); err != nil || !fi.IsDir() {
+			continue
+		}
+		out = append(out, sessionHome{Name: name, Home: canonical(home), Dormant: true})
+	}
+	return out
+}
+
 // ── Service 外部接口 ──────────────────────────────────────
 
 // sessionHome 一个会话的身份三元组：tmux session_id（内部键）+ 名字（对外 handle）+ 归属目录。
@@ -288,6 +332,9 @@ type sessionHome struct {
 	ID   string
 	Name string
 	Home string
+	// Dormant 这个会话只存在于台账里：机器重启带走了 tmux 那一半，点开即恢复。
+	// 归属照常算（目录一直记着），但它没有 pane、没有进程。
+	Dormant bool
 }
 
 // resolveSessionID 问 tmux 要某会话的 session_id（`=name` 精确匹配，避免前缀误命中）。
@@ -346,6 +393,11 @@ func (s *Service) SessionHome(session string) string {
 // 优先）钉一次；顺带收敛死会话残行。这是 session 归属的唯一入口，
 // Annotations / SessionCwds / worktree 会话 join / ListAll 全部走它。
 func (s *Service) sessionHomes(ctx context.Context) []sessionHome {
+	return append(s.livingHomes(ctx), s.homes.dormantHomes()...)
+}
+
+// livingHomes 活会话那一半（原 sessionHomes 的全部逻辑）。
+func (s *Service) livingHomes(ctx context.Context) []sessionHome {
 	panes := tmuxPanes(ctx)
 	alive := make(map[string]bool, len(panes))
 	order := make([]string, 0, len(panes))
@@ -388,7 +440,7 @@ func (s *Service) sessionHomes(ctx context.Context) []sessionHome {
 func homePanes(homes []sessionHome) []pane {
 	out := make([]pane, 0, len(homes))
 	for _, h := range homes {
-		out = append(out, pane{ID: h.ID, Session: h.Name, Active: true, Cwd: h.Home})
+		out = append(out, pane{ID: h.ID, Session: h.Name, Active: true, Cwd: h.Home, Dormant: h.Dormant})
 	}
 	return out
 }

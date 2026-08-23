@@ -73,9 +73,9 @@ func (a App) Run(args []string) error {
 			return session.Tree(a.rt, a.meta(), a.swarmSessions(), out)
 		}
 		if has(rest, "--json") {
-			return session.ListJSON(a.rt, a.swarmSessions(), out)
+			return session.ListJSON(a.rt, a.meta(), a.swarmSessions(), out)
 		}
-		return session.List(a.rt, a.swarmSessions(), out)
+		return session.List(a.rt, a.meta(), a.swarmSessions(), out)
 	case "new":
 		return session.New(a.rt, rest, out)
 	// ── subSession（fork/树/parent，设计 07 §2.1）──
@@ -148,7 +148,7 @@ func (a App) Run(args []string) error {
 
 func (a App) runStatus(args []string) error {
 	if len(args) < 1 {
-		_ = session.List(a.rt, a.swarmSessions(), os.Stdout)
+		_ = session.List(a.rt, a.meta(), a.swarmSessions(), os.Stdout)
 		fmt.Fprintln(os.Stdout)
 		return group.List(a.rt, a.swarmNames(), os.Stdout)
 	}

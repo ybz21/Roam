@@ -317,15 +317,31 @@ func Handler(c *gin.Context) {
 	}
 	defer conn.Close()
 
-	// 会话已经没了就当场说清楚并用 4404 关掉。
-	// 从前这里照样 attach：tmux 打一行 "can't find session" 就退出 → pty EOF → 前端按
-	// 「普通断线」1.2s 后重连 → 再来一遍，永远停在「连接中」。标签页是从 URL 恢复的，
-	// 昨天跑完被 kill 的会话今天还在标签条上，于是「很多终端连不上」。
+	// 会话不在 tmux 里，先问台账认不认得它。
+	//
+	// 认得且只是**被机器重启带走的** → 当场按台账重开一个壳（有对话 id 的顺带接回），
+	// 然后照常 attach 下去。这就是「懒恢复」：开机什么都不建，点开哪个哪个才活过来。
+	//
+	// 台账也不认（或是被显式 kill 的、原目录没了）→ 才是真的没了，用 4404 关掉。
+	// 从前这里一律 attach：tmux 打一行 "can't find session" 就退出 → pty EOF → 前端按
+	// 「普通断线」1.2s 后重连 → 再来一遍，永远停在「连接中」。
 	if !sessionExists(name) {
-		_ = conn.WriteMessage(websocket.TextMessage, []byte("\r\n[会话已不存在: "+name+"]\r\n"))
-		_ = conn.WriteMessage(websocket.CloseMessage,
-			websocket.FormatCloseMessage(closeSessionGone, "session gone"))
-		return
+		revived, ok := reviveDormant(name)
+		if !ok {
+			_ = conn.WriteMessage(websocket.TextMessage, []byte("\r\n[会话已不存在: "+name+"]\r\n"))
+			_ = conn.WriteMessage(websocket.CloseMessage,
+				websocket.FormatCloseMessage(closeSessionGone, "session gone"))
+			return
+		}
+		// 重开的是新 id 的会话（旧行保持 dead，靠 restored_from 溯源）。前端必须知道
+		// 改叫什么了，否则标签、URL、后续的 /api/term/<旧名> 全对不上，下次刷新又是死链接。
+		notice, _ := json.Marshal(struct {
+			Type string `json:"type"`
+			From string `json:"from"`
+			To   string `json:"to"`
+		}{Type: "revived", From: name, To: revived})
+		_ = conn.WriteMessage(websocket.TextMessage, notice)
+		name = revived
 	}
 
 	// 关闭 tmux 鼠标模式，保留浏览器/xterm 原生拖选复制体验。
