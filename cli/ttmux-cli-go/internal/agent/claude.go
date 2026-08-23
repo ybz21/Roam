@@ -22,21 +22,43 @@ func (claude) Bin() string         { return "claude" }
 // 关联由构造保证，会话死了、目录里又开过别的 agent，也认得回来。
 func (claude) PinsConversationID() bool { return true }
 
-func (claude) StartArgs(opt StartOpts) []string {
+func (claude) InteractiveArgs(opt StartOpts) []string {
 	var a []string
-	if opt.Permission != "" {
-		a = append(a, "--"+opt.Permission)
-	}
 	if opt.Model != "" {
 		a = append(a, "--model", opt.Model)
 	}
+	a = append(a, permArgs(opt.Permission)...)
+	// 只在交互式注入对话 id：一次性任务跑完就结束，钉一个 id 没意义，
+	// 反而会和下一次 -p 撞同一个 id。
 	if opt.ConvID != "" {
 		a = append(a, "--session-id", opt.ConvID)
 	}
-	if opt.Prompt != "" {
-		a = append(a, opt.Prompt)
-	}
 	return a
+}
+
+func (claude) OneShotArgs(opt StartOpts) []string {
+	// -p 本身就从 stdin 读 prompt，不需要额外的 `-`。
+	a := []string{"-p"}
+	if opt.Model != "" {
+		a = append(a, "--model", opt.Model)
+	}
+	a = append(a, permArgs(opt.Permission)...)
+	if opt.MaxTurns != "" {
+		a = append(a, "--max-turns", opt.MaxTurns)
+	}
+	return append(a, "--output-format", "text")
+}
+
+// permArgs 把 Roam 口径的权限档翻成 claude 的参数。
+// "dangerously-skip-permissions" 是个独立开关，其余走 --permission-mode。
+func permArgs(perm string) []string {
+	if perm == "dangerously-skip-permissions" {
+		return []string{"--dangerously-skip-permissions"}
+	}
+	if perm == "" {
+		return nil
+	}
+	return []string{"--permission-mode", perm}
 }
 
 func (c claude) ResumeCommand(convID string) string {
