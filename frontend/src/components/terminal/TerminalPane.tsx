@@ -8,7 +8,7 @@ import GitPanel from '../git/GitPanel'
 import MobileSubPage from '../MobileSubPage'
 import { PaneCloseConfirm, type PaneCloseTarget } from './PaneCloseConfirm'
 import Term, { TermHandle, TermStatus } from './Terminal'
-import { api, makeClipboardImageFile, upload } from '../../api'
+import { api, makeClipboardImageFile, upload, uploadedPathOf } from '../../api'
 import { VoiceInput } from '../chat/VoiceInput'
 import { copyText } from '../chat/blocks'
 import RenameSessionModal from '../sessions/RenameSessionModal'
@@ -362,15 +362,42 @@ export default function TerminalPane(props: {
     setPasteText('')
     setPasteOpen(true)
   }
+  /**
+   * 粘贴图片：**先把 @路径 敲进去，再后台上传**。
+   *
+   * 反过来（await upload 之后再敲）会吞掉用户的输入：上传要几百毫秒到几秒，
+   * 而用户按完 Ctrl+V 就以为贴好了、立刻接着打字——那些字符实时进了 pty，
+   * 等上传回来，@路径 插在**光标当前位置**，正好戳进已经打了一半的句子中间。
+   * 用户看到的就是「后半段文字被淹没」。
+   *
+   * 路径能提前算出来，靠的是文件名里那截随机串（见 makeClipboardImageFile）：
+   * 后端 uniquePath 只在重名时才改名，不重名就原样落盘。
+   * 万一真撞了名，下面会拿实际路径和预敲的比一次，不一致就明说。
+   */
   const pasteImage = async (session: string, rawFiles: File[]) => {
     const files = rawFiles.map((f, i) => makeClipboardImageFile(f, f.type, i))
+    const expected = files.map((f) => uploadedPathOf('/tmp', f))
+    // 末尾补一个空格：紧接着打字时不会和路径粘成一坨。
+    sendPaste(session, expected.map((p) => '@' + p).join(' ') + ' ')
     message.loading({ content: t('terminal.imageUploading'), key: 'img-paste', duration: 0 })
     try {
       const res = await upload('/tmp', files)
-      sendPaste(session, res.saved.map((p: string) => '@' + p).join(' '))
+      const saved: string[] = res.saved || []
+      const drifted = saved.filter((p, i) => p !== expected[i])
+      if (drifted.length) {
+        // 极罕见（撞名了）。不去改终端里已经敲下的字——那要靠退格删，
+        // 而用户这会儿多半已经在上面接着打了。老实报出真实路径，让用户自己改。
+        message.warning({
+          content: t('terminal.imagePathDrifted', { paths: drifted.join(' ') }),
+          key: 'img-paste', duration: 8,
+        })
+        return
+      }
       message.success({ content: t('terminal.imagePasted', { count: files.length }), key: 'img-paste' })
     } catch (e: any) {
-      message.error({ content: t('terminal.imageUploadFailed', { message: e.message }), key: 'img-paste' })
+      // 路径已经敲进去了但文件没上去，必须说清楚，否则用户会对着一个不存在的
+      // 路径按回车，然后困惑于 agent 说找不到文件。
+      message.error({ content: t('terminal.imageUploadFailed', { message: e.message }), key: 'img-paste', duration: 8 })
     }
   }
   const pasteClipboard = async (session: string) => {

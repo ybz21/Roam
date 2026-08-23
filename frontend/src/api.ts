@@ -60,7 +60,23 @@ export function makeClipboardImageFile(blob: Blob, mime: string, index: number):
   const pad = (n: number) => String(n).padStart(2, '0')
   const ts = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`
   const suffix = index > 0 ? `-${index + 1}` : ''
-  return new File([blob], `clipboard-${ts}${suffix}.${ext}`, { type: mime })
+  // 末尾那截随机串是为了**让路径可以提前算出来**：
+  // 后端 uniquePath 只在重名时才改名（改成 "xxx (1).png"），而终端粘贴那条路
+  // 要在上传**开始前**就把 @路径 敲进去（见 TerminalPane.pasteImage 的注释）。
+  // 只到秒的时间戳同一秒粘两次就会撞，一撞后端就改名、前端敲进去的路径就是错的。
+  return new File([blob], `clipboard-${ts}${suffix}-${randomToken()}.${ext}`, { type: mime })
+}
+
+/** 4 字符 base36 随机串，够把同秒撞名压到可以忽略。 */
+function randomToken(): string {
+  const a = new Uint8Array(3)
+  ;(globalThis.crypto || (globalThis as any).msCrypto)?.getRandomValues?.(a)
+  return Array.from(a, (b) => b.toString(36).padStart(2, '0')).join('').slice(0, 4)
+}
+
+/** 上传后这个文件会落在哪。与后端 uniquePath 的「不重名就原样」约定配套。 */
+export function uploadedPathOf(dir: string, file: File): string {
+  return (dir.endsWith('/') ? dir.slice(0, -1) : dir) + '/' + file.name
 }
 
 // 上传录音(WAV)做语音识别，返回识别出的文本。服务商与密钥由后端配置。
