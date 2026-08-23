@@ -140,6 +140,11 @@ var (
 
 func available() bool {
 	availOnce.Do(func() {
+		// cgroup v2 统一层级：v1 的控制器分散在多个挂载点上，本包的读写路径全按
+		// v2 的单一层级来，没有它一切免谈。
+		if _, err := os.Stat("/sys/fs/cgroup/cgroup.controllers"); err != nil {
+			return
+		}
 		if _, err := exec.LookPath("systemctl"); err != nil {
 			return
 		}
@@ -156,18 +161,33 @@ func available() bool {
 }
 
 // cgroupPath 读进程的 cgroup v2 路径（形如 /user.slice/.../tmux-spawn-<uuid>.scope）。
-// cgroup v2 的 /proc/<pid>/cgroup 只有一行 `0::<path>`。
+//
+// **只认 v2**，格式是唯一的一行 `0::<path>`。v1 的 /proc/<pid>/cgroup 是多行
+// `<n>:<controller>:<path>`，照 v2 的写法去截最后一个冒号，会解析出**登录会话**
+// 的 scope（session-4195.scope）——那不是这个 pane 的，给它设上限等于限制该用户
+// 的所有进程。实测 jetson（Ubuntu 20.04 / cgroup v1）就长这样。
+//
+// available() 那道也拦得住（v1 上读不到委派文件），但这种「解析出一个看着很像、
+// 其实是别人家的路径」的错法后果太重，不该只靠一道。
 func cgroupPath(pid int) string {
 	b, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/cgroup")
 	if err != nil {
 		return ""
 	}
-	line := strings.TrimSpace(string(b))
-	i := strings.LastIndex(line, ":")
-	if i < 0 {
+	return parseCgroupFile(string(b))
+}
+
+// parseCgroupFile 从 /proc/<pid>/cgroup 的内容里取出 v2 路径（认不出返回空串）。
+func parseCgroupFile(content string) string {
+	lines := strings.Split(strings.TrimSpace(content), "\n")
+	if len(lines) != 1 {
+		return "" // 多行 = cgroup v1，本包不支持
+	}
+	path, ok := strings.CutPrefix(strings.TrimSpace(lines[0]), "0::")
+	if !ok {
 		return ""
 	}
-	return strings.TrimSpace(line[i+1:])
+	return strings.TrimSpace(path)
 }
 
 // cgroupDir 该进程 cgroup 在 sysfs 里的目录（拿不到返回空串）。

@@ -2,6 +2,7 @@ package memguard
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -121,6 +122,28 @@ func TestScopeOfSelf(t *testing.T) {
 	}
 	if unit != "" && strings.ContainsAny(unit, "/ \t\n") {
 		t.Fatalf("scope 单元名不该含路径或空白: %q", unit)
+	}
+}
+
+// cgroup v1 的 /proc/<pid>/cgroup 是多行。照 v2 的写法解析会得出登录会话的
+// scope —— 一个看着很像、其实是别人家的路径，给它设上限就限制了该用户所有进程。
+// 实测 jetson（Ubuntu 20.04）就是 v1，所以这条不是假想。
+func TestCgroupPathRejectsV1(t *testing.T) {
+	dir := t.TempDir()
+	v1 := `12:pids:/user.slice/user-1000.slice/session-4195.scope
+11:memory:/user.slice
+0::/user.slice/user-1000.slice/session-4195.scope`
+	if err := os.WriteFile(filepath.Join(dir, "cgroup"), []byte(v1), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := parseCgroupFile(v1); got != "" {
+		t.Fatalf("v1 多行格式应当被拒，得到 %q", got)
+	}
+	if got := parseCgroupFile("0::/user.slice/tmux-spawn-abc.scope"); got != "/user.slice/tmux-spawn-abc.scope" {
+		t.Fatalf("v2 单行解析错了: %q", got)
+	}
+	if got := parseCgroupFile("1:name=systemd:/foo"); got != "" {
+		t.Fatalf("没有 0:: 前缀的应当被拒，得到 %q", got)
 	}
 }
 
