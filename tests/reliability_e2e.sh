@@ -301,6 +301,40 @@ JSON.stringify({rows:rows.length,dormantTag:dor.length,hollow:hollow.length,memb
   # U2 内存条：会话列表走 tree 接口，treeNode 漏字段的话这里恒为 0
   [ "${membar:-0}" -gt 0 ] && ok "U2 活会话渲染出内存条（$membar 个）" \
     || bad "U2 一个内存条都没有" "多半是 tree 接口漏了 mem 字段"
+
+  # U3 主机监控面板不许再用硬编码颜色。
+  #
+  # swap 用满是整机卡死的前兆（2026-08-12 本机就是这么冻死的：ping 通、ssh 进不去），
+  # 而它一度画成一根固定灰色的小条，98% 和 5% 长得一样。修好之后颜色全走令牌，
+  # 这条盯的就是「别又有人写回 #f5222d」——AGENTS.md 的 tokens-only 在这里最容易破防，
+  # 因为进度条颜色是行内 style，hover:check 那类静态扫描看不见。
+  local hub="${HUB_URL:-}"
+  if [ -z "$hub" ]; then
+    skip "U3 主机监控颜色令牌化" "没给 HUB_URL（形如 https://<中心>:13570）"
+  else
+    chrome goto "$hub" >/dev/null 2>&1; sleep 3
+    if chrome eval "!!document.querySelector('input[type=password]')" 2>/dev/null | grep -q true; then
+      [ -n "${HUB_PASSWORD:-}" ] && {
+        chrome fill "input[type=password]" "$HUB_PASSWORD" >/dev/null 2>&1
+        chrome click "button[type=submit], button:has-text('登 录')" >/dev/null 2>&1; sleep 4
+      }
+    fi
+    chrome eval "location.hash='#/hub'; 1" >/dev/null 2>&1; sleep 4
+    chrome eval "const f=[...document.querySelectorAll('.tt-hub-fold')].find(x=>/这台机器|This machine/.test(x.innerText)); const b=f&&f.querySelector('button'); b&&b.click(); 1" >/dev/null 2>&1; sleep 4
+    local hr
+    hr=$(chrome eval "
+const bars=[...document.querySelectorAll('.ant-progress-line .ant-progress-bg')].map(b=>b.style.background||b.style.backgroundColor);
+JSON.stringify({swap:/Swap /.test(document.body.innerText),bars:bars.length,hard:bars.filter(b=>/#f5222d|#faad14/.test(b)).length})
+" 2>/dev/null | tail -1)
+    local hard swapshown
+    hard=$(echo "$hr" | python3 -c 'import json,sys;print(json.loads(sys.stdin.read().strip().strip(chr(39))).get("hard",-1))' 2>/dev/null)
+    swapshown=$(echo "$hr" | python3 -c 'import json,sys;print(json.loads(sys.stdin.read().strip().strip(chr(39))).get("swap",False))' 2>/dev/null)
+    if [ "$swapshown" = "True" ] && [ "${hard:-1}" = "0" ]; then
+      ok "U3 中心页画出 Swap 条，且颜色全走令牌"
+    else
+      bad "U3 swap显示=$swapshown 硬编码色=$hard" "期望 swap 条在且 0 个 #f5222d/#faad14"
+    fi
+  fi
 }
 
 case "${1:-all}" in
