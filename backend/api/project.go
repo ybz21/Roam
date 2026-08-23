@@ -11,6 +11,7 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -19,6 +20,7 @@ import (
 	"time"
 
 	"encoding/json"
+	"fmt"
 
 	"github.com/gin-gonic/gin"
 	"ttmux-web/project"
@@ -397,6 +399,9 @@ func (a *API) ProjectCreate(c *gin.Context) {
 	var b struct {
 		Dir         string `json:"dir"`
 		DisplayName string `json:"displayName"`
+		// CloneURL 填了就先把它克隆到 Dir，再按 git 项目登记。
+		// 空 = 老行为（目录已存在就用它，不存在就新建一个空目录）。
+		CloneURL string `json:"cloneUrl"`
 	}
 	if err := c.ShouldBindJSON(&b); err != nil || strings.TrimSpace(b.Dir) == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
@@ -412,6 +417,14 @@ func (a *API) ProjectCreate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_DIR", "message": "absolute path required"}})
 		return
 	}
+	// 克隆要先做，做完那个目录才是个 git 仓库，下面的 ResolveRepo 才认得。
+	if u := strings.TrimSpace(b.CloneURL); u != "" {
+		if err := cloneInto(c.Request.Context(), u, dir); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "CLONE_FAILED", "message": err.Error()}})
+			return
+		}
+	}
+
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 	git := true
@@ -444,6 +457,58 @@ func (a *API) ProjectCreate(c *gin.Context) {
 	projResp = nil
 	projRespMu.Unlock()
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"key": key, "dir": dir, "git": git}})
+}
+
+// cloneMaxWait 克隆最多等多久。10 秒是给「读一下本地目录」用的，克隆完全是另一个量级：
+// 大仓库几分钟很正常，用那个超时会把每一次稍大的克隆都判成失败——而它其实还在跑，
+// 只是没人等它了，留下半个目录。
+const cloneMaxWait = 15 * time.Minute
+
+// cloneInto 把 url 克隆进 dir。
+//
+// **不走 shell**：URL 是用户输入，拼进 sh -c 就是一个命令注入口子。
+// exec.Command 直接传参数，任何引号反引号都只是普通字符。
+func cloneInto(parent context.Context, url, dir string) error {
+	if st, err := os.Stat(dir); err == nil {
+		if !st.IsDir() {
+			return fmt.Errorf("%s 已存在且不是目录", dir)
+		}
+		// 已存在的目录必须是空的：git clone 进非空目录会失败，
+		// 但那句报错（"destination path already exists and is not an empty directory"）
+		// 对着一个刚点了「新建项目」的人说不清楚发生了什么。
+		ents, err := os.ReadDir(dir)
+		if err != nil {
+			return err
+		}
+		if len(ents) > 0 {
+			return fmt.Errorf("目录 %s 已存在且非空，换一个位置或先清空它", dir)
+		}
+	} else if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(parent, cloneMaxWait)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "clone", "--", url, dir)
+	// 非交互：URL 写错或私库没配好凭证时，git 会停在终端上等用户名密码，
+	// 而这里没有终端 —— 不关掉就是干等到超时。
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_ASKPASS=", "SSH_ASKPASS=")
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		return nil
+	}
+	// clone 失败会留下半个目录，不清掉的话用户重试会撞上「已存在且非空」。
+	if ents, e := os.ReadDir(dir); e == nil && len(ents) > 0 {
+		_ = os.RemoveAll(dir)
+	}
+	msg := strings.TrimSpace(string(out))
+	if ctx.Err() == context.DeadlineExceeded {
+		return fmt.Errorf("克隆超时（超过 %s）：%s", cloneMaxWait, msg)
+	}
+	if msg == "" {
+		return err
+	}
+	return fmt.Errorf("%s", msg)
 }
 
 // ProjectDelete DELETE /projects/:key
