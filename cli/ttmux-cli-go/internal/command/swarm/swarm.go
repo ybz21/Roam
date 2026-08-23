@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"ttmux-cli-go/internal/agent"
 	"ttmux-cli-go/internal/command/group"
 	"ttmux-cli-go/internal/runtime"
 	swarmcore "ttmux-cli-go/internal/swarm"
@@ -218,8 +219,10 @@ func cmdAdd(rt runtime.Runtime, st *swarmcore.Store, args []string, w io.Writer)
 		ui.Err(w, "--type 只能是 task 或 agent")
 		return fmt.Errorf("bad type")
 	}
-	if spec.Type == "agent" && spec.Kind != "claude" && spec.Kind != "codex" {
-		ui.Err(w, "--kind 只能是 claude 或 codex")
+	// 认哪些 kind 由注册表说了算，不写死在这里：
+	// 新增一型只要实现 agent.Agent 并 Register，这里自动接受它。
+	if spec.Type == "agent" && agent.Get(spec.Kind) == nil {
+		ui.Err(w, "--kind 只能是 %s", strings.Join(agent.Kinds(), " 或 "))
 		return fmt.Errorf("bad kind")
 	}
 	spec.Role = swarmcore.RoleNorm(spec.Role)

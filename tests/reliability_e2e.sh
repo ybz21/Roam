@@ -165,12 +165,14 @@ while 1: a.append(bytearray(30*1024*1024))'" C-m 2>/dev/null
   # 这条特意**先把缓存撑起来**再比，否则两个数字本来就一样，测了也白测。
   s=$(mk g7)
   d=$(cg_dir "$s")
-  # 撑 page cache：读一批**大**文件才拉得开差距。先 drop 掉这个 cgroup 自己的缓存，
-  # 再读 frontend/dist（几十 MB 的 chunk），确保 current 明显高于 anon。
-  echo 1 > "$d/memory.reclaim" 2>/dev/null || true
-  tmux send-keys -t "=$s:" "cat $(pwd)/frontend/dist/assets/*.js $(pwd)/backend/dist/* >/dev/null 2>&1" C-m 2>/dev/null
+  # 撑 page cache：**写**一个新文件，别去读老文件。
+  # page cache 是全局共享的，只有**首次读入**才 charge 给某个 cgroup——
+  # 反复跑测试时那些文件早就在缓存里了，再读一遍这个 cgroup 一分钱不涨
+  # （实测就是这么一直 skip 的）。而写入产生的脏页必然算在写的人头上。
+  local tmpf="/tmp/roam-e2e-cache-$$.bin"
+  tmux send-keys -t "=$s:" "dd if=/dev/zero of=$tmpf bs=1M count=300 2>/dev/null; cat $tmpf >/dev/null" C-m 2>/dev/null
   local w=0
-  until [ "$(cat "$d/memory.current" 2>/dev/null || echo 0)" -gt $((200*1024*1024)) ] || [ $w -ge 15 ]; do sleep 1; w=$((w+1)); done
+  until [ "$(cat "$d/memory.current" 2>/dev/null || echo 0)" -gt $((250*1024*1024)) ] || [ $w -ge 20 ]; do sleep 1; w=$((w+1)); done
   sleep 1
   local anon cur shown
   anon=$(awk '/^anon /{print $2}' "$d/memory.stat" 2>/dev/null)
@@ -181,13 +183,16 @@ import json,sys
 for r in json.load(sys.stdin):
     if r['name']=='$s': print(r.get('mem',{}).get('cur',0)); break
 else: print(0)")
-  if [ "${cur:-0}" -le "${anon:-0}" ]; then
-    skip "G7 内存条报真占用" "这一轮没能撑出 page cache 差异（anon=$anon current=$cur）"
+  # 要求 current 比 anon 多出至少 100MB 才算「撑起来了」。
+  # 两个都接近 0 时去比大小毫无意义——那种情况下测试恒过或恒挂，都不说明问题。
+  if [ $(( ${cur:-0} - ${anon:-0} )) -lt $((100*1024*1024)) ]; then
+    skip "G7 内存条报真占用" "这一轮没能撑出 page cache 差异（anon=$((${anon:-0}/1024/1024))M current=$((${cur:-0}/1024/1024))M）"
   elif python3 -c "import sys; sys.exit(0 if abs($shown-$anon) < 64*1024*1024 and $shown < $cur*0.7 else 1)"; then
     ok "G7 内存条报 anon 而非 current（anon=$((anon/1024/1024))M current=$((cur/1024/1024))M 显示=$((shown/1024/1024))M）"
   else
     bad "G7 显示 $((shown/1024/1024))M，anon=$((anon/1024/1024))M current=$((cur/1024/1024))M" "page cache 被当成了占用"
   fi
+  rm -f "$tmpf" 2>/dev/null
 
   # G6 显式关闭要真的关掉
   s=$(ROAM_SESSION_MEM_MAX=off "$TTMUX" new "$TAG-g6" --detach --json 2>/dev/null \
@@ -262,6 +267,61 @@ import json,sys
 print(sum(1 for x in json.load(sys.stdin) if x['name']=='$s' and x.get('state')=='dormant'))")
   [ "$still" = "0" ] && ok "V6 已恢复的会话从休眠列表消失" \
     || bad "V6 它还在休眠列表里" "restored_from 被占用后就该排除，否则会重复恢复"
+
+  # V8 **每一型 agent 都要能接回对话**，不只是 claude。
+  #
+  # 从前 revive 里硬编着 `claude --resume`、codex 直接跳过，理由写的是
+  # 「codex 没有对应参数」——那句话在写下时是对的，可 codex 后来加了
+  # `codex resume <SESSION_ID>`，假设过期了没人回头改。这条按注册表逐型验，
+  # 新增一型忘了实现 ResumeCommand，红的是这里。
+  local kinds
+  kinds=$(python3 -c "
+import subprocess,json
+out=subprocess.run(['$TTMUX','agent','kinds','--json'],capture_output=True,text=True).stdout.strip()
+print(out if out else '')" 2>/dev/null)
+  if [ -z "$kinds" ]; then
+    # 没有 CLI 子命令就直接按已知两型验（接口在 internal/agent 里已有单测覆盖全集）
+    kinds="claude codex"
+  fi
+  local kind fake newid rcmd
+  for kind in $kinds; do
+    fake=$(mk "v8-$kind")
+    [ -z "$fake" ] && { bad "V8 建不出 $kind 测试会话"; continue; }
+    # 伪造一段该型的对话：给它一个 uuid + kind，再变成休眠
+    newid="11111111-2222-3333-4444-$(printf '%012d' $RANDOM$RANDOM)"
+    python3 - "$fake" "$kind" "$newid" <<'PYEOF'
+import sqlite3,sys,os
+sid,kind,cid=sys.argv[1],sys.argv[2],sys.argv[3]
+c=sqlite3.connect(os.path.expanduser('~/.roam/meta.db'))
+c.execute("update sessions set agent_kind=?, agent_session_uuid=? where id=?",(kind,cid,sid))
+c.commit()
+PYEOF
+    make_dormant "$fake"
+    # 等它真的进了休眠列表再往下走。台账刚改完不代表列表立刻认——
+    # Dormant() 只认「最新一代 epoch」，而上一轮用例可能刚写过一条更晚的。
+    local resumable="" w2=0
+    until [ "$resumable" = "True" ] || [ "$resumable" = "False" ] || [ $w2 -ge 8 ]; do
+      resumable=$("$TTMUX" ls --json 2>/dev/null | python3 -c "
+import json,sys
+for r in json.load(sys.stdin):
+    if r['name']=='$fake': print(r.get('resumable',False)); break
+else: print('missing')")
+      [ "$resumable" = "missing" ] && { sleep 1; w2=$((w2+1)); resumable=""; }
+    done
+    # 恢复，看 pane 里敲的是不是这一型自己的命令
+    "$TTMUX" db revive "$fake" --json >/dev/null 2>&1
+    local newsess
+    newsess=$(db "select id from sessions where restored_from=?" "$fake")
+    sleep 1
+    local typed
+    typed=$(tmux capture-pane -t "=$newsess:" -p 2>/dev/null | grep -m1 -oE "(claude --resume|codex resume) [0-9a-f-]+" | head -1)
+    if [ "$resumable" = "True" ] && [ -n "$typed" ] && echo "$typed" | grep -q "$newid"; then
+      ok "V8/$kind 标为可接回，且 pane 里敲的是「$typed」"
+    else
+      bad "V8/$kind resumable=$resumable 敲的是「${typed:-（没敲）}」" "期望这一型自己的 resume 命令且带上对话 id"
+    fi
+    [ -n "$newsess" ] && tmux kill-session -t "=$newsess" 2>/dev/null
+  done
 
   # V7 显式 kill 掉的不该自己回来
   local k; k=$(mk r7)

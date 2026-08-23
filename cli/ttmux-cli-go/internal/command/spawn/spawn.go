@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"ttmux-cli-go/internal/agent"
 	"ttmux-cli-go/internal/runtime"
 	"ttmux-cli-go/internal/sessmeta"
 	"ttmux-cli-go/internal/ui"
@@ -266,11 +267,18 @@ func recordAgentSession(rt runtime.Runtime, sess string, ac AgentConfig) {
 	meta := sessmeta.New(rt.HomeDir)
 	meta.DataDir = rt.DataDir
 	_ = meta.SetHome(sess, ac.Workdir, repoRootOf(ac.Workdir))
-	// 记下是哪种 agent：会话被机器重启带走后，恢复时靠它决定敲 claude 还是 codex。
+	// 记下是哪种 agent：会话被机器重启带走后，恢复时靠它决定敲哪一型的命令。
 	// 不记的话这一列永远是空，「按类型分派」就是一段永远走不到的代码。
 	_ = meta.SetAgentKind(sess, ac.Kind)
-	if ac.Kind != "codex" {
-		_ = meta.SetAgentSession(sess, ac.SessionUUID)
+	// 对话 id 由**这一型自己**说怎么来：能在启动时指定的（claude 的 --session-id）
+	// 直接记我们指定的那个，关联由构造保证；指定不了的（codex）事后去认，
+	// 认不出就留空——宁可只恢复出壳，也别接回别人的对话。
+	if a := agent.Get(ac.Kind); a != nil {
+		if a.PinsConversationID() {
+			_ = meta.SetAgentSession(sess, ac.SessionUUID)
+		} else if got := a.DetectConversationID(ac.Workdir); got != "" {
+			_ = meta.SetAgentSession(sess, got)
+		}
 	}
 }
 

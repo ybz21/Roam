@@ -14,6 +14,7 @@ import (
 	"os"
 	"sync"
 
+	"ttmux-cli-go/internal/agent"
 	"ttmux-cli-go/internal/runtime"
 	"ttmux-cli-go/internal/sessmeta"
 )
@@ -139,13 +140,22 @@ func Revive(rt runtime.Runtime, meta *sessmeta.Store, name string) (Result, erro
 
 // resumeCommand 给出「接回原对话」要在 shell 里敲的命令（没有就返回空串）。
 //
-// 只有 Claude Code 那一侧有可指定的对话 id：codex 没有对应参数，spawn 那边
-// 压根不给 codex 记 uuid（见 spawn.go 的 `if ac.Kind != "codex"`）。所以这里
-// 不用担心「拿 codex 的 id 去喂 claude」——那种行会先在 AgentUUID 上就是空的。
-// agent_kind 明确是 codex 的一律只开壳：敲一条错的恢复命令比不敲更糟。
+// 每一型 agent 自己说自己怎么接回（internal/agent）。从前这里硬编着
+// `claude --resume`，codex 直接跳过——而 codex 早就支持 `codex resume <id>` 了，
+// 那句「codex 没有对应参数」在写下时是对的，之后没人回头改。
+// 现在新增一型只要实现 agent.Agent 并 Register，这条路自动认得它。
 func resumeCommand(row sessmeta.Row) (cmd, uuid string) {
-	if row.AgentUUID == "" || row.AgentKind == "codex" {
+	if row.AgentUUID == "" {
 		return "", ""
 	}
-	return "claude --resume " + row.AgentUUID, row.AgentUUID
+	kind := row.AgentKind
+	if kind == "" {
+		// 老数据没记类型。**不猜**：猜错就是拿这一型的 id 去喂另一型，
+		// 敲出一条跑得起来但接错对话的命令，比不敲更糟。
+		return "", ""
+	}
+	if c := agent.ResumeCommandFor(kind, row.AgentUUID); c != "" {
+		return c, row.AgentUUID
+	}
+	return "", ""
 }

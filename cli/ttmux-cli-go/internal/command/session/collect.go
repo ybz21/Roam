@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"strings"
 
+	"ttmux-cli-go/internal/agent"
 	"ttmux-cli-go/internal/memalert"
 	"ttmux-cli-go/internal/memguard"
 	"ttmux-cli-go/internal/metadb"
@@ -177,11 +178,12 @@ func appendDormant(sessions []sessionInfo, meta *sessmeta.Store, exclude map[str
 			LastActivity: r.DiedAt,
 			State:        "dormant",
 			Agent:        r.AgentKind,
-			Resumable:    r.AgentUUID != "" && r.AgentKind != "codex",
-			Dir:          dir,
-			Repo:         r.RepoRoot,
-			CreatedBy:    r.CreatedBy,
-			Parent:       r.Parent,
+			// 能不能接回对话，由那一型自己说了算——别在这里硬判 kind。
+			Resumable: agent.ResumeCommandFor(r.AgentKind, r.AgentUUID) != "",
+			Dir:       dir,
+			Repo:      r.RepoRoot,
+			CreatedBy: r.CreatedBy,
+			Parent:    r.Parent,
 		})
 	}
 	return sessions
