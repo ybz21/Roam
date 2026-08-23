@@ -171,7 +171,10 @@ func recordNewSession(rt runtime.Runtime, sess, dir string) {
 		return
 	}
 	if dir == "" { // 没显式指定就问 tmux 要 pane 的当前目录
-		out, err := rt.TmuxOutput("display-message", "-t", "="+sess, "-p", "#{pane_current_path}")
+		// 目标必须写 `=<会话>:`——pane_current_path 是 **pane 级**属性，
+		// 裸 `=<会话>` 时 tmux 静默返回空串（不报错、退出码 0），于是 dir 恒空、
+		// SetHome 存了个空目录，这个会话就再也算不出项目归属了。同 #214。
+		out, err := rt.TmuxOutput("display-message", "-t", "="+sess+":", "-p", "#{pane_current_path}")
 		if err == nil {
 			dir = strings.TrimSpace(out)
 		}
@@ -182,7 +185,21 @@ func recordNewSession(rt runtime.Runtime, sess, dir string) {
 	// 归属目录与仓库根现在就记下来：worktree 事后会被删掉，那时再从目录反推
 	// 就永远推不出来了，而「这个会话属于哪个项目」正是靠仓库根认的。
 	_ = meta.SetHome(sess, dir, repoRootOf(dir))
-	_ = meta.SetLabel(sess, rt.SessionLabel(sess))
+	// 名字要**有意义**且**落库**。
+	//
+	// 从前这里落的是 rt.SessionLabel()，而它在没设 @roam_name 时退回会话名——
+	// 于是台账里存进一个「名字就是 id」的假名字，列表上是一排 2026-0812-1811-000f。
+	// 没起名就用归属目录名认人，并且 tmux 那边也设上：@roam_name 随会话生死，
+	// 台账 label 是会话死后唯一还认得出它的东西，两边得是同一个名字。
+	if label := rt.SessionLabel(sess); label == "" || label == sess {
+		if dir != "" {
+			auto := filepath.Base(dir)
+			_ = rt.SetSessionLabel(sess, auto)
+			_ = meta.SetLabel(sess, auto)
+		}
+	} else {
+		_ = meta.SetLabel(sess, label)
+	}
 	// 目标写 `=<会话>:`：`=` 关掉前缀匹配（`dev` 会命中 `dev-review`），末尾的冒号
 	// 是必须的——pipe-pane 要的是 pane，裸 `=<会话>` tmux 会报 can't find pane。
 	// -o：已经在管道就不重复开（fork/spawn 路径可能先开过）
@@ -295,7 +312,7 @@ func KillAll(rt runtime.Runtime, exclude map[string]bool, w io.Writer) error {
 // Rename 改会话的**展示名**（@roam_name）——tmux 会话名是 id，永远不动。
 // 于是改名不再牵动任何按名字定位的东西：meta 外键、logs/meta 路径、group 台账、
 // 前端标签与 URL 全都不受影响，重名也随便。
-func Rename(rt runtime.Runtime, exclude map[string]bool, args []string, w io.Writer) (string, string, error) {
+func Rename(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool, args []string, w io.Writer) (string, string, error) {
 	var target, neu string
 	switch {
 	case len(args) >= 2:
@@ -324,6 +341,12 @@ func Rename(rt runtime.Runtime, exclude map[string]bool, args []string, w io.Wri
 	old := rt.SessionLabel(target)
 	if err := rt.SetSessionLabel(target, neu); err != nil {
 		return "", "", err
+	}
+	// **名字也要落台账**：@roam_name 是 tmux 会话级选项，会话一死就跟着没了。
+	// 只改 tmux 的话，机器重启后这个会话在历史/休眠列表里就退回一串裸 id——
+	// 用户明明起过名字，却在最需要认人的时候看不到。
+	if meta != nil {
+		_ = meta.SetLabel(target, runtime.SanitizeLabel(neu))
 	}
 	ui.Ok(w, "%s → %s%s", ui.Bold(old), ui.Bold(runtime.SanitizeLabel(neu)), ui.Dim("("+target+")"))
 	return target, neu, nil

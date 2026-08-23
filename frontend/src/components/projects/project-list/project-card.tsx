@@ -19,8 +19,9 @@ import type { Proj, ProjSwarm } from './project-model'
 const Go = () => <span className="prj-goi"><ChevronRight size={12} /></span>
 
 /** 状态点：黄（等待输入）优先于绿（agent 在跑），灰 = 闲着。 */
-const StatusDot = ({ waiting, running }: { waiting?: boolean; running?: boolean }) => (
-  <i className={`prj-cdot${waiting ? ' a' : running ? ' g' : ''}`} />
+// 休眠会话画成空心点：它「在」但不「活」，与实心的活会话一眼分得开。
+const StatusDot = ({ waiting, running, dormant }: { waiting?: boolean; running?: boolean; dormant?: boolean }) => (
+  <i className={`prj-cdot${dormant ? ' d' : waiting ? ' a' : running ? ' g' : ''}`} />
 )
 
 export function ProjectCard({ p, swarms, index, openTerm, refresh }: {
@@ -97,8 +98,11 @@ export function ProjectCard({ p, swarms, index, openTerm, refresh }: {
             <div key={s.name} className="prj-crow" role="button" tabIndex={0}
               onClick={(e) => { e.stopPropagation(); openTerm(s.name) }}
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); openTerm(s.name) } }}>
-              <StatusDot waiting={s.waiting} running={s.running} />
-              <span className="t" title={`${s.label || sessionLabel(s.name)}（${s.name}）`}>{s.label || sessionLabel(s.name)}</span>
+              <StatusDot waiting={s.waiting} running={s.running} dormant={s.state === 'dormant'} />
+              <span className={`t${s.state === 'dormant' ? ' dorm' : ''}`}
+                title={s.state === 'dormant'
+                  ? `${s.label || sessionLabel(s.name)}（${s.name}）· ${t('session.dormant.hint')}`
+                  : `${s.label || sessionLabel(s.name)}（${s.name}）`}>{s.label || sessionLabel(s.name)}</span>
               {s.linked && <span className="tt-branch" title={s.branch}><BranchIcon size={11} /></span>}
               {s.agent && (
                 <span className="tt-agentmark" title={t(s.agent === 'claude' ? 'session.runningClaude' : 'session.runningCodex')}>
@@ -190,6 +194,9 @@ html[data-pointer="coarse"] .prj-crow{min-height:44px}
 .prj-cdot{width:8px;height:8px;flex:0 0 8px;border-radius:50%;display:inline-block;background:var(--text-dimmer)}
 .prj-cdot.g{background:var(--ok);box-shadow:0 0 0 3px var(--ok-soft)}
 .prj-cdot.a{background:var(--warn);box-shadow:0 0 0 3px var(--warn-soft)}
+/* 休眠：空心。不用灰色实心——那会和「活着但空闲」撞脸，而两者的区别是能不能直接用 */
+.prj-cdot.d{background:transparent;box-shadow:inset 0 0 0 1.5px var(--text-dimmer)}
+.prj-crow .t.dorm{color:var(--text-dim)}
 .prj-cmore{padding:2px var(--sp-2);font-size:var(--fs-meta);color:var(--text-dimmer)}
 
 .prj-cfoot{display:flex;align-items:center;gap:var(--sp-2);min-height:28px;margin-top:var(--sp-1);

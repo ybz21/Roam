@@ -77,6 +77,38 @@ type Row struct {
 	LastSeen   string `json:"last_seen,omitempty"`   // 最后一次被 Reconcile 看见（host-restart 的 died_at 取它）
 }
 
+// DisplayLabel 这一行该显示成什么名字。
+//
+// **兜底规则只此一份**：会话列表、休眠列表、恢复出来的新会话都用它，
+// 否则就会出现「列表里叫 XiaoHui，点开恢复后变成一串裸 id」——
+// 名字是现算的、没落库，两处各算各的就对不上。
+//
+// 恢复时算出来的名字要 SetLabel 落库（见 revive.Revive）：从那一刻起
+// 它就是真名字，不再依赖谁去现算。
+func (r Row) DisplayLabel() string {
+	// label 等于会话 id 的，视同没起过名字。
+	// recordNewSession 落库时用的是 rt.SessionLabel()，而它在没设 @roam_name 时
+	// **退回会话名**——于是台账里存着一个「名字就是 id」的假名字，
+	// 光判空串的话目录兜底永远不触发，列表上就是一排 2026-0812-1811-000f。
+	if r.Label != "" && r.Label != r.Session {
+		return r.Label
+	}
+	// 没显式改过名的会话（本机 17 个休眠会话里有 11 个）用归属目录名认人，
+	// 比一串 2026-0812-1811-000f 强得多。
+	if dir := r.Dir(); dir != "" {
+		return filepath.Base(dir)
+	}
+	return r.Session
+}
+
+// Dir 会话的归属目录：钉死的 home 优先，退回建会话时的 cwd。
+func (r Row) Dir() string {
+	if r.Home != "" {
+		return r.Home
+	}
+	return r.InitialCwd
+}
+
 func New(homeDir string) *Store { return &Store{HomeDir: homeDir, Now: time.Now} }
 
 // WithIDs 注入会话名→$N 解析器（测试用；生产用默认的 tmux 实现）。

@@ -1,7 +1,6 @@
 package session
 
 import (
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -109,13 +108,10 @@ func appendDormant(sessions []sessionInfo, meta *sessmeta.Store, exclude map[str
 		if live[r.Session] || exclude[r.Session] {
 			continue
 		}
-		dir := r.Home
-		if dir == "" {
-			dir = r.InitialCwd
-		}
+		dir := r.Dir()
 		sessions = append(sessions, sessionInfo{
 			Name:         r.Session,
-			Label:        labelOr(r.Label, r.Session, dir),
+			Label:        r.DisplayLabel(),
 			ID:           r.Session,
 			Created:      r.CreatedAt,
 			LastActivity: r.DiedAt,
@@ -129,16 +125,4 @@ func appendDormant(sessions []sessionInfo, meta *sessmeta.Store, exclude map[str
 		})
 	}
 	return sessions
-}
-
-// labelOr 给没起过名字的会话一个能认人的名字。
-// 休眠会话里有一多半从没被显式改过名，全显示成裸 id 的话列表等于没有信息。
-func labelOr(label, sess, dir string) string {
-	if label != "" {
-		return label
-	}
-	if dir != "" {
-		return filepath.Base(dir)
-	}
-	return sess
 }

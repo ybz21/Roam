@@ -58,10 +58,10 @@ func Candidate(meta *sessmeta.Store, name string) (sessmeta.Row, bool) {
 // restorable 目录还在才谈得上重开。worktree 被清是常事——据实报错，
 // 别糊里糊涂在别处建一个会话出来。
 func restorable(row sessmeta.Row) bool {
-	if row.Status != "dead" || dirOf(row) == "" {
+	if row.Status != "dead" || row.Dir() == "" {
 		return false
 	}
-	fi, err := os.Stat(dirOf(row))
+	fi, err := os.Stat(row.Dir())
 	return err == nil && fi.IsDir()
 }
 
@@ -88,7 +88,7 @@ func Revive(rt runtime.Runtime, meta *sessmeta.Store, name string) (Result, erro
 	// 省掉这一步，并发点击就会建出两个会话（经典的 double-checked locking）。
 	if got := meta.RestoredAs(name); got != "" && rt.HasSession(got) {
 		row, _ := meta.Get(got)
-		return Result{Session: got, Label: row.Label, Dir: dirOf(row), From: name, Reused: true}, nil
+		return Result{Session: got, Label: row.DisplayLabel(), Dir: row.Dir(), From: name, Reused: true}, nil
 	}
 
 	row, ok := meta.Get(name)
@@ -98,23 +98,28 @@ func Revive(rt runtime.Runtime, meta *sessmeta.Store, name string) (Result, erro
 	if row.Status != "dead" {
 		return Result{}, fmt.Errorf("会话 %s 还活着，不需要重开", name)
 	}
-	if dirOf(row) == "" {
+	if row.Dir() == "" {
 		return Result{}, fmt.Errorf("会话 %s 没有记下归属目录，无法重开", name)
 	}
 	if !restorable(row) {
-		return Result{}, fmt.Errorf("原目录已不存在：%s", dirOf(row))
+		return Result{}, fmt.Errorf("原目录已不存在：%s", row.Dir())
 	}
-	dir := dirOf(row)
+	dir := row.Dir()
 
-	sess, err := rt.CreateSession(runtime.CreateOpts{Label: row.Label, Dir: dir})
+	// 名字**一定要带过去**，而且要落库。
+	//
+	// 从前这里是 `if row.Label != ""` 才设：没显式改过名的会话（本机 17 个里有 11 个）
+	// 于是恢复出来是一串裸 id——而它在休眠列表里明明显示着目录名。同一个会话，
+	// 恢复前后两个名字，因为那个名字是显示时现算的、从没进过库。
+	// DisplayLabel 把兜底规则收在一处，这里算一次就写进台账，从此它就是真名字。
+	label := row.DisplayLabel()
+	sess, err := rt.CreateSession(runtime.CreateOpts{Label: label, Dir: dir})
 	if err != nil {
 		return Result{}, err
 	}
 	_ = meta.Put(sessmeta.Row{Session: sess, CreatedBy: "revive", InitialCwd: dir})
 	_ = meta.SetHome(sess, dir, row.RepoRoot)
-	if row.Label != "" {
-		_ = meta.SetLabel(sess, row.Label)
-	}
+	_ = meta.SetLabel(sess, label)
 	if row.AgentKind != "" {
 		_ = meta.SetAgentKind(sess, row.AgentKind)
 	}
@@ -123,7 +128,7 @@ func Revive(rt runtime.Runtime, meta *sessmeta.Store, name string) (Result, erro
 	_ = meta.SetRestoredFrom(sess, name)
 	_ = rt.Tmux("pipe-pane", "-t", "="+sess+":", "-o", "cat >> '"+rt.LogFile(sess)+"'")
 
-	res := Result{Session: sess, Label: row.Label, Dir: dir, From: name}
+	res := Result{Session: sess, Label: label, Dir: dir, From: name}
 	if cmd, uuid := resumeCommand(row); cmd != "" {
 		_ = meta.SetAgentSession(sess, uuid)
 		_ = rt.Tmux("send-keys", "-t", "="+sess+":", cmd, "C-m")
@@ -143,12 +148,4 @@ func resumeCommand(row sessmeta.Row) (cmd, uuid string) {
 		return "", ""
 	}
 	return "claude --resume " + row.AgentUUID, row.AgentUUID
-}
-
-// dirOf 会话该在哪个目录重开：归属目录优先，退回建会话时的 cwd。
-func dirOf(row sessmeta.Row) string {
-	if row.Home != "" {
-		return row.Home
-	}
-	return row.InitialCwd
 }
