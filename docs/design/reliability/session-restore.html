@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Roam · 宿主重启后的会话续接（R2 v0.1）</title>
+<style>
+/* ── 令牌：直接取 frontend/src/theme.tsx 的真值 ─────────────────────────── */
+:root {
+  --bg-base:#0d1117; --bg-container:#161b22; --bg-elevated:#1b222b; --bg-term:#06090d;
+  --border:#30363d; --border-subtle:#21262d;
+  --text-bright:#e6edf3; --text-dim:#8b949e; --text-dimmer:#6e7681;
+  --accent:#58a6ff; --accent-solid:#1f6feb; --accent-soft:rgba(31,111,235,.14); --accent-border:rgba(88,166,255,.45);
+  --ok:#3fb950; --ok-solid:#238636; --ok-soft:rgba(63,185,80,.14); --ok-border:rgba(63,185,80,.42);
+  --danger:#f85149; --danger-soft:rgba(248,81,73,.12); --danger-border:rgba(248,81,73,.40);
+  --warn:#d29922; --warn-soft:rgba(210,153,34,.12); --warn-border:rgba(210,153,34,.40);
+  --list-hover:rgba(255,255,255,.025);
+  --fs-micro:11px; --fs-meta:12px; --fs-sm:13px; --fs-body:14px; --fs-lg:16px; --fs-title:22px;
+  --r-xs:6px; --r-sm:10px; --r-card:14px; --r-pill:999px;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+html[data-theme="light"] {
+  --bg-base:#f6f8fa; --bg-container:#ffffff; --bg-elevated:#ffffff; --bg-term:#ffffff;
+  --border:#d0d7de; --border-subtle:#e6e9ec;
+  --text-bright:#1f2328; --text-dim:#57606a; --text-dimmer:#8c959f;
+  --accent:#0969da; --accent-solid:#1f6feb; --accent-soft:rgba(31,111,235,.10); --accent-border:rgba(31,111,235,.40);
+  --ok:#1a7f37; --ok-solid:#1f883d; --ok-soft:rgba(31,136,61,.10); --ok-border:rgba(31,136,61,.40);
+  --danger:#cf222e; --danger-soft:rgba(207,34,46,.09); --danger-border:rgba(207,34,46,.35);
+  --warn:#9a6700; --warn-soft:rgba(154,103,0,.10); --warn-border:rgba(154,103,0,.35);
+  --list-hover:rgba(27,31,36,.04);
+}
+* { box-sizing:border-box; }
+html { background:#07090d; }
+html[data-theme="light"] { background:#eef1f5; }
+body {
+  margin:0; color:var(--text-bright);
+  font:var(--fs-body)/1.65 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+svg { display:block; }
+button { font:inherit; cursor:pointer; }
+
+.top {
+  position:sticky; top:0; z-index:20;
+  display:flex; align-items:center; gap:var(--sp-3);
+  padding:10px clamp(16px,3vw,40px);
+  background:color-mix(in srgb, var(--bg-base) 84%, transparent);
+  border-bottom:1px solid var(--border-subtle); backdrop-filter:blur(18px);
+}
+.top .kicker { font-size:var(--fs-micro); letter-spacing:.14em; text-transform:uppercase; color:var(--text-dimmer); }
+.top h1 { margin:0; font-size:var(--fs-sm); font-weight:600; }
+.top .sp { flex:1; }
+.tbtn { border:1px solid var(--border); background:var(--bg-container); color:var(--text-dim);
+  border-radius:var(--r-pill); padding:5px 14px; font-size:var(--fs-meta); }
+.tbtn:hover { color:var(--text-bright); border-color:var(--accent-border); }
+
+.wrap { max-width:1060px; margin:0 auto; padding:34px clamp(16px,3vw,40px) 110px; }
+.lede { color:var(--text-dim); font-size:var(--fs-lg); line-height:1.7; margin:0 0 var(--sp-5); }
+h2 { margin:56px 0 6px; padding-top:26px; font-size:var(--fs-lg); font-weight:600; border-top:1px solid var(--border-subtle); }
+h2:first-of-type { margin-top:8px; border-top:0; padding-top:0; }
+h2 .n { color:var(--text-dimmer); font-family:var(--mono); font-size:var(--fs-meta); margin-right:var(--sp-2); }
+h3 { margin:30px 0 8px; font-size:var(--fs-body); font-weight:600; }
+p { margin:10px 0; }
+code { font-family:var(--mono); font-size:.92em; background:var(--bg-elevated);
+  border:1px solid var(--border-subtle); border-radius:var(--r-xs); padding:1px 5px; }
+pre { margin:var(--sp-3) 0; padding:var(--sp-4); overflow-x:auto;
+  background:var(--bg-term); border:1px solid var(--border-subtle); border-radius:var(--r-sm);
+  font-family:var(--mono); font-size:var(--fs-meta); line-height:1.65; color:var(--text-bright); }
+pre code { background:none; border:0; padding:0; }
+pre .c { color:var(--text-dimmer); }
+pre .k { color:var(--accent); }
+pre .g { color:var(--ok); }
+pre .r { color:var(--danger); }
+ul,ol { margin:10px 0; padding-left:22px; }
+li { margin:5px 0; }
+a { color:var(--accent); }
+
+.card { background:var(--bg-container); border:1px solid var(--border); border-radius:var(--r-card);
+  padding:var(--sp-4) var(--sp-5); margin:var(--sp-4) 0; }
+.card.warn { border-color:var(--warn-border); background:var(--warn-soft); }
+.card.bad  { border-color:var(--danger-border); background:var(--danger-soft); }
+.card.good { border-color:var(--ok-border); background:var(--ok-soft); }
+.card > :first-child { margin-top:0; }
+.card > :last-child { margin-bottom:0; }
+.card h4 { margin:0 0 var(--sp-2); font-size:var(--fs-sm); font-weight:600; }
+
+.tag { display:inline-block; font-size:var(--fs-micro); letter-spacing:.06em; padding:2px 9px;
+  border-radius:var(--r-pill); border:1px solid var(--border); color:var(--text-dim); vertical-align:2px; }
+.tag.have { border-color:var(--ok-border); color:var(--ok); background:var(--ok-soft); }
+.tag.miss { border-color:var(--danger-border); color:var(--danger); background:var(--danger-soft); }
+.tag.part { border-color:var(--warn-border); color:var(--warn); background:var(--warn-soft); }
+
+table { width:100%; border-collapse:collapse; margin:var(--sp-3) 0; font-size:var(--fs-sm); }
+th,td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--border-subtle); vertical-align:top; }
+th { color:var(--text-dim); font-weight:600; font-size:var(--fs-meta); letter-spacing:.04em; text-transform:uppercase; }
+td.num { font-family:var(--mono); text-align:right; white-space:nowrap; }
+td.mono { font-family:var(--mono); font-size:var(--fs-meta); }
+
+.cols { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:var(--sp-3); margin:var(--sp-4) 0; }
+
+.flow { display:grid; gap:var(--sp-2); margin:var(--sp-4) 0; }
+.step { display:grid; grid-template-columns:26px 1fr; gap:var(--sp-3); align-items:start;
+  padding:var(--sp-3) var(--sp-4); background:var(--bg-container);
+  border:1px solid var(--border-subtle); border-radius:var(--r-sm); }
+.step .i { width:26px; height:26px; border-radius:var(--r-pill); background:var(--accent-soft);
+  border:1px solid var(--accent-border); color:var(--accent);
+  display:flex; align-items:center; justify-content:center; font-size:var(--fs-meta); font-family:var(--mono); }
+.step .i.g { background:var(--ok-soft); border-color:var(--ok-border); color:var(--ok); }
+.step .i.r { background:var(--danger-soft); border-color:var(--danger-border); color:var(--danger); }
+.step b { display:block; font-weight:600; font-size:var(--fs-sm); margin-bottom:2px; }
+.step small { color:var(--text-dim); font-size:var(--fs-meta); line-height:1.6; }
+
+/* 界面稿 */
+.mock { background:var(--bg-base); border:1px solid var(--border); border-radius:var(--r-card);
+  overflow:hidden; margin:var(--sp-4) 0; }
+.mock .mhd { padding:8px var(--sp-4); border-bottom:1px solid var(--border-subtle);
+  font-size:var(--fs-micro); letter-spacing:.12em; text-transform:uppercase; color:var(--text-dimmer);
+  display:flex; align-items:center; gap:var(--sp-2); }
+.mock .mbd { padding:var(--sp-4); }
+.mock.phone { max-width:390px; }
+
+.banner { border:1px solid var(--accent-border); background:var(--accent-soft);
+  border-radius:var(--r-card); padding:var(--sp-4); }
+.banner .bt { display:flex; align-items:flex-start; gap:var(--sp-3); }
+.banner .bi { flex:none; width:30px; height:30px; border-radius:var(--r-pill);
+  border:1px solid var(--accent-border); display:flex; align-items:center; justify-content:center; }
+.banner .bi svg { width:17px; height:17px; stroke:var(--accent); fill:none; stroke-width:1.8;
+  stroke-linecap:round; stroke-linejoin:round; }
+.banner h5 { margin:0 0 3px; font-size:var(--fs-sm); font-weight:600; }
+.banner p { margin:0; color:var(--text-dim); font-size:var(--fs-meta); line-height:1.6; }
+.banner .ba { display:flex; gap:var(--sp-2); margin-top:var(--sp-3); flex-wrap:wrap; }
+.btn { border:1px solid var(--border); background:transparent; color:var(--text-dim);
+  border-radius:var(--r-sm); padding:5px 13px; font-size:var(--fs-meta); }
+.btn.pri { background:var(--accent-solid); border-color:var(--accent-solid); color:#fff; }
+.btn.gho { color:var(--text-dimmer); }
+
+.rrow { display:grid; grid-template-columns:20px 1fr auto; gap:var(--sp-3); align-items:center;
+  padding:10px var(--sp-2); font-size:var(--fs-sm); }
+.rrow + .rrow { border-top:1px solid var(--border-subtle); }
+.ck { width:15px; height:15px; border-radius:4px; border:1px solid var(--accent-border);
+  background:var(--accent-solid); position:relative; }
+.ck.off { background:transparent; border-color:var(--border); }
+.ck svg { position:absolute; inset:2px; width:9px; height:9px; stroke:#fff; fill:none; stroke-width:2.4;
+  stroke-linecap:round; stroke-linejoin:round; }
+.ck.off svg { display:none; }
+.rrow .t small { display:block; color:var(--text-dimmer); font-size:var(--fs-micro); font-family:var(--mono); }
+.rrow .t em { font-style:normal; color:var(--text-dimmer); }
+
+.foot { margin-top:70px; padding-top:var(--sp-4); border-top:1px solid var(--border-subtle);
+  color:var(--text-dimmer); font-size:var(--fs-meta); }
+@media (max-width:640px) { .rrow { grid-template-columns:20px 1fr; } .rrow > :last-child { grid-column:2; } }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div>
+    <div class="kicker">Roam · Reliability</div>
+    <h1>R2 宿主重启后的会话续接</h1>
+  </div>
+  <div class="sp"></div>
+  <button class="tbtn" id="themeBtn" type="button">浅色</button>
+</div>
+
+<div class="wrap">
+
+<p class="lede">
+2026-08-23 早上开机，会话列表是空的——17 个连续跑了 11 天的会话一个不剩。
+但它们并没有丢：台账全都记着，<code>ttmux db restore</code> 早就能把它们重开回来。
+<b>丢的不是数据，是那条通往数据的路。</b>这份稿子把「消失」改成「一眼看见、一键接回」。
+</p>
+
+<h2><span class="n">01</span>先说清楚：什么能救回来，什么救不回来</h2>
+
+<p>tmux server 不跨重启——这是 tmux 的固有属性，不是 Roam 的缺陷。机器一关，
+所有 pane 里的进程连同它们的内存现场一起消失。所以第一件事是把预期摆正：</p>
+
+<div class="cols">
+  <div class="card bad">
+    <h4>救不回来 <span class="tag miss">现场</span></h4>
+    <p>pane 里跑到一半的进程、终端上的滚动历史、shell 的环境变量与后台作业。
+    进程死了就是死了，重放一段命令历史只会造出一个<b>看起来像</b>原来那样的假象。</p>
+  </div>
+  <div class="card good">
+    <h4>救得回来 <span class="tag have">壳 + 对话</span></h4>
+    <p>会话的归属目录、展示名、所属仓库、以及 <b>agent 那一侧的对话 id</b>。
+    agent 的上下文本来就不在 pane 里，它在 agent 自己的 transcript 里——
+    <code>claude --resume &lt;id&gt;</code> 接回去的是真上下文，不是模拟。</p>
+  </div>
+</div>
+
+<div class="card">
+  <h4>这个取舍是对的，要写进文档而不是改掉</h4>
+  <p>tmux-resurrect 那一路做法（存下每个 pane 的命令行，重启后重放）在 agent 场景下是有害的：
+  重放 <code>claude</code> 得到的是一个<b>全新的空白会话</b>，但它占着原来的位置、顶着原来的名字，
+  用户以为接上了，其实上下文全没了。Roam 走「壳可恢复、现场不可恢复、对话靠 <code>--resume</code> 接」
+  这条路更诚实，也更可靠。<b>问题不在这个取舍，在于用户根本没被告知这条路存在。</b></p>
+</div>
+
+<h2><span class="n">02</span>台账其实一直是对的</h2>
+
+<p>先给现有实现记功——底子比想象中好得多，缺的都在最后一公里：</p>
+
+<table>
+  <tr><th>能力</th><th>状态</th><th>位置</th></tr>
+  <tr><td>会话死了不删行，只置 <code>status='dead'</code></td><td><span class="tag have">已有</span></td>
+      <td class="mono">sessmeta.go:13，保留上限 5000 行</td></tr>
+  <tr><td>区分「被杀」与「机器重启带走」</td><td><span class="tag have">已有</span></td>
+      <td class="mono">Reconcile 比对 <code>tmux_epoch</code>（= tmux server pid）</td></tr>
+  <tr><td>记下归属目录 / 展示名 / 仓库根</td><td><span class="tag have">已有</span></td>
+      <td class="mono">sessions.home_dir / label / repo_root</td></tr>
+  <tr><td>记下 agent 对话 id</td><td><span class="tag have">已有</span></td>
+      <td class="mono">sessions.agent_session_uuid</td></tr>
+  <tr><td>按台账重开壳并接回对话</td><td><span class="tag have">已有</span></td>
+      <td class="mono">db.go:186 <code>ttmux db restore</code></td></tr>
+  <tr><td>重开的溯源关系</td><td><span class="tag have">已有</span></td>
+      <td class="mono"><code>restored_from</code>，旧行保持 dead，历史不被改写</td></tr>
+  <tr><td>Web 上逐条恢复</td><td><span class="tag part">有，但藏着</span></td>
+      <td class="mono">SessionHistory.tsx，挂在 Sessions.tsx:509 底部折叠面板</td></tr>
+  <tr><td>重启后主动告知</td><td><span class="tag miss">没有</span></td><td>——</td></tr>
+  <tr><td>批量恢复</td><td><span class="tag miss">没有</span></td><td>——</td></tr>
+</table>
+
+<p>验证一下真实台账（<code>~/.roam/meta.db</code>）：</p>
+
+<pre><code>died_reason 分布：  <span class="k">host-restart</span> 167 条   <span class="c">killed 17 条</span>
+                    <span class="c">↑ 「重启带走一批」不是偶发，是这台机器的常态</span>
+
+本次（2026-08-23）被带走：<span class="r">17 条</span>，全部 died_at = <span class="r">2026-08-23T10:43:33</span>
+其中 6 条有 agent 对话 id  <span class="c">→ 能连上下文一起接回</span>
+    11 条只有目录         <span class="c">→ 只能开空壳</span>
+    11 条<span class="r">连展示名都没有</span>     <span class="c">→ 恢复出来显示成一串裸 id，认不出是干什么的</span></code></pre>
+
+<h2><span class="n">03</span>四个缺口</h2>
+
+<div class="flow">
+  <div class="step"><span class="i r">G1</span><div>
+    <b>开机后没有任何提示</b>
+    <small>主列表空空如也，恢复入口在会话页<b>底部一个默认收起的折叠面板</b>里，还得先点开才去拉数据。
+    用户看到的就是「全没了」，除非他碰巧记得有这么个东西。这是四个缺口里唯一真正造成「消失」体感的那个。</small>
+  </div></div>
+  <div class="step"><span class="i r">G2</span><div>
+    <b>只能一条一条点</b>
+    <small>17 条要点 17 次，每次一个 toast。而且面板里混着 167 条历史，得自己从里面认出「哪些是今早那一批」。</small>
+  </div></div>
+  <div class="step"><span class="i r">G3</span><div>
+    <b>恢复出来是半成品</b>
+    <small>11 条没有 label，列表里就是一串 <code>2026-0812-1811-000f</code>；
+    <code>restore</code> 里 <b>agent 类型硬编码成 <code>claude</code></b>（<code>db.go:229</code>），
+    台账压根没记这个会话原本用的是 claude 还是 codex——恢复一个 codex 会话会敲出
+    <code>claude --resume &lt;codex的对话id&gt;</code>。</small>
+  </div></div>
+  <div class="step"><span class="i r">G4</span><div>
+    <b>死亡时刻是假的</b>
+    <small>17 条的 <code>died_at</code> 全是 <code>10:43:33</code>——那是<b>开机后 Roam 第一次跑 Reconcile 的时刻</b>，
+    不是会话真正结束的时刻（真实是前一晚 21:51 的 OOM 或次日 09:33 关机）。
+    「那天下午干了什么」这个设计目标，被这一下打了折。</small>
+  </div></div>
+</div>
+
+<h2><span class="n">04</span>G1 的解法：重启横幅</h2>
+
+<p>核心动作只有一个：<b>让那批会话在开机后自己出现在眼前</b>，而不是等用户去翻。
+判据是现成的——同一个 <code>tmux_epoch</code> 下、<code>died_reason='host-restart'</code>、
+<code>died_at</code> 同一时刻的一批，就是「上一代 tmux server 带走的」。</p>
+
+<div class="mock">
+  <div class="mhd">会话页 · 顶部（重启后首次进入）</div>
+  <div class="mbd">
+    <div class="banner">
+      <div class="bt">
+        <span class="bi"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg></span>
+        <div>
+          <h5>上次重启带走了 17 个会话</h5>
+          <p>2026-08-23 10:43 · 已跑 11 天 · 其中 6 个能连对话一起接回。目录和名字都还在台账里。</p>
+        </div>
+      </div>
+      <div class="ba">
+        <button class="btn pri" type="button">全部恢复</button>
+        <button class="btn" type="button">挑选…</button>
+        <button class="btn gho" type="button">不用了</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<ul>
+  <li><b>只在有东西可恢复时出现</b>：这批里存在至少一个目录还在的会话才显示。
+      目录已被删（worktree 清掉是常事）的不计数——<code>restore</code> 现在就会据实报错，别在横幅里许一个做不到的承诺。</li>
+  <li><b>「不用了」是永久的</b>：按 epoch 记一个 dismissed 标记落台账，不是 localStorage——
+      换个浏览器、换台手机进来不该再被同一条横幅拦一次。</li>
+  <li><b>恢复完自动收起</b>，并在会话列表里把新会话高亮一下（复用现有 <code>onRestored</code> 的 <code>load()</code> + <code>openTerm()</code>）。</li>
+  <li><b>手机端</b>：横幅压成两行，三个按钮横排占满宽度，命中区 ≥44px（<a href="../../development/web-ui-checklist.md">web-ui-checklist</a>）。</li>
+</ul>
+
+<h3>「挑选…」抽屉</h3>
+<p>17 条里往往只有几条还想继续。抽屉默认全选<b>有对话 id 的</b>，其余留给用户勾：</p>
+
+<div class="mock">
+  <div class="mhd">恢复抽屉 · 上次重启带走的会话</div>
+  <div class="mbd">
+    <div class="rrow"><span class="ck"><svg viewBox="0 0 12 12"><path d="M1 6l3.2 3.2L11 2.4"/></svg></span>
+      <div class="t">渠道上增加一个飞书登录<small>/home/ai/codes/blade-oauth</small></div>
+      <span class="tag have">可接回对话</span></div>
+    <div class="rrow"><span class="ck"><svg viewBox="0 0 12 12"><path d="M1 6l3.2 3.2L11 2.4"/></svg></span>
+      <div class="t">拉下最新代码<small>/home/ai/codes/llm-gateway</small></div>
+      <span class="tag have">可接回对话</span></div>
+    <div class="rrow"><span class="ck"><svg viewBox="0 0 12 12"><path d="M1 6l3.2 3.2L11 2.4"/></svg></span>
+      <div class="t">/weekly-report<small>/home/ai/codes</small></div>
+      <span class="tag have">可接回对话</span></div>
+    <div class="rrow"><span class="ck off"><svg viewBox="0 0 12 12"><path d="M1 6l3.2 3.2L11 2.4"/></svg></span>
+      <div class="t"><em>（无名）</em><small>/home/ai/codes/ttmux</small></div>
+      <span class="tag">只开壳</span></div>
+    <div class="rrow"><span class="ck off"><svg viewBox="0 0 12 12"><path d="M1 6l3.2 3.2L11 2.4"/></svg></span>
+      <div class="t"><em>（无名）</em><small>/home/ai/codes/tmp</small></div>
+      <span class="tag">只开壳</span></div>
+    <div class="rrow"><span class="ck off"><svg viewBox="0 0 12 12"><path d="M1 6l3.2 3.2L11 2.4"/></svg></span>
+      <div class="t">blade-os 重构<small>/home/ai/codes/blade-os/.worktrees/2026-0811-…</small></div>
+      <span class="tag miss">原目录已不存在</span></div>
+  </div>
+</div>
+
+<p>目录已不存在的一行<b>禁用勾选</b>并说明原因，而不是让用户点了才吃一个报错。</p>
+
+<h2><span class="n">05</span>G2 的解法：批量恢复（必须限流）</h2>
+
+<div class="card bad">
+  <h4>这里是两份稿子的交汇点，也是最危险的地方</h4>
+  <p>「全部恢复」如果老老实实把 17 个会话同时拉起来、每个都 <code>claude --resume</code>，
+  那就是在开机三十秒内复现造成这次事故的同一种局面——
+  17 个 Node 进程同时冷启动、同时读 transcript。<b>一键恢复会直接变成一键 OOM。</b></p>
+  <p>硬约束：批量恢复必须限流，且每个恢复出来的会话必须走
+  <a href="memory-guard.html">R1 会话内存护栏</a>的 <code>memguard.Wrap</code>。不得绕过。</p>
+</div>
+
+<pre><code><span class="c">// POST /api/sessions/restore-batch  {ids: [...], resumeAgents: bool}
+// 串行 + 小并发，逐个确认起稳再下一个。宁可慢十秒，不要一起雪崩。</span>
+const <span class="k">restoreConcurrency</span> = 3
+const <span class="k">agentStagger</span>       = 2 * time.Second  <span class="c">// 两个 agent 冷启动之间的间隔</span>
+
+<span class="c">// 返回逐条结果而不是一个整体成败：17 条里第 9 条的目录没了，
+// 不该让前 8 条白做，也不该让后 8 条不做。</span>
+type BatchResult struct {
+    Session string `json:"session"`
+    OK      bool   `json:"ok"`
+    NewID   string `json:"new_id,omitempty"`
+    Resumed string `json:"resumed,omitempty"`
+    Error   string `json:"error,omitempty"`   <span class="c">// 如 "原目录已不存在：…"</span>
+}</code></pre>
+
+<p>前端用一条进度条 +「9 / 17 已恢复」，失败的留在抽屉里并标出原因，可单条重试。
+CLI 侧对应 <code>ttmux db restore --last-boot [--dry-run] [--no-resume]</code>——
+<code>--dry-run</code> 先打印会做什么，这种批量动作值得有个后悔的机会。</p>
+
+<h2><span class="n">06</span>G3 的解法：让恢复出来的东西是完整的</h2>
+
+<h3>记住 agent 类型</h3>
+<pre><code>ALTER TABLE sessions ADD COLUMN <span class="k">agent_kind</span> TEXT;  <span class="c">-- claude | codex | ''</span></code></pre>
+<p>建 agent 会话时（<code>internal/command/spawn/agent.go</code>）顺手写上。
+<code>restore</code> 里那行硬编码的 <code>"claude --resume "</code> 改成按 <code>agent_kind</code> 分派；
+<code>agent_kind</code> 为空（老数据）就<b>只开壳、不猜</b>——敲一条错的恢复命令比不敲更糟。</p>
+
+<h3>补上展示名</h3>
+<p>11 条没有 label，是因为 label 只在用户显式改名时才有。恢复列表里显示裸 id 等于没有信息。
+兜底顺序：<code>label</code> → 首个 prompt 的前 20 字（agent 会话本来就有）→
+<code>仓库名 · 相对路径</code> → 裸 id。这个兜底对<b>活着的</b>会话列表同样有价值，不只是恢复场景。</p>
+
+<h3>顺手修掉 restore 里的竞态</h3>
+<p><code>db.go:229</code> 在 <code>CreateSession</code> 返回后立刻
+<code>send-keys "claude --resume …" C-m</code>。新会话里的 shell 未必已经起到能收键的状态
+（尤其带 zsh 插件/starship 的环境），命令可能被吞掉开头几个字符。
+更稳的是把恢复命令作为 <code>new-session</code> 的启动命令直接传进去，
+或者先等 <code>#{pane_current_command}</code> 变成 shell 再发。</p>
+
+<div class="card warn">
+  <h4>这里不是 SendPromptSubmit 的场景</h4>
+  <p><code>AGENTS.md</code> 规定「给 TUI agent 发消息必须用 <code>rt.SendPromptSubmit</code>，
+  裸 <code>send-keys text C-m</code> 只打字不发送」。那条规则针对的是<b>往已经跑起来的 TUI 里发 prompt</b>。
+  这里是往 shell 敲一条启动命令，<code>send-keys … C-m</code> 是对的——
+  问题只在时机，不在方式。别顺手「修」成 SendPromptSubmit。</p>
+</div>
+
+<h2><span class="n">07</span>G4 的解法：记真实的死亡时刻</h2>
+
+<p><code>Reconcile</code> 发现会话没了的时候，只能拿到「现在」。真实结束时刻要靠活着的时候留脚印：</p>
+
+<pre><code>ALTER TABLE sessions ADD COLUMN <span class="k">last_seen</span> TEXT;
+
+<span class="c">// Reconcile 每轮给所有 live 会话刷一次 last_seen（本来就在遍历，几乎零成本）。
+// 判定某会话没了时：</span>
+died_at = <span class="k">last_seen</span>        <span class="c">// host-restart：取最后一次看见它的时刻</span>
+died_at = now              <span class="c">// killed：Roam 在场，"现在"就是准的</span></code></pre>
+
+<p>精度取决于 Reconcile 周期（分钟级），足够回答「那天下午干了什么」。
+配合 <a href="memory-guard.html">R1</a> 的 <code>died_reason='oom'</code>，
+台账就能同时说清<b>什么时候没的</b>和<b>为什么没的</b>——这次事故里这两个问题都得靠翻内核日志。</p>
+
+<h2><span class="n">08</span>要不要自动恢复</h2>
+
+<p>设置里给一个开关：<b>「开机后自动恢复上次的会话」，默认关</b>。</p>
+
+<div class="cols">
+  <div class="card">
+    <h4>默认关的理由</h4>
+    <p>自动拉起 17 个 agent = 一次无人值守的内存冲击，而且用户可能压根不想继续昨天那些活。
+    重启常常正是因为「乱了，重来」。</p>
+  </div>
+  <div class="card">
+    <h4>开了之后的约束</h4>
+    <p>只恢复<b>有对话 id 且目录还在</b>的；上限（默认 5 个）；走 R1 的限流与内存上限；
+    完成后发一条通知说明恢复了哪几个。</p>
+  </div>
+</div>
+
+<p>对多数人来说，横幅上那个「全部恢复」按钮已经足够——它只比自动恢复多一次点击，
+却把「要不要继续」的决定权留在了人手上。</p>
+
+<h2><span class="n">09</span>落地顺序</h2>
+
+<table>
+  <tr><th>#</th><th>动作</th><th>成本</th><th>拿到什么</th></tr>
+  <tr><td>1</td><td>后端 <code>GET /sessions/last-boot</code>：返回上一代 epoch 被带走的那批 + 可恢复性</td>
+      <td>一个查询</td><td>横幅和抽屉的数据源</td></tr>
+  <tr><td>2</td><td>前端重启横幅（含 dismiss 落台账）</td><td>一个组件</td>
+      <td><b>「消失」的体感当场消除。单做这一条收益最大。</b></td></tr>
+  <tr><td>3</td><td><code>restore-batch</code> API + CLI <code>--last-boot</code>，带限流与 R1 上限</td>
+      <td>约 150 行</td><td>17 条一次搞定，且不会引发下一次 OOM</td></tr>
+  <tr><td>4</td><td>「挑选…」抽屉</td><td>一个抽屉</td><td>只捡想要的那几个</td></tr>
+  <tr><td>5</td><td><code>agent_kind</code> 列 + restore 按类型分派 + 展示名兜底</td><td>一列 + 分支</td>
+      <td>恢复出来是能认、能用的，codex 会话不再敲错命令</td></tr>
+  <tr><td>6</td><td><code>last_seen</code> 列 + died_at 取真实时刻</td><td>一列 + 一次 UPDATE</td>
+      <td>历史时间线不再失真</td></tr>
+  <tr><td>7</td><td>自动恢复开关（默认关）</td><td>设置页一项</td><td>愿意的人可以完全无感</td></tr>
+</table>
+
+<h2><span class="n">10</span>验收</h2>
+<ul>
+  <li><b>真机重启一次</b>（这是唯一诚实的测法）：开若干会话，其中至少一个 agent 会话、
+      一个 codex 会话、一个目录会被删掉的 worktree 会话，重启后——
+      横幅出现且数字正确；「全部恢复」后目录/名字/对话都对；
+      目录没了的那条报明确原因而不是静默失败。</li>
+  <li><b>限流生效</b>：批量恢复 10 个 agent 会话时观察内存曲线（R1 的 L3 内存条），
+      不出现同时冷启动的尖峰；任一会话失败不影响其余。</li>
+  <li><b>dismiss 跨端</b>：桌面点「不用了」，手机上进来不再出现同一条横幅。</li>
+  <li><b>没东西可恢复时不打扰</b>：全新环境、或上一批全部被显式 kill（<code>died_reason='killed'</code>）时，横幅不出现。</li>
+  <li><b>时间线</b>：重启恢复后查台账，被带走会话的 <code>died_at</code> 接近真实关机时刻，
+      而不是开机后第一次 Reconcile 的时刻。</li>
+  <li><b>手机端</b>：横幅与抽屉在 <code>data-size=compact</code> 下过
+      <a href="../../development/web-ui-checklist.md">web-ui-checklist</a> 真机一遍。</li>
+</ul>
+
+<div class="foot">
+  Roam · docs/design/reliability/session-restore.html · v0.1 · 2026-08-23<br>
+  证据来源：<code>~/.roam/meta.db</code> sessions 表（host-restart 167 条，本次 17 条）、
+  <code>internal/sessmeta/sessmeta.go</code>、<code>internal/command/db/db.go</code>、
+  <code>frontend/src/components/sessions/SessionHistory.tsx</code>。
+  姊妹稿：<a href="memory-guard.html">R1 会话内存护栏</a>。
+</div>
+
+</div>
+
+<script>
+// 主题切换：跟随系统，可手动覆盖。设计稿常被人在亮着的屏幕上打开。
+(function () {
+  var b = document.getElementById('themeBtn');
+  var dark = !window.matchMedia('(prefers-color-scheme: light)').matches;
+  function apply() {
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    b.textContent = dark ? '浅色' : '深色';
+  }
+  b.addEventListener('click', function () { dark = !dark; apply(); });
+  apply();
+})();
+</script>
+</body>
+</html>

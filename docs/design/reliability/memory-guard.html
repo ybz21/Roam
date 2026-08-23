@@ -1,0 +1,508 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Roam · 会话内存护栏（R1 v0.1）</title>
+<style>
+/* ── 令牌：直接取 frontend/src/theme.tsx 的真值 ─────────────────────────── */
+:root {
+  --bg-base:#0d1117; --bg-container:#161b22; --bg-elevated:#1b222b; --bg-term:#06090d;
+  --border:#30363d; --border-subtle:#21262d;
+  --text-bright:#e6edf3; --text-dim:#8b949e; --text-dimmer:#6e7681;
+  --accent:#58a6ff; --accent-solid:#1f6feb; --accent-soft:rgba(31,111,235,.14); --accent-border:rgba(88,166,255,.45);
+  --ok:#3fb950; --ok-solid:#238636; --ok-soft:rgba(63,185,80,.14); --ok-border:rgba(63,185,80,.42);
+  --danger:#f85149; --danger-soft:rgba(248,81,73,.12); --danger-border:rgba(248,81,73,.40);
+  --warn:#d29922; --warn-soft:rgba(210,153,34,.12); --warn-border:rgba(210,153,34,.40);
+  --list-hover:rgba(255,255,255,.025);
+  --fs-micro:11px; --fs-meta:12px; --fs-sm:13px; --fs-body:14px; --fs-lg:16px; --fs-title:22px;
+  --r-xs:6px; --r-sm:10px; --r-card:14px; --r-pill:999px;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+html[data-theme="light"] {
+  --bg-base:#f6f8fa; --bg-container:#ffffff; --bg-elevated:#ffffff; --bg-term:#ffffff;
+  --border:#d0d7de; --border-subtle:#e6e9ec;
+  --text-bright:#1f2328; --text-dim:#57606a; --text-dimmer:#8c959f;
+  --accent:#0969da; --accent-solid:#1f6feb; --accent-soft:rgba(31,111,235,.10); --accent-border:rgba(31,111,235,.40);
+  --ok:#1a7f37; --ok-solid:#1f883d; --ok-soft:rgba(31,136,61,.10); --ok-border:rgba(31,136,61,.40);
+  --danger:#cf222e; --danger-soft:rgba(207,34,46,.09); --danger-border:rgba(207,34,46,.35);
+  --warn:#9a6700; --warn-soft:rgba(154,103,0,.10); --warn-border:rgba(154,103,0,.35);
+  --list-hover:rgba(27,31,36,.04);
+}
+* { box-sizing:border-box; }
+html { background:#07090d; }
+html[data-theme="light"] { background:#eef1f5; }
+body {
+  margin:0; color:var(--text-bright);
+  font:var(--fs-body)/1.65 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+svg { display:block; }
+button { font:inherit; cursor:pointer; }
+
+.top {
+  position:sticky; top:0; z-index:20;
+  display:flex; align-items:center; gap:var(--sp-3);
+  padding:10px clamp(16px,3vw,40px);
+  background:color-mix(in srgb, var(--bg-base) 84%, transparent);
+  border-bottom:1px solid var(--border-subtle); backdrop-filter:blur(18px);
+}
+.top .kicker { font-size:var(--fs-micro); letter-spacing:.14em; text-transform:uppercase; color:var(--text-dimmer); }
+.top h1 { margin:0; font-size:var(--fs-sm); font-weight:600; }
+.top .sp { flex:1; }
+.tbtn { border:1px solid var(--border); background:var(--bg-container); color:var(--text-dim);
+  border-radius:var(--r-pill); padding:5px 14px; font-size:var(--fs-meta); }
+.tbtn:hover { color:var(--text-bright); border-color:var(--accent-border); }
+
+.wrap { max-width:1060px; margin:0 auto; padding:34px clamp(16px,3vw,40px) 110px; }
+.lede { color:var(--text-dim); font-size:var(--fs-lg); line-height:1.7; margin:0 0 var(--sp-5); }
+h2 { margin:56px 0 6px; padding-top:26px; font-size:var(--fs-lg); font-weight:600; border-top:1px solid var(--border-subtle); }
+h2:first-of-type { margin-top:8px; border-top:0; padding-top:0; }
+h2 .n { color:var(--text-dimmer); font-family:var(--mono); font-size:var(--fs-meta); margin-right:var(--sp-2); }
+h3 { margin:30px 0 8px; font-size:var(--fs-body); font-weight:600; }
+p { margin:10px 0; }
+code { font-family:var(--mono); font-size:.92em; background:var(--bg-elevated);
+  border:1px solid var(--border-subtle); border-radius:var(--r-xs); padding:1px 5px; }
+pre { margin:var(--sp-3) 0; padding:var(--sp-4); overflow-x:auto;
+  background:var(--bg-term); border:1px solid var(--border-subtle); border-radius:var(--r-sm);
+  font-family:var(--mono); font-size:var(--fs-meta); line-height:1.65; color:var(--text-bright); }
+pre code { background:none; border:0; padding:0; }
+pre .c { color:var(--text-dimmer); }
+pre .k { color:var(--accent); }
+pre .g { color:var(--ok); }
+pre .r { color:var(--danger); }
+ul,ol { margin:10px 0; padding-left:22px; }
+li { margin:5px 0; }
+a { color:var(--accent); }
+
+.card { background:var(--bg-container); border:1px solid var(--border); border-radius:var(--r-card);
+  padding:var(--sp-4) var(--sp-5); margin:var(--sp-4) 0; }
+.card.warn { border-color:var(--warn-border); background:var(--warn-soft); }
+.card.bad  { border-color:var(--danger-border); background:var(--danger-soft); }
+.card.good { border-color:var(--ok-border); background:var(--ok-soft); }
+.card > :first-child { margin-top:0; }
+.card > :last-child { margin-bottom:0; }
+.card h4 { margin:0 0 var(--sp-2); font-size:var(--fs-sm); font-weight:600; letter-spacing:.01em; }
+
+.tag { display:inline-block; font-size:var(--fs-micro); letter-spacing:.06em; padding:2px 9px;
+  border-radius:var(--r-pill); border:1px solid var(--border); color:var(--text-dim); vertical-align:2px; }
+.tag.now  { border-color:var(--danger-border); color:var(--danger); background:var(--danger-soft); }
+.tag.l1   { border-color:var(--accent-border); color:var(--accent); background:var(--accent-soft); }
+.tag.l2   { border-color:var(--warn-border);   color:var(--warn);   background:var(--warn-soft); }
+.tag.l3   { border-color:var(--ok-border);     color:var(--ok);     background:var(--ok-soft); }
+
+table { width:100%; border-collapse:collapse; margin:var(--sp-3) 0; font-size:var(--fs-sm); }
+th,td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--border-subtle); vertical-align:top; }
+th { color:var(--text-dim); font-weight:600; font-size:var(--fs-meta); letter-spacing:.04em; text-transform:uppercase; }
+td.num { font-family:var(--mono); text-align:right; white-space:nowrap; }
+tr.hot td { color:var(--danger); font-weight:600; }
+
+/* 内存条 */
+.bars { margin:var(--sp-4) 0; }
+.bar { display:grid; grid-template-columns:150px 1fr 92px; gap:var(--sp-3); align-items:center; margin:6px 0; font-size:var(--fs-sm); }
+.bar .nm { font-family:var(--mono); font-size:var(--fs-meta); color:var(--text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.bar .tr { height:14px; background:var(--bg-elevated); border:1px solid var(--border-subtle); border-radius:var(--r-xs); overflow:hidden; }
+.bar .fi { height:100%; background:var(--accent-solid); }
+.bar .fi.hot { background:var(--danger); }
+.bar .fi.mid { background:var(--warn); }
+.bar .vl { font-family:var(--mono); font-size:var(--fs-meta); text-align:right; color:var(--text-dim); }
+
+.cols { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:var(--sp-3); margin:var(--sp-4) 0; }
+
+.flow { display:grid; gap:var(--sp-2); margin:var(--sp-4) 0; }
+.step { display:grid; grid-template-columns:26px 1fr; gap:var(--sp-3); align-items:start;
+  padding:var(--sp-3) var(--sp-4); background:var(--bg-container);
+  border:1px solid var(--border-subtle); border-radius:var(--r-sm); }
+.step .i { width:26px; height:26px; border-radius:var(--r-pill); background:var(--accent-soft);
+  border:1px solid var(--accent-border); color:var(--accent);
+  display:flex; align-items:center; justify-content:center; font-size:var(--fs-meta); font-family:var(--mono); }
+.step .i.g { background:var(--ok-soft); border-color:var(--ok-border); color:var(--ok); }
+.step .i.r { background:var(--danger-soft); border-color:var(--danger-border); color:var(--danger); }
+.step b { display:block; font-weight:600; font-size:var(--fs-sm); margin-bottom:2px; }
+.step small { color:var(--text-dim); font-size:var(--fs-meta); line-height:1.6; }
+
+.mock { background:var(--bg-base); border:1px solid var(--border); border-radius:var(--r-card);
+  overflow:hidden; margin:var(--sp-4) 0; }
+.mock .mhd { padding:8px var(--sp-4); border-bottom:1px solid var(--border-subtle);
+  font-size:var(--fs-micro); letter-spacing:.12em; text-transform:uppercase; color:var(--text-dimmer); }
+.mock .mbd { padding:var(--sp-4); }
+.srow { display:grid; grid-template-columns:1fr 132px 76px; gap:var(--sp-3); align-items:center;
+  padding:9px var(--sp-3); border-radius:var(--r-sm); border:1px solid transparent; }
+.srow + .srow { border-top:1px solid var(--border-subtle); border-radius:0; }
+.srow.alert { border-color:var(--danger-border); background:var(--danger-soft); border-radius:var(--r-sm); }
+.srow .t { font-size:var(--fs-sm); }
+.srow .t small { display:block; color:var(--text-dimmer); font-size:var(--fs-micro); font-family:var(--mono); }
+.mini { height:6px; background:var(--bg-elevated); border-radius:var(--r-pill); overflow:hidden; }
+.mini i { display:block; height:100%; background:var(--ok); }
+.mini i.mid { background:var(--warn); }
+.mini i.hot { background:var(--danger); }
+.srow .v { font-family:var(--mono); font-size:var(--fs-micro); color:var(--text-dim); text-align:right; }
+.srow.alert .v { color:var(--danger); }
+
+.foot { margin-top:70px; padding-top:var(--sp-4); border-top:1px solid var(--border-subtle);
+  color:var(--text-dimmer); font-size:var(--fs-meta); }
+@media (max-width:640px) {
+  .bar { grid-template-columns:110px 1fr 72px; }
+  .srow { grid-template-columns:1fr 84px 66px; }
+}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div>
+    <div class="kicker">Roam · Reliability</div>
+    <h1>R1 会话内存护栏</h1>
+  </div>
+  <div class="sp"></div>
+  <button class="tbtn" id="themeBtn" type="button">浅色</button>
+</div>
+
+<div class="wrap">
+
+<p class="lede">
+2026-08-22 21:51，这台 30 GB 的机器被打爆。凶手不是 Roam 后端，是 Roam 托管的<b>一个
+Claude Code 进程</b>——它自己涨到 15.5 GB。这份稿子先把证据摆完，再给出四层护栏：
+让失控的会话只杀死自己，而不是拖走整机和另外 16 个会话。
+</p>
+
+<h2><span class="n">01</span>事故还原：内核日志说了什么</h2>
+
+<p>机器重启后 <code>journalctl -k -b -1</code> 里留着完整现场。这不是推测，是内核在被打死前
+自己 dump 的进程表：</p>
+
+<pre><code><span class="c"># 触发者只是恰好在申请内存的那个进程，不是元凶</span>
+Aug 22 21:51:23 kernel: buildkitd invoked oom-killer: ... global_oom
+Aug 22 21:51:23 kernel: oom-kill:constraint=CONSTRAINT_NONE, global_oom,
+    task_memcg=<span class="k">/user.slice/user-1000.slice/user@1000.service/tmux-spawn-00635c01-….scope</span>,
+    task=<span class="r">2.1.228</span>, pid=831019, uid=1000
+Aug 22 21:51:23 kernel: Out of memory: Killed process 831019 (<span class="r">2.1.228</span>)
+    total-vm:17094704kB, <span class="r">anon-rss:15888120kB</span>, pgtables:31520kB</code></pre>
+
+<div class="card bad">
+  <h4>被杀的 <code>2.1.228</code> 是什么？</h4>
+  <p><code>2.1.228</code> 是 <b>Claude Code 的版本号</b>（本机当前 <code>claude --version</code> =
+  2.1.241，8/22 那天正是 2.1.228）。Node 应用把 <code>process.title</code> 设成版本串，
+  内核的 <code>comm</code> 就记成了这个。它跑在 <code>tmux-spawn-*.scope</code> 里——
+  也就是 <b>Roam 起的一个 tmux 会话的 pane</b> 中。</p>
+</div>
+
+<h3>OOM 那一刻的内存排行（按内核 dump 的真实 RSS 聚合）</h3>
+
+<div class="bars">
+  <div class="bar"><span class="nm">2.1.228 (claude)</span><span class="tr"><i class="fi hot" style="width:100%"></i></span><span class="vl">15 516 MB</span></div>
+  <div class="bar"><span class="nm">qemu-system-x86</span><span class="tr"><i class="fi mid" style="width:29.8%"></i></span><span class="vl">4 624 MB</span></div>
+  <div class="bar"><span class="nm">claude × 11</span><span class="tr"><i class="fi" style="width:14.8%"></i></span><span class="vl">2 293 MB</span></div>
+  <div class="bar"><span class="nm">java</span><span class="tr"><i class="fi" style="width:13.3%"></i></span><span class="vl">2 064 MB</span></div>
+  <div class="bar"><span class="nm">dockerd</span><span class="tr"><i class="fi" style="width:3.1%"></i></span><span class="vl">483 MB</span></div>
+  <div class="bar"><span class="nm">chrome × 8</span><span class="tr"><i class="fi" style="width:1.0%"></i></span><span class="vl">163 MB</span></div>
+  <div class="bar"><span class="nm">codex × 2</span><span class="tr"><i class="fi" style="width:0.5%"></i></span><span class="vl">82 MB</span></div>
+  <div class="bar"><span class="nm">ttmux-web</span><span class="tr"><i class="fi" style="width:0.24%"></i></span><span class="vl">≈38 MB</span></div>
+</div>
+
+<div class="card">
+  <h4>结论：后端没有泄漏，护栏才是缺的那块</h4>
+  <p><code>ttmux-web</code> 在 OOM dump 里连前 20 都排不进（现在跑着也只有 38 MB）。
+  代码侧复查也支持这一点：7 处 <code>NewTicker</code> 全部配了 <code>Stop()</code>，
+  <code>pty.Handler</code> 的 <code>defer</code> 里 <code>ptmx.Close()</code> +
+  <code>Process.Kill()</code> + <code>Wait()</code> 三件齐全，PR #197 已经修掉了中心反代
+  每请求新建 <code>Transport</code> 的 goroutine 泄漏。</p>
+  <p><b>真正的问题是：Roam 是个进程编排器，而它编排出来的进程没有任何内存上限。</b>
+  11 个常驻 claude（2.3 GB）+ 一台 AVD 模拟器（4.6 GB）+ java（2 GB）是长期底盘，
+  一个失控的 agent 补上最后 15.5 GB，30 GB 就没了。</p>
+</div>
+
+<h3>为什么系统自己的兜底没救下来</h3>
+<table>
+  <tr><th>机制</th><th>状态</th><th>为什么没生效</th></tr>
+  <tr><td><code>systemd-oomd</code></td><td>active</td>
+      <td>它的 <code>ManagedOOMSwap</code> 判据看 swap 使用率。本机 8 GB swap 在 OOM 时
+          <code>USED 0B</code>——判据永远不触发。</td></tr>
+  <tr><td>swap（8 GB）</td><td>没用上</td>
+      <td>OOM dump 里绝大多数进程 <code>swapents</code> 为 0。15.9 GB anon 涨得比回收快，
+          swap 来不及成为缓冲。</td></tr>
+  <tr><td><code>user@1000.service</code> 内存限制</td><td><span class="tag now">未设置</span></td>
+      <td>没有 <code>MemoryHigh</code>／<code>MemoryMax</code>，用户切片可以一路吃到物理内存见底。</td></tr>
+  <tr><td>每会话限制</td><td><span class="tag now">未设置</span></td>
+      <td>本稿要补的主线。</td></tr>
+</table>
+
+<h2><span class="n">02</span>已经现成的隔离点</h2>
+
+<p>好消息：<b>隔离边界早就在了，只是没上锁。</b>本机 tmux 编译带 systemd 支持，每个 pane
+自动落进一个独立 cgroup：</p>
+
+<pre><code>$ cat /proc/self/cgroup
+0::/user.slice/user-1000.slice/user@1000.service/<span class="k">tmux-spawn-33218aea-….scope</span>
+
+$ systemctl --user list-units --type=scope
+tmux-spawn-33218aea-….scope   <span class="c">tmux child pane 82485 launched by process 82284</span></code></pre>
+
+<p>而且 <code>memory</code> 控制器已经委派到了用户切片，<b>不需要 root</b> 就能设上限。已实测：</p>
+
+<pre><code>$ cat /sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/cgroup.subtree_control
+<span class="g">cpu memory pids</span>
+
+$ systemd-run --user --scope -p MemoryMax=200M -p MemorySwapMax=0 --quiet \
+    bash -c 'cat /sys/fs/cgroup$(cat /proc/self/cgroup|cut -d: -f3)/memory.max'
+<span class="g">209715200</span>   <span class="c"># 生效</span></code></pre>
+
+<div class="card good">
+  <h4>这一条决定了整个方案的成本</h4>
+  <p>不需要 root、不需要 docker、不需要改 tmux、不需要 systemd 单元文件。
+  只要在起会话时把命令包一层 <code>systemd-run --user --scope</code>，
+  每个会话就有了自己的内存天花板。</p>
+</div>
+
+<h2><span class="n">03</span>四层护栏</h2>
+
+<p>四层从内到外，各自解决一个不同的失败模式。L1 是主线，其余是纵深。</p>
+
+<div class="flow">
+  <div class="step"><span class="i">L1</span><div>
+    <b>每会话内存上限 <span class="tag l1">主防线</span></b>
+    <small>失控的会话撞自己的天花板，cgroup OOM 只在该 scope 内选victim。整机和其余 16 个会话毫发无损。</small>
+  </div></div>
+  <div class="step"><span class="i">L2</span><div>
+    <b>用户切片总闸 <span class="tag l2">兜底</span></b>
+    <small>L1 拦不住的（比如 20 个会话各自合规地占 3 GB）由软限 <code>MemoryHigh</code> 接住：先回收、先 throttle，不硬杀。保证 GUI／sshd／ttmux-web 还活着，人还进得来。</small>
+  </div></div>
+  <div class="step"><span class="i">L3</span><div>
+    <b>看门狗与可见性 <span class="tag l3">预防</span></b>
+    <small>会话列表上直接显示每个会话吃了多少。这才是「预防」——在爆之前就能看出是哪个会话在涨。</small>
+  </div></div>
+  <div class="step"><span class="i">L4</span><div>
+    <b>事后可追溯</b>
+    <small>撞顶写进台账：<code>died_reason='oom'</code> + 峰值内存。下次再问「机器怎么又卡了」，答案是一行记录而不是一次考古。</small>
+  </div></div>
+</div>
+
+<h2><span class="n">04</span>L1：每会话内存上限</h2>
+
+<h3>改动点</h3>
+<p>唯一的建会话入口是 <code>Runtime.CreateSession</code>
+（<code>cli/ttmux-cli-go/internal/runtime/session.go:204</code>）。所有会话——手动开的、
+agent 会话、swarm 成员、插件常驻——都从这里出去，包一层就全覆盖。</p>
+
+<pre><code><span class="c">// CreateOpts 增加一个字段（空 = 用全局默认，"0" = 显式不限）</span>
+type CreateOpts struct {
+    Dir, Label, Width, Height string
+    Extra                     []string
+    <span class="k">MemMax</span>                    string <span class="c">// 如 "8G"；见 memguard.Wrap</span>
+}
+
+<span class="c">// memguard.Wrap 把要跑的命令包进一个带上限的 transient scope。
+// 包不动就原样返回——没有 systemd 的环境（容器、macOS）不该因此起不了会话。</span>
+func Wrap(cmd []string, max string) []string {
+    if max == "" || max == "0" || !available() { return cmd }
+    return append([]string{
+        "systemd-run", "--user", "--scope", "--quiet",
+        "--unit", "roam-sess-" + id,          <span class="c">// 可反查是哪个会话</span>
+        "-p", "MemoryMax=" + max,
+        "-p", "MemorySwapMax=" + swapCap(max), <span class="c">// 别让它把 swap 也吃穿</span>
+        "-p", "MemoryHigh=" + high(max),       <span class="c">// 撞硬顶前先 throttle 一段，给看门狗反应时间</span>
+        "--",
+    }, cmd...)
+}</code></pre>
+
+<p><code>available()</code> 的判定要便宜且可缓存：<code>systemd-run</code> 在 PATH 里、
+<code>XDG_RUNTIME_DIR</code> 有值、<code>cgroup.subtree_control</code> 含 <code>memory</code>。
+三条缺一就静默退回不包——护栏失效应当降级成「和今天一样」，不能变成「开不出会话」。</p>
+
+<h3>默认值</h3>
+<table>
+  <tr><th>会话类型</th><th class="num">MemoryHigh</th><th class="num">MemoryMax</th><th>依据</th></tr>
+  <tr><td>Agent 会话（claude / codex）</td><td class="num">6 G</td><td class="num">8 G</td>
+      <td>健康态实测 180–600 MB。8 G 是 20× 余量，正常工作绝无可能撞到；15.5 GB 那种一定是失控。</td></tr>
+  <tr><td>普通 shell 会话</td><td class="num">3 G</td><td class="num">4 G</td>
+      <td>跑构建／测试够用；真要编译大项目由用户在设置里单独抬高。</td></tr>
+  <tr><td>插件常驻会话</td><td class="num">1 G</td><td class="num">2 G</td>
+      <td>im-bridge、cron、hostmon 都是轻量长跑，涨上去必然是漏了。</td></tr>
+  <tr><td>模拟器（AVD／qemu）</td><td class="num">—</td><td class="num">AVD 内存 + 2 G</td>
+      <td>本次事故里 qemu 占 4.6 GB。上限按 AVD 配置的 RAM 推算，多给 2 G 给 qemu 自身开销。</td></tr>
+</table>
+
+<p>全局默认值进设置页（<code>docs/design/settings/</code>），单个会话可在新建时覆盖。
+设成 <code>0</code> = 显式不限，给「我就是要跑个吃 20 G 的东西」留门，但那是用户明确的选择。</p>
+
+<h3>撞顶时会发生什么</h3>
+<div class="flow">
+  <div class="step"><span class="i">1</span><div><b>先到 <code>MemoryHigh</code>（6 G）</b>
+    <small>内核开始激进回收并 throttle 该 cgroup。进程变慢但不死。L3 看门狗在这一刻就该发通知了。</small></div></div>
+  <div class="step"><span class="i r">2</span><div><b>再到 <code>MemoryMax</code>（8 G）</b>
+    <small>cgroup 内 OOM。<b>victim 只在这个 scope 里选</b>——被杀的是失控的 agent，不是 gnome-shell、不是别人的会话、不是 buildkitd。</small></div></div>
+  <div class="step"><span class="i g">3</span><div><b>tmux pane 收到子进程退出</b>
+    <small>会话本身还在（pane 里的 shell 还活着），用户看到的是 agent 挂了，不是整台机器没了。重开一个 agent 就能继续。</small></div></div>
+  <div class="step"><span class="i g">4</span><div><b>台账记一笔（L4）</b>
+    <small><code>died_reason='oom'</code> + <code>peak_rss</code>，从 <code>memory.peak</code> 和
+    <code>memory.events</code> 的 <code>oom_kill</code> 计数读。</small></div></div>
+</div>
+
+<h2><span class="n">05</span>L2：用户切片总闸</h2>
+
+<p>L1 管不了「每个都合规、加起来超了」。补一道软限，它不杀进程，只是让整个用户会话在
+逼近上限时先回收、先变慢，把硬 OOM 换成可感知的卡顿：</p>
+
+<pre><code><span class="c"># /etc/systemd/system/user@1000.service.d/roam-memory.conf（需 root，一次性）</span>
+[Service]
+MemoryHigh=75%      <span class="c"># 30 G 机器 → 22.5 G，软限，触发回收+throttle</span>
+MemoryMax=88%       <span class="c"># → 26.4 G，硬顶，仍留 3.6 G 给内核和系统服务</span>
+ManagedOOMMemoryPressure=kill
+ManagedOOMMemoryPressureLimit=60%</code></pre>
+
+<p>关键收益不是「不 OOM」，而是<b>把 OOM 关在用户切片里</b>。这次是 <code>global_oom</code>，
+内核在全机范围选 victim，所以桌面才会整个僵住。限死在 user slice 之后，
+sshd、systemd-journald、以及跑在 system slice 的服务都还在，机器不会「卡住到只能按电源」。</p>
+
+<p>顺手把 swap 用起来：<code>vm.swappiness</code> 现在是 60 但 swap 实际 <code>USED 0B</code>。
+配一份 zram（压缩内存 swap，比磁盘 swap 快一个数量级）能给突发增长再争取几十秒——
+足够 L3 的通知发出去。这一条是加分项，不是主线。</p>
+
+<h2><span class="n">06</span>L3：看门狗与可见性</h2>
+
+<p>前两层是「爆了之后损失可控」，这一层才是用户问的<b>「如何预防」</b>：让内存在会话列表上
+一直看得见，涨起来的那个自己会跳出来。</p>
+
+<h3>数据从哪来</h3>
+<p>不用轮询 <code>ps</code> 聚合进程树——cgroup 本来就按会话分好了，一次读一个文件：</p>
+<pre><code>$ cat .../tmux-spawn-&lt;uuid&gt;.scope/memory.current   <span class="c"># 当前占用（含子进程全部后代）</span>
+$ cat .../tmux-spawn-&lt;uuid&gt;.scope/memory.peak      <span class="c"># 历史峰值</span>
+$ cat .../tmux-spawn-&lt;uuid&gt;.scope/memory.events    <span class="c"># high / max / oom_kill 计数</span></code></pre>
+
+<p>会话名 → scope 的映射从 pane pid 反查 <code>/proc/&lt;pid&gt;/cgroup</code>；
+用了 L1 之后 scope 名里直接带会话 id，连反查都省了。
+采集挂进已有的 <code>plugins/hostmonitor/</code>（它已经在采 CPU/GPU/内存/磁盘/网络），
+新增一路 per-session 指标即可，不必再造一个采集器。</p>
+
+<h3>会话列表长这样</h3>
+<div class="mock">
+  <div class="mhd">会话列表 · 内存列</div>
+  <div class="mbd">
+    <div class="srow alert">
+      <div class="t">blade-os 重构<small>2026-0812-1808-0006</small></div>
+      <div class="mini"><i class="hot" style="width:97%"></i></div>
+      <div class="v">7.8G / 8G</div>
+    </div>
+    <div class="srow">
+      <div class="t">XiaoHui 联调<small>2026-0812-1748-0003</small></div>
+      <div class="mini"><i class="mid" style="width:41%"></i></div>
+      <div class="v">3.3G / 8G</div>
+    </div>
+    <div class="srow">
+      <div class="t">memleak-hunt<small>2026-0823-1043-0001</small></div>
+      <div class="mini"><i style="width:6%"></i></div>
+      <div class="v">512M / 8G</div>
+    </div>
+    <div class="srow">
+      <div class="t">llm-gateway<small>2026-0813-1743-0012</small></div>
+      <div class="mini"><i style="width:3%"></i></div>
+      <div class="v">243M / 8G</div>
+    </div>
+  </div>
+</div>
+
+<p>内存条平时是安静的细线（<code>--ok</code>），过 60% 转 <code>--warn</code>，
+过 85% 转 <code>--danger</code> 并把整行点亮。手机端 <code>data-size=compact</code>
+只留细线和数字，不显示分母。</p>
+
+<h3>通知</h3>
+<p>复用现成的 <code>plugin_notifications</code> 通道，两档，各自只发一次（按会话 + 阈值去重，
+不然一个失控会话能刷屏）：</p>
+<ul>
+  <li><b>85%</b>——「会话 <i>blade-os 重构</i> 内存 6.8G/8G，还在涨」，带「去看看 / 结束它」两个动作。</li>
+  <li><b>撞顶被杀</b>——「会话 <i>blade-os 重构</i> 里的 agent 因超出 8G 被终止，峰值 8.0G」。
+      这条一定要有：否则用户只会看到 agent 莫名其妙没了。</li>
+</ul>
+
+<div class="card warn">
+  <h4>不做自动 kill</h4>
+  <p>看门狗<b>不主动杀</b>会话。硬顶交给内核（确定、及时、不会误判），看门狗只负责让人知道。
+  一个跑了三小时的 agent 被脚本按阈值猜杀，比 OOM 更让人恼火。</p>
+</div>
+
+<h2><span class="n">07</span>L4：事后可追溯</h2>
+
+<p><code>sessions</code> 表已经有 <code>died_reason</code>（现有取值 <code>killed</code> /
+<code>host-restart</code>，见 <code>internal/sessmeta/sessmeta.go:451</code>）。加第三种取值和一个峰值列：</p>
+
+<pre><code>ALTER TABLE sessions ADD COLUMN <span class="k">peak_rss</span> INTEGER;   <span class="c">-- 字节，取自 memory.peak</span>
+<span class="c">-- died_reason 取值扩为: killed | host-restart | oom</span></code></pre>
+
+<p><code>Reconcile</code> 判定某会话没了的时候，顺手看一眼它 scope 的
+<code>memory.events</code>：<code>oom_kill &gt; 0</code> 就记 <code>oom</code> 而不是
+<code>killed</code>，并把 <code>memory.peak</code> 落进 <code>peak_rss</code>。
+scope 目录随进程消失，所以这一眼得赶在 systemd 回收之前——采集器（L3）本来就在周期性读，
+把最后一次读到的值缓存住即可，不必和内核赛跑。</p>
+
+<p>另外把 <code>ROAM_PPROF</code> 这条既有的诊断口写进部署文档
+（<code>backend/cmd/pprof.go</code>，只绑回环，默认关）。它诊断的是 ttmux-web 自身——
+这次证明不是它的锅，但下次可能是，而事故当场再去翻怎么开就晚了。</p>
+
+<h2><span class="n">08</span>与「会话恢复」的交汇</h2>
+
+<div class="card bad">
+  <h4>一键恢复 17 个 agent 会话 = 下一次 OOM</h4>
+  <p>姊妹稿 <a href="session-restore.html">R2 宿主重启后的会话续接</a> 要做「批量恢复」。
+  这次重启带走了 17 个会话——如果批量恢复把 17 个 claude 同时拉起来，那正是造成这次事故的
+  同一种局面，而且是一瞬间造成的。</p>
+  <p><b>硬约束：批量恢复必须限流（建议并发 ≤3、逐个等 agent 起稳），且每个恢复出来的会话
+  必须走 L1 上限。</b>R2 的实现不得绕过本稿的 <code>memguard.Wrap</code>。</p>
+</div>
+
+<h2><span class="n">09</span>落地顺序</h2>
+
+<table>
+  <tr><th>#</th><th>动作</th><th>成本</th><th>拿到什么</th></tr>
+  <tr><td>1</td><td>L2 用户切片 drop-in</td><td>一个配置文件，需 root 一次</td>
+      <td>立刻见效。就算别的都不做，整机也不会再被单个会话打死。</td></tr>
+  <tr><td>2</td><td>L1 <code>memguard.Wrap</code> + <code>CreateSession</code> 接线</td><td>约 120 行 + 单测</td>
+      <td>失控会话只杀自己。这是主线。</td></tr>
+  <tr><td>3</td><td>L1 默认值进设置页</td><td>前端一屏</td><td>用户能按机器规格调，也能给单个会话开例外。</td></tr>
+  <tr><td>4</td><td>L3 hostmonitor per-session 采集 + 会话列表内存条</td><td>采集一路 + 前端一列</td>
+      <td>「预防」落到实处：涨起来的那个当场就看得见。</td></tr>
+  <tr><td>5</td><td>L3 两档通知</td><td>复用现有通道</td><td>人不盯着屏幕也能知道。</td></tr>
+  <tr><td>6</td><td>L4 <code>died_reason='oom'</code> + <code>peak_rss</code></td><td>一列 + 判定分支</td>
+      <td>下次「机器怎么又卡了」是查台账，不是考古。</td></tr>
+</table>
+
+<h2><span class="n">10</span>验收</h2>
+<ul>
+  <li><b>合成失控</b>：在一个会话里跑
+      <code>python3 -c "a=[];\nwhile 1: a.append(bytearray(50*1024*1024))"</code>。
+      期望：该会话的 agent 在 8 G 处被杀，<b>其他会话和桌面完全无感</b>，
+      通知到达，台账记 <code>oom</code> + <code>peak_rss≈8G</code>。</li>
+  <li><b>护栏缺失时不阻断</b>：<code>PATH</code> 里去掉 <code>systemd-run</code>，
+      会话照常能建（静默降级），日志里一行说明。</li>
+  <li><b>不误伤正常工作</b>：跑一遍 <code>scripts/dev/quality/check.sh full</code> 和一次
+      前端 <code>npm run build</code>，确认 4 G 的 shell 会话上限不会把构建挤死。</li>
+  <li><b>数据准确</b>：<code>memory.current</code> 读数与 <code>ps</code> 对该 pane 进程树
+      的 RSS 求和在同量级（cgroup 会把共享页算得更准，允许有差）。</li>
+  <li><b>手机端</b>：会话列表在 <code>data-size=compact</code> 下内存列不撑破布局，
+      按 <a href="../../development/web-ui-checklist.md">web-ui-checklist</a> 过真机一遍。</li>
+</ul>
+
+<div class="foot">
+  Roam · docs/design/reliability/memory-guard.html · v0.1 · 2026-08-23<br>
+  证据来源：<code>journalctl -k -b -1</code>（2026-08-22 21:51:23 OOM dump）、
+  <code>~/.roam/meta.db</code> sessions 表、本机 cgroup v2 实测。
+  姊妹稿：<a href="session-restore.html">R2 宿主重启后的会话续接</a>。
+</div>
+
+</div>
+
+<script>
+// 主题切换：跟随系统，可手动覆盖。设计稿常被人在亮着的屏幕上打开。
+(function () {
+  var b = document.getElementById('themeBtn');
+  var dark = !window.matchMedia('(prefers-color-scheme: light)').matches;
+  function apply() {
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    b.textContent = dark ? '浅色' : '深色';
+  }
+  b.addEventListener('click', function () { dark = !dark; apply(); });
+  apply();
+})();
+</script>
+</body>
+</html>
