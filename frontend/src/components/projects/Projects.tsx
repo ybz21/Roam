@@ -8,6 +8,7 @@
 // （渐变卡面 + focus 辉光环）、git 数据一律等宽字、行 hover 左导轨渐显、
 // 分区头沿用设计图纸体例、入场一次性 stagger。全部颜色走 index.css token。
 import {Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { appendPaths } from '../../agent-paths'
 import { MemBar } from '../sessions/session-memory'
 import type { ReactNode } from 'react'
 import { App as AntApp, AutoComplete, Button, Dropdown, Input, Modal, Popconfirm, Segmented, Select, Space, Spin, Tag, Tooltip, Typography } from 'antd'
@@ -303,9 +304,20 @@ function NewProjectModal({ open, onClose }: { open: boolean; onClose: () => void
   const [pick, setPick] = useState(false)
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
+  // 三种来源。后端其实一直支持「目录不存在就新建」，但界面从没说过，
+  // 于是用户只敢填已经存在的路径——这里把它摆到明面上。
+  const [source, setSource] = useState<'existing' | 'clone'>('existing')
+  const [cloneUrl, setCloneUrl] = useState('')
   // 名字是不是用户自己写过：写过就不再被目录覆盖，否则改一次目录就把他写的名字冲掉
   const [nameTouched, setNameTouched] = useState(false)
-  useEffect(() => { if (open) { setDir(''); setName(''); setNameTouched(false) } }, [open])
+  useEffect(() => { if (open) { setDir(''); setName(''); setNameTouched(false); setSource('existing'); setCloneUrl('') } }, [open])
+
+  /** 从 git URL 猜仓库名：git@host:org/repo.git 或 https://host/org/repo(.git) → repo */
+  const repoNameFromUrl = (u: string): string => {
+    const cleaned = u.trim().replace(/\.git$/, '').replace(/\/+$/, '')
+    const seg = cleaned.split(/[/:]/).filter(Boolean).pop() || ''
+    return /^[\w.-]+$/.test(seg) ? seg : ''
+  }
 
   /** 目录定下来就把名字填成路径最后一段（/home/ai/codes/ttmux → ttmux）。
    *  只在「选完」时填——选目录、选历史项、离开输入框，不跟着每次按键跳。 */
@@ -316,14 +328,21 @@ function NewProjectModal({ open, onClose }: { open: boolean; onClose: () => void
   }
   const ok = async () => {
     if (!dir.trim()) { message.error(t('session.dirPlaceholder')); return }
+    if (source === 'clone' && !cloneUrl.trim()) { message.error(t('project.cloneUrlRequired')); return }
     try {
       setCreating(true)
-      const res = await api('POST', '/projects', { dir: dir.trim(), displayName: name.trim() })
+      // 克隆可能要几分钟（大仓库），loading 里说清楚在干嘛，别让人以为卡死了
+      if (source === 'clone') message.loading({ content: t('project.cloning'), key: 'newproj', duration: 0 })
+      const res = await api('POST', '/projects', {
+        dir: dir.trim(), displayName: name.trim(),
+        ...(source === 'clone' ? { cloneUrl: cloneUrl.trim() } : {}),
+      })
+      message.destroy('newproj')
       pushRecentDir(dir.trim())
       message.success(t('project.createdProject'))
       onClose()
       location.hash = '#/projects/' + encodeURIComponent(res.data.key)
-    } catch (e: any) { message.error(e.message) }
+    } catch (e: any) { message.destroy('newproj'); message.error(e.message) }
     finally { setCreating(false) }
   }
   return (
@@ -331,8 +350,27 @@ function NewProjectModal({ open, onClose }: { open: boolean; onClose: () => void
       <Modal open={open} onCancel={onClose} onOk={ok} title={t('project.newModalTitle')}
         okText={t('file.create')} destroyOnClose confirmLoading={creating}>
         <Space direction="vertical" style={{ width: '100%' }}>
+          <Segmented block value={source} onChange={(v) => setSource(v as 'existing' | 'clone')}
+            options={[
+              { value: 'existing', label: t('project.sourceLocal') },
+              { value: 'clone', label: t('project.sourceClone') },
+            ]} />
+          {source === 'clone' && (
+            <Input value={cloneUrl} autoFocus
+              onChange={(e) => {
+                setCloneUrl(e.target.value)
+                // 顺手把目录和名字填好：绝大多数情况就是「克隆到 ~/codes/<仓库名>」。
+                const repo = repoNameFromUrl(e.target.value)
+                if (repo && !nameTouched) setName(repo)
+                if (repo && (!dir || /(^|\/)[\w.-]*$/.test(dir))) {
+                  const base = dir.includes('/') ? dir.slice(0, dir.lastIndexOf('/')) : '~/codes'
+                  setDir(base + '/' + repo)
+                }
+              }}
+              placeholder={t('project.cloneUrlPlaceholder')} />
+          )}
           <Space.Compact style={{ width: '100%' }}>
-            <AutoComplete style={{ flex: 1 }} value={dir} onChange={setDir} autoFocus
+            <AutoComplete style={{ flex: 1 }} value={dir} onChange={setDir} autoFocus={source === 'existing'}
               onSelect={(v) => fillNameFromDir(String(v))}
               onBlur={() => fillNameFromDir(dir)}
               options={recentDirs().map((d) => ({ value: d }))}
@@ -342,7 +380,9 @@ function NewProjectModal({ open, onClose }: { open: boolean; onClose: () => void
           </Space.Compact>
           <Input placeholder={t('project.displayName')} value={name}
             onChange={(e) => { setName(e.target.value); setNameTouched(true) }} />
-          <div style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)' }}>{t('project.newHint')}</div>
+          <div style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-dimmer)', lineHeight: 1.7 }}>
+            {source === 'clone' ? t('project.cloneHint') : t('project.newHint')}
+          </div>
         </Space>
       </Modal>
       <DirPicker open={pick} start={dir}
@@ -992,7 +1032,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
     setUploading(true)
     try {
       const res = await upload('/tmp', images)
-      setPrompt((v) => (v ? v.replace(/\s*$/, ' ') : '') + res.saved.join(' ') + ' ')
+      setPrompt((v) => appendPaths(v, res.saved))
       message.success(t('chat.uploadedFiles', { count: images.length, dir: '/tmp' }))
     } catch (e: any) { message.error(t('chat.uploadFailed', { message: e.message })) }
     finally { setUploading(false) }
@@ -1855,7 +1895,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
             <FileBrowser
               dir={proj.dir}
               layout="split"
-              onInsertPath={(p) => setPrompt((cur) => (cur ? cur.replace(/\s*$/, ' ') : '') + '@' + p + ' ')}
+              onInsertPath={(p) => setPrompt((cur) => appendPaths(cur, [p]))}
             />
           </div>
         )}

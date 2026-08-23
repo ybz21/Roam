@@ -181,8 +181,11 @@ func main() {
 		if gen {
 			log.Printf("已生成自签 TLS 证书: %s", certPath)
 		}
-		log.Printf("ttmux-web 监听 https://%s  (ttmux=%s；自签证书，手机首访点「继续前往」信任)", bind, bin)
-		if err := r.RunTLS(bind, certPath, keyPath); err != nil {
+		log.Printf("ttmux-web 监听 https://%s  (ttmux=%s；自签证书，手机首访点「继续前往」信任；明文 http 会自动跳转)", bind, bin)
+		// 不用 r.RunTLS：它只认 TLS 握手，地址栏少打个 s 就是一句
+		// "Client sent an HTTP request to an HTTPS server."（HTTP 400），
+		// 用户看不出该怎么办。见 tlsredirect.go。
+		if err := serveTLSWithRedirect(r, bind, certPath, keyPath); err != nil {
 			log.Fatal(err)
 		}
 		return
