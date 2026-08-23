@@ -157,6 +157,38 @@ while 1: a.append(bytearray(30*1024*1024))'" C-m 2>/dev/null
   local reason; reason=$(db "select died_reason from sessions where id=?" "$s")
   [ "$reason" = "oom" ] && ok "G5 died_reason=oom（不是笼统的 killed）" || bad "G5 died_reason=$reason" "期望 oom"
 
+  # G7 内存条报的必须是**真占用**（anon），不是 memory.current。
+  #
+  # current 把 page cache 一起算进来，而那是内核为加速留的、内存紧张时自己就会回收的。
+  # 实测一个跑完两次交叉编译的会话 current=4.37G，其中 anon 只有 0.75G——
+  # 拿 current 画条，用户看到 4.4G 会以为漏了；看门狗按它算百分比更会凭空报警。
+  # 这条特意**先把缓存撑起来**再比，否则两个数字本来就一样，测了也白测。
+  s=$(mk g7)
+  d=$(cg_dir "$s")
+  # 撑 page cache：读一批**大**文件才拉得开差距。先 drop 掉这个 cgroup 自己的缓存，
+  # 再读 frontend/dist（几十 MB 的 chunk），确保 current 明显高于 anon。
+  echo 1 > "$d/memory.reclaim" 2>/dev/null || true
+  tmux send-keys -t "=$s:" "cat $(pwd)/frontend/dist/assets/*.js $(pwd)/backend/dist/* >/dev/null 2>&1" C-m 2>/dev/null
+  local w=0
+  until [ "$(cat "$d/memory.current" 2>/dev/null || echo 0)" -gt $((200*1024*1024)) ] || [ $w -ge 15 ]; do sleep 1; w=$((w+1)); done
+  sleep 1
+  local anon cur shown
+  anon=$(awk '/^anon /{print $2}' "$d/memory.stat" 2>/dev/null)
+  cur=$(cat "$d/memory.current" 2>/dev/null)
+  "$TTMUX" ls >/dev/null 2>&1
+  shown=$("$TTMUX" ls --json 2>/dev/null | python3 -c "
+import json,sys
+for r in json.load(sys.stdin):
+    if r['name']=='$s': print(r.get('mem',{}).get('cur',0)); break
+else: print(0)")
+  if [ "${cur:-0}" -le "${anon:-0}" ]; then
+    skip "G7 内存条报真占用" "这一轮没能撑出 page cache 差异（anon=$anon current=$cur）"
+  elif python3 -c "import sys; sys.exit(0 if abs($shown-$anon) < 64*1024*1024 and $shown < $cur*0.7 else 1)"; then
+    ok "G7 内存条报 anon 而非 current（anon=$((anon/1024/1024))M current=$((cur/1024/1024))M 显示=$((shown/1024/1024))M）"
+  else
+    bad "G7 显示 $((shown/1024/1024))M，anon=$((anon/1024/1024))M current=$((cur/1024/1024))M" "page cache 被当成了占用"
+  fi
+
   # G6 显式关闭要真的关掉
   s=$(ROAM_SESSION_MEM_MAX=off "$TTMUX" new "$TAG-g6" --detach --json 2>/dev/null \
       | python3 -c 'import json,sys;print(json.load(sys.stdin).get("session",""))' 2>/dev/null)

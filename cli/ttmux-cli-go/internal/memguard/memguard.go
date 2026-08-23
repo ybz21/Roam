@@ -343,9 +343,53 @@ func Current(pid int) (cur, peak int64, ok bool) {
 	if dir == "" {
 		return 0, 0, false
 	}
-	cur, ok1 := readInt(filepath.Join(dir, "memory.current"))
-	peak, _ = readInt(filepath.Join(dir, "memory.peak")) // 老内核没有 memory.peak，缺了不算失败
-	return cur, peak, ok1
+	// 取 memory.stat 的 anon，**不是 memory.current**。
+	//
+	// current 把 page cache 一起算进来，而那是内核为加速留的、内存紧张时自己就会
+	// 回收的东西。实测本机一个会话跑完两次交叉编译后 current=4.37G，其中 anon 只有
+	// 0.75G（= claude 进程那 743MB），file 占 3.43G；往 memory.reclaim 写 2G，
+	// current 当场掉到 2.32G，而进程一个字节没动。
+	//
+	// 拿 current 画内存条，用户看到 4.4G 会以为漏了；看门狗按它算百分比更会凭空
+	// 报警——真实压力根本没到。所以只报 anon：它才是「这个会话吃了多少」。
+	//
+	// **peak 走另一套口径，故意的。**
+	//
+	// 它取内核记的 memory.peak（含 cache），而不是 anon 的采样最大值。
+	// 因为两者服务不同目的：
+	//   - cur 是「现在吃了多少」，天天在列表上看，必须准 → anon
+	//   - peak 是「涨到过多少」，事后取证用，**绝不能漏尖峰** → memory.peak
+	// 撞顶到进程被杀是毫秒级的事，5 秒一次的采样必然错过；靠 anon 采样取最大，
+	// 查出来的 peak 会是 0（实测如此），那正好把最该看见的那一刻丢了。
+	// 代价是 peak 偏高（含缓存），所以它是**上界**不是精确值——用它定位
+	// 「是哪个会话」够了，别拿它算百分比。
+	anon, ok1 := statField(filepath.Join(dir, "memory.stat"), "anon")
+	if !ok1 {
+		// 老内核没有 anon 这一行时退回 current：偏高，但总比没有强。
+		anon, ok1 = readInt(filepath.Join(dir, "memory.current"))
+	}
+	peak, _ = readInt(filepath.Join(dir, "memory.peak")) // 缺了不算失败
+	if peak < anon {
+		peak = anon
+	}
+	return anon, peak, ok1
+}
+
+// statField 从 memory.stat 里取一个字段（每行 `<名字> <值>`）。
+func statField(path, key string) (int64, bool) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return 0, false
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		k, v, ok := strings.Cut(strings.TrimSpace(line), " ")
+		if !ok || k != key {
+			continue
+		}
+		n, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+		return n, err == nil
+	}
+	return 0, false
 }
 
 // OOMKilled 返回这个 scope 里发生过几次 cgroup OOM。
