@@ -1597,6 +1597,7 @@ const zhCN = {
   'plugins.monitor.pollFailed': '刷新失败',
   'plugins.monitor.cpu': 'CPU',
   'plugins.monitor.memory': '内存',
+  'plugins.monitor.swapCritical': '交换空间快用完了 —— 再吃内存整机会卡死到只能按电源键（ping 还通，ssh 进不来）',
   'plugins.monitor.gpu': 'GPU',
   'plugins.monitor.disk': '磁盘',
   'plugins.monitor.network': '网络',
