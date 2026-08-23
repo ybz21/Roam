@@ -143,12 +143,13 @@ describe('Inspector 让位次序', () => {
     expect(w - dock - SPLIT_RAIL * 2 - ins).toBeGreaterThanOrEqual(CANVAS_MIN)
   })
 
-  it('1440：借不够，Canvas 让位，且 Dock 用回原宽（终端一寸不变）', () => {
+  it('1440：借不够，Canvas 让位，终端长满它腾出来的宽度', () => {
     const w = workspace(1440) // 1216
     expect(canvasFitsWith({ workspaceWidth: w, inspectorWidth: ins, hasDock: true })).toBe(false)
     const mine = defaultDockWidth(1440, w)
-    expect(effectiveDockWidth({ workspaceWidth: w, dockWidth: mine, inspectorWidth: ins, inspectorOpen: true }))
-      .toBe(mine)
+    const dock = effectiveDockWidth({ workspaceWidth: w, dockWidth: mine, inspectorWidth: ins, inspectorOpen: true })
+    expect(dock).toBeGreaterThan(mine)                  // 守着原宽 = 右边留一条黑边
+    expect(dock + SPLIT_RAIL * 2 + ins).toBe(w)         // 正好铺满
   })
 
   it('借宽绝不越过用户拖出来的宽度，也绝不低于 480', () => {
@@ -156,7 +157,11 @@ describe('Inspector 让位次序', () => {
       const w = workspace(viewport)
       for (const mine of [DOCK_MIN, 600, 880]) {
         const got = effectiveDockWidth({ workspaceWidth: w, dockWidth: mine, inspectorWidth: ins, inspectorOpen: true })
-        expect(got).toBeLessThanOrEqual(mine)
+        // 「不越过原宽」是**借宽**这一步的约束（第 1 步，Canvas 还在）。Canvas 让掉之后
+        // 走的是第 2 步「长满」，那里越过原宽正是要的结果。
+        if (canvasFitsWith({ workspaceWidth: w, inspectorWidth: ins, hasDock: true })) {
+          expect(got).toBeLessThanOrEqual(mine)
+        }
         expect(got).toBeGreaterThanOrEqual(DOCK_MIN)
       }
     }
@@ -195,10 +200,28 @@ describe('Inspector 让位次序', () => {
     expect(dock + SPLIT_RAIL * 2 + want).toBeLessThanOrEqual(w)
   })
 
-  it('抽屉够放时终端一寸不动——退让只在真不够的时候发生', () => {
-    const w = workspace(1600, false)
-    const mine = 900
-    const dock = effectiveDockWidth({ workspaceWidth: w, dockWidth: mine, inspectorWidth: 552, inspectorOpen: true })
+  it('Canvas 保得住时终端一寸不动——借宽只在真不够的时候发生', () => {
+    const w = workspace(1600, false) // 1552
+    const mine = 500
+    expect(canvasFitsWith({ workspaceWidth: w, inspectorWidth: ins, hasDock: true })).toBe(true)
+    const dock = effectiveDockWidth({ workspaceWidth: w, dockWidth: mine, inspectorWidth: ins, inspectorOpen: true })
     expect(dock).toBe(mine)
+  })
+
+  // 这次的 bug：Canvas 让掉之后那条宽度谁都没接，右边空出一道黑边（1366 笔记本上 192px）。
+  // 三列几何的硬契约是**既不溢出、也不留白**——溢出招来 10px 文档滚动条，留白就是那张截图。
+  it('Canvas 让位之后，Dock + Inspector 正好铺满工作区', () => {
+    for (const viewport of [1280, 1366, 1440, 1600, 1920]) {
+      for (const navExpanded of [true, false]) {
+        const w = workspace(viewport, navExpanded)
+        const cap = inspectorBounds({ workspaceWidth: w, hasDock: true }).max
+        for (const want of [INSPECTOR_MIN, INSPECTOR_DEFAULT, 552, 945]) {
+          const insW = Math.min(want, cap)
+          if (canvasFitsWith({ workspaceWidth: w, inspectorWidth: insW, hasDock: true })) continue
+          const dock = effectiveDockWidth({ workspaceWidth: w, dockWidth: DOCK_MIN, inspectorWidth: insW, inspectorOpen: true })
+          expect(dock + SPLIT_RAIL * 2 + insW).toBe(w)
+        }
+      }
+    }
   })
 })
