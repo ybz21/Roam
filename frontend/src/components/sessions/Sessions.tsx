@@ -419,6 +419,9 @@ export default function Sessions({ openTerm, closeTerm, activeTerm, embedded }: 
               const connected = s.attached == 1
               const agent = cc[s.name] ? 'claude' : cx[s.name] ? 'codex' : null
               const waiting = !!needsInput[s.name]
+              // 休眠：机器重启带走了 tmux 那一半，台账还认得它，点开即恢复。
+              // 它没有进程，所以 attached/agent/待输入这些运行时判断都不适用。
+              const dormant = s.state === 'dormant'
               const activeRow = activeTerm === s.name
               return (
                 // 整行点击直接进入终端；右侧操作区 stopPropagation 不触发进入
@@ -435,8 +438,15 @@ export default function Sessions({ openTerm, closeTerm, activeTerm, embedded }: 
                   {activeRow && <span aria-hidden style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: 'var(--accent)' }} />}
                   {/* 七个格子恒定：缺一个桌面上就整行错列，所以空的项目/位置格照样渲染（见 .tt-srow） */}
                   <div className="tt-srow">
-                    <i title={waiting ? t('prompt.confirmRequired') : connected ? t('terminal.status.connected') : t('terminal.status.idle')} style={{ width: 8, height: 8, borderRadius: '50%', flex: '0 0 8px', background: waiting ? '#d29922' : connected ? 'var(--ok)' : 'var(--text-dimmer)' }} />
-                    <span className="nm" style={{ color: activeRow ? '#fff' : undefined }}
+                    <i title={dormant ? t('session.dormant.hint') : waiting ? t('prompt.confirmRequired') : connected ? t('terminal.status.connected') : t('terminal.status.idle')}
+                      style={{
+                        width: 8, height: 8, borderRadius: '50%', flex: '0 0 8px',
+                        // 休眠是空心：灰实心已经是「活着但空闲」，而这两者的区别是
+                        // 点下去会发生什么——一个直接进终端，一个要先把会话重开出来。
+                        background: dormant ? 'transparent' : waiting ? '#d29922' : connected ? 'var(--ok)' : 'var(--text-dimmer)',
+                        boxShadow: dormant ? 'inset 0 0 0 1.5px var(--text-dimmer)' : undefined,
+                      }} />
+                    <span className="nm" style={{ color: activeRow ? '#fff' : dormant ? 'var(--text-dim)' : undefined }}
                       title={`${s.label || s.name}（${s.id || s.name}）· ${t('session.createdAt')} ${absTime(s.created)}`}>
                       {en.fam && <Tooltip title={t('session.fork.childOf', { parent: s.parent })}><span style={{ color: 'var(--swarm)', marginRight: 6, display: 'inline-flex' }}><BranchIcon size={12} /></span></Tooltip>}
                       {s.label || s.name}
@@ -472,10 +482,17 @@ export default function Sessions({ openTerm, closeTerm, activeTerm, embedded }: 
                         </>)
                       })()}
                       {sw && <Tag color="blue" style={{ margin: 0, flex: '0 0 auto' }}>{t('nav.swarm')}:{sw.swarm}{sw.role === 'leader' ? `·${t('swarm.master')}` : ''}</Tag>}
-                      {waiting && <Tag color="warning" style={{ margin: 0, flex: '0 0 auto' }}>{t('session.waiting')}</Tag>}
-                      {cc[s.name] && <span className="tt-agentmark"><AgentLogo kind="claude" size={12} />Claude</span>}
-                      {cx[s.name] && <span className="tt-agentmark"><AgentLogo kind="codex" size={12} />Codex</span>}
-                      {!sw && !agent && <Tag style={{ margin: 0, flex: '0 0 auto' }}>{connected ? t('terminal.status.connected') : t('terminal.status.idle')}</Tag>}
+                      {waiting && !dormant && <Tag color="warning" style={{ margin: 0, flex: '0 0 auto' }}>{t('session.waiting')}</Tag>}
+                      {cc[s.name] && !dormant && <span className="tt-agentmark"><AgentLogo kind="claude" size={12} />Claude</span>}
+                      {cx[s.name] && !dormant && <span className="tt-agentmark"><AgentLogo kind="codex" size={12} />Codex</span>}
+                      {/* 休眠会话必须一眼看得出来。从前它和活会话一样显示「空闲中」，
+                          于是点下去才发现是要重开的——那正是「点击恢复又新建了一个」的由来。 */}
+                      {dormant && (
+                        <Tag color={s.resumable ? 'blue' : undefined} style={{ margin: 0, flex: '0 0 auto' }}>
+                          {t(s.resumable ? 'session.dormant.resumable' : 'session.dormant.hint')}
+                        </Tag>
+                      )}
+                      {!sw && !agent && !dormant && <Tag style={{ margin: 0, flex: '0 0 auto' }}>{connected ? t('terminal.status.connected') : t('terminal.status.idle')}</Tag>}
                       {/* 窗口数 99% 的会话都是 1，常驻就是一列噪声——只在 >1 时说 */}
                       {s.windows > 1 && <span style={{ color: 'var(--text-dim)', fontSize: 12, whiteSpace: 'nowrap' }}>{t('session.windows', { count: s.windows })}</span>}
                     </span>

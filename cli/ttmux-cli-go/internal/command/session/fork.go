@@ -185,6 +185,9 @@ type treeNode struct {
 	Agent     string `json:"agent,omitempty"`
 	Resumable bool   `json:"resumable,omitempty"`
 	Repo      string `json:"repo,omitempty"`
+	// Mem 会话此刻吃了多少。**会话列表走的就是这条树接口**，漏了这一列，
+	// 内存条在最该出现的地方永远画不出来。
+	Mem *memInfo `json:"mem,omitempty"`
 }
 
 // TreeJSON 输出 parent 投影的会话森林（含每会话活动 pane cwd）。
@@ -241,7 +244,7 @@ func buildTree(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool
 			Name: s.Name, Label: s.Label, ID: s.ID, TmuxID: s.TmuxID,
 			Windows: s.Windows, Created: s.Created, Attached: s.Attached,
 			LastActivity: s.LastActivity, State: s.State, Agent: s.Agent,
-			Resumable: s.Resumable, Repo: s.Repo,
+			Resumable: s.Resumable, Repo: s.Repo, Mem: s.Mem,
 		}
 		// 休眠会话没有 pane，cwd 只能取台账里记下的归属目录——项目详情页正是靠它归位。
 		if s.State == "dormant" {
