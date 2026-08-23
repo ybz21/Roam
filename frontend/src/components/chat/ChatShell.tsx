@@ -2,6 +2,7 @@
 // 会话名、切回终端、文件面板都在上方的会话工具条里，这里不再重复一行头部。
 // Claude、Codex 共用，差异只在 accent、占位文案与消息渲染(renderMessage)。
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { appendPaths, atPath } from '../../agent-paths'
 import { Button, Input, App as AntApp } from 'antd'
 import { api, upload, makeClipboardImageFile } from '../../api'
 import { PromptPanel } from '../prompt'
@@ -67,13 +68,13 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
   // 把文本追加进输入框末尾（语音识别结果 / 路径插入共用）
   const appendText = (s: string) => setInput((v) => (v ? v.replace(/\s*$/, ' ') : '') + s + ' ')
   // 把路径以 @引用 插进输入框（文件侧栏「@」按钮 / 拖拽共用），与终端 toMention 一致
-  const insertPath = (p: string) => appendText('@' + p)
+  const insertPath = (p: string) => appendText(atPath(p))
 
   // 图片上传到 /tmp 并把完整路径插进输入框（等同桌面 Ctrl+V：不污染工作目录，模型按绝对路径读取）
   const uploadImagesToTmp = async (images: File[]) => {
     if (!images.length) return
     const res = await upload('/tmp', images)
-    setInput((v) => (v ? v.replace(/\s*$/, ' ') : '') + res.saved.join(' ') + ' ')
+    setInput((v) => appendPaths(v, res.saved))
     message.success(t('chat.uploadedFiles', { count: images.length, dir: '/tmp' }))
   }
 
@@ -84,9 +85,10 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
     const dir = cwd?.data?.dir
     if (!dir) { message.error(t('chat.cwdMissing')); return }
     const res = await upload(dir, files)
-    const names = res.saved.map((p) => p.split('/').pop() || p)
-    setInput((v) => (v ? v.replace(/\s*$/, ' ') : '') + names.join(' ') + ' ')
-    message.success(t('chat.uploadedFiles', { count: names.length, dir }))
+    // 插完整路径而不是文件名：@ 后面跟绝对路径，模型不必猜「相对谁」——
+    // agent 的工作目录未必就是这个 dir（worktree、cd 过、子 agent 都可能不同）。
+    setInput((v) => appendPaths(v, res.saved))
+    message.success(t('chat.uploadedFiles', { count: res.saved.length, dir }))
   }
 
   // 拖拽/📎 选择：图片走 /tmp+绝对路径（同 Ctrl+V），其余文件走工作目录+文件名。

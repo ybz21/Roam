@@ -1,4 +1,5 @@
 import { TBtn, TI } from './terminal-toolbar'
+import { atPath, atPaths } from '../../agent-paths'
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import ClaudeChat from '../chat/ClaudeChat'
 import CodexChat from '../chat/CodexChat'
@@ -219,7 +220,7 @@ export default function TerminalPane(props: {
   // 拖拽载荷就是文件绝对路径，原样作为 @mention（不转相对路径）。
   const toMention = (raw: string) => {
     const p = raw.trim()
-    return p ? '@' + p : ''
+    return atPath(p)
   }
   const readDropPath = (e: React.DragEvent) =>
     e.dataTransfer.getData('application/x-ttmux-path') || e.dataTransfer.getData('text/plain') || ''
@@ -253,7 +254,7 @@ export default function TerminalPane(props: {
     } catch (err: any) { message.error(t('terminal.imageUploadFailed', { message: err.message })); return }
     if (!saved.length) return
     exitCopyMode()
-    termRefs.current[active]?.send(saved.map((p) => '@' + p).join(' ') + ' ', true)
+    termRefs.current[active]?.send(atPaths(saved), true)
   }
   // 拖到终端区：直接把 @路径 送进当前会话（claude/codex TUI 或 shell 提示符的光标处）。
   const onTermDrop = (e: React.DragEvent) => {
@@ -378,7 +379,7 @@ export default function TerminalPane(props: {
     const files = rawFiles.map((f, i) => makeClipboardImageFile(f, f.type, i))
     const expected = files.map((f) => uploadedPathOf('/tmp', f))
     // 末尾补一个空格：紧接着打字时不会和路径粘成一坨。
-    sendPaste(session, expected.map((p) => '@' + p).join(' ') + ' ')
+    sendPaste(session, atPaths(expected))
     message.loading({ content: t('terminal.imageUploading'), key: 'img-paste', duration: 0 })
     try {
       const res = await upload('/tmp', files)

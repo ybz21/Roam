@@ -8,6 +8,7 @@
 // （渐变卡面 + focus 辉光环）、git 数据一律等宽字、行 hover 左导轨渐显、
 // 分区头沿用设计图纸体例、入场一次性 stagger。全部颜色走 index.css token。
 import {Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { appendPaths } from '../../agent-paths'
 import { MemBar } from '../sessions/session-memory'
 import type { ReactNode } from 'react'
 import { App as AntApp, AutoComplete, Button, Dropdown, Input, Modal, Popconfirm, Segmented, Select, Space, Spin, Tag, Tooltip, Typography } from 'antd'
@@ -1031,7 +1032,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
     setUploading(true)
     try {
       const res = await upload('/tmp', images)
-      setPrompt((v) => (v ? v.replace(/\s*$/, ' ') : '') + res.saved.join(' ') + ' ')
+      setPrompt((v) => appendPaths(v, res.saved))
       message.success(t('chat.uploadedFiles', { count: images.length, dir: '/tmp' }))
     } catch (e: any) { message.error(t('chat.uploadFailed', { message: e.message })) }
     finally { setUploading(false) }
@@ -1894,7 +1895,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
             <FileBrowser
               dir={proj.dir}
               layout="split"
-              onInsertPath={(p) => setPrompt((cur) => (cur ? cur.replace(/\s*$/, ' ') : '') + '@' + p + ' ')}
+              onInsertPath={(p) => setPrompt((cur) => appendPaths(cur, [p]))}
             />
           </div>
         )}
