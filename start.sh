@@ -194,15 +194,6 @@ elif [ "$(find frontend/src frontend/index.html frontend/vite.config.ts -newer f
   (cd frontend && ensure_frontend_deps && npm run build)
 fi
 
-# ── 杀掉旧进程 ───────────────────────────────────────────────────
-pids="$(port_pids)"
-if [ -n "${pids// /}" ]; then
-  echo "==> 杀掉 :$PORT 上的旧进程 ($pids)"
-  kill $pids 2>/dev/null || true
-  sleep 1
-  kill -9 $pids 2>/dev/null || true
-fi
-
 # ── 后端：dev 增量编译；非 dev 直接用 install.sh 产物 ─────────────
 if [ "$DEV" = 1 ]; then
   # 检测 .go 与 go:embed 的资源(*.tmpl/*.html)变更，避免改模板却跳过编译
@@ -222,6 +213,36 @@ echo "==> 启动 Roam  $SCHEME://$BIND"
 echo "    登录口令：首次打开网页时在界面上设置；或编辑 ~/.roam/config.yaml 的 web.password。"
 [ -n "$LAN" ] && echo "==> 手机/平板（同 WiFi）: $SCHEME://$LAN:$PORT"
 [ "$SCHEME" = https ] && echo "    （自签证书：手机首次访问点「高级 → 继续前往」即可，之后语音/剪贴板可用；如需 http 设 TTMUX_WEB_TLS=0）"
+
+# ── 装了开机自启就交给 systemd ───────────────────────────────────
+#
+# scripts/dev/install-autostart.sh 之后服务归 systemd 管，而它跑的正是
+# `start.sh fg`——参数一模一样，只是换了谁来拉。这时若还自己 daemon_start，
+# 就是两套东西抢同一个端口：下面那段先把 systemd 的进程杀了，新进程占了口，
+# systemd 见 MainPID 没了按 Restart=always 又拉一个回来，来回打架。
+#
+# 判据用 is-enabled 而不是 is-active：装没装自启是既定事实，而 is-active
+# 在这一刻可能正好是 activating（服务刚被谁重启），那就漏判了。
+# **必须排除 fg**：systemd 的 ExecStart 就是 `start.sh fg`，不排除的话它一进来
+# 又去 restart 自己，systemd 数到 start-limit-hit 直接把服务判死（实测踩过）。
+if [ "${1:-}" != "fg" ] && command -v systemctl >/dev/null 2>&1 \
+   && systemctl --user is-enabled roam.service >/dev/null 2>&1; then
+  echo "==> 交给 systemd 重启（roam.service）"
+  systemctl --user restart roam.service
+  sleep 2
+  echo "==> 服务 $(systemctl --user is-active roam.service)  ·  $SCHEME://$BIND"
+  echo "    日志: journalctl --user -u roam.service -f   停止: systemctl --user stop roam"
+  exit 0
+fi
+
+# ── 杀掉旧进程 ───────────────────────────────────────────────────
+pids="$(port_pids)"
+if [ -n "${pids// /}" ]; then
+  echo "==> 杀掉 :$PORT 上的旧进程 ($pids)"
+  kill $pids 2>/dev/null || true
+  sleep 1
+  kill -9 $pids 2>/dev/null || true
+fi
 
 # fg：前台运行（调试，Ctrl-C 即停）
 if [ "${1:-}" = "fg" ]; then
