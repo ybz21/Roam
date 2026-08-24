@@ -565,6 +565,7 @@ const zhCN = {
   'chat.taskStatus.deleted': '已删除',
   'chat.systemReminder': '系统提醒',
   'chat.imageBlock': '[图片]',
+  'chat.viewImage': '点击查看',
   'prompt.confirmRequired': '需要你确认',
   'prompt.yes': '是 (y)',
   'prompt.no': '否 (n)',
