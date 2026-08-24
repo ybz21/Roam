@@ -10,6 +10,9 @@ import { useI18n } from '../../i18n'
 import type { Block, Msg } from './types'
 import { LooseResult, ToolView } from './tool-render'
 import { TerminalIcon } from '../../icons'
+import { splitAtPaths } from '../../agent-paths'
+import { IMG_EXT } from '../files/file-utils'
+import { MentionedImage } from './MentionedImage'
 
 export const CODEX_ACCENT = 'var(--ok)' // Codex 一方的强调色＝全站唯一那支绿
 
@@ -84,6 +87,26 @@ function Prose({ blocks, accent, side }: { blocks: Block[]; accent: string; side
 
 // 用户气泡：右侧实心块。命令小标、命令回显、系统提醒都挪到气泡外，
 // 免得白字压在实心底色上再套一层折叠框。
+const isImagePath = (p: string) => IMG_EXT.includes((p.split('.').pop() || '').toLowerCase())
+
+/**
+ * 正文里被 @ 引用的图片就地换成缩略图卡片，其余文字照常走 Markdown。
+ *
+ * 就地替换而不是「正文照旧、图片另起一排」：路径常常嵌在句子里（「看看 @/tmp/a.png
+ * 这个问题」），把它抽到底下，句子就断在半空；而留在原地又等于把同一件事说两遍。
+ */
+function BodyWithImages({ text, accent }: { text: string; accent: string }) {
+  const segs = splitAtPaths(text, isImagePath)
+  if (segs.length === 1 && segs[0].kind === 'text') return <Markdown accent={accent}>{text}</Markdown>
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)', alignItems: 'flex-start' }}>
+      {segs.map((sg, i) => (sg.kind === 'path'
+        ? <MentionedImage key={i} path={sg.path} onAccent={accent === '#fff'} />
+        : <Markdown key={i} accent={accent}>{sg.text}</Markdown>))}
+    </div>
+  )
+}
+
 function UserMessage({ m, accent }: { m: Msg; accent: string }) {
   const { t } = useI18n()
   const parsed = m.blocks.map((b) => (b.kind === 'text' ? parseUserText(b.text || '') : null))
@@ -98,7 +121,7 @@ function UserMessage({ m, accent }: { m: Msg; accent: string }) {
           {m.blocks.map((b, i) => {
             const p = parsed[i]
             // 实心底上正文是白字，链接跟着走白色——默认那支蓝压在蓝底上根本看不见
-            if (!p) return b.text ? <Markdown key={i} accent="#fff">{b.text}</Markdown> : null
+            if (!p) return b.text ? <BodyWithImages key={i} text={b.text} accent="#fff" /> : null
             return (
               <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)' }}>
                 {p.command && (
@@ -106,7 +129,7 @@ function UserMessage({ m, accent }: { m: Msg; accent: string }) {
                     <TerminalIcon size={12} />{p.command}{p.args ? ` ${p.args}` : ''}
                   </span>
                 )}
-                {p.body && <Markdown accent="#fff">{p.body}</Markdown>}
+                {p.body && <BodyWithImages text={p.body} accent="#fff" />}
               </div>
             )
           })}

@@ -563,6 +563,7 @@ const enUS = {
   'chat.taskStatus.deleted': 'Deleted',
   'chat.systemReminder': 'System reminder',
   'chat.imageBlock': '[image]',
+  'chat.viewImage': 'View',
   'prompt.confirmRequired': 'Confirmation required',
   'prompt.yes': 'Yes (y)',
   'prompt.no': 'No (n)',
