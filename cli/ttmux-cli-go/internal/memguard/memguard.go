@@ -13,6 +13,7 @@
 package memguard
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -109,13 +110,26 @@ func DefaultMax() string {
 }
 
 // totalMemory 物理内存字节数（读不到返回 0）。
-func totalMemory() int64 {
+func totalMemory() int64 { return meminfoBytes("MemTotal:") }
+
+// TotalMemory 本机物理内存（字节，读不到 0）。总量闸拿它当分母。
+func TotalMemory() int64 { return totalMemory() }
+
+// AvailableMemory 内核估的**还能拿去用**的内存（字节，读不到 0）。
+//
+// 判「机器要不要卡死了」只能用它，不能用 MemFree：page cache 算在 free 之外，
+// 而它是随时可回收的 —— 拿 MemFree 判会在一台内存充裕、只是缓存占满的机器上
+// 一直误报。MemAvailable 是内核替我们算过回收余量之后的数。
+func AvailableMemory() int64 { return meminfoBytes("MemAvailable:") }
+
+// meminfoBytes 取 /proc/meminfo 里某一行的字节数（该行以 kB 计）。
+func meminfoBytes(key string) int64 {
 	b, err := os.ReadFile("/proc/meminfo")
 	if err != nil {
 		return 0
 	}
 	for _, line := range strings.Split(string(b), "\n") {
-		if !strings.HasPrefix(line, "MemTotal:") {
+		if !strings.HasPrefix(line, key) {
 			continue
 		}
 		f := strings.Fields(line)
@@ -285,12 +299,21 @@ func Limit(pid int) int64 {
 }
 
 // currentMax 回读这个 pane 所在 cgroup 的 memory.max（"max" = 未设限）。
-func currentMax(pid int) (int64, bool) {
+func currentMax(pid int) (int64, bool) { return currentLimit(pid, "memory.max") }
+
+// HighRatio 是软限相对硬顶的默认比例。总量闸靠它认出「这个会话是不是被踩着刹车」——
+// 软限明显低于 max×HighRatio，就是有人单独压过它。
+const HighRatio = highRatio
+
+// HighOf 回读软限 memory.high（0 = 未设限）。
+func HighOf(pid int) (int64, bool) { return currentLimit(pid, "memory.high") }
+
+func currentLimit(pid int, file string) (int64, bool) {
 	dir := cgroupDir(pid)
 	if dir == "" {
 		return 0, false
 	}
-	b, err := os.ReadFile(filepath.Join(dir, "memory.max"))
+	b, err := os.ReadFile(filepath.Join(dir, file))
 	if err != nil {
 		return 0, false
 	}
@@ -300,6 +323,45 @@ func currentMax(pid int) (int64, bool) {
 	}
 	n, err := strconv.ParseInt(s, 10, 64)
 	return n, err == nil
+}
+
+// SetHigh 单独调一个 pane 的软限，**硬顶 memory.max 一动不动**（那是 L1 的事）。
+//
+// 总量闸用它踩刹车：软限只让内核激进回收 + throttle 住分配，不触发 OOM kill。
+// 传 0 表示松开，交还给 L1 设的默认值。
+func SetHigh(pid int, bytes int64) error {
+	if !available() {
+		// 这里**返回错误**，与 Apply 的「静默跳过」相反：Apply 在建会话路径上，
+		// 护栏装不上就该降级成「和以前一样」，绝不能因此开不出会话；
+		// 而这条路的调用方要靠返回值判断刹车到底踩没踩上 —— 报成功而实际没做，
+		// 就会告诉用户「已给它减速」，用户于是不再管它，机器接着爆。
+		return errors.New("memguard: 这台机器上装不了内存护栏")
+	}
+	val := "infinity"
+	if bytes > 0 {
+		val = strconv.FormatInt(bytes, 10)
+	}
+	deadline := time.Now().Add(applyWait)
+	var lastErr error
+	for {
+		if cgroupPath(pid) == "" {
+			return nil // 进程没了，没什么好设的
+		}
+		if unit := ScopeOf(pid); unit != "" {
+			if err := exec.Command("systemctl", "--user", "set-property", unit, "MemoryHigh="+val).Run(); err != nil {
+				lastErr = err
+			} else if got, ok := HighOf(pid); ok && got == bytes {
+				return nil // 与 Apply 同一条教训：判据是回读到了要的值，不是命令返回 0
+			}
+		}
+		if time.Now().After(deadline) {
+			if lastErr != nil {
+				return lastErr
+			}
+			return fmt.Errorf("memguard: 软限 %s 未在 %v 内生效", val, applyWait)
+		}
+		time.Sleep(applyRetry)
+	}
 }
 
 // parseBytes 把 "8G" / "6442450944" / "2000M" 解析成字节数。

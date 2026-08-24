@@ -7,6 +7,7 @@ import (
 	"ttmux-cli-go/internal/agent"
 	"ttmux-cli-go/internal/memalert"
 	"ttmux-cli-go/internal/memguard"
+	"ttmux-cli-go/internal/memthrottle"
 	"ttmux-cli-go/internal/metadb"
 	"ttmux-cli-go/internal/runtime"
 	"ttmux-cli-go/internal/sessmeta"
@@ -39,6 +40,7 @@ func Collect(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool) 
 	// 内存画像：会话列表上那条内存条的数据源。cgroup 按 pane 分好了，
 	// 一次读两个文件，比轮询 ps 聚合整棵进程树便宜也准（含子进程全部后代）。
 	samples := make([]memalert.Sample, 0, len(live))
+	brakes := make([]memthrottle.Sample, 0, len(live))
 	for i := range live {
 		m := sampleMem(rt, live[i].Name)
 		if !m.OK {
@@ -48,6 +50,10 @@ func Collect(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool) 
 		samples = append(samples, memalert.Sample{
 			Session: live[i].Name, Label: live[i].Label,
 			Cur: m.Cur, Peak: m.Peak, Limit: m.Limit, OOMKills: m.OOMKills,
+		})
+		brakes = append(brakes, memthrottle.Sample{
+			Session: live[i].Name, Label: live[i].Label,
+			PIDs: m.PIDs, Cur: m.Cur, High: m.High, Max: m.Limit,
 		})
 	}
 	// tmux 盲态（server 没起）时 alive 为空，Reconcile 内部会一行不动——
@@ -66,6 +72,12 @@ func Collect(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool) 
 		// 数据跟着会话列表走，插件那条路要再建一条通路）。
 		if db, err := metadb.Open(rt.HomeDir, metadb.Options{DataDir: rt.DataDir}); err == nil {
 			memalert.Check(db, rt.Now(), samples)
+			// 总量闸（L2）：每个会话都守着自己的上限、加起来仍然把机器压垮的那一档。
+			// 稳态下 Plan 返回空（踩过的会话下一轮就认得出来），不花额外开销。
+			host := memthrottle.Host{Total: memguard.TotalMemory(), Avail: memguard.AvailableMemory()}
+			for _, d := range memthrottle.Apply(memthrottle.Plan(host, memthrottle.FromEnv(), brakes), memthrottle.SetHigh) {
+				memalert.Throttled(db, rt.Now(), d.Session, d.Label, d.High, d.Brake)
+			}
 		}
 	}
 	return appendDormant(live, meta, exclude)
@@ -78,12 +90,15 @@ func Collect(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool) 
 // 上限取最大的那个——多 pane 时各自有各自的天花板，展示按最宽的算。
 type memSample struct {
 	Cur, Peak, Limit, OOMKills int64
+	High                       int64 // 当前软限（总量闸靠它认出谁已经踩着刹车）
+	PIDs                       []int
 	OK                         bool
 }
 
 func sampleMem(rt runtime.Runtime, sess string) memSample {
 	var m memSample
 	for _, pid := range rt.PanePIDs(sess) {
+		m.PIDs = append(m.PIDs, pid)
 		if c, p, got := memguard.Current(pid); got {
 			m.OK = true
 			m.Cur += c
@@ -93,6 +108,11 @@ func sampleMem(rt runtime.Runtime, sess string) memSample {
 		}
 		if l := memguard.Limit(pid); l > m.Limit {
 			m.Limit = l
+		}
+		// 软限取**最小**的那个：多 pane 时只要有一个被压过，这个会话就是踩着刹车的。
+		// 取最大会让「踩了一个 pane」看起来像没踩，下一轮又去踩一次，越踩越低。
+		if h, ok := memguard.HighOf(pid); ok && h > 0 && (m.High == 0 || h < m.High) {
+			m.High = h
 		}
 		m.OOMKills += memguard.OOMKilled(pid)
 	}

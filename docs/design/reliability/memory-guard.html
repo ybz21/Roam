@@ -355,6 +355,53 @@ ManagedOOMMemoryPressureLimit=60%</code></pre>
 内核在全机范围选 victim，所以桌面才会整个僵住。限死在 user slice 之后，
 sshd、systemd-journald、以及跑在 system slice 的服务都还在，机器不会「卡住到只能按电源」。</p>
 
+<h3>实装时发现：这条路需要 root，而且没有 root 时<b>会骗人</b></h3>
+
+<p>上面那份 drop-in 落在 <code>/etc/systemd/system/</code>，要 root。真正的问题是<b>没有 root
+时的表现</b>——用户实例照样能写下 drop-in，<code>systemctl --user set-property</code> 返回 0，
+<code>systemctl show</code> 也报得出 <code>MemoryHigh=25769803776</code>，只有去看内核才发现：</p>
+
+<pre><code>$ cat /sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/memory.high
+max                                          <span class="c"># ← 纹丝不动</span>
+
+$ ls -l .../user@1000.service/memory.high
+-rw-r--r-- 1 <b>root root</b> 0 ...              <span class="c"># ← 切片根节点的限额归父级所有</span></code></pre>
+
+<p>那正是 cgroup 委派的安全边界：子树的目录交给用户，<b>根节点自己的限额留给父级</b>——
+否则用户能自己解开上级给的限制。<b>装上一个不生效的护栏比没有更糟</b>：以为有闸，
+于是不再管它。</p>
+
+<h3>用户权限版：总量闸（<code>internal/memthrottle</code>）</h3>
+
+<p>会话自己的 scope 在委派子树里，<b>那里我们改得动</b>。所以同一件事换个做法：机器快没内存时，
+给<b>当时最大的那个会话</b>单独踩一脚软刹车，把总量压回线下。</p>
+
+<pre><code><span class="c"># 判据用 MemAvailable 而不是「我们占了多少」——机器卡死是全机内存耗尽。</span>
+可用 &lt; 12%  且  这些会话占 &gt; 35%   →  踩最大的那个：memory.high = 它当前用量 × 0.85
+可用 &gt; 20%                        →  松开，回到 L1 的默认软限
+12% – 20%                         →  滞后区，不踩也不松</code></pre>
+
+<p>三处细节是真机演练逼出来的，都不显然：</p>
+<ul>
+<li><b>占比不够就不动手。</b>内存是浏览器 / docker 吃掉的时候，踩我们自己既不解决问题，
+又白白让 agent 变慢——那种情况该报给人。</li>
+<li><b>踩下去必须明显低于 L1 的默认软限。</b>会话用量贴近硬顶时（<code>cur ≈ 0.88 × max</code>），
+<code>cur × 0.85</code> 和 <code>max × 0.75</code> 只差几个页面——演练里踩出过 <b>4096 字节</b>的差。
+那一脚等于没踩，更糟的是下一轮认不出它被踩过（判据就是「低于默认」），于是每轮重踩它一次。</li>
+<li><b>松开是回到 L1 的默认软限，不是回到「无软限」。</b>第一版把松开写成
+<code>MemoryHigh=infinity</code>，把 L1 那道软限一起撤了，会话从此裸奔。</li>
+</ul>
+
+<p>「当前是不是踩着刹车」<b>从内核读</b>，不自己记：CLI 每次调用都是一个新进程，
+记在内存里的状态活不过这一轮，落盘又要多一张表。内核里那个数就是唯一真相。</p>
+
+<p>三条线可以按机器调（<code>ROAM_MEM_BRAKE_LOW</code> / <code>_OK</code> / <code>_SHARE</code>）：
+128 G 的机器上 12% 是 15 G 余量，早得没必要；8 G 的机器上 12% 只剩 1 G，已经太晚。</p>
+
+<p>剩下的那半——<b>硬顶</b>，也就是「把 OOM 关在用户切片里」——仍然只有 root 做得到，
+<code>scripts/dev/install-memory-guard.sh</code> 留着。总量闸能把机器从「快要爆」拉回来，
+但拦不住一次瞬间的巨额分配；那一下仍会打成 <code>global_oom</code>。两者是互补的，不是替代。</p>
+
 <p>顺手把 swap 用起来：<code>vm.swappiness</code> 现在是 60 但 swap 实际 <code>USED 0B</code>。
 配一份 zram（压缩内存 swap，比磁盘 swap 快一个数量级）能给突发增长再争取几十秒——
 足够 L3 的通知发出去。这一条是加分项，不是主线。</p>
@@ -459,7 +506,7 @@ scope 目录随进程消失，所以这一眼得赶在 systemd 回收之前—�
 
 <table>
   <tr><th>#</th><th>动作</th><th>成本</th><th>拿到什么</th></tr>
-  <tr><td>1</td><td>L2 用户切片 drop-in</td><td>一个配置文件，需 root 一次</td>
+  <tr><td>1</td><td>L2 总量闸（internal/memthrottle，无需 root）＋ 切片硬顶 drop-in（需 root 一次）</td><td>见 §05</td>
       <td>立刻见效。就算别的都不做，整机也不会再被单个会话打死。</td></tr>
   <tr><td>2</td><td>L1 <code>memguard.Wrap</code> + <code>CreateSession</code> 接线</td><td>约 120 行 + 单测</td>
       <td>失控会话只杀自己。这是主线。</td></tr>

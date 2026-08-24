@@ -12,6 +12,7 @@ package memalert
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"ttmux-cli-go/internal/metadb"
@@ -109,6 +110,33 @@ func add(db *metadb.DB, now time.Time, n Notification) {
 	_, _ = db.Exec(`INSERT INTO plugin_notifications (type, severity, title, body, source, dedupe, created)
 		VALUES (?,?,?,?,?,?,?)`, n.Type, n.Severity, n.Title, n.Body, "memguard", n.Dedupe,
 		now.Format(time.RFC3339))
+}
+
+// Throttled 总量闸踩下 / 松开刹车时说一声。
+//
+// 必须说：用户看到的是 agent 突然变慢，不说的话那就是「莫名其妙卡住了」——
+// 最难查的一类故障。踩下用 warn，松开用 info（那是好消息，不该弹得同样刺眼）。
+func Throttled(db *metadb.DB, now time.Time, session, label string, high int64, brake bool) {
+	name := session
+	if strings.TrimSpace(label) != "" {
+		name = label
+	}
+	if brake {
+		add(db, now, Notification{
+			Type: "memory", Severity: "warn",
+			Title: "已给「" + name + "」减速",
+			Body: "机器可用内存不足，这个会话是当前最大的一个，已把它的软限压到 " + human(high) +
+				"。它会变慢，但不会被杀；内存缓过来会自动松开。",
+			Dedupe: "memthrottle-brake-" + session,
+		})
+		return
+	}
+	add(db, now, Notification{
+		Type: "memory", Severity: "info",
+		Title:  "「" + name + "」已恢复全速",
+		Body:   "机器内存缓过来了，之前给它踩的刹车已经松开。",
+		Dedupe: "memthrottle-release-" + session,
+	})
 }
 
 // human 把字节数写成人看的样子。通知正文里 "7.8G" 比 8375186227 有用得多。
