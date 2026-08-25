@@ -177,41 +177,46 @@ func avdRef(name string) string { return "avd:" + name }
 
 func avdNameFromRef(ref string) string { return strings.TrimPrefix(ref, "avd:") }
 
-// gpuMode 挑渲染后端：找到 Intel(0x8086)/AMD(0x1002) 渲染节点就走 host 硬件加速，否则软件渲染。
-// 跳过 NVIDIA(0x10de)：其专有驱动下 SurfaceFlinger 常起不来（redroid 时代同样的坑）。
+// gpuMode 挑渲染后端。
+//
+// **先看有没有显示**：-gpu host 走的是 GLX/EGL，要一个 X/Wayland 显示才拿得到 EGL display。
+// roam 后端常年是 systemd 用户服务，DISPLAY 是空的，那里 host 必然失败——日志里写着
+// 「Failed to get EGL display / Could not start renderer」，而 UI 上只剩一句「启动超时」。
+// 有独显也没用：显卡在，能画的那块屏不在。
+//
+// 有显示时才谈硬件加速：Intel(0x8086)/AMD(0x1002) 走 host，
+// 跳过 NVIDIA(0x10de)——其专有驱动下 SurfaceFlinger 常起不来（redroid 时代同样的坑）。
 func gpuMode() string {
 	if runtime.GOOS != "linux" {
 		return "auto" // macOS/Windows 交给模拟器自己挑（有 Metal/ANGLE 后端）
 	}
+	return linuxGPUMode(os.Getenv("DISPLAY"), os.Getenv("WAYLAND_DISPLAY"), drmVendors())
+}
+
+// drmVendors 读出本机各渲染节点的 PCI 厂商号。
+func drmVendors() []string {
 	nodes, _ := filepath.Glob("/sys/class/drm/renderD*/device/vendor")
+	var out []string
 	for _, n := range nodes {
-		b, err := os.ReadFile(n)
-		if err != nil {
-			continue
+		if b, err := os.ReadFile(n); err == nil {
+			out = append(out, strings.TrimSpace(string(b)))
 		}
-		switch strings.TrimSpace(string(b)) {
+	}
+	return out
+}
+
+// linuxGPUMode 是上面那条判断的纯函数部分。
+func linuxGPUMode(display, wayland string, vendors []string) string {
+	if strings.TrimSpace(display) == "" && strings.TrimSpace(wayland) == "" {
+		return "swiftshader_indirect" // 无头：只有软件渲染起得来
+	}
+	for _, v := range vendors {
+		switch v {
 		case "0x8086", "0x1002":
 			return "host"
 		}
 	}
 	return "swiftshader_indirect"
-}
-
-// kvmUsable 判断当前进程能不能真的用上 KVM，并把修法直接写进错误里。
-func kvmUsable() error {
-	f, err := os.OpenFile("/dev/kvm", os.O_RDWR, 0)
-	if err == nil {
-		f.Close()
-		return nil
-	}
-	if os.IsNotExist(err) {
-		return errors.New("没有 /dev/kvm：模拟器需要 KVM（虚拟机里要先开嵌套虚拟化）")
-	}
-	if os.IsPermission(err) {
-		return errors.New("无权访问 /dev/kvm：把当前用户加进 kvm 组后重新登录（sudo gpasswd -a $USER kvm），" +
-			"或临时授权 sudo setfacl -m u:$USER:rw /dev/kvm")
-	}
-	return fmt.Errorf("/dev/kvm 不可用: %w", err)
 }
 
 // avdStartMu 串行化启动：重复点击不该起出第二个 qemu 进程（同名 AVD 第二个会因锁失败，只留一堆日志）。
@@ -236,12 +241,13 @@ func startAVD(name string, wipe bool) (string, error) {
 	}
 	// KVM 先于启动检查：没有它 x86_64 镜像根本起不来，而 emulator 的原始报错埋在日志里，
 	// UI 上只剩一句「启动超时」——白等三分钟。
-	// 必须真开一次而不是 Stat：/dev/kvm 常年在那儿，权限却是 logind 按会话动态挂的 ACL，
-	// 文件存在和当前进程能不能用完全是两回事。
+	kvm := kvmOK
 	if runtime.GOOS == "linux" {
-		if err := kvmUsable(); err != nil {
+		st, err := kvmState()
+		if st != kvmOK && st != kvmViaGroup {
 			return "", err
 		}
+		kvm = st
 	}
 	logPath := filepath.Join(avdDir(), "avd-"+name+".log")
 	lf, err := os.Create(logPath)
@@ -253,7 +259,10 @@ func startAVD(name string, wipe bool) (string, error) {
 	if wipe {
 		args = append(args, "-wipe-data")
 	}
-	cmd := exec.Command(bin, args...)
+	// 组里加过 kvm 但本进程没带上时套一层 sg：那一格不套就永远起不来，
+	// 而用户已经照我们说的跑过 sudo 了 —— 再让他「重新登录一次」是我们没做完事。
+	spawnBin, spawnArgs := kvmSpawn(kvm, bin, args)
+	cmd := exec.Command(spawnBin, spawnArgs...)
 	// Setsid：脱离 ttmux 的会话与进程组。后端重启/退出不能把用户的模拟器一起带走。
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	cmd.Stdout, cmd.Stderr = lf, lf
@@ -261,7 +270,26 @@ func startAVD(name string, wipe bool) (string, error) {
 		return "", fmt.Errorf("启动模拟器失败: %w", err)
 	}
 	go func() { _ = cmd.Wait() }() // 只为回收僵尸；进程已 setsid，不随我们生死
-	return waitAVDBoot(name, 180*time.Second)
+	serial, err := waitAVDBoot(name, 180*time.Second)
+	if err != nil && serial == "" {
+		// 连 adb 都没登记过 = 它压根没起来（渲染器初始化失败就是这样）。
+		// 这种壳子必须收掉：它会一直握着 AVD 的 multiinstance.lock，
+		// 下一次点「启动」只换来一句 "AVD is already running" ——
+		// 一次失败毒死后面每一次。（同 AGENTS.md 那条：send 失败就 kill 掉刚建的会话。）
+		killProcessGroup(cmd.Process)
+	}
+	return serial, err
+}
+
+// killProcessGroup 收掉整棵进程树。emulator 会再 fork 出 qemu-system 与 crashpad，
+// 只 kill 首进程会留下一堆孤儿，AVD 的锁也还在它们手上；进程已 setsid，pgid 就是它自己。
+func killProcessGroup(p *os.Process) {
+	if p == nil {
+		return
+	}
+	_ = syscall.Kill(-p.Pid, syscall.SIGTERM)
+	time.Sleep(500 * time.Millisecond)
+	_ = syscall.Kill(-p.Pid, syscall.SIGKILL)
 }
 
 // waitAVDBoot 等 serial 出现并等到 sys.boot_completed=1。

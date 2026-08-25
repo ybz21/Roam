@@ -13,6 +13,7 @@
 #   ROAM_BIN_DIR=DIR      安装目录（默认 ~/.local/bin）
 #   ROAM_NO_SERVICE=1     只装二进制，不注册 systemd 服务
 #   ROAM_SYSTEM=1         注册系统级 systemd 服务（/etc/systemd/system，需 root/sudo）
+#   ROAM_NO_KVM=1         跳过 /dev/kvm 授权（则本机 Android 模拟器起不来）
 #   ROAM_FROM_SOURCE=1    在仓库 clone 内从源码构建（需 go+node），而非下载 release
 #
 # 开发/源码构建请用 start.sh --dev（会从源码构建 CLI/chrome/skills + 前后端）。
@@ -165,6 +166,36 @@ ensure_adb() {
     || warn "未能自动安装 adb：手机镜像页不可用，装好后重启：systemctl --user restart roam"
 }
 
+# ── KVM（本机 Android 模拟器要靠它跑起来）──────────────────────────
+#
+# 唯一实现在 scripts/install/kvm-access.sh —— 这里按「本地仓库 → 远端同源 → 只打印命令」
+# 三级取用，**不留第二份副本**：抄两份必然走散，改一条规则要改两处，最后两个入口
+# 按不同版本的规则给同一台机器授权。远端和 install.sh 自己是同一个 raw 源，不多一层信任。
+ensure_kvm() {
+  [ "$OS" = linux ] || return 0                     # macOS 用 HVF，不碰 /dev/kvm
+  [ -e /dev/kvm ] || return 0                       # 云主机大多没有，别为用不上的功能弹口令框
+  local here lib=""
+  here="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo "")"
+  if [ -n "$here" ] && [ -f "$here/scripts/install/kvm-access.sh" ]; then
+    lib="$here/scripts/install/kvm-access.sh"
+  else
+    lib="$(mktemp)" || lib=""
+    # 限时：网络不通时安装器不能卡在这儿 —— 拿不到就退回打印命令，几秒内给出结论。
+    if [ -n "$lib" ] && ! curl -fsSL --connect-timeout 5 --max-time 20 \
+         "https://raw.githubusercontent.com/${REPO}/main/scripts/install/kvm-access.sh" -o "$lib" 2>/dev/null; then
+      rm -f "$lib"; lib=""
+    fi
+  fi
+  if [ -z "$lib" ]; then
+    warn "取不到 KVM 授权脚本。若要用本机模拟器，在终端里跑一次： sudo gpasswd -a \$USER kvm && sudo setfacl -m u:\$USER:rw /dev/kvm"
+    return 0
+  fi
+  # shellcheck source=scripts/install/kvm-access.sh
+  source "$lib"
+  kvm_ensure step
+  [ "$lib" = "$here/scripts/install/kvm-access.sh" ] || rm -f "$lib"
+}
+
 # ── systemd 常驻服务 ─────────────────────────────────────────────
 install_service_user() {
   command -v systemctl >/dev/null || { warn "无 systemd，跳过服务注册；手动运行：${BIN_DIR}/roam"; return 0; }
@@ -257,6 +288,7 @@ install_binary
 ensure_tmux
 ensure_chrome
 ensure_adb
+ensure_kvm
 
 if [ "${ROAM_NO_SERVICE:-0}" = 1 ]; then
   step "ROAM_NO_SERVICE=1：跳过服务注册"

@@ -208,6 +208,32 @@ elif [ ! -x "$BIN" ]; then
   echo "✘ 未找到 $BIN —— 先构建：bash install.sh   或   bash start.sh --dev"; exit 1
 fi
 
+# ── KVM：--dev 才动手拿权限，平时只提醒 ──────────────────────────
+#
+# 为什么分开：systemd 的 ExecStart 就是 `start.sh fg`，普通启动也常在后台跑，
+# 那里弹 sudo 口令框会把启动挂死（kvm_ensure 里的 can_elevate 也会挡住，
+# 但「启动服务」这件事本来就不该顺手要 root）。--dev 是源码档的安装+构建模式，
+# 装依赖、编 CLI、拉 chrome 都在那儿，拿 KVM 权限是同一类事。
+#
+# 只对「装了 Android SDK 却开不了 /dev/kvm」的机器说：没装 SDK 的机器不关心模拟器。
+kvm_step() {
+  [ "$OS" = Linux ] || return 0
+  [ -e /dev/kvm ] || return 0
+  [ -r /dev/kvm ] && [ -w /dev/kvm ] && return 0
+  local sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Android/Sdk}}"
+  [ -d "$sdk" ] || return 0
+  if [ "$DEV" = 1 ] && [ -f scripts/install/kvm-access.sh ]; then
+    # shellcheck source=scripts/install/kvm-access.sh
+    source scripts/install/kvm-access.sh
+    kvm_ensure 'echo "==>"'
+    return 0
+  fi
+  echo "==> 提示：无权访问 /dev/kvm，本机 Android 模拟器起不来。跑一次即可（只需一次）："
+  echo "    sudo gpasswd -a \$USER kvm && sudo setfacl -m u:\$USER:rw /dev/kvm"
+  echo "    或 bash start.sh --dev 让它替你办（需要在终端里跑）"
+}
+kvm_step
+
 # ── 启动 ─────────────────────────────────────────────────────────
 echo "==> 启动 Roam  $SCHEME://$BIND"
 echo "    登录口令：首次打开网页时在界面上设置；或编辑 ~/.roam/config.yaml 的 web.password。"
