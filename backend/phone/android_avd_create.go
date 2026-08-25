@@ -478,7 +478,10 @@ func runCreate(t *avdTask, r avdCreateReq) {
 // tuneAVDConfig 改写新建 AVD 的 config.ini。
 //
 // 这步不能省：avdmanager 建出来的 TV 档未必带方向键，而没有 D-pad 的电视就是块砖——
-// 电视没有触摸屏，焦点走位是唯一的交互方式。分辨率同理，1920x1080@320 才是 960x540dp 的设计画布。
+// 电视没有触摸屏，焦点走位是唯一的交互方式。
+//
+// 分辨率则**只在调用方给了才改**：选了机型档时那一档自己写的才对（tv_4k 是
+// 3840x2160@640），这里再盖一层就把 4K 按回了 1080p。调用方只在没选档时兜一个值。
 func tuneAVDConfig(r avdCreateReq) error {
 	p := filepath.Join(avdHome(), r.Name+".avd", "config.ini")
 	b, err := os.ReadFile(p)

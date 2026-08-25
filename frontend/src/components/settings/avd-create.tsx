@@ -8,37 +8,14 @@ import { App as AntApp, Button, Checkbox, Drawer, Input, InputNumber, Segmented,
 import { api } from '../../api'
 import { nodeApi } from '../cluster/node-url'
 import { useI18n } from '../../i18n'
+import { purposeFilter, slugAvdName, tvSizeOverride } from '../../avd-profile'
+import type { AvdImage, DeviceProfile, Purpose } from '../../avd-profile'
 
-type DeviceProfile = { id: string; name: string; oem?: string; tag?: string }
-type Image = { pkg: string; api: string; variant: string; abi: string; installed: boolean }
+type Image = AvdImage
 type Catalog = {
   devices: DeviceProfile[]; images: Image[]; avds: string[]; abi: string
   tools: { emulator: boolean; sdkmanager: boolean; avdmanager: boolean; sdkRoot: string }
 }
-
-type Purpose = 'phone' | 'tablet' | 'tv' | 'custom'
-
-// 变体按关键字认，不按白名单：Google 一直在加新档（google-tv、google_apis_ps16k、
-// *_tablet、aosp_atd…），写死名单等于每出一个新档就漏一个。
-const NON_HANDHELD = /tv|wear|automotive|desktop|xr/
-
-const purposeFilter = (p: Purpose) => ({
-  device: (d: DeviceProfile) => {
-    const tablet = /tablet|nexus (7|9|10)/i.test(d.id + ' ' + d.name)
-    if (p === 'tv') return /tv/.test(d.tag || '')
-    if (p === 'tablet') return !d.tag && tablet
-    if (p === 'phone') return !d.tag && !tablet
-    return true
-  },
-  image: (i: Image) => {
-    if (p === 'tv') return /tv/.test(i.variant)
-    if (p === 'phone' || p === 'tablet') return !NON_HANDHELD.test(i.variant)
-    return true
-  },
-})
-
-// AVD 名只收 [A-Za-z0-9._-]：avdmanager 拒绝空格和中文，就地转掉而不是留给后端报错。
-const slug = (s: string) => s.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+|_+$/g, '')
 
 export function AvdCreateDrawer({ open, onClose, onCreated }: {
   open: boolean; onClose: () => void; onCreated: () => void
@@ -81,7 +58,7 @@ export function AvdCreateDrawer({ open, onClose, onCreated }: {
   // 名字跟着选择走，除非用户自己改过——改过就不再覆盖他。
   useEffect(() => {
     if (nameTouched || !picked) return
-    setName(slug([device || purpose, 'api' + picked.api].join('_')))
+    setName(slugAvdName([device || purpose, 'api' + picked.api].join('_')))
   }, [device, pkg, purpose])
 
   const variantText = (v: string) => {
@@ -118,7 +95,7 @@ export function AvdCreateDrawer({ open, onClose, onCreated }: {
 
   const create = async (start: boolean) => {
     if (!name || !pkg) { message.warning(t('phone.avd.needNamePkg')); return }
-    const tvSize = purpose === 'tv' ? { width: 1920, height: 1080, density: 320 } : {}
+    const tvSize = tvSizeOverride(purpose, device)
     try {
       const r = await api('POST', '/phone/avd', {
         name, pkg, device, start, acceptLicense: license,
@@ -180,7 +157,7 @@ export function AvdCreateDrawer({ open, onClose, onCreated }: {
 
         <div>
           <div className="tt-lbl">{t('phone.avd.name')}</div>
-          <Input value={name} onChange={(e) => { setNameTouched(true); setName(slug(e.target.value)) }} />
+          <Input value={name} onChange={(e) => { setNameTouched(true); setName(slugAvdName(e.target.value)) }} />
           <div className="tt-hint">{t('phone.avd.nameHelp')}</div>
         </div>
 
