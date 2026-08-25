@@ -197,23 +197,6 @@ func gpuMode() string {
 	return "swiftshader_indirect"
 }
 
-// kvmUsable 判断当前进程能不能真的用上 KVM，并把修法直接写进错误里。
-func kvmUsable() error {
-	f, err := os.OpenFile("/dev/kvm", os.O_RDWR, 0)
-	if err == nil {
-		f.Close()
-		return nil
-	}
-	if os.IsNotExist(err) {
-		return errors.New("没有 /dev/kvm：模拟器需要 KVM（虚拟机里要先开嵌套虚拟化）")
-	}
-	if os.IsPermission(err) {
-		return errors.New("无权访问 /dev/kvm：把当前用户加进 kvm 组后重新登录（sudo gpasswd -a $USER kvm），" +
-			"或临时授权 sudo setfacl -m u:$USER:rw /dev/kvm")
-	}
-	return fmt.Errorf("/dev/kvm 不可用: %w", err)
-}
-
 // avdStartMu 串行化启动：重复点击不该起出第二个 qemu 进程（同名 AVD 第二个会因锁失败，只留一堆日志）。
 var avdStartMu sync.Mutex
 
@@ -236,12 +219,13 @@ func startAVD(name string, wipe bool) (string, error) {
 	}
 	// KVM 先于启动检查：没有它 x86_64 镜像根本起不来，而 emulator 的原始报错埋在日志里，
 	// UI 上只剩一句「启动超时」——白等三分钟。
-	// 必须真开一次而不是 Stat：/dev/kvm 常年在那儿，权限却是 logind 按会话动态挂的 ACL，
-	// 文件存在和当前进程能不能用完全是两回事。
+	kvm := kvmOK
 	if runtime.GOOS == "linux" {
-		if err := kvmUsable(); err != nil {
+		st, err := kvmState()
+		if st != kvmOK && st != kvmViaGroup {
 			return "", err
 		}
+		kvm = st
 	}
 	logPath := filepath.Join(avdDir(), "avd-"+name+".log")
 	lf, err := os.Create(logPath)
@@ -253,7 +237,10 @@ func startAVD(name string, wipe bool) (string, error) {
 	if wipe {
 		args = append(args, "-wipe-data")
 	}
-	cmd := exec.Command(bin, args...)
+	// 组里加过 kvm 但本进程没带上时套一层 sg：那一格不套就永远起不来，
+	// 而用户已经照我们说的跑过 sudo 了 —— 再让他「重新登录一次」是我们没做完事。
+	spawnBin, spawnArgs := kvmSpawn(kvm, bin, args)
+	cmd := exec.Command(spawnBin, spawnArgs...)
 	// Setsid：脱离 ttmux 的会话与进程组。后端重启/退出不能把用户的模拟器一起带走。
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	cmd.Stdout, cmd.Stderr = lf, lf

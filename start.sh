@@ -208,6 +208,24 @@ elif [ ! -x "$BIN" ]; then
   echo "✘ 未找到 $BIN —— 先构建：bash install.sh   或   bash start.sh --dev"; exit 1
 fi
 
+# ── KVM 提醒：只对「装了 Android SDK 却开不了 /dev/kvm」的机器说 ──
+#
+# 这里**不**动 sudo：start.sh 常在后台/systemd 下跑，弹口令框只会把它挂死。
+# 授权归 install.sh（那时有终端），这里只负责别让人对着「启动超时」猜。
+# 「加了组还没重新登录」那一格后端会自己套 sg 起，所以这条只在真没授权时出现。
+kvm_hint() {
+  [ "$OS" = Linux ] || return 0
+  [ -e /dev/kvm ] || return 0
+  [ -r /dev/kvm ] && [ -w /dev/kvm ] && return 0
+  id -nG 2>/dev/null | tr ' ' '\n' | grep -qx kvm && return 0
+  getent group kvm 2>/dev/null | grep -q "[:,]${USER}\(,\|$\)" && return 0
+  local sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Android/Sdk}}"
+  [ -d "$sdk" ] || return 0   # 没装 SDK 的机器不关心模拟器，别多嘴
+  echo "==> 提示：无权访问 /dev/kvm，本机 Android 模拟器起不来。跑一次即可（只需一次）："
+  echo "    sudo gpasswd -a \$USER kvm && sudo setfacl -m u:\$USER:rw /dev/kvm"
+}
+kvm_hint
+
 # ── 启动 ─────────────────────────────────────────────────────────
 echo "==> 启动 Roam  $SCHEME://$BIND"
 echo "    登录口令：首次打开网页时在界面上设置；或编辑 ~/.roam/config.yaml 的 web.password。"

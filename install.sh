@@ -13,6 +13,7 @@
 #   ROAM_BIN_DIR=DIR      安装目录（默认 ~/.local/bin）
 #   ROAM_NO_SERVICE=1     只装二进制，不注册 systemd 服务
 #   ROAM_SYSTEM=1         注册系统级 systemd 服务（/etc/systemd/system，需 root/sudo）
+#   ROAM_NO_KVM=1         跳过 /dev/kvm 授权（则本机 Android 模拟器起不来）
 #   ROAM_FROM_SOURCE=1    在仓库 clone 内从源码构建（需 go+node），而非下载 release
 #
 # 开发/源码构建请用 start.sh --dev（会从源码构建 CLI/chrome/skills + 前后端）。
@@ -165,6 +166,55 @@ ensure_adb() {
     || warn "未能自动安装 adb：手机镜像页不可用，装好后重启：systemctl --user restart roam"
 }
 
+# ── KVM（本机 Android 模拟器要靠它跑起来）──────────────────────────
+# 没有 KVM，x86_64 系统镜像根本起不来，界面上只会看到一句「无权访问 /dev/kvm」。
+#
+# 权限有两条来路，都要，因为它们管的时间段不一样：
+#   setfacl  立刻生效（ACL 按 uid 匹配，连正在跑的 roam 都能开），但它是 logind 挂的，
+#            换个座位会话就会被重挂掉，也不过重启
+#   kvm 组   持久、重启后照样在，代价是附加组在进程创建时定死 —— 要新登录才带得上
+# 于是：ACL 管「现在」，组管「以后」。中间那段（加了组还没重新登录）由后端套 sg 兜住。
+#
+# 机器上没有 /dev/kvm 就直接跳过：云主机大多如此，不该为一个用不上的功能弹口令框。
+# ROAM_NO_KVM=1 可显式跳过。
+ensure_kvm() {
+  [ "$OS" = linux ] || return 0                    # macOS 用 HVF，不碰 /dev/kvm
+  [ "${ROAM_NO_KVM:-0}" = 1 ] && { step "ROAM_NO_KVM=1：跳过 KVM 授权（本机模拟器将起不来）"; return 0; }
+  [ -e /dev/kvm ] || { info "本机没有 /dev/kvm，跳过（本机模拟器需要虚拟化；虚拟机里要先开嵌套虚拟化）"; return 0; }
+  if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then info "KVM 已就绪（本机模拟器可用）"; return 0; fi
+
+  local sudo=""; [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null && sudo=sudo
+  if [ "$(id -u)" -ne 0 ] && [ -z "$sudo" ]; then
+    warn "无权访问 /dev/kvm 且没有 sudo：本机模拟器起不来。请由管理员执行：gpasswd -a $USER kvm"
+    return 0
+  fi
+  step "无权访问 /dev/kvm，申请授权（需要 sudo 口令）..."
+
+  getent group kvm >/dev/null 2>&1 || $sudo groupadd -r kvm 2>/dev/null || true
+  $sudo gpasswd -a "$USER" kvm >/dev/null 2>&1 || $sudo usermod -aG kvm "$USER" 2>/dev/null || \
+    warn "加入 kvm 组失败：重启后模拟器仍会起不来"
+
+  # setfacl 来自 acl 包，不是每台机器都有；缺了就补一个，补不上也只是少了「立刻生效」这半。
+  command -v setfacl >/dev/null 2>&1 || {
+    if   command -v apt-get >/dev/null; then $sudo apt-get install -y -qq acl 2>/dev/null
+    elif command -v dnf     >/dev/null; then $sudo dnf install -y acl 2>/dev/null
+    elif command -v pacman  >/dev/null; then $sudo pacman -Sy --noconfirm acl 2>/dev/null
+    elif command -v zypper  >/dev/null; then $sudo zypper -n install acl 2>/dev/null
+    elif command -v apk     >/dev/null; then $sudo apk add acl 2>/dev/null
+    fi
+  }
+  command -v setfacl >/dev/null 2>&1 && $sudo setfacl -m "u:$USER:rw" /dev/kvm 2>/dev/null
+
+  # 判据是回读设备，不是命令返回码：装上一个不生效的授权比没有更糟 —— 以为有，于是不再管它。
+  if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
+    info "KVM 已授权（本机模拟器可用；已加入 kvm 组，重启后依然有效）"
+  elif id -nG "$USER" 2>/dev/null | tr ' ' '\n' | grep -qx kvm || getent group kvm | grep -q "[:,]$USER\(,\|$\)"; then
+    info "已加入 kvm 组（重新登录后生效；在那之前 roam 会自动借 sg 起模拟器）"
+  else
+    warn "KVM 授权未成功，本机模拟器起不来。手动执行： sudo gpasswd -a \$USER kvm && sudo setfacl -m u:\$USER:rw /dev/kvm"
+  fi
+}
+
 # ── systemd 常驻服务 ─────────────────────────────────────────────
 install_service_user() {
   command -v systemctl >/dev/null || { warn "无 systemd，跳过服务注册；手动运行：${BIN_DIR}/roam"; return 0; }
@@ -257,6 +307,7 @@ install_binary
 ensure_tmux
 ensure_chrome
 ensure_adb
+ensure_kvm
 
 if [ "${ROAM_NO_SERVICE:-0}" = 1 ]; then
   step "ROAM_NO_SERVICE=1：跳过服务注册"

@@ -236,6 +236,39 @@ mode 由地址形状决定，不是两个独立选择：`avd:<名>`/`emulator-xx
 - **就绪轮询**：Android 等 `adb wait-for-device` + `boot_completed`；iOS 等 `simctl bootstatus`。
 - **Shutdown**：Linux 停容器 / kill 模拟器；macOS `simctl shutdown`（可选保留，因为模拟器复用快）。
 
+### KVM 权限：三种「起不来」，别混成一句话
+
+本机模拟器（AVD）是 QEMU+KVM，开不了 `/dev/kvm` 就一定起不来，而 `emulator` 的原始
+报错埋在启动日志里，界面上只剩「启动超时」——白等三分钟。所以 `startAVD` 在拉起之前
+先自己开一次 `/dev/kvm`（`backend/phone/kvm.go`）。**必须真开一次而不是 `Stat`**：
+文件常年在那儿，权限却是 logind 按会话动态挂的 ACL。
+
+三种处境要分开说，因为解法不同：
+
+| 处境 | 判据 | 说法 / 做法 |
+| --- | --- | --- |
+| 没有设备 | `ENOENT` | 机器没开虚拟化（虚拟机里要先开嵌套虚拟化）。救不了，说清楚 |
+| 组里没名字 | `EACCES` 且组数据库里没有 | 让用户跑 `sudo gpasswd -a $USER kvm && sudo setfacl -m u:$USER:rw /dev/kvm` |
+| 组里有名字、进程没带上 | `EACCES` 且组数据库里有 | **我们自己兜住**：套一层 `sg kvm -c` 起模拟器 |
+
+第三格最坑：附加组是进程创建时定死的，systemd 的**用户实例**也是登录时定死的，
+`systemctl --user restart roam` 换不来新组。用户明明照做了那条 sudo，模拟器还是起不来，
+只会觉得那条命令没生效。`sg` 会照组数据库重算整套组再执行，不需要口令（本来就是成员），
+副作用只有「这条命令新建的文件属组变成 kvm」，落在 AVD 自己的镜像文件上，无碍。
+
+两条授权命令分工也不一样，所以两条都发：`setfacl` 立刻生效（ACL 按 uid 匹配，连正在
+跑的进程都能开）但不过重启、也会被 logind 重挂；`gpasswd` 持久，代价是要新登录。
+`install.sh` 的 `ensure_kvm` 在安装时把两条都办了（机器上没有 `/dev/kvm` 就整段跳过，
+云主机不该为一个用不上的功能弹口令框；`ROAM_NO_KVM=1` 显式跳过）。判据是**回读设备**，
+不是命令返回码——装上一个不生效的授权比没有更糟。
+
+### 机型档的分辨率归机型档
+
+`avdmanager create avd -d <档>` 会把该档自己的分辨率写进 `config.ini`（`tv_4k` 是
+`3840x2160@640`）。调用方**只在没选机型档时**才该给分辨率兜底——那时 avdmanager 会
+落到手机默认档，一台竖屏手机尺寸的「电视」才需要我们给 `1920x1080@320`。
+选了档还盖，用户选的 4K 就被按回 1080p，而且 `config.ini` 里看不出是谁按的。
+
 ## 8. 分步骤实施
 
 每步都有明确**验收标准**，做完能独立验证再进下一步。先单平台（Linux/Android）打通整条链路，再补 iOS。
