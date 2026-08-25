@@ -258,9 +258,17 @@ mode 由地址形状决定，不是两个独立选择：`avd:<名>`/`emulator-xx
 
 两条授权命令分工也不一样，所以两条都发：`setfacl` 立刻生效（ACL 按 uid 匹配，连正在
 跑的进程都能开）但不过重启、也会被 logind 重挂；`gpasswd` 持久，代价是要新登录。
-`install.sh` 的 `ensure_kvm` 在安装时把两条都办了（机器上没有 `/dev/kvm` 就整段跳过，
-云主机不该为一个用不上的功能弹口令框；`ROAM_NO_KVM=1` 显式跳过）。判据是**回读设备**，
-不是命令返回码——装上一个不生效的授权比没有更糟。
+授权本身的唯一实现是 [`scripts/install/kvm-access.sh`](../../scripts/install/kvm-access.sh)。
+`install.sh` 按「本地仓库 → 远端同源 raw → 只打印命令」三级取用它，不留第二份副本；
+`start.sh --dev` 直接 source 它。判据是**回读设备**，不是命令返回码——装上一个不生效的
+授权比没有更糟。机器上没有 `/dev/kvm` 就整段跳过（云主机不该为一个用不上的功能弹口令框，
+`ROAM_NO_KVM=1` 可显式跳过）。
+
+**提权只在提得起来的时候**，规矩沿用 `lib/platform.sh` 的 `can_autoinstall`：root /
+免密 sudo / 交互式终端才动手，否则打印命令。`curl … | bash` 的 stdin 是管道、systemd 下
+根本没有终端 —— 那里去 sudo 只会卡在密码输入上，一个装到一半卡死的安装器比不装更难查。
+所以 `start.sh` 分两档：`--dev`（源码档的安装+构建模式）替你办，普通启动只提醒 ——
+systemd 的 `ExecStart` 就是 `start.sh fg`，「启动服务」这件事本来就不该顺手要 root。
 
 ### `-gpu host` 要一块能画的屏，不只是一张显卡
 

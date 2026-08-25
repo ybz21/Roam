@@ -167,52 +167,33 @@ ensure_adb() {
 }
 
 # ── KVM（本机 Android 模拟器要靠它跑起来）──────────────────────────
-# 没有 KVM，x86_64 系统镜像根本起不来，界面上只会看到一句「无权访问 /dev/kvm」。
 #
-# 权限有两条来路，都要，因为它们管的时间段不一样：
-#   setfacl  立刻生效（ACL 按 uid 匹配，连正在跑的 roam 都能开），但它是 logind 挂的，
-#            换个座位会话就会被重挂掉，也不过重启
-#   kvm 组   持久、重启后照样在，代价是附加组在进程创建时定死 —— 要新登录才带得上
-# 于是：ACL 管「现在」，组管「以后」。中间那段（加了组还没重新登录）由后端套 sg 兜住。
-#
-# 机器上没有 /dev/kvm 就直接跳过：云主机大多如此，不该为一个用不上的功能弹口令框。
-# ROAM_NO_KVM=1 可显式跳过。
+# 唯一实现在 scripts/install/kvm-access.sh —— 这里按「本地仓库 → 远端同源 → 只打印命令」
+# 三级取用，**不留第二份副本**：抄两份必然走散，改一条规则要改两处，最后两个入口
+# 按不同版本的规则给同一台机器授权。远端和 install.sh 自己是同一个 raw 源，不多一层信任。
 ensure_kvm() {
-  [ "$OS" = linux ] || return 0                    # macOS 用 HVF，不碰 /dev/kvm
-  [ "${ROAM_NO_KVM:-0}" = 1 ] && { step "ROAM_NO_KVM=1：跳过 KVM 授权（本机模拟器将起不来）"; return 0; }
-  [ -e /dev/kvm ] || { info "本机没有 /dev/kvm，跳过（本机模拟器需要虚拟化；虚拟机里要先开嵌套虚拟化）"; return 0; }
-  if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then info "KVM 已就绪（本机模拟器可用）"; return 0; fi
-
-  local sudo=""; [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null && sudo=sudo
-  if [ "$(id -u)" -ne 0 ] && [ -z "$sudo" ]; then
-    warn "无权访问 /dev/kvm 且没有 sudo：本机模拟器起不来。请由管理员执行：gpasswd -a $USER kvm"
+  [ "$OS" = linux ] || return 0                     # macOS 用 HVF，不碰 /dev/kvm
+  [ -e /dev/kvm ] || return 0                       # 云主机大多没有，别为用不上的功能弹口令框
+  local here lib=""
+  here="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo "")"
+  if [ -n "$here" ] && [ -f "$here/scripts/install/kvm-access.sh" ]; then
+    lib="$here/scripts/install/kvm-access.sh"
+  else
+    lib="$(mktemp)" || lib=""
+    # 限时：网络不通时安装器不能卡在这儿 —— 拿不到就退回打印命令，几秒内给出结论。
+    if [ -n "$lib" ] && ! curl -fsSL --connect-timeout 5 --max-time 20 \
+         "https://raw.githubusercontent.com/${REPO}/main/scripts/install/kvm-access.sh" -o "$lib" 2>/dev/null; then
+      rm -f "$lib"; lib=""
+    fi
+  fi
+  if [ -z "$lib" ]; then
+    warn "取不到 KVM 授权脚本。若要用本机模拟器，在终端里跑一次： sudo gpasswd -a \$USER kvm && sudo setfacl -m u:\$USER:rw /dev/kvm"
     return 0
   fi
-  step "无权访问 /dev/kvm，申请授权（需要 sudo 口令）..."
-
-  getent group kvm >/dev/null 2>&1 || $sudo groupadd -r kvm 2>/dev/null || true
-  $sudo gpasswd -a "$USER" kvm >/dev/null 2>&1 || $sudo usermod -aG kvm "$USER" 2>/dev/null || \
-    warn "加入 kvm 组失败：重启后模拟器仍会起不来"
-
-  # setfacl 来自 acl 包，不是每台机器都有；缺了就补一个，补不上也只是少了「立刻生效」这半。
-  command -v setfacl >/dev/null 2>&1 || {
-    if   command -v apt-get >/dev/null; then $sudo apt-get install -y -qq acl 2>/dev/null
-    elif command -v dnf     >/dev/null; then $sudo dnf install -y acl 2>/dev/null
-    elif command -v pacman  >/dev/null; then $sudo pacman -Sy --noconfirm acl 2>/dev/null
-    elif command -v zypper  >/dev/null; then $sudo zypper -n install acl 2>/dev/null
-    elif command -v apk     >/dev/null; then $sudo apk add acl 2>/dev/null
-    fi
-  }
-  command -v setfacl >/dev/null 2>&1 && $sudo setfacl -m "u:$USER:rw" /dev/kvm 2>/dev/null
-
-  # 判据是回读设备，不是命令返回码：装上一个不生效的授权比没有更糟 —— 以为有，于是不再管它。
-  if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
-    info "KVM 已授权（本机模拟器可用；已加入 kvm 组，重启后依然有效）"
-  elif id -nG "$USER" 2>/dev/null | tr ' ' '\n' | grep -qx kvm || getent group kvm | grep -q "[:,]$USER\(,\|$\)"; then
-    info "已加入 kvm 组（重新登录后生效；在那之前 roam 会自动借 sg 起模拟器）"
-  else
-    warn "KVM 授权未成功，本机模拟器起不来。手动执行： sudo gpasswd -a \$USER kvm && sudo setfacl -m u:\$USER:rw /dev/kvm"
-  fi
+  # shellcheck source=scripts/install/kvm-access.sh
+  source "$lib"
+  kvm_ensure step
+  [ "$lib" = "$here/scripts/install/kvm-access.sh" ] || rm -f "$lib"
 }
 
 # ── systemd 常驻服务 ─────────────────────────────────────────────
