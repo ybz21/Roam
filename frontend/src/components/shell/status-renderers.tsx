@@ -3,16 +3,16 @@
 // 图标同理：只能按名字从这张表里取，取不到就不画（设计 §05 约束①）。
 import type { ReactNode } from 'react'
 import {
-  ArrowDown, ArrowUp, ChecklistIcon, ClockIcon, CloudIcon, DiffIcon, ForkIcon, GlobeIcon,
-  LinkIcon, MegaphoneIcon, PlugIcon, SwarmIcon, TerminalIcon, WarnIcon,
+  ArrowDown, ArrowUp, BotIcon, ChecklistIcon, ClockIcon, CloudIcon, DiffIcon, ForkIcon,
+  GlobeIcon, LinkIcon, MegaphoneIcon, PlugIcon, SwarmIcon, TerminalIcon, WarnIcon,
 } from '../../icons'
 import { HostIcon } from '../cluster/cluster-icons'
 import { formatValue, type Cell } from './status-cells'
 
 /** 插件可用的图标名。名字是契约的一部分，改名等于改公开 API */
 const ICONS: Record<string, (p: { size?: number }) => ReactNode> = {
-  ArrowDown, ArrowUp, ChecklistIcon, ClockIcon, CloudIcon, DiffIcon, ForkIcon, GlobeIcon,
-  HostIcon, LinkIcon, MegaphoneIcon, PlugIcon, SwarmIcon, TerminalIcon, WarnIcon,
+  ArrowDown, ArrowUp, BotIcon, ChecklistIcon, ClockIcon, CloudIcon, DiffIcon, ForkIcon,
+  GlobeIcon, HostIcon, LinkIcon, MegaphoneIcon, PlugIcon, SwarmIcon, TerminalIcon, WarnIcon,
 }
 
 export function cellIcon(name?: string): ReactNode {
@@ -32,6 +32,9 @@ function Gauge({ pct }: { pct: number }) {
 
 export function CellBody({ cell }: { cell: Cell }) {
   const text = formatValue(cell.val, cell.unit)
+  // data-unit 让 CSS 按单位预留宽度：`CPU 8%` 涨到 `CPU 100%` 时后面所有格
+  // 会跟着平移一次，每 3 秒一次，整条在眼皮底下抖。
+  const val = <span className="vl" data-unit={cell.unit || 'text'}>{text}</span>
   const icon = cellIcon(cell.icon)
   // danger 档才配警示标：三个颜色一起亮的时候，多一枚图标只是更吵
   const badge = cell.severity === 'danger' ? <WarnIcon size={13} /> : icon
@@ -41,8 +44,8 @@ export function CellBody({ cell }: { cell: Cell }) {
         <>
           {badge}
           {cell.label && <span className="lb">{cell.label}</span>}
-          <Gauge pct={cell.val.value ?? 0} />
-          <span className="vl">{text}</span>
+          <Gauge pct={cell.val.pct ?? cell.val.value ?? 0} />
+          {val}
         </>
       )
     case 'dot':
@@ -50,7 +53,7 @@ export function CellBody({ cell }: { cell: Cell }) {
         <>
           <i className={`dot ${cell.severity}`} aria-hidden />
           {cell.label && <span className="lb">{cell.label}</span>}
-          <span className="vl">{text}</span>
+          {val}
         </>
       )
     case 'progress':
@@ -58,7 +61,7 @@ export function CellBody({ cell }: { cell: Cell }) {
         <>
           <i className="spin" aria-hidden />
           {cell.label && <span className="lb">{cell.label}</span>}
-          <span className="vl">{text}</span>
+          {val}
         </>
       )
     default:
@@ -66,7 +69,7 @@ export function CellBody({ cell }: { cell: Cell }) {
         <>
           {badge}
           {cell.label && <span className="lb">{cell.label}</span>}
-          <span className="vl">{text}</span>
+          {val}
         </>
       )
   }

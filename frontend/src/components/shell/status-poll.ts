@@ -10,7 +10,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../../api'
 import { groupRefreshMs, groupSources, readPath, type PluginSource } from './status-registry'
-import type { CellValue } from './status-cells'
+import { formatRatio, type CellValue } from './status-cells'
 
 const CALL_TIMEOUT_MS = 1000
 const FAIL_BLACKOUT = 3
@@ -40,6 +40,14 @@ export function extract(group: PluginSource[], snapshot: any): Record<string, Ce
     const text = s.textPath ? readPath(snapshot, s.textPath) : undefined
     const num = typeof raw === 'number' && Number.isFinite(raw) ? raw : undefined
     if (num == null && typeof text !== 'string') { out[s.cellId] = { missing: true }; continue }
+    // 「已用/总量」：一个百分比说不出还剩多少，而那才是你要的数
+    if (s.unit === 'bytesRatio' && s.totalPath && num != null) {
+      const total = readPath(snapshot, s.totalPath)
+      if (typeof total === 'number' && total > 0) {
+        out[s.cellId] = { value: num, pct: (num / total) * 100, text: formatRatio(num, total) }
+        continue
+      }
+    }
     out[s.cellId] = { value: num, text: typeof text === 'string' ? text : undefined }
   }
   return out

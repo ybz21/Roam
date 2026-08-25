@@ -181,3 +181,19 @@ describe('估宽宁可估大', () => {
     expect(estimateWidth(spec({ id: 'x', ...over }), text)).toBeGreaterThanOrEqual(real)
   })
 })
+
+describe('版本号只留标签那一截', () => {
+  it('剥掉 git describe 的提交计数与哈希', async () => {
+    const { shortVersion } = await import('./status-system')
+    // 完整串 189px，比机器格还宽，而那截哈希在状态条上一眼读不出意思
+    expect(shortVersion('0.1.0-rc.2-291-gb6624ee-dirty')).toBe('v0.1.0-rc.2')
+    expect(shortVersion('v1.2.3-4-gabc1234')).toBe('v1.2.3')
+    expect(shortVersion('1.2.3-dirty')).toBe('v1.2.3')
+  })
+  it('干净的版本号原样留着', () => {
+    return import('./status-system').then(({ shortVersion }) => {
+      expect(shortVersion('0.4.1-go')).toBe('v0.4.1-go')
+      expect(shortVersion('v2.0.0')).toBe('v2.0.0')
+    })
+  })
+})

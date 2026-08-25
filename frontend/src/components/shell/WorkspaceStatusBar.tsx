@@ -67,7 +67,7 @@ export function WorkspaceStatusBar({ system, onAction }: {
     const now = Date.now()
     const build = (spec: CellSpec, val: CellValue): Cell | null => {
       if (val.missing) return null // 取不到就整格不渲染，不画「—」占位
-      const raw = val.severity ?? rawSeverity(val.value, spec.thresholds)
+      const raw = val.severity ?? rawSeverity(val.pct ?? val.value, spec.thresholds)
       const tr = trackSustain(sustain.current.get(spec.id), raw, now, spec.thresholds?.sustainSec)
       sustain.current.set(spec.id, tr)
       const severity = val.stale ? 'ok' : tr.shown
@@ -91,8 +91,10 @@ export function WorkspaceStatusBar({ system, onAction }: {
 
   if (!prefs.statusBar?.enabled) return null
 
-  // 弹簧插在最后一个左半格之后，把右半推到尽头
-  const lastLeft = visible.map((c) => c.align).lastIndexOf('left')
+  // 弹簧插在最后一个左半格之后，把右半推到尽头。
+  // 没有右半格时不插——否则那根分隔线会孤零零地贴在最右边。
+  const hasRight = visible.some((c) => c.align === 'right')
+  const lastLeft = hasRight ? visible.map((c) => c.align).lastIndexOf('left') : -1
 
   return (
     <div ref={ref} className="tt-statusbar" role="status" aria-label={t('status.bar')}>

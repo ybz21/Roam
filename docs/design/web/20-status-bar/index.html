@@ -636,6 +636,24 @@ Roam 抄过来有两个实际问题：壳里已经有强调蓝在导航选中项
 
 <h2><span class="n">06</span>全量分格：左半 13 格，右半 12 格</h2>
 
+<div class="card warn">
+<h4>落地时改了一处：左右的语义</h4>
+<p>
+上面那张表把主机负载六格放在<b class="hl">左半</b>（工作区作用域）。真跑起来不对：
+左半塞了机器 + 待办 + 会话 + 六格读数，全挤在最左边三分之一，右边空一大片；
+而且「我在干什么」和「机器怎么样」两组性质完全不同的东西贴在一起，扫一眼分不出哪几个是一伙的。
+</p>
+<p>
+改成：<b class="hl">左半 = 我在干什么</b>（机器 · 中心 · 待办 · 会话 · Agent · 分支 · 改动 · 蜂群 · 后台），
+<b class="hl">右半 = 这台机器怎么样 + 我正对着什么</b>（CPU · 内存 · 磁盘 · 温度 · GPU · 网络 ·
+编辑器上下文 · 通知 · 版本）。两组之间一根 12px 竖线，弹簧把它们推到两头。
+</p>
+<p>
+值得留意的是<b class="hl">改这件事没动宿主一行代码</b>——主机那六格的 <code>align</code>
+写在 <code>roam.host-monitor</code> 自己的 manifest 里，那正是注册制该有的样子。
+</p>
+</div>
+
 <div class="half"><b>左半 · 工作区作用域</b><small>换页不变。从左到右：身份 ｜ 后台 ｜ 仓库 ｜ 主机 ｜ 链路。「来自」那列标出是<b>系统格</b>还是<b>插件格</b>——主机那六格全是插件的（§05）。</small></div>
 
 <table>
@@ -735,6 +753,45 @@ VS Code 右半那几格也是纯文字，不是巧合。
 <p>
 <b class="hl">后台格是唯一平静时也上色的格</b>（<code>--accent</code>）：它代表「有东西正在动」，
 本来就该被看见，而且它自己会消失——不像别的格常驻。这是从 VS Code 抄的：那边的进度条也是唯一会转的东西。
+</p>
+
+<h3>数值宽度必须钉死，否则整条在眼皮底下抖</h3>
+
+<p>
+<code>CPU 8%</code> 涨到 <code>CPU 100%</code> 只多一位数字，但那一格宽出 7px，
+<b class="hl">它右边所有格跟着平移一次</b>——每 3 秒一次。等宽数字（<code>tabular-nums</code>）
+只保证「每个数字一样宽」，管不了位数变化。
+</p>
+
+<p>
+所以每个单位按<b class="hl">最长可能值</b>预留宽度，数字右对齐：
+</p>
+
+<table>
+<thead><tr><th>单位</th><th>预留</th><th>最长值</th></tr></thead>
+<tbody>
+<tr><td class="mono">percent</td><td class="mono">4ch</td><td class="mono">100%</td></tr>
+<tr><td class="mono">celsius</td><td class="mono">5ch</td><td class="mono">100°C</td></tr>
+<tr><td class="mono">bytes</td><td class="mono">6ch</td><td class="mono">999.9G</td></tr>
+<tr><td class="mono">bytesPerSec</td><td class="mono">8ch</td><td class="mono">999.9M/s</td></tr>
+<tr><td class="mono">bytesRatio</td><td class="mono">9ch</td><td class="mono">12.1/32G</td></tr>
+<tr><td class="mono">count</td><td class="mono">3ch</td><td class="mono">999</td></tr>
+</tbody>
+</table>
+
+<p>
+估宽（§09）也要按预留值算，不然估出来的和画出来的对不上，折叠就在错误的位置发生。
+<b class="hl">验收判据是可测的</b>：连续四个刷新周期里，每一格的左边界只能出现在一个位置上。
+</p>
+
+<h3>「已用/总量」比一个百分比有用</h3>
+
+<p>
+<code>内存 39%</code> 说不出还剩多少，而<b class="hl">那才是你要的数</b>。
+所以加了 <code>unit: "bytesRatio"</code> + <code>source.totalPath</code>：
+一条路径取已用、一条取总量，画成 <code>12.1/32G</code>，迷你条与阈值都按两者的比例算。
+同量级时前一半不重复写单位——<code>12.1G/32G</code> 读起来是两个数，<code>12.1/32G</code>
+才读得出「32 里用了 12」。
 </p>
 
 <div class="card warn">
@@ -1013,6 +1070,21 @@ M1 的后端改动只有 manifest 结构和一段 <code>statusItems</code> 声�
 <code>#/plugins/roam.host-monitor</code>、整条开关生效、文档横向滚动 0px、
 粗指针下条高 44 且条上方 3px 处命中的仍是页面内容（不是条）。
 估宽逐格不低于实测，已把实测值钉进单测。</p>
+<p><b class="hl">第一轮之后按真机反馈改的四处（同日）：</b></p>
+<ol>
+<li><b class="hl">条在抖。</b>数字位数一变，右边所有格平移一次，每 3 秒一次。
+    按单位预留宽度钉死（见 §08）。验收：连续四个刷新周期里每格左边界只出现在一个位置上。</li>
+<li><b class="hl">全挤在左边。</b>主机六格改落右半（改的是插件自己的 manifest，宿主没动），
+    两组之间加一根竖线。</li>
+<li><b class="hl">东西太少。</b>加了「正在跑的 Agent」和「版本」两格；内存从 <code>39%</code>
+    改成 <code>12.6/31G</code>。版本要剥掉 <code>git describe</code> 的
+    <code>-291-gb6624ee-dirty</code> 那截——完整串 189px，比机器格还宽。</li>
+<li><b class="hl">点 CPU 只到插件列表页。</b>动作里先 <code>go('plugins')</code> 再写 hash，
+    而 <code>go()</code> 只认页面名，把 <code>/&lt;id&gt;</code> 那截深链抹掉了。
+    改成直接写 hash，并给 <code>PluginsPanel</code> 补上 <code>initialId</code>
+    （沿用项目页 <code>initialKey</code> 那套）。</li>
+</ol>
+
 <p><b class="hl">留到 M2 的：</b>右半十二格（要动 Monaco 与会话状态）、分支 / 改动 / 蜂群 / 后台任务四格
 （各自的数据源还没有）、机器格点开的<b class="hl">机器切换下拉</b>。
 最后这一条是为什么<b class="hl">侧栏底座那枚切换器和 <code>LinkStatus</code> 这次没撤</b>——

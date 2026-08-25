@@ -3176,16 +3176,35 @@ html[data-size="compact"] .tt-histname { flex: 1 1 auto; max-width: none; }
 }
 .tt-statusbar .cell {
   display: inline-flex; align-items: center; gap: 6px;
-  padding: 0 9px; height: 100%;
+  padding: 0 var(--sp-3); height: 100%;
   white-space: nowrap; border: 0; background: none; color: inherit; font: inherit;
 }
 .tt-statusbar button.cell { cursor: pointer; }
 :where(html[data-pointer="fine"]) .tt-statusbar button.cell:hover {
   background: var(--list-hover); color: var(--text-bright);
 }
-.tt-statusbar .sp { flex: 1 1 auto; min-width: 24px; }
+.tt-statusbar .sp { flex: 1 1 auto; min-width: var(--sp-5); }
+/* 左右两组之间一根竖线：弹簧把它们推开，线说明「这两组不是一伙的」。
+   画在弹簧自己身上而不是右边第一格的 ::before —— 那个伪元素是「钉住」标记的。 */
+.tt-statusbar .sp { position: relative; }
+.tt-statusbar .sp::after {
+  content: ""; position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+  width: 1px; height: 12px; background: var(--border);
+}
 .tt-statusbar .lb { color: var(--text-dimmer); }
-.tt-statusbar .vl { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.tt-statusbar .vl {
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  /* 按单位预留最长值的位置。等宽数字只保证「每个数字一样宽」，位数一变
+     （8% → 100%）这一格还是会宽出 7px，右边所有格跟着平移——每 3 秒一次。
+     预留之后宽度就钉死了，条不再在眼皮底下抖。 */
+  text-align: right;
+}
+.tt-statusbar .vl[data-unit="percent"] { min-width: 4ch; }
+.tt-statusbar .vl[data-unit="celsius"] { min-width: 5ch; }
+.tt-statusbar .vl[data-unit="count"] { min-width: 3ch; }
+.tt-statusbar .vl[data-unit="bytes"] { min-width: 6ch; }
+.tt-statusbar .vl[data-unit="bytesPerSec"] { min-width: 8ch; }
+.tt-statusbar .vl[data-unit="bytesRatio"] { min-width: 9ch; }
 .tt-statusbar .dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; background: var(--ok); }
 .tt-statusbar .dot.warn { background: var(--warn); }
 .tt-statusbar .dot.danger { background: var(--danger); }

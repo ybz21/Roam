@@ -147,3 +147,32 @@ describe('快照 → 各格的值', () => {
     expect(extract(group, { cpu: { usagePercent: 0 }, gpus: [] })['hm/cpu']).toEqual({ value: 0, text: undefined })
   })
 })
+
+describe('已用/总量（bytesRatio）', () => {
+  const group = [{
+    cellId: 'hm/mem', pluginId: 'roam.hm', command: 'hm.s', refreshMs: 3000,
+    path: 'memory.used', totalPath: 'memory.total', unit: 'bytesRatio' as const,
+  }]
+  it('画成「12.1/32G」，迷你条和阈值走比例', async () => {
+    const { extract } = await import('./status-poll')
+    const v = extract(group, { memory: { used: 12988366848, total: 34359738368 } })['hm/mem']
+    expect(v.text).toBe('12.1/32G') // 同量级时前一半不重复写单位
+    expect(Math.round(v.pct!)).toBe(38)
+  })
+  it('总量取不到就退回原样的数字，不编一个比例出来', async () => {
+    const { extract } = await import('./status-poll')
+    const v = extract(group, { memory: { used: 12988366848 } })['hm/mem']
+    expect(v.pct).toBeUndefined()
+  })
+})
+
+describe('数值预留宽度', () => {
+  it('每个带单位的格都留够最长值的位置 —— 否则位数一变整条平移', async () => {
+    const { UNIT_CH, estimateWidth } = await import('./status-cells')
+    // 8% 和 100% 必须估出同样的宽度，条才不会每 3 秒抖一次
+    const spec = { provider: 'p', kind: 'plugin' as const, label: 'CPU', align: 'left' as const,
+      priority: 0, tier: 3 as const, render: 'gauge' as const, unit: 'percent' as const, id: 'x' }
+    expect(estimateWidth(spec, '8%')).toBe(estimateWidth(spec, '100%'))
+    expect(UNIT_CH.percent).toBe(4)
+  })
+})

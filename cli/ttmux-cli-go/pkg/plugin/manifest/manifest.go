@@ -111,7 +111,10 @@ type StatusSrc struct {
 	Path    string `json:"path,omitempty"`    // 点分路径,支持 a.b[0].c
 	// Text 是可选的第二条路径:取到就直接当文案用,不再由宿主按 Unit 格式化。
 	TextPath string `json:"textPath,omitempty"`
-	Push     bool   `json:"push,omitempty"` // 常驻插件主动推(runtime.resident 才有意义)
+	// Total 配合 unit=bytesRatio:Path 取已用、TotalPath 取总量,画成「12.1/32G」,
+	// 迷你条与阈值都按两者的比例算。一个百分比说不出「还剩多少」,而那才是你要的。
+	TotalPath string `json:"totalPath,omitempty"`
+	Push      bool   `json:"push,omitempty"` // 常驻插件主动推(runtime.resident 才有意义)
 }
 
 // StatusThr 是阈值。SustainSec>0 时要求连续越线这么久才升级——CPU 天天冲

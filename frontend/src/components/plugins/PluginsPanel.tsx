@@ -64,12 +64,14 @@ function lt(text: LocaleText, locale: string): string {
   return text[locale] || text['zh-CN'] || Object.values(text)[0] || ''
 }
 
-export default function PluginsPanel() {
+export default function PluginsPanel({ initialId }: { initialId?: string } = {}) {
   const { t, locale } = useI18n()
   const [plugins, setPlugins] = useState<RegisteredPlugin[]>([])
   const [daemon, setDaemon] = useState<Record<string, any> | null>(null)
   const [loading, setLoading] = useState(true)
-  const [selected, setSelected] = useState('')
+  // 深链选中：状态条上点某一格进来时带着插件 id（#/plugins/<id>）。
+  // 从前点进来只到列表页第一项，你还得自己在左边找一遍——而你刚刚点的就是它。
+  const [selected, setSelected] = useState(initialId || '')
   const [startingDaemon, setStartingDaemon] = useState(false)
   const [installOpen, setInstallOpen] = useState(false)
   // 手机(窄屏)走两级导航：一级整页插件列表，点某项后详情以全屏二级页(MobileSubPage)展开。
@@ -82,7 +84,7 @@ export default function PluginsPanel() {
       const rows: RegisteredPlugin[] = list || []
       setPlugins(rows)
       setDaemon(st?.daemon || null)
-      setSelected((cur) => cur || rows[0]?.manifest.id || '')
+      setSelected((cur) => cur || initialId || rows[0]?.manifest.id || '')
     } catch (e: any) {
       message.error(e.message)
     } finally {

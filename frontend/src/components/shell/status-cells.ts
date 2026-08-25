@@ -9,7 +9,7 @@ export type CellAlign = 'left' | 'right'
 export type CellRender = 'text' | 'gauge' | 'dot' | 'progress'
 /** 折叠档位：1 最晚被丢（永不丢），4 最先丢 */
 export type CellTier = 1 | 2 | 3 | 4
-export type CellUnit = 'percent' | 'bytes' | 'bytesPerSec' | 'celsius' | 'count' | 'text'
+export type CellUnit = 'percent' | 'bytes' | 'bytesPerSec' | 'bytesRatio' | 'celsius' | 'count' | 'text'
 
 export type Thresholds = {
   warn?: number
@@ -49,6 +49,8 @@ export type CellSpec = {
 /** 一格的**当前值**：由 provider 每帧给出 */
 export type CellValue = {
   value?: number
+  /** 迷你条与阈值看这个；缺省用 value。bytesRatio 那类「已用/总量」靠它拿百分比 */
+  pct?: number
   /** 给了就直接用，不再按 unit 格式化 */
   text?: string
   /** 第二行/悬停里的补充，如「16 核 · 负载 5.3」 */
@@ -115,6 +117,18 @@ export function humanBytes(n: number): string {
   return (v >= 100 || i === 0 ? Math.round(v) : Number(v.toFixed(1))) + UNITS[i]
 }
 
+/**
+ * 「已用/总量」：同一个量级时把前一半的单位去掉——`12.1G/32G` 读起来是两个数，
+ * `12.1/32G` 才读得出「32 里用了 12」。
+ */
+export function formatRatio(used: number, total: number): string {
+  const a = humanBytes(used)
+  const b = humanBytes(total)
+  const ua = a.replace(/[\d.]/g, '')
+  const ub = b.replace(/[\d.]/g, '')
+  return ua === ub ? `${a.slice(0, a.length - ua.length)}/${b}` : `${a}/${b}`
+}
+
 export function formatValue(v: CellValue, unit?: CellUnit): string {
   if (v.text) return v.text
   if (v.stale || v.value == null || !Number.isFinite(v.value)) return '--'
@@ -125,6 +139,21 @@ export function formatValue(v: CellValue, unit?: CellUnit): string {
     case 'bytesPerSec': return humanBytes(v.value) + '/s'
     default: return String(Math.round(v.value))
   }
+}
+
+/**
+ * 每个单位给数值预留的字符宽度（等宽数字，1ch ≈ 7px）。
+ *
+ * 不预留的话，`CPU 8%` 涨到 `CPU 100%` 就宽 7px，它右边所有格跟着平移一次——
+ * 每 3 秒一次，整条在眼皮底下抖。留够最长值的位置，宽度就钉死了。
+ */
+export const UNIT_CH: Partial<Record<CellUnit, number>> = {
+  percent: 4,      // 100%
+  celsius: 5,      // 100°C
+  bytes: 6,        // 999.9G
+  bytesPerSec: 8,  // 999.9M/s
+  bytesRatio: 9,   // 12.1/32G
+  count: 3,
 }
 
 /**
@@ -145,7 +174,8 @@ export function estimateWidth(spec: CellSpec, text: string): number {
   if (spec.render === 'dot' || spec.render === 'progress') w += 17
   if (spec.render === 'gauge') w += 42 // 迷你条 30 + 两侧间距
   if (spec.label) w += chars(spec.label) + 6
-  w += chars(text)
+  // 数值那一段按「预留宽度」和「实际内容」取大：预留是为了不抖，取大是为了不裁
+  w += Math.max(chars(text), (UNIT_CH[spec.unit as CellUnit] ?? 0) * 7)
   return Math.ceil(w)
 }
 

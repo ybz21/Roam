@@ -23,11 +23,27 @@ export type SystemInput = {
   waiting: number
   /** 已合入待清理的 worktree 数 */
   unfinished: number
+  /** 有 Agent 在跑的会话数 */
+  agents: number
+  /** Roam 版本；还没取到时为空，那一格就不出现 */
+  version: string
   t: (key: string, vars?: Record<string, unknown>) => string
 }
 
 /** 延迟超过这个数就算慢：跨网连一台机器，300ms 往上打字已经能感觉到 */
 const SLOW_MS = 300
+
+/**
+ * 版本号在条上只留标签那一截。
+ *
+ * `git describe` 给的是 `0.1.0-rc.2-291-gb6624ee-dirty` —— 189px，比机器格还宽，
+ * 而后面那截提交计数和哈希在状态条上一眼也读不出意思。剥掉 `-<n>-g<hash>`
+ * 和 `-dirty`，完整串留给悬停。
+ */
+export function shortVersion(v: string): string {
+  const bare = v.replace(/^v/, '').replace(/-\d+-g[0-9a-f]+(-dirty)?$/i, '').replace(/-dirty$/i, '')
+  return 'v' + bare
+}
 
 export function systemCells(i: SystemInput): SystemCell[] {
   const out: SystemCell[] = []
@@ -88,10 +104,33 @@ export function systemCells(i: SystemInput): SystemCell[] {
   if (i.sessions > 0) {
     push(
       systemCell('roam.core', 'sessions', {
-        label: '', priority: 70, tier: 2, render: 'text', icon: 'TerminalIcon',
+        label: '', priority: 70, tier: 2, render: 'text', icon: 'TerminalIcon', unit: 'count',
         onClick: { kind: 'route', id: '#/sessions' },
       }),
       { text: String(i.sessions) },
+    )
+  }
+
+  // ── 正在跑的 Agent：会话数说不出「有几个在真干活」，而那是你真正想知道的 ──
+  if (i.agents > 0) {
+    push(
+      systemCell('roam.core', 'agents', {
+        label: '', priority: 65, tier: 2, render: 'text', icon: 'BotIcon', unit: 'count',
+        onClick: { kind: 'route', id: '#/sessions' },
+      }),
+      { text: String(i.agents) },
+    )
+  }
+
+  // ── 版本：最右、最暗、最先被折叠掉。它只在你要报 bug 那天有用 ──
+  if (i.version) {
+    push(
+      systemCell('roam.core', 'version', {
+        label: '', align: 'right', priority: 0, tier: 4, render: 'text',
+        onClick: { kind: 'route', id: '#/about' },
+      }),
+      // 完整串留在 detail（悬停与读屏拿得到），条上只留标签
+      { text: shortVersion(i.version), detail: i.version },
     )
   }
 

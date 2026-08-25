@@ -129,6 +129,7 @@ export default function App() {
   const tab = route.split('/')[0]                                  // 基础页（swarm/leave → swarm）
   const swarmSub = tab === 'swarm' && route.includes('/') ? decodeURIComponent(route.slice(route.indexOf('/') + 1)) : '' // 深链选中的蜂群
   const projectSub = tab === 'projects' && route.includes('/') ? decodeURIComponent(route.slice(route.indexOf('/') + 1)) : '' // 深链选中的项目
+  const pluginSub = tab === 'plugins' && route.includes('/') ? decodeURIComponent(route.slice(route.indexOf('/') + 1)) : '' // 深链选中的插件（状态条点进来）
   const settingsSub = tab === 'settings' && route.includes('/') ? route.slice(route.indexOf('/') + 1) : '' // 设置的哪一类（node/browser）
   const go = (k: string) => {
     const qi = location.hash.indexOf('?')
@@ -187,6 +188,13 @@ export default function App() {
   // 会话坞要显示「几个在等你」，而这个信号是 TerminalPane 抓屏算出来的（detectPrompt）。
   // 它已经在为每个已开会话轮询，别再开第二份——让它把结果递上来即可。
   const [mobileWaiting, setMobileWaiting] = useState<Record<string, boolean>>({})
+  // 版本给状态条最右那一格用：**一次性**取，不是轮询（免登录接口，见 server.go）
+  const [roamVersion, setRoamVersion] = useState('')
+  useEffect(() => {
+    let stop = false
+    api('GET', '/version').then((r) => { if (!stop) setRoamVersion(r?.data?.version || '') }).catch(() => {})
+    return () => { stop = true }
+  }, [])
   const [unfinished, setUnfinished] = useState(0)
   // 不能按 hasSider 收窄：手机没有侧栏，但会话坞同样要写「项目 · 会话」
   useEffect(() => {
@@ -502,7 +510,7 @@ export default function App() {
     files: <FilesPage openTerm={openTerm} />,
     settings: <SettingsPage sub={settingsSub} onNav={(r) => go(r)} />,
     hub: <HubPage />,
-    plugins: <PluginsPanel />,
+    plugins: <PluginsPanel initialId={pluginSub || undefined} />,
     browser: <BrowserView />,
     phone: <PhoneView />,
   }
@@ -659,12 +667,16 @@ export default function App() {
     sessions: terms.length,
     waiting: Object.values(mobileWaiting).filter(Boolean).length,
     unfinished,
+    agents: terms.filter((n) => claudeMap[n]?.running || codexMap[n]?.running).length,
+    version: roamVersion,
     t,
   })
   // 插件只能给白名单里的两种动作，给不了任意跳转（20 设计 §05 约束①）
   const onStatusAction = (a: StatusAction) => {
+    // 直接写 hash，不走 go()：go() 只认页面名，会把 `/<id>` 那截深链抹掉，
+    // 于是点 CPU 只到插件列表页第一项——而你刚点的就是主机监控。
     if (a.kind === 'route') location.hash = a.id
-    else if (a.kind === 'pluginView') { go('plugins'); location.hash = '#/plugins/' + encodeURIComponent(a.id) }
+    else if (a.kind === 'pluginView') location.hash = '#/plugins/' + encodeURIComponent(a.id)
   }
 
   return (
