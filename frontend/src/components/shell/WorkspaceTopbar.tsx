@@ -1,6 +1,6 @@
 // Command Center：横跨 Canvas 与 Dock 的 40px 顶栏（14 设计 §4.5）。
 //
-// 只放三样：全局搜索、快捷创建、连接状态。**页面标题和项目路径不进来**——
+// 只放两样：全局搜索、快捷创建。连接状态归底部状态条（20 设计）。**页面标题和项目路径不进来**——
 // 否则 Focus 时会形成"顶栏一层、页面头一层"的无意义两层头部。页面标题留在 Canvas，
 // 项目与会话上下文进工作区标签。
 //
@@ -13,8 +13,7 @@ import { openPalette } from './palette'
 
 export type { PaletteItem, PaletteActions } from './palette'
 
-export function WorkspaceTopbar({ online, dockCount, dockOpen, onToggleDock, onCreate, modKey }: {
-  online: boolean
+export function WorkspaceTopbar({ dockCount, dockOpen, onToggleDock, onCreate, modKey }: {
   dockCount: number
   dockOpen: boolean
   onToggleDock: () => void
@@ -48,13 +47,8 @@ export function WorkspaceTopbar({ online, dockCount, dockOpen, onToggleDock, onC
           color: '#fff', background: 'var(--accent-solid)', fontSize: 12, cursor: 'pointer',
         }}><PlusIcon size={12} />{t('common.create')}</button>
 
-        <span title={online ? t('workspace.online') : t('workspace.offline')} style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6,
-          color: 'var(--text-dim)', fontSize: 11, whiteSpace: 'nowrap',
-        }}>
-          <i style={{ width: 7, height: 7, borderRadius: '50%', background: online ? 'var(--ok)' : 'var(--text-dimmer)' }} />
-          {online ? t('workspace.online') : t('workspace.offline')}
-        </span>
+        {/* 「在线/离线」那颗点搬去了底部状态条的机器格：那儿位置更稳、每一页都在，
+            而且手机也有（顶栏手机上根本不存在）。见 shell/status-system.ts。 */}
 
         {dockCount > 0 && (
           <button onClick={onToggleDock} title={`${t('nav.terminal')} (${modKey}J)`} style={{

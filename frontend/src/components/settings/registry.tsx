@@ -18,6 +18,7 @@ import { QuickCommandsSettings } from './quick-commands'
 import { ChangePasswordSettings, TwoFactorSettings, CertDownloadButton } from './security-settings'
 import { AboutSettings } from './about-settings'
 import { ClusterSettings } from '../cluster/ClusterSettings'
+import { StatusBarSettings } from './status-bar-settings'
 
 export const MAX_ROWS = 6
 
@@ -194,6 +195,15 @@ export function buildSettings(deps: {
       ],
     },
     {
+      id: 'ui.status', name: t('status.settings'), parent: t('set.groupUi'), scope: 'mine',
+      note: t('status.settingsDesc'),
+      items: [{
+        id: 'statusBar', label: t('status.settings'), bare: true,
+        keywords: '状态条 status bar cpu 内存 memory 插件 plugin 主机 host',
+        control: { kind: 'custom', node: <StatusBarSettings /> },
+      }],
+    },
+    {
       id: 'agent.bin', name: t('set.pageBin'), parent: t('set.groupAgent'), scope: 'mine',
       items: [claudeItem, codexItem],
     },
@@ -294,7 +304,7 @@ export function buildSettings(deps: {
   const nodes: TreeNode[] = [
     { kind: 'section', title: t('set.secMine'), note: '' },
     { kind: 'leaf', page: 'common' },
-    { kind: 'parent', id: 'ui', title: t('set.groupUi'), kids: ['ui.look', 'ui.layout'] },
+    { kind: 'parent', id: 'ui', title: t('set.groupUi'), kids: ['ui.look', 'ui.layout', 'ui.status'] },
     { kind: 'parent', id: 'agent', title: t('set.groupAgent'), kids: ['agent.bin', 'agent.new'] },
     // 这一段的页直接摊平：段标题已经写了「这台机器」，再套一层同名的父节点是把同一件事说两遍
     { kind: 'section', title: deps.nodeLabel ? t('set.secNode', { node: deps.nodeLabel }) : t('set.groupNode'), note: '' },

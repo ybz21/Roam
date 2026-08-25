@@ -1,0 +1,1093 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Roam · 底部状态条（20 v0.1）</title>
+<style>
+/* ── 令牌：直接取 frontend/src/theme.tsx 的真值 ─────────────────────────── */
+:root {
+  --bg-base:#0d1117; --bg-container:#161b22; --bg-elevated:#1b222b; --bg-term:#06090d;
+  --border:#30363d; --border-subtle:#21262d;
+  --text-bright:#e6edf3; --text-dim:#8b949e; --text-dimmer:#6e7681;
+  --accent:#58a6ff; --accent-solid:#1f6feb; --accent-soft:rgba(31,111,235,.14); --accent-border:rgba(88,166,255,.45);
+  --ok:#3fb950; --ok-solid:#238636; --ok-soft:rgba(63,185,80,.14); --ok-border:rgba(63,185,80,.42);
+  --danger:#f85149; --danger-soft:rgba(248,81,73,.12); --danger-border:rgba(248,81,73,.40);
+  --warn:#d29922; --warn-soft:rgba(210,153,34,.12); --warn-border:rgba(210,153,34,.40);
+  --list-hover:rgba(255,255,255,.045);
+  --fs-micro:11px; --fs-meta:12px; --fs-sm:13px; --fs-body:14px; --fs-lg:16px; --fs-title:22px;
+  --r-xs:6px; --r-sm:10px; --r-card:14px; --r-pill:999px;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+html[data-theme="light"] {
+  --bg-base:#f6f8fa; --bg-container:#ffffff; --bg-elevated:#ffffff; --bg-term:#ffffff;
+  --border:#d0d7de; --border-subtle:#e6e9ec;
+  --text-bright:#1f2328; --text-dim:#57606a; --text-dimmer:#8c959f;
+  --accent:#0969da; --accent-solid:#1f6feb; --accent-soft:rgba(31,111,235,.10); --accent-border:rgba(31,111,235,.40);
+  --ok:#1a7f37; --ok-solid:#1f883d; --ok-soft:rgba(31,136,61,.10); --ok-border:rgba(31,136,61,.40);
+  --danger:#cf222e; --danger-soft:rgba(207,34,46,.09); --danger-border:rgba(207,34,46,.35);
+  --warn:#9a6700; --warn-soft:rgba(154,103,0,.10); --warn-border:rgba(154,103,0,.35);
+  --list-hover:rgba(27,31,36,.05);
+}
+* { box-sizing:border-box; }
+html { background:#07090d; }
+html[data-theme="light"] { background:#eef1f5; }
+body {
+  margin:0; color:var(--text-bright);
+  font:var(--fs-body)/1.65 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+svg { display:block; }
+button { font:inherit; cursor:pointer; }
+
+.top {
+  position:sticky; top:0; z-index:20;
+  display:flex; align-items:center; gap:var(--sp-3);
+  padding:10px clamp(16px,3vw,40px);
+  background:color-mix(in srgb, var(--bg-base) 84%, transparent);
+  border-bottom:1px solid var(--border-subtle); backdrop-filter:blur(18px);
+}
+.top .kicker { font-size:var(--fs-micro); letter-spacing:.14em; text-transform:uppercase; color:var(--text-dimmer); }
+.top h1 { margin:0; font-size:var(--fs-sm); font-weight:600; }
+.top .sp { flex:1; }
+.tbtn { border:1px solid var(--border); background:var(--bg-container); color:var(--text-dim);
+  border-radius:var(--r-pill); padding:5px 14px; font-size:var(--fs-meta); }
+.tbtn:hover { color:var(--text-bright); border-color:var(--accent-border); }
+
+.wrap { max-width:1060px; margin:0 auto; padding:34px clamp(16px,3vw,40px) 110px; }
+.lede { color:var(--text-dim); font-size:var(--fs-lg); line-height:1.7; margin:0 0 var(--sp-5); }
+h2 { margin:56px 0 6px; padding-top:26px; font-size:var(--fs-lg); font-weight:600; border-top:1px solid var(--border-subtle); }
+h2:first-of-type { margin-top:8px; border-top:0; padding-top:0; }
+h2 .n { color:var(--text-dimmer); font-family:var(--mono); font-size:var(--fs-meta); margin-right:var(--sp-2); }
+h3 { margin:30px 0 8px; font-size:var(--fs-body); font-weight:600; }
+p { margin:10px 0; }
+code { font-family:var(--mono); font-size:.92em; background:var(--bg-elevated);
+  border:1px solid var(--border-subtle); border-radius:var(--r-xs); padding:1px 5px; }
+pre { margin:var(--sp-3) 0; padding:var(--sp-4); overflow-x:auto;
+  background:var(--bg-term); border:1px solid var(--border-subtle); border-radius:var(--r-sm);
+  font-family:var(--mono); font-size:var(--fs-meta); line-height:1.65; color:var(--text-bright); }
+pre code { background:none; border:0; padding:0; }
+pre .c { color:var(--text-dimmer); }
+pre .k { color:var(--accent); }
+pre .g { color:var(--ok); }
+pre .r { color:var(--danger); }
+ul,ol { margin:10px 0; padding-left:22px; }
+li { margin:5px 0; }
+a { color:var(--accent); }
+b.hl { color:var(--text-bright); }
+
+.card { background:var(--bg-container); border:1px solid var(--border); border-radius:var(--r-card);
+  padding:var(--sp-4) var(--sp-5); margin:var(--sp-4) 0; }
+.card.warn { border-color:var(--warn-border); background:var(--warn-soft); }
+.card.bad  { border-color:var(--danger-border); background:var(--danger-soft); }
+.card.good { border-color:var(--ok-border); background:var(--ok-soft); }
+.card > :first-child { margin-top:0; }
+.card > :last-child { margin-bottom:0; }
+.card h4 { margin:0 0 var(--sp-2); font-size:var(--fs-sm); font-weight:600; }
+
+.tag { display:inline-block; font-size:var(--fs-micro); letter-spacing:.06em; padding:2px 9px;
+  border-radius:var(--r-pill); border:1px solid var(--border); color:var(--text-dim); vertical-align:2px; }
+.tag.new { border-color:var(--accent-border); color:var(--accent); background:var(--accent-soft); }
+.tag.cut { border-color:var(--danger-border); color:var(--danger); background:var(--danger-soft); }
+.tag.opt { border-color:var(--warn-border); color:var(--warn); background:var(--warn-soft); }
+
+table { width:100%; border-collapse:collapse; margin:var(--sp-3) 0; font-size:var(--fs-sm); }
+th,td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--border-subtle); vertical-align:top; }
+th { color:var(--text-dim); font-weight:600; font-size:var(--fs-meta); letter-spacing:.04em; text-transform:uppercase; }
+td.num { font-family:var(--mono); text-align:right; white-space:nowrap; }
+td.mono, .mono { font-family:var(--mono); }
+.ok-t { color:var(--ok); } .warn-t { color:var(--warn); } .bad-t { color:var(--danger); } .dim-t { color:var(--text-dimmer); }
+
+.cols { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:var(--sp-3); margin:var(--sp-4) 0; }
+
+/* ── 稿件容器：一张「这是长这样」的图 ──────────────────────────────────── */
+.fig { margin:var(--sp-4) 0 var(--sp-5); }
+.fig .cap { font-size:var(--fs-meta); color:var(--text-dimmer); margin:6px 2px 0; }
+.fig .cap b { color:var(--text-dim); font-weight:600; }
+
+/* ── 状态条本体（1:1，就是要落地的那条）────────────────────────────────── */
+.sb {
+  --status-h:24px;
+  display:flex; align-items:stretch; height:var(--status-h);
+  background:var(--bg-container); border-top:1px solid var(--border-subtle);
+  font-size:var(--fs-meta); color:var(--text-dim); overflow:hidden; user-select:none;
+}
+.sb .cell {
+  display:inline-flex; align-items:center; gap:6px; padding:0 9px; height:100%;
+  white-space:nowrap; border:0; background:none; color:inherit; font:inherit;
+}
+.sb .cell.btn:hover { background:var(--list-hover); color:var(--text-bright); }
+.sb .sp { flex:1 1 auto; min-width:0; }
+.sb .dot { width:7px; height:7px; border-radius:50%; flex:0 0 auto; background:var(--ok); }
+.sb .dot.off { background:var(--text-dimmer); }
+.sb .dot.bad { background:var(--danger); }
+.sb .lb { color:var(--text-dimmer); }
+.sb .vl { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+.sb .mini { width:30px; height:4px; border-radius:var(--r-pill); background:color-mix(in srgb, var(--text-dimmer) 26%, transparent); overflow:hidden; flex:0 0 auto; }
+.sb .mini i { display:block; height:100%; background:var(--text-dimmer); }
+.sb .cell.warn { color:var(--warn); }
+.sb .cell.warn .lb, .sb .cell.warn .mini i { color:var(--warn); background:var(--warn); }
+.sb .cell.warn .lb { background:none; }
+.sb .cell.bad { color:var(--danger); }
+.sb .cell.bad .lb { color:var(--danger); background:none; }
+.sb .cell.bad .mini i { background:var(--danger); }
+.sb .cell.stale { color:var(--text-dimmer); opacity:.55; }
+.sb svg { width:13px; height:13px; flex:0 0 auto; }
+.sb .cell.pin { position:relative; }
+.sb .cell.pin::before { content:""; position:absolute; left:0; top:0; bottom:0; width:2px; background:currentColor; opacity:.5; }
+/* 粗指针档：整条长到 44，格子减到三个（见 §07） */
+.sb.coarse { --status-h:44px; font-size:var(--fs-sm); }
+.sb.coarse .cell { padding:0 var(--sp-3); gap:var(--sp-2); }
+
+/* 装状态条的「窗口」外壳，用来演示宽度 */
+.win { border:1px solid var(--border); border-radius:var(--r-sm); overflow:hidden; background:var(--bg-base); }
+.win.w720 { max-width:720px; } .win.w420 { max-width:420px; } .win.w360 { max-width:360px; }
+
+/* ── 整壳线框：说明它挂在哪 ───────────────────────────────────────────── */
+.shell { border:1px solid var(--border); border-radius:var(--r-card); overflow:hidden; background:var(--bg-base); }
+.shell .row { display:flex; }
+.shell .nav { width:74px; flex:0 0 74px; border-right:1px solid var(--border-subtle);
+  background:var(--bg-base); padding:var(--sp-2); display:flex; flex-direction:column; gap:5px; }
+.shell .nav i { display:block; height:9px; border-radius:var(--r-xs); background:var(--bg-elevated); }
+.shell .nav i.on { background:var(--accent-soft); box-shadow:inset 2px 0 0 var(--accent); }
+.shell .nav .gap { flex:1; }
+.shell .main { flex:1; min-width:0; display:flex; flex-direction:column; }
+.shell .tb { height:26px; border-bottom:1px solid var(--border-subtle); display:flex; align-items:center;
+  gap:6px; padding:0 8px; font-size:var(--fs-micro); color:var(--text-dimmer); }
+.shell .tb .s { height:14px; width:200px; border-radius:var(--r-xs); background:var(--bg-elevated); }
+.shell .body { display:flex; height:132px; }
+.shell .canvas { flex:1; padding:var(--sp-3); display:flex; flex-direction:column; gap:6px; }
+.shell .canvas i { display:block; height:10px; border-radius:var(--r-xs); background:var(--bg-container); }
+.shell .canvas i.w60 { width:60%; } .shell .canvas i.w40 { width:40%; } .shell .canvas i.w80 { width:80%; }
+.shell .dock { width:180px; flex:0 0 180px; border-left:1px solid var(--border-subtle);
+  background:var(--bg-term); padding:var(--sp-2); font-family:var(--mono); font-size:var(--fs-micro); color:var(--text-dimmer); }
+.shell .lbl { position:relative; }
+.shell .lbl::after { content:attr(data-l); position:absolute; right:8px; top:4px;
+  font-size:var(--fs-micro); color:var(--text-dimmer); letter-spacing:.08em; }
+
+/* ── 手机线框 ─────────────────────────────────────────────────────────── */
+.ph { width:300px; border:1px solid var(--border); border-radius:var(--r-card); overflow:hidden; background:var(--bg-base); }
+.ph .scr { height:150px; padding:var(--sp-3); display:flex; flex-direction:column; gap:6px; }
+.ph .scr i { display:block; height:10px; border-radius:var(--r-xs); background:var(--bg-container); }
+.ph .alert { display:flex; align-items:center; gap:6px; padding:5px 10px; font-size:var(--fs-meta);
+  color:var(--danger); background:var(--danger-soft); border-top:1px solid var(--danger-border); }
+.ph .dock { display:flex; align-items:center; gap:8px; height:34px; padding:0 10px; font-size:var(--fs-meta);
+  color:var(--text-dim); background:var(--bg-container); border-top:1px solid var(--border-subtle); }
+.ph .tabs { display:flex; background:var(--bg-container); border-top:1px solid var(--border); }
+.ph .tabs span { flex:1; text-align:center; padding:7px 0 9px; font-size:var(--fs-micro); color:var(--text-dimmer); }
+.ph .tabs span.on { color:var(--accent); }
+
+/* ── 弹出面板（点某一格展开的那张卡）──────────────────────────────────── */
+.pop { width:300px; background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--r-card);
+  padding:var(--sp-3); box-shadow:0 10px 30px rgba(0,0,0,.35); }
+.pop h5 { margin:0 0 var(--sp-2); font-size:var(--fs-meta); color:var(--text-dimmer);
+  letter-spacing:.1em; text-transform:uppercase; font-weight:600; }
+.pop .r { display:grid; grid-template-columns:1fr 54px 60px; gap:var(--sp-2); align-items:center;
+  padding:5px 2px; font-size:var(--fs-meta); }
+.pop .r + .r { border-top:1px solid var(--border-subtle); }
+.pop .r .n { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pop .r .v { font-family:var(--mono); text-align:right; color:var(--text-dim); }
+.pop .bar { height:5px; border-radius:var(--r-pill); background:var(--bg-base); overflow:hidden; }
+.pop .bar i { display:block; height:100%; background:var(--accent); }
+.pop .bar i.hot { background:var(--danger); }
+.pop .foot { margin-top:var(--sp-2); padding-top:var(--sp-2); border-top:1px solid var(--border-subtle);
+  font-size:var(--fs-micro); color:var(--text-dimmer); }
+
+.flow { display:grid; gap:var(--sp-2); margin:var(--sp-4) 0; }
+.step { display:grid; grid-template-columns:26px 1fr; gap:var(--sp-3); align-items:start;
+  padding:var(--sp-3) var(--sp-4); background:var(--bg-container);
+  border:1px solid var(--border-subtle); border-radius:var(--r-sm); }
+.step .i { width:26px; height:26px; border-radius:var(--r-pill); background:var(--accent-soft);
+  border:1px solid var(--accent-border); color:var(--accent);
+  display:flex; align-items:center; justify-content:center; font-size:var(--fs-meta); font-family:var(--mono); }
+.step .i.g { background:var(--ok-soft); border-color:var(--ok-border); color:var(--ok); }
+.step .i.r { background:var(--danger-soft); border-color:var(--danger-border); color:var(--danger); }
+.step b { display:block; font-weight:600; font-size:var(--fs-sm); margin-bottom:2px; }
+.step small { color:var(--text-dim); font-size:var(--fs-meta); line-height:1.6; }
+
+/* ── VS Code 对照与上下文矩阵 ─────────────────────────────────────────── */
+.sb .cell.rmt { background:var(--accent-solid); color:#fff; }
+.sb .cell.rmt .dot { background:rgba(255,255,255,.9); }
+.sb .cell.rmt:hover { background:color-mix(in srgb, var(--accent-solid) 82%, #fff); }
+.sb .sep { width:1px; align-self:center; height:12px; background:var(--border-subtle); margin:0 2px; flex:0 0 auto; }
+.sb .spin { width:11px; height:11px; border-radius:50%; flex:0 0 auto;
+  border:2px solid var(--border); border-top-color:var(--accent); animation:sbspin 1s linear infinite; }
+@keyframes sbspin { to { transform:rotate(360deg); } }
+.sb .cell.acc { color:var(--accent); }
+.sb .badge { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+.mx td.y { color:var(--text-bright); }
+.mx td.n { color:var(--text-dimmer); }
+.mx th:first-child, .mx td:first-child { white-space:nowrap; }
+.half { border-left:3px solid var(--accent-border); padding-left:var(--sp-3); margin:var(--sp-4) 0 var(--sp-2); }
+.half.r { border-left-color:var(--ok-border); }
+.half b { display:block; font-size:var(--fs-sm); }
+/* 稿件标注：给「这几格是插件注册的」画一条底线，真实界面上没有这条线 */
+.sb .cell.plug { position:relative; }
+.sb .cell.plug::after { content:""; position:absolute; left:3px; right:3px; bottom:0; height:2px;
+  background:var(--accent); opacity:.6; border-radius:2px; }
+.legend { display:flex; gap:var(--sp-4); flex-wrap:wrap; font-size:var(--fs-meta); color:var(--text-dimmer); margin:6px 2px 0; }
+.legend i { display:inline-block; width:16px; height:2px; border-radius:2px; vertical-align:3px; margin-right:6px; }
+.legend i.sys { background:var(--text-dimmer); opacity:.5; }
+.legend i.plg { background:var(--accent); opacity:.6; }
+/* 设置页里的「状态条」分组 */
+.setg { background:var(--bg-container); border:1px solid var(--border); border-radius:var(--r-card); padding:var(--sp-3) var(--sp-4); max-width:420px; }
+.setg h5 { margin:var(--sp-3) 0 var(--sp-2); font-size:var(--fs-micro); letter-spacing:.1em; text-transform:uppercase; color:var(--text-dimmer); font-weight:600; }
+.setg h5:first-child { margin-top:0; }
+.setg .row { display:flex; align-items:center; gap:var(--sp-2); padding:6px 0; font-size:var(--fs-sm); border-top:1px solid var(--border-subtle); }
+.setg .row:first-of-type { border-top:0; }
+.setg .row .src { font-family:var(--mono); font-size:var(--fs-micro); color:var(--text-dimmer); }
+.setg .sw { margin-left:auto; width:28px; height:16px; border-radius:var(--r-pill); background:var(--border); position:relative; flex:0 0 auto; }
+.setg .sw.on { background:var(--accent-solid); }
+.setg .sw::after { content:""; position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%; background:#fff; }
+.setg .sw.on::after { left:14px; }
+.setg .note { font-size:var(--fs-meta); color:var(--text-dim); margin-top:var(--sp-2); padding-top:var(--sp-2); border-top:1px solid var(--border-subtle); }
+.step small b, .half small b { display:inline; font-size:inherit; margin:0; color:var(--text-bright); }
+:root { --brand-claude:#d97757; }
+.half small { color:var(--text-dim); font-size:var(--fs-meta); }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div>
+    <div class="kicker">Roam · Web 设计 20</div>
+    <h1>底部状态条 — 一条 24px 的常驻读数</h1>
+  </div>
+  <div class="sp"></div>
+  <button class="tbtn" id="themeBtn" type="button">浅色</button>
+</div>
+
+<div class="wrap">
+
+<p class="lede">
+在壳的最底下加一条 24px 的常驻细条，长得像 <b class="hl">VS Code 的状态栏</b>：
+<b class="hl">左半是工作区</b>（这台机器、后台在跑什么、分支、要你处理的事、主机撑不撑得住），
+<b class="hl">右半是你此刻正对着的东西</b>（文件的行列/编码/语言、会话的 pane 尺寸与模型、镜像的设备）。
+左半不随页面变，右半随页面换——这正是 VS Code 二十年没改过的那条分界。
+平静时整条一种灰，只有越线的那一格上色。
+<b class="hl">条是壳，格是注册进来的</b>：宿主一格都不硬编码，连 CPU / 内存 / 磁盘那几格都由
+<code>roam.host-monitor</code> 插件走公开贡献点注册——第三方插件用的是同一条路。
+</p>
+<h2><span class="n">01</span>为什么要它：这些数字今天都不在屏幕上</h2>
+
+<p>
+Roam 现在有四个地方在报「状态」，但没有一个报<b class="hl">这台机器本身</b>：
+</p>
+
+<table>
+<thead><tr><th>今天在哪</th><th>报什么</th><th>问题</th></tr></thead>
+<tbody>
+<tr><td class="mono">WorkspaceTopbar</td><td>在线 / 离线小圆点、终端数</td><td>只说「网通不通」，不说机器怎么样；且手机没有顶栏</td></tr>
+<tr><td class="mono">Navigation 底座</td><td>机器切换器 + 中心红点、P2P 链路</td><td>轨态（收起 / Focus / 非 large）下只剩一个头像，名字和延迟都看不见</td></tr>
+<tr><td class="mono">SessionDock</td><td>几个会话、几个在等你</td><td>只有手机有</td></tr>
+<tr><td class="mono">中心页 / 护栏面板</td><td>中心 RSS、goroutine、会话内存</td><td>要专门点进去才看得见——而人只在出事之后才会想起去点</td></tr>
+</tbody>
+</table>
+
+<div class="card bad">
+<h4>这就是 2026-08-22 那次的形状</h4>
+<p>
+30 GB 的机器被一个 Claude Code 进程吃到 15.5 GB，界面上<b class="hl">从头到尾没有一处</b>
+说过内存在涨；发现它是因为机器卡死了。同一个形状在中心那次也出现过：goroutine 从 1518 爬到
+18298，十几个小时无人发现——<a href="../../reliability/memory-guard.html">R1 内存护栏</a>
+给了限额和曲线，但曲线要点进去看。<b class="hl">常驻可见</b>是护栏缺的那一半。
+</p>
+</div>
+
+
+<h2><span class="n">02</span>准入规则：什么有资格占这 24px</h2>
+
+<p>
+条上能放二十五格，但同一时刻只出现十来格。谁进谁不进，靠三条硬规则——
+第一条正是 VS Code 那条左右分界：
+</p>
+
+<div class="flow">
+  <div class="step"><div class="i">1</div><div>
+    <b>左半登载「不看就会错过」，右半登载「你此刻在动的那个东西」</b>
+    <small>左半是<b class="hl">工作区作用域</b>：机器、后台任务、分支、待办、主机负载——换页不变。
+    右半是<b class="hl">上下文作用域</b>：打开的是文件就给行列/编码/语言，聚焦的是会话就给
+    pane 尺寸/前台命令/模型，看的是镜像就给设备与分辨率。<b class="hl">一格只属于一半</b>，
+    两边都想要的格子说明它的作用域没想清楚。</small>
+  </div></div>
+  <div class="step"><div class="i">2</div><div>
+    <b>平静时只有一种颜色</b>
+    <small>全部 <code>--text-dim</code>。越阈值的那一格才变 <code>--warn</code> / <code>--danger</code>。
+    一条平时就有绿有蓝有黄的条，第四天起就没人再看它了。VS Code 那条<b class="hl">整条蓝底</b>我们不抄，
+    理由见 §04。</small>
+  </div></div>
+  <div class="step"><div class="i">3</div><div>
+    <b>每一格都要有去处</b>
+    <small>点分支去 Git 面板、点待办去那一页、点内存去护栏面板、点行列跳转行。
+    只读的格（编码、换行、pane 尺寸）也要能<b class="hl">点开看到出处</b>，
+    一个只能看不能点的数字，看见了也不知道下一步干什么。</small>
+  </div></div>
+</div>
+
+<h2><span class="n">03</span>位置与几何</h2>
+
+<h3>横跨整个窗口，包括侧栏</h3>
+
+<p>
+状态条<b class="hl">全宽</b>，在侧栏和工作区<em>之下</em>，不是只在工作区上方——和 VS Code 一样。
+它登载的东西作用域覆盖整个应用，包括左边那列导航看的是哪台机器。
+</p>
+<div class="fig"><div class="shell">  <div class="row">
+    <div class="nav"><i></i><i class="on"></i><i></i><i></i><div class="gap"></div><i></i><i></i></div>
+    <div class="main">
+      <div class="tb"><div class="s"></div><span style="margin-left:auto">＋ 新建</span></div>
+      <div class="body">
+        <div class="canvas"><i class="w60"></i><i class="w80"></i><i class="w40"></i><i class="w80"></i><i class="w60"></i></div>
+        <div class="dock">$ claude<br>&rsaquo; 正在写入…</div>
+      </div>
+    </div>
+  </div><div class="sb"><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span>roam-dev</span><i class="dot"></i></button><button class="cell btn acc"><span class="spin"></span><span>下载镜像 62%</span></button><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.8" r="2.2"/><circle cx="7" cy="19.2" r="2.2"/><circle cx="17" cy="19.2" r="2.2"/><path d="M12 7v2.6"/><path d="M12 9.6a4.4 4.4 0 0 0-5 4.4v3"/><path d="M12 9.6a4.4 4.4 0 0 1 5 4.4v3"/></svg><span>feat/status-bar</span><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m6 13 6 6 6-6"/></svg><span class="badge">1</span><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m6 11 6-6 6 6"/></svg><span class="badge">2</span></button><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3 6 2 2 3-3"/><path d="m3 14 2 2 3-3"/><path d="M12 7h9"/><path d="M12 15h9"/></svg><span>2 待确认</span></button><span class="sep"></span><button class="cell btn"><span class="lb">CPU</span><span class="mini"><i style="width:34%"></i></span><span class="vl">34%</span></button><button class="cell btn"><span class="lb">内存</span><span class="mini"><i style="width:38%"></i></span><span class="vl">12.1/32G</span></button><button class="cell btn"><span class="lb">磁盘</span><span class="vl">63%</span></button><span class="sp"></span><button class="cell btn"><span>行 128，列 32</span></button><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4a1 1 0 0 0 1 1h3l7 4V5L8 9H5a1 1 0 0 0-1 1Z"/><path d="M18.5 9a4 4 0 0 1 0 6"/></svg><span class="badge">3</span></button><button class="cell btn dim-t"><span class="mono">v0.9.3</span></button></div></div><div class="cap"><b>桌面 · 平静态，文件页（约 1000px 宽）。</b>左半四格 + 主机三格 + 右半一格 + 通知 + 版本。缩进 / 编码 / 换行 / 语言四格在这个宽度下已经被丢掉（§09 档 4）——这就是折叠的常态，而不是例外。整条只有一种灰。</div></div>
+<h3>几何与契约</h3>
+
+<table>
+<thead><tr><th>项</th><th>值</th><th>为什么</th></tr></thead>
+<tbody>
+<tr><td>高度</td><td class="mono">--status-h: 24px</td><td>与 <code>--topbar-h</code> 并列的新令牌（VS Code 是 22）。文字 <code>--fs-meta</code>（12px），行高压到 1</td></tr>
+<tr><td>底色</td><td class="mono">--bg-container</td><td>比页面 <code>--bg-base</code> 亮一档，一条实底就够分开，不必再描第二条边</td></tr>
+<tr><td>上边界</td><td class="mono">1px --border-subtle</td><td>下边界没有——它就贴在窗口底</td></tr>
+<tr><td>分隔</td><td class="mono">12px 竖线</td><td>只在<b class="hl">左半的分组之间</b>用一根（身份/后台/仓库 ｜ 主机），格与格之间靠间距分，不逐格描线</td></tr>
+<tr><td>外壳结构</td><td class="mono">flex-direction: column</td><td><code>App.tsx</code> 最外层 <code>&lt;Layout&gt;</code> 改列向：<code>[ 横向行(侧栏+工作区) ][ 状态条 ]</code></td></tr>
+<tr><td>侧栏高度</td><td class="mono">100dvh → 100%</td><td><code>&lt;Sider&gt;</code> 现在写死 <code>height:100dvh</code>，不改的话它会顶穿状态条</td></tr>
+<tr><td>安全区</td><td class="mono">padding-bottom: var(--safe-b)</td><td>它是最底下那一层，安全区归它吃</td></tr>
+</tbody>
+</table>
+
+<div class="card warn">
+<h4>文档不许滚动这条契约由它守，也可能被它破</h4>
+<p>
+壳是 <code>html,body{overflow:hidden}</code> 的固定高度盒（见 AGENTS「文档永远不滚动」）。
+状态条必须是 <b class="hl">flex 布局里的一格</b>（<code>flex:0 0 var(--status-h)</code>），
+<b class="hl">不能</b>用 <code>position:fixed</code> 贴底——fixed 不占位，上面那层照旧按
+<code>100dvh</code> 算高，最后一行内容永远压在条底下，而且横向滚动条一闪就把画布挪 10px。
+</p>
+</div>
+
+<h3>顺手删掉两处重复</h3>
+
+<table>
+<thead><tr><th></th><th>今天</th><th>之后</th></tr></thead>
+<tbody>
+<tr><td><span class="tag cut">撤</span></td><td>顶栏右侧「● 在线 / 离线」</td><td>并进状态条左端的机器格（同一颗点，位置更稳，且手机也有）</td></tr>
+<tr><td><span class="tag cut">撤</span></td><td>侧栏底座的机器切换器</td><td>搬到状态条第一格：轨态下那枚只剩一个头像，名字、延迟、中心红点全看不见——
+而状态条不随侧栏收起而变窄</td></tr>
+<tr><td><span class="tag cut">撤</span></td><td>侧栏底座的 P2P 链路 <code>LinkStatus</code></td><td>成为链路格。它本来就是 VS Code「端口转发」那一格的位置</td></tr>
+</tbody>
+</table>
+
+<h2><span class="n">04</span>照着 VS Code 抄什么，不抄什么</h2>
+
+<p>
+VS Code 的状态栏是这类控件里被磨得最久的一个，它的分组、位置、交互都值得直接照搬。
+逐项过一遍——<b class="hl">抄的是位置和语法，不是内容</b>：
+</p>
+
+<table>
+<thead><tr><th>VS Code</th><th>抄不抄</th><th>Roam 对应</th></tr></thead>
+<tbody>
+<tr><td>最左的<b>远程指示器</b>（实心块 <code>&gt;&lt;</code>）</td><td class="ok-t">抄</td>
+    <td><b class="hl">机器格</b>。不是本机时整格上实心强调底——这是全条<b class="hl">唯一</b>一块实心色，理由与 VS Code 一样：
+    「你现在动的不是本地」是最容易搞错、代价最大的一件事</td></tr>
+<tr><td><b>分支 + 同步</b>（<code>main</code> ↓2 ↑1）</td><td class="ok-t">抄</td>
+    <td>分支格。<code>/git/status</code> 今天就返回 <code>branch/ahead/behind</code>，箭头用 <code>ArrowUp</code>/<code>ArrowDown</code> 两枚 SVG，不是 <code>↑↓</code> 文字</td></tr>
+<tr><td><b>问题</b>（错误数 / 警告数）</td><td class="ok-t">抄形式</td>
+    <td><b class="hl">待办格</b>。Roam 没有编译错误，但有等价物：<b>n 待确认</b>（会话卡在权限确认）·
+    <b>n 待收尾</b>（已合入未清理的 worktree）· <b>n 发现</b>（插件 findings）。语法和 VS Code 一样：一个数字，点开是清单</td></tr>
+<tr><td><b>端口转发</b>（Ports）</td><td class="ok-t">抄</td><td>链路格：直连 / 隧道 / P2P + 当前速率。侧栏底座那枚 <code>LinkStatus</code> 搬过来</td></tr>
+<tr><td><b>后台任务进度</b>（转圈 + 一句话）</td><td class="ok-t">抄</td>
+    <td>后台格。Roam 的后台活儿比 VS Code 还重：系统镜像 2G 下载、模拟器冷启 37s、插件跑、P2P 传文件、Git fetch</td></tr>
+<tr><td><b>只读锁</b></td><td class="ok-t">抄</td><td>打开的文件没有写权限时出现一格「只读」，省得改半天存不进去</td></tr>
+<tr><td><b>Ln, Col</b>（点击=跳转行）</td><td class="ok-t">抄</td><td>文件页就是 Monaco，行列与「已选 n 行」原样搬，点击开跳转行</td></tr>
+<tr><td><b>缩进 / 编码 / 换行 / 语言</b></td><td class="ok-t">抄</td><td>四格照搬。缩进和语言可点（改），编码和换行只读</td></tr>
+<tr><td><b>通知铃铛</b>（最右）</td><td class="ok-t">抄</td><td>插件通知（<code>/plugin/notifications</code>）。位置也照搬——最右，最后一格</td></tr>
+<tr><td><b>Copilot 状态</b></td><td class="ok-t">抄，且加厚</td>
+    <td><b class="hl">Agent 格</b>：当前会话跑的是 Claude 还是 Codex、什么模型、上下文用掉多少。
+    这是 Roam 比 VS Code 更该有的一格——那边 agent 是插件，这边 agent 是主角</td></tr>
+<tr><td>Prettier / 格式化程序</td><td class="bad-t">不抄</td><td>Roam 不做格式化</td></tr>
+<tr><td>反馈笑脸</td><td class="bad-t">不抄</td><td>VS Code 自己也删了</td></tr>
+<tr><td><b>整条蓝底</b>（无文件夹时紫底）</td><td class="bad-t">不抄</td><td>见下</td></tr>
+<tr><td>右键逐格隐藏的长菜单</td><td class="warn-t">抄一半</td><td>给「显示哪些格」的开关（设置页 + 状态条右键），<b class="hl">但不做拖拽排序</b>——顺序固定才有肌肉记忆</td></tr>
+<tr><td><b>扩展贡献状态栏项</b>（<code>createStatusBarItem</code>）</td><td class="ok-t">抄，但改成声明式</td>
+    <td><b class="hl">这份设计的核心，见 §05。</b>VS Code 的扩展跑在扩展宿主进程里、能直接 <code>new</code> 一个状态栏项；
+    Roam 的插件是外部进程（<code>plugin run</code> 每次一个短命子进程），不可能让它渲染我们的 DOM。
+    所以贡献点是<b class="hl">声明式的</b>：插件在 manifest 里声明格子，只提供数据，宿主用固定的四种渲染器画</td></tr>
+<tr><td>—</td><td class="tag new">加</td><td><b class="hl">主机负载</b>（CPU / GPU / 内存 / 磁盘 / 温度 / 网络）。VS Code 这归扩展——
+    <b class="hl">Roam 也归扩展</b>：<code>roam.host-monitor</code> 是个 builtin 插件，早就在采这些数（还带 12 分钟趋势和一整页仪表盘），
+    这次只是让它把六格注册到条上。这台机器就是干活的机器，而它被一个 agent 吃爆过（<a href="../../reliability/memory-guard.html">R1</a>）</td></tr>
+<tr><td>—</td><td class="tag new">加</td><td><b class="hl">蜂群</b>、<b class="hl">会话数</b>、<b class="hl">镜像设备</b>——Roam 独有的三样上下文</td></tr>
+</tbody>
+</table>
+
+<div class="card bad">
+<h4>那条蓝底为什么不抄</h4>
+<p>
+VS Code 用整条蓝区分「打开了文件夹 / 没打开」，是二十年前留下的身份色。
+Roam 抄过来有两个实际问题：壳里已经有强调蓝在导航选中项和主按钮上，底部再铺一整条会把视线钉死在最底下；
+更要命的是深色主题下终端就贴在它上面，一条饱和蓝紧挨着一屏 <code>--bg-term</code> 非常吵。
+所以我们反过来：<b class="hl">平静时一整条灰，实心色只留给「不是本机」那一格</b>——
+把 VS Code 那块实心色的<em>信息量</em>留下，把它的<em>面积</em>丢掉。
+</p>
+</div>
+
+<h2><span class="n">05</span>注册制：条是壳，格是注册进来的</h2>
+
+<p>
+条上<b class="hl">两类格并存</b>：<b class="hl">系统格</b>（宿主自带，随二进制走，装不上也卸不掉）
+和<b class="hl">插件格</b>（注册进来的，可装可卸）。宿主本身<b class="hl">不画任何一格</b>——
+它只提供一条 24px 的横槽、四种渲染器、一套阈值判定和一套折叠规则；
+两类格<b class="hl">共用同一套契约</b>，但<b class="hl">不是同一等公民</b>，差别下面一张表说清。
+<code>contributes.statusItems</code> 是新的贡献点，和今天的
+<code>commands</code> / <code>configFields</code> / <code>notificationSinks</code> 并列
+（<a href="../../plugin/05-manifest.md">05-manifest §2</a> 那张表加一行）。
+</p>
+
+<h3>三个来源，两个等级</h3>
+
+<table>
+<thead><tr><th></th><th>系统格</th><th>内置插件格</th><th>第三方插件格</th></tr></thead>
+<tbody>
+<tr><td>谁提供</td><td>宿主的五个 provider<br><code>roam.core / git / tasks / editor / agent</code></td>
+    <td>随二进制分发的 builtin 插件<br><code>roam.host-monitor</code></td>
+    <td>用户装的插件<br><code>acme.ci</code>…</td></tr>
+<tr><td>数据源</td><td class="ok-t">进程内 state（不发请求）</td><td class="warn-t">按 <code>refresh</code> 调 <code>plugin run</code></td><td class="warn-t">同左</td></tr>
+<tr><td>位置</td><td class="ok-t">固定槽位（机器永远第一、版本永远最后）</td><td class="warn-t">只能落 <code>left-tail</code> / <code>right-head</code></td><td class="warn-t">同左</td></tr>
+<tr><td>默认可见</td><td class="ok-t">开</td><td class="ok-t">开</td><td class="bad-t">关</td></tr>
+<tr><td>格数上限</td><td>不限（但实际就那些）</td><td>6</td><td class="bad-t">2</td></tr>
+<tr><td>能不能卸掉</td><td class="bad-t">不能，只能在设置里隐藏</td><td class="warn-t">能停用插件</td><td class="ok-t">能卸载</td></tr>
+<tr><td>崩了会怎样</td><td>是宿主自己的 bug</td><td colspan="2" class="ok-t">只熄它那几格，条不受影响</td></tr>
+<tr><td colspan="4"><b class="hl">相同的部分</b>：贡献点结构、四种渲染器、阈值→severity 的判法、折叠档位与钉住规则、
+    stale 判定、设置里的开关。<b class="hl">插件格在条上看不出是插件的</b>——同一条槽、同一种长相。</td></tr>
+</tbody>
+</table>
+
+<div class="card">
+<h4>为什么系统格不做成插件</h4>
+<p>
+「全都是插件」听着更纯粹，但会付两笔代价：<b class="hl">机器格、待办格这些必须在第一帧就有值</b>，
+走 <code>plugin run</code> 意味着开局先空半秒；而它们的位置是肌肉记忆的锚，
+一旦进了「按 priority 排序的尾段」，装个插件就可能把机器格挤走。
+反过来，<b class="hl">主机负载做成插件是对的</b>——它本来就是插件，采集要读 <code>/proc</code>、要调
+<code>nvidia-smi</code>、要跨调用存计数器，那是插件该干的活，不是壳该干的。
+</p>
+</div>
+
+<div class="card good">
+<h4>主机监控是第一个用户，而且它已经在那儿了</h4>
+<p>
+<code>roam.host-monitor</code>（<code>plugins/hostmonitor/</code>）是个 builtin 插件，
+今天就在采 CPU / GPU / 内存 / 磁盘 / 网络 + 12 分钟趋势，插件页里还挂着一整页仪表盘。
+这次<b class="hl">不写新后端、不加新接口</b>——只在它的 manifest 里多声明六个
+<code>statusItems</code>，那六格就出现在条上了。它走的是<b class="hl">第三方插件将来要走的同一条路</b>，
+没有任何特权通道。
+</p>
+</div>
+
+<h3>贡献点长什么样</h3>
+
+<pre><code><span class="c">// plugins/hostmonitor/register.go —— Contributes 里多这一段</span>
+<span class="k">"statusItems"</span>: [
+  {
+    <span class="k">"id"</span>:       "cpu",                       <span class="c">// 全局 id = roam.host-monitor/cpu</span>
+    <span class="k">"title"</span>:    { "zh-CN": "CPU", "en-US": "CPU" },
+    <span class="k">"align"</span>:    "left",                      <span class="c">// left | right</span>
+    <span class="k">"priority"</span>: 40,                          <span class="c">// 同段内从大到小</span>
+    <span class="k">"tier"</span>:     2,                           <span class="c">// 折叠档位 1..4（§09），不填=3</span>
+    <span class="k">"render"</span>:   "gauge",                     <span class="c">// text | gauge | dot | progress</span>
+    <span class="k">"source"</span>: {                             <span class="c">// 拉模型：宿主按 refresh 调命令取 path</span>
+      <span class="k">"command"</span>: "host-monitor.stats",
+      <span class="k">"refresh"</span>: 3,
+      <span class="k">"path"</span>:    "cpu.usagePercent"
+    },
+    <span class="k">"unit"</span>: "percent",
+    <span class="k">"thresholds"</span>: { <span class="k">"warn"</span>: 70, <span class="k">"danger"</span>: 95, <span class="k">"sustainSec"</span>: 60 },
+    <span class="k">"onClick"</span>: { <span class="k">"kind"</span>: "pluginView", <span class="k">"id"</span>: "roam.host-monitor" }
+  },
+  <span class="c">// 另外五格：memory.usagePercent · disks[0].usagePercent · cpu.tempC</span>
+  <span class="c">//           gpus[0].utilPercent · network.rxBytesPerSec</span>
+]</code></pre>
+
+<p>
+一次声明，六格上条。<b class="hl">GPU 那格是最好的证据</b>：主机监控本来就在采
+<code>gpus[].utilPercent</code>，条上多一格 <code>GPU 41% · 6.2/24G</code>，宿主一行代码都不用改。
+</p>
+<div class="fig"><div class="win"><div class="sb"><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span>roam-dev</span><i class="dot"></i></button><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.8" r="2.2"/><circle cx="7" cy="19.2" r="2.2"/><circle cx="17" cy="19.2" r="2.2"/><path d="M12 7v2.6"/><path d="M12 9.6a4.4 4.4 0 0 0-5 4.4v3"/><path d="M12 9.6a4.4 4.4 0 0 1 5 4.4v3"/></svg><span>main</span></button><span class="sep"></span><button class="cell btn plug"><span class="lb">CPU</span><span class="mini"><i style="width:34%"></i></span><span class="vl">34%</span></button><button class="cell btn plug"><span class="lb">内存</span><span class="mini"><i style="width:38%"></i></span><span class="vl">12.1/32G</span></button><button class="cell btn plug"><span class="lb">磁盘</span><span class="vl">63%</span></button><button class="cell btn plug"><span class="lb">温度</span><span class="vl">61°C</span></button><button class="cell btn plug"><span class="lb">GPU</span><span class="mini"><i style="width:41%"></i></span><span class="vl">41%</span></button><button class="cell btn plug"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m6 13 6 6 6-6"/></svg><span class="vl">2.1M</span><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m6 11 6-6 6 6"/></svg><span class="vl">340K</span></button><button class="cell btn plug"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3 6 2 2 3-3"/><path d="m3 14 2 2 3-3"/><path d="M12 7h9"/><path d="M12 15h9"/></svg><span>CI 通过</span></button><span class="sp"></span><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4a1 1 0 0 0 1 1h3l7 4V5L8 9H5a1 1 0 0 0-1 1Z"/><path d="M18.5 9a4 4 0 0 1 0 6"/></svg><span class="badge">3</span></button><button class="cell btn dim-t"><span class="mono">v0.9.3</span></button></div></div><div class="legend"><span><i class="sys"></i>系统格（宿主自带）</span><span><i class="plg"></i>插件格（注册进来的）</span><span>底线只是这份稿子的标注，真实界面上没有</span></div><div class="cap"><b>两类格并排。</b>机器 · 分支 · 通知 · 版本是<b>系统格</b>；中间六格是内置插件 <code>roam.host-monitor</code> 注册的；<code>CI 通过</code>那格来自第三方插件 <code>acme.ci</code>（装了它、并且在设置里打开之后才出现）。<b>三者在条上长得一模一样，这正是目的</b>——装了 N 卡就多一格 GPU，没有就少一格，判据是 <code>nvidia-smi</code> 取不取得到，而不是宿主里的一个 if。</div></div>
+<h3>四条硬约束</h3>
+
+<div class="flow">
+  <div class="step"><div class="i r">1</div><div>
+    <b>插件给数据，不给 DOM</b>
+    <small>VS Code 的扩展跑在扩展宿主进程里，可以直接造一个状态栏项；Roam 的插件是
+    <b class="hl">外部进程</b>（<code>plugin run</code> 每次一个短命子进程），让它往我们页面里塞标记
+    等于把 XSS 写进设计。所以贡献点是声明式的：<code>render</code> 只能从
+    <code>text / gauge / dot / progress</code> 四选一，图标只能按名字从
+    <code>icons.tsx</code> 取，<b class="hl">不能自带 SVG、不能自带颜色</b>。
+    这和 <code>configFields</code>「插件零前端、表单由宿主渲染」是同一个思路。</small>
+  </div></div>
+  <div class="step"><div class="i r">2</div><div>
+    <b>红黄绿由宿主判，不由插件说</b>
+    <small>插件报 <code>value</code>，宿主拿声明的 <code>thresholds</code> 判 severity。
+    要是让插件自己说「我现在是 danger」，<b class="hl">每个插件都会把自己染红</b>——
+    第三个红格出现的那天，这条就报废了。<code>sustainSec</code> 也在宿主这边算（CPU 那条 60s 滞后，见 §08）。</small>
+  </div></div>
+  <div class="step"><div class="i r">3</div><div>
+    <b>位置由段决定，不由插件抢</b>
+    <small>内置格的位置是<b class="hl">写死的</b>——机器永远第一，版本永远最后，肌肉记忆靠这个。
+    插件格只能落进两个段：<code>left-tail</code>（左半尾）和 <code>right-head</code>（右半头），
+    段内按 <code>priority</code> 从大到小、同分按 id 字典序（稳定，不会因为装插件的顺序抖动）。
+    <code>priority</code> 只在段内有意义，<b class="hl">再大也插不到机器格前面</b>。</small>
+  </div></div>
+  <div class="step"><div class="i r">4</div><div>
+    <b>一个 provider 崩了，只熄它那几格</b>
+    <small>宿主<b class="hl">永远不 await 插件来渲染第一帧</b>：条先画出来，格子有值了再填。
+    命令超时 1s、连续失败 3 次熄灯并退避到 60s 重试、值超过 <code>3×refresh</code> 判 stale
+    （变暗置 <code>--</code>，见 §08 ④）。插件死了条不动，这是底线。</small>
+  </div></div>
+</div>
+
+<h3>预算：不给它撑爆的机会</h3>
+
+<table>
+<thead><tr><th>项</th><th>默认</th><th>为什么</th></tr></thead>
+<tbody>
+<tr><td>每插件格数</td><td class="mono">2</td><td>内置 provider 可以多（主机监控 6 格），第三方 2 格封顶——一条 24px 装不下三个插件各五格</td></tr>
+<tr><td>最小 <code>refresh</code></td><td class="mono">2s</td><td><code>plugin run</code> 每次起一个子进程。主机监控自己的面板用的是 3s，条上沿用</td></tr>
+<tr><td>单次超时</td><td class="mono">1s</td><td>超时就不画这一帧，绝不卡住整条</td></tr>
+<tr><td>文本长度</td><td class="mono">24 字符</td><td>超出截断。一个插件不该有能力把条撑满</td></tr>
+<tr><td>第三方格默认可见性</td><td class="mono">关</td><td>装了插件 ≠ 同意它上我的状态条。插件详情页显示「想在状态条放 2 格」+ 一键打开；
+    <b class="hl">内置 provider 默认开</b></td></tr>
+<tr><td>页面不可见</td><td class="mono">全停</td><td><code>document.hidden</code> 时所有拉取停掉——否则后台标签页每 3 秒起一堆子进程</td></tr>
+</tbody>
+</table>
+
+<div class="card warn">
+<h4>插件报了一个系统格已经在报的东西</h4>
+<p>
+比如装了个插件也报 CPU。<b class="hl">不拦</b>——拦了就得维护一张「哪些语义已被占用」的清单，
+而那张清单永远不全。做法是：系统格<b class="hl">永远占它的固定槽位</b>，插件那一格落在尾段，
+两个 CPU 一左一右并排显示；设置页里两条都列着、各带来源，你自己关掉一个。
+<b class="hl">看得见的重复比看不见的覆盖好</b>。
+</p>
+</div>
+
+<h3>用户看得见两类格的区别</h3>
+
+<p>
+条上看不出，<b class="hl">设置里必须看得出</b>——不然你没法回答「这个数是谁报的、准不准、能不能关」。
+设置页新增一节「状态条」，按来源分组，插件格额外标出来自哪个插件：
+</p>
+<div class="fig"><div class="setg">
+  <h5>系统格</h5>
+  <div class="row"><span>机器</span><span class="src">roam.core</span><span class="sw on"></span></div>
+  <div class="row"><span>分支 · 改动</span><span class="src">roam.git</span><span class="sw on"></span></div>
+  <div class="row"><span>待办 · 后台 · 蜂群</span><span class="src">roam.tasks</span><span class="sw on"></span></div>
+  <div class="row"><span>编辑器上下文</span><span class="src">roam.editor</span><span class="sw on"></span></div>
+  <div class="row"><span>会话与 Agent</span><span class="src">roam.agent</span><span class="sw on"></span></div>
+
+  <h5>插件格</h5>
+  <div class="row"><span>主机监控 · 6 格</span><span class="src">roam.host-monitor · 内置</span><span class="sw on"></span></div>
+  <div class="row"><span>CI 状态 · 1 格</span><span class="src">acme.ci · 第三方</span><span class="sw on"></span></div>
+  <div class="row"><span>天气 · 1 格</span><span class="src">someone.weather · 第三方</span><span class="sw"></span></div>
+  <div class="note">第三方插件的格<b>装上就默认关着</b>，要你在这里打开——
+    装了插件不等于同意它上你的状态条。系统格关不掉来源，只能隐藏。</div>
+</div><div class="cap"><b>设置 · 状态条。</b>分组本身就是答案：「这个 61°C 是谁报的」——主机监控插件；「能不能让它别再报了」——能，这里关掉，或者停用那个插件。</div></div>
+<h3>拉与推</h3>
+
+<p>
+默认<b class="hl">拉</b>：宿主按 <code>refresh</code> 调
+<code>POST /plugins/&lt;id&gt;/run</code>，从返回的 JSON 里按 <code>path</code> 取值——
+这正是主机监控面板今天在做的事，一条新接口都不用加。
+常驻插件（<code>runtime.resident</code>）可以声明 <code>"push": true</code>，
+改由 SDK 的 <code>roam.status.set(itemId, value)</code> 主动推（IM 桥那种长连接插件适合这个）。
+两条路进同一张注册表，渲染侧不区分。
+</p>
+
+<div class="card">
+<h4>六个 provider，各注册哪些格</h4>
+<p>
+五个系统 provider 加一个插件，<b class="hl">用的是同一个贡献点结构</b>——这是整件事成不成立的判据：
+</p>
+<table>
+<thead><tr><th>provider</th><th>注册的格</th></tr></thead>
+<tbody>
+<tr><td class="mono">roam.core</td><td>机器 · 中心 · 会话 · 通知 · 版本</td></tr>
+<tr><td class="mono">roam.git</td><td>分支 · 改动</td></tr>
+<tr><td class="mono">roam.tasks</td><td>后台 · 待办 · 蜂群</td></tr>
+<tr><td class="mono">roam.host-monitor <span class="tag">插件</span></td><td>CPU · 内存 · 磁盘 · 温度 · GPU · 网络</td></tr>
+<tr><td class="mono">roam.editor</td><td>未保存 · 只读 · 行列 · 缩进 · 编码换行 · 语言</td></tr>
+<tr><td class="mono">roam.agent</td><td>Agent · 上下文 · pane · 前台命令 · 设备</td></tr>
+</tbody>
+</table>
+<p>
+差别只有两处：内置 provider 的数据源是<b class="hl">进程内的 state</b>（不是 <code>plugin run</code>），
+位置可以落在固定槽位而不是两个尾段。<b class="hl">要是宿主自己的格走后门，这套注册制两个月就烂了</b>——
+到时候没人记得那条公开路径还能不能用。
+</p>
+</div>
+
+<p>
+配套还要动一处 manifest 规范：激活事件加 <code>onStatusItem:&lt;id&gt;</code>
+（第一次要渲染这一格时才拉起插件），贡献点表加 <code>statusItems</code> 一行，分期 v1。
+</p>
+
+<h2><span class="n">06</span>全量分格：左半 13 格，右半 12 格</h2>
+
+<div class="half"><b>左半 · 工作区作用域</b><small>换页不变。从左到右：身份 ｜ 后台 ｜ 仓库 ｜ 主机 ｜ 链路。「来自」那列标出是<b>系统格</b>还是<b>插件格</b>——主机那六格全是插件的（§05）。</small></div>
+
+<table>
+<thead><tr><th>#</th><th>格</th><th>来自</th><th>显示</th><th>点它</th><th>什么时候不出现</th></tr></thead>
+<tbody>
+<tr><td class="mono">L1</td><td><b>机器</b></td><td><span class="tag">系统</span> <span class="mono dim-t">core</span></td><td><code>HostIcon</code> + 名字 + 状态点（多机时加延迟）；<b class="hl">非本机时整格实心强调底</b></td><td>机器切换菜单（沿用侧栏那份 <code>nodeMenu</code>）</td><td>永远在。它是这条的锚</td></tr>
+<tr><td class="mono">L2</td><td><b>中心</b></td><td><span class="tag">系统</span> <span class="mono dim-t">core</span></td><td><code>CloudIcon</code> + 「正常 / 不健康」</td><td>中心页 <code>#/hub</code></td><td>没接入中心时</td></tr>
+<tr><td class="mono">L3</td><td><b>后台</b></td><td><span class="tag">系统</span> <span class="mono dim-t">tasks</span></td><td>转圈 + 最重那件事：<code>下载镜像 62%</code>；多件时 <code>3 个任务</code></td><td>任务弹层：逐条进度 + 取消</td><td>没有后台任务时</td></tr>
+<tr><td class="mono">L4</td><td><b>分支</b></td><td><span class="tag">系统</span> <span class="mono dim-t">git</span></td><td><code>ForkIcon</code> + 分支名 + 落后/领先数（两枚箭头图标）</td><td>Git 面板；再点箭头 = 拉取 / 推送</td><td>当前上下文不在 Git 仓库里时</td></tr>
+<tr><td class="mono">L5</td><td><b>改动</b></td><td><span class="tag">系统</span> <span class="mono dim-t">git</span></td><td><code>+128 −34</code>，未提交的行数</td><td>Git 面板的改动页</td><td>工作区干净时</td></tr>
+<tr><td class="mono">L6</td><td><b>待办</b></td><td><span class="tag">系统</span> <span class="mono dim-t">tasks</span></td><td><code>2 待确认 · 1 待收尾</code>（+ 插件发现数）</td><td>逐项进对应页</td><td>三样都是 0 时</td></tr>
+<tr><td class="mono">L7</td><td><b>蜂群</b></td><td><span class="tag">系统</span> <span class="mono dim-t">tasks</span></td><td><code>SwarmIcon</code> + <code>2 群 · 7 成员</code></td><td>蜂群台</td><td>没有活跃蜂群时</td></tr>
+<tr><td class="mono">L8</td><td><b>CPU</b></td><td><span class="tag new">插件</span> <span class="mono" style="color:var(--accent)">host-monitor</span></td><td><code>CPU</code> + 迷你条 + 百分比</td><td>主机卡：1/5/15 分钟负载 + 核数</td><td>取不到时整格不渲染</td></tr>
+<tr><td class="mono">L9</td><td><b>内存</b></td><td><span class="tag new">插件</span> <span class="mono" style="color:var(--accent)">host-monitor</span></td><td><code>内存</code> + 迷你条 + <code>12.1/32G</code></td><td>主机卡：吃得最多的三个会话，可直达护栏面板</td><td>同上</td></tr>
+<tr><td class="mono">L10</td><td><b>磁盘 / 温度</b></td><td><span class="tag new">插件</span> <span class="mono" style="color:var(--accent)">host-monitor</span></td><td>最满那块盘的百分比；有传感器时再给一格 <code>61°C</code></td><td>磁盘去文件页该挂载点；温度开主机卡</td><td>同上（多数云主机没有温度）</td></tr>
+<tr><td class="mono">L11</td><td><b>GPU</b></td><td><span class="tag new">插件</span> <span class="mono" style="color:var(--accent)">host-monitor</span></td><td><code>GPU</code> + 迷你条 + <code>41% · 6.2/24G</code></td><td>主机监控面板</td><td>没有 N 卡时（<code>nvidia-smi</code> 取不到）</td></tr>
+<tr><td class="mono">L12</td><td><b>网络</b></td><td><span class="tag new">插件</span> <span class="mono" style="color:var(--accent)">host-monitor</span></td><td><code>2.1M</code> / <code>340K</code>，收发各配一枚 <code>ArrowDown</code> / <code>ArrowUp</code></td><td>主机监控面板</td><td>速率长时间为 0 时</td></tr>
+<tr><td class="mono">L13</td><td><b>链路</b></td><td><span class="tag">系统</span> <span class="mono dim-t">core</span></td><td><code>LinkIcon</code> + <code>直连 / 隧道 / P2P</code> + 传输中时给速率</td><td>链路卡：通道、延迟、走了多少字节</td><td>本机直连且没有传输时</td></tr>
+</tbody>
+</table>
+
+<div class="half r"><b>右半 · 上下文作用域</b><small>跟着「你此刻在动什么」换。同一时刻只会出现其中一组。</small></div>
+
+<table>
+<thead><tr><th>#</th><th>格</th><th>来自</th><th>显示</th><th>点它</th><th>出现在</th></tr></thead>
+<tbody>
+<tr><td class="mono">R1</td><td><b>未保存</b></td><td><span class="tag">系统</span> <span class="mono dim-t">editor</span></td><td>黄点 + <code>未保存</code></td><td>保存（<code>⌘S</code> 的第二入口）</td><td rowspan="6">文件页 / 文件工作区（Monaco）</td></tr>
+<tr><td class="mono">R2</td><td><b>只读</b></td><td><span class="tag">系统</span> <span class="mono dim-t">editor</span></td><td><code>只读</code></td><td>说明为什么（无写权限 / 二进制 / 大文件截断）</td></tr>
+<tr><td class="mono">R3</td><td><b>行 : 列</b></td><td><span class="tag">系统</span> <span class="mono dim-t">editor</span></td><td><code>行 128，列 32</code>；有选区时 <code>已选 12 行 340 字</code></td><td>跳转行</td></tr>
+<tr><td class="mono">R4</td><td><b>缩进</b></td><td><span class="tag">系统</span> <span class="mono dim-t">editor</span></td><td><code>空格: 2</code> / <code>制表符: 4</code></td><td>改这个文件的缩进</td></tr>
+<tr><td class="mono">R5</td><td><b>编码 · 换行</b></td><td><span class="tag">系统</span> <span class="mono dim-t">editor</span></td><td><code>UTF-8</code> · <code>LF</code></td><td>只读，点开说明出处</td></tr>
+<tr><td class="mono">R6</td><td><b>语言</b></td><td><span class="tag">系统</span> <span class="mono dim-t">editor</span></td><td><code>TypeScript</code></td><td>改语言模式（影响高亮）</td></tr>
+<tr><td class="mono">R7</td><td><b>Agent</b></td><td><span class="tag">系统</span> <span class="mono dim-t">agent</span></td><td><code>AgentLogo</code> + <code>Claude · Opus 5</code></td><td>切到对话页</td><td rowspan="4">会话页 / 终端坞聚焦时</td></tr>
+<tr><td class="mono">R8</td><td><b>上下文</b></td><td><span class="tag">系统</span> <span class="mono dim-t">agent</span></td><td><code>上下文 62%</code>，迷你条；≥85% 上黄</td><td>对话页顶部</td></tr>
+<tr><td class="mono">R9</td><td><b>pane</b></td><td><span class="tag">系统</span> <span class="mono dim-t">agent</span></td><td><code>80×24</code></td><td>只读；点开说明「窄于 60 列时 TUI 会花屏」</td></tr>
+<tr><td class="mono">R10</td><td><b>前台命令</b></td><td><span class="tag">系统</span> <span class="mono dim-t">agent</span></td><td><code>claude</code> / <code>codex</code> / <code>bash</code></td><td>只读</td></tr>
+<tr><td class="mono">R11</td><td><b>设备</b></td><td><span class="tag">系统</span> <span class="mono dim-t">agent</span></td><td><code>DeviceIcon</code> + <code>Pixel 7 · 1080×2400</code>；浏览器镜像时给 <code>GlobeIcon</code> + 域名</td><td>手机 / 浏览器页的设备切换</td><td>手机镜像 / 浏览器镜像页</td></tr>
+<tr><td class="mono">R12</td><td><b>通知 · 版本</b></td><td><span class="tag">系统</span> <span class="mono dim-t">core</span></td><td><code>MegaphoneIcon</code> + 未读数；<code>v0.9.3</code></td><td>通知抽屉 / 关于页</td><td>永远在，最右</td></tr>
+</tbody>
+</table>
+
+<div class="card">
+<h4>不加新图标</h4>
+<p>
+二十五格里带图标的只有九格，用的全是现成的：<code>HostIcon</code> / <code>CloudIcon</code>
+（<code>cluster-icons.tsx</code>），<code>ForkIcon</code> / <code>ArrowUp</code> / <code>ArrowDown</code> /
+<code>SwarmIcon</code> / <code>LinkIcon</code> / <code>TerminalIcon</code> / <code>DeviceIcon</code> /
+<code>GlobeIcon</code> / <code>MegaphoneIcon</code> / <code>WarnIcon</code> / <code>AgentLogo</code>
+（<code>icons.tsx</code>）。CPU / 内存 / 磁盘 / 温度 / 缩进 / 编码这些用<b class="hl">两三个字的文案</b>：
+12px 高度下芯片、内存条、硬盘三枚线性图标彼此难分，而「内存」两个字没有歧义，还能进 i18n——
+VS Code 右半那几格也是纯文字，不是巧合。
+</p>
+</div>
+
+<h2><span class="n">07</span>右半随页面换：一页一张脸</h2>
+
+<p>左半那十三格换页不动。右半按<b class="hl">当前激活的对象</b>整组替换——不是叠加，是替换：</p>
+
+<table class="mx">
+<thead><tr><th>你在看</th><th>右半给什么</th><th>不给什么</th></tr></thead>
+<tbody>
+<tr><td>项目页 / 概览</td><td class="y">通知 · 版本</td><td class="n">没有激活对象，右半基本是空的——这是对的</td></tr>
+<tr><td>文件页（Monaco）</td><td class="y">未保存 · 只读 · 行列 · 缩进 · 编码换行 · 语言</td><td class="n">Agent / pane / 设备</td></tr>
+<tr><td>文件页（图片 / PDF / 视频）</td><td class="y">尺寸或时长 · 文件大小</td><td class="n">行列 / 缩进 / 编码——它们对二进制没有意义</td></tr>
+<tr><td>会话页 / 终端坞聚焦</td><td class="y">Agent · 上下文 · pane 尺寸 · 前台命令</td><td class="n">行列 / 编码 / 语言</td></tr>
+<tr><td>对话页（Claude / Codex）</td><td class="y">Agent · 上下文</td><td class="n">pane 尺寸（对话页不看终端几何）</td></tr>
+<tr><td>手机 / 浏览器镜像</td><td class="y">设备 · 分辨率 / 域名</td><td class="n">其余全部</td></tr>
+<tr><td>Git 面板</td><td class="y">对比基线（<code>vs origin/main</code>）</td><td class="n">左半的分支格已经说了分支，这里只补「跟谁比」</td></tr>
+</tbody>
+</table>
+
+<p>
+桌面上<b class="hl">分栏</b>时（左边文件、右边终端）右半跟<b class="hl">焦点</b>走，不跟鼠标走——
+和 VS Code 一模一样：点进终端，右半立刻从「行 128，列 32」换成「80×24 · claude」。
+焦点的判定沿用工作区已有的 <code>space.focus</code>，不新造一套。
+</p>
+<div class="fig"><div class="win"><div class="sb"><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span>roam-dev</span><i class="dot"></i></button><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.8" r="2.2"/><circle cx="7" cy="19.2" r="2.2"/><circle cx="17" cy="19.2" r="2.2"/><path d="M12 7v2.6"/><path d="M12 9.6a4.4 4.4 0 0 0-5 4.4v3"/><path d="M12 9.6a4.4 4.4 0 0 1 5 4.4v3"/></svg><span>main</span></button><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3 6 2 2 3-3"/><path d="m3 14 2 2 3-3"/><path d="M12 7h9"/><path d="M12 15h9"/></svg><span>1 待收尾</span></button><span class="sep"></span><button class="cell btn"><span class="lb">CPU</span><span class="mini"><i style="width:21%"></i></span><span class="vl">21%</span></button><button class="cell btn"><span class="lb">内存</span><span class="mini"><i style="width:30%"></i></span><span class="vl">9.6/32G</span></button><button class="cell btn"><span class="lb">磁盘</span><span class="vl">63%</span></button><span class="sp"></span><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4a1 1 0 0 0 1 1h3l7 4V5L8 9H5a1 1 0 0 0-1 1Z"/><path d="M18.5 9a4 4 0 0 1 0 6"/></svg><span class="badge">3</span></button><button class="cell btn dim-t"><span class="mono">v0.9.3</span></button></div></div><div class="cap"><b>① 项目页。</b>没有激活对象，右半只剩通知与版本——空着比硬填有意义。</div></div><div class="fig"><div class="win"><div class="sb"><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span>roam-dev</span><i class="dot"></i></button><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.8" r="2.2"/><circle cx="7" cy="19.2" r="2.2"/><circle cx="17" cy="19.2" r="2.2"/><path d="M12 7v2.6"/><path d="M12 9.6a4.4 4.4 0 0 0-5 4.4v3"/><path d="M12 9.6a4.4 4.4 0 0 1 5 4.4v3"/></svg><span>feat/status-bar</span><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m6 13 6 6 6-6"/></svg><span class="badge">1</span><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m6 11 6-6 6 6"/></svg><span class="badge">2</span></button><button class="cell btn warn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3 6 2 2 3-3"/><path d="m3 14 2 2 3-3"/><path d="M12 7h9"/><path d="M12 15h9"/></svg><span>2 待确认</span></button><span class="sep"></span><button class="cell btn"><span class="lb">内存</span><span class="mini"><i style="width:38%"></i></span><span class="vl">12.1/32G</span></button><span class="sp"></span><button class="cell btn warn"><i class="dot" style="background:var(--warn)"></i><span>未保存</span></button><button class="cell btn"><span>行 128，列 32</span></button><button class="cell btn"><span>空格: 2</span></button><button class="cell btn"><span>UTF-8 · LF</span></button><button class="cell btn"><span>TypeScript</span></button><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4a1 1 0 0 0 1 1h3l7 4V5L8 9H5a1 1 0 0 0-1 1Z"/><path d="M18.5 9a4 4 0 0 1 0 6"/></svg><span class="badge">3</span></button><button class="cell btn dim-t"><span class="mono">v0.9.3</span></button></div></div><div class="cap"><b>② 文件页，Monaco 打开 <code>StatusBar.tsx</code>。</b>右半是 VS Code 那五格的原样搬运——为了让它们全出场，后台、改动、CPU、磁盘先让了位（同档内从右往左，主机格里不越线的先走）。待办格因为有 2 个会话卡在确认而黄。</div></div><div class="fig"><div class="win"><div class="sb"><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span>roam-dev</span><i class="dot"></i></button><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.8" r="2.2"/><circle cx="7" cy="19.2" r="2.2"/><circle cx="17" cy="19.2" r="2.2"/><path d="M12 7v2.6"/><path d="M12 9.6a4.4 4.4 0 0 0-5 4.4v3"/><path d="M12 9.6a4.4 4.4 0 0 1 5 4.4v3"/></svg><span>feat/status-bar</span><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m6 11 6-6 6 6"/></svg><span class="badge">2</span></button><span class="sep"></span><button class="cell btn"><span class="lb">CPU</span><span class="mini"><i style="width:72%"></i></span><span class="vl">72%</span></button><button class="cell btn"><span class="lb">内存</span><span class="mini"><i style="width:64%"></i></span><span class="vl">20.4/32G</span></button><span class="sp"></span><button class="cell btn"><i class="dot" style="background:#d97757"></i><span>Claude · Opus 5</span></button><button class="cell btn"><span class="lb">上下文</span><span class="mini"><i style="width:62%"></i></span><span class="vl">62%</span></button><button class="cell btn"><span>80×24</span></button><button class="cell btn dim-t"><span>claude</span></button><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4a1 1 0 0 0 1 1h3l7 4V5L8 9H5a1 1 0 0 0-1 1Z"/><path d="M18.5 9a4 4 0 0 1 0 6"/></svg><span class="badge">3</span></button><button class="cell btn dim-t"><span class="mono">v0.9.3</span></button></div></div><div class="cap"><b>③ 终端聚焦。</b>右半整组换掉：Agent 品牌色那一点用 <code>--brand-claude</code>（品牌标不改画法、不改颜色）。pane 尺寸这格看着无聊，但它是「窄屏 TUI 花屏」那类问题的第一现场。</div></div><div class="fig"><div class="win"><div class="sb"><button class="cell btn rmt"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span>jetson</span><i class="dot"></i><span class="vl">34ms</span></button><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.8" r="2.2"/><circle cx="7" cy="19.2" r="2.2"/><circle cx="17" cy="19.2" r="2.2"/><path d="M12 7v2.6"/><path d="M12 9.6a4.4 4.4 0 0 0-5 4.4v3"/><path d="M12 9.6a4.4 4.4 0 0 1 5 4.4v3"/></svg><span>main</span></button><span class="sep"></span><button class="cell btn"><span class="lb">CPU</span><span class="mini"><i style="width:88%"></i></span><span class="vl">88%</span></button><button class="cell btn"><span class="lb">内存</span><span class="mini"><i style="width:71%"></i></span><span class="vl">5.7/8G</span></button><button class="cell btn"><span class="lb">温度</span><span class="vl">72°C</span></button><span class="sp"></span><button class="cell btn"><span>80×24</span></button><button class="cell btn dim-t"><span>claude</span></button><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4a1 1 0 0 0 1 1h3l7 4V5L8 9H5a1 1 0 0 0-1 1Z"/><path d="M18.5 9a4 4 0 0 1 0 6"/></svg><span class="badge">3</span></button><button class="cell btn dim-t"><span class="mono">v0.9.3</span></button></div></div><div class="cap"><b>④ 切到 jetson。</b>机器格上<b>实心强调底</b>——全条唯一一块实心色。这就是 VS Code 远程指示器那块颜色的全部理由：在别人的机器上敲 <code>rm</code> 之前，你得先知道自己在别人的机器上。顺带，Jetson 有温度传感器，那一格于是出现了。</div></div><div class="fig"><div class="win"><div class="sb"><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span>roam-dev</span><i class="dot"></i></button><button class="cell btn acc"><span class="spin"></span><span>模拟器启动中 · 已 21s</span></button><span class="sep"></span><button class="cell btn"><span class="lb">CPU</span><span class="mini"><i style="width:94%"></i></span><span class="vl">94%</span></button><button class="cell btn"><span class="lb">内存</span><span class="mini"><i style="width:52%"></i></span><span class="vl">16.6/32G</span></button><button class="cell btn"><span class="lb">磁盘</span><span class="vl">63%</span></button><span class="sp"></span><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18.5h2"/></svg><span>xh_tv4k · 3840×2160</span></button><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4a1 1 0 0 0 1 1h3l7 4V5L8 9H5a1 1 0 0 0-1 1Z"/><path d="M18.5 9a4 4 0 0 1 0 6"/></svg><span class="badge">3</span></button><button class="cell btn dim-t"><span class="mono">v0.9.3</span></button></div></div><div class="cap"><b>⑤ 手机镜像页。</b>右半只剩设备与分辨率。后台格在数模拟器冷启的秒数——那件事要 37 秒，没有这一格的时候，界面上只有「转圈」和「你是不是卡住了」。</div></div>
+<h2><span class="n">08</span>静默与上色</h2>
+
+<table>
+<thead><tr><th>格</th><th class="dim-t">平静 <code>--text-dim</code></th><th class="warn-t">警戒 <code>--warn</code></th><th class="bad-t">告警 <code>--danger</code></th></tr></thead>
+<tbody>
+<tr><td>CPU</td><td>&lt; 70%</td><td>≥ 70% <b class="hl">持续 60s</b></td><td>≥ 95% 持续 60s</td></tr>
+<tr><td>内存</td><td>&lt; 80%</td><td>≥ 80%</td><td>≥ 92%，或 swap 正在换出</td></tr>
+<tr><td>磁盘</td><td>&lt; 85%</td><td>≥ 85%</td><td>≥ 95%，或剩余 &lt; 2 GB</td></tr>
+<tr><td>温度</td><td>&lt; 80°C</td><td>≥ 80°C</td><td>≥ 90°C（Jetson 的降频线）</td></tr>
+<tr><td>机器</td><td>在线</td><td>延迟 &gt; 300ms</td><td>离线</td></tr>
+<tr><td>中心</td><td>正常</td><td>—</td><td>不健康</td></tr>
+<tr><td>待办</td><td>三样都是 0</td><td>有待确认 / 待收尾</td><td>—</td></tr>
+<tr><td>分支</td><td>—</td><td>落后 &gt; 0</td><td>—（冲突态归 Git 面板，条上说不清）</td></tr>
+<tr><td>上下文</td><td>&lt; 85%</td><td>≥ 85%</td><td>≥ 95%（快要自动压缩了）</td></tr>
+<tr><td>未保存</td><td>—</td><td>始终警戒色（就是那颗黄点）</td><td>—</td></tr>
+<tr><td>后台</td><td><b class="hl">强调色</b>，不是灰</td><td>—</td><td>任务失败时红，且停留到你点掉</td></tr>
+</tbody>
+</table>
+
+<p>
+<b class="hl">后台格是唯一平静时也上色的格</b>（<code>--accent</code>）：它代表「有东西正在动」，
+本来就该被看见，而且它自己会消失——不像别的格常驻。这是从 VS Code 抄的：那边的进度条也是唯一会转的东西。
+</p>
+
+<div class="card warn">
+<h4>CPU 那条「持续 60s」不是可选项</h4>
+<p>
+瞬时 CPU 天天冲到 100%——编译、<code>npm run build</code>、agent 跑测试，都是正常干活。
+按瞬时值上色，这一格每分钟黄好几次，两天之内所有人都学会无视它，
+连带着<b class="hl">旁边那格真的内存告警也一起被无视</b>。所以 CPU 只认「连续 30 帧越线」。
+内存和磁盘不需要这个滞后：它们本来就是慢变量。
+</p>
+</div>
+<div class="fig"><div class="win"><div class="sb"><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span>roam-dev</span><i class="dot"></i></button><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.8" r="2.2"/><circle cx="7" cy="19.2" r="2.2"/><circle cx="17" cy="19.2" r="2.2"/><path d="M12 7v2.6"/><path d="M12 9.6a4.4 4.4 0 0 0-5 4.4v3"/><path d="M12 9.6a4.4 4.4 0 0 1 5 4.4v3"/></svg><span>main</span></button><span class="sep"></span><button class="cell btn"><span class="lb">CPU</span><span class="mini"><i style="width:34%"></i></span><span class="vl">34%</span></button><button class="cell btn"><span class="lb">内存</span><span class="mini"><i style="width:38%"></i></span><span class="vl">12.1/32G</span></button><button class="cell btn"><span class="lb">磁盘</span><span class="vl">63%</span></button><span class="sp"></span><button class="cell btn"><span>行 128，列 32</span></button><button class="cell btn"><span>TypeScript</span></button><button class="cell btn dim-t"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4a1 1 0 0 0 1 1h3l7 4V5L8 9H5a1 1 0 0 0-1 1Z"/><path d="M18.5 9a4 4 0 0 1 0 6"/></svg></button><button class="cell btn dim-t"><span class="mono">v0.9.3</span></button></div></div><div class="cap"><b>① 平静。</b>一种灰。这是 99% 的时间里它的样子。</div></div><div class="fig"><div class="win"><div class="sb"><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span>roam-dev</span><i class="dot"></i></button><button class="cell btn warn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.8" r="2.2"/><circle cx="7" cy="19.2" r="2.2"/><circle cx="17" cy="19.2" r="2.2"/><path d="M12 7v2.6"/><path d="M12 9.6a4.4 4.4 0 0 0-5 4.4v3"/><path d="M12 9.6a4.4 4.4 0 0 1 5 4.4v3"/></svg><span>main</span><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m6 13 6 6 6-6"/></svg><span class="badge">3</span></button><span class="sep"></span><button class="cell btn"><span class="lb">CPU</span><span class="mini"><i style="width:81%"></i></span><span class="vl">81%</span></button><button class="cell btn warn pin"><span class="lb">内存</span><span class="mini"><i style="width:86%"></i></span><span class="vl">27.6/32G</span></button><button class="cell btn"><span class="lb">磁盘</span><span class="vl">63%</span></button><span class="sp"></span><button class="cell btn"><span>行 128，列 32</span></button><button class="cell btn"><span>TypeScript</span></button><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4a1 1 0 0 0 1 1h3l7 4V5L8 9H5a1 1 0 0 0-1 1Z"/><path d="M18.5 9a4 4 0 0 1 0 6"/></svg><span class="badge">3</span></button><button class="cell btn dim-t"><span class="mono">v0.9.3</span></button></div></div><div class="cap"><b>② 警戒。</b>内存 86% 上黄并被<b>钉住</b>（左侧 2px 竖条，见 §09）。CPU 81% <em>没有</em>上色——它才越线 12 秒。分支落后 3 个提交，也是黄。</div></div><div class="fig"><div class="win"><div class="sb"><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span>roam-dev</span><i class="dot"></i></button><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.8" r="2.2"/><circle cx="7" cy="19.2" r="2.2"/><circle cx="17" cy="19.2" r="2.2"/><path d="M12 7v2.6"/><path d="M12 9.6a4.4 4.4 0 0 0-5 4.4v3"/><path d="M12 9.6a4.4 4.4 0 0 1 5 4.4v3"/></svg><span>main</span></button><span class="sep"></span><button class="cell btn"><span class="lb">CPU</span><span class="mini"><i style="width:97%"></i></span><span class="vl">97%</span></button><button class="cell btn bad pin"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 4.3 2.6 17.5A2 2 0 0 0 4.3 20.5h15.4a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0Z"/><path d="M12 9.5v4"/><path d="M12 17h.01"/></svg><span class="lb">内存</span><span class="mini"><i style="width:94%"></i></span><span class="vl">30.2/32G · 正在换出</span></button><button class="cell btn"><span class="lb">磁盘</span><span class="vl">63%</span></button><span class="sp"></span><button class="cell btn"><span>80×24</span></button><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4a1 1 0 0 0 1 1h3l7 4V5L8 9H5a1 1 0 0 0-1 1Z"/><path d="M18.5 9a4 4 0 0 1 0 6"/></svg><span class="badge">3</span></button><button class="cell btn dim-t"><span class="mono">v0.9.3</span></button></div></div><div class="cap"><b>③ 告警。</b>只有 danger 档才配 <code>WarnIcon</code>，并把「正在换出」这句原因写进格里——到这一步，多几个字比省几个像素重要。</div></div><div class="fig"><div class="win"><div class="sb"><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span>roam-dev</span><i class="dot bad"></i></button><span class="cell stale"><span>CPU  --</span></span><span class="cell stale"><span>内存  --</span></span><span class="cell stale"><span>磁盘  --</span></span><span class="sp"></span><button class="cell btn bad"><span>连接中断 · 18s</span></button><button class="cell btn dim-t"><span class="mono">v0.9.3</span></button></div></div><div class="cap"><b>④ 断线。</b>连丢 3 帧（6s）后所有读数<b>置 <code>--</code> 并变暗</b>，不留最后一帧。一个停在 34% 的假数字比空白危险得多——它看起来像「一切正常」。</div></div>
+<h2><span class="n">09</span>窗口变窄：分四档丢，告警格钉住</h2>
+
+<p>
+状态条不换行、不滚动、不出省略号——这三条 VS Code 也守了二十年。宽度不够时<b class="hl">整格消失</b>，
+按档位丢，同档内<b class="hl">从右往左</b>。二十五格排一条长长的优先级表没人记得住，四档就够：
+</p>
+
+<pre><code><span class="c">档 4  最先丢 · 只是「知道了更好」</span>
+      编码换行 · 缩进 · 语言 · 前台命令 · pane · 版本 · 改动 · 蜂群 · 网络
+
+<span class="c">档 3</span>
+      行列 · 上下文 · 链路 · 磁盘 · 温度 · GPU · 中心
+
+<span class="c">档 2</span>
+      CPU · Agent · 设备 · 通知 · 后台
+
+<span class="g">档 1  永不丢</span>
+      机器 · 内存 · 待办（数不为 0 时）· 未保存（有未保存改动时）
+
+<span class="c">跨档例外：任何处在 warn/danger 的格子被「钉住」，跳过丢弃顺序，</span>
+<span class="c">并挪到机器格右边那个最显眼的位置。钉住的格左侧多一条 2px 竖线——</span>
+<span class="c">表示「它是被留下来的，不是碰巧还在」。</span></code></pre>
+
+<p>
+<b class="hl">右半整组早于左半消失。</b>VS Code 也是这样：窗口一窄，先没的是编码和语言，
+远程指示器和问题数一直在。理由一样——右半描述「你在动的东西」，
+而那个东西本身就在屏幕正中央摆着；左半描述你<em>看不见</em>的东西。
+</p>
+<div class="fig"><div class="win w720"><div class="sb"><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span>roam-dev</span><i class="dot"></i></button><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.8" r="2.2"/><circle cx="7" cy="19.2" r="2.2"/><circle cx="17" cy="19.2" r="2.2"/><path d="M12 7v2.6"/><path d="M12 9.6a4.4 4.4 0 0 0-5 4.4v3"/><path d="M12 9.6a4.4 4.4 0 0 1 5 4.4v3"/></svg><span>main</span></button><button class="cell btn warn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3 6 2 2 3-3"/><path d="m3 14 2 2 3-3"/><path d="M12 7h9"/><path d="M12 15h9"/></svg><span>2 待确认</span></button><span class="sep"></span><button class="cell btn"><span class="lb">CPU</span><span class="mini"><i style="width:34%"></i></span><span class="vl">34%</span></button><button class="cell btn"><span class="lb">内存</span><span class="mini"><i style="width:38%"></i></span><span class="vl">12.1/32G</span></button><span class="sp"></span><button class="cell btn"><span>行 128，列 32</span></button><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4a1 1 0 0 0 1 1h3l7 4V5L8 9H5a1 1 0 0 0-1 1Z"/><path d="M18.5 9a4 4 0 0 1 0 6"/></svg><span class="badge">3</span></button></div></div><div class="cap"><b>900px。</b>档 4 全丢：编码、缩进、语言、版本都没了；行列还在（档 3）。</div></div><div class="fig"><div class="win w420"><div class="sb"><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span>roam-dev</span><i class="dot"></i></button><button class="cell btn warn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3 6 2 2 3-3"/><path d="m3 14 2 2 3-3"/><path d="M12 7h9"/><path d="M12 15h9"/></svg><span>2 待确认</span></button><span class="sp"></span><button class="cell btn"><span class="lb">内存</span><span class="mini"><i style="width:38%"></i></span><span class="vl">12.1/32G</span></button></div></div><div class="cap"><b>420px。</b>只剩档 1 + 一格警戒。</div></div><div class="fig"><div class="win w360"><div class="sb"><button class="cell btn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span>roam-dev</span><i class="dot"></i></button><button class="cell btn bad pin"><span class="lb">磁盘</span><span class="vl">96%</span></button><span class="sp"></span><button class="cell btn"><span class="lb">内存</span><span class="mini"><i style="width:38%"></i></span><span class="vl">12.1/32G</span></button></div></div><div class="cap"><b>360px，磁盘告警。</b>磁盘本在档 3，但它红了——钉住，并挪到机器格右边。CPU / 待办 / 通知全让位。</div></div>
+<p>
+实现上这段判定是<b class="hl">纯函数</b>：<code>pickCells(cells, widthPx) → Cell[]</code>，
+输入是每格的估算宽度、档位和告警等级，输出是要渲染的清单。放
+<code>frontend/src/components/shell/status-cells.ts</code>，单测覆盖「钉住优先于档位」
+「档 1 在任何宽度下都在」「右半整组先于左半消失」。<b class="hl">不要用 ResizeObserver 去量真实 DOM 再决定丢谁</b>——
+量→删→变宽→加回来会在临界宽度上抖成无限循环。每格的宽度按<b class="hl">字符数估</b>
+（等宽数字 + 固定 padding），估宽偏大 8px 也无所谓，宁可早丢一格也不要抖。
+</p>
+
+<h2><span class="n">10</span>手指与手机</h2>
+
+<h3>粗指针：整条长到 44，格子减到三个</h3>
+
+<p>
+AGENTS 的规矩是「用伪元素撑命中区，不要撑视觉尺寸」。<b class="hl">这里是那条规矩的例外，
+而且必须是例外</b>：状态条上方紧贴着页面内容，往上撑 20px 的伪元素会在每一页的最后一行
+盖出一条点不到的死区。所以这里反过来——<b class="hl">把条本身长到 44px</b>，同时只留三格：
+机器、当前最重的那一格、会话数。
+</p>
+<div class="fig"><div class="win w720"><div class="sb coarse"><button class="cell btn"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span>roam-dev</span><i class="dot"></i></button><span class="sp"></span><button class="cell btn warn"><span class="lb">内存</span><span class="mini" style="width:40px;height:5px"><i style="width:86%"></i></span><span class="vl">86%</span></button><button class="cell btn"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3"/><path d="M13 15h4"/></svg><span class="vl">12</span></button></div></div><div class="cap"><b>平板 / 触屏笔记本（<code>data-pointer="coarse"</code> 且 <code>desktop</code> 档）。</b>三格，每格自带 ≥44 的命中高度，格间距 <code>--sp-3</code>，相邻两枚的间隙比 44 再多 4px。</div></div>
+<h3>手机：不常驻，只在出事时来一条</h3>
+
+<p>
+手机底部已经叠了两层：<b class="hl">会话坞 50px + 底栏 6 格</b>，共用一个 fixed 容器。
+再加一条常驻状态条就是第三层——360px 宽的屏上，底部会吃掉三分之一。所以手机上：
+</p>
+
+<ul>
+<li><b class="hl">平静时不渲染</b>。一个像素都不占。</li>
+<li>任何一格进入 <code>danger</code> 时，在会话坞<b class="hl">之上</b>插一条 28px 的单行告警，
+    只说那一件事：<code>内存 30.2/32G · 正在换出</code>。点它进护栏面板。</li>
+<li><code>warn</code> 档不打扰手机。手机不是运维终端，黄色的东西留给你回到电脑前再看。</li>
+<li><b class="hl">右半的上下文格手机上一格都不出。</b>「未保存」「行列」这些归各页自己的工具条——
+    文件页那颗黄点和保存钮今天就在，状态条不去接管它。</li>
+<li>完整读数进「更多」sheet 的第一段：<b class="hl">主机状态</b>，一行一格，
+    行高 ≥44——那是手机上看这些数字的正规入口。</li>
+</ul>
+<div class="fig" style="display:flex;gap:var(--sp-4);flex-wrap:wrap;align-items:flex-start">  <div>
+    <div class="ph">
+      <div class="scr"><i style="width:70%"></i><i style="width:90%"></i><i style="width:50%"></i><i style="width:80%"></i></div>
+      <div class="dock"><i style="width:8px;height:8px;border-radius:50%;background:var(--ok);display:block"></i><span>ttmux · 前端重构</span><span style="margin-left:auto">3</span></div>
+      <div class="tabs"><span>项目</span><span class="on">文件</span><span>浏览器</span><span>手机</span><span>更多</span></div>
+    </div>
+    <div class="cap"><b>手机 · 平静。</b>与今天逐像素一致。</div>
+  </div>
+  <div>
+    <div class="ph">
+      <div class="scr"><i style="width:70%"></i><i style="width:90%"></i><i style="width:50%"></i><i style="width:80%"></i></div>
+      <div class="alert"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 4.3 2.6 17.5A2 2 0 0 0 4.3 20.5h15.4a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0Z"/><path d="M12 9.5v4"/><path d="M12 17h.01"/></svg><span>内存 30.2/32G · 正在换出</span></div>
+      <div class="dock"><i style="width:8px;height:8px;border-radius:50%;background:var(--ok);display:block"></i><span>ttmux · 前端重构</span><span style="margin-left:auto">3</span></div>
+      <div class="tabs"><span>项目</span><span class="on">文件</span><span>浏览器</span><span>手机</span><span>更多</span></div>
+    </div>
+    <div class="cap"><b>手机 · 告警。</b>只有 danger 才出现，一行，一件事，可点。</div>
+  </div>
+</div>
+<h2><span class="n">11</span>点开之后：一格一张小卡</h2>
+
+<p>
+悬停只给 <code>title</code>／<code>aria-label</code>（<b class="hl">不用 Tooltip</b>——粗指针下站点级
+隐藏了 <code>.ant-tooltip</code>，长按打开的 tooltip 拿不到 <code>mouseleave</code>，
+它的遮罩会吃掉下一次点击）。真正的细节走点击展开的小卡，向上弹出，<code>Esc</code> 关闭：
+</p>
+<div class="fig" style="display:flex;gap:var(--sp-4);flex-wrap:wrap">  <div>
+    <div class="pop">
+      <h5>内存 · 27.6 / 32.0 G</h5>
+      <div class="r"><span class="n">ttmux · 前端重构</span><span class="bar"><i class="hot" style="width:78%"></i></span><span class="v">9.4G</span></div>
+      <div class="r"><span class="n">roam · p2p</span><span class="bar"><i style="width:41%"></i></span><span class="v">5.0G</span></div>
+      <div class="r"><span class="n">xiaohui · 周报</span><span class="bar"><i style="width:22%"></i></span><span class="v">2.7G</span></div>
+      <div class="foot">其余 14 个会话合计 4.1G · 系统 6.4G　　<span style="color:var(--accent);white-space:nowrap">打开内存护栏</span></div>
+    </div>
+    <div class="cap"><b>内存格。</b>吃得最多的三个<b>会话</b>（不是进程）——因为你能处理的单位是会话。</div>
+  </div>
+  <div>
+    <div class="pop">
+      <h5>后台 · 3 个任务</h5>
+      <div class="r"><span class="n">下载 system-image API 34</span><span class="bar"><i style="width:62%"></i></span><span class="v">62%</span></div>
+      <div class="r"><span class="n">模拟器 xh_tv4k 启动中</span><span class="bar"><i style="width:55%"></i></span><span class="v">21s</span></div>
+      <div class="r"><span class="n">P2P 传 dist.tar.gz</span><span class="bar"><i style="width:88%"></i></span><span class="v">6.1MB/s</span></div>
+      <div class="foot">每行右端可取消 · 失败的任务留在卡里直到你点掉</div>
+    </div>
+    <div class="cap"><b>后台格。</b>这是 Roam 比 VS Code 更需要的一格：那边的后台任务多是秒级，这边动辄几分钟。</div>
+  </div>
+  <div>
+    <div class="pop">
+      <h5>待办 · 4 件</h5>
+      <div class="r"><span class="n">2 个会话卡在权限确认</span><span class="bar"><i class="hot" style="width:100%"></i></span><span class="v">去处理</span></div>
+      <div class="r"><span class="n">1 个 worktree 已合入待清理</span><span class="bar"><i style="width:100%"></i></span><span class="v">去收尾</span></div>
+      <div class="r"><span class="n">1 条插件发现</span><span class="bar"><i style="width:100%"></i></span><span class="v">去查看</span></div>
+      <div class="foot">对应 VS Code 的「问题」格：一个数字，点开是清单，每条都能直达</div>
+    </div>
+    <div class="cap"><b>待办格。</b>三个来源合成一个数字，但卡里必须分开列——它们去的是三个不同的页。</div>
+  </div>
+  <div>
+    <div class="pop">
+      <h5>CPU · 34%</h5>
+      <div class="r"><span class="n">负载 1 分钟</span><span class="bar"><i style="width:33%"></i></span><span class="v">5.3</span></div>
+      <div class="r"><span class="n">负载 5 分钟</span><span class="bar"><i style="width:26%"></i></span><span class="v">4.1</span></div>
+      <div class="r"><span class="n">负载 15 分钟</span><span class="bar"><i style="width:19%"></i></span><span class="v">3.0</span></div>
+      <div class="foot">16 核 · 已运行 6 天 4 小时</div>
+    </div>
+    <div class="cap"><b>CPU 格。</b>负载对着核数看才有意义，所以核数写在脚注里。</div>
+  </div>
+</div>
+<h2><span class="n">12</span>数据从哪来：一条新接口都不加</h2>
+
+<p>
+这份设计最早的版本写着「后端今天没有任何一条接口报主机负载，要新开一个
+<code>backend/system</code> 包」。<b class="hl">那是错的</b>：
+<code>plugins/hostmonitor/</code> 早就在那儿，采 CPU / GPU / 内存 / 磁盘 / 网络，
+带 12 分钟趋势，还有一整页仪表盘。走注册制以后，主机那六格<b class="hl">复用它</b>，
+新后端包和 <code>/system/stats</code> 全部取消。
+</p>
+
+<table>
+<thead><tr><th>格</th><th>来源</th><th>要新增什么</th></tr></thead>
+<tbody>
+<tr><td><b>CPU · 内存 · 磁盘 · 温度 · GPU · 网络</b></td>
+    <td class="mono">POST /plugins/roam.host-monitor/run<br>{ command: "host-monitor.stats" }</td>
+    <td class="ok-t">只在 manifest 里加 <code>statusItems</code> 声明</td></tr>
+<tr><td>机器 · 中心</td><td class="mono">useClusterNodes() · useHubHealth()</td><td class="dim-t">无</td></tr>
+<tr><td>分支 · 改动</td><td class="mono">GET /git/status（已返回 branch/ahead/behind）</td><td class="dim-t">无</td></tr>
+<tr><td>待办</td><td class="mono">/sessions（待确认判定在 waiting.go）· /git/worktrees/all · /plugin/findings</td><td class="dim-t">无</td></tr>
+<tr><td>蜂群</td><td class="mono">GET /swarms</td><td class="dim-t">无</td></tr>
+<tr><td>会话 · pane · 前台命令</td><td class="mono">/sessions · /sessions/:name/panes/active（含 <code>pane_width/height/current_command</code>）</td><td class="dim-t">无</td></tr>
+<tr><td>通知</td><td class="mono">GET /plugin/notifications</td><td class="dim-t">无</td></tr>
+<tr><td>链路</td><td class="mono">p2p/transport 的 LinkStatus</td><td class="dim-t">无</td></tr>
+<tr><td>Agent · 上下文</td><td class="mono">/sessions/:name/claude · /codex；<code>usage.input_tokens</code> 已在 claude.go 解析</td><td class="warn-t">把 usage 汇总成百分比</td></tr>
+<tr><td>行列 · 缩进 · 语言 · 未保存</td><td class="mono">Monaco 实例（<code>onDidChangeCursorPosition</code>）+ FileView 的 <code>dirty</code></td><td class="warn-t">把状态抬到壳层</td></tr>
+<tr><td>编码 · 换行</td><td class="mono">/file 读文件时判定并回传</td><td class="warn-t">后端补两个字段</td></tr>
+<tr><td>后台</td><td class="mono">/phone/avd/tasks SSE · /tasks · 插件运行 · P2P 传输</td><td class="warn-t">前端侧的任务登记表</td></tr>
+</tbody>
+</table>
+
+<div class="card bad">
+<h4>状态条不许自己去轮询</h4>
+<p>
+二十五格，如果每格自己拉一条接口，就是二十条新轮询——而 18 号设计刚刚删掉过一套
+「概览每 6s 对 ≤14 个会话各发 3 条请求」的轮询。规则：
+<b class="hl">内置 provider 一律订阅 App 已有的 state，一条新请求都不发</b>；
+只有插件 provider 才按 <code>refresh</code> 拉，而且拉的是<b class="hl">整个快照</b>——
+主机那六格共用<b class="hl">一次</b> <code>host-monitor.stats</code> 调用，不是六次。
+<code>document.hidden</code> 时全停。拿不到的数据就不显示那一格，
+<b class="hl">不为了填满一条状态条去加一条轮询</b>。
+</p>
+</div>
+
+<h3>主机监控今天返回什么</h3>
+
+<pre><code><span class="c">// POST /plugins/roam.host-monitor/run { command: "host-monitor.stats" }</span>
+{
+  <span class="k">"host"</span>:    { "hostname": "roam-dev", "uptimeSec": 534120, "load1": 5.3, "load5": 4.1, "load15": 3.0 },
+  <span class="k">"cpu"</span>:     { "cores": 16, "usagePercent": 34.2, "tempC": 61.2, "perCore": [...] },
+  <span class="k">"memory"</span>:  { "total": 34359738368, "used": 12988366848, "usagePercent": 37.8, "swapUsed": 0 },
+  <span class="k">"disks"</span>:   [ { "mount": "/", "usagePercent": 62.9, ... } ],
+  <span class="k">"gpus"</span>:    [ { "name": "RTX 4090", "utilPercent": 41, "memUsed": ..., "tempC": 63 } ],
+  <span class="k">"network"</span>: { "rxBytesPerSec": 2202009, "txBytesPerSec": 348160 },
+  <span class="k">"history"</span>: [ ... ]   <span class="c">// 12 分钟趋势，状态条不用，面板用</span>
+}</code></pre>
+
+<p>
+条上要的全在里面，<b class="hl">一个字段都不用加</b>——<code>statusItems</code> 的
+<code>path</code> 就是从这个 JSON 里取值的路径。<code>history</code> 那段条上不读：
+状态条只要「现在」，曲线归它自己的面板。
+</p>
+
+<div class="card warn">
+<h4>子进程不是免费的</h4>
+<p>
+<code>plugin run</code> 每次都起一个短命子进程（CPU / 网络速率靠 <code>StorageDir</code> 里上一次的
+计数器差分得出，所以它<b class="hl">必须</b>被周期性地调，不能只在你打开面板时调）。
+3s 一次、页面不可见就停、六格共用一次调用——这是可以接受的量，
+主机监控面板今天就是这个节奏。但如果哪天有五个插件各自声明 2s 拉一次，
+就得把「同一插件的多个 item 合并成一次调用」这条从优化变成硬约束。<b class="hl">现在就写进契约，别等出事。</b>
+</p>
+</div>
+
+<h2><span class="n">13</span>落地清单</h2>
+
+<p>分两期。<b class="hl">M1 做注册表 + 左半</b>——注册表是这件事的骨架，左半是「不看就会错过」的一半；
+右半的上下文格要动 Monaco 和会话状态，留 M2。<b class="hl">后端几乎不动</b>：主机那六格复用已有的插件，
+M1 的后端改动只有 manifest 结构和一段 <code>statusItems</code> 声明。</p>
+
+<table>
+<thead><tr><th>期</th><th>文件</th><th>做什么</th></tr></thead>
+<tbody>
+<tr><td class="mono">M1</td><td class="mono">pkg/plugin/manifest/manifest.go</td><td><span class="tag new">新</span> <code>StatusItemContrib</code> 结构 + <code>Contribs.StatusItems</code>；<code>Validate</code> 里管住格数与 <code>refresh</code> 下限</td></tr>
+<tr><td class="mono">M1</td><td class="mono">plugins/hostmonitor/register.go</td><td>manifest 里加六个 <code>statusItems</code>。<b class="hl">这是全部改动</b>——采集逻辑一行不动</td></tr>
+<tr><td class="mono">M1</td><td class="mono">docs/design/plugin/05-manifest.md</td><td>贡献点表加 <code>statusItems</code> 一行（v1）；激活事件表加 <code>onStatusItem:&lt;id&gt;</code></td></tr>
+<tr><td class="mono">M1</td><td class="mono">shell/status-registry.ts</td><td><span class="tag new">新</span> 注册表：内置 provider 与插件贡献点合流、按段与 priority 排序、格数预算、失败熄灯与退避</td></tr>
+<tr><td class="mono">M1</td><td class="mono">shell/status-renderers.tsx</td><td><span class="tag new">新</span> 四种渲染器（<code>text/gauge/dot/progress</code>）。<b>插件只能选，不能自带</b></td></tr>
+<tr><td class="mono">M1</td><td class="mono">shell/status-poll.ts</td><td><span class="tag new">新</span> 插件拉取：同插件多 item 合并成一次 <code>run</code>、<code>document.hidden</code> 停、1s 超时、3 次熄灯</td></tr>
+<tr><td class="mono">M1</td><td class="mono">frontend/src/components/shell/StatusBar.tsx</td><td><span class="tag new">新</span> 组件本体（只渲染左半 + 通知/版本）</td></tr>
+<tr><td class="mono">M1</td><td class="mono">shell/status-cells.ts · status-cells.test.ts</td><td><span class="tag new">新</span> 纯函数：阈值判等级、CPU 的 60s 滞后、按宽度四档挑格（钉住规则）</td></tr>
+<tr><td class="mono">M1</td><td class="mono">frontend/src/index.css</td><td><code>.tt-statusbar</code>；新令牌 <code>--status-h</code>；hover 一律 <code>:where(html[data-pointer="fine"])</code></td></tr>
+<tr><td class="mono">M1</td><td class="mono">frontend/src/App.tsx</td><td>最外层改列向 flex；<code>&lt;Sider&gt;</code> 的 <code>height:100dvh</code> 改 <code>100%</code></td></tr>
+<tr><td class="mono">M1</td><td class="mono">shell/WorkspaceTopbar.tsx</td><td><span class="tag cut">删</span> 「在线/离线」那一段</td></tr>
+<tr><td class="mono">M1</td><td class="mono">shell/Navigation.tsx</td><td><span class="tag cut">删</span> 底座的机器切换器与 <code>LinkStatus</code>（<code>node</code> / <code>nodeMenu</code> / <code>hubAlarm</code> / <code>linkStatus</code> 四个 prop 一起走）</td></tr>
+<tr><td class="mono">M1</td><td class="mono">frontend/src/i18n/*</td><td><code>status.*</code> 一组文案，中英双份</td></tr>
+<tr><td class="mono">M1</td><td class="mono">preferences</td><td><code>statusBar.enabled</code> + <code>statusBar.hidden[]</code>（内置默认开、第三方默认关）。<b>镜像到 localStorage</b>，见下</td></tr>
+<tr><td class="mono">M1</td><td class="mono">plugins/PluginsPanel.tsx</td><td>插件详情页显示「想在状态条放 N 格」+ 一键打开</td></tr>
+<tr><td class="mono">M2</td><td class="mono">shell/status-context.ts</td><td><span class="tag new">新</span> 右半的上下文来源：焦点是文件 / 会话 / 镜像时各给一组格</td></tr>
+<tr><td class="mono">M2</td><td class="mono">files/CodeEditor.tsx · fileview/FileView.tsx</td><td>把光标位置、语言、缩进、<code>dirty</code> 抬到壳层（一个轻 store，不走 props 穿透）</td></tr>
+<tr><td class="mono">M2</td><td class="mono">backend/api/files.go</td><td><code>/file</code> 回传 <code>encoding</code> 与 <code>eol</code> 两个字段</td></tr>
+<tr><td class="mono">M2</td><td class="mono">backend/api/claude.go · codex.go</td><td>把已解析的 <code>usage</code> 汇总成「上下文占用百分比」</td></tr>
+<tr><td class="mono">M2</td><td class="mono">shell/status-tasks.ts</td><td><span class="tag new">新</span> 前端任务登记表：AVD / 插件 / P2P / fetch 都往这里登记，后台格只读它</td></tr>
+</tbody>
+</table>
+
+<div class="card warn">
+<h4>偏好来得晚</h4>
+<p>
+状态条的开关是<b class="hl">可见项</b>：<code>usePreferences()</code> 在
+<code>/preferences</code> 落地前给的是默认值，于是关掉它的人每次刷新都会看见它闪一下再消失。
+按 AGENTS 的规矩，这个值要<b class="hl">同时镜像到 <code>localStorage</code></b>，首帧就是对的；
+服务端那份仍是权威，只是不再在加载后一拍把版面顶一下。
+</p>
+</div>
+
+<div class="card good">
+<h4>M1 落地记录（2026-08-25）</h4>
+<p><b class="hl">已经在跑的：</b></p>
+<ul>
+<li>贡献点 <code>contributes.statusItems</code> + 校验（格数、refresh 地板、render/align/onClick 枚举、
+    命令必须是本插件声明过的）——<code>pkg/plugin/manifest/</code>，10 条单测。</li>
+<li><code>roam.host-monitor</code> 注册六格（CPU · 内存 · 磁盘 · 温度 · GPU · 网络）。
+    <b class="hl">采集逻辑一行没动</b>，只在 manifest 里多了一段声明。</li>
+<li>注册表 / 折叠 / 阈值滞后 / 拉取合并 —— <code>shell/status-cells.ts</code>、
+    <code>status-registry.ts</code>、<code>status-poll.ts</code>，49 条单测。</li>
+<li>系统格 <code>roam.core</code>（机器 · 中心 · 会话）与 <code>roam.tasks</code>（待办），
+    数据全来自 App 已有的 state，<b class="hl">零新请求</b>。</li>
+<li>设置页「界面 · 状态条」：按来源分组、标出来自哪个插件、整条开关。</li>
+<li>顶栏那颗「在线/离线」点撤掉，并进机器格。</li>
+</ul>
+<p><b class="hl">真机验收（1440 桌面 + 粗指针档）：</b>七格全出、点 CPU 跳到
+<code>#/plugins/roam.host-monitor</code>、整条开关生效、文档横向滚动 0px、
+粗指针下条高 44 且条上方 3px 处命中的仍是页面内容（不是条）。
+估宽逐格不低于实测，已把实测值钉进单测。</p>
+<p><b class="hl">留到 M2 的：</b>右半十二格（要动 Monaco 与会话状态）、分支 / 改动 / 蜂群 / 后台任务四格
+（各自的数据源还没有）、机器格点开的<b class="hl">机器切换下拉</b>。
+最后这一条是为什么<b class="hl">侧栏底座那枚切换器和 <code>LinkStatus</code> 这次没撤</b>——
+在等价替代品落地之前撤掉它，多机用户在桌面上就切不了机器了，那是实打实的功能倒退。
+设计里写的「顺手删掉」，删的顺序得排在替代品后面。</p>
+</div>
+
+<h3>不做什么</h3>
+
+<ul>
+<li><b class="hl">不做曲线</b>。24px 里画 sparkline 只能画出噪音；历史归中心页与护栏面板。</li>
+<li><b class="hl">不做拖拽自定义顺序</b>。顺序固定才有肌肉记忆；能配置的只有「显示哪些格」。</li>
+<li><b class="hl">不做进程级排行</b>。你能操作的单位是会话，不是 PID；小卡里给的就是会话。</li>
+<li><b class="hl">不做通知</b>。状态条是被动的。要主动推送归插件（<code>roam.cron</code> 那条路）。</li>
+<li><b class="hl">不为一格加一条轮询</b>。见 §12。</li>
+<li><b class="hl">不让插件跑前端代码</b>。贡献点是声明式的，渲染器只有四种，图标按名字取。见 §05。</li>
+<li><b class="hl">不让插件自己说自己是红的</b>。severity 一律宿主按声明的阈值判。</li>
+<li><b class="hl">不在手机上常驻</b>。见 §10。</li>
+</ul>
+
+<h2><span class="n">14</span>验收</h2>
+
+<p>按 <a href="../../../development/web-ui-checklist.md">web-ui-checklist</a> 跑真机，
+外加这条自己的清单：</p>
+
+<ul>
+<li>桌面：侧栏收起 / 展开 / Focus 三态下，状态条宽度不变、左端不移动。</li>
+<li>桌面：终端坞拖宽拖窄的整个过程中，<b class="hl">不出现文档级横向滚动条</b>（那 10px 会横移整个画布）。</li>
+<li>窄窗：从 1440 拖到 360 的连续过程中，格子只会消失/出现一次，<b class="hl">不在临界宽度抖动</b>。</li>
+<li>上下文：分栏下点终端再点回文件，右半整组切换<b class="hl">不闪、不留上一组的残格</b>。</li>
+<li>断线：拔网线 6s 内主机四格变 <code>--</code> 并变暗；恢复后第一帧就是真值。</li>
+<li>非本机：切到 jetson，机器格上实心底；切回本机，实心底消失（<b class="hl">这一格错了后果最重</b>）。</li>
+<li>轮询：开着 devtools network 待 60s，确认<b class="hl">新增请求只有那一条 SSE</b>。</li>
+<li>手机：平静时底部与今天逐像素一致（截图比对）；造一次内存告警，确认那条 28px 出现在会话坞之上、
+    且底栏没有被顶出安全区。</li>
+<li>粗指针：用 <code>document.elementFromPoint</code> 验三格的命中区，<b class="hl">并验状态条上方
+    那一行页面内容仍然点得中</b>——这是伪元素方案会踩、而 44px 实条不会踩的那个坑。</li>
+<li>阈值：把 <code>host-monitor.stats</code> 换成假数据源逐档过一遍各格的三种颜色（含 CPU 的 60s 滞后）。</li>
+<li><b class="hl">注册制：写一个只声明一格的样例插件</b>（<code>plugins/examples/</code>），装上它，确认那一格<b class="hl">默认不出现</b>、打开后落在 <code>left-tail</code>、再把它的命令改成必定超时，确认 3 次后熄灯而整条不受影响。</li>
+<li>合并调用：主机六格全开时，devtools 里 3 秒内对 <code>/plugins/roam.host-monitor/run</code> 只有<b class="hl">一次</b>请求，不是六次。</li>
+</ul>
+
+<div class="card good">
+<h4>一句话</h4>
+<p>
+一条 24px，左半十三格右半十二格，同一时刻只出现十来格，平时一种灰。
+形状照抄 VS Code——<b class="hl">左边是你看不见的东西，右边是你正在看的东西</b>。
+但条上<b class="hl">两类格并存</b>：系统格随二进制走、占固定槽位、第一帧就有值；插件格注册进来、落尾段、可装可卸。主机那六格属于后者——由已经存在的 <code>roam.host-monitor</code> 插件走公开贡献点注册，
+第三方插件走同一条路、受同一套预算约束。宿主只负责一条槽、四种渲染器和一套折叠规则。
+</p>
+</div>
+
+<div style="margin-top:56px;padding-top:20px;border-top:1px solid var(--border-subtle);
+     font-size:var(--fs-meta);color:var(--text-dimmer)">
+  相关：<a href="../../reliability/memory-guard.html">R1 会话内存护栏</a> ·
+  <a href="../14-desktop-workspace.md">14 桌面工作区</a> ·
+  <a href="../13-mobile-responsive.md">13 移动端响应式</a> ·
+  <a href="../18-overview-projects-merge/index.html">18 概览×项目合并（删轮询那次）</a> ·
+  <a href="../../../development/ui-design-system.md">Web UI 设计系统</a>
+</div>
+
+</div>
+
+<script>
+// 主题切换：跟随系统，可手动覆盖。设计稿常被人在亮着的屏幕上打开。
+(function () {
+  var b = document.getElementById('themeBtn');
+  var dark = !window.matchMedia('(prefers-color-scheme: light)').matches;
+  function apply() {
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    b.textContent = dark ? '浅色' : '深色';
+  }
+  b.addEventListener('click', function () { dark = !dark; apply(); });
+  apply();
+})();
+</script>
+</body>
+</html>

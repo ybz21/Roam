@@ -84,3 +84,15 @@ func TestParseLoadAvg(t *testing.T) {
 		t.Errorf("got %v %v %v", l1, l5, l15)
 	}
 }
+
+// 状态条那六格必须过 manifest 校验:builtin 上限正好是 6,再加一格就该报错。
+// 校验发生在注册期,漏了的话是启动时才炸,不是这里。
+func TestStatusItemsValid(t *testing.T) {
+	m := Manifest()
+	if err := m.Validate(); err != nil {
+		t.Fatalf("host-monitor manifest invalid: %v", err)
+	}
+	if n := len(m.Contributes.StatusItems); n != 6 {
+		t.Fatalf("want 6 status items, got %d", n)
+	}
+}

@@ -47,6 +47,9 @@ import { Navigation } from './components/shell/Navigation'
 import { reorderTabs } from './components/shell/tabs'
 import { requestIntent, OPEN_FILE_INTENT } from './intents'
 import { SessionDock } from './components/shell/SessionDock'
+import { WorkspaceStatusBar } from './components/shell/WorkspaceStatusBar'
+import { systemCells } from './components/shell/status-system'
+import type { StatusAction } from './components/shell/status-cells'
 import { sessionProject, setSessionProjects, buildSessionProjects } from './components/sessions/session-project'
 import { MobileSheet, SheetRow, SheetSection } from './components/shell/MobileSheet'
 import { WorkspaceTopbar, type PaletteActions, type PaletteItem } from './components/shell/WorkspaceTopbar'
@@ -646,15 +649,37 @@ export default function App() {
   // 侧栏是否是 64px 轨：用户手动收起 / Focus 聚焦 / 非 large 档（expanded 一律用轨）
   const navRail = space.navCollapsed || space.mode === 'focus'
 
+  // 状态条的系统格：全部由 App 已经有的 state 算出来，**一条新请求都不发**
+  // （18 设计刚删掉过一套「每 6s 对 ≤14 个会话各发 3 条请求」的轮询，别再种一棵）。
+  const statusCells = systemCells({
+    online,
+    node: curNode ? { name: curNode.name, online: curNode.online, latencyMs: curNode.latencyMs } : null,
+    hubAlarm: hubHealth.level === 'ok' ? undefined : t('hub.why.' + (hubHealth.reasons[0] || 'unknown')),
+    clustered: clusterNodes.length > 0,
+    sessions: terms.length,
+    waiting: Object.values(mobileWaiting).filter(Boolean).length,
+    unfinished,
+    t,
+  })
+  // 插件只能给白名单里的两种动作，给不了任意跳转（20 设计 §05 约束①）
+  const onStatusAction = (a: StatusAction) => {
+    if (a.kind === 'route') location.hash = a.id
+    else if (a.kind === 'pluginView') { go('plugins'); location.hash = '#/plugins/' + encodeURIComponent(a.id) }
+  }
+
   return (
-    <Layout style={{ height: '100dvh', overflow: 'hidden', background: 'var(--bg-base)' }}>
+    // 外壳改成列向：[ 横向行(侧栏 + 工作区) ][ 状态条 ]。状态条必须占位——
+    // 用 position:fixed 的话上面那层照旧按 100dvh 算高，页面最后一行会永远
+    // 压在条底下，而且横向滚动条一闪就把画布挪 10px（AGENTS「文档永远不滚动」）。
+    <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-base)' }}>
+    <Layout style={{ flex: 1, minHeight: 0, overflow: 'hidden', background: 'var(--bg-base)' }}>
       <UpdateBanner />
       {/* Focus 时导航收成 64px 轨而不是消失——上下文始终可找回（14 §4.1，老 dockMax 的病根）。
           expanded 档也一律用轨：905–1279 展开 224 侧栏会把 Canvas 挤破契约。*/}
       {hasSider && (
         <Sider collapsible trigger={null} collapsedWidth={NAV_RAIL} width={NAV_WIDTH} theme={mode}
           collapsed={navRail}
-          style={{ position: 'sticky', top: 0, height: '100dvh', background: 'var(--bg-base)', borderRight: '1px solid var(--border-subtle)' }}>
+          style={{ position: 'sticky', top: 0, height: '100%', background: 'var(--bg-base)', borderRight: '1px solid var(--border-subtle)' }}>
           <Navigation
             rail={navRail} active={tab} groups={navGroups} onGo={go}
             settings={{ key: 'settings', label: t('nav.env'), icon: ICONS.settings }}
@@ -683,7 +708,7 @@ export default function App() {
       <Layout style={{ background: 'var(--bg-base)', minWidth: 0 }}>
         {hasSider && (
           <WorkspaceTopbar
-            online={online} modKey={modKeyLabel}
+            modKey={modKeyLabel}
             dockCount={terms.length} dockOpen={space.dockVisible}
             onToggleDock={() => { space.setFocus('none'); space.toggleDock() }}
             // 切到项目页并留下「要新建」的意图，由那一页挂载后消费（见 intents.ts）。
@@ -836,6 +861,11 @@ export default function App() {
         </div>
       )}
     </Layout>
+
+    {/* 手机不常驻：底部已经叠了会话坞 + 底栏两层，再加一条就是第三层，
+        360px 宽的屏上底部会吃掉三分之一（20 设计 §10）。 */}
+    {hasSider && <WorkspaceStatusBar system={statusCells} onAction={onStatusAction} />}
+    </div>
   )
 
   function logout() {

@@ -1,0 +1,99 @@
+// 系统格：宿主自己注册的那几格（20 设计 §05「三个来源，两个等级」）。
+//
+// 和插件格的差别只有两处：数据源是**进程内已有的 state**（一条新请求都不发），
+// 位置落在固定槽位而不是两个尾段。除此之外走的是同一个 CellSpec、同一套渲染器、
+// 同一套阈值与折叠规则——要是宿主自己的格走后门，这套注册制两个月就烂了。
+//
+// M1 只登载 App 手里已经有的东西。分支 / 改动 / 蜂群 / 后台任务要各自的数据源，
+// 那些留 M2；缺了就不渲染那一格，**不为了填满一条状态条去加一条轮询**。
+import { systemCell } from './status-registry'
+import type { CellValue, Severity } from './status-cells'
+import type { SystemCell } from './WorkspaceStatusBar'
+
+export type SystemInput = {
+  /** 浏览器与后端连着没有（单机时机器格的状态点看它） */
+  online: boolean
+  /** 当前机器；单机（没接入中心）时为 null */
+  node: { name: string; online: boolean; latencyMs: number } | null
+  /** 中心不健康时的一句话原因；健康或没接中心时为空 */
+  hubAlarm?: string
+  clustered: boolean
+  sessions: number
+  /** 卡在权限确认的会话数 */
+  waiting: number
+  /** 已合入待清理的 worktree 数 */
+  unfinished: number
+  t: (key: string, vars?: Record<string, unknown>) => string
+}
+
+/** 延迟超过这个数就算慢：跨网连一台机器，300ms 往上打字已经能感觉到 */
+const SLOW_MS = 300
+
+export function systemCells(i: SystemInput): SystemCell[] {
+  const out: SystemCell[] = []
+  const push = (spec: ReturnType<typeof systemCell>, val: CellValue) => out.push({ spec, val })
+
+  // ── 机器：这条的锚，永远在最左、永远不被折叠掉 ──
+  // 它同时接管了顶栏那颗「在线/离线」小点：单机看浏览器连没连上，多机看这台机器。
+  const machineSeverity: Severity = i.node
+    ? (!i.node.online ? 'danger' : i.node.latencyMs > SLOW_MS ? 'warn' : 'ok')
+    : (i.online ? 'ok' : 'danger')
+  const machineText = i.node
+    ? (i.node.online ? i.t('node.latencyMs', { ms: i.node.latencyMs }) : i.t('node.offline'))
+    : (i.online ? i.t('workspace.online') : i.t('workspace.offline'))
+  push(
+    systemCell('roam.core', 'machine', {
+      label: i.node?.name || i.t('nav.thisDevice'),
+      priority: 100, tier: 1, render: 'dot',
+      // 多机时点它去中心页（机器都在那儿）；单机没有可去的地方，就不是按钮
+      onClick: i.clustered ? { kind: 'route', id: '#/hub' } : undefined,
+    }),
+    { text: machineText, severity: machineSeverity },
+  )
+
+  // ── 中心：只在接入中心时出现 ──
+  // 2026-08-11 中心卡死十几个小时无人发现——中心页当时就存在，但得先「发现打不开」
+  // 才会想起去看它。这一格是唯一能保证被看见的位置。
+  if (i.clustered) {
+    push(
+      systemCell('roam.core', 'hub', {
+        label: i.t('status.hub'), priority: 90, tier: 3, render: 'dot',
+        onClick: { kind: 'route', id: '#/hub' },
+      }),
+      {
+        text: i.hubAlarm || i.t('status.hubOk'),
+        detail: i.hubAlarm,
+        severity: i.hubAlarm ? 'danger' : 'ok',
+      },
+    )
+  }
+
+  // ── 待办：对应 VS Code 的「问题」格。三样都是 0 就不出现 ──
+  const todo = i.waiting + i.unfinished
+  if (todo > 0) {
+    const parts: string[] = []
+    if (i.waiting) parts.push(i.t('status.waitingN', { n: i.waiting }))
+    if (i.unfinished) parts.push(i.t('status.unfinishedN', { n: i.unfinished }))
+    push(
+      systemCell('roam.tasks', 'todo', {
+        label: '', priority: 80, tier: 1, render: 'text', icon: 'ChecklistIcon',
+        onClick: { kind: 'route', id: '#/projects' },
+      }),
+      // 有会话卡在确认就是警戒色：那是「它在等你，而你不知道」
+      { text: parts.join(' · '), severity: i.waiting ? 'warn' : 'ok' },
+    )
+  }
+
+  // ── 会话数：0 个会话时整格不出现 ──
+  if (i.sessions > 0) {
+    push(
+      systemCell('roam.core', 'sessions', {
+        label: '', priority: 70, tier: 2, render: 'text', icon: 'TerminalIcon',
+        onClick: { kind: 'route', id: '#/sessions' },
+      }),
+      { text: String(i.sessions) },
+    )
+  }
+
+  return out
+}
