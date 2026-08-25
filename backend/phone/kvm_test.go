@@ -64,3 +64,30 @@ func TestSgCommandFallsBackWhenSgMissing(t *testing.T) {
 		t.Errorf("没有 sg 时应原样返回，得到 %s %v", bin, args)
 	}
 }
+
+func TestLinuxGPUModeHeadless(t *testing.T) {
+	intel := []string{"0x8086"}
+	nvidia := []string{"0x10de"}
+
+	// 无头是判据的第一位：显卡在，能画的那块屏不在。
+	// roam 后端常年是 systemd 用户服务（DISPLAY 空），从前这里回 host，
+	// emulator 拿不到 EGL display 直接死，UI 上只剩一句「启动超时」。
+	if got := linuxGPUMode("", "", intel); got != "swiftshader_indirect" {
+		t.Errorf("无头 + 核显应软件渲染，得到 %s", got)
+	}
+	if got := linuxGPUMode("", "", nvidia); got != "swiftshader_indirect" {
+		t.Errorf("无头 + 独显也一样，得到 %s", got)
+	}
+
+	// 有显示才谈硬件加速
+	if got := linuxGPUMode(":0", "", intel); got != "host" {
+		t.Errorf("有 X 显示 + 核显应走 host，得到 %s", got)
+	}
+	if got := linuxGPUMode("", "wayland-0", []string{"0x1002"}); got != "host" {
+		t.Errorf("Wayland + AMD 应走 host，得到 %s", got)
+	}
+	// NVIDIA 专有驱动下 SurfaceFlinger 常起不来，有显示也躲开
+	if got := linuxGPUMode(":0", "", nvidia); got != "swiftshader_indirect" {
+		t.Errorf("NVIDIA 应躲开 host，得到 %s", got)
+	}
+}

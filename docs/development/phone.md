@@ -262,6 +262,22 @@ mode 由地址形状决定，不是两个独立选择：`avd:<名>`/`emulator-xx
 云主机不该为一个用不上的功能弹口令框；`ROAM_NO_KVM=1` 显式跳过）。判据是**回读设备**，
 不是命令返回码——装上一个不生效的授权比没有更糟。
 
+### `-gpu host` 要一块能画的屏，不只是一张显卡
+
+`gpuMode()` 从前只看有没有 Intel/AMD 渲染节点就回 `host`。但 `-gpu host` 走的是 GLX/EGL，
+要一个 X/Wayland 显示才拿得到 EGL display，而 roam 后端常年是 systemd 用户服务，
+`DISPLAY` 是空的 —— 于是 emulator 在日志里写 `Failed to get EGL display / Could not start
+renderer` 然后停在那儿，UI 上只剩一句「启动超时」，白等三分钟。**无头就只能软件渲染**
+（`swiftshader_indirect`），有独显也一样：显卡在，能画的那块屏不在。
+
+代价是慢，但起得来：本机 4K（3840x2160）Android TV 冷启动 37s，之后走 quickboot 快照
+再起约 10s。
+
+顺带：**起失败要把壳子收干净**。渲染器初始化失败这类失败会留下一个永远不会开机的 qemu，
+它一直握着 AVD 的 `multiinstance.lock`，下一次点「启动」只换来一句 `AVD is already running`
+—— 一次失败毒死后面每一次。判据是「连 adb 都没登记过」：登记过但没开完机的那台还在正常
+往前走，不能杀。
+
 ### 机型档的分辨率归机型档
 
 `avdmanager create avd -d <档>` 会把该档自己的分辨率写进 `config.ini`（`tv_4k` 是
