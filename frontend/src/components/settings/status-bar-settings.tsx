@@ -11,7 +11,7 @@ import { usePreferences } from '../../preferences'
 import { pluginCells, type PluginRecord } from '../shell/status-registry'
 
 /** 系统 provider 与它们注册的格——与 shell/status-system.ts 一一对应 */
-const SYSTEM_PROVIDERS = ['roam.core', 'roam.tasks'] as const
+const SYSTEM_PROVIDERS = ['roam.core', 'roam.git', 'roam.tasks'] as const
 
 export function StatusBarSettings() {
   const { t, locale } = useI18n()
@@ -75,7 +75,7 @@ export function StatusBarSettings() {
         <div style={group}>{t('status.groupSystem')}</div>
         {SYSTEM_PROVIDERS.map((id) => (
           <div key={id} style={row}>
-            <span>{id === 'roam.core' ? t('status.provider.core') : t('status.provider.tasks')}</span>
+            <span>{t('status.provider.' + id.split('.')[1])}</span>
             <span className="mono" style={hint}>{id}</span>
             <Switch size="small" style={{ marginLeft: 'auto' }} disabled={!bar.enabled}
               checked={!hidden.has(id)} onChange={(v) => toggleHidden(id, v)} />

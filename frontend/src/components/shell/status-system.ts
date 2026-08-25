@@ -27,6 +27,12 @@ export type SystemInput = {
   agents: number
   /** Roam 版本；还没取到时为空，那一格就不出现 */
   version: string
+  /** 当前会话所属仓库；不在仓库里时为 null，分支那几格整组不出现 */
+  git: { branch: string; ahead: number; behind: number; files: number; state: string; conflicts: number } | null
+  /** 当前会话所属项目的 key，分支那几格点开去它的项目页 */
+  projectKey: string
+  /** 活跃蜂群数（已归档的不算） */
+  swarms: number
   t: (key: string, vars?: Record<string, unknown>) => string
 }
 
@@ -107,7 +113,7 @@ export function systemCells(i: SystemInput): SystemCell[] {
         label: '', priority: 70, tier: 2, render: 'text', icon: 'TerminalIcon', unit: 'count',
         onClick: { kind: 'route', id: '#/sessions' },
       }),
-      { text: String(i.sessions) },
+      { text: String(i.sessions), detail: i.t('nav.sessions') },
     )
   }
 
@@ -118,7 +124,70 @@ export function systemCells(i: SystemInput): SystemCell[] {
         label: '', priority: 65, tier: 2, render: 'text', icon: 'BotIcon', unit: 'count',
         onClick: { kind: 'route', id: '#/sessions' },
       }),
-      { text: String(i.agents) },
+      { text: String(i.agents), detail: i.t('status.agentsRunning') },
+    )
+  }
+
+  // ── 分支：VS Code 状态栏上最有用的那一格 ──
+  // 不在仓库里（或者压根没有活动会话）就整组不出现，而不是画一个「-」占位。
+  if (i.git?.branch) {
+    const g = i.git
+    const gitRoute = i.projectKey ? '#/projects/' + encodeURIComponent(i.projectKey) : '#/projects'
+    // rebase / merge 进行中是**必须看见**的：那时候一个 git commit 的后果和平时不一样
+    // 未知的 state（git 将来加了新模式）退回原文，别把键名画到条上
+    const stateKey = 'status.gitState.' + g.state
+    const stateText = g.state ? i.t(stateKey) : ''
+    const state = stateText === stateKey ? g.state : stateText
+    push(
+      systemCell('roam.git', 'branch', {
+        label: '', priority: 85, tier: 3, render: 'text', icon: 'ForkIcon',
+        // Git 面板挂在 Inspector 槽位里、不是一条路由，所以去这个仓库的项目页——
+        // worktree、待收尾、开 Git 面板的入口都在那儿
+        onClick: { kind: 'route', id: gitRoute },
+      }),
+      {
+        text: state ? `${g.branch} · ${state}` : g.branch,
+        detail: g.conflicts ? i.t('status.conflictsN', { n: g.conflicts }) : undefined,
+        severity: g.conflicts ? 'danger' : g.state ? 'warn' : 'ok',
+      },
+    )
+
+    // ── 同步：落后/领先。箭头是图标不是文字符号，数字用文案说清哪头是哪头 ──
+    if (g.ahead || g.behind) {
+      const parts: string[] = []
+      if (g.behind) parts.push(i.t('status.behindN', { n: g.behind }))
+      if (g.ahead) parts.push(i.t('status.aheadN', { n: g.ahead }))
+      push(
+        systemCell('roam.git', 'sync', {
+          label: '', priority: 84, tier: 4, render: 'text',
+          icon: g.behind ? 'ArrowDown' : 'ArrowUp',
+          onClick: { kind: 'route', id: gitRoute },
+        }),
+        // 落后才上色：领先只是「还没推」，那是你自己知道的事
+        { text: parts.join(' · '), severity: g.behind ? 'warn' : 'ok' },
+      )
+    }
+
+    // ── 改动：几个文件动过。0 就不出现 ──
+    if (g.files) {
+      push(
+        systemCell('roam.git', 'changed', {
+          label: '', priority: 83, tier: 4, render: 'text', icon: 'DiffIcon', unit: 'count',
+          onClick: { kind: 'route', id: gitRoute },
+        }),
+        { text: String(g.files), detail: i.t('status.changedFiles') },
+      )
+    }
+  }
+
+  // ── 蜂群：有活跃的才出现 ──
+  if (i.swarms > 0) {
+    push(
+      systemCell('roam.tasks', 'swarm', {
+        label: '', priority: 60, tier: 4, render: 'text', icon: 'SwarmIcon', unit: 'count',
+        onClick: { kind: 'route', id: '#/swarm' },
+      }),
+      { text: String(i.swarms), detail: i.t('status.swarmsActive') },
     )
   }
 

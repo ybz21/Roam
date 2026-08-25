@@ -1085,8 +1085,39 @@ M1 的后端改动只有 manifest 结构和一段 <code>statusItems</code> 声�
     （沿用项目页 <code>initialKey</code> 那套）。</li>
 </ol>
 
-<p><b class="hl">留到 M2 的：</b>右半十二格（要动 Monaco 与会话状态）、分支 / 改动 / 蜂群 / 后台任务四格
-（各自的数据源还没有）、机器格点开的<b class="hl">机器切换下拉</b>。
+<p><b class="hl">第三轮：把分支那几格接上（同日）。</b>之前它们「留到 M2」，理由是 App 没有数据源、
+而我不想为一格加一条轮询。真跑起来发现条上只有主机读数，
+<b class="hl">最该在状态条上的那格（分支）反而不在</b>。接法是<b class="hl">挂在已经在跑的那条
+15s 轮询上</b>——不另起定时器，只在同一个 <code>Promise.all</code> 里多两条请求，
+换会话时立刻补一次（换会话就是换了仓库）。新增：</p>
+<ul>
+<li><b>分支</b>（<code>ForkIcon</code> + 名字；rebase / merge 进行中时上黄并写进格里——
+    那时候一个 <code>git commit</code> 的后果和平时不一样；有冲突则红）</li>
+<li><b>同步</b>（<code>ArrowDown</code>/<code>ArrowUp</code> + 「落后 3 · 领先 1」。
+    <b class="hl">落后才上色</b>，领先只是「还没推」，那是你自己知道的事。
+    箭头是图标不是文字符号，数字用文案说清哪头是哪头）</li>
+<li><b>改动</b>（<code>DiffIcon</code> + 文件数）· <b>Agent</b>（在跑的数）· <b>蜂群</b>（活跃群数）</li>
+</ul>
+<p>
+去处那一格踩了个坑：Git 面板<b class="hl">不是一条路由</b>，它挂在 Inspector 槽位里、由
+TerminalPane / 项目页 portal 进去。所以分支那三格点开去的是<b class="hl">这个仓库的项目页</b>
+（<code>#/projects/&lt;key&gt;</code>）——worktree、待收尾、开 Git 面板的入口都在那儿。
+</p>
+<p>
+另外两个 bug 值得记：<code>/git/status</code> 的 <code>files</code> / <code>conflicts</code>
+是<b class="hl">数组不是计数</b>（<code>String(d.files)</code> 会画出一串
+<code>[object Object]</code>，而空数组还是 truthy，那一格于是永远显示 0）；
+<code>sessionProject()</code> 是普通函数<b class="hl">不是响应式的</b>，归属表更新时不触发重渲，
+切了会话之后分支格要等下一次别的 state 变化才跟上——改用 <code>useSessionProject()</code>。
+两个都是真机上点出来的，typecheck 和单测都拦不住。
+</p>
+<p>
+只有图标没有文字的格（改动 / 会话 / Agent / 蜂群）条上就是一个数字，
+名字必须进 <code>aria-label</code> 与 <code>title</code>，且<b class="hl">排在数字前面</b>：
+读到的是「改动文件 2」而不是「2」。
+</p>
+
+<p><b class="hl">留到 M2 的：</b>右半十二格（要动 Monaco 与会话状态）、后台任务那一格（AVD / 插件 / P2P / fetch 要先有一张前端任务登记表）、机器格点开的<b class="hl">机器切换下拉</b>。
 最后这一条是为什么<b class="hl">侧栏底座那枚切换器和 <code>LinkStatus</code> 这次没撤</b>——
 在等价替代品落地之前撤掉它，多机用户在桌面上就切不了机器了，那是实打实的功能倒退。
 设计里写的「顺手删掉」，删的顺序得排在替代品后面。</p>

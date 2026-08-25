@@ -50,7 +50,7 @@ import { SessionDock } from './components/shell/SessionDock'
 import { WorkspaceStatusBar } from './components/shell/WorkspaceStatusBar'
 import { systemCells } from './components/shell/status-system'
 import type { StatusAction } from './components/shell/status-cells'
-import { sessionProject, setSessionProjects, buildSessionProjects } from './components/sessions/session-project'
+import { sessionProject, useSessionProject, setSessionProjects, buildSessionProjects } from './components/sessions/session-project'
 import { MobileSheet, SheetRow, SheetSection } from './components/shell/MobileSheet'
 import { WorkspaceTopbar, type PaletteActions, type PaletteItem } from './components/shell/WorkspaceTopbar'
 import { GlobalSearch, openPalette } from './components/shell/palette'
@@ -196,6 +196,32 @@ export default function App() {
     return () => { stop = true }
   }, [])
   const [unfinished, setUnfinished] = useState(0)
+  const [swarmCount, setSwarmCount] = useState(0)
+  // 当前会话所属仓库的 Git 状态，给状态条的分支/同步/改动三格用。
+  // **不另起一条定时器**：挂在下面那条已经在跑的 15s 轮询上，换目录时立刻补一次。
+  const [git, setGit] = useState<{ branch: string; ahead: number; behind: number; files: number; state: string; conflicts: number } | null>(null)
+  // 用**响应式**的那个：sessionProject() 是普通函数，归属表更新时不会触发重渲，
+  // 于是切了会话之后分支那几格要等到下一次别的 state 变化才跟上。
+  const activeProject = useSessionProject(active)
+  const gitDir = activeProject?.dir || ''
+  const gitDirRef = useRef(gitDir)
+  gitDirRef.current = gitDir
+  const loadGit = async () => {
+    const dir = gitDirRef.current
+    if (!dir) { setGit(null); return }
+    try {
+      const d = (await api('GET', `/git/status?dir=${encodeURIComponent(dir)}`))?.data
+      // files / conflicts 是**数组**不是计数（踩过：`String(d.files)` 会画出
+      // 一串 [object Object]，而空数组还是 truthy，那一格永远显示 0）
+      const len = (v: unknown) => (Array.isArray(v) ? v.length : Number(v) || 0)
+      setGit(d?.repo ? {
+        branch: d.branch || '', ahead: d.ahead || 0, behind: d.behind || 0,
+        files: len(d.files), state: d.state || '', conflicts: len(d.conflicts),
+      } : null)
+    } catch { /* 轮询失败保持上一轮，不清空 */ }
+  }
+  // 换会话就换了仓库：立刻补一次，不等下一个 15s
+  useEffect(() => { if (authed) void loadGit() }, [authed, gitDir])
   // 不能按 hasSider 收窄：手机没有侧栏，但会话坞同样要写「项目 · 会话」
   useEffect(() => {
     // **必须等 authed**：hooks 跑在下面 `return <Login/>` 那些提前 return 之前，
@@ -206,14 +232,18 @@ export default function App() {
     let stop = false
     const load = async () => {
       try {
-        const [pr, an] = await Promise.all([
+        const [pr, an, sw] = await Promise.all([
           api('GET', '/projects'),
           api('GET', '/sessions/annotations').catch(() => null),
+          api('GET', '/swarms').catch(() => null),
         ])
         if (stop) return
         const projects = pr?.data?.projects || []
         setUnfinished(projects.reduce((n: number, p: any) => n + (p.unfinished || 0), 0))
         setSessionProjects(buildSessionProjects(projects, an?.data || {}))
+        const swarms = Array.isArray(sw) ? sw : sw?.data || []
+        setSwarmCount(swarms.filter((x: any) => x?.status && x.status !== 'archived').length)
+        void loadGit()
       } catch { /* 轮询失败就保持上一轮的值，不清空 */ }
     }
     load()
@@ -669,6 +699,9 @@ export default function App() {
     unfinished,
     agents: terms.filter((n) => claudeMap[n]?.running || codexMap[n]?.running).length,
     version: roamVersion,
+    git,
+    projectKey: activeProject?.key || '',
+    swarms: swarmCount,
     t,
   })
   // 插件只能给白名单里的两种动作，给不了任意跳转（20 设计 §05 约束①）

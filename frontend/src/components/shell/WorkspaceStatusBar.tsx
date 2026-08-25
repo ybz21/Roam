@@ -110,7 +110,8 @@ export function WorkspaceStatusBar({ system, onAction }: {
 
 function CellButton({ cell, onAction }: { cell: Cell; onAction: (a: StatusAction) => void }) {
   const { t } = useI18n()
-  const name = [cell.label, formatValue(cell.val, cell.unit), cell.val.detail]
+  // detail 排在数字前面：图标格条上只有一个「2」，名字得先说清那是什么的 2
+  const name = [cell.label, cell.val.detail, formatValue(cell.val, cell.unit)]
     .filter(Boolean).join(' ')
   const cls = [
     'cell', cell.severity !== 'ok' ? cell.severity : '',
