@@ -20,7 +20,21 @@ export interface Preferences {
   p2pGatherTimeoutSec: number // ICE 候选收集上限（秒）：等 srflx 等这么久，慢网(手机蜂窝)可调大。默认 30
   p2pMinSpeedKBps: number // P2P 直连测速回退阈值(KB/s)：平均落盘速率长期低于此值就回退 frp；0=禁用，永远坚持 P2P。默认 200
   workspace: WorkspacePreference // 工作区外壳偏好（13/14 设计共用一份，见下）
+  statusBar: StatusBarPreference // 底部状态条（20 设计）
   _migrated: boolean
+}
+
+/**
+ * 底部状态条偏好（20 设计 §05/§13）。
+ *
+ * `hidden` 收全局格 id 或 provider id；`optIn` 是**第三方插件**的白名单——
+ * 装了插件不等于同意它上你的状态条，所以第三方默认关，要在设置里打开。
+ * 系统格与随二进制分发的 builtin 插件（如主机监控）默认就在，不需要进 optIn。
+ */
+export interface StatusBarPreference {
+  enabled: boolean
+  hidden: string[]
+  optIn: string[]
 }
 
 /**
@@ -57,6 +71,8 @@ const WORKSPACE_DEFAULTS: WorkspacePreference = {
   dpadHintSeen: false,
 }
 
+const STATUSBAR_DEFAULTS: StatusBarPreference = { enabled: true, hidden: [], optIn: [] }
+
 const DEFAULTS: Preferences = {
   theme: 'dark',
   locale: 'zh-CN',
@@ -76,6 +92,7 @@ const DEFAULTS: Preferences = {
   p2pGatherTimeoutSec: 30,
   p2pMinSpeedKBps: 200,
   workspace: WORKSPACE_DEFAULTS,
+  statusBar: STATUSBAR_DEFAULTS,
   _migrated: false,
 }
 

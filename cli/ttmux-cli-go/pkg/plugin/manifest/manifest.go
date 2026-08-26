@@ -80,7 +80,67 @@ type Contribs struct {
 	NotificationSinks []SinkContrib    `json:"notificationSinks,omitempty"`
 	ConfigGroups      []ConfigGroup    `json:"configGroups,omitempty"`
 	ConfigFields      []ConfigField    `json:"configFields,omitempty"`
+	StatusItems       []StatusItem     `json:"statusItems,omitempty"`
 }
+
+// StatusItem 声明一格底部状态条(docs/design/web/20-status-bar §05)。
+//
+// 声明式而非代码式:插件是外部进程,不可能让它渲染宿主的 DOM。插件只给数值,
+// 宿主用固定的四种渲染器画、按声明的阈值判红黄绿——**severity 不由插件说**,
+// 否则每个插件都会把自己染红,第三格红的出现时这条就报废了。
+type StatusItem struct {
+	ID     string     `json:"id"`                 // 插件内唯一;全局 id 是 <插件id>/<id>
+	Title  LocaleText `json:"title,omitempty"`    // 格前的短标签(「内存」),也是设置页里的名字
+	Align  string     `json:"align,omitempty"`    // left(默认) | right;插件只能落 left-tail / right-head
+	Prio   int        `json:"priority,omitempty"` // 段内从大到小;同分按全局 id 字典序(稳定)
+	Tier   int        `json:"tier,omitempty"`     // 折叠档位 1..4,越小越晚被丢;缺省 3
+	Render string     `json:"render,omitempty"`   // text | gauge | dot | progress;缺省 text
+	Icon   string     `json:"icon,omitempty"`     // icons.tsx 里的导出名;不认识的名字宿主忽略
+	Unit   string     `json:"unit,omitempty"`     // percent | bytes | bytesPerSec | celsius | count
+	Source StatusSrc  `json:"source"`
+	Thresh *StatusThr `json:"thresholds,omitempty"`
+	Click  *StatusAct `json:"onClick,omitempty"`
+}
+
+// StatusSrc 是取值方式。默认拉:宿主按 Refresh 调 Command,再从返回的 JSON
+// 里按 Path 取值。同一插件的多个 item 若 Command 相同,合并成一次调用——
+// 主机监控六格共用一次 stats,不是六次。
+type StatusSrc struct {
+	Command string `json:"command,omitempty"` // 短名形式(host-monitor.stats)
+	Refresh int    `json:"refresh,omitempty"` // 秒;下限 StatusMinRefresh
+	Path    string `json:"path,omitempty"`    // 点分路径,支持 a.b[0].c
+	// Text 是可选的第二条路径:取到就直接当文案用,不再由宿主按 Unit 格式化。
+	TextPath string `json:"textPath,omitempty"`
+	// Total 配合 unit=bytesRatio:Path 取已用、TotalPath 取总量,画成「12.1/32G」,
+	// 迷你条与阈值都按两者的比例算。一个百分比说不出「还剩多少」,而那才是你要的。
+	TotalPath string `json:"totalPath,omitempty"`
+	Push      bool   `json:"push,omitempty"` // 常驻插件主动推(runtime.resident 才有意义)
+}
+
+// StatusThr 是阈值。SustainSec>0 时要求连续越线这么久才升级——CPU 天天冲
+// 100%(编译、跑测试都是正常干活),按瞬时值上色两天内就没人再看这条了。
+type StatusThr struct {
+	Warn       *float64 `json:"warn,omitempty"`
+	Danger     *float64 `json:"danger,omitempty"`
+	SustainSec int      `json:"sustainSec,omitempty"`
+	// Invert:值越小越糟(如剩余磁盘)。缺省 false = 越大越糟。
+	Invert bool `json:"invert,omitempty"`
+}
+
+// StatusAct 是点击动作。只有白名单里的几种,插件给不了任意跳转。
+type StatusAct struct {
+	Kind string `json:"kind"`         // pluginView | route
+	ID   string `json:"id,omitempty"` // pluginView: 插件 id;route: 形如 #/files 的站内路由
+}
+
+// 状态条贡献点的预算(20-status-bar §05)。一条 24px 的槽装不下三个插件各五格,
+// 所以格数、刷新率都在 manifest 校验期就管住,而不是等运行时再讲道理。
+const (
+	StatusMaxItemsPlugin  = 2 // 第三方插件
+	StatusMaxItemsBuiltin = 6 // 随二进制分发的 builtin 插件
+	StatusMinRefresh      = 2 // 秒;plugin run 每次起一个子进程
+	StatusMaxTitleLen     = 24
+)
 
 // ConfigGroup 把配置字段分节展示(如飞书桥的「出站通知」与「入站派活」是
 // 两条独立通道);设置页按声明顺序渲染分组标题与引导说明。
@@ -149,6 +209,72 @@ func (m Manifest) Validate() error {
 			return fmt.Errorf("manifest %s: duplicate command id %q", m.ID, c.ID)
 		}
 		seen[c.ID] = true
+	}
+	if err := m.validateStatusItems(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// validateStatusItems 管住状态条贡献点的预算与取值枚举。
+func (m Manifest) validateStatusItems() error {
+	items := m.Contributes.StatusItems
+	if len(items) == 0 {
+		return nil
+	}
+	max := StatusMaxItemsPlugin
+	if m.Runtime.Kind == "builtin" {
+		max = StatusMaxItemsBuiltin
+	}
+	if len(items) > max {
+		return fmt.Errorf("manifest %s: %d statusItems exceeds the limit of %d", m.ID, len(items), max)
+	}
+	seen := map[string]bool{}
+	for _, it := range items {
+		if it.ID == "" {
+			return fmt.Errorf("manifest %s: statusItem id is required", m.ID)
+		}
+		if strings.ContainsAny(it.ID, "/:") {
+			return fmt.Errorf("manifest %s: statusItem id %q must not contain '/' or ':'", m.ID, it.ID)
+		}
+		if seen[it.ID] {
+			return fmt.Errorf("manifest %s: duplicate statusItem id %q", m.ID, it.ID)
+		}
+		seen[it.ID] = true
+		switch it.Align {
+		case "", "left", "right":
+		default:
+			return fmt.Errorf("manifest %s: statusItem %q has unsupported align %q", m.ID, it.ID, it.Align)
+		}
+		switch it.Render {
+		case "", "text", "gauge", "dot", "progress":
+		default:
+			return fmt.Errorf("manifest %s: statusItem %q has unsupported render %q", m.ID, it.ID, it.Render)
+		}
+		if it.Tier < 0 || it.Tier > 4 {
+			return fmt.Errorf("manifest %s: statusItem %q has tier %d, want 1..4", m.ID, it.ID, it.Tier)
+		}
+		if !it.Source.Push {
+			if it.Source.Command == "" {
+				return fmt.Errorf("manifest %s: statusItem %q needs source.command (or source.push)", m.ID, it.ID)
+			}
+			if _, ok := m.CommandOwner(it.Source.Command); !ok {
+				return fmt.Errorf("manifest %s: statusItem %q references undeclared command %q", m.ID, it.ID, it.Source.Command)
+			}
+			if it.Source.Refresh > 0 && it.Source.Refresh < StatusMinRefresh {
+				return fmt.Errorf("manifest %s: statusItem %q refresh %ds is below the %ds floor", m.ID, it.ID, it.Source.Refresh, StatusMinRefresh)
+			}
+			if it.Source.Path == "" && it.Source.TextPath == "" {
+				return fmt.Errorf("manifest %s: statusItem %q needs source.path or source.textPath", m.ID, it.ID)
+			}
+		}
+		if it.Click != nil {
+			switch it.Click.Kind {
+			case "pluginView", "route":
+			default:
+				return fmt.Errorf("manifest %s: statusItem %q has unsupported onClick.kind %q", m.ID, it.ID, it.Click.Kind)
+			}
+		}
 	}
 	return nil
 }

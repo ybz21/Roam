@@ -106,6 +106,7 @@
   --nav-w: 224px;
   --nav-rail: 48px;
   --topbar-h: 40px;
+  --status-h: 24px;               /* 底部状态条；粗指针下长到 --tap（见 .tt-statusbar） */
   --canvas-min: 560px;
   --dock-min: 480px;
   --dock-max: 880px;
@@ -3155,3 +3156,92 @@ html[data-size="compact"] .cc-run-slot { width: auto; }
    否则右侧按钮会跟着名字长短左右参差。 */
 html[data-size="compact"] .tt-histdir { display: none; }
 html[data-size="compact"] .tt-histname { flex: 1 1 auto; max-width: none; }
+
+
+/* ── 底部状态条（shell/WorkspaceStatusBar.tsx，20 设计）────────────────────
+   条是壳，格是注册进来的：系统格与插件格共用这一套长相，条上看不出区别。
+
+   它是 flex 布局里的一格（App 最外层改成列向），**不是 position:fixed**——
+   fixed 不占位，上面那层照旧按 100dvh 算高，最后一行内容会永远压在条底下，
+   而且横向滚动条一闪就把整个画布挪 10px（见 AGENTS「文档永远不滚动」）。 */
+.tt-statusbar {
+  flex: 0 0 auto;
+  display: flex; align-items: stretch;
+  height: calc(var(--status-h) + var(--safe-b));
+  padding-bottom: var(--safe-b);
+  background: var(--bg-container);
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--fs-meta); color: var(--text-dim);
+  overflow: hidden; user-select: none;
+}
+.tt-statusbar .cell {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 0 var(--sp-3); height: 100%;
+  white-space: nowrap; border: 0; background: none; color: inherit; font: inherit;
+}
+.tt-statusbar button.cell { cursor: pointer; }
+:where(html[data-pointer="fine"]) .tt-statusbar button.cell:hover {
+  background: var(--list-hover); color: var(--text-bright);
+}
+.tt-statusbar .sp { flex: 1 1 auto; min-width: var(--sp-5); }
+/* 左右两组之间一根竖线：弹簧把它们推开，线说明「这两组不是一伙的」。
+   画在弹簧自己身上而不是右边第一格的 ::before —— 那个伪元素是「钉住」标记的。 */
+.tt-statusbar .sp { position: relative; }
+.tt-statusbar .sp::after {
+  content: ""; position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+  width: 1px; height: 12px; background: var(--border);
+}
+.tt-statusbar .lb { color: var(--text-dimmer); }
+.tt-statusbar .vl {
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  /* 按单位预留最长值的位置。等宽数字只保证「每个数字一样宽」，位数一变
+     （8% → 100%）这一格还是会宽出 7px，右边所有格跟着平移——每 3 秒一次。
+     预留之后宽度就钉死了，条不再在眼皮底下抖。 */
+  text-align: right;
+}
+.tt-statusbar .vl[data-unit="percent"] { min-width: 4ch; }
+.tt-statusbar .vl[data-unit="celsius"] { min-width: 5ch; }
+.tt-statusbar .vl[data-unit="count"] { min-width: 3ch; }
+.tt-statusbar .vl[data-unit="bytes"] { min-width: 6ch; }
+.tt-statusbar .vl[data-unit="bytesPerSec"] { min-width: 8ch; }
+.tt-statusbar .vl[data-unit="bytesRatio"] { min-width: 9ch; }
+.tt-statusbar .dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; background: var(--ok); }
+.tt-statusbar .dot.warn { background: var(--warn); }
+.tt-statusbar .dot.danger { background: var(--danger); }
+.tt-statusbar .mini {
+  width: 30px; height: 4px; border-radius: var(--r-pill); flex: 0 0 auto; overflow: hidden;
+  background: color-mix(in srgb, var(--text-dimmer) 26%, transparent);
+}
+.tt-statusbar .mini i { display: block; height: 100%; background: var(--text-dimmer); }
+.tt-statusbar .spin {
+  width: 11px; height: 11px; border-radius: 50%; flex: 0 0 auto;
+  border: 2px solid var(--border); border-top-color: var(--accent);
+  animation: tt-status-spin 1s linear infinite;
+}
+@keyframes tt-status-spin { to { transform: rotate(360deg); } }
+
+/* 平静时整条一种灰，只有越线的那一格上色。一条平时就有绿有蓝有黄的条，
+   第四天起就没人再看它了。 */
+.tt-statusbar .cell.warn { color: var(--warn); }
+.tt-statusbar .cell.warn .lb, .tt-statusbar .cell.danger .lb { color: inherit; }
+.tt-statusbar .cell.warn .mini i { background: var(--warn); }
+.tt-statusbar .cell.danger { color: var(--danger); }
+.tt-statusbar .cell.danger .mini i { background: var(--danger); }
+/* 过期：变暗置 --，不留最后一帧。一个停在 34% 的假数字比空白危险得多 */
+.tt-statusbar .cell.stale { color: var(--text-dimmer); opacity: .55; }
+/* 钉住：这一格不参与折叠。竖线表示「它是被留下来的，不是碰巧还在」 */
+.tt-statusbar .cell.pin { position: relative; }
+.tt-statusbar .cell.pin::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0;
+  width: 2px; background: currentColor; opacity: .5;
+}
+.tt-statusbar .cell svg { width: 13px; height: 13px; flex: 0 0 auto; }
+
+/* 粗指针：整条长到 44，而不是拿伪元素往上撑命中区——条的上方紧贴着页面内容，
+   往上撑 20px 会在每一页的最后一行盖出一条点不到的死区。 */
+:where(html[data-pointer="coarse"]) .tt-statusbar {
+  --status-h: var(--tap);
+  font-size: var(--fs-sm);
+}
+:where(html[data-pointer="coarse"]) .tt-statusbar .cell { padding: 0 var(--sp-3); gap: var(--sp-2); }
+:where(html[data-pointer="coarse"]) .tt-statusbar .cell svg { width: 16px; height: 16px; }

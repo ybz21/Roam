@@ -47,7 +47,10 @@ import { Navigation } from './components/shell/Navigation'
 import { reorderTabs } from './components/shell/tabs'
 import { requestIntent, OPEN_FILE_INTENT } from './intents'
 import { SessionDock } from './components/shell/SessionDock'
-import { sessionProject, setSessionProjects, buildSessionProjects } from './components/sessions/session-project'
+import { WorkspaceStatusBar } from './components/shell/WorkspaceStatusBar'
+import { systemCells } from './components/shell/status-system'
+import type { StatusAction } from './components/shell/status-cells'
+import { sessionProject, useSessionProject, setSessionProjects, buildSessionProjects } from './components/sessions/session-project'
 import { MobileSheet, SheetRow, SheetSection } from './components/shell/MobileSheet'
 import { WorkspaceTopbar, type PaletteActions, type PaletteItem } from './components/shell/WorkspaceTopbar'
 import { GlobalSearch, openPalette } from './components/shell/palette'
@@ -126,6 +129,7 @@ export default function App() {
   const tab = route.split('/')[0]                                  // 基础页（swarm/leave → swarm）
   const swarmSub = tab === 'swarm' && route.includes('/') ? decodeURIComponent(route.slice(route.indexOf('/') + 1)) : '' // 深链选中的蜂群
   const projectSub = tab === 'projects' && route.includes('/') ? decodeURIComponent(route.slice(route.indexOf('/') + 1)) : '' // 深链选中的项目
+  const pluginSub = tab === 'plugins' && route.includes('/') ? decodeURIComponent(route.slice(route.indexOf('/') + 1)) : '' // 深链选中的插件（状态条点进来）
   const settingsSub = tab === 'settings' && route.includes('/') ? route.slice(route.indexOf('/') + 1) : '' // 设置的哪一类（node/browser）
   const go = (k: string) => {
     const qi = location.hash.indexOf('?')
@@ -184,7 +188,40 @@ export default function App() {
   // 会话坞要显示「几个在等你」，而这个信号是 TerminalPane 抓屏算出来的（detectPrompt）。
   // 它已经在为每个已开会话轮询，别再开第二份——让它把结果递上来即可。
   const [mobileWaiting, setMobileWaiting] = useState<Record<string, boolean>>({})
+  // 版本给状态条最右那一格用：**一次性**取，不是轮询（免登录接口，见 server.go）
+  const [roamVersion, setRoamVersion] = useState('')
+  useEffect(() => {
+    let stop = false
+    api('GET', '/version').then((r) => { if (!stop) setRoamVersion(r?.data?.version || '') }).catch(() => {})
+    return () => { stop = true }
+  }, [])
   const [unfinished, setUnfinished] = useState(0)
+  const [swarmCount, setSwarmCount] = useState(0)
+  // 当前会话所属仓库的 Git 状态，给状态条的分支/同步/改动三格用。
+  // **不另起一条定时器**：挂在下面那条已经在跑的 15s 轮询上，换目录时立刻补一次。
+  const [git, setGit] = useState<{ branch: string; ahead: number; behind: number; files: number; state: string; conflicts: number } | null>(null)
+  // 用**响应式**的那个：sessionProject() 是普通函数，归属表更新时不会触发重渲，
+  // 于是切了会话之后分支那几格要等到下一次别的 state 变化才跟上。
+  const activeProject = useSessionProject(active)
+  const gitDir = activeProject?.dir || ''
+  const gitDirRef = useRef(gitDir)
+  gitDirRef.current = gitDir
+  const loadGit = async () => {
+    const dir = gitDirRef.current
+    if (!dir) { setGit(null); return }
+    try {
+      const d = (await api('GET', `/git/status?dir=${encodeURIComponent(dir)}`))?.data
+      // files / conflicts 是**数组**不是计数（踩过：`String(d.files)` 会画出
+      // 一串 [object Object]，而空数组还是 truthy，那一格永远显示 0）
+      const len = (v: unknown) => (Array.isArray(v) ? v.length : Number(v) || 0)
+      setGit(d?.repo ? {
+        branch: d.branch || '', ahead: d.ahead || 0, behind: d.behind || 0,
+        files: len(d.files), state: d.state || '', conflicts: len(d.conflicts),
+      } : null)
+    } catch { /* 轮询失败保持上一轮，不清空 */ }
+  }
+  // 换会话就换了仓库：立刻补一次，不等下一个 15s
+  useEffect(() => { if (authed) void loadGit() }, [authed, gitDir])
   // 不能按 hasSider 收窄：手机没有侧栏，但会话坞同样要写「项目 · 会话」
   useEffect(() => {
     // **必须等 authed**：hooks 跑在下面 `return <Login/>` 那些提前 return 之前，
@@ -195,14 +232,18 @@ export default function App() {
     let stop = false
     const load = async () => {
       try {
-        const [pr, an] = await Promise.all([
+        const [pr, an, sw] = await Promise.all([
           api('GET', '/projects'),
           api('GET', '/sessions/annotations').catch(() => null),
+          api('GET', '/swarms').catch(() => null),
         ])
         if (stop) return
         const projects = pr?.data?.projects || []
         setUnfinished(projects.reduce((n: number, p: any) => n + (p.unfinished || 0), 0))
         setSessionProjects(buildSessionProjects(projects, an?.data || {}))
+        const swarms = Array.isArray(sw) ? sw : sw?.data || []
+        setSwarmCount(swarms.filter((x: any) => x?.status && x.status !== 'archived').length)
+        void loadGit()
       } catch { /* 轮询失败就保持上一轮的值，不清空 */ }
     }
     load()
@@ -499,7 +540,7 @@ export default function App() {
     files: <FilesPage openTerm={openTerm} />,
     settings: <SettingsPage sub={settingsSub} onNav={(r) => go(r)} />,
     hub: <HubPage />,
-    plugins: <PluginsPanel />,
+    plugins: <PluginsPanel initialId={pluginSub || undefined} />,
     browser: <BrowserView />,
     phone: <PhoneView />,
   }
@@ -646,15 +687,44 @@ export default function App() {
   // 侧栏是否是 64px 轨：用户手动收起 / Focus 聚焦 / 非 large 档（expanded 一律用轨）
   const navRail = space.navCollapsed || space.mode === 'focus'
 
+  // 状态条的系统格：全部由 App 已经有的 state 算出来，**一条新请求都不发**
+  // （18 设计刚删掉过一套「每 6s 对 ≤14 个会话各发 3 条请求」的轮询，别再种一棵）。
+  const statusCells = systemCells({
+    online,
+    node: curNode ? { name: curNode.name, online: curNode.online, latencyMs: curNode.latencyMs } : null,
+    hubAlarm: hubHealth.level === 'ok' ? undefined : t('hub.why.' + (hubHealth.reasons[0] || 'unknown')),
+    clustered: clusterNodes.length > 0,
+    sessions: terms.length,
+    waiting: Object.values(mobileWaiting).filter(Boolean).length,
+    unfinished,
+    agents: terms.filter((n) => claudeMap[n]?.running || codexMap[n]?.running).length,
+    version: roamVersion,
+    git,
+    projectKey: activeProject?.key || '',
+    swarms: swarmCount,
+    t,
+  })
+  // 插件只能给白名单里的两种动作，给不了任意跳转（20 设计 §05 约束①）
+  const onStatusAction = (a: StatusAction) => {
+    // 直接写 hash，不走 go()：go() 只认页面名，会把 `/<id>` 那截深链抹掉，
+    // 于是点 CPU 只到插件列表页第一项——而你刚点的就是主机监控。
+    if (a.kind === 'route') location.hash = a.id
+    else if (a.kind === 'pluginView') location.hash = '#/plugins/' + encodeURIComponent(a.id)
+  }
+
   return (
-    <Layout style={{ height: '100dvh', overflow: 'hidden', background: 'var(--bg-base)' }}>
+    // 外壳改成列向：[ 横向行(侧栏 + 工作区) ][ 状态条 ]。状态条必须占位——
+    // 用 position:fixed 的话上面那层照旧按 100dvh 算高，页面最后一行会永远
+    // 压在条底下，而且横向滚动条一闪就把画布挪 10px（AGENTS「文档永远不滚动」）。
+    <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-base)' }}>
+    <Layout style={{ flex: 1, minHeight: 0, overflow: 'hidden', background: 'var(--bg-base)' }}>
       <UpdateBanner />
       {/* Focus 时导航收成 64px 轨而不是消失——上下文始终可找回（14 §4.1，老 dockMax 的病根）。
           expanded 档也一律用轨：905–1279 展开 224 侧栏会把 Canvas 挤破契约。*/}
       {hasSider && (
         <Sider collapsible trigger={null} collapsedWidth={NAV_RAIL} width={NAV_WIDTH} theme={mode}
           collapsed={navRail}
-          style={{ position: 'sticky', top: 0, height: '100dvh', background: 'var(--bg-base)', borderRight: '1px solid var(--border-subtle)' }}>
+          style={{ position: 'sticky', top: 0, height: '100%', background: 'var(--bg-base)', borderRight: '1px solid var(--border-subtle)' }}>
           <Navigation
             rail={navRail} active={tab} groups={navGroups} onGo={go}
             settings={{ key: 'settings', label: t('nav.env'), icon: ICONS.settings }}
@@ -683,7 +753,7 @@ export default function App() {
       <Layout style={{ background: 'var(--bg-base)', minWidth: 0 }}>
         {hasSider && (
           <WorkspaceTopbar
-            online={online} modKey={modKeyLabel}
+            modKey={modKeyLabel}
             dockCount={terms.length} dockOpen={space.dockVisible}
             onToggleDock={() => { space.setFocus('none'); space.toggleDock() }}
             // 切到项目页并留下「要新建」的意图，由那一页挂载后消费（见 intents.ts）。
@@ -836,6 +906,11 @@ export default function App() {
         </div>
       )}
     </Layout>
+
+    {/* 手机不常驻：底部已经叠了会话坞 + 底栏两层，再加一条就是第三层，
+        360px 宽的屏上底部会吃掉三分之一（20 设计 §10）。 */}
+    {hasSider && <WorkspaceStatusBar system={statusCells} onAction={onStatusAction} />}
+    </div>
   )
 
   function logout() {
