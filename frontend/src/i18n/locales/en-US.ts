@@ -307,6 +307,7 @@ const enUS = {
   'pair.intro.replyHead': 'To get a reply, include your own session name in the message:',
   'pair.intro.note': 'What it receives is one line of text, submitted for it — no different from a human typing it. Say who you are and what you want first; and do not keep trading pleasantries.',
   'pair.sent': 'Told "{name}" how to talk to "{peer}"',
+  'pair.dropHint': 'Tell this session how to talk to it',
   'pair.noAgent': 'No agent is running in "{name}" — the blurb would be executed line by line as shell commands',
   'pair.crossNode': '"{name}" is on another machine — ttmux send cannot reach it',
   'status.changedFiles': 'changed files',

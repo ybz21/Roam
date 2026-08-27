@@ -307,6 +307,7 @@ const zhCN = {
   'pair.intro.replyHead': '想让它回你，就在消息里带上你自己的会话名：',
   'pair.intro.note': '它收到的是一行文字并自动回车，和人敲进去的没区别。先说清你是谁、想让它干什么；也别一直客套着来回。',
   'pair.sent': '已经告诉「{name}」怎么跟「{peer}」说话',
+  'pair.dropHint': '告诉这个会话怎么跟它说话',
   'pair.noAgent': '「{name}」里没有 Agent 在跑，介绍词会被当成命令一行行执行掉',
   'pair.crossNode': '「{name}」在别的机器上，ttmux send 过不去',
   'status.changedFiles': '改动文件',
