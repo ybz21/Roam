@@ -284,6 +284,11 @@ export default function TerminalPane(props: {
   }
   // 拖到终端区：直接把 @路径 送进当前会话（claude/codex TUI 或 shell 提示符的光标处）。
   const onTermDrop = (e: React.DragEvent) => {
+    if (isSessionDrag(e)) { // 拖到画面上 = 说给当前会话听
+      e.preventDefault(); e.stopPropagation(); setDragOver(false)
+      if (active) void introduce(e, active)
+      return
+    }
     if (isFileDrag(e) && e.dataTransfer.files?.length) { // 系统文件：上传并注入（无视左右半区，不做分栏）
       e.preventDefault(); e.stopPropagation(); setDragOver(false)
       onTermFileDrop(e)
@@ -583,8 +588,10 @@ export default function TerminalPane(props: {
                   // 所以这里只按「目标有没有 Agent」决定亮不亮；剩下的判定落在 drop
                   const ok = !!(claudeMap[termName]?.running || codexMap[termName]?.running)
                   e.preventDefault(); e.stopPropagation()
-                  e.dataTransfer.dropEffect = ok ? 'copy' : 'none'
-                  setDropPeer(ok ? termName : '')
+                  // **一律 copy**：dropEffect='none' 会让浏览器干脆不投递 drop 事件，
+                  // 于是「不接」变成静默失败，人连原因都看不到。接住再解释。
+                  e.dataTransfer.dropEffect = 'copy'
+                  setDropPeer(ok ? termName : '') // 高亮只给接得住的
                   return
                 }
                 if (!isTabDrag(e)) return
@@ -799,6 +806,14 @@ export default function TerminalPane(props: {
     <div className={dpad ? 'tt-has-dpad' : undefined}
       style={{ flex: 1, minHeight: 0, display: 'flex', position: 'relative' }}
       onDragOver={(e) => {
+        // 会话拖到画面上 = 说给**当前**会话听。自定义 MIME 与路径拖拽
+        // (application/x-ttmux-path) 天然分得开，两条路互不干扰
+        if (isSessionDrag(e)) {
+          e.preventDefault(); e.stopPropagation()
+          e.dataTransfer.dropEffect = 'copy' // 见标签那处：none 会让 drop 根本不投递
+          setDragOver(agentRunning)
+          return
+        }
         if (isFileDrag(e)) { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; setDragOver(true); return } // 系统文件：允许放下并上传
         if (!isPathDrag(e)) return
         if (inTermSplitZone(e)) { setDragOver(false); return } // 右半区：让事件冒泡给 FileWorkspace 显示分栏提示

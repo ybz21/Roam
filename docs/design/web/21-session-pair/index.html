@@ -400,9 +400,11 @@ ttmux send &lt;会话&gt; &lt;消息&gt;
 <h2><span class="n">03</span>落点</h2>
 
 <p>
-落点必须分清楚，因为<b class="hl">终端画面那块地已经被文件拖放占着了</b>——
-拖文件进终端会插入路径，而且踩过一串坑（拖到光标格会往 xterm 的隐藏 textarea 灌残值，
-中文 IME 差分重放成重复 <code>@路径</code>）。
+<b class="hl">终端画面和会话标签都接。</b>「拖到当前会话里」本来就是人的直觉，
+而画面那块地看着像被文件拖放占着了——其实不是：路径拖拽用的是
+<code>application/x-ttmux-path</code>，跟会话拖拽的 <code>application/x-tt-session</code>
+天然分得开，两条路互不干扰。<b class="hl">第一版只让标签接，结果就是往画面里拖没反应</b>
+（用户第一句话就是「怎么拖动不了」）。
 </p>
 <div class="fig"><div class="dnd">  <div class="col">
     <div class="hd">项目页 · 任务</div>
@@ -418,14 +420,15 @@ ttmux send &lt;会话&gt; &lt;消息&gt;
       <span class="tab2">qwen38-2…-spa</span>
     </div>
     <div class="term2">
-      <div class="nope">拖到画面里 ＝ 插入 <span style="color:var(--text-dim)">@fix-missing-search</span> 文本，不注入</div>
+      <div class="nope" style="border-color:var(--accent-border);color:var(--accent)">画面这块也接：说给<b>当前</b>会话听</div>
     </div>
-  </div></div><div class="cap"><b>拖任务卡到会话标签上。</b>只有标签亮成落点；画面那块地归文件拖放。<b>用位置区分，不用修饰键</b>——按住 Shift 才怎样这种设计没人记得住，手机上也按不出来。</div></div>
+  </div></div><div class="cap"><b>标签和画面都接。</b>拖到画面 = 说给当前会话听；拖到某个标签 = 说给那个会话听。<b>用位置区分，不用修饰键</b>——按住 Shift 才怎样这种设计没人记得住，手机上也按不出来。</div></div>
 <table>
 <thead><tr><th>落在哪</th><th>发生什么</th></tr></thead>
 <tbody>
-<tr><td><b>终端坞的会话标签</b> / <b>会话坞里的会话行</b>（手机）</td><td class="ok-t">注入那段话</td></tr>
-<tr><td>终端画面里 / 对话页输入框</td><td class="warn-t">插入 <code>@会话名</code> 文本，照旧</td></tr>
+<tr><td><b>终端画面里</b>（拖到「当前会话」）</td><td class="ok-t">注入那段话</td></tr>
+<tr><td><b>终端坞的会话标签</b></td><td class="ok-t">注入那段话，说给那个标签的会话听</td></tr>
+<tr><td>对话页输入框</td><td class="warn-t">插入 <code>@会话名</code> 文本，照旧</td></tr>
 <tr><td>拖到自己身上 / 目标没跑 Agent / 跨机</td><td>不给落点，见 §04</td></tr>
 </tbody>
 </table>
@@ -458,7 +461,14 @@ ttmux send &lt;会话&gt; &lt;消息&gt;
 两个会话在不同机器上时它找不到对方，而 Agent 会拿到一句「会话不存在」然后开始瞎猜。
 </p>
 <p>
-两种都<b class="hl">不给落点</b>并说清原因——<b class="hl">明确拒绝好过让它撞一堵看不见的墙</b>。
+两种都拒绝<b class="hl">并说清原因</b>——明确拒绝好过让它撞一堵看不见的墙。
+</p>
+<p>
+实现上有个坑：<code>dragover</code> 里把 <code>dropEffect</code> 设成 <code>'none'</code>
+的话，浏览器<b class="hl">干脆不投递 <code>drop</code> 事件</b>——于是「不接」变成了静默失败，
+人连原因都看不到。<b class="hl">要一律 <code>'copy'</code> 接住，再在 drop 里解释</b>；
+高亮只给接得住的目标。（合成事件测不出这条：它绕过了浏览器那层判定，
+真·鼠标拖一次才现形。）
 </p>
 </div>
 
@@ -514,7 +524,9 @@ Web 侧本来就有往会话发东西的路径（发消息、开工都走它）�
 <h2><span class="n">06</span>验收</h2>
 
 <ul>
-<li>拖任务卡到标签：只有标签亮；拖到终端画面仍然是插入 <code>@路径</code>（文件拖放没被弄坏）。</li>
+<li>拖任务卡到<b class="hl">画面</b>和到<b class="hl">标签</b>都要通；拖文件进终端仍然是插入 <code>@路径</code>（两条路没打架）。</li>
+<li><b class="hl">用真·鼠标拖一次</b>，不是只发合成事件——合成事件绕过浏览器对
+    <code>dropEffect</code> 的判定，测不出「不接的目标静默失败」那类问题。</li>
 <li>落下后当前 pane 里出现那段介绍，<b class="hl">并且真的自动回车了</b>——
     裸 <code>send-keys text C-m</code> 只打字不发送，这条必须真机看。</li>
 <li>照着注进去的命令原样发一条，对面 pane 里出现并提交。</li>
