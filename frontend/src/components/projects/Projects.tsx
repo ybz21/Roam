@@ -14,6 +14,8 @@ import type { ReactNode } from 'react'
 import { App as AntApp, AutoComplete, Button, Dropdown, Input, Modal, Popconfirm, Segmented, Select, Space, Spin, Tag, Tooltip, Typography } from 'antd'
 import type { InputRef, MenuProps } from 'antd'
 import { sessionLabel } from '../sessions/session-label'
+import { SESSION_MIME } from '../shell/session-drop'
+import { currentNodeId } from '../cluster/node-url'
 import { dirTailName } from '../files/dir-name'
 import { api, upload, makeClipboardImageFile } from '../../api'
 import { useI18n } from '../../i18n'
@@ -1298,6 +1300,18 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
       <div key={s.name} className={`prj-row prj-in${activeTerm === s.name ? ' on' : ''}`}
         aria-current={activeTerm === s.name ? 'true' : undefined}
         style={{ marginLeft: isChild ? 22 : 0, animationDelay: `${Math.min(i, 8) * 40}ms` }}
+        // 拖到终端标签上 = 告诉那个会话怎么跟这个会话说话（21 设计）。
+        // 自定义 MIME：用 text/plain 会被文件区/终端当成路径拖拽接走。
+        draggable
+        onDragStart={(e) => {
+          e.dataTransfer.setData(SESSION_MIME, JSON.stringify({
+            id: s.name, label: s.label || sessionLabel(s.name),
+            project: proj.name, dir: hit.worktree || proj.dir,
+            agent: cc[s.name] ? 'claude' : cx[s.name] ? 'codex' : '',
+            node: currentNodeId() || '',
+          }))
+          e.dataTransfer.effectAllowed = 'copy'
+        }}
         onClick={() => openTerm(s.name)}>
         <span style={{ marginTop: 7, display: 'inline-flex' }}>{dot(false, waiting ? '#d29922' : running ? 'var(--ok)' : undefined, dormant)}</span>
         {isChild && <span style={{ color: 'var(--swarm)', marginTop: 3, display: 'inline-flex' }}><BranchIcon size={12} /></span>}

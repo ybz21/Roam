@@ -297,6 +297,18 @@ const enUS = {
   'status.provider.core': 'Machine & sessions',
   'status.provider.tasks': 'To-dos',
   'status.provider.git': 'Branch & changes',
+  // Dropping one session onto another (design 21): the blurb injected into the
+  // current session. The commands themselves are not translated.
+  'pair.intro.head': '[Roam] There is another session next to you that you can talk to directly.',
+  'pair.intro.who': 'Who it is: {who}',
+  'pair.intro.dir': 'Working directory: {dir}',
+  'pair.intro.id': 'Session name: {id}',
+  'pair.intro.sendHead': 'Send it a message (replace … with what you want to say):',
+  'pair.intro.replyHead': 'To get a reply, include your own session name in the message:',
+  'pair.intro.note': 'What it receives is one line of text, submitted for it — no different from a human typing it. Say who you are and what you want first; and do not keep trading pleasantries.',
+  'pair.sent': 'Told "{name}" how to talk to "{peer}"',
+  'pair.noAgent': 'No agent is running in "{name}" — the blurb would be executed line by line as shell commands',
+  'pair.crossNode': '"{name}" is on another machine — ttmux send cannot reach it',
   'status.changedFiles': 'changed files',
   'status.agentsRunning': 'agents running',
   'status.swarmsActive': 'active swarms',

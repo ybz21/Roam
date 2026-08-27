@@ -297,6 +297,18 @@ const zhCN = {
   'status.provider.core': '机器与会话',
   'status.provider.tasks': '待办',
   'status.provider.git': '分支与改动',
+  // 把一个会话拖到另一个会话上（21 设计）：落下时注进当前会话的那段话。
+  // 命令本身不翻译。
+  'pair.intro.head': '[Roam] 你旁边还有一个会话，可以直接跟它说话。',
+  'pair.intro.who': '它是谁：{who}',
+  'pair.intro.dir': '工作目录：{dir}',
+  'pair.intro.id': '会话名：{id}',
+  'pair.intro.sendHead': '给它发消息（把 … 换成你要说的话）：',
+  'pair.intro.replyHead': '想让它回你，就在消息里带上你自己的会话名：',
+  'pair.intro.note': '它收到的是一行文字并自动回车，和人敲进去的没区别。先说清你是谁、想让它干什么；也别一直客套着来回。',
+  'pair.sent': '已经告诉「{name}」怎么跟「{peer}」说话',
+  'pair.noAgent': '「{name}」里没有 Agent 在跑，介绍词会被当成命令一行行执行掉',
+  'pair.crossNode': '「{name}」在别的机器上，ttmux send 过不去',
   'status.changedFiles': '改动文件',
   'status.agentsRunning': '正在跑的 Agent',
   'status.swarmsActive': '活跃蜂群',

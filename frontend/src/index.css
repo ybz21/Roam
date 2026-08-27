@@ -1314,6 +1314,10 @@ html[data-size="compact"] .ant-form-item-control-input-content > .ant-picker { w
 .tt-tab.on { background: var(--bg-base); color: var(--text-bright); font-weight: 600;
   box-shadow: inset 0 2px 0 var(--accent); }
 .tt-tab .tt-wait { flex: 0 0 auto; color: var(--warn); font-weight: 600; }
+/* 会话拖到标签上（21 设计）：落点亮成实心强调边。跟标签重排那条 .dropL
+   （一条竖插入线）区分开——一个是「插到这儿」，一个是「说给这个会话听」。 */
+.tt-tab.dropPeer { background: var(--accent-soft); color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent-border); }
 /* 名字中间省略：头段收缩 + 尾段不收缩，省略号自然落在中间（见 session-label.tsx TabName） */
 /* 这几条对 .tt-name 通用——标签条和手机会话页胶囊共用同一个 TabName。
    之前只挂在 .tt-tab 下，胶囊里的标题就换行了，把 50px 的顶栏撑成两行。 */
