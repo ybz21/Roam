@@ -306,6 +306,7 @@ const zhCN = {
   'pair.intro.sendHead': '给它发消息（把 … 换成你要说的话）：',
   'pair.intro.replyHead': '想让它回你，就在消息里带上你自己的会话名：',
   'pair.intro.note': '它收到的是一行文字并自动回车，和人敲进去的没区别。先说清你是谁、想让它干什么；也别一直客套着来回。',
+  'pair.intro.noteShell': '注意：那边现在跑的不是 Agent，是个普通 shell —— 你发过去的每一行都会被当成命令直接执行。要么发真正的命令，要么先确认那头有人。',
   'pair.sent': '已经告诉「{name}」怎么跟「{peer}」说话',
   'pair.tellCurrent': '告诉当前会话怎么跟「{name}」说话',
   'pair.noCurrent': '先打开一个会话，介绍词要投给它',

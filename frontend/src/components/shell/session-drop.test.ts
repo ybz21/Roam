@@ -111,3 +111,19 @@ describe('注进去的那段话', () => {
     expect(intro.split('\n').length).toBeGreaterThan(8)
   })
 })
+
+describe('对面不是 Agent 的时候', () => {
+  it('说清楚发过去的会被当命令执行，而不是照抄「和人敲进去没区别」', () => {
+    // 真用起来才发现的：Roam 告诉我「可以跟它说话」，而那头跑的是 bash——
+    // 照着介绍写一句人话过去，在那头就是 command not found
+    const shell = buildIntro({ id: 'a', label: 'A' }, 'self', (k) =>
+      k === 'pair.intro.noteShell' ? '那边是个普通 shell，每一行都会被当成命令执行' : k)
+    expect(shell).toContain('普通 shell')
+  })
+  it('对面是 Agent 时用原来那句', () => {
+    const agent = buildIntro({ id: 'a', label: 'A', agent: 'claude' }, 'self', (k) =>
+      k === 'pair.intro.note' ? '和人敲进去的没区别' : k)
+    expect(agent).toContain('和人敲进去的没区别')
+    expect(agent).not.toContain('noteShell')
+  })
+})

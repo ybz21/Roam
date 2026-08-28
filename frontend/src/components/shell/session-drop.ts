@@ -73,10 +73,16 @@ type T = (key: string, vars?: Record<string, unknown>) => string
  * - **自己的会话名**：否则对面收到消息没有回信地址，只能干瞪眼
  * - 「和人敲进去没区别」：这条通道唯一反直觉的性质——不是发到收件箱，是直接替对方
  *   按下回车。知道了它才会斟酌第一句怎么写
+ * - **对面是不是 Agent**：没有 Agent 在跑的会话，收到的每一行都会被 shell 当命令执行。
+ *   这条是真用起来才发现的：Roam 告诉我「可以跟它说话」，而那头跑的是 bash
  */
 export function buildIntro(src: SessionDrag, selfId: string, t: T): string {
   const who = [src.project, src.label || src.id].filter(Boolean).join(' · ')
   const kind = src.agent ? `（${src.agent}）` : ''
+  // 对面没有 Agent 在跑 = 那是个普通 shell，发过去的**是一条命令**，会被直接执行。
+  // 不拦（给 shell 发命令本来就是 ttmux send 的正当用法），但必须说清楚——
+  // 否则收到介绍的那一方会照着写一句人话过去，然后在那头变成 command not found。
+  const peerNote = src.agent ? 'pair.intro.note' : 'pair.intro.noteShell'
   const lines = [
     t('pair.intro.head'),
     '',
@@ -92,7 +98,7 @@ export function buildIntro(src: SessionDrag, selfId: string, t: T): string {
     '  ' + t('pair.intro.replyHead'),
     `    ttmux send ${selfId} "…"`,
     '',
-    '  ' + t('pair.intro.note'),
+    '  ' + t(peerNote),
   )
   return lines.join('\n')
 }

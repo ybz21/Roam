@@ -389,6 +389,11 @@ ttmux send &lt;会话&gt; &lt;消息&gt;
 <tr><td><b>自己的会话名</b></td><td>否则对面收到消息<b class="hl">没有回信地址</b>，只能干瞪眼</td></tr>
 <tr><td><b>「和人敲进去没区别」</b></td><td>这是这条通道唯一反直觉的性质：不是发到收件箱，是<b class="hl">直接替对方按下回车</b>。
     知道了它才会斟酌第一句怎么写</td></tr>
+<tr><td><b>对面是不是 Agent</b></td><td><b class="hl">真用起来才发现的。</b>没有 Agent 在跑的会话，
+    收到的每一行都会被 shell 当命令执行。第一次真拖成功时，Roam 告诉我「可以跟它说话」，
+    而那头跑的是 <code>bash</code>——照着介绍写一句人话过去，在那头就是 <code>command not found</code>。
+    <b class="hl">不拦</b>（给 shell 发命令本来就是 <code>ttmux send</code> 的正当用法），
+    但介绍词得换一句：「那边是个普通 shell，你发过去的每一行都会被当成命令直接执行」</td></tr>
 <tr><td><b>「别一直客套着来回」</b></td><td>两个 Agent 互相回「收到，我看看」能一直聊下去。<b class="hl">一句提醒，不是一套闸门</b></td></tr>
 </tbody>
 </table>
@@ -450,7 +455,8 @@ ttmux send &lt;会话&gt; &lt;消息&gt;
 <div class="card bad">
 <h4>要拦的两种情况（第二种是真机上撞出来的）</h4>
 <p>
-<b class="hl">① 目标里没有 Agent 在跑。</b>这条比想象的严重。投递是「粘一段文本 + 按回车」：
+<b class="hl">① 目标里没有 Agent 在跑。</b>（注意是<b class="hl">收介绍的那一方</b>；
+被介绍的那一方是不是 Agent 不拦，只换一句措辞，见 §02。）这条比想象的严重。投递是「粘一段文本 + 按回车」：
 落进 Agent 的输入框，整段是<b class="hl">一条消息</b>；落进普通 shell，
 <b class="hl">每一行都被当成命令执行</b>——包括介绍词里那两行示例命令。
 第一次真机测试就撞上了：靶子是个空 shell，于是它<b class="hl">真的替我发了一条消息出去</b>
