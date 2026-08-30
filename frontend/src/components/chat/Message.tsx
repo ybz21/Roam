@@ -11,6 +11,7 @@ import type { Block, Msg } from './types'
 import { LooseResult, ToolView } from './tool-render'
 import { TerminalIcon } from '../../icons'
 import { splitAtPaths } from '../../agent-paths'
+import { ROAM_NOTICE_PREFIX } from '../shell/session-drop'
 import { IMG_EXT } from '../files/file-utils'
 import { MentionedImage } from './MentionedImage'
 
@@ -107,6 +108,23 @@ function BodyWithImages({ text, accent }: { text: string; accent: string }) {
   )
 }
 
+/** 整条消息就是 Roam 的注入：第一个文本块以标记开头 */
+function isRoamNotice(m: Msg): boolean {
+  const first = m.blocks.find((b) => b.kind === 'text')
+  return !!first?.text?.startsWith(ROAM_NOTICE_PREFIX)
+}
+
+function RoamNotice({ m }: { m: Msg }) {
+  const { t } = useI18n()
+  const text = m.blocks.filter((b) => b.kind === 'text').map((b) => b.text || '').join('\n')
+  // 默认收起：它是给 Agent 看的上下文，人只要知道「这儿发生过一次注入」就够了
+  return (
+    <div className="cc-msg" data-msg-id={m.id} style={{ margin: 'var(--sp-1) 0' }}>
+      <Collapsible label={t('chat.roamNotice')} text={text.replace(ROAM_NOTICE_PREFIX, '')} color="var(--text-dimmer)" />
+    </div>
+  )
+}
+
 function UserMessage({ m, accent }: { m: Msg; accent: string }) {
   const { t } = useI18n()
   const parsed = m.blocks.map((b) => (b.kind === 'text' ? parseUserText(b.text || '') : null))
@@ -146,6 +164,10 @@ export const ChatMessage = memo(function ChatMessage({ m, results, side }: { m: 
   const accent = side === 'codex' ? CODEX_ACCENT : 'var(--accent)'
   const solid = side === 'codex' ? 'var(--ok-solid)' : 'var(--accent-solid)'
 
+  // Roam 自己塞进去的那段话（如「旁边还有一个会话」的介绍词）：它是经
+  // SendPromptSubmit 投进输入框并回车的，转录里就记成一个 user turn——可它不是
+  // 你说的话，画成实心蓝气泡会把对话搅浑。收成一条可展开的通知。
+  if (m.role === 'user' && isRoamNotice(m)) return <RoamNotice m={m} />
   if (m.role === 'user') return <UserMessage m={m} accent={solid} />
 
   const segs = segments(m.blocks)

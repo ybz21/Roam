@@ -311,6 +311,7 @@ const zhCN = {
   'pair.tellCurrent': '告诉当前会话怎么跟「{name}」说话',
   'pair.noCurrent': '先打开一个会话，介绍词要投给它',
   'pair.cannotSelf': '这就是当前会话，不用介绍给自己',
+  'chat.roamNotice': 'Roam 给这个会话发的通知',
   'pair.dropHint': '告诉这个会话怎么跟它说话',
   'pair.noAgent': '「{name}」里没有 Agent 在跑，介绍词会被当成命令一行行执行掉',
   'pair.crossNode': '「{name}」在别的机器上，ttmux send 过不去',
