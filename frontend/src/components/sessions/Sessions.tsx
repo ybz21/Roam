@@ -10,7 +10,9 @@ import { SessionHistory } from './SessionHistory'
 import { useLayout } from '../../layout'
 import { MemBar } from './session-memory'
 import { detectPrompt } from '../prompt'
-import { sessionDisplay, setSessionLabels } from './session-label'
+import { sessionDisplay, sessionLabel, setSessionLabels } from './session-label'
+import { SESSION_MIME } from '../shell/session-drop'
+import { currentNodeId } from '../cluster/node-url'
 import { sessionLocation, useSessionProjects } from './session-project'
 import { absTime, relTime } from '../../time-format'
 import { Button, Checkbox, Empty, Input, List, Popconfirm, Segmented, Select, Space, Tag, Tooltip, App as AntApp } from 'antd'
@@ -434,7 +436,19 @@ export default function Sessions({ openTerm, closeTerm, activeTerm, embedded }: 
                   background: activeRow ? 'linear-gradient(90deg, rgba(31,111,235,.38), rgba(31,111,235,.16))' : undefined,
                   border: activeRow ? '1px solid var(--accent)' : '1px solid transparent',
                   boxShadow: activeRow ? '0 0 0 1px rgba(88,166,255,.18), 0 0 18px rgba(31,111,235,.14)' : undefined,
-                }} onClick={() => openTerm(s.name)}>
+                }}
+                // 会话页的行也能拖（21 设计）：拖到终端画面/标签上 = 告诉那个会话
+                // 怎么跟这一行说话。项目页的任务卡是同一件事，两处入口都给。
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData(SESSION_MIME, JSON.stringify({
+                    id: s.name, label: sessionLabel(s.name),
+                    dir: s.cwd || '', agent: s.agent || '',
+                    node: currentNodeId() || '',
+                  }))
+                  e.dataTransfer.effectAllowed = 'copy'
+                }}
+                onClick={() => openTerm(s.name)}>
                   {activeRow && <span aria-hidden style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: 'var(--accent)' }} />}
                   {/* 七个格子恒定：缺一个桌面上就整行错列，所以空的项目/位置格照样渲染（见 .tt-srow） */}
                   <div className="tt-srow">
