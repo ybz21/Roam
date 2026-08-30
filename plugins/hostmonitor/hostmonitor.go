@@ -27,7 +27,8 @@ const (
 func Activate(ctx *sdk.Ctx) sdk.Plugin {
 	return sdk.Plugin{
 		Commands: map[string]sdk.CommandHandler{
-			"stats": stats,
+			"stats":      stats,
+			"swap-clear": swapClear,
 		},
 	}
 }
