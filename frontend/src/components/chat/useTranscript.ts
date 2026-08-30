@@ -1,4 +1,8 @@
-// 轮询会话转录(JSONL)，按物理行 offset 增量拉取，自动归一为 Msg[]。
+// 轮询会话转录(JSONL)，按**字节偏移**增量拉取，自动归一为 Msg[]。
+//
+// offset 在这一层是**不透明游标**：只原样回传、只比大小（变小=文件被换过，重来）。
+// 后端 2026-08-30 把它从行号改成字节偏移，这里一行没动——行号逼着后端每次轮询
+// 从第 1 行重数一遍，一次请求就分配一整个文件（见 backend/api/transcript-read.go）。
 // Claude 与 Codex 共用，只是 path 不同(transcript / codex-transcript)。
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../../api'
@@ -29,7 +33,8 @@ export function useTranscript(name: string, file: string | undefined, path: stri
     setMsgs([]); setErr(''); setStatus({})
     const poll = async () => {
       try {
-        const q = new URLSearchParams({ offset: String(offset) })
+        // boff=1：告诉后端这个 offset 是字节偏移（升级前的页面不会带，后端据此重新锚定）
+        const q = new URLSearchParams({ offset: String(offset), boff: '1' })
         // 只有首屏带 tail：增量轮询要的是「新行」，一条都不能丢。
         if (offset === 0) q.set('tail', String(tail))
         if (f) q.set('file', f)

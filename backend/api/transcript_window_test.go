@@ -1,8 +1,6 @@
 package api
 
 import (
-	"bufio"
-	"strings"
 	"testing"
 )
 
@@ -39,25 +37,7 @@ func TestTranscriptWindow(t *testing.T) {
 	}
 }
 
-// 取尾部：只留最后 keep 行，并如实报出「第一行是第几行」与总行数——
-// 行号是前端的稳定 key，错一位就会在增量轮询时和新行撞车。
-func TestTailLines(t *testing.T) {
-	mk := func(s string) *bufio.Scanner { return bufio.NewScanner(strings.NewReader(s)) }
-	lines, first, total := tailLines(mk("a\nb\nc\nd\ne\n"), 2)
-	if len(lines) != 2 || lines[0] != "d" || lines[1] != "e" || first != 4 || total != 5 {
-		t.Fatalf("尾部取错: %v first=%d total=%d", lines, first, total)
-	}
-	// 不足 keep 行：全给，且从第 1 行起
-	lines, first, total = tailLines(mk("a\nb\n"), 10)
-	if len(lines) != 2 || first != 1 || total != 2 {
-		t.Errorf("不足 keep 时该全给: %v first=%d total=%d", lines, first, total)
-	}
-	// 空文件
-	if lines, first, total = tailLines(mk(""), 5); len(lines) != 0 || total != 0 || first != 1 {
-		t.Errorf("空文件: %v first=%d total=%d", lines, first, total)
-	}
-	// 末行没有换行符也算一行（转录正被写入时就是这样）
-	if _, _, total = tailLines(mk("a\nb"), 5); total != 2 {
-		t.Errorf("末行无换行也要算: total=%d", total)
-	}
-}
+// tailLines 已经退役：它扫全文件、每行一次字符串分配，而 offset 是行号，
+// 逼着每次轮询从第 1 行重数。改成按字节偏移读之后，尾部读取与续读的用例都在
+// transcript_read_test.go 里（含旧实现的一个 bug：末行没写完时，半条 JSON 解析
+// 失败不产出消息，而 offset 已经跨过去了——那条消息就永远丢了）。

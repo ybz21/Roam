@@ -7,7 +7,6 @@ package api
 // 前端拿到就扔。tail=N 让首屏只带最近 N 条，增量轮询照旧按 offset 走（那时一条都不能丢）。
 
 import (
-	"bufio"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -62,28 +61,3 @@ func (w *transcriptWindow) out() ([]cMsg, bool) {
 // 一条消息通常不止一行（thinking / tool_result 之类的行不产出消息），
 // 所以按行取尾时多带几倍，尽量凑够要的条数。
 const tailLineFactor = 4
-
-// tailLines 扫完整份转录，但只留最后 keep 行原文，不解析 JSON。
-// 首屏那几秒的大头是「整卷 JSON 解析」而不是传输：一个 7185 行的会话，
-// 全量解析 3.4s、传 3MB，而前端只渲染最后一屏。这里把解析量压到尾部那几百行。
-// 返回：尾部行、其中第一行的行号(1-based)、文件总行数。
-func tailLines(sc *bufio.Scanner, keep int) (lines []string, firstLine int, total int) {
-	if keep <= 0 {
-		return nil, 0, 0
-	}
-	ring := make([]string, keep)
-	for sc.Scan() {
-		ring[total%keep] = sc.Text()
-		total++
-	}
-	n := keep
-	if total < keep {
-		n = total
-	}
-	out := make([]string, 0, n)
-	start := total - n
-	for i := start; i < total; i++ {
-		out = append(out, ring[i%keep])
-	}
-	return out, start + 1, total
-}
