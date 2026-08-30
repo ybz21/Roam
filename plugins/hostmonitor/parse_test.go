@@ -96,3 +96,49 @@ func TestStatusItemsValid(t *testing.T) {
 		t.Fatalf("want 6 status items, got %d", n)
 	}
 }
+
+// ── 清 swap 的判定(swap.go)────────────────────────────────────────────────
+//
+// 这条命令自己就能把机器打死:swapoff 是同步的,要把已用的 swap 一次性读回内存,
+// 装不下的时候 OOM killer 当场开枪,挑的多半是最大的那个进程——也就是正在跑的
+// agent。所以判据必须在动手之前算清楚。
+
+const gib = uint64(1) << 30
+
+func TestSwapPlanRefusesWhenItWontFit(t *testing.T) {
+	// 换出 7G,可用 5G —— 读回来直接爆
+	p := planSwapClear(7*gib, 5*gib)
+	if p.OK || p.Reason != "wont-fit" {
+		t.Fatalf("装不下却放行了: %+v", p)
+	}
+}
+
+func TestSwapPlanKeepsHeadroom(t *testing.T) {
+	// 换出 7G,可用 7.5G:塞得下,但一点余量都不剩 —— 也不干
+	if p := planSwapClear(7*gib, 7*gib+gib/2); p.OK {
+		t.Fatalf("余量不足却放行了: %+v", p)
+	}
+	// 换出 7G,可用 11G:留得下 1G 余量,放行
+	p := planSwapClear(7*gib, 11*gib)
+	if !p.OK {
+		t.Fatalf("装得下却拒绝了: %+v", p)
+	}
+	if p.Headroom != 4*gib {
+		t.Fatalf("余量算错: %d", p.Headroom)
+	}
+}
+
+func TestSwapPlanEmptyIsNotAnError(t *testing.T) {
+	p := planSwapClear(0, 11*gib)
+	if p.OK || p.Reason != "empty" {
+		t.Fatalf("swap 本来就是空的,应当直说: %+v", p)
+	}
+}
+
+func TestSwapPlanNoUnsignedWraparound(t *testing.T) {
+	// 无符号数先减后比会绕回一个巨大的 Headroom,于是「装不下」被算成「余量充足」
+	p := planSwapClear(8*gib, 1*gib)
+	if p.OK || p.Headroom != 0 {
+		t.Fatalf("无符号回绕: %+v", p)
+	}
+}

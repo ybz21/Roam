@@ -2,7 +2,7 @@
 // 命令,展示 CPU/GPU/内存/磁盘/网络实时状态与趋势。趋势历史由插件在
 // StorageDir 持久化,面板打开即有近期曲线,不依赖页面常驻。
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { Alert, Card, Empty, Progress, Segmented, Space, Spin, Tag, Tooltip, Typography } from 'antd'
+import { Alert, App as AntApp, Card, Empty, Progress, Segmented, Space, Spin, Tag, Tooltip, Typography } from 'antd'
 import { api } from '../../api'
 import { ArrowDown, ArrowUp, Swatch } from '../../icons'
 
@@ -49,16 +49,25 @@ function usageColor(p: number): string {
 // 前兆**——一旦换页无处可去，内核就在直接回收里空转，ping 还通（内核收发 ICMP 不换页）
 // 但 ssh 再也进不来，只能按电源键。本机 2026-08-12 那次就是这么冻的，而那三天里 swap
 // 一直贴着 98%——数字一直在这块面板上，只是画成了一根永不变色的灰条，和 5% 长得一样。
-function SwapBar({ used, total, t }: {
+function SwapBar({ used, total, t, onClear }: {
   used: number; total: number
   t: (k: string, vars?: Record<string, string | number>) => string
+  /** 清一次；没给就不画那颗钮（比如快照是外部喂的、没有真插件可调） */
+  onClear?: () => void
 }) {
   const pct = Math.round((used / total) * 100)
   return (
     <div style={{ marginTop: 'var(--sp-2)' }}>
-      <Typography.Text type="secondary" style={{ fontSize: 'var(--fs-meta)' }}>
-        Swap {fmtBytes(used)} / {fmtBytes(total)}
-      </Typography.Text>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
+        <Typography.Text type="secondary" style={{ fontSize: 'var(--fs-meta)' }}>
+          Swap {fmtBytes(used)} / {fmtBytes(total)}
+        </Typography.Text>
+        {onClear && used > 0 && (
+          <button type="button" className="tt-act" style={{ marginLeft: 'auto' }} onClick={onClear}>
+            {t('plugins.monitor.swapClear')}
+          </button>
+        )}
+      </div>
       <Progress percent={pct} showInfo={false} size="small" strokeColor={usageColor(pct)} />
       {pct >= 90 && (
         <div style={{ color: 'var(--danger)', fontSize: 'var(--fs-micro)' }}>
@@ -115,6 +124,7 @@ export default function HostMonitorPanel({ pluginId, enabled, t, fetchSnapshot }
   t: (k: string, vars?: Record<string, string | number>) => string
   fetchSnapshot?: () => Promise<Snapshot>
 }) {
+  const { message, modal } = AntApp.useApp()
   const [snap, setSnap] = useState<Snapshot | null>(null)
   const [error, setError] = useState('')
   const [intervalSec, setIntervalSec] = useState(3)
@@ -135,6 +145,41 @@ export default function HostMonitorPanel({ pluginId, enabled, t, fetchSnapshot }
       busy.current = false
     }
   }, [pluginId, fetchSnapshot])
+
+  // 清 swap：swapoff -a 把换出去的页一次性读回内存，装不下就是 OOM 当场开枪，
+  // 而它挑的多半是最大的那个进程——正在跑的 agent。所以先问一次判定，
+  // 把「换出多少 / 可用多少 / 读回来还剩多少」摆在确认框上，人点了才真干。
+  const run = (args: Record<string, string>) =>
+    api('POST', `/plugins/${encodeURIComponent(pluginId)}/run`, { command: 'host-monitor.swap-clear', args })
+  const clearSwap = async () => {
+    let plan: any
+    try { plan = (await run({}))?.data ?? await run({}) } catch (e: any) { message.error(e.message); return }
+    if (!plan?.ok) {
+      message.warning(t('plugins.monitor.swapRefuse.' + (plan?.reason || 'wont-fit'), {
+        used: fmtBytes(plan?.swapUsed || 0), avail: fmtBytes(plan?.available || 0),
+      }))
+      return
+    }
+    modal.confirm({
+      title: t('plugins.monitor.swapConfirmTitle'),
+      content: t('plugins.monitor.swapConfirmBody', {
+        used: fmtBytes(plan.swapUsed), avail: fmtBytes(plan.available), left: fmtBytes(plan.headroom),
+      }),
+      okText: t('plugins.monitor.swapClear'),
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          await run({ apply: '1' })
+          message.success(t('plugins.monitor.swapCleared'))
+          poll()
+        } catch (e: any) {
+          // 没开免密时给出那一行 sudoers，而不是干巴巴一句「失败」
+          message.error(String(e.message).includes('need-sudo')
+            ? t('plugins.monitor.swapNeedSudo') : e.message)
+        }
+      },
+    })
+  }
 
   useEffect(() => {
     if (!enabled) return
@@ -209,7 +254,7 @@ export default function HostMonitorPanel({ pluginId, enabled, t, fetchSnapshot }
               <Sparkline series={history.map((h) => h.mem)} color="var(--hl-title)" max={100} />
             </div>
           </Space>
-          {memory.swapTotal > 0 && <SwapBar used={memory.swapUsed} total={memory.swapTotal} t={t} />}
+          {memory.swapTotal > 0 && <SwapBar used={memory.swapUsed} total={memory.swapTotal} t={t} onClear={fetchSnapshot ? undefined : clearSwap} />}
         </StatCard>
 
         {/* GPU */}

@@ -24,12 +24,13 @@ func Manifest() manifest.Manifest {
 		Runtime: manifest.Runtime{Kind: "builtin"},
 		Permissions: manifest.Perms{
 			// 采样读本机 /proc;GPU 经 nvidia-smi(声明白名单,采集不走宿主 API)
-			Commands: manifest.CommandPerms{Allow: []string{"nvidia-smi"}},
+			Commands: manifest.CommandPerms{Allow: []string{"nvidia-smi", "sudo -n swapoff", "sudo -n swapon"}},
 		},
 		ActivationEvents: []string{"onCommand:host-monitor.stats"},
 		Contributes: manifest.Contribs{
 			Commands: []manifest.CommandContrib{
 				{ID: "host-monitor.stats", Title: manifest.LocaleText{"zh-CN": "采集一次资源快照(含近期趋势)", "en-US": "Take a resource snapshot (with recent trend)"}},
+				{ID: "host-monitor.swap-clear", Title: manifest.LocaleText{"zh-CN": "把换出去的页读回内存(swapoff -a && swapon -a)", "en-US": "Read swapped-out pages back into RAM (swapoff -a && swapon -a)"}},
 			},
 			StatusItems: statusItems(),
 		},
