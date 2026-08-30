@@ -5,7 +5,6 @@
 package api
 
 import (
-	"bufio"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -529,7 +528,15 @@ func (a *API) ClaudeTranscript(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_FILE"}})
 		return
 	}
-	offset, _ := strconv.Atoi(c.Query("offset"))
+	// offset 是**字节偏移**（原来是行号，那逼着每次轮询从第 1 行重数一遍，
+	// 一次请求就分配一整个文件 —— 见 transcript-read.go 顶上的实测）
+	offset, _ := strconv.ParseInt(c.Query("offset"), 10, 64)
+	// boff=1 是「我这个 offset 是字节偏移」的标记。没有它就说明对面是**升级前的
+	// 页面**，手里攥的还是行号——当字节偏移 seek 会跳到文件很靠前的地方，一次吐回
+	// 一大堆重复消息。这时干脆重新锚定到尾部，让它下一轮拿着新语义的游标接着走。
+	if offset > 0 && c.Query("boff") != "1" {
+		offset = 0
+	}
 
 	f, err := os.Open(file)
 	if err != nil {
@@ -538,44 +545,46 @@ func (a *API) ClaudeTranscript(c *gin.Context) {
 	}
 	defer f.Close()
 
-	tail := tailLimit(c, offset)
+	tail := tailLimit(c, int(offset))
 	win := newTranscriptWindow(tail)
 	st := cStatus{}
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 1024*1024), 8*1024*1024) // 容纳长行
-	n := 0
-	if tail > 0 {
-		// 首屏：只解析尾部那几百行。状态字段(cwd/model/branch/mode)每行都带，尾部就够。
-		lines, first, total := tailLines(sc, tail*tailLineFactor)
-		for i, line := range lines {
-			st = scanStatus(line, st)
-			if m := parseLine(line); m != nil {
-				if m.ID == "" {
-					m.ID = strconv.Itoa(first + i)
-				}
-				win.add(*m)
-			}
+
+	var lines []transcriptLine
+	var size int64
+	var more bool
+	if offset > 0 {
+		if fi, e := f.Stat(); e == nil {
+			size = fi.Size()
 		}
-		n = total
-		if first > 1 {
-			win.dropped = true // 前面还有整整一截没读，别让前端以为这就是全部
+		if size < offset { // 文件被换过/截断过：从头来
+			offset = 0
+			lines, size, more, err = readTail(f, tail)
+		} else {
+			lines, err = readFrom(f, offset, size)
 		}
 	} else {
-		for sc.Scan() {
-			n++
-			if n <= offset {
-				continue
+		lines, size, more, err = readTail(f, tail*tailLineFactor)
+	}
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"messages": []cMsg{}, "nextOffset": offset, "file": file}})
+		return
+	}
+	for _, ln := range lines {
+		text := string(ln.Text)
+		st = scanStatus(text, st)
+		if m := parseLine(text); m != nil {
+			if m.ID == "" {
+				// 行首字节偏移当稳定 key：首屏与增量两条路算出来的是同一个值
+				m.ID = strconv.FormatInt(ln.At, 10)
 			}
-			line := sc.Text()
-			st = scanStatus(line, st)
-			if m := parseLine(line); m != nil {
-				if m.ID == "" { // uuid 缺失时用行号兜底，保证稳定 key
-					m.ID = strconv.Itoa(n)
-				}
-				win.add(*m)
-			}
+			win.add(*m)
 		}
 	}
+	if more {
+		win.dropped = true // 前面还有整整一截没读，别让前端以为这就是全部
+	}
+	n := lastComplete(lines, offset)
+
 	msgs, truncated := win.out()
 	// 这一轮没扫到新行时 status 是空的；前端 sticky 保留上一次的值。
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{
