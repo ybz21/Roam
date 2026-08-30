@@ -13,7 +13,9 @@ import { MemBar } from '../sessions/session-memory'
 import type { ReactNode } from 'react'
 import { App as AntApp, AutoComplete, Button, Dropdown, Input, Modal, Popconfirm, Segmented, Select, Space, Spin, Tag, Tooltip, Typography } from 'antd'
 import type { InputRef, MenuProps } from 'antd'
-import { sessionLabel } from '../sessions/session-label'
+import { sessionLabel, sessionDisplay } from '../sessions/session-label'
+import { SESSION_MIME, buildIntro, canDrop } from '../shell/session-drop'
+import { currentNodeId } from '../cluster/node-url'
 import { dirTailName } from '../files/dir-name'
 import { api, upload, makeClipboardImageFile } from '../../api'
 import { useI18n } from '../../i18n'
@@ -1293,11 +1295,40 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
     else if (gs === 'merged') { done = 4; stage = t('project.stage.merged') } // 合入检测（10 §5）：导轨走满
     else if (gs === 'pushed') { done = 3; cur = 4; stage = t('project.stage.pushed') } // 已推送待合入：审毕、并在跑
     else if (gs === 'committed') { done = 2; cur = 3; stage = t('project.stage.committed') } // 本地已提交未推送
+    // 告诉**当前**会话怎么跟这一行说话。和拖拽同一件事、同一段介绍词——
+    // 拖拽在触屏上根本不存在（HTML5 DnD 没有触摸事件），在桌面上也可能被
+    // 选区拖拽之类的东西抢走，所以必须有一条不依赖手势的路。
+    const tellCurrent = async () => {
+      if (!activeTerm) { message.warning(t('pair.noCurrent')); return }
+      const drag = {
+        id: s.name, label: s.label || sessionLabel(s.name),
+        project: proj.name, dir: hit.worktree || proj.dir,
+        agent: cc[s.name] ? 'claude' : cx[s.name] ? 'codex' : '',
+      }
+      const v = canDrop(drag, { id: activeTerm })
+      if (!v.ok) { message.warning(t('pair.cannotSelf')); return }
+      try {
+        await api('POST', '/tasks/_/send', { sess: activeTerm, msg: buildIntro(drag, activeTerm, t) })
+        message.success(t('pair.sent', { name: sessionDisplay(activeTerm), peer: drag.label }))
+      } catch (e: any) { message.error(e.message) }
+    }
     // 从这一行开的会话：行保持选中并给细蓝边，页面与终端的对应关系不靠记（14 §6.3.1）
-    return (
+    const rowNode = (
       <div key={s.name} className={`prj-row prj-in${activeTerm === s.name ? ' on' : ''}`}
         aria-current={activeTerm === s.name ? 'true' : undefined}
         style={{ marginLeft: isChild ? 22 : 0, animationDelay: `${Math.min(i, 8) * 40}ms` }}
+        // 拖到终端标签上 = 告诉那个会话怎么跟这个会话说话（21 设计）。
+        // 自定义 MIME：用 text/plain 会被文件区/终端当成路径拖拽接走。
+        draggable
+        onDragStart={(e) => {
+          e.dataTransfer.setData(SESSION_MIME, JSON.stringify({
+            id: s.name, label: s.label || sessionLabel(s.name),
+            project: proj.name, dir: hit.worktree || proj.dir,
+            agent: cc[s.name] ? 'claude' : cx[s.name] ? 'codex' : '',
+            node: currentNodeId() || '',
+          }))
+          e.dataTransfer.effectAllowed = 'copy'
+        }}
         onClick={() => openTerm(s.name)}>
         <span style={{ marginTop: 7, display: 'inline-flex' }}>{dot(false, waiting ? '#d29922' : running ? 'var(--ok)' : undefined, dormant)}</span>
         {isChild && <span style={{ color: 'var(--swarm)', marginTop: 3, display: 'inline-flex' }}><BranchIcon size={12} /></span>}
@@ -1356,6 +1387,13 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
             : <ActBtn icon={<CloseIcon size={14} />} label={t('common.close')} tone="danger" onClick={() => beginClose(s.name)} />}
         </span>
       </div>
+    )
+    return (
+      <Dropdown key={s.name} trigger={['contextMenu']} menu={{ items: [
+        { key: 'tell', disabled: !activeTerm || activeTerm === s.name,
+          label: t('pair.tellCurrent', { name: s.label || sessionLabel(s.name) }),
+          onClick: () => { void tellCurrent() } },
+      ] }}>{rowNode}</Dropdown>
     )
   }
 

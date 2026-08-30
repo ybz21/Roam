@@ -14,7 +14,10 @@ import { groupRuns } from './runs'
 import { ToolRun } from './ToolRun'
 import { LiveTail } from './LiveTail'
 import { useLayout } from '../../layout'
-import { ArrowToBottom, ArrowUp, FileTextIcon, PaperclipIcon, StopIcon } from '../../icons'
+import { ArrowToBottom, ArrowUp, FileTextIcon, PaperclipIcon, StopIcon, TerminalIcon } from '../../icons'
+import { SESSION_MIME, buildIntro, canDrop, readDrag, type SessionDrag } from '../shell/session-drop'
+import { currentNodeId } from '../cluster/node-url'
+import { sessionDisplay } from '../sessions/session-label'
 import { ChatActionsProvider } from './actions'
 import type { TaskIndex } from './tasks'
 import { StatusBar, type StatusActions } from './StatusBar'
@@ -50,7 +53,7 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
   const seenCount = useRef(0)
   const [limit, setLimit] = useState(200) // 只渲染最近 N 条，超长转录不卡
   const [dragOver, setDragOver] = useState(false)
-  const [dropMode, setDropMode] = useState<'upload' | 'path'>('upload')
+  const [dropMode, setDropMode] = useState<'upload' | 'path' | 'session'>('upload')
   const [uploading, setUploading] = useState(false)
   const boxRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -69,6 +72,18 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
   const appendText = (s: string) => setInput((v) => (v ? v.replace(/\s*$/, ' ') : '') + s + ' ')
   // 把路径以 @引用 插进输入框（文件侧栏「@」按钮 / 拖拽共用），与终端 toMention 一致
   const insertPath = (p: string) => appendText(atPath(p))
+  // 对话视图里拖进来一个会话：和终端那边同一件事，同一段介绍词
+  const introduce = async (drag: SessionDrag) => {
+    const v = canDrop(drag, { id: name, node: currentNodeId() || '', hasAgent: true })
+    if (!v.ok) {
+      message.warning(t(v.why === 'cross' ? 'pair.crossNode' : 'pair.noAgent', { name: drag.label || drag.id }))
+      return
+    }
+    try {
+      await api('POST', '/tasks/_/send', { sess: name, msg: buildIntro(drag, name, t) })
+      message.success(t('pair.sent', { name: sessionDisplay(name), peer: drag.label || drag.id }))
+    } catch (e: any) { message.error(e.message) }
+  }
 
   // 图片上传到 /tmp 并把完整路径插进输入框（等同桌面 Ctrl+V：不污染工作目录，模型按绝对路径读取）
   const uploadImagesToTmp = async (images: File[]) => {
@@ -237,22 +252,28 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
         onDragOver={(e) => {
           e.preventDefault()
           e.stopPropagation() // 对话区自己接住,别冒泡到 FileWorkspace 分栏层(否则会显示「分栏」提示并抢走 drop)
-          const isPath = Array.from(e.dataTransfer.types || []).includes('application/x-ttmux-path')
+          const types = Array.from(e.dataTransfer.types || [])
+          const isPath = types.includes('application/x-ttmux-path')
           e.dataTransfer.dropEffect = 'copy'
-          setDropMode(isPath ? 'path' : 'upload')
+          setDropMode(types.includes(SESSION_MIME) ? 'session' : isPath ? 'path' : 'upload')
           if (!dragOver) setDragOver(true)
         }}
         onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false) }}
         onDrop={(e) => {
           e.preventDefault(); e.stopPropagation(); setDragOver(false) // 阻断冒泡:否则分栏层还会再把文件当「开文件」打开一次
+          // 会话拖进来 = 告诉这个会话怎么跟对面说话（21 设计）。**必须排在下面那条前面**：
+          // 这个处理器无条件接住一切，而 text/plain 一有值就会被当成路径插成 @引用——
+          // 于是拖会话进来只会得到一个莫名其妙的 @xxx
+          const drag = readDrag(e.dataTransfer)
+          if (drag) { void introduce(drag); return }
           const p = e.dataTransfer.getData('application/x-ttmux-path') || e.dataTransfer.getData('text/plain')
           if (p && !e.dataTransfer.files?.length) { insertPath(p); return } // 从文件侧栏拖来的：插入 @路径
           if (e.dataTransfer?.files?.length) doUpload(e.dataTransfer.files) // 从系统拖来的：上传
         }}>
         {dragOver && (
           <div style={{ position: 'absolute', inset: 0, zIndex: 30, pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--sp-2)', background: 'rgba(0,0,0,0.45)', border: `2px dashed ${accent}`, borderRadius: 'var(--r-card)', color: accent, fontSize: 'var(--fs-lg)', fontWeight: 600 }}>
-            {dropMode === 'path' ? <FileTextIcon size={16} /> : <PaperclipIcon size={16} />}
-            {dropMode === 'path' ? t('chat.dropInsertPath') : t('chat.dropUpload')}
+            {dropMode === 'session' ? <TerminalIcon size={16} /> : dropMode === 'path' ? <FileTextIcon size={16} /> : <PaperclipIcon size={16} />}
+            {dropMode === 'session' ? t('pair.dropHint') : dropMode === 'path' ? t('chat.dropInsertPath') : t('chat.dropUpload')}
           </div>
         )}
         <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex' }}>

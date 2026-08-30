@@ -16,6 +16,8 @@ import RenameSessionModal from '../sessions/RenameSessionModal'
 import { type ClaudeInfo } from './claude-info'
 import { KEYS, PFX, tmuxMenu } from './tmux-keys'
 import { useI18n } from '../../i18n'
+import { SESSION_MIME, buildIntro, canDrop, readDrag } from '../shell/session-drop'
+import { currentNodeId } from '../cluster/node-url'
 import { OPEN_FILE_INTENT, requestIntent } from '../../intents'
 import { useLayout } from '../../layout'
 import { savePreferences, saveWorkspace, usePreferences } from '../../preferences'
@@ -203,6 +205,30 @@ export default function TerminalPane(props: {
   const [dropAt, setDropAt] = useState<number | null>(null)
   // 自定义 MIME：文件区/终端的拖放判定按 type 分流，共用 text/plain 会被它们当路径接走
   const isTabDrag = (e: React.DragEvent) => e.dataTransfer.types.includes('application/x-tt-tab')
+  // 会话拖到标签上（21 设计）：不建链路、不留台账，只往**这个**会话里注一段话，
+  // 告诉它旁边那个是谁、怎么用 ttmux send 跟它说话。剩下的交给大模型自己安排。
+  const isSessionDrag = (e: React.DragEvent) => e.dataTransfer.types.includes(SESSION_MIME)
+  const [dropPeer, setDropPeer] = useState('')
+  const introduce = async (e: React.DragEvent, target: string) => {
+    const src = readDrag(e.dataTransfer)
+    const v = canDrop(src, {
+      id: target, node: currentNodeId() || '',
+      hasAgent: !!(claudeMap[target]?.running || codexMap[target]?.running),
+    })
+    if (!src) return
+    if (!v.ok) {
+      // 跨机说清楚原因：ttmux send 走本机 tmux，静默失败会让 Agent 拿到
+      // 一句「会话不存在」然后开始瞎猜
+      if (v.why === 'cross') message.warning(t('pair.crossNode', { name: src.label || src.id }))
+      // 落进普通 shell 会把介绍词的每一行当命令跑掉（真机撞出来的）
+      if (v.why === 'noagent') message.warning(t('pair.noAgent', { name: sessionDisplay(target) }))
+      return
+    }
+    try {
+      await api('POST', '/tasks/_/send', { sess: target, msg: buildIntro(src, target, t) })
+      message.success(t('pair.sent', { name: sessionDisplay(target), peer: src.label || src.id }))
+    } catch (err: any) { message.error(err.message) }
+  }
   /** 落在标签右半边 = 插到它后面 */
   const dropIndexAt = (e: React.DragEvent, i: number) => {
     const b = e.currentTarget.getBoundingClientRect()
@@ -258,6 +284,11 @@ export default function TerminalPane(props: {
   }
   // 拖到终端区：直接把 @路径 送进当前会话（claude/codex TUI 或 shell 提示符的光标处）。
   const onTermDrop = (e: React.DragEvent) => {
+    if (isSessionDrag(e)) { // 拖到画面上 = 说给当前会话听
+      e.preventDefault(); e.stopPropagation(); setDragOver(false)
+      if (active) void introduce(e, active)
+      return
+    }
     if (isFileDrag(e) && e.dataTransfer.files?.length) { // 系统文件：上传并注入（无视左右半区，不做分栏）
       e.preventDefault(); e.stopPropagation(); setDragOver(false)
       onTermFileDrop(e)
@@ -541,7 +572,7 @@ export default function TerminalPane(props: {
             .filter(Boolean).join(' · ')
           const tab = (
             <span key={termName} ref={on ? activeTabRef : undefined}
-              className={`tt-tab${on ? ' on' : ''}${dragTab === termName ? ' dragging' : ''}${dropAt === i ? ' dropL' : ''}`}
+              className={`tt-tab${on ? ' on' : ''}${dragTab === termName ? ' dragging' : ''}${dropAt === i ? ' dropL' : ''}${dropPeer === termName ? ' dropPeer' : ''}`}
               title={tip} onClick={() => setActive(termName)}
               draggable={!!onReorder}
               onDragStart={(e) => {
@@ -552,12 +583,30 @@ export default function TerminalPane(props: {
                 setDragTab(termName)
               }}
               onDragOver={(e) => {
+                if (isSessionDrag(e)) {
+                  // dragover 里读不到 dataTransfer 的内容（浏览器只在 drop 时给），
+                  // 所以这里只按「目标有没有 Agent」决定亮不亮；剩下的判定落在 drop
+                  const ok = !!(claudeMap[termName]?.running || codexMap[termName]?.running)
+                  e.preventDefault(); e.stopPropagation()
+                  // **一律 copy**：dropEffect='none' 会让浏览器干脆不投递 drop 事件，
+                  // 于是「不接」变成静默失败，人连原因都看不到。接住再解释。
+                  e.dataTransfer.dropEffect = 'copy'
+                  setDropPeer(ok ? termName : '') // 高亮只给接得住的
+                  return
+                }
                 if (!isTabDrag(e)) return
                 e.preventDefault(); e.stopPropagation()
                 e.dataTransfer.dropEffect = 'move'
                 setDropAt(dropIndexAt(e, i))
               }}
+              onDragLeave={() => setDropPeer((cur) => (cur === termName ? '' : cur))}
               onDrop={(e) => {
+                if (isSessionDrag(e)) {
+                  e.preventDefault(); e.stopPropagation()
+                  setDropPeer('')
+                  void introduce(e, termName)
+                  return
+                }
                 if (!isTabDrag(e)) return
                 e.preventDefault(); e.stopPropagation()
                 // 源标签从 dataTransfer 读，不从 dragTab 状态读：状态只用来画拖拽反馈，
@@ -567,7 +616,7 @@ export default function TerminalPane(props: {
                 if (name) onReorder?.(name, dropIndexAt(e, i))
                 setDragTab(null); setDropAt(null)
               }}
-              onDragEnd={() => { setDragTab(null); setDropAt(null) }}>
+              onDragEnd={() => { setDragTab(null); setDropAt(null); setDropPeer('') }}>
               {statusDot(dotOf(termName))}
               {waiting && <span className="tt-wait" title={t('prompt.confirmRequired')}>{t('session.waiting')}</span>}
               {agentMarks(termName)}
@@ -757,6 +806,14 @@ export default function TerminalPane(props: {
     <div className={dpad ? 'tt-has-dpad' : undefined}
       style={{ flex: 1, minHeight: 0, display: 'flex', position: 'relative' }}
       onDragOver={(e) => {
+        // 会话拖到画面上 = 说给**当前**会话听。自定义 MIME 与路径拖拽
+        // (application/x-ttmux-path) 天然分得开，两条路互不干扰
+        if (isSessionDrag(e)) {
+          e.preventDefault(); e.stopPropagation()
+          e.dataTransfer.dropEffect = 'copy' // 见标签那处：none 会让 drop 根本不投递
+          setDragOver(agentRunning)
+          return
+        }
         if (isFileDrag(e)) { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; setDragOver(true); return } // 系统文件：允许放下并上传
         if (!isPathDrag(e)) return
         if (inTermSplitZone(e)) { setDragOver(false); return } // 右半区：让事件冒泡给 FileWorkspace 显示分栏提示

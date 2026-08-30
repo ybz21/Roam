@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Roam · 会话结对（21 v0.1）</title>
+<style>
+/* ── 令牌：直接取 frontend/src/theme.tsx 的真值 ─────────────────────────── */
+:root {
+  --bg-base:#0d1117; --bg-container:#161b22; --bg-elevated:#1b222b; --bg-term:#06090d;
+  --border:#30363d; --border-subtle:#21262d;
+  --text-bright:#e6edf3; --text-dim:#8b949e; --text-dimmer:#6e7681;
+  --accent:#58a6ff; --accent-solid:#1f6feb; --accent-soft:rgba(31,111,235,.14); --accent-border:rgba(88,166,255,.45);
+  --ok:#3fb950; --ok-solid:#238636; --ok-soft:rgba(63,185,80,.14); --ok-border:rgba(63,185,80,.42);
+  --danger:#f85149; --danger-soft:rgba(248,81,73,.12); --danger-border:rgba(248,81,73,.40);
+  --warn:#d29922; --warn-soft:rgba(210,153,34,.12); --warn-border:rgba(210,153,34,.40);
+  --list-hover:rgba(255,255,255,.045);
+  --fs-micro:11px; --fs-meta:12px; --fs-sm:13px; --fs-body:14px; --fs-lg:16px; --fs-title:22px;
+  --r-xs:6px; --r-sm:10px; --r-card:14px; --r-pill:999px;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+html[data-theme="light"] {
+  --bg-base:#f6f8fa; --bg-container:#ffffff; --bg-elevated:#ffffff; --bg-term:#ffffff;
+  --border:#d0d7de; --border-subtle:#e6e9ec;
+  --text-bright:#1f2328; --text-dim:#57606a; --text-dimmer:#8c959f;
+  --accent:#0969da; --accent-solid:#1f6feb; --accent-soft:rgba(31,111,235,.10); --accent-border:rgba(31,111,235,.40);
+  --ok:#1a7f37; --ok-solid:#1f883d; --ok-soft:rgba(31,136,61,.10); --ok-border:rgba(31,136,61,.40);
+  --danger:#cf222e; --danger-soft:rgba(207,34,46,.09); --danger-border:rgba(207,34,46,.35);
+  --warn:#9a6700; --warn-soft:rgba(154,103,0,.10); --warn-border:rgba(154,103,0,.35);
+  --list-hover:rgba(27,31,36,.05);
+}
+* { box-sizing:border-box; }
+html { background:#07090d; }
+html[data-theme="light"] { background:#eef1f5; }
+body {
+  margin:0; color:var(--text-bright);
+  font:var(--fs-body)/1.65 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+svg { display:block; }
+button { font:inherit; cursor:pointer; }
+
+.top {
+  position:sticky; top:0; z-index:20;
+  display:flex; align-items:center; gap:var(--sp-3);
+  padding:10px clamp(16px,3vw,40px);
+  background:color-mix(in srgb, var(--bg-base) 84%, transparent);
+  border-bottom:1px solid var(--border-subtle); backdrop-filter:blur(18px);
+}
+.top .kicker { font-size:var(--fs-micro); letter-spacing:.14em; text-transform:uppercase; color:var(--text-dimmer); }
+.top h1 { margin:0; font-size:var(--fs-sm); font-weight:600; }
+.top .sp { flex:1; }
+.tbtn { border:1px solid var(--border); background:var(--bg-container); color:var(--text-dim);
+  border-radius:var(--r-pill); padding:5px 14px; font-size:var(--fs-meta); }
+.tbtn:hover { color:var(--text-bright); border-color:var(--accent-border); }
+
+.wrap { max-width:1060px; margin:0 auto; padding:34px clamp(16px,3vw,40px) 110px; }
+.lede { color:var(--text-dim); font-size:var(--fs-lg); line-height:1.7; margin:0 0 var(--sp-5); }
+h2 { margin:56px 0 6px; padding-top:26px; font-size:var(--fs-lg); font-weight:600; border-top:1px solid var(--border-subtle); }
+h2:first-of-type { margin-top:8px; border-top:0; padding-top:0; }
+h2 .n { color:var(--text-dimmer); font-family:var(--mono); font-size:var(--fs-meta); margin-right:var(--sp-2); }
+h3 { margin:30px 0 8px; font-size:var(--fs-body); font-weight:600; }
+p { margin:10px 0; }
+code { font-family:var(--mono); font-size:.92em; background:var(--bg-elevated);
+  border:1px solid var(--border-subtle); border-radius:var(--r-xs); padding:1px 5px; }
+pre { margin:var(--sp-3) 0; padding:var(--sp-4); overflow-x:auto;
+  background:var(--bg-term); border:1px solid var(--border-subtle); border-radius:var(--r-sm);
+  font-family:var(--mono); font-size:var(--fs-meta); line-height:1.65; color:var(--text-bright); }
+pre code { background:none; border:0; padding:0; }
+pre .c { color:var(--text-dimmer); }
+pre .k { color:var(--accent); }
+pre .g { color:var(--ok); }
+pre .r { color:var(--danger); }
+ul,ol { margin:10px 0; padding-left:22px; }
+li { margin:5px 0; }
+a { color:var(--accent); }
+b.hl { color:var(--text-bright); }
+
+.card { background:var(--bg-container); border:1px solid var(--border); border-radius:var(--r-card);
+  padding:var(--sp-4) var(--sp-5); margin:var(--sp-4) 0; }
+.card.warn { border-color:var(--warn-border); background:var(--warn-soft); }
+.card.bad  { border-color:var(--danger-border); background:var(--danger-soft); }
+.card.good { border-color:var(--ok-border); background:var(--ok-soft); }
+.card > :first-child { margin-top:0; }
+.card > :last-child { margin-bottom:0; }
+.card h4 { margin:0 0 var(--sp-2); font-size:var(--fs-sm); font-weight:600; }
+
+.tag { display:inline-block; font-size:var(--fs-micro); letter-spacing:.06em; padding:2px 9px;
+  border-radius:var(--r-pill); border:1px solid var(--border); color:var(--text-dim); vertical-align:2px; }
+.tag.new { border-color:var(--accent-border); color:var(--accent); background:var(--accent-soft); }
+.tag.cut { border-color:var(--danger-border); color:var(--danger); background:var(--danger-soft); }
+.tag.opt { border-color:var(--warn-border); color:var(--warn); background:var(--warn-soft); }
+
+table { width:100%; border-collapse:collapse; margin:var(--sp-3) 0; font-size:var(--fs-sm); }
+th,td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--border-subtle); vertical-align:top; }
+th { color:var(--text-dim); font-weight:600; font-size:var(--fs-meta); letter-spacing:.04em; text-transform:uppercase; }
+td.num { font-family:var(--mono); text-align:right; white-space:nowrap; }
+td.mono, .mono { font-family:var(--mono); }
+.ok-t { color:var(--ok); } .warn-t { color:var(--warn); } .bad-t { color:var(--danger); } .dim-t { color:var(--text-dimmer); }
+
+.cols { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:var(--sp-3); margin:var(--sp-4) 0; }
+
+/* ── 稿件容器：一张「这是长这样」的图 ──────────────────────────────────── */
+.fig { margin:var(--sp-4) 0 var(--sp-5); }
+.fig .cap { font-size:var(--fs-meta); color:var(--text-dimmer); margin:6px 2px 0; }
+.fig .cap b { color:var(--text-dim); font-weight:600; }
+
+/* ── 状态条本体（1:1，就是要落地的那条）────────────────────────────────── */
+.sb {
+  --status-h:24px;
+  display:flex; align-items:stretch; height:var(--status-h);
+  background:var(--bg-container); border-top:1px solid var(--border-subtle);
+  font-size:var(--fs-meta); color:var(--text-dim); overflow:hidden; user-select:none;
+}
+.sb .cell {
+  display:inline-flex; align-items:center; gap:6px; padding:0 9px; height:100%;
+  white-space:nowrap; border:0; background:none; color:inherit; font:inherit;
+}
+.sb .cell.btn:hover { background:var(--list-hover); color:var(--text-bright); }
+.sb .sp { flex:1 1 auto; min-width:0; }
+.sb .dot { width:7px; height:7px; border-radius:50%; flex:0 0 auto; background:var(--ok); }
+.sb .dot.off { background:var(--text-dimmer); }
+.sb .dot.bad { background:var(--danger); }
+.sb .lb { color:var(--text-dimmer); }
+.sb .vl { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+.sb .mini { width:30px; height:4px; border-radius:var(--r-pill); background:color-mix(in srgb, var(--text-dimmer) 26%, transparent); overflow:hidden; flex:0 0 auto; }
+.sb .mini i { display:block; height:100%; background:var(--text-dimmer); }
+.sb .cell.warn { color:var(--warn); }
+.sb .cell.warn .lb, .sb .cell.warn .mini i { color:var(--warn); background:var(--warn); }
+.sb .cell.warn .lb { background:none; }
+.sb .cell.bad { color:var(--danger); }
+.sb .cell.bad .lb { color:var(--danger); background:none; }
+.sb .cell.bad .mini i { background:var(--danger); }
+.sb .cell.stale { color:var(--text-dimmer); opacity:.55; }
+.sb svg { width:13px; height:13px; flex:0 0 auto; }
+.sb .cell.pin { position:relative; }
+.sb .cell.pin::before { content:""; position:absolute; left:0; top:0; bottom:0; width:2px; background:currentColor; opacity:.5; }
+/* 粗指针档：整条长到 44，格子减到三个（见 §07） */
+.sb.coarse { --status-h:44px; font-size:var(--fs-sm); }
+.sb.coarse .cell { padding:0 var(--sp-3); gap:var(--sp-2); }
+
+/* 装状态条的「窗口」外壳，用来演示宽度 */
+.win { border:1px solid var(--border); border-radius:var(--r-sm); overflow:hidden; background:var(--bg-base); }
+.win.w720 { max-width:720px; } .win.w420 { max-width:420px; } .win.w360 { max-width:360px; }
+
+/* ── 整壳线框：说明它挂在哪 ───────────────────────────────────────────── */
+.shell { border:1px solid var(--border); border-radius:var(--r-card); overflow:hidden; background:var(--bg-base); }
+.shell .row { display:flex; }
+.shell .nav { width:74px; flex:0 0 74px; border-right:1px solid var(--border-subtle);
+  background:var(--bg-base); padding:var(--sp-2); display:flex; flex-direction:column; gap:5px; }
+.shell .nav i { display:block; height:9px; border-radius:var(--r-xs); background:var(--bg-elevated); }
+.shell .nav i.on { background:var(--accent-soft); box-shadow:inset 2px 0 0 var(--accent); }
+.shell .nav .gap { flex:1; }
+.shell .main { flex:1; min-width:0; display:flex; flex-direction:column; }
+.shell .tb { height:26px; border-bottom:1px solid var(--border-subtle); display:flex; align-items:center;
+  gap:6px; padding:0 8px; font-size:var(--fs-micro); color:var(--text-dimmer); }
+.shell .tb .s { height:14px; width:200px; border-radius:var(--r-xs); background:var(--bg-elevated); }
+.shell .body { display:flex; height:132px; }
+.shell .canvas { flex:1; padding:var(--sp-3); display:flex; flex-direction:column; gap:6px; }
+.shell .canvas i { display:block; height:10px; border-radius:var(--r-xs); background:var(--bg-container); }
+.shell .canvas i.w60 { width:60%; } .shell .canvas i.w40 { width:40%; } .shell .canvas i.w80 { width:80%; }
+.shell .dock { width:180px; flex:0 0 180px; border-left:1px solid var(--border-subtle);
+  background:var(--bg-term); padding:var(--sp-2); font-family:var(--mono); font-size:var(--fs-micro); color:var(--text-dimmer); }
+.shell .lbl { position:relative; }
+.shell .lbl::after { content:attr(data-l); position:absolute; right:8px; top:4px;
+  font-size:var(--fs-micro); color:var(--text-dimmer); letter-spacing:.08em; }
+
+/* ── 手机线框 ─────────────────────────────────────────────────────────── */
+.ph { width:300px; border:1px solid var(--border); border-radius:var(--r-card); overflow:hidden; background:var(--bg-base); }
+.ph .scr { height:150px; padding:var(--sp-3); display:flex; flex-direction:column; gap:6px; }
+.ph .scr i { display:block; height:10px; border-radius:var(--r-xs); background:var(--bg-container); }
+.ph .alert { display:flex; align-items:center; gap:6px; padding:5px 10px; font-size:var(--fs-meta);
+  color:var(--danger); background:var(--danger-soft); border-top:1px solid var(--danger-border); }
+.ph .dock { display:flex; align-items:center; gap:8px; height:34px; padding:0 10px; font-size:var(--fs-meta);
+  color:var(--text-dim); background:var(--bg-container); border-top:1px solid var(--border-subtle); }
+.ph .tabs { display:flex; background:var(--bg-container); border-top:1px solid var(--border); }
+.ph .tabs span { flex:1; text-align:center; padding:7px 0 9px; font-size:var(--fs-micro); color:var(--text-dimmer); }
+.ph .tabs span.on { color:var(--accent); }
+
+/* ── 弹出面板（点某一格展开的那张卡）──────────────────────────────────── */
+.pop { width:300px; background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--r-card);
+  padding:var(--sp-3); box-shadow:0 10px 30px rgba(0,0,0,.35); }
+.pop h5 { margin:0 0 var(--sp-2); font-size:var(--fs-meta); color:var(--text-dimmer);
+  letter-spacing:.1em; text-transform:uppercase; font-weight:600; }
+.pop .r { display:grid; grid-template-columns:1fr 54px 60px; gap:var(--sp-2); align-items:center;
+  padding:5px 2px; font-size:var(--fs-meta); }
+.pop .r + .r { border-top:1px solid var(--border-subtle); }
+.pop .r .n { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pop .r .v { font-family:var(--mono); text-align:right; color:var(--text-dim); }
+.pop .bar { height:5px; border-radius:var(--r-pill); background:var(--bg-base); overflow:hidden; }
+.pop .bar i { display:block; height:100%; background:var(--accent); }
+.pop .bar i.hot { background:var(--danger); }
+.pop .foot { margin-top:var(--sp-2); padding-top:var(--sp-2); border-top:1px solid var(--border-subtle);
+  font-size:var(--fs-micro); color:var(--text-dimmer); }
+
+.flow { display:grid; gap:var(--sp-2); margin:var(--sp-4) 0; }
+.step { display:grid; grid-template-columns:26px 1fr; gap:var(--sp-3); align-items:start;
+  padding:var(--sp-3) var(--sp-4); background:var(--bg-container);
+  border:1px solid var(--border-subtle); border-radius:var(--r-sm); }
+.step .i { width:26px; height:26px; border-radius:var(--r-pill); background:var(--accent-soft);
+  border:1px solid var(--accent-border); color:var(--accent);
+  display:flex; align-items:center; justify-content:center; font-size:var(--fs-meta); font-family:var(--mono); }
+.step .i.g { background:var(--ok-soft); border-color:var(--ok-border); color:var(--ok); }
+.step .i.r { background:var(--danger-soft); border-color:var(--danger-border); color:var(--danger); }
+.step b { display:block; font-weight:600; font-size:var(--fs-sm); margin-bottom:2px; }
+.step small { color:var(--text-dim); font-size:var(--fs-meta); line-height:1.6; }
+
+/* ── VS Code 对照与上下文矩阵 ─────────────────────────────────────────── */
+.sb .cell.rmt { background:var(--accent-solid); color:#fff; }
+.sb .cell.rmt .dot { background:rgba(255,255,255,.9); }
+.sb .cell.rmt:hover { background:color-mix(in srgb, var(--accent-solid) 82%, #fff); }
+.sb .sep { width:1px; align-self:center; height:12px; background:var(--border-subtle); margin:0 2px; flex:0 0 auto; }
+.sb .spin { width:11px; height:11px; border-radius:50%; flex:0 0 auto;
+  border:2px solid var(--border); border-top-color:var(--accent); animation:sbspin 1s linear infinite; }
+@keyframes sbspin { to { transform:rotate(360deg); } }
+.sb .cell.acc { color:var(--accent); }
+.sb .badge { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+.mx td.y { color:var(--text-bright); }
+.mx td.n { color:var(--text-dimmer); }
+.mx th:first-child, .mx td:first-child { white-space:nowrap; }
+.half { border-left:3px solid var(--accent-border); padding-left:var(--sp-3); margin:var(--sp-4) 0 var(--sp-2); }
+.half.r { border-left-color:var(--ok-border); }
+.half b { display:block; font-size:var(--fs-sm); }
+/* 稿件标注：给「这几格是插件注册的」画一条底线，真实界面上没有这条线 */
+.sb .cell.plug { position:relative; }
+.sb .cell.plug::after { content:""; position:absolute; left:3px; right:3px; bottom:0; height:2px;
+  background:var(--accent); opacity:.6; border-radius:2px; }
+.legend { display:flex; gap:var(--sp-4); flex-wrap:wrap; font-size:var(--fs-meta); color:var(--text-dimmer); margin:6px 2px 0; }
+.legend i { display:inline-block; width:16px; height:2px; border-radius:2px; vertical-align:3px; margin-right:6px; }
+.legend i.sys { background:var(--text-dimmer); opacity:.5; }
+.legend i.plg { background:var(--accent); opacity:.6; }
+/* 设置页里的「状态条」分组 */
+.setg { background:var(--bg-container); border:1px solid var(--border); border-radius:var(--r-card); padding:var(--sp-3) var(--sp-4); max-width:420px; }
+.setg h5 { margin:var(--sp-3) 0 var(--sp-2); font-size:var(--fs-micro); letter-spacing:.1em; text-transform:uppercase; color:var(--text-dimmer); font-weight:600; }
+.setg h5:first-child { margin-top:0; }
+.setg .row { display:flex; align-items:center; gap:var(--sp-2); padding:6px 0; font-size:var(--fs-sm); border-top:1px solid var(--border-subtle); }
+.setg .row:first-of-type { border-top:0; }
+.setg .row .src { font-family:var(--mono); font-size:var(--fs-micro); color:var(--text-dimmer); }
+.setg .sw { margin-left:auto; width:28px; height:16px; border-radius:var(--r-pill); background:var(--border); position:relative; flex:0 0 auto; }
+.setg .sw.on { background:var(--accent-solid); }
+.setg .sw::after { content:""; position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%; background:#fff; }
+.setg .sw.on::after { left:14px; }
+.setg .note { font-size:var(--fs-meta); color:var(--text-dim); margin-top:var(--sp-2); padding-top:var(--sp-2); border-top:1px solid var(--border-subtle); }
+.step small b, .half small b { display:inline; font-size:inherit; margin:0; color:var(--text-bright); }
+:root { --brand-claude:#d97757; }
+.half small { color:var(--text-dim); font-size:var(--fs-meta); }
+
+/* ── 拖拽落点线框 ─────────────────────────────────────────────────────── */
+.dnd { display:grid; grid-template-columns:300px 1fr; gap:var(--sp-3); margin:var(--sp-4) 0; }
+.dnd .col { border:1px solid var(--border); border-radius:var(--r-card); background:var(--bg-base); overflow:hidden; }
+.dnd .hd { padding:7px var(--sp-3); border-bottom:1px solid var(--border-subtle);
+  font-size:var(--fs-micro); letter-spacing:.1em; text-transform:uppercase; color:var(--text-dimmer); }
+.dnd .bd { padding:var(--sp-3); display:grid; gap:var(--sp-2); }
+.task { display:flex; align-items:center; gap:var(--sp-2); padding:8px var(--sp-3);
+  border:1px solid var(--border-subtle); border-radius:var(--r-sm); background:var(--bg-container); font-size:var(--fs-sm); }
+.task.drag { border-color:var(--accent-border); background:var(--accent-soft); box-shadow:0 6px 18px rgba(0,0,0,.35); }
+.task .d { width:8px; height:8px; border-radius:50%; background:var(--ok); flex:0 0 auto; }
+.task small { color:var(--text-dimmer); font-size:var(--fs-micro); margin-left:auto; font-family:var(--mono); }
+.tabs2 { display:flex; gap:2px; padding:6px var(--sp-2); border-bottom:1px solid var(--border-subtle); background:var(--bg-base); }
+.tab2 { display:flex; align-items:center; gap:6px; padding:5px 10px; border-radius:var(--r-xs);
+  font-size:var(--fs-meta); color:var(--text-dim); background:var(--bg-container); border:1px solid transparent; }
+.tab2.on { color:var(--text-bright); border-color:var(--border); }
+.tab2.drop { border-color:var(--accent); background:var(--accent-soft); color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent-border); }
+.term2 { background:var(--bg-term); padding:var(--sp-3); font-family:var(--mono); font-size:var(--fs-meta);
+  color:var(--text-dim); min-height:110px; }
+.term2 .nope { border:1px dashed var(--border); border-radius:var(--r-sm); padding:var(--sp-2);
+  color:var(--text-dimmer); font-family:inherit; }
+.dlg { max-width:470px; background:var(--bg-elevated); border:1px solid var(--border);
+  border-radius:var(--r-card); padding:var(--sp-4); box-shadow:0 16px 40px rgba(0,0,0,.45); }
+.dlg h5 { margin:0 0 var(--sp-3); font-size:var(--fs-body); font-weight:600; }
+.dlg .who { display:flex; align-items:center; gap:var(--sp-2); font-size:var(--fs-sm);
+  padding:8px 0; border-top:1px solid var(--border-subtle); }
+.dlg .who:first-of-type { border-top:0; }
+.dlg .warnline { margin:var(--sp-3) 0 0; padding:var(--sp-2) var(--sp-3); font-size:var(--fs-meta);
+  background:var(--warn-soft); border:1px solid var(--warn-border); border-radius:var(--r-sm); color:var(--warn); }
+.dlg .acts { display:flex; gap:var(--sp-2); justify-content:flex-end; margin-top:var(--sp-3); }
+.dlg .btn { padding:5px 14px; border-radius:var(--r-xs); font-size:var(--fs-meta);
+  border:1px solid var(--border); color:var(--text-dim); background:var(--bg-container); }
+.dlg .btn.pri { background:var(--accent-solid); border-color:var(--accent-solid); color:#fff; }
+.dlg .seg { display:inline-flex; border:1px solid var(--border); border-radius:var(--r-xs); overflow:hidden; margin-left:auto; }
+.dlg .seg span { padding:3px 10px; font-size:var(--fs-micro); color:var(--text-dim); }
+.dlg .seg span.on { background:var(--accent-soft); color:var(--accent); }
+.log { border:1px solid var(--border); border-radius:var(--r-card); overflow:hidden; max-width:600px; }
+.log .row { display:grid; grid-template-columns:116px 1fr 54px; gap:var(--sp-2);
+  padding:8px var(--sp-3); font-size:var(--fs-meta); border-top:1px solid var(--border-subtle); align-items:baseline; }
+.log .row:first-child { border-top:0; }
+.log .w { font-family:var(--mono); font-size:var(--fs-micro); color:var(--text-dimmer); white-space:nowrap; }
+.log .w.a { color:var(--accent); }
+.log .t { color:var(--text-bright); }
+.log .at { font-family:var(--mono); font-size:var(--fs-micro); color:var(--text-dimmer); text-align:right; }
+.log .foot { padding:8px var(--sp-3); border-top:1px solid var(--border);
+  background:var(--bg-container); font-size:var(--fs-micro); color:var(--text-dimmer); display:flex; gap:var(--sp-3); }
+.log .foot b { color:var(--warn); }
+.chip { display:inline-flex; align-items:center; gap:6px; padding:3px 9px; border-radius:var(--r-pill);
+  border:1px solid var(--accent-border); background:var(--accent-soft); color:var(--accent); font-size:var(--fs-micro); }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div>
+    <div class="kicker">Roam · Web 设计 21</div>
+    <h1>会话结对 — 把一个会话拖进另一个会话</h1>
+  </div>
+  <div class="sp"></div>
+  <button class="tbtn" id="themeBtn" type="button">浅色</button>
+</div>
+
+<div class="wrap">
+
+<p class="lede">
+把左边任务列表里的一个会话拖到右边正在用的会话上——落下之后，
+<b class="hl">往当前会话里注一段话，告诉它旁边那个是谁、怎么跟它说话</b>。
+<b class="hl">就这些。</b>没有链路对象、没有配额、没有转发器、没有新命令：
+发消息的能力 <code>ttmux send</code> 早就在了，剩下的交给大模型自己安排。
+</p>
+
+<h2><span class="n">01</span>能力已经在了，缺的只是「它不知道」</h2>
+
+<pre><code><span class="c">// cli/ttmux-cli-go/internal/command/session/commands.go:368</span>
+ttmux send &lt;会话&gt; &lt;消息&gt;
+   ├─ rt.Resolve(会话)                <span class="c">会话名 / tmux id / 展示名 都认</span>
+   └─ rt.<span class="k">SendPromptSubmit</span>("=名:", 消息)
+         <span class="c">paste-buffer 落文本 + 独立回车——对方 pane 里出现这行并提交，</span>
+         <span class="c">和人亲手敲进去没有区别</span></code></pre>
+
+<p>
+所以「两个 Agent 怎么通信」这一问，答案是<b class="hl">今天就能通信</b>，
+一行命令的事。真正缺的是两样：
+</p>
+
+<div class="flow">
+  <div class="step"><div class="i">1</div><div>
+    <b>Agent 不知道有这条命令</b>
+    <small>它不会用它不知道的东西。<code>ttmux send</code> 在帮助里，但没人会去翻。</small>
+  </div></div>
+  <div class="step"><div class="i">2</div><div>
+    <b>Agent 不知道对面是谁</b>
+    <small>会话名是 <code>2026-0824-1501-006h</code> 这种，Agent 手上没有这张表。</small>
+  </div></div>
+</div>
+
+<p>
+拖拽解决的就是这两件事：<b class="hl">用一个手势，把「对面是谁 + 怎么发」当场告诉它</b>。
+</p>
+
+<div class="card good">
+<h4>为什么不做更多</h4>
+<p>
+上一版这份稿子设计了链路表、轮次预算、速率闸、往来记录、<code>tell</code>／<code>unpair</code>
+四条新命令。全部砍掉——那是<b class="hl">拿一套机器去替大模型做决定</b>：
+该说几句、该不该回、什么时候停，它自己判断得比我的计数器好。
+真出了问题（比如两个 Agent 一直客套），人看着终端一眼就发现，<code>Ctrl-C</code> 就停了，
+不需要我提前替他建一套闸门。
+</p>
+</div>
+
+<h2><span class="n">02</span>注进去的那段话</h2>
+
+<p>
+这是本稿<b class="hl">唯一真正的设计物</b>，所以逐字推敲。它经
+<code>SendPromptSubmit</code> 投进<b class="hl">当前会话</b>——也就是你正看着的那个 pane，
+和你自己敲一段话进去没有区别：
+</p>
+
+<pre><code>[Roam] 你旁边还有一个会话，可以直接跟它说话。
+
+  它是谁：XiaoHui · fix-missing-search（codex）
+  工作目录：/home/ai/codes/ybz/xh/XiaoHui
+  会话名：2026-0824-1501-006h
+
+  给它发消息：
+    ttmux send 2026-0824-1501-006h "你的话"
+
+  想让它回你，就在消息里带上你自己的会话名：
+    ttmux send 2026-0823-1043-0001 "回复内容"
+
+  它收到的是一行文字并自动回车，和人敲进去的没区别。
+  第一句最好先说清你是谁、想让它干什么；也别一直客套着来回。</code></pre>
+
+<table>
+<thead><tr><th>这一段里的每一样</th><th>为什么非有不可</th></tr></thead>
+<tbody>
+<tr><td><b>展示名 + 项目 + Agent 种类</b></td><td>人读的那半。Agent 也靠它判断「这活该不该找它」</td></tr>
+<tr><td><b>工作目录</b></td><td>决定了能不能让它去看某个文件。缺了这行，第一句话多半要花在问路上</td></tr>
+<tr><td><b>会话名（id）而不是展示名</b></td><td><code>Resolve</code> 认展示名，但<b class="hl">展示名可以重复</b>（同名取排序第一个）。
+    命令里用 id 才不会发错人</td></tr>
+<tr><td><b>自己的会话名</b></td><td>否则对面收到消息<b class="hl">没有回信地址</b>，只能干瞪眼</td></tr>
+<tr><td><b>「和人敲进去没区别」</b></td><td>这是这条通道唯一反直觉的性质：不是发到收件箱，是<b class="hl">直接替对方按下回车</b>。
+    知道了它才会斟酌第一句怎么写</td></tr>
+<tr><td><b>对面是不是 Agent</b></td><td><b class="hl">真用起来才发现的。</b>没有 Agent 在跑的会话，
+    收到的每一行都会被 shell 当命令执行。第一次真拖成功时，Roam 告诉我「可以跟它说话」，
+    而那头跑的是 <code>bash</code>——照着介绍写一句人话过去，在那头就是 <code>command not found</code>。
+    <b class="hl">不拦</b>（给 shell 发命令本来就是 <code>ttmux send</code> 的正当用法），
+    但介绍词得换一句：「那边是个普通 shell，你发过去的每一行都会被当成命令直接执行」</td></tr>
+<tr><td><b>「别一直客套着来回」</b></td><td>两个 Agent 互相回「收到，我看看」能一直聊下去。<b class="hl">一句提醒，不是一套闸门</b></td></tr>
+</tbody>
+</table>
+
+<p>
+文案走 i18n（<code>pair.intro.*</code>），中英双份；<b class="hl">命令本身不翻译</b>。
+</p>
+
+<h2><span class="n">03</span>落点</h2>
+
+<p>
+<b class="hl">终端画面和会话标签都接。</b>「拖到当前会话里」本来就是人的直觉，
+而画面那块地看着像被文件拖放占着了——其实不是：路径拖拽用的是
+<code>application/x-ttmux-path</code>，跟会话拖拽的 <code>application/x-tt-session</code>
+天然分得开，两条路互不干扰。<b class="hl">第一版只让标签接，结果就是往画面里拖没反应</b>
+（用户第一句话就是「怎么拖动不了」）。
+</p>
+<div class="fig"><div class="dnd">  <div class="col">
+    <div class="hd">项目页 · 任务</div>
+    <div class="bd">
+      <div class="task"><i class="d"></i><span>XiaoHui-sh</span><small>claude</small></div>
+      <div class="task drag"><i class="d"></i><span>fix-missing-search</span><small>codex</small></div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="tabs2">
+      <span class="tab2 on">roam · roam优化</span>
+      <span class="tab2 drop">dgx-spark · ds4-fl…h-docs　落这儿</span>
+      <span class="tab2">qwen38-2…-spa</span>
+    </div>
+    <div class="term2">
+      <div class="nope" style="border-color:var(--accent-border);color:var(--accent)">画面这块也接：说给<b>当前</b>会话听</div>
+    </div>
+  </div></div><div class="cap"><b>标签和画面都接。</b>拖到画面 = 说给当前会话听；拖到某个标签 = 说给那个会话听。<b>用位置区分，不用修饰键</b>——按住 Shift 才怎样这种设计没人记得住，手机上也按不出来。</div></div>
+<table>
+<thead><tr><th>落在哪</th><th>发生什么</th></tr></thead>
+<tbody>
+<tr><td><b>终端画面里</b>（拖到「当前会话」）</td><td class="ok-t">注入那段话</td></tr>
+<tr><td><b>终端坞的会话标签</b></td><td class="ok-t">注入那段话，说给那个标签的会话听</td></tr>
+<tr><td>对话页输入框</td><td class="warn-t">插入 <code>@会话名</code> 文本，照旧</td></tr>
+<tr><td>拖到自己身上 / 目标没跑 Agent / 跨机</td><td>不给落点，见 §04</td></tr>
+</tbody>
+</table>
+
+<h2><span class="n">04</span>落下之后</h2>
+
+<p>
+<b class="hl">不弹确认框。</b>这一步只是往你自己的会话里发了一段话——
+和你在输入框里敲一句话按回车是同一件事，而那件事我们从来不问「确定吗」。
+你看着它出现在 pane 里，不满意就 <code>Ctrl-C</code>。
+</p>
+
+<p>
+<b class="hl">也不做芯片、不做记录、不做状态条那一格。</b>
+往来就在两个 pane 里明摆着，那本来就是终端最擅长的事；
+再画一份记录只是把同一件事说两遍，还得维护它和真实 pane 不一致的那些时刻。
+</p>
+
+<div class="card bad">
+<h4>要拦的两种情况（第二种是真机上撞出来的）</h4>
+<p>
+<b class="hl">① 目标里没有 Agent 在跑。</b>（注意是<b class="hl">收介绍的那一方</b>；
+被介绍的那一方是不是 Agent 不拦，只换一句措辞，见 §02。）这条比想象的严重。投递是「粘一段文本 + 按回车」：
+落进 Agent 的输入框，整段是<b class="hl">一条消息</b>；落进普通 shell，
+<b class="hl">每一行都被当成命令执行</b>——包括介绍词里那两行示例命令。
+第一次真机测试就撞上了：靶子是个空 shell，于是它<b class="hl">真的替我发了一条消息出去</b>
+（<code>✔ 已发送到 ds4-flash-docs …</code>）。所以没有 Agent 在跑的会话<b class="hl">不给落点</b>。
+</p>
+<p>
+<b class="hl">② 不在同一台机器。</b><code>ttmux send</code> 走的是本机 tmux，
+两个会话在不同机器上时它找不到对方，而 Agent 会拿到一句「会话不存在」然后开始瞎猜。
+</p>
+<p>
+两种都拒绝<b class="hl">并说清原因</b>——明确拒绝好过让它撞一堵看不见的墙。
+</p>
+<p>
+实现上有个坑：<code>dragover</code> 里把 <code>dropEffect</code> 设成 <code>'none'</code>
+的话，浏览器<b class="hl">干脆不投递 <code>drop</code> 事件</b>——于是「不接」变成了静默失败，
+人连原因都看不到。<b class="hl">要一律 <code>'copy'</code> 接住，再在 drop 里解释</b>；
+高亮只给接得住的目标。（合成事件测不出这条：它绕过了浏览器那层判定，
+真·鼠标拖一次才现形。）
+</p>
+</div>
+
+<div class="card">
+<h4>验收时的一个观察：它不一定马上说话</h4>
+<p>
+真机上把介绍投给一个闲着的 Claude 会话，它读完之后<b class="hl">没有去打招呼</b>，
+而是接着干自己手上的事。这是对的——<b class="hl">介绍是上下文，不是指令</b>。
+硬让它发一句「你好」只会浪费两边各一轮。它有话要说的时候自然会用。
+</p>
+</div>
+
+<h2><span class="n">05</span>落地清单</h2>
+
+<table>
+<thead><tr><th>文件</th><th>做什么</th></tr></thead>
+<tbody>
+<tr><td class="mono">frontend/…/projects/Projects.tsx</td>
+    <td>任务卡加 <code>draggable</code>，<code>dataTransfer</code> 带
+    <code>{ kind:'session', id, label, dir, agent, node }</code></td></tr>
+<tr><td class="mono">frontend/…/shell/session-drop.ts<br>session-drop.test.ts</td>
+    <td><span class="tag new">新</span> 纯函数：这次拖拽<b>该不该</b>接（是会话吗？不是自己吧？同机吗？），
+    以及<b class="hl">拼那段介绍词</b>——文案是纯函数，喂固定输入断言，不必开浏览器看</td></tr>
+<tr><td class="mono">frontend/…/terminal/TerminalPane.tsx</td>
+    <td>标签接 <code>drop</code>，<b class="hl">按 kind 分流</b>——别把文件拖放那条路弄坏</td></tr>
+<tr><td class="mono">backend/api + server.go</td>
+    <td><code>POST /sessions/:name/send</code>（若已有等价接口就直接用），转
+    <code>ttmux send</code></td></tr>
+<tr><td class="mono">frontend/src/i18n/locales/*</td><td><code>pair.intro.*</code> 中英双份</td></tr>
+</tbody>
+</table>
+
+<p>
+后端<b class="hl">大概率一行不用改</b>：投递就是 <code>ttmux send</code>，
+Web 侧本来就有往会话发东西的路径（发消息、开工都走它）。落地前先确认这条，
+能复用就别新开路由。
+</p>
+
+<h3>不做什么</h3>
+
+<ul>
+<li><b class="hl">不建链路对象</b>。没有 <code>pair</code> 表、没有 <code>unpair</code>。
+    拖一下就是发一段话，发完这件事就结束了——<b class="hl">状态留在两个 Agent 的上下文里</b>，
+    那才是它该在的地方。</li>
+<li><b class="hl">不做轮次预算 / 速率闸 / hop 深度</b>。该说几句、该不该回、什么时候停，
+    大模型判断得比计数器好。</li>
+<li><b class="hl">不做往来记录面板</b>。往来就在 pane 里。</li>
+<li><b class="hl">不加新 CLI 命令</b>。<code>ttmux send</code> 够了。</li>
+<li><b class="hl">不弹确认框</b>。见 §04。</li>
+<li><b class="hl">不做跨机</b>，<b class="hl">也不往非 Agent 会话投</b>。都不给落点，见 §04。</li>
+</ul>
+
+<h2><span class="n">06</span>验收</h2>
+
+<ul>
+<li>拖任务卡到<b class="hl">画面</b>和到<b class="hl">标签</b>都要通；拖文件进终端仍然是插入 <code>@路径</code>（两条路没打架）。</li>
+<li><b class="hl">用真·鼠标拖一次</b>，不是只发合成事件——合成事件绕过浏览器对
+    <code>dropEffect</code> 的判定，测不出「不接的目标静默失败」那类问题。</li>
+<li>落下后当前 pane 里出现那段介绍，<b class="hl">并且真的自动回车了</b>——
+    裸 <code>send-keys text C-m</code> 只打字不发送，这条必须真机看。</li>
+<li>照着注进去的命令原样发一条，对面 pane 里出现并提交。</li>
+<li>对面按介绍里的地址回一条，回到发起方 pane 里。<b class="hl">一个来回真的通</b>，
+    这是这个功能的全部。</li>
+<li>展示名重复的两个会话：确认命令里用的是 id，发到了正确的那一个。</li>
+<li>跨机拖拽、以及目标里没跑 Agent：都不给落点，并说清原因。</li>
+<li>落点高亮：<code>dragover</code> 时标签亮成实心强调边，且<b class="hl">不该接的目标不亮</b>。</li>
+</ul>
+
+<div class="card good">
+<h4>一句话</h4>
+<p>
+通信方法就是 <code>ttmux send &lt;会话&gt; &lt;消息&gt;</code>，它今天就能用。
+这个功能要做的只是<b class="hl">在对的时刻把这句话连同对面的地址一起告诉 Agent</b>——
+剩下的它自己会。
+</p>
+</div>
+
+<div style="margin-top:56px;padding-top:20px;border-top:1px solid var(--border-subtle);
+     font-size:var(--fs-meta);color:var(--text-dimmer)">
+  相关：<a href="../09-swarm-in-project.md">09 蜂群 × 项目</a>（三个以上会话、要编排的时候用那套） ·
+  <a href="../20-status-bar/index.html">20 底部状态条</a> ·
+  <a href="../../../development/ui-design-system.md">Web UI 设计系统</a>
+</div>
+
+</div>
+
+<script>
+(function () {
+  var b = document.getElementById('themeBtn');
+  var dark = !window.matchMedia('(prefers-color-scheme: light)').matches;
+  function apply() {
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    b.textContent = dark ? '浅色' : '深色';
+  }
+  b.addEventListener('click', function () { dark = !dark; apply(); });
+  apply();
+})();
+</script>
+</body>
+</html>
