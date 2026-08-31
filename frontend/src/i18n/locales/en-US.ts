@@ -311,6 +311,7 @@ const enUS = {
   'pair.tellCurrent': 'Tell the current session how to talk to "{name}"',
   'pair.noCurrent': 'Open a session first — the blurb has to go somewhere',
   'pair.cannotSelf': 'That is the current session; no need to introduce it to itself',
+  'chat.roamNotice': 'Notice Roam sent to this session',
   'pair.dropHint': 'Tell this session how to talk to it',
   'pair.noAgent': 'No agent is running in "{name}" — the blurb would be executed line by line as shell commands',
   'pair.crossNode': '"{name}" is on another machine — ttmux send cannot reach it',

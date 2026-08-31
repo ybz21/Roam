@@ -61,6 +61,14 @@ export function readDrag(dt: DataTransfer | null): SessionDrag | null {
   } catch { return null }
 }
 
+/**
+ * 介绍词的开头标记。**注入端与渲染端共用同一个常量**——对话页靠它把这段话认出来，
+ * 渲染成一条通知而不是「你说的话」。改文案时两边不会漂开。
+ *
+ * 中英两份文案里它都是字面量（见 pair.intro.head），所以拿它当判据是稳的。
+ */
+export const ROAM_NOTICE_PREFIX = '[Roam] '
+
 type T = (key: string, vars?: Record<string, unknown>) => string
 
 /**

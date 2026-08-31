@@ -69,3 +69,35 @@ describe('长文件名', () => {
     expect(card.getAttribute('aria-label')).toContain('3ded4b2ed06754eed0cc76c603f59da4.jpg')
   })
 })
+
+describe('Roam 塞进来的介绍词', () => {
+  // 它是经 SendPromptSubmit 投进输入框并回车的，转录里记成一个 user turn——
+  // 可那不是人说的话，画成实心蓝气泡会把对话搅浑
+  const notice = (): Msg => ({
+    role: 'user', id: 'n1',
+    blocks: [{ kind: 'text', text: '[Roam] 你旁边还有一个会话，可以直接跟它说话。\n  会话名：2026-0823-1911-003a' }],
+  })
+
+  it('收成一条通知，不画成用户气泡', () => {
+    const { container } = render(
+      <I18nProvider><ChatMessage m={notice()} results={{}} side="claude" /></I18nProvider>)
+    expect(container.textContent).toContain('Roam 给这个会话发的通知')
+    // 默认收起：正文不在 DOM 里
+    expect(container.textContent).not.toContain('2026-0823-1911-003a')
+  })
+
+  it('展开能看到原文，但不带那个标记前缀', () => {
+    const { container } = render(
+      <I18nProvider><ChatMessage m={notice()} results={{}} side="claude" /></I18nProvider>)
+    fireEvent.click(screen.getByText('Roam 给这个会话发的通知'))
+    expect(container.textContent).toContain('2026-0823-1911-003a')
+    expect(container.textContent).not.toContain('[Roam]')
+  })
+
+  it('普通用户消息照旧走气泡', () => {
+    const { container } = render(
+      <I18nProvider><ChatMessage m={{ role: 'user', id: 'u9', blocks: [{ kind: 'text', text: '帮我看下这个' }] }} results={{}} side="claude" /></I18nProvider>)
+    expect(container.textContent).toContain('帮我看下这个')
+    expect(container.textContent).not.toContain('Roam 给这个会话发的通知')
+  })
+})
