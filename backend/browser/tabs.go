@@ -6,6 +6,7 @@
 package browser
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -46,8 +47,15 @@ func NewTab(c *gin.Context) {
 }
 
 // CloseTab 关闭指定标签页。
+// 关不掉的（Chrome 自己的界面页）单独给一个 code，前端据此把这一行从标签条上抹掉——
+// 用户按了「关闭」就该看见它消失，哪怕 Chrome 那边根本不肯放手。
 func CloseTab(c *gin.Context) {
-	if err := closeTab(c.Param("id")); err != nil {
+	err := closeTab(c.Param("id"))
+	if errors.Is(err, ErrNotClosable) {
+		c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "not_closable", "message": err.Error()}})
+		return
+	}
+	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": gin.H{"message": err.Error()}})
 		return
 	}

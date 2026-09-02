@@ -97,6 +97,18 @@ const effectiveTimeoutMs = (verb, timeoutMs) => verb === 'record' ? Math.max(tim
 // 「前台标签跟随」（见 backend/browser/screencast.go 的 /json 顺序兜底）靠的正是标签被前置
 // 这件事本身，agent 操作到哪，面板就跟到哪。前置失败（标签刚好被关掉等）不影响后续真正的
 // 操作，吞掉即可。
+// Chrome 自己的界面也是一个 page：地址栏下拉 chrome://omnibox-popup.top-chrome/、
+// 标签搜索、侧边栏。它们混在 ctx.pages() 里，chrome tabs 会多列几行，更要命的是
+// pages[0] 可能就是其中一个——那 chrome goto/text 就操作到浏览器界面上去了。
+// 与后端 isUserTab（backend/browser/browser.go）同一条规矩。
+function userPages(pages) {
+  return pages.filter((p) => {
+    const u = (p.url() || '').toLowerCase()
+    if (u.startsWith('devtools://') || u.startsWith('chrome-untrusted://')) return false
+    return !(u.startsWith('chrome://') && u.slice('chrome://'.length).split('/')[0].includes('top-chrome'))
+  })
+}
+
 async function pick(pages, flags, fail) {
   const p = pickPage(pages, flags, fail)
   await p.bringToFront().catch(() => {})
@@ -162,7 +174,7 @@ async function executeVerb(browser, verb, flags, pos, timeoutMs, io) {
   const to = timeoutMs
   const settle = () => settleMs(flags)
   const ctx = browser.contexts()[0] || (await browser.newContext())
-  const pages = ctx.pages()
+  const pages = userPages(ctx.pages())
   const pickHere = () => pick(pages, flags, fail)
 
   switch (verb) {
@@ -243,7 +255,7 @@ async function executeVerb(browser, verb, flags, pos, timeoutMs, io) {
     }
     case 'pdf': { const f = pos[0] || 'page.pdf'; await (await pickHere()).pdf({ path: f }); io.log(f); break }
     case 'tabs': io.log(await Promise.all(pages.map(async (pg, i) => ({ i, title: await pg.title().catch(() => ''), url: pg.url() })))); break
-    case 'new': { const np = await ctx.newPage(); if (pos[0]) { await allowInsecureTLS(ctx, np); await np.goto(pos[0], { waitUntil: 'load', timeout: to }) } await np.bringToFront().catch(() => {}); io.log({ i: ctx.pages().indexOf(np), url: np.url() }); break }
+    case 'new': { const np = await ctx.newPage(); if (pos[0]) { await allowInsecureTLS(ctx, np); await np.goto(pos[0], { waitUntil: 'load', timeout: to }) } await np.bringToFront().catch(() => {}); io.log({ i: userPages(ctx.pages()).indexOf(np), url: np.url() }); break }
     case 'close': await (await pickHere()).close(); io.log('ok'); break
     default: fail('未知命令: ' + verb)
   }
@@ -313,7 +325,7 @@ class Recorder {
       if (this.active) fail('已经在录制：' + this.outPath + '（先 record stop）')
       const outPath = resolveRecordPath(pos[1], fail)
       const ctx = browser.contexts()[0] || (await browser.newContext())
-      const page = await pick(ctx.pages(), flags, fail)
+      const page = await pick(userPages(ctx.pages()), flags, fail)
       await this._start(ctx, page, outPath, fail)
       io.log({ recording: true, path: outPath })
       return

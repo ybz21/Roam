@@ -816,6 +816,7 @@ const enUS = {
   'browser.subtitle': 'Live mirror of the backend Chrome — take over input, switch tabs, emulate mobile devices',
   'browser.tabs': 'Tabs',
   'browser.newTab': 'New tab',
+  'browser.tabHidden': "Chrome won't close this page (it's browser UI, not a tab) — removed it from the tab strip",
   'browser.quality.auto': 'Auto',
   'browser.quality.standard': 'SD',
   'browser.quality.high': 'HD',
@@ -970,6 +971,8 @@ const enUS = {
   'phone.save': 'Save & connect',
   'phone.test': 'Test connection',
   'phone.saved': 'Saved',
+  // 镜像页共用（浏览器 / 手机）
+  'mirror.openInNewPage': 'Open in new page',
   'overview.welcome': 'Welcome back 👋',
   'overview.subtitle': 'Drive your machine and its AI agents — anywhere, anytime',
   'overview.enterSessions': 'Open sessions',

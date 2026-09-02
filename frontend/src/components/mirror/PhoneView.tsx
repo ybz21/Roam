@@ -10,7 +10,7 @@ import { api } from '../../api'
 import { useI18n } from '../../i18n'
 import { connect, type DuplexTransport } from '../../p2p/transport'
 import { devKindText, devStateText, listPhoneDevices, selectPhoneDevice, type PhoneDevice } from '../../phone-devices'
-import { AppsIcon, ChevronDown, DeviceIcon, PhoneAssistIcon, PhoneBackIcon, PhoneHomeIcon, PhoneRecentsIcon, PowerIcon, RefreshIcon, SearchIcon } from '../../icons'
+import { AppsIcon, ChevronDown, DeviceIcon, OpenInIcon, PhoneAssistIcon, PhoneBackIcon, PhoneHomeIcon, PhoneRecentsIcon, PowerIcon, RefreshIcon, SearchIcon } from '../../icons'
 import { fmtRate, IconBtn, MirrorChrome, MirrorMenu, Omnibox, StreamControl, useShelf, type Quality } from './mirror'
 
 interface PhoneApp { id: string; name?: string }
@@ -229,6 +229,9 @@ export default function PhoneView() {
       { key: 'lock', icon: <PowerIcon size={14} />, label: t('phone.lock'), onClick: () => pressKey('lock') },
     ]),
     { key: 'reconnect', icon: <RefreshIcon size={14} />, label: t('phone.reconnect'), onClick: () => setReconnectKey((n) => n + 1) },
+    // terms=none：新开的这页只有镜像，不继承当前的会话标签（见 route-hash）
+    { key: 'newpage', icon: <OpenInIcon size={14} />, label: t('mirror.openInNewPage'),
+      onClick: () => window.open('/#/phone?terms=none', '_blank') },
   ]
 
   // 设备身份：名字 + 它是什么（本机模拟器/真机/远程），点开换一台。
