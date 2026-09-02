@@ -96,7 +96,8 @@ install_binary() {
     ( cd "$here" && bash scripts/build/build-roam.sh )
     local built; built="$(ls -1 "${here}/backend/dist/roam-"* 2>/dev/null | head -1)"
     [ -n "$built" ] || die "源码构建未产出二进制"
-    cp "$built" "$dest"; chmod +x "$dest"
+    # 服务正跑着时 cp 直接覆盖会报「文本文件忙」；先落临时名再 mv，rename 对运行中的二进制是原子的
+    cp "$built" "${dest}.tmp"; chmod +x "${dest}.tmp"; mv -f "${dest}.tmp" "$dest"
     info "roam 已从源码构建并安装到 $dest"
     return 0
   fi
