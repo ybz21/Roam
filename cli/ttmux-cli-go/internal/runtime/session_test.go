@@ -118,3 +118,26 @@ func TestSanitizeLabelKeepsHumanText(t *testing.T) {
 		t.Fatalf("制表/换行会破坏 list-sessions -F 的分隔，必须替掉: %q", got)
 	}
 }
+
+// 只有 tmux 那两句「连不上 socket」算 server 不在；权限不对、别的报错都不算——
+// 认错了就会把一整表活会话误收进历史。
+func TestNoServer(t *testing.T) {
+	for _, out := range []string{
+		"no server running on /tmp/tmux-1000/default\n",
+		"error connecting to /tmp/tmux-1000/default (No such file or directory)\n",
+	} {
+		if !NoServer(out) {
+			t.Errorf("应判为 server 不在: %q", out)
+		}
+	}
+	for _, out := range []string{
+		"",
+		"error connecting to /tmp/tmux-1000/default (Permission denied)\n",
+		"can't find session: dev\n",
+		"dev\t1\t1700000000\n",
+	} {
+		if NoServer(out) {
+			t.Errorf("不该判为 server 不在: %q", out)
+		}
+	}
+}

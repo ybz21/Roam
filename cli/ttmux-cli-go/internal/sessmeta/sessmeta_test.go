@@ -286,3 +286,47 @@ func TestSetHomeOverwritesButBlankKeeps(t *testing.T) {
 		t.Fatalf("传空不该清掉已有的 repo_root: %q", repo)
 	}
 }
+
+// tmux server 整个不在（重启 / kill-server）：这不是盲态，所有 live 行一次收进历史，
+// 记 host-restart、died_at 取最后一次看见它，并且**当场**就出现在 Dormant() 里——
+// 不用等用户新建一个会话让 alive 非空才被收敛。
+func TestServerGoneMarksLiveRowsDormant(t *testing.T) {
+	s, _ := newTestStore(t, map[string]string{"a": "$1", "b": "$2"})
+	s.Epoch = func() string { return "1000" }
+	dir := t.TempDir()
+	for _, n := range []string{"a", "b"} {
+		if err := s.Put(Row{Session: n, InitialCwd: dir}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// 活着时看见过一次：died_at 应取这一刻，不是之后收敛的时刻
+	s.Reconcile(map[string]bool{"a": true, "b": true})
+	seen := s.Now().Format(time.RFC3339)
+	s.Now = func() time.Time { return time.Date(2026, 7, 29, 9, 0, 0, 0, time.UTC) }
+
+	s.ReconcileServerGone()
+
+	if live := s.All(); len(live) != 0 {
+		t.Fatalf("server 没了不该还有活行: %+v", live)
+	}
+	hist := s.History(0)
+	if len(hist) != 2 {
+		t.Fatalf("两行都该进历史，got %+v", hist)
+	}
+	for _, r := range hist {
+		if r.DiedReason != "host-restart" {
+			t.Fatalf("%s died_reason = %q, want host-restart", r.Session, r.DiedReason)
+		}
+		if r.DiedAt != seen {
+			t.Fatalf("%s died_at = %q, want 最后一次看见 %q", r.Session, r.DiedAt, seen)
+		}
+	}
+	if got := s.Dormant(); len(got) != 2 {
+		t.Fatalf("server 没了之后休眠列表就该有它们，got %+v", got)
+	}
+	// 没有活行时再来一次什么都不变
+	s.ReconcileServerGone()
+	if len(s.History(0)) != 2 || len(s.Dormant()) != 2 {
+		t.Fatalf("重复收敛不该改变结果: %+v", s.History(0))
+	}
+}

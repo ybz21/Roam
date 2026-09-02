@@ -120,6 +120,20 @@ func (r Runtime) HasSession(name string) bool {
 	return cmd.Run() == nil
 }
 
+// NoServer 判断 tmux 的一次报错是不是「server 根本不在」。
+//
+// 客户端连不上 socket 只有两种措辞：socket 文件在但没人听是
+// "no server running on <path>"，连 socket 文件都没有是
+// "error connecting to <path> (No such file or directory)"。这两种都是确定的
+// 「一个会话都没有」，和权限不对、二进制缺失那种「看不见」是两回事——
+// 前者该让台账把所有活行收进历史，后者才是一行不许动的盲态。
+func NoServer(out string) bool {
+	if strings.Contains(out, "no server running on") {
+		return true
+	}
+	return strings.Contains(out, "error connecting to") && strings.Contains(out, "No such file or directory")
+}
+
 // Sessions returns all tmux session names (unfiltered).
 func (r Runtime) Sessions() []string {
 	out, err := r.TmuxOutput("list-sessions", "-F", "#{session_name}")
