@@ -763,13 +763,15 @@ const Term = forwardRef<TermHandle, {
         onPaste?.()
         return false // 吞掉，避免 xterm 再触发一次原生 paste 造成重复
       }
-      // 普通 Ctrl+V 放行给浏览器的原生 paste 事件（不需要剪贴板权限，最省事）；
+      // 普通 Ctrl+V 靠浏览器的原生 paste 事件（不需要剪贴板权限，最省事）；
       // 但它不一定来——有的环境 keydown 到了 paste 却没触发。等一拍没等到就走应用粘贴，
       // 让 Ctrl+V 在哪都有反应，而不是要用户知道 Ctrl+Shift+V 这条暗门。
+      // 返回 false 是为了**不让 xterm 把 ^V(\x16) 送进终端**：不 preventDefault，paste 照样来；
+      // 而 Claude Code 收到 ^V 会往输入框里塞一条横线，之前每次粘贴前面都多出一行 ───。
       if (isV && e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
         nativePasteSeen = false
         window.setTimeout(() => { if (!nativePasteSeen) onPaste?.() }, 250)
-        return true
+        return false
       }
       const isC = e.key === 'c' || e.key === 'C'
       if (!isC) return true
