@@ -69,6 +69,13 @@ type Agent interface {
 	// 「认」天生带推断成分（同目录并发跑两个就可能认错），所以调用方应当
 	// 只在无歧义时采信 —— 宁可没有对话 id，也别接回别人的对话。
 	DetectConversationID(cwd string) string
+
+	// ConversationDir 这段对话**现在**落在哪个工作目录；返回空串表示不知道。
+	//
+	// 台账记的归属目录是建会话那一刻的；而 agent 中途可能挪进 worktree，
+	// 对话文件也跟着搬家。恢复时若仍回到建会话的目录敲 resume，agent 在那里
+	// 找不到这段对话——看起来就是「记忆丢了」。所以以对话文件自己说的为准。
+	ConversationDir(convID string) string
 }
 
 // StartOpts 拉起 agent 时的可变部分。
@@ -141,4 +148,16 @@ func ResumeCommandFor(kind, convID string) string {
 		return ""
 	}
 	return a.ResumeCommand(convID)
+}
+
+// ConversationDirFor 认不出类型、或这一型不知道，都返回空串——调用方退回台账目录。
+func ConversationDirFor(kind, convID string) string {
+	if convID == "" {
+		return ""
+	}
+	a := Get(kind)
+	if a == nil {
+		return ""
+	}
+	return a.ConversationDir(convID)
 }
