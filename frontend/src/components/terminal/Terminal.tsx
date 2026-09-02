@@ -118,7 +118,9 @@ function xtermTheme() {
   const fg = cs.getPropertyValue('--xterm-fg').trim() || '#e6edf3'
   // 光标同样吃全站强调色（--accent），这里必须取解析后的值——xterm 不认 var()
   const cursor = cs.getPropertyValue('--accent').trim() || '#58a6ff'
-  return { background: bg, foreground: fg, cursor }
+  // 选区色必须跟主题走：xterm 缺省是白色半透明，浅色底上选了什么根本看不见
+  const selectionBackground = cs.getPropertyValue('--xterm-selection').trim() || 'rgba(88, 166, 255, .35)'
+  return { background: bg, foreground: fg, cursor, selectionBackground }
 }
 
 // 滤掉应用(Claude Code/Codex/vim 等)开启「鼠标上报」的 DECSET 序列 ESC[?1000/1001/1002/1003h。
@@ -152,12 +154,18 @@ const cmpCell = (a: Cell, b: Cell) => a.row - b.row || a.col - b.col
 // 触摸长按选词的分词符（近似 xterm 双击选词 wordSeparator 的缺省值）
 const WORD_SEPS = new Set([' ', '\t', '(', ')', '[', ']', '{', '}', "'", '"', '`', ',', ';', '|'])
 
-// 跨 http（局域网非安全上下文）也能用的复制
+// 跨 http（局域网非安全上下文）也能用的复制。
+// 安全上下文下 writeText 也会失败：自签证书没被信任时 Chrome 会拒绝剪贴板 API，
+// 页面照样 isSecureContext——所以被拒后仍要退回 execCommand，不能吞掉就算。
 function copyText(s: string) {
   if (navigator.clipboard && window.isSecureContext) {
-    navigator.clipboard.writeText(s).catch(() => {})
+    navigator.clipboard.writeText(s).catch(() => copyTextLegacy(s))
     return
   }
+  copyTextLegacy(s)
+}
+
+function copyTextLegacy(s: string) {
   const ta = document.createElement('textarea')
   ta.value = s
   ta.style.position = 'fixed'
@@ -736,6 +744,7 @@ const Term = forwardRef<TermHandle, {
 
     // Ctrl/Cmd+C 智能复制：有选区 → 复制并清除选区（交上层弹「已复制」），无选区 → 放行发 ^C 中断。
     // Ctrl/Cmd+Shift+C 始终复制（与浏览器习惯一致）。返回 false 表示该按键不再发给终端。
+    let nativePasteSeen = true // Ctrl+V 之后浏览器有没有真的送来 paste 事件（见下）
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== 'keydown') return true
       // Shift+Enter → CSI u 序列 \x1b[13;2u：让 Claude Code / Codex 等 TUI 识别为换行而非提交。
@@ -753,6 +762,14 @@ const Term = forwardRef<TermHandle, {
         e.preventDefault()
         onPaste?.()
         return false // 吞掉，避免 xterm 再触发一次原生 paste 造成重复
+      }
+      // 普通 Ctrl+V 放行给浏览器的原生 paste 事件（不需要剪贴板权限，最省事）；
+      // 但它不一定来——有的环境 keydown 到了 paste 却没触发。等一拍没等到就走应用粘贴，
+      // 让 Ctrl+V 在哪都有反应，而不是要用户知道 Ctrl+Shift+V 这条暗门。
+      if (isV && e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
+        nativePasteSeen = false
+        window.setTimeout(() => { if (!nativePasteSeen) onPaste?.() }, 250)
+        return true
       }
       const isC = e.key === 'c' || e.key === 'C'
       if (!isC) return true
@@ -990,6 +1007,7 @@ const Term = forwardRef<TermHandle, {
       if (touchRangeRef.current && !term.hasSelection()) { touchRangeRef.current = null; setHandles(null) }
     })
     const onPasteCapture = (e: ClipboardEvent) => {
+      nativePasteSeen = true
       if (!e.clipboardData?.items) return
       // 一次粘贴只取一张图：同一张截图常以多种 MIME(image/png + image/jpeg…)重复出现，
       // 全收会重复上传 → 终端里出现两次 @路径。取到第一张就停。
