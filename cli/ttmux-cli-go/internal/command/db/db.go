@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 
+	"ttmux-cli-go/internal/agent"
 	"ttmux-cli-go/internal/metadb"
 	"ttmux-cli-go/internal/revive"
 	"ttmux-cli-go/internal/runtime"
@@ -254,17 +255,31 @@ func backup(rt runtime.Runtime, rest []string, asJSON bool, w io.Writer) error {
 // ttmux 自己拉起的 agent 靠 --session-id，关联由构造保证；用户在会话里手敲
 // `claude` 的那些只能由上层推断，所以这里**只记一次不覆盖**——先前确定下来的
 // 那次比后来推断的更可信。
+//
+// 第三个参数是 agent 类型。恢复时靠它决定敲哪一型的命令，而且**不猜**——
+// 从前这条路只记 id 不记类型，于是手敲 claude 的会话即便认到了对话，
+// 重开出来也永远只有壳。
 func linkAgent(rt runtime.Runtime, rest []string, w io.Writer) error {
 	if len(rest) < 2 {
-		return fmt.Errorf("用法：ttmux db link-agent <会话> <对话uuid>")
+		return fmt.Errorf("用法：ttmux db link-agent <会话> <对话uuid> [类型]")
 	}
 	sess := rt.Resolve(rest[0])
 	if sess == "" {
 		sess = rest[0]
 	}
+	kind := ""
+	if len(rest) >= 3 {
+		if agent.Get(rest[2]) == nil {
+			return fmt.Errorf("未知的 agent 类型 %q（可用：%v）", rest[2], agent.Kinds())
+		}
+		kind = agent.Get(rest[2]).Kind()
+	}
 	meta := sessmeta.New(rt.HomeDir)
 	meta.DataDir = rt.DataDir
-	return meta.SetAgentSession(sess, rest[1])
+	if err := meta.SetAgentSession(sess, rest[1]); err != nil {
+		return err
+	}
+	return meta.SetAgentKind(sess, kind)
 }
 
 // setHome 记会话归属的**台账事实**。后端事后改钉（cdInto 之后、fork 继承父归属）

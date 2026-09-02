@@ -24,6 +24,7 @@ func (g gemini) ResumeCommand(c string) string {
 	return g.Bin() + " --chat " + c
 }
 func (gemini) DetectConversationID(string) string { return "" }
+func (gemini) ConversationDir(string) string      { return "" }
 
 func TestNewKindNeedsNoChangesElsewhere(t *testing.T) {
 	Register(gemini{})

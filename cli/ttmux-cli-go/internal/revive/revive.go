@@ -59,10 +59,27 @@ func Candidate(meta *sessmeta.Store, name string) (sessmeta.Row, bool) {
 // restorable 目录还在才谈得上重开。worktree 被清是常事——据实报错，
 // 别糊里糊涂在别处建一个会话出来。
 func restorable(row sessmeta.Row) bool {
-	if row.Status != "dead" || row.Dir() == "" {
+	if row.Status != "dead" {
 		return false
 	}
-	fi, err := os.Stat(row.Dir())
+	d := targetDir(row)
+	return d != "" && isDir(d)
+}
+
+// targetDir 重开该回到哪个目录。
+//
+// 台账记的是建会话那一刻的目录；agent 中途进了 worktree，对话文件就跟着搬到
+// 那里，回到原目录敲 resume 是找不到它的——用户看到的就是「会话记忆丢了」。
+// 所以对话文件自己说的目录优先，没有或已被清掉再退回台账。
+func targetDir(row sessmeta.Row) string {
+	if d := agent.ConversationDirFor(row.AgentKind, row.AgentUUID); d != "" && isDir(d) {
+		return d
+	}
+	return row.Dir()
+}
+
+func isDir(p string) bool {
+	fi, err := os.Stat(p)
 	return err == nil && fi.IsDir()
 }
 
@@ -102,10 +119,10 @@ func Revive(rt runtime.Runtime, meta *sessmeta.Store, name string) (Result, erro
 	if row.Dir() == "" {
 		return Result{}, fmt.Errorf("会话 %s 没有记下归属目录，无法重开", name)
 	}
+	dir := targetDir(row)
 	if !restorable(row) {
-		return Result{}, fmt.Errorf("原目录已不存在：%s", row.Dir())
+		return Result{}, fmt.Errorf("原目录已不存在：%s", dir)
 	}
-	dir := row.Dir()
 
 	// 名字**一定要带过去**，而且要落库。
 	//

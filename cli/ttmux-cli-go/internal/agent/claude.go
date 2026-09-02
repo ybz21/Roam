@@ -1,6 +1,11 @@
 package agent
 
 import (
+	"bufio"
+	"bytes"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"ttmux-cli-go/internal/id"
@@ -70,6 +75,70 @@ func (c claude) ResumeCommand(convID string) string {
 
 // 用不上：这一型的 id 是我们指定的，不需要事后认。
 func (claude) DetectConversationID(string) string { return "" }
+
+// claudeProjectsRoot 是 Claude Code 存对话的根目录（~/.claude/projects）。
+// 做成变量是留给测试注入的。
+var claudeProjectsRoot = func() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".claude", "projects")
+}
+
+// ConversationDir 找到 <convID>.jsonl，取它**最后一条**带 cwd 的记录。
+//
+// 对话文件按启动目录归档在 ~/.claude/projects/<目录转义>/ 下，而 Claude Code
+// 进 worktree 后会把文件搬到 worktree 那个转义目录、之后每条记录的 cwd 都是
+// worktree。转义是有损的（/ 和 . 都变成 -），所以不从目录名反推，直接读记录。
+// 取最后一条而不是第一条：第一条是建会话时的目录，正是台账已经记着的那个。
+func (claude) ConversationDir(convID string) string {
+	root := claudeProjectsRoot()
+	if root == "" || strings.TrimSpace(convID) == "" {
+		return ""
+	}
+	ents, err := os.ReadDir(root)
+	if err != nil {
+		return ""
+	}
+	for _, e := range ents {
+		if !e.IsDir() {
+			continue
+		}
+		p := filepath.Join(root, e.Name(), convID+".jsonl")
+		if _, err := os.Stat(p); err != nil {
+			continue
+		}
+		return lastCwd(p)
+	}
+	return ""
+}
+
+// lastCwd 逐行读到底，记住最后一个非空的 cwd。
+// 不用 bufio.Scanner：工具结果一行就能有几 MB，Scanner 默认 64K 就爆。
+func lastCwd(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	var last string
+	r := bufio.NewReader(f)
+	for {
+		line, err := r.ReadBytes('\n')
+		if len(line) > 0 && bytes.Contains(line, []byte(`"cwd"`)) {
+			var rec struct {
+				Cwd string `json:"cwd"`
+			}
+			if json.Unmarshal(line, &rec) == nil && rec.Cwd != "" {
+				last = rec.Cwd
+			}
+		}
+		if err != nil {
+			return last
+		}
+	}
+}
 
 // NewConversationID 生成一个待指定的对话 id。
 // 成本为零，而少了它，会话死后就再也认不出「那段对话是哪一份 jsonl」。

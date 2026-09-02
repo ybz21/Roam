@@ -38,6 +38,7 @@ const linkWindow = 30 * time.Minute
 // pendingLink 一个「已经开始跑 claude、还没认到对话」的会话。
 type pendingLink struct {
 	dir   string
+	kind  string // 跑的是哪一型：认到对话时一起落台账，恢复时靠它选命令
 	since time.Time
 	// seen 是跃迁那一刻该目录下已有的对话；之后的新面孔才算候选。
 	seen map[string]bool
@@ -74,7 +75,7 @@ var linkNow = time.Now // 测试注入时钟
 
 // note 吃下这一轮的 agent 扫描结果：登记新开始跑 claude 的会话，并给还在等的那些
 // 尝试认领。homeOf 给出会话的归属目录，link 落地关联。
-func (l *agentLinker) note(running map[string]string, homeOf func(string) string, link func(sess, uuid string)) {
+func (l *agentLinker) note(running map[string]string, homeOf func(string) string, link func(sess, uuid, kind string)) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -90,15 +91,15 @@ func (l *agentLinker) note(running map[string]string, homeOf func(string) string
 
 	now := linkNow()
 	// 1) 新开始跑 claude 的会话进入等待，并记下此刻该目录已有哪些对话
-	for sess, agent := range running {
-		if agent != "claude" || prev[sess] == "claude" || l.linked[sess] || l.pending[sess] != nil {
+	for sess, kind := range running {
+		if kind != "claude" || prev[sess] == "claude" || l.linked[sess] || l.pending[sess] != nil {
 			continue
 		}
 		dir := homeOf(sess)
 		if dir == "" {
 			continue
 		}
-		l.pending[sess] = &pendingLink{dir: dir, since: now, seen: transcriptSet(projectDirFor(dir))}
+		l.pending[sess] = &pendingLink{dir: dir, kind: kind, since: now, seen: transcriptSet(projectDirFor(dir))}
 	}
 
 	// 2) 会话不跑 claude 了（关了/退出了），或等太久 → 放弃
@@ -123,7 +124,7 @@ func (l *agentLinker) note(running map[string]string, homeOf func(string) string
 		}
 		l.linked[sess] = true
 		delete(l.pending, sess)
-		link(sess, fresh[0])
+		link(sess, fresh[0], p.kind)
 	}
 }
 
@@ -159,8 +160,8 @@ func newTranscripts(dir string, seen map[string]bool) []string {
 
 // linkAgentSession 把关联落进台账。sessions 表归 CLI 写（单写者），所以走子命令。
 // 记不上不是错误：空着顶多重开时给个空壳。
-func (a *API) linkAgentSession(sess, uuid string) {
-	if out, err := a.TT.Run("db", "link-agent", sess, uuid); err != nil {
-		log.Printf("关联会话对话失败 %s → %s: %s", sess, uuid, ttmux.StripANSI(out))
+func (a *API) linkAgentSession(sess, uuid, kind string) {
+	if out, err := a.TT.Run("db", "link-agent", sess, uuid, kind); err != nil {
+		log.Printf("关联会话对话失败 %s → %s (%s): %s", sess, uuid, kind, ttmux.StripANSI(out))
 	}
 }

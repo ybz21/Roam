@@ -9,13 +9,14 @@ import (
 
 // linkFixture 造一个 transcript 目录，并允许「在某个时刻之后写出一份新对话」。
 type linkFixture struct {
-	t    *testing.T
-	dirs map[string]string // 会话归属目录 → 该目录的 transcript 目录
-	got  map[string]string // 会话 → 认到的 uuid
+	t     *testing.T
+	dirs  map[string]string // 会话归属目录 → 该目录的 transcript 目录
+	got   map[string]string // 会话 → 认到的 uuid
+	kinds map[string]string // 会话 → 一起落台账的 agent 类型
 }
 
 func newLinkFixture(t *testing.T) *linkFixture {
-	return &linkFixture{t: t, dirs: map[string]string{}, got: map[string]string{}}
+	return &linkFixture{t: t, dirs: map[string]string{}, got: map[string]string{}, kinds: map[string]string{}}
 }
 
 // project 注册一个工作目录，返回它的 transcript 目录。
@@ -39,7 +40,7 @@ func (f *linkFixture) homeOf(sess string) string {
 	return ""
 }
 
-func (f *linkFixture) link(sess, uuid string) { f.got[sess] = uuid }
+func (f *linkFixture) link(sess, uuid, kind string) { f.got[sess] = uuid; f.kinds[sess] = kind }
 
 // writeTranscript 在某工作目录的 transcript 目录里写一份对话。
 func (f *linkFixture) writeTranscript(home, uuid string) {
@@ -85,6 +86,10 @@ func TestLinksWhenTranscriptArrivesLate(t *testing.T) {
 	f.run(l, map[string]string{"/repo/a-1": "claude", "/repo/a-2": "claude"})
 	if f.got["/repo/a-2"] != "uuid-new" {
 		t.Fatalf("迟到的对话也该认到: %v", f.got)
+	}
+	// 类型要一起落台账：恢复那一侧不猜类型，没有它就只开壳
+	if f.kinds["/repo/a-2"] != "claude" {
+		t.Fatalf("认到对话时该把类型一起交出去: %v", f.kinds)
 	}
 	if _, ok := f.got["/repo/a-1"]; ok {
 		t.Fatal("上一轮就在跑的会话不该被认（它的对话早写完了）")
