@@ -230,7 +230,7 @@ export function Omnibox({ value, onChange, onSubmit, onFocusChange, lead, traili
 // 状态与档位从来是同一件事（现在多清楚 / 连没连上 / 能不能换），拆成两处必然出现
 // 「超清」在屏幕上出现两次、谁也说不清哪个是状态哪个是开关。
 
-export function StreamControl({ connected, label, quality, onQuality, level, latency, bytesPerSec, fps, variant = 'badge', showLabel }: {
+export function StreamControl({ connected, label, quality, onQuality, level, latency, bytesPerSec, fps, size, variant = 'badge', showLabel }: {
   connected: boolean
   label: string
   quality: Quality
@@ -239,6 +239,8 @@ export function StreamControl({ connected, label, quality, onQuality, level, lat
   latency: number | null
   bytesPerSec: number
   fps: number
+  /** 画面分辨率（如 1280×720）：远端视口固定之后，「现在传的是多大一张图」是链路信息，和延迟/码率同属这里 */
+  size?: string
   /** badge = omnibox 左徽标；chip = 状态芯片条上的一枚 */
   variant?: 'badge' | 'chip'
   /** 徽标里带不带「已连接」四个字（桌面带，手机只留档位名） */
@@ -257,6 +259,7 @@ export function StreamControl({ connected, label, quality, onQuality, level, lat
         <span className="num">{latency == null ? '—' : latency + 'ms'}</span>
         <span className="num">{fmtRate(bytesPerSec)}</span>
         <span className="num">{fps}fps</span>
+        {size && <span className="num">{size}</span>}
       </div>
       <Segmented
         size="small"
