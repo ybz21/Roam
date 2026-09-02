@@ -11,7 +11,7 @@ import { useI18n } from '../../i18n'
 import { usePreferences, savePreferences } from '../../preferences'
 import { connect, type DuplexTransport } from '../../p2p/transport'
 import {
-  BotIcon, ChevronLeft, ChevronRight, CodeIcon, DeviceIcon, HomeIcon, OpenInIcon,
+  BotIcon, ChevronLeft, ChevronRight, CodeIcon, DeviceIcon, GlobeIcon, HomeIcon, OpenInIcon,
   PlusIcon, RefreshIcon, RotateScreenIcon, TabsIcon, UserIcon,
 } from '../../icons'
 import {
@@ -163,11 +163,17 @@ export default function BrowserView() {
     api('GET', '/me').then((r) => { if (r?.data?.browserHome) setHome(r.data.browserHome) }).catch(() => {})
   }, [])
 
+  // Chrome 有些「页」压根关不掉——它自己的界面（chrome://*.top-chrome/）就是这样：
+  // /json/close 照收不误，那一行下一次轮询又回来。后端已经把认得出来的挡在外面，
+  // 万一还是漏进来一条，用户按下关闭时就记在这里：关不掉，至少让它从这条标签条上消失。
+  const dismissedRef = useRef<Set<string>>(new Set())
+  const visibleTabs = (list: TabInfo[]) => list.filter((x) => !dismissedRef.current.has(x.id))
+
   // 拉取标签页列表（每 3s 刷新，反映 agent 自己开的标签页/标题变化）
   const loadTabs = async () => {
     try {
       const r = await api('GET', '/browser/tabs')
-      const list: TabInfo[] = r?.data || []
+      const list: TabInfo[] = visibleTabs(r?.data || [])
       setTabs((prev) => mergeTabs(prev, list)) // 稳定顺序，避免后端重排导致 tab 乱跳
       // 当前 target 已不存在 → 切到第一个
       setTarget((t) => (list.some((x) => x.id === t) ? t : (list[0]?.id || '')))
@@ -184,15 +190,24 @@ export default function BrowserView() {
       const known = new Set(tabs.map((t) => t.id)) // 记下创建前的 id，用于定位新开的那个
       await api('POST', '/browser/tabs', { url: home }) // 新标签默认开导航起始页
       const r = await api('GET', '/browser/tabs')
-      const list: TabInfo[] = r?.data || []
+      const list: TabInfo[] = visibleTabs(r?.data || [])
       setTabs((prev) => mergeTabs(prev, list))
       const fresh = list.find((t) => !known.has(t.id)) // 真正新增的(在右侧)，而非后端顺序的末位
       setTarget(fresh?.id || list[list.length - 1]?.id || '')
     } catch (e: any) { message.error(e.message) }
   }
   const closeTab = async (id: string) => {
-    try { await api('DELETE', `/browser/tabs/${id}`); await loadTabs() }
-    catch (e: any) { message.error(e.message) }
+    try {
+      await api('DELETE', `/browser/tabs/${id}`)
+    } catch (e: any) {
+      // not_closable = Chrome 收下了关闭请求但那一页还在（后端确认过，见 ErrNotClosable）
+      if (e?.apiError?.code !== 'not_closable') { message.error(e.message); return }
+      dismissedRef.current.add(id)
+      setTabs((prev) => prev.filter((x) => x.id !== id))
+      setTarget((cur) => (cur === id ? '' : cur))
+      message.info(t('browser.tabHidden'))
+    }
+    await loadTabs()
   }
 
   // 地址栏跟随当前标签页真实 URL（聚焦编辑时不覆盖；about:blank 显示为空）
@@ -227,7 +242,7 @@ export default function BrowserView() {
     for (let i = 0; i < 8; i++) {
       try {
         const r = await api('GET', '/browser/tabs')
-        const list: TabInfo[] = r?.data || []
+        const list: TabInfo[] = visibleTabs(r?.data || [])
         const fresh = list.find((t) => !known.has(t.id))
         if (fresh) {
           setTabs((prev) => mergeTabs(prev, list))
@@ -335,7 +350,7 @@ export default function BrowserView() {
       // 后端广播的当前前台标签（agent 经 chrome-cli 操作、或别处经 REST 前置）：
       // 未暂停跟随时自动切过去；顺手拿它带的标签列表刷新标题/地址，比 3s 轮询更及时。
       if (msg.type === 'active') {
-        if (Array.isArray(msg.tabs)) setTabs((prev) => mergeTabs(prev, msg.tabs))
+        if (Array.isArray(msg.tabs)) setTabs((prev) => mergeTabs(prev, visibleTabs(msg.tabs)))
         if (!followPausedRef.current && msg.id && msg.id !== target) setTarget(msg.id)
         return
       }
@@ -623,7 +638,10 @@ export default function BrowserView() {
     ] : []),
     { key: 'rotate', icon: <RotateScreenIcon />, label: rotation ? `${t('browser.rotateTitle')} ${rotation}°` : t('browser.rotateTitle'), onClick: rotate },
     { key: 'devtools', icon: <CodeIcon />, label: t('browser.devtoolsTitle'), onClick: openDevtools },
-    { key: 'external', icon: <OpenInIcon size={15} />, label: t('browser.openExternalTitle'), onClick: openExternal },
+    { key: 'external', icon: <GlobeIcon size={15} />, label: t('browser.openExternalTitle'), onClick: openExternal },
+    // terms=none：新开的这页只有镜像，不把当前开着的会话标签一并拽过去（见 route-hash）
+    { key: 'newpage', icon: <OpenInIcon size={15} />, label: t('mirror.openInNewPage'),
+      onClick: () => window.open('/#/browser?terms=none', '_blank') },
     { type: 'divider' as const, key: 'd2' },
     { key: 'newtab', icon: <PlusIcon />, label: t('browser.newTab'), onClick: newTab },
   ]

@@ -10,6 +10,7 @@ package browser
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -351,8 +352,30 @@ func browserUA() string {
 	return strings.Replace(v.UserAgent, "HeadlessChrome", "Chrome", 1)
 }
 
-// listPages 返回所有 page 类型的标签页（过滤掉 service worker / iframe 等其它 target）。
-func listPages() []target {
+// isUserTab 判断一个 page target 是不是「用户的标签页」。
+//
+// Chrome 把自己那套界面也报成 type=page：地址栏下拉（chrome://omnibox-popup.top-chrome/）、
+// 标签搜索、各种侧边栏，都是 chrome://<something>.top-chrome/ 的 WebUI。它们混在 /json 里，
+// 于是标签条上多出一条关不掉的标签——/json/close 对浏览器界面无效，它还会随下一次输入再冒出来；
+// 更糟的是它常常排在首位，而首位标签的变化被前台跟随当成「用户切了标签」，镜像会跟着跳过去。
+// DevTools 前端（devtools://）同理：它是我们另开的调试窗口，不是被镜像的标签。
+func isUserTab(t target) bool {
+	u := strings.ToLower(t.URL)
+	if strings.HasPrefix(u, "devtools://") || strings.HasPrefix(u, "chrome-untrusted://") {
+		return false
+	}
+	if rest, ok := strings.CutPrefix(u, "chrome://"); ok {
+		host, _, _ := strings.Cut(rest, "/")
+		if strings.Contains(host, "top-chrome") { // chrome://settings 这类真页面照常留下
+			return false
+		}
+	}
+	return true
+}
+
+// rawTargets 是 /json 的原样结果：什么都不过滤。
+// 「这个 id 还在不在」必须问它——问 listPages 的话，被过滤掉的目标看起来永远是「已经关了」。
+func rawTargets() []target {
 	resp, err := cdpHTTP.Get(CDPBase + "/json")
 	if err != nil {
 		return nil
@@ -363,9 +386,16 @@ func listPages() []target {
 	if json.Unmarshal(b, &ts) != nil {
 		return nil
 	}
+	return ts
+}
+
+// listPages 返回所有 page 类型的标签页（过滤掉 service worker / iframe 等其它 target，
+// 以及 Chrome 自己的界面——见 isUserTab）。
+func listPages() []target {
+	ts := rawTargets()
 	pages := ts[:0]
 	for _, t := range ts {
-		if t.Type == "page" {
+		if t.Type == "page" && isUserTab(t) {
 			pages = append(pages, t)
 		}
 	}
@@ -419,14 +449,39 @@ func newTab(rawURL string) (string, error) {
 	return t.ID, nil
 }
 
-// closeTab 关闭指定标签页。
+// ErrNotClosable：Chrome 收下了关闭请求，但那一页还在。
+// 浏览器界面页就是这样（chrome://omnibox-popup.top-chrome/ 之类）：/json/close 照样回
+// "Target is closing"，列表里却一直在——它是浏览器窗口的一部分，不是标签，关不掉。
+// 实测：/json/close 回 "Target is closing"、CDP Target.closeTarget 回 {success:true}，
+// 两条路都是嘴上答应，那一页原封不动还在列表里。
+var ErrNotClosable = errors.New("这一页是 Chrome 的浏览器界面（不是标签页），Chrome 不允许关闭")
+
+// closeTab 关闭指定标签页，并确认它真的没了。
+//
+// 不能只看 /json/close 的回复：它对关不掉的目标也回 200 "Target is closing"，
+// 于是前端以为关成功，下一次 3 秒轮询那一行又回来了——用户看到的就是「这标签关不掉」。
 func closeTab(id string) error {
 	resp, err := cdpHTTP.Get(CDPBase + "/json/close/" + id)
 	if err != nil {
 		return err
 	}
 	resp.Body.Close()
-	return nil
+	for i := 0; i < 6; i++ { // 关闭是异步的，给它 ~900ms 消失
+		time.Sleep(150 * time.Millisecond)
+		if !targetExists(id) {
+			return nil
+		}
+	}
+	return ErrNotClosable
+}
+
+func targetExists(id string) bool {
+	for _, t := range rawTargets() {
+		if t.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 // 最近被「前置」的标签追踪（用户在镜像面板点标签、或经 REST 激活）。watcher 据此广播

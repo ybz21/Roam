@@ -64,7 +64,7 @@ import Tasks from './components/tasks/Tasks'
 import TerminalPane from './components/terminal/TerminalPane'
 import SoloTerminal from './components/terminal/SoloTerminal'
 import { ICONS } from './components/nav-icons'
-import { normalizeRoute, setHashParams, readTermTokens } from './route-hash'
+import { normalizeRoute, setHashParams, readTermTokens, NO_TERMS } from './route-hash'
 import type { ClaudeInfo } from './components/terminal/claude-info'
 import { dropDeadTokens, loadTabs, saveTabs } from './components/terminal/term-tabs-store'
 import { CloudIcon, ExitFullscreenIcon, FullscreenIcon, LogoutIcon, MoonIcon, MoreIcon, SearchIcon, SunIcon } from './icons'
@@ -160,6 +160,9 @@ export default function App() {
   // URL 上待还原的 id/名字（还没拿到 id 映射前先原样存着）
   const urlTerms = useRef<string[]>(readTermTokens().terms)
   const urlActive = useRef<string>(readTermTokens().active)
+  // 「在新页面打开」开出来的页（terms=none）：这一页不继承任何会话，也不许拿空集回写——
+  // 回写就把主页面记着的那串标签抹了。用户在这页真开了会话之后，它就是普通页面。
+  const noTabs = useRef(readTermTokens().none)
   const restored = useRef(false) // 还原完成前不许回写 URL，否则会把待还原的参数抹掉
   const [overlay, setOverlay] = useState(false) // 手机/平板全屏终端
   const [moreOpen, setMoreOpen] = useState(false) // 手机「更多」sheet
@@ -368,7 +371,7 @@ export default function App() {
     restored.current = true
     const toName = (tok: string) => sessIds.byId[tok] || tok
     const fromUrl = urlTerms.current
-    const saved = fromUrl.length ? null : loadTabs(curNodeId)
+    const saved = fromUrl.length || noTabs.current ? null : loadTabs(curNodeId)
     if (saved && !urlActive.current) urlActive.current = saved.active
     // 查无此会话的 id 直接丢：切机器、会话在别处被关掉，都会在这里长出打不开的空标签
     const names = Array.from(new Set(dropDeadTokens(saved ? saved.terms : fromUrl, sessIds.byId).map(toName)))
@@ -385,6 +388,10 @@ export default function App() {
   // 终端状态同步到 URL，刷新后可恢复。写 id；还没有 id 的（刚建、列表未刷新）先退回写名字。
   useEffect(() => {
     if (!restored.current) return
+    if (noTabs.current) {
+      if (!terms.length) return   // 还是那页干净的镜像页：URL 保持 terms=none，本机记忆不动
+      noTabs.current = false      // 这页开了会话 → 回到普通页面的存续规则
+    }
     const toTok = (n: string) => sessIds?.byName[n] || n
     const toks = terms.map(toTok)
     const activeTok = active ? toTok(active) : ''
@@ -620,8 +627,9 @@ export default function App() {
     const back = loadTabs(id)
     setCurrentNode(id)
     setHashParams({
-      terms: back.terms.map(encodeURIComponent).join(','),
-      active: back.active ? encodeURIComponent(back.active) : '',
+      // 干净页（terms=none）换台机器还是干净页——那台的标签不该在这里长出来
+      terms: noTabs.current ? NO_TERMS : back.terms.map(encodeURIComponent).join(','),
+      active: noTabs.current || !back.active ? '' : encodeURIComponent(back.active),
     })
     location.reload()
   }

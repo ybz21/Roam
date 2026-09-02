@@ -27,14 +27,22 @@ export function setHashParams(params: Record<string, string>) {
   if (h !== next) history.replaceState(history.state, '', next)
 }
 
+export const NO_TERMS = 'none'
+
 // URL 上的终端标签参数（terms=打开的标签、active=当前标签）。
 // 现在写进去的是会话 id；老链接里存的是会话名，两者都能读——还原时按 id 表判别（见 resolveToken）。
-export function readTermTokens(): { terms: string[]; active: string } {
+//
+// terms 有三态，别把后两个当成一回事：**没写** = 这条链接对标签没意见，回落到本机记的那份；
+// **terms=none** = 明说「这页不要标签」（「在新页面打开」开出来的镜像页就带这个）；
+// 有值 = 就开这几个。少了 none 这一态，新开的页会把上一次的会话全部拽过来。
+export function readTermTokens(): { terms: string[]; active: string; none: boolean } {
   const p = getHashParams()
   const t = p.get('terms')
   const a = p.get('active')
   return {
-    terms: t ? t.split(',').map(decodeURIComponent).filter(Boolean) : [],
+    terms: t && t !== NO_TERMS ? t.split(',').map(decodeURIComponent).filter(Boolean) : [],
     active: a ? decodeURIComponent(a) : '',
+    none: t === NO_TERMS,
   }
 }
+

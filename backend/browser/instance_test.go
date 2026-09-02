@@ -26,3 +26,25 @@ func TestParseProfilePort(t *testing.T) {
 		t.Errorf("空 profile 不该匹配任何东西: got %d", got)
 	}
 }
+
+// 标签条上那条关不掉的「chrome://omnibox-popup.top-chrome/」：Chrome 自己的界面也报成 page。
+func TestIsUserTab(t *testing.T) {
+	cases := []struct {
+		url  string
+		want bool
+	}{
+		{"https://example.com/", true},
+		{"about:blank", true},
+		{"chrome://settings/", true}, // 真页面，用户开的就该看得见、关得掉
+		{"chrome://version/", true},
+		{"chrome://omnibox-popup.top-chrome/omnibox_popup_aim.html", false},
+		{"chrome://tab-search.top-chrome/tab_search.html", false},
+		{"devtools://devtools/bundled/devtools_app.html", false},
+		{"chrome-untrusted://feed/", false},
+	}
+	for _, c := range cases {
+		if got := isUserTab(target{URL: c.url}); got != c.want {
+			t.Errorf("isUserTab(%q) = %v, want %v", c.url, got, c.want)
+		}
+	}
+}

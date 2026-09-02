@@ -818,6 +818,7 @@ const zhCN = {
   'browser.subtitle': '把后端那台 Chrome 的画面实时镜像到这里：可接管键鼠、切标签、模拟移动设备',
   'browser.tabs': '标签页',
   'browser.newTab': '新建标签',
+  'browser.tabHidden': 'Chrome 不允许关闭这一页（它是浏览器界面，不是标签页），已从标签条移除',
   'browser.quality.auto': '自动',
   'browser.quality.standard': '标清',
   'browser.quality.high': '高清',
@@ -972,6 +973,8 @@ const zhCN = {
   'phone.save': '保存并连接',
   'phone.test': '测试连接',
   'phone.saved': '已保存',
+  // 镜像页共用（浏览器 / 手机）
+  'mirror.openInNewPage': '在新页面打开',
   'overview.welcome': '欢迎回来 👋',
   'overview.subtitle': '随时随地，遥控你的电脑和 AI 干活',
   'overview.enterSessions': '进入会话',
