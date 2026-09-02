@@ -588,6 +588,7 @@ func (s *Store) OnKill(session string) error {
 
 // Reconcile 对齐 tmux 实况，**双向**自愈：活着的置 live 并刷新运行时句柄，不在了
 // 的置 dead（不删）。alive 为空（tmux 盲态）时一行不动——看不见的时候不下判断。
+// server 确定不在的情况不走这里，走 ReconcileServerGone。
 //
 // died_reason 分两种：tmux_epoch 还是这一代 server ⇒ 是被杀的；对不上 ⇒ server
 // 换代了（机器重启把它带走的）。这是「重启后一整批会话集体消失」和「你刚 kill 了
@@ -682,6 +683,27 @@ func (s *Store) Reconcile(alive map[string]bool) {
 		_, _ = db.Exec(`UPDATE sessions SET status='dead', died_at=?, died_reason=?, tmux_id=NULL
 			WHERE id=?`, g.at, g.reason, g.id)
 	}
+	s.prune(db, deadKeep)
+}
+
+// ReconcileServerGone 处理 tmux server **确定不在**的情况（socket 连不上，见 runtime.NoServer）。
+//
+// 这不是盲态。盲态是「看不见」，这里是「看清楚了，一个都不在」——机器重启、
+// tmux 被整个带走之后就是这样。Reconcile 在 alive 为空时一行不动，于是重启后
+// 所有行卡在 live：Dormant() 只认 dead 行，列表里一个休眠会话都不出现，
+// 要等用户随手新建一个会话、alive 非空了才被收敛（实测就是「点了新建命令行
+// 旧会话才冒出来」）。这里把所有 live 行一次收进历史，记 host-restart（整批一起
+// 没的，不是谁被 kill），died_at 取最后一次看见它。tmux_epoch 原样留着，
+// Dormant() 靠它认「上一代 server 带走的那批」。
+func (s *Store) ReconcileServerGone() {
+	db, err := s.db()
+	if err != nil {
+		return
+	}
+	now := s.Now().Format(time.RFC3339)
+	_, _ = db.Exec(`UPDATE sessions SET status='dead', died_reason='host-restart', tmux_id=NULL,
+		died_at=CASE WHEN IFNULL(last_seen,'')<>'' THEN last_seen ELSE ? END
+		WHERE status='live'`, now)
 	s.prune(db, deadKeep)
 }
 

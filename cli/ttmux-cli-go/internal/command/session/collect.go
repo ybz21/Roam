@@ -37,6 +37,9 @@ func Collect(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool) 
 	if err == nil {
 		live = parseSessionLines(out, exclude)
 	}
+	// server 确定不在（socket 连不上）≠ 盲态：前者台账里所有活行一起进历史，
+	// 后者一行不动。分不开这两种，重启后休眠会话就要等下一次建会话才出现。
+	serverGone := err != nil && runtime.NoServer(out)
 	// 内存画像：会话列表上那条内存条的数据源。cgroup 按 pane 分好了，
 	// 一次读两个文件，比轮询 ps 聚合整棵进程树便宜也准（含子进程全部后代）。
 	samples := make([]memalert.Sample, 0, len(live))
@@ -56,17 +59,21 @@ func Collect(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool) 
 			PIDs: m.PIDs, Cur: m.Cur, High: m.High, Max: m.Limit,
 		})
 	}
-	// tmux 盲态（server 没起）时 alive 为空，Reconcile 内部会一行不动——
-	// 「看不见的时候不下判断」。这里照常调用，让它自己决定。
+	// tmux 盲态（list-sessions 出错但不是「server 不在」）时 alive 为空，
+	// Reconcile 内部会一行不动——「看不见的时候不下判断」。这里照常调用，让它自己决定。
 	if meta != nil {
-		alive := make(map[string]bool, len(live))
-		for _, s := range live {
-			alive[s.Name] = true
+		if serverGone {
+			meta.ReconcileServerGone()
+		} else {
+			alive := make(map[string]bool, len(live))
+			for _, s := range live {
+				alive[s.Name] = true
+			}
+			// 把「这个会话吃了多少内存」接给台账。cgroup 按 pane 分好了，
+			// 一次读两个文件，比轮询 ps 聚合整棵进程树便宜也准。
+			meta.MemStat = func(sess string) (int64, int64, bool) { return sessionMem(rt, sess) }
+			meta.Reconcile(alive)
 		}
-		// 把「这个会话吃了多少内存」接给台账。cgroup 按 pane 分好了，
-		// 一次读两个文件，比轮询 ps 聚合整棵进程树便宜也准。
-		meta.MemStat = func(sess string) (int64, int64, bool) { return sessionMem(rt, sess) }
-		meta.Reconcile(alive)
 		// 看门狗：逼近上限 / 撞顶被杀各说一次。列会话本来就在采内存，顺手判一下，
 		// 不必再养一个采集器（这也是它没做成 hostmonitor 插件的原因——
 		// 数据跟着会话列表走，插件那条路要再建一条通路）。
