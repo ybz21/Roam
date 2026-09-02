@@ -8,7 +8,7 @@
 //   主行  = [左钮] [主角（Omnibox / devbox）] [右钮…]   —— 永远只有四个左右的可点目标
 //   芯片条 = 智能体 / 连接与画质 / 设备 …               —— 状态只读一眼，点开才是面板
 // 主角是唯一被强调的东西：胶囊、撑满剩余宽度、左徽标（连接与画质）+ 右就地操作。
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { Dropdown, Popover, Segmented } from 'antd'
 import type { MenuProps } from 'antd'
 import { useI18n } from '../../i18n'
@@ -123,6 +123,40 @@ export function MirrorMenu({ items, label }: { items: MenuProps['items']; label:
   )
 }
 
+// ── 全屏 ────────────────────────────────────────────────────────────────
+
+/**
+ * 元素级全屏：把镜像这一块（工具行 + 画面）铺满显示器。
+ *
+ * 用元素级而不是整页全屏，是因为远端视口固定之后，观看区的宽高比决定黑边有多厚——
+ * 铺满一块 16:9 的显示器，黑边正好归零。iOS Safari 只允许 <video> 全屏，那里
+ * supported=false，调用方直接不摆这个入口（摆了也点不动）。
+ */
+export function useFullscreen(ref: RefObject<HTMLElement | null>) {
+  const [on, setOn] = useState(false)
+  useEffect(() => {
+    const sync = () => setOn(!!(document.fullscreenElement || (document as any).webkitFullscreenElement))
+    document.addEventListener('fullscreenchange', sync)
+    document.addEventListener('webkitfullscreenchange', sync)
+    return () => {
+      document.removeEventListener('fullscreenchange', sync)
+      document.removeEventListener('webkitfullscreenchange', sync)
+    }
+  }, [])
+  const root: any = typeof document === 'undefined' ? null : document.documentElement
+  const supported = !!(root?.requestFullscreen || root?.webkitRequestFullscreen)
+  const toggle = () => {
+    const doc: any = document
+    if (doc.fullscreenElement || doc.webkitFullscreenElement) {
+      (doc.exitFullscreen || doc.webkitExitFullscreen)?.call(doc)
+      return
+    }
+    const node: any = ref.current
+    ;(node?.requestFullscreen || node?.webkitRequestFullscreen)?.call(node)
+  }
+  return { on, supported, toggle }
+}
+
 // ── 主角 ────────────────────────────────────────────────────────────────
 
 /** 把 URL 拆成「域名」和「其余」：不聚焦时人只需要认出这是哪个站，协议和路径是噪音。 */
@@ -230,7 +264,7 @@ export function Omnibox({ value, onChange, onSubmit, onFocusChange, lead, traili
 // 状态与档位从来是同一件事（现在多清楚 / 连没连上 / 能不能换），拆成两处必然出现
 // 「超清」在屏幕上出现两次、谁也说不清哪个是状态哪个是开关。
 
-export function StreamControl({ connected, label, quality, onQuality, level, latency, bytesPerSec, fps, variant = 'badge', showLabel }: {
+export function StreamControl({ connected, label, quality, onQuality, level, latency, bytesPerSec, fps, size, variant = 'badge', showLabel }: {
   connected: boolean
   label: string
   quality: Quality
@@ -239,6 +273,8 @@ export function StreamControl({ connected, label, quality, onQuality, level, lat
   latency: number | null
   bytesPerSec: number
   fps: number
+  /** 画面分辨率（如 1280×720）：远端视口固定之后，「现在传的是多大一张图」是链路信息，和延迟/码率同属这里 */
+  size?: string
   /** badge = omnibox 左徽标；chip = 状态芯片条上的一枚 */
   variant?: 'badge' | 'chip'
   /** 徽标里带不带「已连接」四个字（桌面带，手机只留档位名） */
@@ -257,6 +293,7 @@ export function StreamControl({ connected, label, quality, onQuality, level, lat
         <span className="num">{latency == null ? '—' : latency + 'ms'}</span>
         <span className="num">{fmtRate(bytesPerSec)}</span>
         <span className="num">{fps}fps</span>
+        {size && <span className="num">{size}</span>}
       </div>
       <Segmented
         size="small"
