@@ -4,18 +4,18 @@
 //   发 {type:'nav', url} | {type:'ping', t} | {type:'mouse'|'wheel'|'key', ...}（输入仅 control=1 生效）
 import { useEffect, useRef, useState } from 'react'
 import { nodeWs, nodeWsHostPath } from '../cluster/node-url'
-import { Dropdown, App as AntApp } from 'antd'
+import { ConfigProvider, Dropdown, App as AntApp } from 'antd'
 import type { MenuProps } from 'antd'
 import { api } from '../../api'
 import { useI18n } from '../../i18n'
 import { usePreferences, savePreferences } from '../../preferences'
 import { connect, type DuplexTransport } from '../../p2p/transport'
 import {
-  BotIcon, ChevronLeft, ChevronRight, CodeIcon, DeviceIcon, GlobeIcon, HomeIcon, OpenInIcon,
-  PlusIcon, RefreshIcon, RotateScreenIcon, TabsIcon, UserIcon,
+  BotIcon, ChevronLeft, ChevronRight, CodeIcon, DeviceIcon, ExitFullscreenIcon, FullscreenIcon,
+  GlobeIcon, HomeIcon, OpenInIcon, PlusIcon, RefreshIcon, RotateScreenIcon, TabsIcon, UserIcon,
 } from '../../icons'
 import {
-  fmtRate, IconBtn, MirrorChrome, MirrorMenu, Omnibox, StatusChip, StreamControl, useShelf, type Quality,
+  fmtRate, IconBtn, MirrorChrome, MirrorMenu, Omnibox, StatusChip, StreamControl, useFullscreen, useShelf, type Quality,
 } from './mirror'
 import { TabSheet, TabStrip, type TabInfo } from './browser-tabs'
 
@@ -78,6 +78,7 @@ export default function BrowserView() {
   const [prefs] = usePreferences()
   const imgRef = useRef<HTMLImageElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
   // 镜像收发底层：p2p 时是 media PC 上的不可靠 DataChannel，回退时是 /api/browser/stream 的 WS。
   // 二进制帧解析/ack/ping/自适应逻辑不感知底层（DuplexTransport ≈ WebSocket）。
   const tpRef = useRef<DuplexTransport | null>(null)
@@ -141,6 +142,8 @@ export default function BrowserView() {
   // 模式要长期保持，不能自己漂移回去（人正盯着一个 agent 没打算离开的页面时尤其如此）。
   const [followPaused, setFollowPaused] = useState(false)
   const followPausedRef = useRef(false)
+
+  const fs = useFullscreen(rootRef)
 
   // control 开关用 ref 同步，供事件回调读取最新值
   useEffect(() => { controlRef.current = control }, [control])
@@ -447,7 +450,9 @@ export default function BrowserView() {
     const boxH = img?.clientHeight || (rotated ? r.width : r.height)
     const scale = Math.min(boxW / nw, boxH / nh) // contain 缩放比
     const dispW = nw * scale, dispH = nh * scale // 画面实际显示尺寸
-    const padX = (boxW - dispW) / 2, padY = (boxH - dispH) / 2 // 黑边
+    // 黑边：横向居中（左右各一半），纵向贴上沿（全在下面）——必须跟 <img> 的 object-position 一致，
+    // 否则点击落点会整体偏上/偏下半条黑边。
+    const padX = (boxW - dispW) / 2, padY = 0
     // 屏幕点 → 舞台中心相对
     const dx = clientX - (r.left + r.width / 2)
     const dy = clientY - (r.top + r.height / 2)
@@ -640,6 +645,12 @@ export default function BrowserView() {
   // ⋯ 菜单：低频动作一律进这里，主行永远只有四个目标（设计 17 §3）。
   // 窄档下把「前进 / 主页」也收进来——它们是次高频，后退才是必须留在外面的那一枚。
   const menuItems: MenuProps['items'] = [
+    // 全屏摆在最前：远端视口固定之后，「黑边多厚」只取决于观看区多大，铺满显示器就是把黑边挤没
+    ...(fs.supported ? [
+      { key: 'fs', icon: fs.on ? <ExitFullscreenIcon size={15} /> : <FullscreenIcon size={15} />,
+        label: fs.on ? t('common.exitFullscreen') : t('common.fullscreen'), onClick: fs.toggle },
+      { type: 'divider' as const, key: 'd0' },
+    ] : []),
     ...(shelf === 'narrow' ? [
       { key: 'forward', icon: <ChevronRight />, label: t('file.forward'), onClick: () => act('forward') },
       { key: 'home', icon: <HomeIcon size={15} />, label: t('browser.home'), onClick: () => act('navigate', { url: home }) },
@@ -683,135 +694,146 @@ export default function BrowserView() {
   )
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* 页头（设计 17）：桌面＝标签条 + 工具行；窄档＝一条主行 + 状态芯片条。
-          从前是五行散装控件——「前往」实心按钮比地址栏还抢戏、四档清晰度常驻一整行、
-          「外部打开」被挤成第五行的孤儿。现在只有一个主角：omnibox。 */}
-      {shelf !== 'narrow' && (
-        <TabStrip tabs={tabs} active={target} onSelect={switchTab} onClose={closeTab} onAdd={newTab}
-          extra={<StatusChip icon={followPaused ? <UserIcon size={12} /> : <BotIcon size={12} />}
-            strong={followPaused ? t('browser.followModeHuman') : t('browser.followModeAgent')}
-            active={!followPaused} onClick={() => (followPaused ? resumeFollow() : pauseFollow())} />} />
-      )}
-      <MirrorChrome
-        chromeRef={shelfRef}
-        main={<>
-          <IconBtn icon={<ChevronLeft size={17} />} label={t('file.back')} onClick={() => act('back')} />
-          {shelf !== 'narrow' && <>
-            <IconBtn icon={<ChevronRight size={17} />} label={t('file.forward')} onClick={() => act('forward')} />
-            <IconBtn icon={<RefreshIcon size={16} />} label={t('common.refresh')} onClick={() => act('reload')} />
-            <IconBtn icon={<HomeIcon size={16} />} label={t('browser.home')} onClick={() => act('navigate', { url: home })} />
-          </>}
-          <Omnibox
-            value={url}
-            onChange={setUrl}
-            onSubmit={navigate}
-            onFocusChange={(f) => { addrFocused.current = f }}
-            placeholder={t('browser.urlPlaceholder')}
-            goLabel={t('browser.go')}
-            lead={streamBadge}
-            trailing={shelf === 'narrow'
-              ? <IconBtn icon={<RefreshIcon size={15} />} label={t('common.refresh')} onClick={() => act('reload')} />
-              : shelf === 'wide'
-                ? <span className="mc-omni-num">{`${latency == null ? '—' : latency + 'ms'} · ${fmtRate(bw)} · ${fps}fps`}</span>
-                : undefined}
-          />
-          {shelf === 'narrow' && (
-            <IconBtn icon={<TabsIcon />} label={t('browser.tabs')} badge={tabs.length} onClick={() => setTabsOpen(true)} />
-          )}
-          {shelf !== 'narrow' && deviceChip}
-          <MirrorMenu items={menuItems} label={t('common.more')} />
-        </>}
-        chips={shelf === 'narrow' ? <>
-          <StatusChip icon={followPaused ? <UserIcon size={12} /> : <BotIcon size={12} />}
-            strong={followPaused ? t('browser.followModeHuman') : t('browser.followModeAgent')}
-            active={!followPaused} onClick={() => (followPaused ? resumeFollow() : pauseFollow())} />
-          {deviceChip}
-        </> : undefined}
-      />
-      {/* 手机标签：横条在 360 上放不下第三枚，换成「⧉N + 抽屉」（设计 17 §4） */}
-      <TabSheet open={tabsOpen} tabs={tabs} active={target} onClose={() => setTabsOpen(false)}
-        onSelect={(id) => { switchTab(id); setTabsOpen(false) }}
-        onCloseTab={closeTab} onAdd={() => { newTab(); setTabsOpen(false) }} />
-      <style>{`
-        .bv-ripple{position:absolute;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;
-          border:2px solid var(--accent);pointer-events:none;animation:bvRip .45s ease-out forwards;}
-        @keyframes bvRip{from{transform:scale(.3);opacity:.9}to{transform:scale(2.6);opacity:0}}
-      `}</style>
-      <div
-        ref={stageRef}
-        tabIndex={0}
-        onKeyDown={onKey}
-        onWheel={onWheel}
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
-        style={{
-          flex: 1, minHeight: 0, background: '#000', overflow: 'hidden', position: 'relative',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          cursor: control ? 'default' : 'not-allowed', outline: 'none', touchAction: 'none',
-        }}
-      >
-        <img
-          ref={imgRef}
-          draggable={false}
-          onMouseDown={onMouse('down')}
-          onMouseUp={onMouse('up')}
-          onMouseMove={onMove}
-          style={{
-            // 显示盒 = 整个舞台（旋转 90/270 时宽高对调），画面按 object-fit: contain 等比塞进去：
-            // 装不满的那一维留黑边。远端视口是固定的，所以拖窗格只改这一步的缩放比，画面内容不动。
-            position: 'absolute', left: '50%', top: '50%',
-            width: rotated ? stage.h : stage.w,
-            height: rotated ? stage.w : stage.h,
-            objectFit: 'contain',
-            transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
-          }}
-        />
-        <textarea
-          ref={imeRef}
-          aria-label={t('browser.imeProxyLabel')}
-          tabIndex={-1}
-          autoCapitalize="off"
-          autoCorrect="off"
-          spellCheck={false}
-          onCompositionStart={() => { composingRef.current = true }}
-          onCompositionEnd={() => { composingRef.current = false; flushIme() }}
-          onInput={() => {
-            // 组合中的中间态（isComposing 的 input 事件）不发；只有非组合插入
-            //（如 macOS 长按选音标）才在这里落地。
-            if (!composingRef.current) flushIme()
-          }}
-          onBlur={() => {
-            // 失焦时丢弃半截组合，避免残留拼音在下次聚焦时被误发到远端。
-            composingRef.current = false
-            if (imeRef.current) imeRef.current.value = ''
-          }}
-          style={{
-            position: 'absolute', left: imePos.x, top: imePos.y, width: 2, height: 2,
-            opacity: 0, padding: 0, border: 'none', outline: 'none', resize: 'none',
-            overflow: 'hidden', background: 'transparent', caretColor: 'transparent',
-            pointerEvents: 'none',
-          }}
-        />
-        {ripples.map((p) => (
-          <span key={p.id} className="bv-ripple" style={{ left: p.x, top: p.y }} />
-        ))}
-        {/* 连不上且后端报了原因：覆盖一层提示，省得用户对着黑屏猜 */}
-        {!connected && healthMsg && (
-          <div style={{
-            position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: 24, pointerEvents: 'none',
-          }}>
-            <div style={{
-              maxWidth: 520, padding: 'var(--sp-3) var(--sp-4)', borderRadius: 'var(--r-sm)', background: 'rgba(0,0,0,.72)',
-              border: '1px solid var(--danger-border)', color: 'var(--danger)', fontSize: 'var(--fs-sm)', lineHeight: 1.6, textAlign: 'center',
-            }}>
-              {t('browser.launchFailed')}<br />{healthMsg}
-            </div>
-          </div>
+    // 背景色写在根上：全屏时这一块就是整块屏幕，缺省背景会在工具行外露出一圈白。
+    // position: relative 给下面 getPopupContainer 当定位基准。
+    <div ref={rootRef} style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)' }}>
+      {/* 浮层（⋯ 菜单/标签/设备下拉/画质气泡）挂进这一块，而不是 document.body：全屏时只有
+          全屏元素的子树会被画出来，挂 body 上的浮层在全屏下**看不见也点不着**——实测点了
+          「全屏」再开 ⋯ 菜单，菜单在 DOM 里、屏幕上没有，连「退出全屏」都够不着。 */}
+      <ConfigProvider getPopupContainer={() => rootRef.current || document.body}>
+        {/* 页头（设计 17）：桌面＝标签条 + 工具行；窄档＝一条主行 + 状态芯片条。
+            从前是五行散装控件——「前往」实心按钮比地址栏还抢戏、四档清晰度常驻一整行、
+            「外部打开」被挤成第五行的孤儿。现在只有一个主角：omnibox。 */}
+        {shelf !== 'narrow' && (
+          <TabStrip tabs={tabs} active={target} onSelect={switchTab} onClose={closeTab} onAdd={newTab}
+            extra={<StatusChip icon={followPaused ? <UserIcon size={12} /> : <BotIcon size={12} />}
+              strong={followPaused ? t('browser.followModeHuman') : t('browser.followModeAgent')}
+              active={!followPaused} onClick={() => (followPaused ? resumeFollow() : pauseFollow())} />} />
         )}
-      </div>
+        <MirrorChrome
+          chromeRef={shelfRef}
+          main={<>
+            <IconBtn icon={<ChevronLeft size={17} />} label={t('file.back')} onClick={() => act('back')} />
+            {shelf !== 'narrow' && <>
+              <IconBtn icon={<ChevronRight size={17} />} label={t('file.forward')} onClick={() => act('forward')} />
+              <IconBtn icon={<RefreshIcon size={16} />} label={t('common.refresh')} onClick={() => act('reload')} />
+              <IconBtn icon={<HomeIcon size={16} />} label={t('browser.home')} onClick={() => act('navigate', { url: home })} />
+            </>}
+            <Omnibox
+              value={url}
+              onChange={setUrl}
+              onSubmit={navigate}
+              onFocusChange={(f) => { addrFocused.current = f }}
+              placeholder={t('browser.urlPlaceholder')}
+              goLabel={t('browser.go')}
+              lead={streamBadge}
+              trailing={shelf === 'narrow'
+                ? <IconBtn icon={<RefreshIcon size={15} />} label={t('common.refresh')} onClick={() => act('reload')} />
+                : shelf === 'wide'
+                  ? <span className="mc-omni-num">{`${latency == null ? '—' : latency + 'ms'} · ${fmtRate(bw)} · ${fps}fps`}</span>
+                  : undefined}
+            />
+            {shelf === 'narrow' && (
+              <IconBtn icon={<TabsIcon />} label={t('browser.tabs')} badge={tabs.length} onClick={() => setTabsOpen(true)} />
+            )}
+            {shelf !== 'narrow' && deviceChip}
+            <MirrorMenu items={menuItems} label={t('common.more')} />
+          </>}
+          chips={shelf === 'narrow' ? <>
+            <StatusChip icon={followPaused ? <UserIcon size={12} /> : <BotIcon size={12} />}
+              strong={followPaused ? t('browser.followModeHuman') : t('browser.followModeAgent')}
+              active={!followPaused} onClick={() => (followPaused ? resumeFollow() : pauseFollow())} />
+            {deviceChip}
+          </> : undefined}
+        />
+        {/* 手机标签：横条在 360 上放不下第三枚，换成「⧉N + 抽屉」（设计 17 §4） */}
+        <TabSheet open={tabsOpen} tabs={tabs} active={target} onClose={() => setTabsOpen(false)}
+          onSelect={(id) => { switchTab(id); setTabsOpen(false) }}
+          onCloseTab={closeTab} onAdd={() => { newTab(); setTabsOpen(false) }} />
+        <style>{`
+          .bv-ripple{position:absolute;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;
+            border:2px solid var(--accent);pointer-events:none;animation:bvRip .45s ease-out forwards;}
+          @keyframes bvRip{from{transform:scale(.3);opacity:.9}to{transform:scale(2.6);opacity:0}}
+        `}</style>
+        <div
+          ref={stageRef}
+          tabIndex={0}
+          onKeyDown={onKey}
+          onWheel={onWheel}
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
+          style={{
+            flex: 1, minHeight: 0, background: '#000', overflow: 'hidden', position: 'relative',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: control ? 'default' : 'not-allowed', outline: 'none', touchAction: 'none',
+          }}
+        >
+          <img
+            ref={imgRef}
+            draggable={false}
+            onMouseDown={onMouse('down')}
+            onMouseUp={onMouse('up')}
+            onMouseMove={onMove}
+            style={{
+              // 显示盒 = 整个舞台（旋转 90/270 时宽高对调），画面按 object-fit: contain 等比塞进去：
+              // 装不满的那一维留黑边。远端视口是固定的，所以拖窗格只改这一步的缩放比，画面内容不动。
+              position: 'absolute', left: '50%', top: '50%',
+              width: rotated ? stage.h : stage.w,
+              height: rotated ? stage.w : stage.h,
+              objectFit: 'contain',
+              // 贴着上沿放，不是居中：黑边全留在下面。居中的话，拖窄一点画面就往中间缩一次，
+              // 页面顶边跟着往下走——手上在拖分隔条，眼睛看到的却是「它自己滚了一下」。
+              // 贴上沿之后，缩放只让下面那条黑边变厚，页面顶边一直钉在原处。
+              objectPosition: '50% 0%',
+              transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
+            }}
+          />
+          <textarea
+            ref={imeRef}
+            aria-label={t('browser.imeProxyLabel')}
+            tabIndex={-1}
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            onCompositionStart={() => { composingRef.current = true }}
+            onCompositionEnd={() => { composingRef.current = false; flushIme() }}
+            onInput={() => {
+              // 组合中的中间态（isComposing 的 input 事件）不发；只有非组合插入
+              //（如 macOS 长按选音标）才在这里落地。
+              if (!composingRef.current) flushIme()
+            }}
+            onBlur={() => {
+              // 失焦时丢弃半截组合，避免残留拼音在下次聚焦时被误发到远端。
+              composingRef.current = false
+              if (imeRef.current) imeRef.current.value = ''
+            }}
+            style={{
+              position: 'absolute', left: imePos.x, top: imePos.y, width: 2, height: 2,
+              opacity: 0, padding: 0, border: 'none', outline: 'none', resize: 'none',
+              overflow: 'hidden', background: 'transparent', caretColor: 'transparent',
+              pointerEvents: 'none',
+            }}
+          />
+          {ripples.map((p) => (
+            <span key={p.id} className="bv-ripple" style={{ left: p.x, top: p.y }} />
+          ))}
+          {/* 连不上且后端报了原因：覆盖一层提示，省得用户对着黑屏猜 */}
+          {!connected && healthMsg && (
+            <div style={{
+              position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: 24, pointerEvents: 'none',
+            }}>
+              <div style={{
+                maxWidth: 520, padding: 'var(--sp-3) var(--sp-4)', borderRadius: 'var(--r-sm)', background: 'rgba(0,0,0,.72)',
+                border: '1px solid var(--danger-border)', color: 'var(--danger)', fontSize: 'var(--fs-sm)', lineHeight: 1.6, textAlign: 'center',
+              }}>
+                {t('browser.launchFailed')}<br />{healthMsg}
+              </div>
+            </div>
+          )}
+        </div>
+      </ConfigProvider>
     </div>
   )
 }

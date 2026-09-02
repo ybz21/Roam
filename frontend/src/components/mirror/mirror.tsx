@@ -8,7 +8,7 @@
 //   主行  = [左钮] [主角（Omnibox / devbox）] [右钮…]   —— 永远只有四个左右的可点目标
 //   芯片条 = 智能体 / 连接与画质 / 设备 …               —— 状态只读一眼，点开才是面板
 // 主角是唯一被强调的东西：胶囊、撑满剩余宽度、左徽标（连接与画质）+ 右就地操作。
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { Dropdown, Popover, Segmented } from 'antd'
 import type { MenuProps } from 'antd'
 import { useI18n } from '../../i18n'
@@ -121,6 +121,40 @@ export function MirrorMenu({ items, label }: { items: MenuProps['items']; label:
       </button>
     </Dropdown>
   )
+}
+
+// ── 全屏 ────────────────────────────────────────────────────────────────
+
+/**
+ * 元素级全屏：把镜像这一块（工具行 + 画面）铺满显示器。
+ *
+ * 用元素级而不是整页全屏，是因为远端视口固定之后，观看区的宽高比决定黑边有多厚——
+ * 铺满一块 16:9 的显示器，黑边正好归零。iOS Safari 只允许 <video> 全屏，那里
+ * supported=false，调用方直接不摆这个入口（摆了也点不动）。
+ */
+export function useFullscreen(ref: RefObject<HTMLElement | null>) {
+  const [on, setOn] = useState(false)
+  useEffect(() => {
+    const sync = () => setOn(!!(document.fullscreenElement || (document as any).webkitFullscreenElement))
+    document.addEventListener('fullscreenchange', sync)
+    document.addEventListener('webkitfullscreenchange', sync)
+    return () => {
+      document.removeEventListener('fullscreenchange', sync)
+      document.removeEventListener('webkitfullscreenchange', sync)
+    }
+  }, [])
+  const root: any = typeof document === 'undefined' ? null : document.documentElement
+  const supported = !!(root?.requestFullscreen || root?.webkitRequestFullscreen)
+  const toggle = () => {
+    const doc: any = document
+    if (doc.fullscreenElement || doc.webkitFullscreenElement) {
+      (doc.exitFullscreen || doc.webkitExitFullscreen)?.call(doc)
+      return
+    }
+    const node: any = ref.current
+    ;(node?.requestFullscreen || node?.webkitRequestFullscreen)?.call(node)
+  }
+  return { on, supported, toggle }
 }
 
 // ── 主角 ────────────────────────────────────────────────────────────────
