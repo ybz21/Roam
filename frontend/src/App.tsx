@@ -3,7 +3,7 @@
 //   电脑 ≥1200 → 三栏：导航 Sider | 列表(页面) | 终端面板(常驻, 多标签)
 //   平板/手机   → 终端为全屏覆盖层；手机底部 Tab 导航
 // 终端：多标签 / 字号调节 / 复制 / 更多快捷键 / 断线自动重连。
-import { Suspense, useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { bootstrapCluster, setCurrentNode, useClusterNodes, useCurrentNodeId } from './components/cluster/node-url'
 import { NodeMark, nodeDotColor } from './components/cluster/NodeMark'
 import { useHubHealth } from './components/cluster/hub-health'
@@ -50,10 +50,12 @@ import { SessionDock } from './components/shell/SessionDock'
 import { WorkspaceStatusBar } from './components/shell/WorkspaceStatusBar'
 import { systemCells } from './components/shell/status-system'
 import type { StatusAction } from './components/shell/status-cells'
-import { sessionProject, useSessionProject, setSessionProjects, buildSessionProjects } from './components/sessions/session-project'
+import { sessionProject, useSessionProject, useSessionProjects, setSessionProjects, buildSessionProjects } from './components/sessions/session-project'
 import { MobileSheet, SheetRow, SheetSection } from './components/shell/MobileSheet'
-import { WorkspaceTopbar, type PaletteActions, type PaletteItem } from './components/shell/WorkspaceTopbar'
-import { GlobalSearch, openPalette } from './components/shell/palette'
+import { GlobalSearch, openPalette, type PaletteActions, type PaletteItem } from './components/shell/palette'
+import { ProjectTree, firstSessionOf, taskPathOf } from './components/shell/ProjectTree'
+import { buildTaskTree } from './components/shell/task-tree'
+import { taskKeyOf, isLooseTask, looseSessionOf, type TaskKey } from './components/sessions/task-key'
 import { setSessionLabels, sessionLabel, sessionDisplay } from './components/sessions/session-label'
 import LinkStatus from './p2p/LinkStatus'
 import { startControlLink, stopControlLink } from './p2p/transport'
@@ -64,7 +66,7 @@ import Tasks from './components/tasks/Tasks'
 import TerminalPane from './components/terminal/TerminalPane'
 import SoloTerminal from './components/terminal/SoloTerminal'
 import { ICONS } from './components/nav-icons'
-import { normalizeRoute, setHashParams, readTermTokens, NO_TERMS } from './route-hash'
+import { normalizeRoute, setHashParams, readTermTokens, readTask, NO_TERMS, TASK_ROUTE } from './route-hash'
 import type { ClaudeInfo } from './components/terminal/claude-info'
 import { dropDeadTokens, loadTabs, saveTabs } from './components/terminal/term-tabs-store'
 import { CloudIcon, ExitFullscreenIcon, FullscreenIcon, LogoutIcon, MoonIcon, MoreIcon, SearchIcon, SunIcon } from './icons'
@@ -157,6 +159,18 @@ export default function App() {
   // 组件内部一律用会话名——后端 API / WebSocket 收发的都是名字。
   const [terms, setTerms] = useState<string[]>([])
   const [active, setActive] = useState<string | null>(null)
+  // 任务视图（22 设计）：当前任务只是标签条上的**过滤器**——terms 仍是全站会话集合，
+  // 哪些会话属于当前任务按 worktree 路径当场算（taskKeyOf），没有第二份列表，
+  // 所以 URL 同步、按机器持久化、⌘K 本地条目、claude/codex 轮询、会话坞一处都不用改。
+  const [activeTask, setActiveTask] = useState<TaskKey | null>(() => readTask() || null)
+  const activeTaskRef = useRef<TaskKey | null>(null)
+  activeTaskRef.current = activeTask
+  const projTable = useSessionProjects()
+  const keyOf = (n: string) => taskKeyOf(n, projTable[n]?.worktree)
+  const taskTerms = activeTask ? terms.filter((n) => keyOf(n) === activeTask) : terms
+  // 左栏树的三份原料（22 设计 §3.2）：/projects 与每项目的 worktree 挂在下面那条 15s 轮询上，/sessions 挂 5s 那条
+  const [treeSrc, setTreeSrc] = useState<{ projects: any[]; worktrees: Record<string, any[]> }>({ projects: [], worktrees: {} })
+  const [sessList, setSessList] = useState<{ name: string; label?: string }[]>([])
   // URL 上待还原的 id/名字（还没拿到 id 映射前先原样存着）
   const urlTerms = useRef<string[]>(readTermTokens().terms)
   const urlActive = useRef<string>(readTermTokens().active)
@@ -166,8 +180,11 @@ export default function App() {
   const restored = useRef(false) // 还原完成前不许回写 URL，否则会把待还原的参数抹掉
   const [overlay, setOverlay] = useState(false) // 手机/平板全屏终端
   const [moreOpen, setMoreOpen] = useState(false) // 手机「更多」sheet
+  // 任务视图 = 桌面 + 路由 #/w + 有当前任务：中间整块给标签工作区，就是现成的 focus 几何
+  const taskView = hasSider && tab === TASK_ROUTE && !!activeTask
   // 空间状态（Page / Split / Focus）与 Dock 宽度：唯一的尺寸契约来源
-  const space = useWorkspaceLayout(terms.length > 0)
+  const space = useWorkspaceLayout(terms.length > 0 || taskView, taskView)
+  const { message: antMessage } = AntApp.useApp()
   const modKeyLabel = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || '') ? '⌘' : 'Ctrl+'
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine)
   useEffect(() => {
@@ -206,7 +223,8 @@ export default function App() {
   // 用**响应式**的那个：sessionProject() 是普通函数，归属表更新时不会触发重渲，
   // 于是切了会话之后分支那几格要等到下一次别的 state 变化才跟上。
   const activeProject = useSessionProject(active)
-  const gitDir = activeProject?.dir || ''
+  // 分支那格看当前任务的 worktree，不是项目主仓库（22 设计 §3.2）
+  const gitDir = activeProject?.worktree || activeProject?.dir || ''
   const gitDirRef = useRef(gitDir)
   gitDirRef.current = gitDir
   const loadGit = async () => {
@@ -247,12 +265,20 @@ export default function App() {
         const swarms = Array.isArray(sw) ? sw : sw?.data || []
         setSwarmCount(swarms.filter((x: any) => x?.status && x.status !== 'archived').length)
         void loadGit()
+        // 左栏树要每个 git 项目的 worktree：并发拉，量级与项目页今天相同；手机没有树，不拉
+        if (hasSider) {
+          const wtLists = await Promise.all(projects.filter((p: any) => p.git).map((p: any) =>
+            api('GET', `/git/worktrees?dir=${encodeURIComponent(p.dir)}`)
+              .then((r) => [p.key, r?.data || []] as const).catch(() => [p.key, []] as const)))
+          if (stop) return
+          setTreeSrc({ projects, worktrees: Object.fromEntries(wtLists) })
+        }
       } catch { /* 轮询失败就保持上一轮的值，不清空 */ }
     }
     load()
     const i = setInterval(load, 15000)
     return () => { stop = true; clearInterval(i) }
-  }, [authed])
+  }, [authed, hasSider])
 
   // Canvas 滚动位置（14 §6.3.5）：终端一开，Canvas 变窄、卡片重排，scrollHeight
   // 从 1108 掉到 781，浏览器顺手把 scrollTop 归零——"你看到哪儿了"就这么没了。
@@ -304,13 +330,14 @@ export default function App() {
       // 了 Escape，事件根本冒泡不到 window。于是天然是对的——在 vim/Claude 里按 Esc
       // 进 TUI，焦点在页面上按 Esc 才收面板。改这段前先确认这条前提还成立。
       if (e.key === 'Escape') {
+        if (taskView) return // 任务视图里 focus 是常态，Esc 没有可退的层
         if (space.mode === 'overlay') space.setDockOpen(false)
         else if (space.focus !== 'none') space.setFocus('none')
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [hasSider, space])
+  }, [hasSider, space, taskView])
 
   // 启动：先确认登录态，**再**做多机引导，最后才放行渲染。
   //
@@ -348,11 +375,15 @@ export default function App() {
       const byId: Record<string, string> = {}
       const byName: Record<string, string> = {}
       const labels: Record<string, string> = {}
+      const names: { name: string; label?: string }[] = []
       for (const s of Array.isArray(list) ? list : []) {
         if (s?.id && s?.name) { byId[s.id] = s.name; byName[s.name] = s.id }
         if (s?.name && s?.label) labels[s.name] = s.label
+        if (s?.name) names.push({ name: s.name, label: s.label || undefined })
       }
       setSessIds({ byId, byName })
+      // 内容没变就不换引用：树是按它 memo 的，5s 一次的空翻新会让整棵树白重算
+      setSessList((cur) => (cur.length === names.length && cur.every((x, i) => x.name === names[i].name && x.label === names[i].label) ? cur : names))
       setSessionLabels(labels) // 展示名（@roam_name）：界面显示「名字（id）」，handle 仍是会话名
     }).catch(() => { if (!stop) setSessIds((m) => m || { byId: {}, byName: {} }) }) // 拉不到也要放行还原，别把标签卡在空白
     load()
@@ -376,6 +407,8 @@ export default function App() {
     // 查无此会话的 id 直接丢：切机器、会话在别处被关掉，都会在这里长出打不开的空标签
     const names = Array.from(new Set(dropDeadTokens(saved ? saved.terms : fromUrl, sessIds.byId).map(toName)))
     if (!names.length) return
+    // 任务：URL 的 wt 优先（初始化时已读），没有就用本机记的；都没有则下面那个 effect 按 active 会话算
+    if (saved?.task) setActiveTask((cur) => cur || saved.task)
     // 用户在 id 表回来之前就点开了标签 → 以他的操作为准，别被 URL 还原顶掉
     setTerms((cur) => (cur.length ? cur : names))
     setActive((cur) => {
@@ -398,10 +431,25 @@ export default function App() {
     setHashParams({
       terms: toks.map(encodeURIComponent).join(','),
       active: activeTok ? encodeURIComponent(activeTok) : '',
+      wt: activeTask ? encodeURIComponent(activeTask) : '',
     })
     // 同一份东西再按机器存一份：切走了还能切回来（见 term-tabs-store）
-    saveTabs(curNodeId, toks, activeTok)
-  }, [terms, active, sessIds, curNodeId])
+    saveTabs(curNodeId, toks, activeTok, activeTask || '')
+  }, [terms, active, activeTask, sessIds, curNodeId])
+
+  // 没有当前任务（老链接、或归属表还没到）就按 active 会话算一个；归属表到了之后
+  // 「散会话」可能变成 worktree 任务，跟着纠正一次。别的情况不动：用户切了任务就是切了。
+  useEffect(() => {
+    if (!active) return
+    const k = taskKeyOf(active, projTable[active]?.worktree)
+    setActiveTask((cur) => (cur == null || (isLooseTask(cur) && looseSessionOf(cur) === active && cur !== k)) ? k : cur)
+  }, [active, projTable])
+
+  // 左栏树：三份原料 memo 一次；已打开会话探测到的 agent 比 /projects 的名单准
+  const tree = useMemo(() => buildTaskTree({
+    projects: treeSrc.projects, worktrees: treeSrc.worktrees, sessions: sessList,
+    agentOf: (n) => (claudeMap[n]?.running ? 'claude' : codexMap[n]?.running ? 'codex' : undefined),
+  }), [treeSrc, sessList, claudeMap, codexMap])
 
   // hash 路由：URL #/xxx 与当前页同步（支持前进/后退、刷新保持、收藏分享）
   useEffect(() => {
@@ -445,14 +493,46 @@ export default function App() {
   const soloName = tab === 'term' && route.includes('/') ? decodeURIComponent(route.slice(route.indexOf('/') + 1)) : ''
   if (soloName) return <SoloTerminal name={soloName} />
 
-  const openTerm = (rawName: string) => {
+  const openTerm = (rawName: string, task?: TaskKey) => {
     // tmux 自身会把 '.' ':' 替换为 '_'，前端也同步净化，
     // 确保标签名/WebSocket URL 与 tmux 实际 session 名一致。
     const name = rawName.replace(/[.:]/g, '_')
     setTerms((ts) => (ts.includes(name) ? ts : [...ts, name]))
     setActive(name)
-    if (hasSider) { space.setDockOpen(true); space.setFocus('none') } // 桌面：拉出右侧停靠栏
+    if (hasSider) {
+      // 桌面：会话归它的任务，进任务视图（22 设计）；Dock 那两个开关留着给手机与 Page 态
+      setActiveTask(task || keyOf(name))
+      go(TASK_ROUTE)
+      space.setDockOpen(true); space.setFocus('none')
+    }
     else setOverlay(true)           // 手机/平板：全屏
+  }
+  // 树：点任务 → 切任务并回到它上次的标签；一个标签都没开就打开它的第一个会话
+  const onTreeTask = (key: TaskKey) => {
+    setActiveTask(key)
+    const open = terms.filter((n) => keyOf(n) === key)
+    if (open.length) setActive(active && open.includes(active) ? active : open[open.length - 1])
+    else {
+      const first = firstSessionOf(tree, key)
+      if (first) { openTerm(first, key); return }
+      setActive(null)
+    }
+    go(TASK_ROUTE)
+    space.setDockOpen(true); space.setFocus('none')
+  }
+  const onTreeSession = (key: TaskKey, name: string) => openTerm(name, key)
+  const onTreeProject = (key: string) => go('projects/' + encodeURIComponent(key))
+  // 标签条「新建 › 新终端」：在当前任务的 worktree 里开一个 shell，名字沿用项目页「新开命令行」的 -sh 后缀
+  const newTerminalInTask = async () => {
+    const key = activeTaskRef.current
+    const dir = key ? (taskPathOf(tree, key) || sessionProject(looseSessionOf(key))?.dir || '') : ''
+    const base = (key && firstSessionOf(tree, key)) || 'shell'
+    let name = `${base}-sh`
+    for (let i = 2; terms.includes(name); i++) name = `${base}-sh${i}`
+    try {
+      const res = await api('POST', '/sessions', dir ? { name, dir } : { name })
+      openTerm(res?.name || name, key || undefined)
+    } catch (e: any) { antMessage.error(e.message) }
   }
   const renameOpenTerm = (oldName: string, newName: string) => {
     if (oldName === newName) return
@@ -498,7 +578,10 @@ export default function App() {
   const closeTerm = (name: string) => {
     setTerms((ts) => {
       const next = ts.filter((t) => t !== name)
-      setActive((a) => (a === name ? (next[next.length - 1] || null) : a))
+      // 「下一个」在当前任务里找，别跳到别的任务的会话上（22 设计 §3.3）
+      const cur = activeTaskRef.current
+      const pool = cur ? next.filter((n) => keyOf(n) === cur) : next
+      setActive((a) => (a === name ? (pool[pool.length - 1] || null) : a))
       if (next.length === 0) { setOverlay(false); space.setFocus('none') }
       return next
     })
@@ -508,7 +591,15 @@ export default function App() {
   const sendKey = (seq: string) => active && termRefs.current[active]?.send(seq)
 
   // 标签拖拽排序（14 §7.1）。顺序本来就写进 URL 的 terms=，所以持久化是白拿的。
-  const reorderTerm = (name: string, to: number) => setTerms((ts) => reorderTabs(ts, name, to))
+  // 标签条只画当前任务的那些，`to` 是可见列表里的位置：先在可见列表里排好，再按原位塞回全集。
+  const reorderTerm = (name: string, to: number) => setTerms((ts) => {
+    const cur = activeTaskRef.current
+    if (!cur) return reorderTabs(ts, name, to)
+    const inTask = (n: string) => keyOf(n) === cur
+    const vis = reorderTabs(ts.filter(inTask), name, to)
+    let i = 0
+    return ts.map((n) => (inTask(n) ? vis[i++] : n))
+  })
 
 
   // 全屏切换（标准 API + webkit 兜底）。不支持的浏览器（如 iOS Safari）隐藏按钮，改走「添加到主屏幕」
@@ -532,11 +623,14 @@ export default function App() {
       claudeMap={claudeMap} claudeView={claudeView} setClaudeView={setClaudeView}
       codexMap={codexMap} codexView={codexView} setCodexView={setCodexView}
       onRename={renameOpenTerm}
-      onCollapse={() => { setOverlay(false); space.setDockOpen(false) }}
+      // 任务视图里没有「收起」：中间整块就是它，收起等于回项目页——点导航去
+      onCollapse={taskView ? undefined : () => { setOverlay(false); space.setDockOpen(false) }}
       onReorder={reorderTerm}
       onNeedsInput={setMobileWaiting}
-      // Focus 只在桌面有意义：手机上终端本来就是全屏覆盖层
-      focus={hasSider ? { on: space.focus !== 'none', toggle: space.toggleFocus, hint: `${modKeyLabel}⇧J` } : undefined}
+      visibleTerms={hasSider ? taskTerms : terms}
+      onNew={taskView ? { terminal: () => { void newTerminalInTask() }, task: () => { go('projects'); requestIntent('new-project') } } : undefined}
+      // Focus 只在桌面有意义：手机上终端本来就是全屏覆盖层；任务视图里 focus 是常态，没有开关
+      focus={hasSider && !taskView ? { on: space.focus !== 'none', toggle: space.toggleFocus, hint: `${modKeyLabel}⇧J` } : undefined}
     />
   )
 
@@ -553,7 +647,9 @@ export default function App() {
   }
   // 懒加载页面 chunk 拉取期间的兜底：居中转圈（体量小，通常一闪而过）
   const lazyFallback = <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}><Spin /></div>
-  const page = <Suspense fallback={lazyFallback}>{pages[tab] || pages.projects}</Suspense>
+  // 任务视图（#/w）时 Canvas 归零，页面不用画；没有当前任务的 #/w 退回项目页
+  const pageKey = tab === TASK_ROUTE ? 'projects' : tab
+  const page = <Suspense fallback={lazyFallback}>{taskView ? null : (pages[pageKey] || pages.projects)}</Suspense>
   // browser 全幅(自带工具栏铺满)；phone 与概览/会话一致走 tt-page（同 16px 留白 + 满高，见 tt-page-phone）。
   // 浏览器页不再全幅特例：与 文件/手机 同走 tt-page 满高容器，五页左上角起点统一 (16,16)
   const pageNode = <div className={`tt-page tt-page-${tab}${isMobile ? ' tt-page-mobile' : ''}${isMobile && terms.length ? ' has-dock' : ''}`}>{page}</div>
@@ -571,7 +667,7 @@ export default function App() {
     ...terms.map((name) => ({
       key: `term:${name}`, group: t('workspace.groupSessions'),
       title: sessionDisplay(name), desc: name === active ? t('workspace.current') : undefined,
-      run: () => { setActive(name); space.setDockOpen(true); if (isMobile) setOverlay(true) },
+      run: () => openTerm(name),
     })),
   ]
 
@@ -740,6 +836,11 @@ export default function App() {
             accountName={t('nav.thisDevice')}
             account={accountMenu}
             nodeMenu={nodeItems}
+            onSearch={openPalette}
+            searchHint={`${modKeyLabel}K`}
+            tree={<ProjectTree tree={tree} activeTask={activeTask} activeSession={active}
+              onProject={onTreeProject} onTask={onTreeTask} onSession={onTreeSession}
+              onAddProject={() => { go('projects'); requestIntent('new-project') }} />}
             hubAlarm={hubHealth.level === 'ok' ? undefined : t('hub.why.' + (hubHealth.reasons[0] || 'unknown'))}
             node={curNode ? {
               name: curNode.name,
@@ -759,21 +860,12 @@ export default function App() {
           顶栏横跨页面与终端，位置不因 Dock 开合跳动；终端**常驻挂载**
           （收起时宽度归零、Focus 时页面归零），换形态不断连接。*/}
       <Layout style={{ background: 'var(--bg-base)', minWidth: 0 }}>
-        {hasSider && (
-          <WorkspaceTopbar
-            modKey={modKeyLabel}
-            dockCount={terms.length} dockOpen={space.dockVisible}
-            onToggleDock={() => { space.setFocus('none'); space.toggleDock() }}
-            // 切到项目页并留下「要新建」的意图，由那一页挂载后消费（见 intents.ts）。
-            // 从任何页面点「＋ 新建」都是同一条路径，不必在每页各摆一枚按钮。
-            onCreate={() => { go('projects'); requestIntent('new-project') }}
-          />
-        )}
-        {hasSider && terms.length > 0 ? (
+        {/* 顶栏 Command Center 撤了（22 设计 §3.5）：搜索去了侧栏、「新建」去了标签条与项目页、终端数状态条本来就有 */}
+        {hasSider && (terms.length > 0 || taskView) ? (
           // 四态（page / split / overlay / focus）都走同一个 Workspace：换的是几何，
           // 不是组件树，终端因此不会在开合时被卸载重建。
           <Workspace
-            mode={space.mode} canvas={canvasNode} dock={dockNode}
+            mode={space.mode} canvas={canvasNode} dock={dockNode} hideRail={taskView}
             dockWidth={space.dockRenderWidth} bounds={space.bounds} splitMax={space.splitMax}
             onResize={space.setDockWidth} onReset={space.resetDockWidth}
             onFocus={() => space.setFocus('dock')}
@@ -905,7 +997,7 @@ export default function App() {
       {/* 全局搜索挂在这里而不是顶栏里：手机没有顶栏、终端聚焦时 xterm 会吃掉按键，
           都得靠这一处（见 shell/palette/GlobalSearch）。入口另给：顶栏那枚框、
           手机「更多」里那一行、以及 ⌘K / Ctrl+K。 */}
-      <GlobalSearch items={paletteItems} actions={paletteActions} dir={sessionProject(active)?.dir} />
+      <GlobalSearch items={paletteItems} actions={paletteActions} dir={activeProject?.worktree || activeProject?.dir} />
 
       {/* 手机/平板：全屏会话覆盖层（桌面用右侧停靠栏，不走这里）*/}
       {isMobile && overlay && (

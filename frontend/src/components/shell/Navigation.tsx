@@ -12,7 +12,7 @@
 import { Dropdown, Tooltip } from 'antd'
 import type { MenuProps } from 'antd'
 import type { ReactNode } from 'react'
-import { ChevronLeft, ChevronRight } from '../../icons'
+import { ChevronLeft, ChevronRight, SearchIcon } from '../../icons'
 import { HostIcon } from '../cluster/cluster-icons'
 import { useI18n } from '../../i18n'
 
@@ -29,8 +29,13 @@ export type NavGroup = { label: string; items: NavEntry[] }
 
 export function Navigation({
   rail, active, groups, onGo, settings, hubAlarm,
-  linkStatus, account, accountName, node, nodeMenu, onToggleRail,
+  linkStatus, account, accountName, node, nodeMenu, onToggleRail, onSearch, searchHint, tree,
 }: {
+  /** 品牌下面那行搜索：就是 ⌘K 面板的入口（22 设计：顶栏撤了，入口搬到这） */
+  onSearch?: () => void
+  searchHint?: string
+  /** 项目树（22 设计 §3.2）：挂在导航组下面、脚上面，吃掉剩余高度 */
+  tree?: ReactNode
   /** 48px 轨态：用户收起 / Focus / 非 large 档 */
   rail: boolean
   active: string
@@ -72,11 +77,17 @@ export function Navigation({
         {!rail && <strong className="wd">Roam</strong>}
       </div>
 
-      {/* 这里原来还有一枚搜索入口。去掉了：顶栏 Command Center 的搜索横跨整个工作区、
-          轨态下也在，侧栏这枚是同一个动作的第二个入口，只是把导航第一屏又占掉一行。 */}
+      {/* 搜索回到这里：顶栏 Command Center 撤了（22 设计 §3.5），这一行是桌面上唯一看得见的入口 */}
+      {onSearch && (
+        rail
+          ? <Tooltip title={t('workspace.search')} placement="right"><button type="button" className="tt-nav-search" onClick={onSearch} aria-label={t('workspace.search')}><SearchIcon size={15} /></button></Tooltip>
+          : <button type="button" className="tt-nav-search" onClick={onSearch} title={t('workspace.search')}>
+              <SearchIcon size={15} /><span className="ph">{t('workspace.searchPlaceholder')}</span>{searchHint && <kbd>{searchHint}</kbd>}
+            </button>
+      )}
 
 
-      <div className="tt-nav-list">
+      <div className={`tt-nav-list${tree ? ' has-tree' : ''}`}>
         {groups.map((g) => (
           <div key={g.label} className="tt-nav-group">
             {!rail && <div className="gl">{g.label}</div>}
@@ -84,6 +95,9 @@ export function Navigation({
           </div>
         ))}
       </div>
+
+      {/* 树不进轨：轨态只有图标，树没有图标形态 */}
+      {tree && !rail && <div className="tt-nav-tree">{tree}</div>}
 
       <div className="tt-nav-foot">
         {/* 机器切换器摆在这一组的第一位：底下这几样都是「上下文与账户」，

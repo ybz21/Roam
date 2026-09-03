@@ -27,7 +27,7 @@ describe('按机器记终端标签', () => {
 
   it('没记过的机器返回空，不返回别人的', () => {
     saveTabs('node-a', ['x'], 'x')
-    expect(loadTabs('node-zzz')).toEqual({ terms: [], active: '' })
+    expect(loadTabs('node-zzz')).toEqual({ terms: [], active: '', task: '' })
   })
 
   it('最多记 8 台，按最后使用淘汰', () => {
@@ -40,7 +40,7 @@ describe('按机器记终端标签', () => {
 
   it('localStorage 里是垃圾时按空处理，不抛', () => {
     localStorage.setItem('roam.terms', '{{{')
-    expect(loadTabs('node-a')).toEqual({ terms: [], active: '' })
+    expect(loadTabs('node-a')).toEqual({ terms: [], active: '', task: '' })
   })
 })
 
@@ -81,5 +81,21 @@ describe('还原前滤掉死 token', () => {
 
   it('全都查无此会话时还原出空，而不是一排空标签', () => {
     expect(dropDeadTokens(['2026-0101-1200-dead', '2026-0101-1200-gone'], known)).toEqual([])
+  })
+})
+
+describe('当前任务跟着标签一起记（22 设计）', () => {
+  beforeEach(() => localStorage.clear())
+
+  it('存了就能读回来，切机器各记各的', () => {
+    saveTabs('a', ['x'], 'x', '/w/.worktrees/a')
+    saveTabs('b', ['y'], 'y', 'loose:y')
+    expect(loadTabs('a').task).toBe('/w/.worktrees/a')
+    expect(loadTabs('b').task).toBe('loose:y')
+  })
+
+  it('老数据没有 task 字段：照常读，任务是空串', () => {
+    localStorage.setItem('roam.terms', JSON.stringify({ '': { terms: ['x'], active: 'x', at: 1 } }))
+    expect(loadTabs(null)).toEqual({ terms: ['x'], active: 'x', task: '' })
   })
 })

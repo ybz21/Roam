@@ -6,7 +6,7 @@ import TerminalPane from './TerminalPane'
 import { type ClaudeInfo } from './claude-info'
 import { OPEN_FILE_INTENT, requestIntent } from '../../intents'
 import { sessionDisplay, setSessionLabels, useSessionLabel } from '../sessions/session-label'
-import { type PaletteActions } from '../shell/WorkspaceTopbar'
+import { type PaletteActions } from '../shell/palette'
 import { GlobalSearch } from '../shell/palette'
 
 export default function SoloTerminal({ name }: { name: string }) {

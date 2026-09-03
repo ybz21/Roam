@@ -39,9 +39,11 @@ export function Workspace({
   mode, canvas, dock, dockWidth, bounds, splitMax, onResize, onReset, onFocus, onDismiss, capsule,
   splitCapable, onToggleDock, onExitFocus,
   inspectorWidth, inspectorBounds, inspectorOverlay, canvasFitsInspector, onInspectorResize, onInspectorReset,
-  inspectorCollapsed, onToggleInspector,
+  inspectorCollapsed, onToggleInspector, hideRail,
 }: {
   mode: SpaceMode
+  /** 任务视图：focus 是常态，没有「页面」可叫回，那条 rail 不画 */
+  hideRail?: boolean
   canvas: ReactNode
   dock: ReactNode
   dockWidth: number
@@ -193,7 +195,7 @@ export function Workspace({
             page   终端已收起，握把把它叫回来
             focus  页面已藏起（往左拖到底的落点），握把把页面叫回来——
                    否则拖到底之后这条路只剩快捷键，而用户刚刚就是用拖走过来的。 */}
-      {(mode === 'split' || mode === 'focus' || (mode === 'page' && splitCapable)) && (
+      {!hideRail && (mode === 'split' || mode === 'focus' || (mode === 'page' && splitCapable)) && (
         <div
           ref={railRef}
           role="separator"

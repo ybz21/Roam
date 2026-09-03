@@ -29,7 +29,7 @@ import { DPad } from '../shell/DPad'
 import { MobileSheet, SheetRow, SheetSection } from '../shell/MobileSheet'
 import { SessionSwitchSheet } from '../shell/SessionDock'
 import { Button, Dropdown, Input, Modal, Spin, Tooltip, App as AntApp } from 'antd'
-import { AgentLogo, ChevronDown, TerminalIcon } from '../../icons'
+import { AgentLogo, ChevronDown, PlusIcon, TerminalIcon } from '../../icons'
 // ── 终端面板（多标签 + 工具栏 + 快捷键栏），桌面右栏与手机覆盖层共用 ──
 export default function TerminalPane(props: {
   terms: string[]; active: string | null; setActive: (n: string) => void; closeTerm: (n: string) => void
@@ -47,8 +47,13 @@ export default function TerminalPane(props: {
   /** 终端 Focus：传了才渲染工具条右侧那枚按钮（手机没有这个概念） */
   focus?: { on: boolean; toggle: () => void; hint: string }
   fileDock?: 'right' | 'left'   // 文件面板停靠：'right'=右侧浮动抽屉（默认），'left'=左侧 VSCode 栏（新标签全屏页）
+  /** 标签条只画这些（当前任务的会话，22 设计 §3.3）；terms 仍是全集——每个终端常驻挂载，只切可见 */
+  visibleTerms?: string[]
+  /** 标签条右端「新建 ▾」：在当前任务里开终端 / 去项目页开新任务。不传就不画 */
+  onNew?: { terminal: () => void; task: () => void }
 }) {
-  const { terms, active, setActive, closeTerm, fontSize, setFontSize, statusMap, setStatus, termRefs, sendKey, onCollapse, claudeMap, claudeView, setClaudeView, codexMap, codexView, setCodexView, onRename, onReorder, onNeedsInput, focus } = props
+  const { terms, active, setActive, closeTerm, fontSize, setFontSize, statusMap, setStatus, termRefs, sendKey, onCollapse, claudeMap, claudeView, setClaudeView, codexMap, codexView, setCodexView, onRename, onReorder, onNeedsInput, focus, visibleTerms, onNew } = props
+  const tabs = visibleTerms ?? terms
   const fileDock = props.fileDock || 'right'
   const { message, modal } = AntApp.useApp()
   const { t } = useI18n()
@@ -563,7 +568,7 @@ export default function TerminalPane(props: {
           if (!el || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return
           el.scrollLeft += e.deltaY
         }}>
-        {terms.map((termName, i) => {
+        {tabs.map((termName, i) => {
           const on = termName === active
           const waiting = termNeedsInput[termName]
           const proj = sessionProject(termName)
@@ -612,7 +617,7 @@ export default function TerminalPane(props: {
                 // 源标签从 dataTransfer 读，不从 dragTab 状态读：状态只用来画拖拽反馈，
                 // 落点判定必须只依赖事件本身，否则 setState 还没刷新时这一拖就静默丢了
                 const from = Number(e.dataTransfer.getData('application/x-tt-tab'))
-                const name = terms[from]
+                const name = tabs[from]
                 if (name) onReorder?.(name, dropIndexAt(e, i))
                 setDragTab(null); setDropAt(null)
               }}
@@ -639,16 +644,29 @@ export default function TerminalPane(props: {
         {/* 拖到最右侧：最后一个标签的右半边已经给出 i+1，这里只补"空白区也能落" */}
         {dragTab && (
           <span className="tt-tab-tail"
-            onDragOver={(e) => { if (!isTabDrag(e)) return; e.preventDefault(); setDropAt(terms.length) }}
+            onDragOver={(e) => { if (!isTabDrag(e)) return; e.preventDefault(); setDropAt(tabs.length) }}
             onDrop={(e) => {
               if (!isTabDrag(e)) return
               e.preventDefault()
-              const name = terms[Number(e.dataTransfer.getData('application/x-tt-tab'))]
-              if (name) onReorder?.(name, terms.length)
+              const name = tabs[Number(e.dataTransfer.getData('application/x-tt-tab'))]
+              if (name) onReorder?.(name, tabs.length)
               setDragTab(null); setDropAt(null)
             }} />
         )}
       </div>
+      {onNew && (
+        <div className="tt-tabs-end">
+          <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: [
+            { key: 'terminal', icon: <TerminalIcon size={14} />, label: t('tabs.newTerminal'), onClick: onNew.terminal },
+            { key: 'task', icon: <PlusIcon size={13} />, label: t('tabs.newTask'), onClick: onNew.task },
+          ] }}>
+            <button type="button" className="tt-tbtn" title={t('tabs.new')}>
+              <PlusIcon size={13} /><span>{t('tabs.new')}</span>
+              <span style={{ color: 'var(--text-dimmer)', display: 'inline-flex' }}><ChevronDown size={11} /></span>
+            </button>
+          </Dropdown>
+        </div>
+      )}
     </div>
   )
   // ── 手机会话页顶栏（13 §5.1）：一行 50，取代「标签条 + 工具条」两行 79 ──
@@ -830,6 +848,9 @@ export default function TerminalPane(props: {
         }}>{t('terminal.dropToMention')}</div>
       )}
       <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+        {!active && onNew && (
+          <div className="tt-tabs-empty">{t('tabs.empty')}<small>{t('tabs.emptyHint')}</small></div>
+        )}
         {terms.map((termName) => (
           // 非当前终端不能用 display:none：xterm 会暂停渲染且容器尺寸归零，切换或关闭当前标签时
           // 下一张 WebGL 画布要经过“重新量尺寸 → 清画布 → 重画”，中间会露出 1~2 帧黑屏。

@@ -151,7 +151,10 @@ export function canSplit(workspaceWidth: number): boolean {
 export function resolveMode(o: {
   hasTerms: boolean; dockOpen: boolean; focus: FocusTarget
   size: WindowSize; workspaceWidth: number
+  /** 任务视图（#/w）：中间整块给标签工作区，就是现成的 focus 几何（22 设计 §3.1） */
+  taskView?: boolean
 }): SpaceMode {
+  if (o.taskView) return 'focus'
   if (!o.hasTerms || !o.dockOpen) return 'page'
   if (o.focus !== 'none') return 'focus'
   if (o.size === 'large' && canSplit(o.workspaceWidth)) return 'split'
@@ -199,8 +202,9 @@ export type WorkspaceLayout = {
 
 /**
  * @param hasTerms 是否有已打开的终端；没有就永远是 Page 态
+ * @param taskView 任务视图：不看 hasTerms / dockOpen，直接 focus
  */
-export function useWorkspaceLayout(hasTerms: boolean): WorkspaceLayout {
+export function useWorkspaceLayout(hasTerms: boolean, taskView = false): WorkspaceLayout {
   const layout = useLayout()
   const [prefs] = usePreferences()
   const ws = prefs.workspace
@@ -254,7 +258,7 @@ export function useWorkspaceLayout(hasTerms: boolean): WorkspaceLayout {
     return Math.max(b.min, Math.min(b.max, wish))
   }, [width, viewport, workspaceWidth])
 
-  const mode = resolveMode({ hasTerms, dockOpen, focus, size: layout.size, workspaceWidth })
+  const mode = resolveMode({ hasTerms, dockOpen, focus, size: layout.size, workspaceWidth, taskView })
 
   // Inspector 宽度同样先钳后用：换到窄窗口不能拿旧大屏的宽度把终端挤到下限之下
   const hasDock = mode === 'split'
@@ -340,7 +344,7 @@ export function useWorkspaceLayout(hasTerms: boolean): WorkspaceLayout {
   return {
     mode,
     dockWidth,
-    dockVisible: hasTerms && dockOpen,
+    dockVisible: taskView || (hasTerms && dockOpen),
     focus,
     navCollapsed: splitCapable ? navCollapsed : true,
     splitCapable,

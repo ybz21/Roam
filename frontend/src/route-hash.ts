@@ -29,6 +29,15 @@ export function setHashParams(params: Record<string, string>) {
 
 export const NO_TERMS = 'none'
 
+/** 任务视图的页面名：#/w?wt=<worktree 绝对路径>（22 设计 §7） */
+export const TASK_ROUTE = 'w'
+
+/** URL 上的当前任务（wt=）；没写返回空串 */
+export function readTask(): string {
+  const v = getHashParams().get('wt')
+  return v ? decodeURIComponent(v) : ''
+}
+
 // URL 上的终端标签参数（terms=打开的标签、active=当前标签）。
 // 现在写进去的是会话 id；老链接里存的是会话名，两者都能读——还原时按 id 表判别（见 resolveToken）。
 //
