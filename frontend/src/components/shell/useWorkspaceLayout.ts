@@ -155,9 +155,11 @@ export function resolveMode(o: {
   taskView?: boolean
 }): SpaceMode {
   if (o.taskView) return 'focus'
+  // large 档：页面态就是整块页面，终端不并排（22 设计 D1 已定）——split 在这一档作废，
+  // 终端只在任务视图里出现。expanded 与手机照旧：覆盖式 / 全屏。
+  if (o.size === 'large') return 'page'
   if (!o.hasTerms || !o.dockOpen) return 'page'
   if (o.focus !== 'none') return 'focus'
-  if (o.size === 'large' && canSplit(o.workspaceWidth)) return 'split'
   if (o.size === 'expanded') return 'overlay'
   return 'focus'
 }

@@ -105,18 +105,20 @@ describe('四态判定', () => {
     expect(at('expanded', { dockOpen: false })).toBe('page')
   })
 
-  it('large 并排、expanded 覆盖——同样是"开着终端"，形态不同', () => {
-    expect(at('large')).toBe('split')
+  it('large 档页面态永远是整块页面，不并排（22 设计 D1）；expanded 仍是覆盖', () => {
+    expect(at('large')).toBe('page')
+    expect(at('large', { focus: 'dock' })).toBe('page')
+    expect(at('large', { workspaceWidth: 1047 })).toBe('page')
     expect(at('expanded')).toBe('overlay')
   })
 
-  it('Focus 是用户显式要的，优先于档位', () => {
-    expect(at('large', { focus: 'dock' })).toBe('focus')
-    expect(at('expanded', { focus: 'dock' })).toBe('focus')
+  it('任务视图直接落 focus：中间整块给标签工作区，不看终端有没有、Dock 开没开', () => {
+    expect(at('large', { taskView: true })).toBe('focus')
+    expect(at('large', { taskView: true, hasTerms: false, dockOpen: false })).toBe('focus')
   })
 
-  it('large 但空间不够（导航展开的 1280 以下）退回 Focus，绝不横向溢出', () => {
-    expect(at('large', { workspaceWidth: 1047 })).toBe('focus')
+  it('expanded 档 Focus 是用户显式要的，优先于覆盖', () => {
+    expect(at('expanded', { focus: 'dock' })).toBe('focus')
   })
 
   it('覆盖式面板 480，与 Dock 下界同宽', () => {

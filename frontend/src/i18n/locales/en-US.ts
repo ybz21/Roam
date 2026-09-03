@@ -285,6 +285,8 @@ const enUS = {
   'tree.noTasks': 'No tasks yet — start one from the project page',
   'tree.empty': 'No projects yet',
   'tree.addProject': 'Add project',
+  'tree.idleN': '{n} idle worktrees',
+  'tree.unfinishedShort': '↑{n}',
   'tabs.new': 'New',
   'tabs.newTerminal': 'New terminal',
   'tabs.newTask': 'New task',

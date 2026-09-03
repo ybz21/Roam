@@ -12,7 +12,7 @@
 import { Dropdown, Tooltip } from 'antd'
 import type { MenuProps } from 'antd'
 import type { ReactNode } from 'react'
-import { ChevronLeft, ChevronRight, SearchIcon } from '../../icons'
+import { ChevronLeft, ChevronRight } from '../../icons'
 import { HostIcon } from '../cluster/cluster-icons'
 import { useI18n } from '../../i18n'
 
@@ -29,12 +29,9 @@ export type NavGroup = { label: string; items: NavEntry[] }
 
 export function Navigation({
   rail, active, groups, onGo, settings, hubAlarm,
-  linkStatus, account, accountName, node, nodeMenu, onToggleRail, onSearch, searchHint, tree,
+  linkStatus, account, accountName, node, nodeMenu, onToggleRail, tree,
 }: {
-  /** 品牌下面那行搜索：就是 ⌘K 面板的入口（22 设计：顶栏撤了，入口搬到这） */
-  onSearch?: () => void
-  searchHint?: string
-  /** 项目树（22 设计 §3.2）：挂在导航组下面、脚上面，吃掉剩余高度 */
+  /** 项目树（22 设计 §3.2）：挂在导航组下面、脚上面，吃掉原来空着的那段高度 */
   tree?: ReactNode
   /** 48px 轨态：用户收起 / Focus / 非 large 档 */
   rail: boolean
@@ -77,20 +74,13 @@ export function Navigation({
         {!rail && <strong className="wd">Roam</strong>}
       </div>
 
-      {/* 搜索回到这里：顶栏 Command Center 撤了（22 设计 §3.5），这一行是桌面上唯一看得见的入口 */}
-      {onSearch && (
-        rail
-          ? <Tooltip title={t('workspace.search')} placement="right"><button type="button" className="tt-nav-search" onClick={onSearch} aria-label={t('workspace.search')}><SearchIcon size={15} /></button></Tooltip>
-          : <button type="button" className="tt-nav-search" onClick={onSearch} title={t('workspace.search')}>
-              <SearchIcon size={15} /><span className="ph">{t('workspace.searchPlaceholder')}</span>{searchHint && <kbd>{searchHint}</kbd>}
-            </button>
-      )}
+      {/* 搜索不在这儿：⌘K 的可见入口是树标题行右边那枚放大镜（ProjectTree），侧栏本身照旧 */}
 
 
-      <div className={`tt-nav-list${tree ? ' has-tree' : ''}`}>
+      <div className={`tt-nav-list${tree && !rail ? ' has-tree' : ''}`}>
         {groups.map((g) => (
-          <div key={g.label} className="tt-nav-group">
-            {!rail && <div className="gl">{g.label}</div>}
+          <div key={g.label || 'all'} className="tt-nav-group">
+            {!rail && g.label && <div className="gl">{g.label}</div>}
             {g.items.map(item)}
           </div>
         ))}

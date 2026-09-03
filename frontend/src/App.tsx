@@ -265,16 +265,25 @@ export default function App() {
         const swarms = Array.isArray(sw) ? sw : sw?.data || []
         setSwarmCount(swarms.filter((x: any) => x?.status && x.status !== 'archived').length)
         void loadGit()
-        // 左栏树要每个 git 项目的 worktree：并发拉，量级与项目页今天相同；手机没有树，不拉
-        if (hasSider) {
-          const wtLists = await Promise.all(projects.filter((p: any) => p.git).map((p: any) =>
-            api('GET', `/git/worktrees?dir=${encodeURIComponent(p.dir)}`)
-              .then((r) => [p.key, r?.data || []] as const).catch(() => [p.key, []] as const)))
+        // 左栏树要每个 git 项目的 worktree。后端每个 worktree 要跑十来条 git 命令，
+        // 八个项目并发着 15s 一轮会把机器打满（实测 CPU 60%、温度报警），所以：
+        // 串行、60s 一轮、项目列表照旧 15s 刷；手机没有树，不拉
+        if (hasSider && Date.now() - wtAt > 60000) {
+          wtAt = Date.now()
+          const worktrees: Record<string, any[]> = {}
+          for (const p of projects.filter((x: any) => x.git)) {
+            if (stop) return
+            try { worktrees[p.key] = (await api('GET', `/git/worktrees?dir=${encodeURIComponent(p.dir)}`))?.data || [] }
+            catch { worktrees[p.key] = [] }
+          }
           if (stop) return
-          setTreeSrc({ projects, worktrees: Object.fromEntries(wtLists) })
+          setTreeSrc({ projects, worktrees })
+        } else if (hasSider) {
+          setTreeSrc((cur) => ({ ...cur, projects }))
         }
       } catch { /* 轮询失败就保持上一轮的值，不清空 */ }
     }
+    let wtAt = 0
     load()
     const i = setInterval(load, 15000)
     return () => { stop = true; clearInterval(i) }
@@ -692,9 +701,9 @@ export default function App() {
 
   // 导航分两组（14 §4.4）：工作区 = 干活的地方，工具 = 看别的东西的地方。
   // 设置 / 关于 不在任何一组里——它们进底部账户菜单，见下面的 accountMenu。
+  // 桌面不再分「工作区 / 工具」两组（22 设计评审：组名和组间空隙占掉树的位置）；手机「更多」sheet 仍分组
   const navGroups = [
-    { label: t('nav.groupWorkspace'), items: NAV_WORKSPACE },
-    { label: t('nav.groupTools'), items: NAV_TOOLS },
+    { label: '', items: [...NAV_WORKSPACE, ...NAV_TOOLS] },
   ].map((g) => ({
     label: g.label,
     items: g.items.map((key) => {
@@ -789,7 +798,8 @@ export default function App() {
   ]
 
   // 侧栏是否是 64px 轨：用户手动收起 / Focus 聚焦 / 非 large 档（expanded 一律用轨）
-  const navRail = space.navCollapsed || space.mode === 'focus'
+  // 任务视图里 focus 是常态（22 设计），侧栏必须留着——树就在里面；只有用户 ⌘⇧J 的 Focus 才收轨
+  const navRail = space.navCollapsed || (space.mode === 'focus' && !taskView)
 
   // 状态条的系统格：全部由 App 已经有的 state 算出来，**一条新请求都不发**
   // （18 设计刚删掉过一套「每 6s 对 ≤14 个会话各发 3 条请求」的轮询，别再种一棵）。
@@ -836,10 +846,9 @@ export default function App() {
             accountName={t('nav.thisDevice')}
             account={accountMenu}
             nodeMenu={nodeItems}
-            onSearch={openPalette}
-            searchHint={`${modKeyLabel}K`}
             tree={<ProjectTree tree={tree} activeTask={activeTask} activeSession={active}
               onProject={onTreeProject} onTask={onTreeTask} onSession={onTreeSession}
+              onSearch={openPalette} searchHint={`${modKeyLabel}K`}
               onAddProject={() => { go('projects'); requestIntent('new-project') }} />}
             hubAlarm={hubHealth.level === 'ok' ? undefined : t('hub.why.' + (hubHealth.reasons[0] || 'unknown'))}
             node={curNode ? {

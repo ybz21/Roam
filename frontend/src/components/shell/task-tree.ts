@@ -24,6 +24,8 @@ export type TreeTask = {
   /** 领先 base 的提交数；会话都关了还有未合并提交 = 待收尾 */
   ahead: number
   unfinished: boolean
+  /** 没会话也没未合并提交：树里折进「还有 N 个空闲 worktree」，别一排灰点占满 */
+  idle: boolean
   sessions: TreeSession[]
 }
 
@@ -87,6 +89,7 @@ export function buildTaskTree(o: {
         path: wt.path,
         ahead,
         unfinished: sessions.length === 0 && ahead > 0,
+        idle: sessions.length === 0 && ahead === 0,
         sessions,
       })
     }

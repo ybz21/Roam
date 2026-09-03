@@ -1,37 +1,41 @@
 // 左栏项目树：项目 → 任务（worktree）→ 会话（22 设计 §3.2）。
 //
-// 它同时是导航和任务列表：点任务进任务视图，点会话进任务视图并打开那个会话，点项目名回项目主页。
-// 任务行与它下面的会话行是**一整块**（.tt-tree-grp）：选中时淡蓝底和左侧竖条盖整组，
-// 不是两个错开的圆角块（原型评审时被指出「不连贯」的那一版就是分开画的）。
-// 任务行只有任务名和徽标，**分支不进列表**——每个任务一条 feat/… 堆成一列只会乱，分支在状态条。
+// 塞在导航组下面原来空着的那段，侧栏别的一切照旧；树只借侧栏的语言（圆角、hover 底、
+// 3px 左线 + 淡蓝底的选中态）。它同时是导航和任务列表：点任务进任务视图，点会话进任务视图并
+// 打开那个会话，点项目名回项目主页。
+//
+// 两条让它不吵的规矩：
+//   · 任务行与它下面的会话行是**一整块**，选中盖整组，不是两个错开的圆角块；
+//   · 没会话也没未合并提交的 worktree 折进「还有 N 个空闲 worktree」一行——真实项目里这种
+//     一抓一把，全铺出来就是一列灰点加一列被截断的分支名。
 import { useState, type ReactNode } from 'react'
 import { Tooltip } from 'antd'
 import { useI18n } from '../../i18n'
-import { AgentLogo, ChevronDown, PlusIcon, TerminalIcon } from '../../icons'
+import { AgentLogo, ChevronDown, PlusIcon, SearchIcon, TerminalIcon } from '../../icons'
 import { isLooseTask, taskKeyOf, type TaskKey } from '../sessions/task-key'
 import type { TaskTree, TreeSession, TreeTask } from './task-tree'
 
-const OPEN_KEY = 'roam.tree.closed'
+const CLOSED_KEY = 'roam.tree.closed'
 
 /** 折叠态记本机：默认全展开，只记「收起了哪些项目」，新项目一出现就是展开的 */
 function readClosed(): Set<string> {
   try {
-    const v = JSON.parse(localStorage.getItem(OPEN_KEY) || '[]')
+    const v = JSON.parse(localStorage.getItem(CLOSED_KEY) || '[]')
     return new Set(Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [])
   } catch { return new Set() }
 }
 function writeClosed(s: Set<string>) {
-  try { localStorage.setItem(OPEN_KEY, JSON.stringify([...s])) } catch { /* 记不住而已 */ }
+  try { localStorage.setItem(CLOSED_KEY, JSON.stringify([...s])) } catch { /* 记不住而已 */ }
 }
 
-function dotTone(t: { running?: boolean; waiting?: boolean; unfinished?: boolean }): string {
-  if (t.waiting) return 'wait'
-  if (t.running) return 'run'
-  if (t.unfinished) return 'fin'
-  return 'idle'
+/** 状态点：运行 / 等你 / 待收尾 才画；空闲只在任务行画一枚很淡的占位点，会话行不画 */
+function dot(o: { running?: boolean; waiting?: boolean; unfinished?: boolean }, idlePlaceholder: boolean): ReactNode {
+  const tone = o.waiting ? 'wait' : o.running ? 'run' : o.unfinished ? 'fin' : ''
+  if (tone) return <i className={`dot ${tone}`} />
+  return idlePlaceholder ? <i className="dot idle" /> : null
 }
 
-export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask, onSession, onAddProject }: {
+export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask, onSession, onSearch, searchHint, onAddProject }: {
   tree: TaskTree
   activeTask: TaskKey | null
   /** 当前标签是哪个会话：它所在的会话行再铺一层底 */
@@ -39,25 +43,34 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
   onProject: (key: string) => void
   onTask: (key: TaskKey) => void
   onSession: (key: TaskKey, name: string) => void
+  /** ⌘K 的可见入口：树标题行右边一枚放大镜（顶栏撤了，侧栏本身不加行） */
+  onSearch?: () => void
+  searchHint?: string
   onAddProject?: () => void
 }) {
   const { t } = useI18n()
   const [closed, setClosed] = useState<Set<string>>(readClosed)
+  // 「还有 N 个空闲 worktree」展开了哪些项目的：纯视图态，不记
+  const [idleOpen, setIdleOpen] = useState<Set<string>>(() => new Set())
   const toggle = (key: string) => setClosed((cur) => {
     const next = new Set(cur)
     if (next.has(key)) next.delete(key); else next.add(key)
     writeClosed(next)
     return next
   })
+  const toggleIdle = (key: string) => setIdleOpen((cur) => {
+    const next = new Set(cur)
+    if (next.has(key)) next.delete(key); else next.add(key)
+    return next
+  })
 
-  const sessionRow = (task: TaskKey, s: TreeSession, extra?: ReactNode) => (
+  const sessionRow = (task: TaskKey, s: TreeSession) => (
     <button key={s.name} type="button"
       className={`tt-tree-sess${activeTask === task && activeSession === s.name ? ' on' : ''}`}
       onClick={() => onSession(task, s.name)} title={s.name}>
-      <span className="ic">{s.agent ? <AgentLogo kind={s.agent} size={14} /> : <TerminalIcon size={14} />}</span>
+      <span className="ic">{s.agent ? <AgentLogo kind={s.agent} size={15} /> : <TerminalIcon size={15} />}</span>
       <span className="nm">{s.label}</span>
-      <i className={`dot ${dotTone(s)}`} />
-      {extra}
+      {dot(s, false)}
     </button>
   )
 
@@ -65,12 +78,14 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
     const on = activeTask === task.key
     const running = task.sessions.some((s) => s.running)
     const waiting = task.sessions.some((s) => s.waiting)
+    // 没会话的任务只有分支名可用：用等宽字排，一眼看出这是分支不是标题
+    const isBranch = task.sessions.length === 0
     return (
       <div key={task.key} className={`tt-tree-grp${on ? ' on' : ''}`}>
         <button type="button" className="tt-tree-task" onClick={() => onTask(task.key)} title={task.path}>
-          <i className={`dot ${dotTone({ running, waiting, unfinished: task.unfinished })}`} />
-          <span className="nm">{task.name}</span>
-          {task.unfinished && <span className="bd warn">{t('tree.unfinished', { n: task.ahead })}</span>}
+          {dot({ running, waiting, unfinished: task.unfinished }, true)}
+          <span className={`nm${isBranch ? ' br' : ''}`}>{task.name}</span>
+          {task.unfinished && <span className="bd" title={t('tree.unfinished', { n: task.ahead })}>{t('tree.unfinishedShort', { n: task.ahead })}</span>}
         </button>
         {task.sessions.map((s) => sessionRow(task.key, s))}
       </div>
@@ -79,8 +94,13 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
 
   return (
     <div className="tt-tree">
+      {/* 树头就是搜索：⌘K 的可见入口（顶栏撤了，得有个看得见的地方）；右边挂「添加项目」 */}
       <div className="tt-tree-head">
-        <span className="gl">{t('nav.projects')}</span>
+        {onSearch && (
+          <button type="button" className="tt-tree-search" onClick={onSearch} title={`${t('workspace.search')}${searchHint ? ` (${searchHint})` : ''}`}>
+            <SearchIcon size={14} /><span className="ph">{t('workspace.searchPlaceholder')}</span>{searchHint && <kbd>{searchHint}</kbd>}
+          </button>
+        )}
         {onAddProject && (
           <Tooltip title={t('tree.addProject')} placement="right">
             <button type="button" className="tt-act ico" onClick={onAddProject} aria-label={t('tree.addProject')}><PlusIcon size={13} /></button>
@@ -90,22 +110,33 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
 
       {tree.projects.map((p) => {
         const open = !closed.has(p.key)
+        const live = p.tasks.filter((x) => !x.idle)
+        const idle = p.tasks.filter((x) => x.idle)
+        const showIdle = idleOpen.has(p.key)
         return (
           <div key={p.key} className="tt-tree-proj">
-            <div className="tt-tree-projrow">
-              <button type="button" className={`chev${open ? '' : ' closed'}`} onClick={() => toggle(p.key)}
-                aria-label={open ? t('common.collapse') : t('common.expand')} aria-expanded={open}>
-                <ChevronDown size={13} />
-              </button>
-              <button type="button" className="nm" onClick={() => onProject(p.key)} title={p.dir}>
-                <span className="av">{p.name.slice(0, 2).toUpperCase()}</span>
-                <span className="tx">{p.name}</span>
-                {p.needs > 0 && <span className="bd">{p.needs}</span>}
-              </button>
-            </div>
-            {open && (p.tasks.length
-              ? p.tasks.map(taskGroup)
-              : <div className="tt-tree-empty">{t('tree.noTasks')}</div>)}
+            <button type="button" className={`tt-tree-projrow${open ? '' : ' closed'}`} title={p.dir}
+              onClick={() => onProject(p.key)}>
+              <span className="av">{p.name.slice(0, 2).toUpperCase()}</span>
+              <span className="tx">{p.name}</span>
+              {p.needs > 0 && <span className="bd">{p.needs}</span>}
+              {/* 折叠箭头是行内第二个可点目标：点它只折不跳，点别处进项目主页 */}
+              <span className="chev" role="button" aria-label={open ? t('common.collapse') : t('common.expand')}
+                onClick={(e) => { e.stopPropagation(); toggle(p.key) }}><ChevronDown size={14} /></span>
+            </button>
+            {open && (
+              <>
+                {live.map(taskGroup)}
+                {idle.length > 0 && (
+                  <button type="button" className={`tt-tree-more${showIdle ? '' : ' closed'}`} onClick={() => toggleIdle(p.key)}>
+                    <span className="chev"><ChevronDown size={12} /></span>
+                    {t('tree.idleN', { n: idle.length })}
+                  </button>
+                )}
+                {showIdle && idle.map(taskGroup)}
+                {!p.tasks.length && <div className="tt-tree-empty">{t('tree.noTasks')}</div>}
+              </>
+            )}
           </div>
         )
       })}
@@ -115,11 +146,7 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
           <div className="tt-tree-head"><span className="gl">{t('tree.loose')}</span></div>
           {tree.loose.map((s) => {
             const key = taskKeyOf(s.name)
-            return (
-              <div key={s.name} className={`tt-tree-grp${activeTask === key ? ' on' : ''}`}>
-                {sessionRow(key, s)}
-              </div>
-            )
+            return <div key={s.name} className={`tt-tree-grp${activeTask === key ? ' on' : ''}`}>{sessionRow(key, s)}</div>
           })}
         </div>
       )}

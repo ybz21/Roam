@@ -285,6 +285,8 @@ const zhCN = {
   'tree.noTasks': '还没有任务，去项目主页开一个',
   'tree.empty': '还没有项目',
   'tree.addProject': '添加项目',
+  'tree.idleN': '还有 {n} 个空闲 worktree',
+  'tree.unfinishedShort': '↑{n}',
   'tabs.new': '新建',
   'tabs.newTerminal': '新终端',
   'tabs.newTask': '新任务',
