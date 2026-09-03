@@ -69,7 +69,8 @@ import SoloTerminal from './components/terminal/SoloTerminal'
 import { ICONS } from './components/nav-icons'
 import { normalizeRoute, setHashParams, readTermTokens, readTask, NO_TERMS, TASK_ROUTE } from './route-hash'
 import type { ClaudeInfo } from './components/terminal/claude-info'
-import { dropDeadTokens, loadTabs, saveTabs } from './components/terminal/term-tabs-store'
+import { dropDeadTokens, loadTabs, saveTabs, type FileTab } from './components/terminal/term-tabs-store'
+import type { FileTabMode } from './components/files/FilePathBar'
 import { CloudIcon, ExitFullscreenIcon, FullscreenIcon, LogoutIcon, MoonIcon, MoreIcon, SearchIcon, SunIcon } from './icons'
 import { lazyRetry } from './components/lazy-retry'
 
@@ -174,7 +175,44 @@ export default function App() {
     try { const v = localStorage.getItem('roam.inspectorPanel'); return v === 'git' || v === 'worktree' ? v : 'files' } catch { return 'files' }
   })
   const setPanel = (p: InspectorPanelKind) => { setPanelLocal(p); try { localStorage.setItem('roam.inspectorPanel', p) } catch { /* 记不住而已 */ } }
-  const [insReq, setInsReq] = useState<{ path: string; line?: number; nonce: number } | undefined>()
+  // 文件标签（22 设计 §3.3）：按任务分片；activeFile 非空 = 当前标签是文件，空 = 当前标签是会话
+  const [fileTabs, setFileTabs] = useState<Record<TaskKey, FileTab[]>>({})
+  const [activeFile, setActiveFile] = useState<Record<TaskKey, string>>({})
+  const [reveal, setReveal] = useState<{ path: string; line: number; nonce: number } | undefined>()
+  const curFiles = activeTask ? fileTabs[activeTask] || [] : []
+  const curFile = activeTask ? activeFile[activeTask] || '' : ''
+  const isMd = (p: string) => /\.(md|markdown|mdx|html?)$/i.test(p)
+  // 单击开预览标签（斜体）；再单击别的文件替换它；已开着的直接激活
+  const openFileTab = (path: string, line?: number) => {
+    const key = activeTaskRef.current
+    if (!key) return
+    setFileTabs((m) => {
+      const list = m[key] || []
+      if (list.some((f) => f.path === path)) return m
+      const tab: FileTab = { path, preview: true, mode: isMd(path) ? 'preview' : 'source' }
+      const i = list.findIndex((f) => f.preview)
+      return { ...m, [key]: i < 0 ? [...list, tab] : list.map((f, k) => (k === i ? tab : f)) }
+    })
+    setActiveFile((m) => ({ ...m, [key]: path }))
+    if (line && line > 0) setReveal((prev) => ({ path, line, nonce: (prev?.nonce || 0) + 1 }))
+  }
+  const selectFileTab = (path: string) => { const key = activeTaskRef.current; if (key) setActiveFile((m) => ({ ...m, [key]: path })) }
+  const pinFileTab = (path: string) => { const key = activeTaskRef.current; if (key) setFileTabs((m) => ({ ...m, [key]: (m[key] || []).map((f) => (f.path === path ? { ...f, preview: false } : f)) })) }
+  const setFileMode = (path: string, mode: FileTabMode) => { const key = activeTaskRef.current; if (key) setFileTabs((m) => ({ ...m, [key]: (m[key] || []).map((f) => (f.path === path ? { ...f, mode, preview: false } : f)) })) }
+  const closeFileTab = (path: string) => {
+    const key = activeTaskRef.current
+    if (!key) return
+    setFileTabs((m) => {
+      const list = m[key] || []
+      const i = list.findIndex((f) => f.path === path)
+      const next = list.filter((f) => f.path !== path)
+      // 关掉当前文件标签：回到邻居文件，没有邻居就回会话
+      setActiveFile((am) => (am[key] === path ? { ...am, [key]: (next[i - 1] || next[i])?.path || '' } : am))
+      return { ...m, [key]: next }
+    })
+  }
+  // 点会话标签 = 文件标签让位
+  const activateSession = (n: string) => { setActive(n); const key = activeTaskRef.current; if (key) setActiveFile((m) => (m[key] ? { ...m, [key]: '' } : m)) }
   // 左栏树的三份原料（22 设计 §3.2）：/projects 与每项目的 worktree 挂在下面那条 15s 轮询上，/sessions 挂 5s 那条
   const [treeSrc, setTreeSrc] = useState<{ projects: any[]; worktrees: Record<string, any[]> }>({ projects: [], worktrees: {} })
   const [sessList, setSessList] = useState<{ name: string; label?: string }[]>([])
@@ -434,6 +472,9 @@ export default function App() {
     if (!names.length) return
     // 任务：URL 的 wt 优先（初始化时已读），没有就用本机记的；都没有则下面那个 effect 按 active 会话算
     if (saved?.task) setActiveTask((cur) => cur || saved.task)
+    // 文件标签只记在本机（URL 不写）：不管 URL 有没有说标签，都从本机那份读
+    const stored = saved || loadTabs(curNodeId)
+    if (Object.keys(stored.files).length) { setFileTabs(stored.files); setActiveFile(stored.activeFile) }
     // 用户在 id 表回来之前就点开了标签 → 以他的操作为准，别被 URL 还原顶掉
     setTerms((cur) => (cur.length ? cur : names))
     setActive((cur) => {
@@ -459,8 +500,8 @@ export default function App() {
       wt: activeTask ? encodeURIComponent(activeTask) : '',
     })
     // 同一份东西再按机器存一份：切走了还能切回来（见 term-tabs-store）
-    saveTabs(curNodeId, toks, activeTok, activeTask || '')
-  }, [terms, active, activeTask, sessIds, curNodeId])
+    saveTabs(curNodeId, toks, activeTok, activeTask || '', fileTabs, activeFile)
+  }, [terms, active, activeTask, fileTabs, activeFile, sessIds, curNodeId])
 
   // 没有当前任务（老链接、或归属表还没到）就按 active 会话算一个；归属表到了之后
   // 「散会话」可能变成 worktree 任务，跟着纠正一次。别的情况不动：用户切了任务就是切了。
@@ -642,7 +683,7 @@ export default function App() {
 
   const termPane = (
     <TerminalPane
-      terms={terms} active={active} setActive={setActive} closeTerm={closeTerm}
+      terms={terms} active={active} setActive={activateSession} closeTerm={closeTerm}
       fontSize={fontSize} setFontSize={setFontSize} statusMap={statusMap} setStatus={setStatus}
       termRefs={termRefs} sendKey={sendKey}
       claudeMap={claudeMap} claudeView={claudeView} setClaudeView={setClaudeView}
@@ -655,8 +696,11 @@ export default function App() {
       visibleTerms={hasSider ? taskTerms : terms}
       onNew={taskView ? { terminal: () => { void newTerminalInTask() }, task: () => { go('projects'); requestIntent('new-project') } } : undefined}
       // 任务视图里对话点路径 / Git 都落到右栏三面板；手机与 Page 态退回 TerminalPane 自己的二级页
-      onOpenFile={taskView ? (path, line) => { setPanel('files'); if (space.inspectorCollapsed) space.toggleInspectorCollapsed(); setInsReq((prev) => ({ path, line, nonce: (prev?.nonce || 0) + 1 })) } : undefined}
+      onOpenFile={taskView ? (path, line) => openFileTab(path, line) : undefined}
       onOpenGit={taskView ? () => { setPanel('git'); if (space.inspectorCollapsed) space.toggleInspectorCollapsed() } : undefined}
+      fileTabs={taskView ? curFiles : undefined} activeFile={taskView ? curFile : undefined}
+      taskDir={activeTask && !isLooseTask(activeTask) ? activeTask : (activeProject?.dir || '')}
+      onFileTab={selectFileTab} onCloseFile={closeFileTab} onPinFile={pinFileTab} onFileMode={setFileMode} reveal={reveal}
       // Focus 只在桌面有意义：手机上终端本来就是全屏覆盖层；任务视图里 focus 是常态，没有开关
       focus={hasSider && !taskView ? { on: space.focus !== 'none', toggle: space.toggleFocus, hint: `${modKeyLabel}⇧J` } : undefined}
     />
@@ -704,7 +748,7 @@ export default function App() {
   const paletteActions: PaletteActions = {
     openRoute: (hash: string) => { location.hash = hash },
     openSession: (name: string) => openTerm(name),
-    openFile: (path: string) => { go('files'); requestIntent(OPEN_FILE_INTENT, { path }) },
+    openFile: (path: string) => { if (taskView) openFileTab(path); else { go('files'); requestIntent(OPEN_FILE_INTENT, { path }) } },
   }
 
   const canvasNode = (
@@ -927,7 +971,8 @@ export default function App() {
         const scope = owner && task ? `${owner.name} · ${task.name}` : (active ? sessionLabel(active) || active : '')
         return (
           <InspectorPanels open={taskView} panel={panel} onPanel={setPanel} dir={dir} scope={scope}
-            branch={task?.branch || activeProject?.branch} openRequest={insReq} openTerm={openTerm}
+            branch={task?.branch || activeProject?.branch} openTerm={openTerm}
+            onOpenFile={(p) => openFileTab(p)} selectedPath={curFile}
             onClose={() => { if (!space.inspectorCollapsed) space.toggleInspectorCollapsed() }} />
         )
       })()}

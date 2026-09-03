@@ -582,7 +582,10 @@ html[data-pointer="coarse"] .tt-ins-act { width: 44px; height: 40px; }
 /* 缩进：每层 22px，和图标槽 + 间距同宽，下一层的图标正好落在上一层文字的起点 */
 .tt-tree-row.lvl1 { padding-left: 32px; }
 .tt-tree-row.lvl2 { padding-left: 54px; }
-.tt-tree-row .chev { flex: 0 0 auto; display: grid; place-items: center; color: var(--text-dimmer); transition: transform .15s; }
+/* 箭头钉右端：没有计数徽标时也不能跟在名字后面 */
+.tt-tree-row .chev { flex: 0 0 auto; margin-left: auto; display: grid; place-items: center; color: var(--text-dimmer); transition: transform .15s; }
+.tt-tree-row .bd + .chev, .tt-tree-row .ic.chev { margin-left: 0; }
+.tt-tree-row.lvl3 { padding-left: 76px; }
 .tt-tree-row.closed .chev { transform: rotate(-90deg); }
 .tt-tree-row.more { color: var(--text-dimmer); font-size: var(--fs-sm); }
 /* 状态点住在图标槽正中：运行 / 等你 / 待收尾 才上色，空闲很淡 */
@@ -594,6 +597,17 @@ html[data-pointer="coarse"] .tt-ins-act { width: 44px; height: 40px; }
 /* 会话行末尾的状态点（只在运行 / 等你时有） */
 .tt-tree-row .nm + .dot { flex: 0 0 auto; margin-left: auto; }
 .tt-tree-empty { padding: 4px 12px 8px; color: var(--text-dimmer); font-size: var(--fs-meta); }
+
+/* ── 文件标签与路径条（22 设计 §3.3）── */
+.tt-tab-file .tt-tab-fi { display: inline-flex; transform: scale(.72); margin: -2px; }
+.tt-tab-file .tt-tab-nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-tab-file.prev .tt-tab-nm { font-style: italic; }
+.tt-tab-dirty { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--text-bright); }
+.tt-pathbar .crumbs { display: flex; align-items: center; gap: 2px; min-width: 0; overflow: hidden; white-space: nowrap; font-family: var(--mono); font-size: var(--fs-meta); color: var(--text-dim); padding-left: 6px; }
+.tt-pathbar .crumbs > span { display: inline-flex; align-items: center; }
+.tt-pathbar .crumbs .sep { color: var(--text-dimmer); margin: 0 4px; }
+.tt-pathbar .crumbs .leaf { color: var(--text-bright); }
+.tt-pathbar-empty { height: 100%; display: grid; place-items: center; color: var(--text-dimmer); font-size: var(--fs-sm); padding: var(--sp-4); text-align: center; }
 
 /* ── 标签条右端「新建 ▾」与任务空态（22 设计 §3.3）── */
 .tt-tabs-end { display: flex; align-items: center; flex: 0 0 auto; padding: 0 6px; border-left: 1px solid var(--border-subtle); }

@@ -4,6 +4,10 @@ import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import ClaudeChat from '../chat/ClaudeChat'
 import CodexChat from '../chat/CodexChat'
 import FileBrowser from '../files/FileBrowser'
+import { FileView } from '../files/fileview'
+import { FileTypeIcon } from '../files/file-icons'
+import { ChangesView, FilePathBar, type FileTabMode } from '../files/FilePathBar'
+import type { FileTab } from './term-tabs-store'
 import FileWorkspace from '../files/FileWorkspace'
 import GitPanel from '../git/GitPanel'
 import MobileSubPage from '../MobileSubPage'
@@ -55,12 +59,41 @@ export default function TerminalPane(props: {
   onOpenFile?: (path: string, line?: number) => void
   /** 对话里点「Git」→ 右栏切到 Git 面板 */
   onOpenGit?: () => void
+  /** 当前任务的文件标签（22 设计 §3.3）：会话标签后面接着画；内容用 FileView，只有当前一个渲染 Monaco */
+  fileTabs?: FileTab[]
+  /** 当前标签是哪个文件；空 = 当前标签是会话 */
+  activeFile?: string
+  /** 当前任务的 worktree 根：路径条面包屑与「改动」都从它算 */
+  taskDir?: string
+  onFileTab?: (path: string) => void
+  onCloseFile?: (path: string) => void
+  onPinFile?: (path: string) => void
+  onFileMode?: (path: string, mode: FileTabMode) => void
+  /** 从对话里点「path:line」跳过来要定位到那一行；nonce 让同一处点第二次也响 */
+  reveal?: { path: string; line: number; nonce: number }
 }) {
-  const { terms, active, setActive, closeTerm, fontSize, setFontSize, statusMap, setStatus, termRefs, sendKey, onCollapse, claudeMap, claudeView, setClaudeView, codexMap, codexView, setCodexView, onRename, onReorder, onNeedsInput, focus, visibleTerms, onNew, onOpenFile, onOpenGit } = props
+  const { terms, active, setActive, closeTerm, fontSize, setFontSize, statusMap, setStatus, termRefs, sendKey, onCollapse, claudeMap, claudeView, setClaudeView, codexMap, codexView, setCodexView, onRename, onReorder, onNeedsInput, focus, visibleTerms, onNew, onOpenFile, onOpenGit, fileTabs, activeFile, taskDir, onFileTab, onCloseFile, onPinFile, onFileMode, reveal } = props
   const tabs = visibleTerms ?? terms
+  const curFile = activeFile || ''
+  // 文件标签的脏标记：FileView 报上来，关标签前问一句（FileWorkspace 同款）
+  const [dirtyFiles, setDirtyFiles] = useState<Set<string>>(() => new Set())
+  const setFileDirty = (p: string, dirty: boolean) => setDirtyFiles((prev) => {
+    if (prev.has(p) === dirty) return prev
+    const n = new Set(prev); dirty ? n.add(p) : n.delete(p); return n
+  })
   const fileDock = props.fileDock || 'right'
   const { message, modal } = AntApp.useApp()
   const { t } = useI18n()
+  const closeFile = (p: string) => {
+    if (!onCloseFile) return
+    if (dirtyFiles.has(p)) {
+      modal.confirm({
+        title: t('file.closeUnsavedTitle'), content: p.split('/').pop() || p,
+        okText: t('file.closeWithoutSaving'), cancelText: t('common.cancel'),
+        okButtonProps: { danger: true }, onOk: () => { setFileDirty(p, false); onCloseFile(p) },
+      })
+    } else onCloseFile(p)
+  }
   const st = active ? statusMap[active] : undefined
   const [termNeedsInput, setTermNeedsInput] = useState<Record<string, boolean>>({})
   const promptSignals = useRef<Record<string, PromptSignal>>({})
@@ -643,6 +676,22 @@ export default function TerminalPane(props: {
             ] }}>{tab}</Dropdown>
           )
         })}
+        {/* 文件标签（22 设计 §3.3）：接在会话标签后面，同一款 .tt-tab；预览态斜体，单击别的文件会替换它，
+            双击转正；脏了标签上带点。文件标签第一期不参与拖拽排序。 */}
+        {(fileTabs || []).map((f) => {
+          const on = curFile === f.path
+          const name = f.path.split('/').pop() || f.path
+          const dirty = dirtyFiles.has(f.path)
+          return (
+            <span key={'file:' + f.path} ref={on ? activeTabRef : undefined}
+              className={`tt-tab tt-tab-file${on ? ' on' : ''}${f.preview ? ' prev' : ''}${dirty ? ' dirty' : ''}`}
+              title={f.path} onClick={() => onFileTab?.(f.path)} onDoubleClick={() => onPinFile?.(f.path)}>
+              <span className="tt-tab-fi"><FileTypeIcon name={name} /></span>
+              <span className="tt-tab-nm">{name}</span>
+              <a className="tt-x" title={dirty ? t('file.unsaved') : t('common.close')} onClick={(e) => { e.stopPropagation(); closeFile(f.path) }}>{dirty ? <span className="tt-tab-dirty" /> : TI.close}</a>
+            </span>
+          )
+        })}
         {/* 拖到最右侧：最后一个标签的右半边已经给出 i+1，这里只补"空白区也能落" */}
         {dragTab && (
           <span className="tt-tab-tail"
@@ -847,7 +896,7 @@ export default function TerminalPane(props: {
         }}>{t('terminal.dropToMention')}</div>
       )}
       <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
-        {!active && onNew && (
+        {!active && !curFile && onNew && (
           <div className="tt-tabs-empty">{t('tabs.empty')}<small>{t('tabs.emptyHint')}</small></div>
         )}
         {terms.map((termName) => (
@@ -856,9 +905,9 @@ export default function TerminalPane(props: {
           // visibility:hidden 保留真实尺寸并让后台画布保持就绪；pointerEvents/zIndex 隔离交互与层叠。
           <div key={termName} style={{
             position: 'absolute', inset: 0, padding: 6,
-            visibility: termName === active ? 'visible' : 'hidden',
-            pointerEvents: termName === active ? 'auto' : 'none',
-            zIndex: termName === active ? 1 : 0,
+            visibility: termName === active && !curFile ? 'visible' : 'hidden',
+            pointerEvents: termName === active && !curFile ? 'auto' : 'none',
+            zIndex: termName === active && !curFile ? 1 : 0,
           }}>
             <Term ref={(h) => { termRefs.current[termName] = h }} name={termName} fontSize={fontSize} active={termName === active} onStatus={(s) => setStatus(termName, s)} onRevived={onRename}
               onContextMenu={({ x, y, selection }) => { setActive(termName); setCtx({ x, y, session: termName, selection }) }}
@@ -880,6 +929,23 @@ export default function TerminalPane(props: {
             )}
           </div>
         ))}
+        {/* 文件层（22 设计 §3.3）：每个文件标签一层，只有当前那层显示；FileView 的 active 只给当前，
+            其余的 Monaco 不渲染、draft 留着——二十个标签只有一个编辑器实例 */}
+        {(fileTabs || []).map((f) => {
+          const on = curFile === f.path
+          return (
+            <div key={'file:' + f.path} style={{ position: 'absolute', inset: 0, zIndex: on ? 7 : 0, display: on ? 'block' : 'none', background: 'var(--bg-base)' }}>
+              {f.mode === 'changes'
+                ? (on && <ChangesView path={f.path} root={taskDir || ''} />)
+                : (
+                  <FileView path={f.path} accent="var(--accent)" inline tabbed forcePreview={f.mode === 'preview'} active={on}
+                    onClose={() => closeFile(f.path)} onOpenPath={(p) => onFileTab?.(p)}
+                    onDirtyChange={(p, d) => { setFileDirty(p, d); if (d) onPinFile?.(p) }}
+                    revealLine={reveal?.path === f.path ? { line: reveal.line, nonce: reveal.nonce } : undefined} />
+                )}
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -999,9 +1065,11 @@ export default function TerminalPane(props: {
       ) : (
         <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
           <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-            {phoneChrome || <>{tabStrip}{sessionToolbar}</>}
+            {phoneChrome || <>{tabStrip}{curFile
+              ? <FilePathBar path={curFile} root={taskDir || ''} mode={(fileTabs || []).find((f) => f.path === curFile)?.mode || 'source'} onMode={(m) => onFileMode?.(curFile, m)} />
+              : sessionToolbar}</>}
             {terminalArea}
-            {sessionBottom}
+            {!curFile && sessionBottom}
           </div>
         </div>
       )}

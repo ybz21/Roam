@@ -31,7 +31,7 @@ const worktreeIcon = (
   </svg>
 )
 
-export function InspectorPanels({ open, panel, onPanel, dir, scope, branch, openRequest, openTerm, onClose }: {
+export function InspectorPanels({ open, panel, onPanel, dir, scope, branch, openRequest, openTerm, onClose, onOpenFile, selectedPath }: {
   open: boolean
   panel: InspectorPanelKind
   onPanel: (p: InspectorPanelKind) => void
@@ -44,6 +44,10 @@ export function InspectorPanels({ open, panel, onPanel, dir, scope, branch, open
   openRequest?: { path: string; line?: number; nonce: number }
   openTerm?: (name: string) => void
   onClose: () => void
+  /** 单击文件 → 中间开成标签（22 设计 §3.3）；不传就用 FileBrowser 自己的预览 */
+  onOpenFile?: (path: string) => void
+  /** 中间当前的文件标签：树里高亮它 */
+  selectedPath?: string
 }) {
   const { t } = useI18n()
   const acts: { key: InspectorPanelKind; label: string; icon: ReactNode }[] = [
@@ -70,7 +74,7 @@ export function InspectorPanels({ open, panel, onPanel, dir, scope, branch, open
         </div>
         {/* 三个面板都挂着，只切 display：树的展开态、Git 的选中都留着 */}
         <div className="tt-ins-body" style={{ display: panel === 'files' ? 'flex' : 'none' }}>
-          <FileBrowser dir={dir} accent="var(--accent)" layout="dock" openRequest={openRequest} />
+          <FileBrowser dir={dir} accent="var(--accent)" layout="dock" openRequest={openRequest} onOpenFile={onOpenFile} selectedPath={selectedPath || null} />
         </div>
         <div className="tt-ins-body" style={{ display: panel === 'git' ? 'flex' : 'none' }}>
           <Suspense fallback={fallback}><GitPanel dir={dir} accent="var(--accent)" openTerm={openTerm} /></Suspense>

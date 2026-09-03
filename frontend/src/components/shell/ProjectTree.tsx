@@ -64,7 +64,7 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
 
   // 每一行都是侧栏那枚 .tt-nav-item：同样的高、图标槽、hover、选中的左线 + 淡蓝底、同一款计数徽标。
   // 区别只有缩进（lvl1 / lvl2）和图标槽里放什么：项目放文件夹，任务放状态点，会话放 agent 标。
-  const sessionRow = (task: TaskKey, s: TreeSession, lvl: 1 | 2) => (
+  const sessionRow = (task: TaskKey, s: TreeSession, lvl: 1 | 2 | 3) => (
     <button key={s.name} type="button"
       className={`tt-nav-item tt-tree-row lvl${lvl}${activeTask === task && activeSession === s.name ? ' on' : ''}`}
       onClick={() => onSession(task, s.name)} title={s.name}
@@ -75,19 +75,20 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
     </button>
   )
 
-  const taskRows = (task: TreeTask) => {
+  // lvl：直接列出的任务是 1，从「待收尾 / 空闲」折叠行里展开的是 2，它们的会话再深一级
+  const taskRows = (task: TreeTask, lvl: 1 | 2 = 1) => {
     const on = activeTask === task.key
     const running = task.sessions.some((s) => s.running)
     const waiting = task.sessions.some((s) => s.waiting)
     return (
       <div key={task.key} className="tt-tree-task">
-        <button type="button" className={`tt-nav-item tt-tree-row lvl1${on && !task.sessions.some((s) => s.name === activeSession) ? ' on' : ''}`}
+        <button type="button" className={`tt-nav-item tt-tree-row lvl${lvl}${on && !task.sessions.some((s) => s.name === activeSession) ? ' on' : ''}`}
           onClick={() => onTask(task.key)} title={task.path}>
           <span className="ic">{dot({ running, waiting, unfinished: task.unfinished }, true)}</span>
           <span className="nm">{task.name}</span>
           {task.unfinished && <span className="bd" title={t('tree.unfinished', { n: task.ahead })}>{t('tree.unfinishedShort', { n: task.ahead })}</span>}
         </button>
-        {task.sessions.map((s) => sessionRow(task.key, s, 2))}
+        {task.sessions.map((s) => sessionRow(task.key, s, lvl === 1 ? 2 : 3))}
       </div>
     )
   }
@@ -126,21 +127,21 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
             </button>
             {open && (
               <>
-                {live.map(taskRows)}
+                {live.map((x) => taskRows(x, 1))}
                 {unfinished.length > 0 && (
                   <button type="button" className={`tt-nav-item tt-tree-row lvl1 more${showUnfinished ? '' : ' closed'}`} onClick={() => toggleIdle(p.key + ':fin')}>
                     <span className="ic chev"><ChevronDown size={13} /></span>
                     <span className="nm">{t('tree.unfinishedN', { n: unfinished.length })}</span>
                   </button>
                 )}
-                {showUnfinished && unfinished.map(taskRows)}
+                {showUnfinished && unfinished.map((x) => taskRows(x, 2))}
                 {idle.length > 0 && (
                   <button type="button" className={`tt-nav-item tt-tree-row lvl1 more${showIdle ? '' : ' closed'}`} onClick={() => toggleIdle(p.key)}>
                     <span className="ic chev"><ChevronDown size={13} /></span>
                     <span className="nm">{t('tree.idleN', { n: idle.length })}</span>
                   </button>
                 )}
-                {showIdle && idle.map(taskRows)}
+                {showIdle && idle.map((x) => taskRows(x, 2))}
                 {!p.tasks.length && <div className="tt-tree-empty">{t('tree.noTasks')}</div>}
               </>
             )}

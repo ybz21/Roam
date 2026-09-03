@@ -27,7 +27,7 @@ describe('按机器记终端标签', () => {
 
   it('没记过的机器返回空，不返回别人的', () => {
     saveTabs('node-a', ['x'], 'x')
-    expect(loadTabs('node-zzz')).toEqual({ terms: [], active: '', task: '' })
+    expect(loadTabs('node-zzz')).toEqual({ terms: [], active: '', task: '', files: {}, activeFile: {} })
   })
 
   it('最多记 8 台，按最后使用淘汰', () => {
@@ -40,7 +40,7 @@ describe('按机器记终端标签', () => {
 
   it('localStorage 里是垃圾时按空处理，不抛', () => {
     localStorage.setItem('roam.terms', '{{{')
-    expect(loadTabs('node-a')).toEqual({ terms: [], active: '', task: '' })
+    expect(loadTabs('node-a')).toEqual({ terms: [], active: '', task: '', files: {}, activeFile: {} })
   })
 })
 
@@ -96,6 +96,22 @@ describe('当前任务跟着标签一起记（22 设计）', () => {
 
   it('老数据没有 task 字段：照常读，任务是空串', () => {
     localStorage.setItem('roam.terms', JSON.stringify({ '': { terms: ['x'], active: 'x', at: 1 } }))
-    expect(loadTabs(null)).toEqual({ terms: ['x'], active: 'x', task: '' })
+    expect(loadTabs(null)).toEqual({ terms: ['x'], active: 'x', task: '', files: {}, activeFile: {} })
+  })
+})
+
+describe('文件标签按任务分片一起记（22 设计 §3.3）', () => {
+  beforeEach(() => localStorage.clear())
+
+  it('存了就能读回来，只认得 path / preview / mode 三个字段', () => {
+    saveTabs('a', ['x'], 'x', '/w/.worktrees/a', { '/w/.worktrees/a': [{ path: '/w/.worktrees/a/README.md', preview: true, mode: 'preview' }] }, { '/w/.worktrees/a': '/w/.worktrees/a/README.md' })
+    const got = loadTabs('a')
+    expect(got.files['/w/.worktrees/a']).toEqual([{ path: '/w/.worktrees/a/README.md', preview: true, mode: 'preview' }])
+    expect(got.activeFile['/w/.worktrees/a']).toBe('/w/.worktrees/a/README.md')
+  })
+
+  it('坏掉的 mode 退回 source，缺 path 的丢掉', () => {
+    localStorage.setItem('roam.terms', JSON.stringify({ '': { terms: [], active: '', at: 1, files: { k: [{ path: '/p', mode: 'rich' }, { preview: true }] } } }))
+    expect(loadTabs(null).files.k).toEqual([{ path: '/p', preview: false, mode: 'source' }])
   })
 })
