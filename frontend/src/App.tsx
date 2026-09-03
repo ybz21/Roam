@@ -384,7 +384,7 @@ export default function App() {
         e.preventDefault()
         // 任务视图：⌘J 开合右栏（Dock 没了，这个键让给它）；⌘⇧J 仍是 Focus
         if (taskView && !e.shiftKey) { space.toggleInspectorCollapsed(); return }
-        if (e.shiftKey) space.toggleFocus()
+        if (e.shiftKey) { if (taskView) space.setNavCollapsed(!space.navCollapsed); else space.toggleFocus() }
         else { space.setFocus('none'); space.toggleDock() }
         return
       }
@@ -746,7 +746,9 @@ export default function App() {
       taskDir={activeTask && !isLooseTask(activeTask) ? activeTask : (activeProject?.dir || '')}
       onFileTab={selectFileTab} onCloseFile={closeFileTab} onPinFile={pinFileTab} onFileMode={setFileMode} reveal={reveal}
       // Focus 只在桌面有意义：手机上终端本来就是全屏覆盖层；任务视图里 focus 是常态，没有开关
-      focus={hasSider && !taskView ? { on: space.focus !== 'none', toggle: space.toggleFocus, hint: `${modKeyLabel}⇧J` } : undefined}
+      focus={!hasSider ? undefined : taskView
+        ? { on: space.navCollapsed, toggle: () => space.setNavCollapsed(!space.navCollapsed), hint: `${modKeyLabel}⇧J` }
+        : { on: space.focus !== 'none', toggle: space.toggleFocus, hint: `${modKeyLabel}⇧J` }}
     />
   )
 
