@@ -118,7 +118,7 @@ export function buildSettings(deps: {
   }
   // 全屏 / 退出登录：原来挂在侧栏脚「当前设备」那枚账户菜单里（22 设计 §3.2 拍板：侧栏脚只留 设置 / 收起）
   const accountItem: SettingItem = {
-    id: 'account', label: t('set.account'), desc: t('set.accountDesc'), bare: true,
+    id: 'account', label: t('set.account'), desc: t('set.accountDesc'),
     keywords: '全屏 退出 登录 fullscreen logout',
     control: { kind: 'custom', node: <AccountActions onLogout={deps.onLogout} /> },
   }
