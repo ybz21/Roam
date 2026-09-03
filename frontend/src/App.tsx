@@ -1019,7 +1019,7 @@ export default function App() {
         const scope = owner && task ? `${owner.name} · ${task.name}` : (active ? sessionLabel(active) || active : '')
         return (
           <InspectorPanels open={taskView} panel={panel} onPanel={setPanel} dir={dir} scope={scope}
-            branch={task?.branch || activeProject?.branch} openTerm={openTerm}
+            openTerm={openTerm}
             onOpenFile={(p) => openFileTab(p)} selectedPath={curFile}
             searchNonce={searchNonce} onOpenLine={(p, line) => openFileTab(p, line)}
             onClose={() => { if (!space.inspectorCollapsed) space.toggleInspectorCollapsed() }} />

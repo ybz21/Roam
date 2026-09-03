@@ -8,7 +8,6 @@ import { Suspense, type ReactNode } from 'react'
 import { Spin, Tooltip } from 'antd'
 import { useI18n } from '../../i18n'
 import { FolderIcon } from '../../icons'
-import { BranchIcon } from '../git/parts'
 import FileBrowser from '../files/FileBrowser'
 import AdaptivePanel from './AdaptivePanel'
 import { lazyRetry } from '../lazy-retry'
@@ -31,7 +30,7 @@ const gitIcon = (
   </svg>
 )
 
-export function InspectorPanels({ open, panel, onPanel, dir, scope, branch, openRequest, openTerm, onClose, onOpenFile, selectedPath, searchNonce, onOpenLine }: {
+export function InspectorPanels({ open, panel, onPanel, dir, scope, openRequest, openTerm, onClose, onOpenFile, selectedPath, searchNonce, onOpenLine }: {
   open: boolean
   panel: InspectorPanelKind
   onPanel: (p: InspectorPanelKind) => void
@@ -39,7 +38,6 @@ export function InspectorPanels({ open, panel, onPanel, dir, scope, branch, open
   dir: string
   /** 作用域头：「项目 · 任务名」 */
   scope: string
-  branch?: string
   /** 对话里点了 Read/Edit 的路径：在文件面板里打开（nonce 让同一路径点第二次也响） */
   openRequest?: { path: string; line?: number; nonce: number }
   openTerm?: (name: string) => void
@@ -72,10 +70,8 @@ export function InspectorPanels({ open, panel, onPanel, dir, scope, branch, open
             </Tooltip>
           ))}
         </div>
-        <div className="tt-ins-scope" title={dir}>
-          <span className="nm">{scope}</span>
-          {branch && <span className="br"><BranchIcon size={12} />{branch}</span>}
-        </div>
+        {/* 只写「项目 · 任务」：分支底部状态条已经有了，这里再来一枚只是把头挤成两行 */}
+        <div className="tt-ins-scope" title={dir}><span className="nm">{scope}</span></div>
         {/* 三个面板都挂着，只切 display：树的展开态、Git 的选中都留着 */}
         <div className="tt-ins-body" style={{ display: panel === 'files' ? 'flex' : 'none' }}>
           {/* 一个搜索框：打字按名字过滤，回车在文件内容里搜（22 设计 §3.4 的「名称 / 内容」两段并成了一框） */}
