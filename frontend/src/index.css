@@ -611,6 +611,18 @@ html[data-pointer="coarse"] .tt-csearch-line, html[data-pointer="coarse"] .tt-cs
 .tt-tree .dot.run { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
 .tt-tree .dot.wait { background: var(--warn); box-shadow: 0 0 0 3px var(--warn-soft); }
 .tt-tree .dot.fin { background: var(--swarm); }
+/* 任务 → 会话的从属：任务名加粗；会话缩一级，左边一根从任务状态点垂下来的引线，每行一个小肘接到图标。
+   引线钉在任务行图标槽正中（padding 32 + 槽 20 / 2 = 42），肘从引线伸到会话行的图标槽（54）。 */
+.tt-tree-task > .tt-tree-row .nm { font-weight: 600; }
+.tt-tree-sessions { position: relative; }
+.tt-tree-sessions::before { content: ''; position: absolute; left: 41.5px; top: -4px; bottom: 15px; width: 1px; background: var(--border); }
+.tt-tree-sessions .tt-tree-row { position: relative; }
+.tt-tree-sessions .tt-tree-row::after { content: ''; position: absolute; left: 41.5px; top: 50%; width: 10px; height: 1px; background: var(--border); }
+.tt-tree-sessions .tt-tree-row .nm { color: var(--text-dim); font-size: var(--fs-sm); }
+.tt-tree-sessions .tt-tree-row.on .nm { color: var(--text-bright); }
+:where(html[data-pointer="fine"]) .tt-tree-sessions .tt-tree-row:hover .nm { color: var(--text-bright); }
+/* 这一组里有当前标签：引线跟着亮成蓝，一眼看出当前会话挂在哪个任务下 */
+.tt-tree-task:has(.tt-tree-row.on) .tt-tree-sessions::before, .tt-tree-task:has(.tt-tree-row.on) .tt-tree-sessions .tt-tree-row::after { background: var(--accent-border); }
 /* 会话行末尾的状态点（只在运行 / 等你时有） */
 .tt-tree-row .nm + .dot { flex: 0 0 auto; margin-left: auto; }
 .tt-tree-empty { padding: 4px 12px 8px; color: var(--text-dimmer); font-size: var(--fs-meta); }

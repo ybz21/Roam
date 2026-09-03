@@ -95,7 +95,8 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
             </>
           )}
         </button>
-        {open && task.sessions.map((s) => sessionRow(task.key, s, lvl))}
+        {/* 会话缩进一级、左边一根从任务状态点垂下来的引线 + 每行一个小肘：谁派生自谁一眼看出来 */}
+        {open && <div className="tt-tree-sessions">{task.sessions.map((s) => sessionRow(task.key, s, (lvl + 1) as 2 | 3))}</div>}
       </div>
     )
   }
