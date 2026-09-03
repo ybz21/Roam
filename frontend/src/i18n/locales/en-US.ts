@@ -281,6 +281,8 @@ const enUS = {
   'workspace.search': 'Search',
   'workspace.searchPlaceholder': 'Search projects, sessions and files',
   'tree.loose': 'Loose sessions',
+  'set.account': 'Account',
+  'set.accountDesc': 'Fullscreen and sign out. About and theme are on this page too.',
   'tree.unfinished': 'Unfinished ↑{n}',
   'tree.noTasks': 'No tasks yet — start one from the project page',
   'tree.empty': 'No projects yet',

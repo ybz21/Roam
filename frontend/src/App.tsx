@@ -54,6 +54,7 @@ import { sessionProject, useSessionProject, useSessionProjects, setSessionProjec
 import { MobileSheet, SheetRow, SheetSection } from './components/shell/MobileSheet'
 import { GlobalSearch, openPalette, type PaletteActions, type PaletteItem } from './components/shell/palette'
 import { ProjectTree, firstSessionOf, taskPathOf } from './components/shell/ProjectTree'
+import { InspectorPanels, type InspectorPanelKind } from './components/shell/InspectorPanels'
 import { buildTaskTree } from './components/shell/task-tree'
 import { taskKeyOf, isLooseTask, looseSessionOf, type TaskKey } from './components/sessions/task-key'
 import { setSessionLabels, sessionLabel, sessionDisplay } from './components/sessions/session-label'
@@ -168,6 +169,12 @@ export default function App() {
   const projTable = useSessionProjects()
   const keyOf = (n: string) => taskKeyOf(n, projTable[n]?.worktree)
   const taskTerms = activeTask ? terms.filter((n) => keyOf(n) === activeTask) : terms
+  // 右栏三面板（22 设计 §3.4）：看哪个面板记本机；对话里点了路径要文件面板打开哪个
+  const [panel, setPanelLocal] = useState<InspectorPanelKind>(() => {
+    try { const v = localStorage.getItem('roam.inspectorPanel'); return v === 'git' || v === 'worktree' ? v : 'files' } catch { return 'files' }
+  })
+  const setPanel = (p: InspectorPanelKind) => { setPanelLocal(p); try { localStorage.setItem('roam.inspectorPanel', p) } catch { /* 记不住而已 */ } }
+  const [insReq, setInsReq] = useState<{ path: string; line?: number; nonce: number } | undefined>()
   // 左栏树的三份原料（22 设计 §3.2）：/projects 与每项目的 worktree 挂在下面那条 15s 轮询上，/sessions 挂 5s 那条
   const [treeSrc, setTreeSrc] = useState<{ projects: any[]; worktrees: Record<string, any[]> }>({ projects: [], worktrees: {} })
   const [sessList, setSessList] = useState<{ name: string; label?: string }[]>([])
@@ -329,8 +336,17 @@ export default function App() {
       const mod = e.metaKey || e.ctrlKey
       if (mod && e.key.toLowerCase() === 'j') {
         e.preventDefault()
+        // 任务视图：⌘J 开合右栏（Dock 没了，这个键让给它）；⌘⇧J 仍是 Focus
+        if (taskView && !e.shiftKey) { space.toggleInspectorCollapsed(); return }
         if (e.shiftKey) space.toggleFocus()
         else { space.setFocus('none'); space.toggleDock() }
+        return
+      }
+      // 右栏切面板：⌘⇧E 文件、⌘⇧G Git（22 设计 §9）
+      if (mod && e.shiftKey && taskView && (e.key.toLowerCase() === 'e' || e.key.toLowerCase() === 'g')) {
+        e.preventDefault()
+        setPanel(e.key.toLowerCase() === 'e' ? 'files' : 'git')
+        if (space.inspectorCollapsed) space.toggleInspectorCollapsed()
         return
       }
       // Esc 收一层：覆盖态先收面板，聚焦态退回分栏。两者都不关终端、不离开页面。
@@ -638,6 +654,9 @@ export default function App() {
       onNeedsInput={setMobileWaiting}
       visibleTerms={hasSider ? taskTerms : terms}
       onNew={taskView ? { terminal: () => { void newTerminalInTask() }, task: () => { go('projects'); requestIntent('new-project') } } : undefined}
+      // 任务视图里对话点路径 / Git 都落到右栏三面板；手机与 Page 态退回 TerminalPane 自己的二级页
+      onOpenFile={taskView ? (path, line) => { setPanel('files'); if (space.inspectorCollapsed) space.toggleInspectorCollapsed(); setInsReq((prev) => ({ path, line, nonce: (prev?.nonce || 0) + 1 })) } : undefined}
+      onOpenGit={taskView ? () => { setPanel('git'); if (space.inspectorCollapsed) space.toggleInspectorCollapsed() } : undefined}
       // Focus 只在桌面有意义：手机上终端本来就是全屏覆盖层；任务视图里 focus 是常态，没有开关
       focus={hasSider && !taskView ? { on: space.focus !== 'none', toggle: space.toggleFocus, hint: `${modKeyLabel}⇧J` } : undefined}
     />
@@ -648,7 +667,7 @@ export default function App() {
     projects: <Projects openTerm={openTerm} closeTerm={closeTerm} initialKey={projectSub || undefined} activeTerm={active} />,
     sessions: <Sessions openTerm={openTerm} closeTerm={closeTerm} activeTerm={active} />,
     files: <FilesPage openTerm={openTerm} />,
-    settings: <SettingsPage sub={settingsSub} onNav={(r) => go(r)} />,
+    settings: <SettingsPage sub={settingsSub} onNav={(r) => go(r)} onLogout={logout} />,
     hub: <HubPage />,
     plugins: <PluginsPanel initialId={pluginSub || undefined} />,
     browser: <BrowserView />,
@@ -780,22 +799,8 @@ export default function App() {
     },
   ] : []
 
-  // 设置不在这里：它在侧栏底部有自己的入口，菜单里再放一条就是同一页两个门
-  const accountMenu: MenuProps['items'] = [
-    { key: 'about', icon: ICONS.github, label: t('nav.about'), onClick: () => go('about') },
-    { type: 'divider' },
-    { key: 'theme', icon: themeIcon, label: mode === 'dark' ? t('common.lightTheme') : t('common.darkTheme'), onClick: () => toggleTheme() },
-    ...(fsSupported ? [{ key: 'fs', icon: fsIcon, label: isFs ? t('common.exitFullscreen') : t('common.fullscreen'), onClick: () => toggleFs() }] : []),
-    { type: 'divider' },
-    {
-      key: 'logout', danger: true, label: t('common.logout'),
-      icon: <LogoutIcon />,
-      onClick: () => Modal.confirm({
-        title: t('common.logoutConfirm'), okText: t('common.logout'), cancelText: t('common.cancel'),
-        okButtonProps: { danger: true }, onOk: logout,
-      }),
-    },
-  ]
+  // 侧栏脚的「当前设备」账户菜单没了（22 设计 §3.2 拍板）：关于 / 主题本来在设置页，全屏 / 退出并进设置 › 外观。
+  // 手机「更多」sheet 里那几行还在（手机没有设置页的常驻入口）。
 
   // 侧栏是否是 64px 轨：用户手动收起 / Focus 聚焦 / 非 large 档（expanded 一律用轨）
   // 任务视图里 focus 是常态（22 设计），侧栏必须留着——树就在里面；只有用户 ⌘⇧J 的 Focus 才收轨
@@ -843,12 +848,11 @@ export default function App() {
             rail={navRail} active={tab} groups={navGroups} onGo={go}
             settings={{ key: 'settings', label: t('nav.env'), icon: ICONS.settings }}
             linkStatus={<LinkStatus collapsed={navRail} />}
-            accountName={t('nav.thisDevice')}
-            account={accountMenu}
             nodeMenu={nodeItems}
+            onSearch={openPalette}
+            searchHint={`${modKeyLabel}K`}
             tree={<ProjectTree tree={tree} activeTask={activeTask} activeSession={active}
               onProject={onTreeProject} onTask={onTreeTask} onSession={onTreeSession}
-              onSearch={openPalette} searchHint={`${modKeyLabel}K`}
               onAddProject={() => { go('projects'); requestIntent('new-project') }} />}
             hubAlarm={hubHealth.level === 'ok' ? undefined : t('hub.why.' + (hubHealth.reasons[0] || 'unknown'))}
             node={curNode ? {
@@ -913,6 +917,20 @@ export default function App() {
           </div>
         )}
       </Layout>
+
+      {/* 右栏三面板：唯一的 AdaptivePanel，portal 进 InspectorColumn 的槽位；Page 态 open=false 自动收起 */}
+      {hasSider && (() => {
+        const loose = activeTask ? isLooseTask(activeTask) : false
+        const owner = activeTask && !loose ? tree.projects.find((p) => p.tasks.some((x) => x.key === activeTask)) : undefined
+        const task = owner?.tasks.find((x) => x.key === activeTask)
+        const dir = activeTask && !loose ? activeTask : (activeProject?.dir || '')
+        const scope = owner && task ? `${owner.name} · ${task.name}` : (active ? sessionLabel(active) || active : '')
+        return (
+          <InspectorPanels open={taskView} panel={panel} onPanel={setPanel} dir={dir} scope={scope}
+            branch={task?.branch || activeProject?.branch} openRequest={insReq} openTerm={openTerm}
+            onClose={() => { if (!space.inspectorCollapsed) space.toggleInspectorCollapsed() }} />
+        )
+      })()}
 
       {/* 底栏 6 格 + 会话坞（13 §4.1/§4.2）：概览/项目/文件/浏览器/手机 + 更多。
           360px 下每格 60px，标签 11px 单行截断——所以格数到此为止，再加就只剩图标了。

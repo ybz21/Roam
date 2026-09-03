@@ -24,8 +24,8 @@ export const NAV_RAIL = 48
 export const OVERLAY_DOCK = 480
 
 /** Inspector（Git / Worktree 列）的尺寸契约，见 14-desktop-workspace/panels-desktop.html */
-export const INSPECTOR_MIN = 360
-export const INSPECTOR_DEFAULT = 420
+export const INSPECTOR_MIN = 280
+export const INSPECTOR_DEFAULT = 350
 // 文件抽屉是两层折叠（文件夹层 + 预览层），两层加起来能到一千出头——880 会把预览截短。
 // 真正的上界仍由 inspectorBounds 按剩余空间给，这里只是"用户最多能拖多宽"。
 export const INSPECTOR_MAX = 1200

@@ -51,8 +51,12 @@ export default function TerminalPane(props: {
   visibleTerms?: string[]
   /** 标签条右端「新建 ▾」：在当前任务里开终端 / 去项目页开新任务。不传就不画 */
   onNew?: { terminal: () => void; task: () => void }
+  /** 对话里点 Read/Edit 的路径 → 右栏文件面板打开（22 设计 §3.4）；不传就退回今天的路（文件页） */
+  onOpenFile?: (path: string, line?: number) => void
+  /** 对话里点「Git」→ 右栏切到 Git 面板 */
+  onOpenGit?: () => void
 }) {
-  const { terms, active, setActive, closeTerm, fontSize, setFontSize, statusMap, setStatus, termRefs, sendKey, onCollapse, claudeMap, claudeView, setClaudeView, codexMap, codexView, setCodexView, onRename, onReorder, onNeedsInput, focus, visibleTerms, onNew } = props
+  const { terms, active, setActive, closeTerm, fontSize, setFontSize, statusMap, setStatus, termRefs, sendKey, onCollapse, claudeMap, claudeView, setClaudeView, codexMap, codexView, setCodexView, onRename, onReorder, onNeedsInput, focus, visibleTerms, onNew, onOpenFile, onOpenGit } = props
   const tabs = visibleTerms ?? terms
   const fileDock = props.fileDock || 'right'
   const { message, modal } = AntApp.useApp()
@@ -118,6 +122,7 @@ export default function TerminalPane(props: {
   const promptOff = !!prefsData.promptPopupOff
   const togglePromptOff = () => savePreferences({ promptPopupOff: !promptOff })
 
+  // 语音开关不再在桌面工具条上（22 设计 §3.3 语音归 composer）；手机「⋯」sheet 里那一行与设置页仍能关掉
   const showVoice = prefsData.showVoiceButton !== false
   const setShowVoice = (v: boolean | ((prev: boolean) => boolean)) => {
     const next = typeof v === 'function' ? v(showVoice) : v
@@ -129,14 +134,11 @@ export default function TerminalPane(props: {
   const [showFiles, setShowFiles] = useState(fileDock === 'left')
   const [showGit, setShowGit] = useState(false)
   const [cwd, setCwd] = useState('')
-  // 右侧停靠时文件与 Git 是**同一个抽屉的两种内容**：Inspector 是个栈，只画栈顶那个。
-  // 所以两个按钮不能同时亮着——亮着的那个必须是你现在看得见的那个，否则「文件」亮着、
-  // 露出来的却是 Git，关掉 Git 又冒出个没人叫的文件面板。开一个就收另一个。
-  // 左侧停靠时文件走左栏、Git 走右抽屉，天然并列，不受此限。
-  const oneDrawer = fileDock === 'right'
-  const toggleFiles = () => setShowFiles((s) => { if (!s && oneDrawer) setShowGit(false); return !s })
-  const toggleGit = () => setShowGit((s) => { if (!s && oneDrawer) setShowFiles(false); return !s })
-  const openGitFromChat = () => { if (oneDrawer) setShowFiles(false); setShowGit(true) }
+  // 右侧停靠：文件 / Git 不再是这里的抽屉，归右栏三面板（InspectorPanels，22 设计 §3.4），
+  // 这里只把「要看哪个」递上去。左侧停靠（#/term 独立页）的 FileWorkspace 照旧。
+  const toggleFiles = () => setShowFiles((s) => !s)
+  const toggleGit = () => setShowGit((s) => !s)
+  const openGitFromChat = () => { if (onOpenGit) onOpenGit(); else setShowGit(true) }
   // 对话页里点工具行的文件路径 → 在文件面板打开（带行号就跳到那一行）。
   // 左侧停靠时 <FileWorkspace> 已挂载在同一页，直接发意图即可开成对话旁边的标签页；
   // 否则先切到文件页再发，跟 ⌘K 搜索结果打开文件是同一条路（见 intents.ts）。
@@ -159,7 +161,7 @@ export default function TerminalPane(props: {
       requestIntent(OPEN_FILE_INTENT, { path, line, side: true })
       return
     }
-    if (oneDrawer) setShowGit(false)
+    if (onOpenFile) { onOpenFile(path, line); return }
     setShowFiles(true)
     setDockFileReq((prev) => ({ path, nonce: (prev?.nonce || 0) + 1 }))
   }
@@ -765,17 +767,14 @@ export default function TerminalPane(props: {
       <Dropdown trigger={['click']} menu={{ items: tmuxMenu(t) as any, onClick: ({ key }) => { if (key === PFX + 'x') openPaneCloseConfirm(); else sendKey(key) } }} placement="bottomLeft">
         <button type="button" className="tt-tbtn">{TI.tmux}<span>tmux</span><span style={{ color: 'var(--text-dimmer)', display: 'inline-flex' }}><ChevronDown size={11} /></span></button>
       </Dropdown>
-      {active && (
-        <TBtn icon={TI.newTab} label={t('terminal.newTab')} title={t('terminal.openInNewTabTitle')}
-          onClick={() => window.open(`/#/term/${encodeURIComponent(active)}`, '_blank')} />
-      )}
+      {/* 「新标签」进了标签右键菜单（标签条上已有「新建」）；文件 / Git 归右栏活动条；
+          语音归 composer——22 设计 §3.3 去掉的四枚。独立页（左停靠）没有右栏，文件 / Git 仍在这 */}
       {active && <TBtn icon={TI.rename} label={t('session.rename')} title={t('session.renameTitle')} onClick={() => setRenameSession(active)} />}
       <span className="tt-sep" />
       <TBtn icon={promptOff ? TI.bellOff : TI.bellOn} label={t('prompt.popup')} on={!promptOff}
         title={promptOff ? t('prompt.popupOff') : t('prompt.popupOn')} onClick={togglePromptOff} />
-      <TBtn icon={TI.folder} label={t('chat.files')} on={showFiles} title={t('terminal.fileBrowserTitle')} onClick={toggleFiles} />
-      <TBtn icon={TI.git} label={t('git.title')} on={showGit} title={t('terminal.gitPanelTitle')} onClick={toggleGit} />
-      <TBtn icon={TI.mic} label={t('voice.input')} on={showVoice} title={showVoice ? t('voice.hideButton') : t('voice.showButton')} onClick={() => setShowVoice((v) => !v)} />
+      {fileDock === 'left' && <TBtn icon={TI.folder} label={t('chat.files')} on={showFiles} title={t('terminal.fileBrowserTitle')} onClick={toggleFiles} />}
+      {fileDock === 'left' && <TBtn icon={TI.git} label={t('git.title')} on={showGit} title={t('terminal.gitPanelTitle')} onClick={toggleGit} />}
       <span className="tt-spacer" />
       <span className="tt-tgroup">
         <TBtn icon={TI.scrollUp} title={t('terminal.scrollHistory')} onClick={() => active && termRefs.current[active]?.scroll(-12)} />
@@ -1009,16 +1008,16 @@ export default function TerminalPane(props: {
       {/* 文件树也进 Inspector：它是最后一种「从右边出来一块」的浮层（420 fixed，
           同样盖住终端）。收进来之后 文件 / Git / Worktree 三者互斥——同一时刻只有一个
           Inspector，关掉栈顶自然露出下面那个（图纸 panels-desktop.html §二）。 */}
-      {fileDock === 'right' && (
+      {/* 右停靠的文件 / Git 抽屉没了：归右栏 InspectorPanels（22 设计 §3.4）。
+          这里只剩左停靠（#/term 独立页）和手机上没有右栏时的文件 / Git 二级页。 */}
+      {fileDock === 'right' && !onOpenFile && (
         <AdaptivePanel open={showFiles} layer="session" title={t('nav.files')}
           onClose={() => setShowFiles(false)}>
           <FileBrowser dir={cwd} accent="var(--accent)" layout="dock" onClose={() => setShowFiles(false)}
             openRequest={dockFileReq || undefined} />
         </AdaptivePanel>
       )}
-      {/* 手机走全屏二级页（13 §6）：420 的浮层在 360 屏上盖到 92vw，还压着底栏、不吃安全区。
-          桌面维持右缘浮动面板不变。layer="session" —— 这一层是从会话全屏(100)里唤起的。 */}
-      <AdaptivePanel open={showGit} layer="session" title={t('git.title')}
+      <AdaptivePanel open={showGit && !onOpenGit} layer="session" title={t('git.title')}
         onClose={() => setShowGit(false)}>
         <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}><Spin /></div>}>
           <GitPanel dir={cwd} accent="var(--accent)" onClose={() => setShowGit(false)} />

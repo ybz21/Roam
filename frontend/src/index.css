@@ -514,6 +514,43 @@ html[data-pointer="coarse"] .tt-nav-collapse::after {
 .tt-nav-foot { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; border-top: 1px solid var(--border-subtle); }
 .tt-nav-account .dots { margin-left: auto; flex: 0 0 auto; display: flex; color: var(--text-dimmer); }
 
+/* ── 侧栏搜索行（22 设计 §3.5）：顶栏 Command Center 撤了，⌘K 的可见入口回到品牌下面 ──
+   实底 + 32 高的假输入框：与底同色只描一圈边的话没人看得出这里能搜（有人用了半年不知道有 ⌘K） */
+.tt-nav-search {
+  display: flex; align-items: center; gap: var(--sp-2); width: 100%; height: 32px;
+  margin: 0 0 var(--sp-2); padding: 0 10px;
+  border: 1px solid var(--border-subtle); border-radius: var(--r-sm);
+  background: var(--bg-elevated); color: var(--text-dim); font-size: var(--fs-sm);
+  text-align: left; cursor: pointer; transition: border-color .12s, color .12s;
+}
+:where(html[data-pointer="fine"]) .tt-nav-search:hover { border-color: var(--accent-border); color: var(--text-bright); }
+.tt-nav-search .ph { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-nav-search kbd {
+  flex: 0 0 auto; padding: 1px 5px; border: 1px solid var(--border); border-radius: 5px;
+  background: var(--bg-base); color: var(--text-dim); font-size: var(--fs-micro); font-family: var(--mono);
+}
+.tt-nav.rail .tt-nav-search { justify-content: center; width: 36px; margin: 0 auto var(--sp-2); padding: 0; border-radius: var(--r-xs); }
+
+/* ── 右栏三面板（22 设计 §3.4）：活动条 + 作用域头 + 文件 / Git / Worktree ── */
+.tt-ins { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
+.tt-ins-acts { display: flex; align-items: center; gap: 2px; height: 40px; padding: 0 8px; border-bottom: 1px solid var(--border-subtle); flex: 0 0 auto; }
+.tt-ins-act {
+  position: relative; width: 32px; height: 32px; display: grid; place-items: center;
+  border: 0; border-radius: var(--r-xs); background: none; color: var(--text-dim); cursor: pointer;
+}
+:where(html[data-pointer="fine"]) .tt-ins-act:hover { background: var(--list-hover); color: var(--text-bright); }
+.tt-ins-act.on { color: var(--text-bright); }
+.tt-ins-act.on::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: -4px; height: 2px; border-radius: 2px; background: var(--accent); }
+html[data-pointer="coarse"] .tt-ins-act { width: 44px; height: 40px; }
+.tt-ins-scope { display: flex; align-items: center; gap: var(--sp-2); height: 36px; padding: 0 14px; flex: 0 0 auto; font-size: var(--fs-sm); font-weight: 600; color: var(--text-bright); }
+.tt-ins-scope .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-ins-scope .br {
+  display: inline-flex; align-items: center; gap: 4px; flex: 0 1 auto; min-width: 0; max-width: 50%;
+  padding: 1px 8px; border: 1px solid var(--border); border-radius: var(--r-pill);
+  font: 400 var(--fs-micro)/1.5 var(--mono); color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tt-ins-body { flex: 1; min-height: 0; min-width: 0; flex-direction: column; }
+
 /* ── 项目树（22 设计 §3.2）：项目 → 任务 → 会话，塞在导航组下面原来空着的那段 ──
    树里每一行就是侧栏那枚 .tt-nav-item：高、图标槽、hover、选中态、计数徽标全是它的；
    这里只加缩进和图标槽里放的东西。不另起一套长相。 */
@@ -535,7 +572,10 @@ html[data-pointer="coarse"] .tt-nav-collapse::after {
   flex: 0 0 auto; padding: 1px 5px; border: 1px solid var(--border); border-radius: 5px;
   background: var(--bg-base); color: var(--text-dim); font-size: var(--fs-micro); font-family: var(--mono);
 }
+.tt-tree-head .gl { flex: 1; padding-left: 10px; color: var(--text-dimmer); font-size: var(--fs-micro); font-weight: 700; letter-spacing: .1em; }
 .tt-tree-head .tt-act { color: var(--text-dimmer); }
+/* 项目行的首字母圆标：项目卡那枚（icoOf 取色）缩到 20，住在图标槽里 */
+.tt-tree-row .av { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font: 700 11px/1 var(--mono); }
 .tt-tree-proj + .tt-tree-proj { margin-top: 4px; }
 .tt-tree-proj.loose { margin-top: 10px; }
 .tt-tree-proj .gl { padding: 0 10px; margin-bottom: var(--sp-1); color: var(--text-dimmer); font-size: var(--fs-micro); font-weight: 700; letter-spacing: .1em; }

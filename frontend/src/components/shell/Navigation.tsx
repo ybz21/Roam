@@ -12,8 +12,7 @@
 import { Dropdown, Tooltip } from 'antd'
 import type { MenuProps } from 'antd'
 import type { ReactNode } from 'react'
-import { ChevronLeft, ChevronRight } from '../../icons'
-import { HostIcon } from '../cluster/cluster-icons'
+import { ChevronLeft, ChevronRight, SearchIcon } from '../../icons'
 import { useI18n } from '../../i18n'
 
 export type NavEntry = {
@@ -29,8 +28,11 @@ export type NavGroup = { label: string; items: NavEntry[] }
 
 export function Navigation({
   rail, active, groups, onGo, settings, hubAlarm,
-  linkStatus, account, accountName, node, nodeMenu, onToggleRail, tree,
+  linkStatus, node, nodeMenu, onToggleRail, tree, onSearch, searchHint,
 }: {
+  /** 品牌下面那行搜索：⌘K 面板的可见入口（22 设计 §3.5：顶栏撤了，搬到这） */
+  onSearch?: () => void
+  searchHint?: string
   /** 项目树（22 设计 §3.2）：挂在导航组下面、脚上面，吃掉原来空着的那段高度 */
   tree?: ReactNode
   /** 48px 轨态：用户收起 / Focus / 非 large 档 */
@@ -41,8 +43,6 @@ export function Navigation({
   /** 设置：是页面，但摆在底部——它跟「概览/项目」不是一类事（14 §4.4） */
   settings: NavEntry
   linkStatus: ReactNode
-  account: MenuProps['items']
-  accountName: string
   /** 多机（连了中心）时给：顶部出现机器切换器；单机传 null，那一块整个不渲染 */
   node: { name: string; mark: ReactNode; dot: string; latency: string } | null
   /** 切换器下拉里的机器列表（含中心）；单机时不会用到 */
@@ -74,7 +74,14 @@ export function Navigation({
         {!rail && <strong className="wd">Roam</strong>}
       </div>
 
-      {/* 搜索不在这儿：⌘K 的可见入口是树标题行右边那枚放大镜（ProjectTree），侧栏本身照旧 */}
+      {/* 搜索：顶栏 Command Center 撤了（22 设计 §3.5），这一行是桌面上唯一看得见的入口 */}
+      {onSearch && (
+        rail
+          ? <Tooltip title={t('workspace.search')} placement="right"><button type="button" className="tt-nav-search" onClick={onSearch} aria-label={t('workspace.search')}><SearchIcon size={15} /></button></Tooltip>
+          : <button type="button" className="tt-nav-search" onClick={onSearch} title={t('workspace.search')}>
+              <SearchIcon size={15} /><span className="ph">{t('workspace.searchPlaceholder')}</span>{searchHint && <kbd>{searchHint}</kbd>}
+            </button>
+      )}
 
 
       <div className={`tt-nav-list${tree && !rail ? ' has-tree' : ''}`}>
@@ -114,21 +121,8 @@ export function Navigation({
         {/* 设置摆在这儿而不是账户菜单里：它是一整页，且是这列里唯一天天要开的一页——
             藏在下拉里等于每次进设置都多点一下。菜单里那条随之删掉，一个入口就够。 */}
         {item(settings)}
-        {/* 关于 / 主题 / 全屏 / 退出 留在账户菜单：它们是操作不是导航，
-            和「概览/项目」并排时，退出登录和切主题的误触代价差了几个数量级 */}
-        {/* 账户按钮回到它本来的样子：这台设备 + 关于/主题/全屏/退出。
-            机器切换已经搬到最上面，这里不再兼两份职。 */}
-        <Dropdown menu={{ items: account }} trigger={['click']} placement={rail ? 'topLeft' : 'top'}>
-          <button type="button" className="tt-nav-account" title={accountName} aria-label={accountName}>
-            <span className="av">{hostIcon}</span>
-            {!rail && (
-              <>
-                <span className="nm">{accountName}</span>
-                <span className="dots">{moreIcon}</span>
-              </>
-            )}
-          </button>
-        </Dropdown>
+        {/* 「当前设备」那枚账户菜单没了（22 设计 §3.2 拍板）：关于 / 主题本来就在设置页，
+            全屏 / 退出并进设置 › 外观。脚只剩 设置 / 收起。 */}
         <button type="button" className="tt-nav-collapse" onClick={onToggleRail}
           title={rail ? t('common.expand') : t('common.collapse')}>
           <span className="ic">{rail ? chevronRight : chevronLeft}</span>
@@ -143,9 +137,7 @@ const stroke = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeL
 const svg = (children: ReactNode) => <svg viewBox="0 0 24 24" width={18} height={18} {...stroke}>{children}</svg>
 // 主机图标而不是姓名首字母：这里代表的是"你连着的这台机器"，不是一个人。
 // 尺寸跟导航项同为 18：整列图标要落在同一条竖线、同一个视觉重量上。
-const hostIcon = <HostIcon size={18} />
 const chevronDown = <svg viewBox="0 0 24 24" width={14} height={14} {...stroke}><polyline points="6 9 12 15 18 9" /></svg>
 const chevronLeft = <ChevronLeft size={18} />
 const chevronRight = <ChevronRight size={18} />
-// 「•••」是三个句点，不是图标：字号下和标点混作一团，也跟不上这一列的线性图标语言
-const moreIcon = <svg viewBox="0 0 24 24" width={16} height={16} fill="currentColor"><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg>
+

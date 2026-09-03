@@ -37,6 +37,7 @@ import { ActivityRail, useRecentActivity, RAIL_CSS } from './project-list/activi
 import { ProjectCard, CARD_CSS } from './project-list/project-card'
 import { useSwarmProjection, normDir } from './project-list/swarm-projection'
 import FileBrowser from '../files/FileBrowser'
+import { VoiceInput } from '../chat/VoiceInput'
 import { AgentLogo, ArchiveIcon, ArrowDown, ArrowUp, CheckIcon, ChevronDown, CircleIcon, CloseIcon, DiffIcon, ForkIcon, MergeIcon, PaperclipIcon, PlayIcon, PlusIcon, PushIcon, SwarmIcon, TerminalIcon, TrashIcon, WarnIcon, WindowsIcon } from '../../icons'
 import { BranchIcon } from '../git/parts'
 import { lazyRetry } from '../lazy-retry'
@@ -1470,7 +1471,6 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
               <span className="tt-cgrp">
                 {/* pill 一律是真按钮：<span onClick> 聚不上焦、键盘按不动，长得也不像能点 */}
                 <button type="button" className={`tt-pill${wtMode === 'new' ? ' on' : ''}`} aria-pressed={wtMode === 'new'} onClick={() => setWtMode('new')}><BranchIcon size={11} />{t('project.where.new')}</button>
-                <button type="button" className={`tt-pill${wtMode === 'repo' ? ' on' : ''}`} aria-pressed={wtMode === 'repo'} onClick={() => setWtMode('repo')}>{t('project.where.repo')}</button>
                 <button type="button" className={`tt-pill${wtMode === 'existing' ? ' on' : ''}`} aria-pressed={wtMode === 'existing'}
                   disabled={!wts.length} onClick={() => setWtMode('existing')}>{t('project.where.existing', { count: wts.length })}</button>
                 {wtMode === 'existing' && (
@@ -1521,6 +1521,8 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
             )}
             {/* 动作组贴右：📎 和「开干」都是动作，跟左边那些「怎么干」的选项分开 */}
             <span className="tt-cend">
+              {/* 与对话页 composer 同一枚话筒、同一位置（22 设计 §3.4） */}
+              {prefs.showVoiceButton !== false && <VoiceInput inline accent="var(--accent)" onResult={(text) => setPrompt((v) => (v ? v + ' ' : '') + text)} />}
               <button type="button" className="tt-pill ico" title={t('project.attachImage')} aria-label={t('project.attachImage')}
                 disabled={uploading} onClick={() => fileRef.current?.click()}>
                 <PaperclipIcon size={13} />

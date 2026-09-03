@@ -11,7 +11,8 @@
 import { useState, type ReactNode } from 'react'
 import { Tooltip } from 'antd'
 import { useI18n } from '../../i18n'
-import { AgentLogo, ChevronDown, FolderIcon, PlusIcon, SearchIcon, TerminalIcon } from '../../icons'
+import { AgentLogo, ChevronDown, PlusIcon, TerminalIcon } from '../../icons'
+import { icoOf } from '../projects/project-list/project-model'
 import { isLooseTask, taskKeyOf, type TaskKey } from '../sessions/task-key'
 import type { TaskTree, TreeSession, TreeTask } from './task-tree'
 
@@ -35,7 +36,7 @@ function dot(o: { running?: boolean; waiting?: boolean; unfinished?: boolean }, 
   return idlePlaceholder ? <i className="dot idle" /> : null
 }
 
-export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask, onSession, onSearch, searchHint, onAddProject }: {
+export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask, onSession, onAddProject }: {
   tree: TaskTree
   activeTask: TaskKey | null
   /** 当前标签是哪个会话：它所在的会话行再铺一层底 */
@@ -43,9 +44,6 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
   onProject: (key: string) => void
   onTask: (key: TaskKey) => void
   onSession: (key: TaskKey, name: string) => void
-  /** ⌘K 的可见入口：树标题行右边一枚放大镜（顶栏撤了，侧栏本身不加行） */
-  onSearch?: () => void
-  searchHint?: string
   onAddProject?: () => void
 }) {
   const { t } = useI18n()
@@ -96,13 +94,8 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
 
   return (
     <div className="tt-tree">
-      {/* 树头就是搜索：⌘K 的可见入口（顶栏撤了，得有个看得见的地方）；右边挂「添加项目」 */}
       <div className="tt-tree-head">
-        {onSearch && (
-          <button type="button" className="tt-tree-search" onClick={onSearch} title={`${t('workspace.search')}${searchHint ? ` (${searchHint})` : ''}`}>
-            <SearchIcon size={14} /><span className="ph">{t('workspace.searchPlaceholder')}</span>{searchHint && <kbd>{searchHint}</kbd>}
-          </button>
-        )}
+        <span className="gl">{t('nav.projects')}</span>
         {onAddProject && (
           <Tooltip title={t('tree.addProject')} placement="right">
             <button type="button" className="tt-act ico" onClick={onAddProject} aria-label={t('tree.addProject')}><PlusIcon size={13} /></button>
@@ -122,8 +115,9 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
         const showIdle = idleOpen.has(p.key)
         return (
           <div key={p.key} className="tt-tree-proj">
+            {/* 项目的身份就是项目卡上那枚按名字取色的首字母圆标（icoOf），不另画图标 */}
             <button type="button" className={`tt-nav-item tt-tree-row${open ? '' : ' closed'}`} title={p.dir} onClick={() => onProject(p.key)}>
-              <span className="ic"><FolderIcon size={18} /></span>
+              <span className="ic"><span className="av" style={{ color: icoOf(p.key)[0], background: icoOf(p.key)[1] }}>{p.name.slice(0, 1).toUpperCase()}</span></span>
               <span className="nm">{p.name}</span>
               {p.needs > 0 && <span className="bd">{p.needs}</span>}
               {/* 折叠箭头是行内第二个可点目标：点它只折不跳，点别处进项目主页 */}

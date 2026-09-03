@@ -334,9 +334,10 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
                   disabled={uploading} onMouseDown={noBlur} onClick={() => fileRef.current?.click()}>
                   <PaperclipIcon size={13} />
                 </button>
-                {showVoice && <VoiceInput inline accent={accent} onResult={appendText} />}
               </span>
               <span className="tt-cend">
+                {/* 话筒贴着发送键：pill 是「带什么」，话筒是「怎么说」，分开放（22 设计 §3.3） */}
+                {showVoice && <VoiceInput inline accent={accent} onResult={appendText} />}
                 {busy && (
                   <button type="button" className="tt-pill danger" title={t('chat.stopTitle')}
                     onMouseDown={noBlur} onClick={stop}>

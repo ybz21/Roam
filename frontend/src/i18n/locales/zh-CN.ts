@@ -281,6 +281,8 @@ const zhCN = {
   'workspace.search': '搜索',
   'workspace.searchPlaceholder': '搜索项目、会话和文件',
   'tree.loose': '散会话',
+  'set.account': '账户',
+  'set.accountDesc': '全屏与退出登录。关于与主题在同一页。',
   'tree.unfinished': '待收尾 ↑{n}',
   'tree.noTasks': '还没有任务，去项目主页开一个',
   'tree.empty': '还没有项目',
