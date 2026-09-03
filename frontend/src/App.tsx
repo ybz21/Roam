@@ -55,7 +55,8 @@ import { MobileSheet, SheetRow, SheetSection } from './components/shell/MobileSh
 import { GlobalSearch, openPalette, type PaletteActions, type PaletteItem } from './components/shell/palette'
 import { ProjectTree, firstSessionOf, taskPathOf } from './components/shell/ProjectTree'
 import { InspectorPanels, type InspectorPanelKind } from './components/shell/InspectorPanels'
-import { buildTaskTree } from './components/shell/task-tree'
+import { buildTaskTree, type TreeTask } from './components/shell/task-tree'
+import { useSessionCloser } from './components/sessions/session-closer'
 import { taskKeyOf, isLooseTask, looseSessionOf, type TaskKey } from './components/sessions/task-key'
 import RenameSessionModal from './components/sessions/RenameSessionModal'
 import { NewSessionModal } from './components/sessions/NewSessionModal'
@@ -242,7 +243,7 @@ export default function App() {
   const taskView = hasSider && tab === TASK_ROUTE
   // 空间状态（Page / Split / Focus）与 Dock 宽度：唯一的尺寸契约来源
   const space = useWorkspaceLayout(terms.length > 0 || taskView, taskView)
-  const { message: antMessage } = AntApp.useApp()
+  const { message: antMessage, modal: antModal } = AntApp.useApp()
   const modKeyLabel = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || '') ? '⌘' : 'Ctrl+'
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine)
   useEffect(() => {
@@ -613,8 +614,8 @@ export default function App() {
     : ''
   const onTreeProject = (key: string) => go('projects/' + encodeURIComponent(key))
   // 标签条「新建」：在当前任务的 worktree 里开 shell / Claude / Codex，名字与项目页「新开命令行」同款后缀
-  const newTerminalInTask = async (kind: 'shell' | 'claude' | 'codex' = 'shell') => {
-    const key = activeTaskRef.current
+  const newTerminalInTask = async (kind: 'shell' | 'claude' | 'codex' = 'shell', keyArg?: TaskKey) => {
+    const key = keyArg ?? activeTaskRef.current
     const dir = key ? (taskPathOf(tree, key) || sessionProject(looseSessionOf(key))?.dir || '') : ''
     // 名字是展示名（@roam_name），后端另发 id：所以前缀用任务的展示名，不是那串 2026-… 的会话 id
     const first = key ? firstSessionOf(tree, key) : null
@@ -685,6 +686,20 @@ export default function App() {
       return next
     })
     delete termRefs.current[name]
+  }
+  // 真关会话（树的右键菜单）：和会话页同一套分流，关完刷树
+  const closer = useSessionCloser(closeTerm, () => { sessReload.current?.(); treeReload.current?.() })
+  // 收尾一个任务：只有一个会话就走它的关闭分流（worktree 有东西会弹三选一）；多个会话先确认，
+  // 多余的直接结束，最后一个再走分流——worktree 的去留在那一步定
+  const finishTask = (task: TreeTask) => {
+    const [first, ...rest] = task.sessions.map((s) => s.name)
+    if (!first) return
+    if (!rest.length) { void closer.beginClose(first); return }
+    antModal.confirm({
+      title: t('tree.finishTaskConfirm', { name: task.name, n: task.sessions.length }),
+      okText: t('common.confirm'), okButtonProps: { danger: true }, cancelText: t('common.cancel'),
+      onOk: async () => { for (const n of rest) await closer.kill(n); await closer.beginClose(first) },
+    })
   }
   const setStatus = (name: string, s: TermStatus) => setStatusMap((m) => ({ ...m, [name]: s }))
   const sendKey = (seq: string) => active && termRefs.current[active]?.send(seq)
@@ -939,7 +954,8 @@ export default function App() {
               onAddProject={() => { go('projects'); requestIntent('new-project') }}
               onRename={setRenameInTree}
               onRenameTask={(key, name) => { setRenameTask({ key, name }); setRenameTaskVal(prefs.taskNames?.[key] || name) }}
-              onNewTask={setNewTaskDir} />}
+              onNewTask={setNewTaskDir} onKill={(n) => { void closer.beginClose(n) }} onFinishTask={finishTask}
+              onNewInTask={(key, kind) => { void newTerminalInTask(kind, key) }} />}
             hubAlarm={hubHealth.level === 'ok' ? undefined : t('hub.why.' + (hubHealth.reasons[0] || 'unknown'))}
             node={curNode ? {
               name: curNode.name,
@@ -953,6 +969,7 @@ export default function App() {
             onToggleRail={() => space.setNavCollapsed(!space.navCollapsed)}
           />
           <RenameSessionModal session={renameInTree} onClose={() => setRenameInTree(null)} onDone={renameOpenTerm} />
+          {closer.node}
           <Modal open={!!renameTask} title={t('tree.renameTask')} okText={t('common.confirm')} cancelText={t('common.cancel')} destroyOnClose
             onCancel={() => setRenameTask(null)}
             onOk={() => {

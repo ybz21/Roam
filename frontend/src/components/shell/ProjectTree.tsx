@@ -9,7 +9,7 @@
 //   · 没会话也没未合并提交的 worktree 折进「还有 N 个空闲 worktree」一行——真实项目里这种
 //     一抓一把，全铺出来就是一列灰点加一列被截断的分支名。
 import { useState, type ReactNode } from 'react'
-import { Tooltip } from 'antd'
+import { Dropdown, Tooltip } from 'antd'
 import { useI18n } from '../../i18n'
 import { AgentLogo, ChevronDown, PlusIcon, TerminalIcon } from '../../icons'
 import { icoOf } from '../projects/project-list/project-model'
@@ -36,7 +36,7 @@ function dot(o: { running?: boolean; waiting?: boolean; unfinished?: boolean }, 
   return idlePlaceholder ? <i className="dot idle" /> : null
 }
 
-export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask, onSession, onAddProject, onRename, onRenameTask, onNewTask }: {
+export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask, onSession, onAddProject, onRename, onRenameTask, onNewTask, onKill, onFinishTask, onNewInTask }: {
   tree: TaskTree
   activeTask: TaskKey | null
   /** 当前标签是哪个会话：它所在的会话行再铺一层底 */
@@ -51,6 +51,12 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
   onRenameTask?: (key: TaskKey, name: string) => void
   /** 项目行的「+」：在这个项目下开新任务（弹新建会话框，默认新建 worktree） */
   onNewTask?: (dir: string) => void
+  /** 右键会话行「关闭会话」：真的结束它（标签条的 × 只是收起标签） */
+  onKill?: (session: string) => void
+  /** 右键任务行「收尾」：关掉它的会话并处理 worktree */
+  onFinishTask?: (task: TreeTask) => void
+  /** 右键任务行：在它的 worktree 里派生一个终端 / Claude / Codex */
+  onNewInTask?: (key: TaskKey, kind: 'shell' | 'claude' | 'codex') => void
 }) {
   const { t } = useI18n()
   const [closed, setClosed] = useState<Set<string>>(readClosed)
@@ -63,21 +69,33 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
 
   // 每一行都是侧栏那枚 .tt-nav-item：同样的高、图标槽、hover、选中的左线 + 淡蓝底、同一款计数徽标。
   // 区别只有缩进（lvl1 / lvl2）和图标槽里放什么：项目放文件夹，任务放状态点，会话放 agent 标。
-  const rename = (session?: string) => onRename && session
-    ? { onDoubleClick: () => onRename(session), onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); onRename(session) } }
-    : {}
-  const renameTask = (task: TreeTask) => onRenameTask && !isLooseTask(task.key)
-    ? { onDoubleClick: () => onRenameTask(task.key, task.name), onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); onRenameTask(task.key, task.name) } }
-    : {}
+  // 右键菜单：会话行 = 打开 / 重命名 / 关闭会话；任务行 = 起名 / 派生三样 / 收尾。
+  // 标签条的 × 只是收起标签，会话还活着、树上还在——真要关，在这里
+  const sessionMenu = (task: TaskKey, s: TreeSession) => ({ items: [
+    { key: 'open', label: t('tree.menu.open'), onClick: () => onSession(task, s.name) },
+    ...(onRename ? [{ key: 'rename', label: t('session.rename'), onClick: () => onRename(s.name) }] : []),
+    ...(onKill ? [{ type: 'divider' as const }, { key: 'kill', label: t('tree.menu.close'), danger: true, onClick: () => onKill(s.name) }] : []),
+  ] })
+  const taskMenu = (task: TreeTask) => ({ items: [
+    ...(onRenameTask && !isLooseTask(task.key) ? [{ key: 'name', label: t('tree.renameTask'), onClick: () => onRenameTask(task.key, task.name) }] : []),
+    ...(onNewInTask ? [{ type: 'group' as const, label: t('tree.menu.deriveHere'), children: [
+      { key: 'sh', icon: <TerminalIcon size={14} />, label: t('tabs.newTerminal'), onClick: () => onNewInTask(task.key, 'shell') },
+      { key: 'cc', icon: <AgentLogo kind="claude" size={14} />, label: t('tabs.newClaude'), onClick: () => onNewInTask(task.key, 'claude') },
+      { key: 'cx', icon: <AgentLogo kind="codex" size={14} />, label: t('tabs.newCodex'), onClick: () => onNewInTask(task.key, 'codex') },
+    ] }] : []),
+    ...(onFinishTask ? [{ type: 'divider' as const }, { key: 'finish', label: t('tree.menu.finish'), danger: true, onClick: () => onFinishTask(task) }] : []),
+  ] })
   const sessionRow = (task: TaskKey, s: TreeSession, lvl: 1 | 2 | 3) => (
-    <button key={s.name} type="button"
-      className={`tt-nav-item tt-tree-row lvl${lvl}${activeTask === task && activeSession === s.name ? ' on' : ''}`}
-      onClick={() => onSession(task, s.name)} title={s.name} {...rename(s.name)}
-      aria-current={activeTask === task && activeSession === s.name ? 'true' : undefined}>
-      <span className="ic">{s.agent ? <AgentLogo kind={s.agent} size={16} /> : <TerminalIcon size={16} />}</span>
-      <span className="nm">{s.label}</span>
-      {dot(s, false)}
-    </button>
+    <Dropdown key={s.name} trigger={['contextMenu']} menu={sessionMenu(task, s)}>
+      <button type="button"
+        className={`tt-nav-item tt-tree-row lvl${lvl}${activeTask === task && activeSession === s.name ? ' on' : ''}`}
+        onClick={() => onSession(task, s.name)} title={s.name} onDoubleClick={onRename ? () => onRename(s.name) : undefined}
+        aria-current={activeTask === task && activeSession === s.name ? 'true' : undefined}>
+        <span className="ic">{s.agent ? <AgentLogo kind={s.agent} size={16} /> : <TerminalIcon size={16} />}</span>
+        <span className="nm">{s.label}</span>
+        {dot(s, false)}
+      </button>
+    </Dropdown>
   )
 
   // lvl：直接列出的任务是 1，从「待收尾 / 空闲」折叠行里展开的是 2，它们的会话再深一级
@@ -88,8 +106,10 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
     const waiting = task.sessions.some((s) => s.waiting)
     return (
       <div key={task.key} className="tt-tree-task">
+        <Dropdown trigger={['contextMenu']} menu={taskMenu(task)}>
         <button type="button" className={`tt-nav-item tt-tree-row lvl${lvl}${on && !task.sessions.some((s) => s.name === activeSession) ? ' on' : ''}${open ? '' : ' closed'}`}
-          onClick={() => onTask(task.key)} title={task.path} {...renameTask(task)}>
+          onClick={() => onTask(task.key)} title={task.path}
+          onDoubleClick={onRenameTask && !isLooseTask(task.key) ? () => onRenameTask(task.key, task.name) : undefined}>
           <span className="ic">{dot({ running, waiting, unfinished: task.unfinished }, true)}</span>
           <span className="nm">{task.name}</span>
           {task.unfinished && <span className="bd" title={t('tree.unfinished', { n: task.ahead })}>{t('tree.unfinishedShort', { n: task.ahead })}</span>}
@@ -102,6 +122,7 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
             </>
           )}
         </button>
+        </Dropdown>
         {/* 会话缩进一级、左边一根从任务状态点垂下来的引线 + 每行一个小肘：谁派生自谁一眼看出来 */}
         {open && <div className="tt-tree-sessions">{task.sessions.map((s) => sessionRow(task.key, s, (lvl + 1) as 2 | 3))}</div>}
       </div>
