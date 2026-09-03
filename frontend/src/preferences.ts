@@ -21,6 +21,7 @@ export interface Preferences {
   p2pMinSpeedKBps: number // P2P 直连测速回退阈值(KB/s)：平均落盘速率长期低于此值就回退 frp；0=禁用，永远坚持 P2P。默认 200
   workspace: WorkspacePreference // 工作区外壳偏好（13/14 设计共用一份，见下）
   statusBar: StatusBarPreference // 底部状态条（20 设计）
+  taskNames: Record<string, string> // 任务（worktree 路径）→ 人起的显示名；没起就用第一个会话的名字
   _migrated: boolean
 }
 
@@ -93,6 +94,7 @@ const DEFAULTS: Preferences = {
   p2pMinSpeedKBps: 200,
   workspace: WORKSPACE_DEFAULTS,
   statusBar: STATUSBAR_DEFAULTS,
+  taskNames: {},
   _migrated: false,
 }
 

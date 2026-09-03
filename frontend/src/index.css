@@ -599,6 +599,12 @@ html[data-pointer="coarse"] .tt-csearch-line, html[data-pointer="coarse"] .tt-cs
 /* 缩进：每层 22px，和图标槽 + 间距同宽，下一层的图标正好落在上一层文字的起点 */
 .tt-tree-row.lvl1 { padding-left: 32px; }
 .tt-tree-row.lvl2 { padding-left: 54px; }
+/* 项目行的「+」：鼠标下悬停才现身，触屏常显；它占住右端，徽标和箭头跟在它后面 */
+.tt-tree-row .add { flex: 0 0 auto; margin-left: auto; width: 20px; height: 20px; display: grid; place-items: center; border-radius: var(--r-xs); color: var(--text-dimmer); opacity: 0; }
+.tt-tree-row .add ~ .bd, .tt-tree-row .add ~ .chev { margin-left: 0; }
+:where(html[data-pointer="fine"]) .tt-tree-row:hover .add { opacity: 1; }
+:where(html[data-pointer="fine"]) .tt-tree-row .add:hover { background: var(--accent-soft); color: var(--accent); }
+:where(html[data-pointer="coarse"]) .tt-tree-row .add { opacity: 1; }
 /* 箭头钉右端：没有计数徽标时也不能跟在名字后面 */
 .tt-tree-row .chev { flex: 0 0 auto; margin-left: auto; display: grid; place-items: center; color: var(--text-dimmer); transition: transform .15s; }
 .tt-tree-row .bd + .chev, .tt-tree-row .ic.chev { margin-left: 0; }

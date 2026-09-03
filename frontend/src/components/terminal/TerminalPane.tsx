@@ -54,7 +54,8 @@ export default function TerminalPane(props: {
   /** 标签条只画这些（当前任务的会话，22 设计 §3.3）；terms 仍是全集——每个终端常驻挂载，只切可见 */
   visibleTerms?: string[]
   /** 标签条右端「新建 ▾」：在当前任务里开终端 / 去项目页开新任务。不传就不画 */
-  onNew?: { terminal: () => void; claude: () => void; codex: () => void; task: () => void }
+  /** 标签条「新建」：三样都在当前任务的 worktree 里派生；taskLabel 写在菜单顶上说明白 */
+  onNew?: { terminal: () => void; claude: () => void; codex: () => void; taskLabel?: string }
   /** 右栏开关（任务视图）：亮着 = 开着 */
   inspector?: { open: boolean; toggle: () => void }
   /** 对话里点 Read/Edit 的路径 → 右栏文件面板打开（22 设计 §3.4）；不传就退回今天的路（文件页） */
@@ -709,13 +710,14 @@ export default function TerminalPane(props: {
       </div>
       {onNew && (
         <div className="tt-tabs-end">
-          <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: [
-            { key: 'terminal', icon: <TerminalIcon size={14} />, label: t('tabs.newTerminal'), onClick: onNew.terminal },
-            { key: 'claude', icon: <AgentLogo kind="claude" size={14} />, label: t('tabs.newClaude'), onClick: onNew.claude },
-            { key: 'codex', icon: <AgentLogo kind="codex" size={14} />, label: t('tabs.newCodex'), onClick: onNew.codex },
-            { type: 'divider' as const },
-            { key: 'task', icon: <PlusIcon size={13} />, label: t('tabs.newTask'), onClick: onNew.task },
-          ] }}>
+          <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: [{
+            type: 'group' as const, label: onNew.taskLabel ? t('tabs.newInTask', { task: onNew.taskLabel }) : t('tabs.newHere'),
+            children: [
+              { key: 'terminal', icon: <TerminalIcon size={14} />, label: t('tabs.newTerminal'), onClick: onNew.terminal },
+              { key: 'claude', icon: <AgentLogo kind="claude" size={14} />, label: t('tabs.newClaude'), onClick: onNew.claude },
+              { key: 'codex', icon: <AgentLogo kind="codex" size={14} />, label: t('tabs.newCodex'), onClick: onNew.codex },
+            ],
+          }] }}>
             <button type="button" className="tt-tbtn" title={t('tabs.new')}>
               <PlusIcon size={13} /><span>{t('tabs.new')}</span>
               <span style={{ color: 'var(--text-dimmer)', display: 'inline-flex' }}><ChevronDown size={11} /></span>

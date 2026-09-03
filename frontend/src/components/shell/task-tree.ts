@@ -51,6 +51,8 @@ export function buildTaskTree(o: {
   agentOf?: (name: string) => 'claude' | 'codex' | undefined
   /** 会话归属表（/sessions/annotations，15s 一轮）：会话 → 项目 key + worktree 路径 */
   placement?: Record<string, { key: string; worktree?: string; branch?: string }>
+  /** 人给任务起的名（偏好 taskNames）：有就用它，会话改名不再连带任务改名 */
+  nameOf?: (path: string) => string | undefined
 }): TaskTree {
   // 会话的展示信息：先从 /projects 的 top / needs 里捞（带 agent / running / waiting），再补 /sessions 的 label
   const info = new Map<string, TreeSession>()
@@ -86,7 +88,7 @@ export function buildTaskTree(o: {
       const ahead = wt.committedAhead || 0
       tasks.push({
         key: taskKeyOf('', wt.path),
-        name: sessions[0]?.label || wt.branch || wt.path.split('/').pop() || wt.path,
+        name: o.nameOf?.(wt.path) || sessions[0]?.label || wt.branch || wt.path.split('/').pop() || wt.path,
         branch: wt.branch || '',
         path: wt.path,
         ahead,
@@ -107,12 +109,12 @@ export function buildTaskTree(o: {
       const hit = tasks.find((x) => x.path.replace(/\/+$/, '') === wt)
       if (hit) {
         hit.sessions.push(sess(s.name))
-        hit.name = hit.sessions[0].label
+        hit.name = o.nameOf?.(hit.path) || hit.sessions[0].label
         hit.unfinished = false; hit.idle = false
         continue
       }
       const ss = [sess(s.name)]
-      tasks.push({ key: taskKeyOf('', wt), name: ss[0].label, branch: pl.branch || '', path: wt, ahead: 0, unfinished: false, idle: false, sessions: ss })
+      tasks.push({ key: taskKeyOf('', wt), name: o.nameOf?.(wt) || ss[0].label, branch: pl.branch || '', path: wt, ahead: 0, unfinished: false, idle: false, sessions: ss })
     }
     return { key: p.key, name: p.name, dir: p.dir, needs: (p.waiting || 0) + (p.unfinished || 0), tasks }
   })

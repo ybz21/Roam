@@ -36,7 +36,7 @@ function dot(o: { running?: boolean; waiting?: boolean; unfinished?: boolean }, 
   return idlePlaceholder ? <i className="dot idle" /> : null
 }
 
-export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask, onSession, onAddProject, onRename }: {
+export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask, onSession, onAddProject, onRename, onRenameTask, onNewTask }: {
   tree: TaskTree
   activeTask: TaskKey | null
   /** 当前标签是哪个会话：它所在的会话行再铺一层底 */
@@ -45,8 +45,12 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
   onTask: (key: TaskKey) => void
   onSession: (key: TaskKey, name: string) => void
   onAddProject?: () => void
-  /** 双击 / 右键任务行或会话行：改展示名。任务名就是第一个会话的展示名，所以改的都是会话 */
+  /** 双击 / 右键会话行：改会话展示名 */
   onRename?: (session: string) => void
+  /** 双击 / 右键任务行：给任务起名（偏好 taskNames），不动会话和分支 */
+  onRenameTask?: (key: TaskKey, name: string) => void
+  /** 项目行的「+」：在这个项目下开新任务（弹新建会话框，默认新建 worktree） */
+  onNewTask?: (dir: string) => void
 }) {
   const { t } = useI18n()
   const [closed, setClosed] = useState<Set<string>>(readClosed)
@@ -61,6 +65,9 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
   // 区别只有缩进（lvl1 / lvl2）和图标槽里放什么：项目放文件夹，任务放状态点，会话放 agent 标。
   const rename = (session?: string) => onRename && session
     ? { onDoubleClick: () => onRename(session), onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); onRename(session) } }
+    : {}
+  const renameTask = (task: TreeTask) => onRenameTask && !isLooseTask(task.key)
+    ? { onDoubleClick: () => onRenameTask(task.key, task.name), onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); onRenameTask(task.key, task.name) } }
     : {}
   const sessionRow = (task: TaskKey, s: TreeSession, lvl: 1 | 2 | 3) => (
     <button key={s.name} type="button"
@@ -82,7 +89,7 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
     return (
       <div key={task.key} className="tt-tree-task">
         <button type="button" className={`tt-nav-item tt-tree-row lvl${lvl}${on && !task.sessions.some((s) => s.name === activeSession) ? ' on' : ''}${open ? '' : ' closed'}`}
-          onClick={() => onTask(task.key)} title={task.path} {...rename(task.sessions[0]?.name)}>
+          onClick={() => onTask(task.key)} title={task.path} {...renameTask(task)}>
           <span className="ic">{dot({ running, waiting, unfinished: task.unfinished }, true)}</span>
           <span className="nm">{task.name}</span>
           {task.unfinished && <span className="bd" title={t('tree.unfinished', { n: task.ahead })}>{t('tree.unfinishedShort', { n: task.ahead })}</span>}
@@ -124,6 +131,11 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
             <button type="button" className={`tt-nav-item tt-tree-row${open ? '' : ' closed'}`} title={p.dir} onClick={() => onProject(p.key)}>
               <span className="ic"><span className="av" style={{ color: icoOf(p.key)[0], background: icoOf(p.key)[1] }}>{p.name.slice(0, 1).toUpperCase()}</span></span>
               <span className="nm">{p.name}</span>
+              {/* 「+」= 在这个项目下开新任务；和标签条的「新建」分开：那个是在当前 worktree 里派生 */}
+              {onNewTask && (
+                <span className="add" role="button" aria-label={t('tree.newTaskIn', { name: p.name })} title={t('tree.newTaskIn', { name: p.name })}
+                  onClick={(e) => { e.stopPropagation(); onNewTask(p.dir) }}><PlusIcon size={13} /></span>
+              )}
               {p.needs > 0 && <span className="bd">{p.needs}</span>}
               {/* 折叠箭头是行内第二个可点目标：点它只折不跳，点别处进项目主页 */}
               <span className="chev" role="button" aria-label={open ? t('common.collapse') : t('common.expand')}

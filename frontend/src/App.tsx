@@ -37,7 +37,7 @@ const HubPage = lazyRetry(() => import('./components/cluster/HubPage'))
 import UpdateBanner from './components/UpdateBanner'
 import { useThemeMode } from './theme'
 import { useI18n } from './i18n'
-import { usePreferences, loadPreferences } from './preferences'
+import { usePreferences, loadPreferences, savePreferences } from './preferences'
 import { detectPrompt } from './components/prompt'
 import type { PromptSignal } from './components/prompt'
 import { useLayout } from './layout'
@@ -58,6 +58,7 @@ import { InspectorPanels, type InspectorPanelKind } from './components/shell/Ins
 import { buildTaskTree } from './components/shell/task-tree'
 import { taskKeyOf, isLooseTask, looseSessionOf, type TaskKey } from './components/sessions/task-key'
 import RenameSessionModal from './components/sessions/RenameSessionModal'
+import { NewSessionModal } from './components/sessions/NewSessionModal'
 import { setSessionLabels, sessionLabel, sessionDisplay } from './components/sessions/session-label'
 import LinkStatus from './p2p/LinkStatus'
 import { startControlLink, stopControlLink } from './p2p/transport'
@@ -221,8 +222,12 @@ export default function App() {
   // 建了新会话就立刻把会话表 / 归属表 / worktree 都刷一遍，不等下一轮（分别 5s / 15s / 60s）
   const sessReload = useRef<(() => void) | null>(null)
   const treeReload = useRef<(() => void) | null>(null)
-  // 树里双击任务 / 会话行改名（任务名就是它第一个会话的展示名）
+  // 树里双击会话行改会话名；双击任务行给任务起名（偏好 taskNames，不动会话和分支）
   const [renameInTree, setRenameInTree] = useState<string | null>(null)
+  const [renameTask, setRenameTask] = useState<{ key: TaskKey; name: string } | null>(null)
+  const [renameTaskVal, setRenameTaskVal] = useState('')
+  // 项目行「+」：在这个项目下开新任务（弹新建会话框，目录预设、默认新建 worktree）
+  const [newTaskDir, setNewTaskDir] = useState<string | null>(null)
   const [sessList, setSessList] = useState<{ name: string; label?: string }[]>([])
   // URL 上待还原的 id/名字（还没拿到 id 映射前先原样存着）
   const urlTerms = useRef<string[]>(readTermTokens().terms)
@@ -522,8 +527,9 @@ export default function App() {
   // 左栏树：三份原料 memo 一次；已打开会话探测到的 agent 比 /projects 的名单准
   const tree = useMemo(() => buildTaskTree({
     projects: treeSrc.projects, worktrees: treeSrc.worktrees, sessions: sessList, placement: projTable,
+    nameOf: (p) => prefs.taskNames?.[p] || undefined,
     agentOf: (n) => (claudeMap[n]?.running ? 'claude' : codexMap[n]?.running ? 'codex' : undefined),
-  }), [treeSrc, sessList, claudeMap, codexMap, projTable])
+  }), [treeSrc, sessList, claudeMap, codexMap, projTable, prefs.taskNames])
 
   // hash 路由：URL #/xxx 与当前页同步（支持前进/后退、刷新保持、收藏分享）
   useEffect(() => {
@@ -601,15 +607,10 @@ export default function App() {
     space.setDockOpen(true); space.setFocus('none')
   }
   const onTreeSession = (key: TaskKey, name: string) => openTerm(name, key)
-  // 标签条「新任务」：回**当前项目**的主页、光标落进 composer——新任务从那里描述需求开出来（22 设计 §3.3）
-  const newTaskInProject = () => {
-    const key = activeTaskRef.current
-    const proj = key
-      ? tree.projects.find((p) => p.tasks.some((x) => x.key === key))?.key || (isLooseTask(key) ? sessionProject(looseSessionOf(key))?.key : undefined)
-      : undefined
-    go(proj ? 'projects/' + encodeURIComponent(proj) : 'projects')
-    requestIntent('compose')
-  }
+  // 标签条「新建」菜单顶上写着派生自哪个任务
+  const activeTaskLabel = activeTask
+    ? (isLooseTask(activeTask) ? sessionLabel(looseSessionOf(activeTask)) : tree.projects.flatMap((p) => p.tasks).find((x) => x.key === activeTask)?.name || activeTask.split('/').pop() || '')
+    : ''
   const onTreeProject = (key: string) => go('projects/' + encodeURIComponent(key))
   // 标签条「新建」：在当前任务的 worktree 里开 shell / Claude / Codex，名字与项目页「新开命令行」同款后缀
   const newTerminalInTask = async (kind: 'shell' | 'claude' | 'codex' = 'shell') => {
@@ -726,7 +727,7 @@ export default function App() {
       onReorder={reorderTerm}
       onNeedsInput={setMobileWaiting}
       visibleTerms={terms}
-      onNew={taskView ? { terminal: () => { void newTerminalInTask('shell') }, claude: () => { void newTerminalInTask('claude') }, codex: () => { void newTerminalInTask('codex') }, task: newTaskInProject } : undefined}
+      onNew={taskView ? { terminal: () => { void newTerminalInTask('shell') }, claude: () => { void newTerminalInTask('claude') }, codex: () => { void newTerminalInTask('codex') }, taskLabel: activeTaskLabel } : undefined}
       // 任务视图里对话点路径 / Git 都落到右栏三面板；手机与 Page 态退回 TerminalPane 自己的二级页
       onOpenFile={taskView ? (path, line) => openFileTab(path, line) : undefined}
       onOpenGit={taskView ? () => { setPanel('git'); if (space.inspectorCollapsed) space.toggleInspectorCollapsed() } : undefined}
@@ -936,7 +937,9 @@ export default function App() {
             tree={<ProjectTree tree={tree} activeTask={activeTask} activeSession={active}
               onProject={onTreeProject} onTask={onTreeTask} onSession={onTreeSession}
               onAddProject={() => { go('projects'); requestIntent('new-project') }}
-              onRename={setRenameInTree} />}
+              onRename={setRenameInTree}
+              onRenameTask={(key, name) => { setRenameTask({ key, name }); setRenameTaskVal(prefs.taskNames?.[key] || name) }}
+              onNewTask={setNewTaskDir} />}
             hubAlarm={hubHealth.level === 'ok' ? undefined : t('hub.why.' + (hubHealth.reasons[0] || 'unknown'))}
             node={curNode ? {
               name: curNode.name,
@@ -950,6 +953,22 @@ export default function App() {
             onToggleRail={() => space.setNavCollapsed(!space.navCollapsed)}
           />
           <RenameSessionModal session={renameInTree} onClose={() => setRenameInTree(null)} onDone={renameOpenTerm} />
+          <Modal open={!!renameTask} title={t('tree.renameTask')} okText={t('common.confirm')} cancelText={t('common.cancel')} destroyOnClose
+            onCancel={() => setRenameTask(null)}
+            onOk={() => {
+              if (!renameTask) return
+              const v = renameTaskVal.trim()
+              const next = { ...(prefs.taskNames || {}) }
+              if (v) next[renameTask.key] = v; else delete next[renameTask.key]
+              savePreferences({ taskNames: next })
+              setRenameTask(null)
+            }}>
+            <Input autoFocus value={renameTaskVal} onChange={(e) => setRenameTaskVal(e.target.value)} placeholder={renameTask?.name}
+              onPressEnter={() => document.querySelector<HTMLButtonElement>('.ant-modal .ant-btn-primary')?.click()} />
+            <div style={{ marginTop: 8, color: 'var(--text-dimmer)', fontSize: 'var(--fs-meta)' }}>{t('tree.taskNameHint')}</div>
+          </Modal>
+          <NewSessionModal open={!!newTaskDir} initialDir={newTaskDir || ''} onClose={() => setNewTaskDir(null)}
+            onDone={(name) => { setNewTaskDir(null); openTerm(name) }} />
         </Sider>
       )}
 
