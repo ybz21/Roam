@@ -241,6 +241,7 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
       setTimeout(() => el.classList.remove('cc-flash'), 1200)
     } : undefined,
     onCompact: () => { api('POST', '/tasks/_/send', { sess: name, msg: '/compact' }).catch(() => {}) },
+    onPickModel: () => { api('POST', '/tasks/_/send', { sess: name, msg: '/model' }).catch(() => {}) },
   }), [name, onOpenGit, lastErrorId])
 
   return (

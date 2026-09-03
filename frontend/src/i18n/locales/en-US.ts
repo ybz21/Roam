@@ -618,6 +618,7 @@ const enUS = {
   'chat.effort': 'Effort',
   'chat.context': 'Context',
   'chat.quotaTitle': 'Plan quota used',
+  'chat.modelPick': 'Click to switch model',
   'chat.modeCycle': 'Click to cycle permission mode',
   'chat.errorsTitle': '{count} failure(s) — click to jump to the latest',
   'chat.elapsedTitle': 'Session duration',

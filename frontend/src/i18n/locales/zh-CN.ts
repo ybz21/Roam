@@ -621,6 +621,7 @@ const zhCN = {
   'chat.context': '上下文',
   'chat.quotaTitle': '套餐额度已用',
   'chat.modeCycle': '点击切换权限模式',
+  'chat.modelPick': '点击切换模型',
   'chat.errorsTitle': '{count} 次失败，点击跳到最近一次',
   'chat.elapsedTitle': '会话时长',
   'chat.elapsed': '时长',
