@@ -95,7 +95,7 @@ const enUS = {
   'set.codexCmd': 'Codex executable',
   'set.codexCmdHelp': 'Same, for Codex sessions.',
   'set.voiceButton': 'Show voice button',
-  'set.voiceButtonHelp': 'The microphone in the composer. Recording needs an HTTPS secure context.',
+  'set.voiceButtonHelp': 'The voice button in the terminal view; the composer microphone is always there. Recording needs an HTTPS secure context.',
   'set.density': 'Density',
   'set.densityHelp': 'Orthogonal to window size: compact tightens row height and padding at any width.',
   'set.densityCozy': 'Cozy',

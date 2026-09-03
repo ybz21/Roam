@@ -2864,9 +2864,6 @@ html[data-size="compact"] .cc-run-slot { width: auto; }
 .cc-st-scroll[data-l][data-r] { mask-image: linear-gradient(90deg, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%); }
 .cc-st-scroll[data-l]:not([data-r]) { mask-image: linear-gradient(90deg, transparent 0, #000 20px); }
 .cc-st-scroll[data-r]:not([data-l]) { mask-image: linear-gradient(90deg, #000 calc(100% - 20px), transparent 100%); }
-/* 状态条条头：从工具条搬下来的连接状态 + 视图开关，和后面的 chip 一样高 */
-.cc-st-lead { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; padding-right: 4px; margin-right: 2px; border-right: 1px solid var(--border-subtle); }
-.cc-st-lead .tt-status { padding: 0 2px; }
 .cc-st-pill {
   flex: 0 0 auto;
   display: inline-flex;

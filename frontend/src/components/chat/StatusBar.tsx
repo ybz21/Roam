@@ -11,7 +11,7 @@
 //   失败 → 跳到最近一次失败那条
 //   分支 → 打开 Git 面板
 //   用时 → 详情
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useI18n } from '../../i18n'
 import { ArrowToBottom, ChecklistIcon, ChevronRight, ClockIcon, WarnIcon } from '../../icons'
 import { BranchIcon } from '../git/parts'
@@ -66,14 +66,12 @@ export type StatusActions = {
   onCompact?: () => void
 }
 
-export function StatusBar({ status, accent, unread, onJump, actions = {}, lead }: {
+export function StatusBar({ status, accent, unread, onJump, actions = {} }: {
   status: AgentStatus
   accent: string
   unread: number
   onJump?: () => void
   actions?: StatusActions
-  /** 条头：连接状态 + 视图开关（原在工具条左侧；对话视图里它们是会话的状态，归这条） */
-  lead?: ReactNode
 }) {
   const { t } = useI18n()
   const [panel, setPanel] = useState<Panel>('none')
@@ -116,13 +114,18 @@ export function StatusBar({ status, accent, unread, onJump, actions = {}, lead }
     <div className="cc-statusbar">
       <div className="cc-st-scroll" ref={stripRef} onScroll={syncFade}
         data-l={fade.l ? '' : undefined} data-r={fade.r ? '' : undefined}>
-        {lead}
         {status.mode && (
           <button type="button" className={`cc-st-pill${actions.onCycleMode ? ' is-btn' : ''}`}
             style={{ color: TONE[status.mode.tone] }} disabled={!actions.onCycleMode}
             onClick={actions.onCycleMode} title={actions.onCycleMode ? t('chat.modeCycle') : modeText}>
             <i style={{ background: TONE[status.mode.tone] }} />{modeText}
           </button>
+        )}
+        {/* 模型名直接摆在条上：「auto」只是权限模式，人更想一眼看到在用哪个模型 */}
+        {status.model && (
+          <Chip onClick={() => toggle('info')} expanded={panel === 'info'} title={t('chat.model')}>
+            <span>{status.model}</span>
+          </Chip>
         )}
 
         {ctx && (

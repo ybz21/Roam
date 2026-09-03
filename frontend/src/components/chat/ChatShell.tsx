@@ -6,7 +6,6 @@ import { appendPaths, atPath } from '../../agent-paths'
 import { Button, Input, App as AntApp } from 'antd'
 import { api, upload, makeClipboardImageFile } from '../../api'
 import { PromptPanel } from '../prompt'
-import { usePreferences } from '../../preferences'
 import { useI18n } from '../../i18n'
 import { VoiceInput } from './VoiceInput'
 import type { Block, Msg } from './types'
@@ -23,9 +22,7 @@ import type { TaskIndex } from './tasks'
 import { StatusBar, type StatusActions } from './StatusBar'
 import type { AgentStatus } from './status'
 
-export function ChatShell({ name, accent, placeholder, messages, results, renderMessage, pending, busy, error, onOpenFile, tasks, status, onOpenGit, lastErrorId, hasEarlier, onLoadEarlier, statusLead, agent }: {
-  /** 状态条条头（连接状态 + 视图开关），由终端面板给 */
-  statusLead?: ReactNode
+export function ChatShell({ name, accent, placeholder, messages, results, renderMessage, pending, busy, error, onOpenFile, tasks, status, onOpenGit, lastErrorId, hasEarlier, onLoadEarlier, agent }: {
   /** 这条 composer 发给谁：左端那枚亮着的 agent pill（22 设计 §3.3） */
   agent?: 'claude' | 'codex'
   name: string
@@ -67,8 +64,6 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
   // 手机窄屏：输入区换成「文本框独占一行 + 按钮行」竖排，避免挤成一坨
   const { phone: isMobile } = useLayout()
   // 语音按钮的显隐跟终端工具条那颗「语音输入」开关是同一个偏好：关了就整个页面都不出现麦克风。
-  const [prefs] = usePreferences()
-  const showVoice = prefs.showVoiceButton !== false
   // 触屏上点按钮不夺走文本框焦点 → 软键盘不收起 → 布局不回弹，click 不会落空（同 App 的 noBlur）。
   const noBlur = (e: React.MouseEvent) => { if (isMobile) e.preventDefault() }
 
@@ -310,8 +305,8 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
           )}
         </div>
         {/* 状态条在选择框之上：选择框要人立刻动手，得离输入框更近 */}
-        {(hasStatus || unread > 0 || statusLead) && (
-          <StatusBar status={status || {}} accent={accent} unread={unread} onJump={jump} actions={statusActions} lead={statusLead} />
+        {(hasStatus || unread > 0) && (
+          <StatusBar status={status || {}} accent={accent} unread={unread} onJump={jump} actions={statusActions} />
         )}
         {/* 交互式选择框（权限确认/选项菜单）：检测到才显示，可点选 */}
         <PromptPanel name={name} accent={accent} />
@@ -347,17 +342,20 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
               </span>
               <span className="tt-cend">
                 {/* 话筒贴着发送键：pill 是「带什么」，话筒是「怎么说」，分开放（22 设计 §3.3） */}
-                {showVoice && <VoiceInput inline accent={accent} onResult={appendText} />}
-                {busy && (
-                  <button type="button" className="tt-pill danger" title={t('chat.stopTitle')}
+                <VoiceInput inline accent={accent} onResult={appendText} />
+                {/* agent 在跑、又没在打字：那枚圆钮就是「停止」；打了字它又是「发送」（可以边跑边排队）。
+                    不另摆一枚「停止」pill——同一个位置一钮两用，和别的对话产品一个习惯 */}
+                {busy && !input.trim() ? (
+                  <button type="button" className="tt-send stop" aria-label={t('chat.stop')} title={t('chat.stopTitle')}
                     onMouseDown={noBlur} onClick={stop}>
-                    <StopIcon size={10} />{t('chat.stop')}
+                    <StopIcon size={12} />
+                  </button>
+                ) : (
+                  <button type="button" className="tt-send" aria-label={t('common.send')} title={t('common.send')}
+                    disabled={sending || !input.trim()} onMouseDown={noBlur} onClick={send}>
+                    <ArrowUp size={16} />
                   </button>
                 )}
-                <button type="button" className="tt-send" aria-label={t('common.send')} title={t('common.send')}
-                  disabled={sending || !input.trim()} onMouseDown={noBlur} onClick={send}>
-                  <ArrowUp size={16} />
-                </button>
               </span>
             </div>
           </div>

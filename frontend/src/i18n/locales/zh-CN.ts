@@ -95,7 +95,7 @@ const zhCN = {
   'set.codexCmd': 'Codex 可执行文件',
   'set.codexCmdHelp': '同上，用于 Codex 会话。',
   'set.voiceButton': '显示语音按钮',
-  'set.voiceButtonHelp': '输入框里的麦克风。录音需要 HTTPS 安全上下文。',
+  'set.voiceButtonHelp': '终端视图里的语音输入按钮；对话框旁的话筒一直在。录音需要 HTTPS 安全上下文。',
   'set.density': '信息密度',
   'set.densityHelp': '与窗口档正交：紧凑档在任何宽度下都把行高和内边距各收一档。',
   'set.densityCozy': '宽松',
