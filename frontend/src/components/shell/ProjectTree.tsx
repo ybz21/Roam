@@ -36,7 +36,7 @@ function dot(o: { running?: boolean; waiting?: boolean; unfinished?: boolean }, 
   return idlePlaceholder ? <i className="dot idle" /> : null
 }
 
-export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask, onSession, onAddProject }: {
+export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask, onSession, onAddProject, onRename }: {
   tree: TaskTree
   activeTask: TaskKey | null
   /** 当前标签是哪个会话：它所在的会话行再铺一层底 */
@@ -45,6 +45,8 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
   onTask: (key: TaskKey) => void
   onSession: (key: TaskKey, name: string) => void
   onAddProject?: () => void
+  /** 双击 / 右键任务行或会话行：改展示名。任务名就是第一个会话的展示名，所以改的都是会话 */
+  onRename?: (session: string) => void
 }) {
   const { t } = useI18n()
   const [closed, setClosed] = useState<Set<string>>(readClosed)
@@ -57,10 +59,13 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
 
   // 每一行都是侧栏那枚 .tt-nav-item：同样的高、图标槽、hover、选中的左线 + 淡蓝底、同一款计数徽标。
   // 区别只有缩进（lvl1 / lvl2）和图标槽里放什么：项目放文件夹，任务放状态点，会话放 agent 标。
+  const rename = (session?: string) => onRename && session
+    ? { onDoubleClick: () => onRename(session), onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); onRename(session) } }
+    : {}
   const sessionRow = (task: TaskKey, s: TreeSession, lvl: 1 | 2 | 3) => (
     <button key={s.name} type="button"
       className={`tt-nav-item tt-tree-row lvl${lvl}${activeTask === task && activeSession === s.name ? ' on' : ''}`}
-      onClick={() => onSession(task, s.name)} title={s.name}
+      onClick={() => onSession(task, s.name)} title={s.name} {...rename(s.name)}
       aria-current={activeTask === task && activeSession === s.name ? 'true' : undefined}>
       <span className="ic">{s.agent ? <AgentLogo kind={s.agent} size={16} /> : <TerminalIcon size={16} />}</span>
       <span className="nm">{s.label}</span>
@@ -76,7 +81,7 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
     return (
       <div key={task.key} className="tt-tree-task">
         <button type="button" className={`tt-nav-item tt-tree-row lvl${lvl}${on && !task.sessions.some((s) => s.name === activeSession) ? ' on' : ''}`}
-          onClick={() => onTask(task.key)} title={task.path}>
+          onClick={() => onTask(task.key)} title={task.path} {...rename(task.sessions[0]?.name)}>
           <span className="ic">{dot({ running, waiting, unfinished: task.unfinished }, true)}</span>
           <span className="nm">{task.name}</span>
           {task.unfinished && <span className="bd" title={t('tree.unfinished', { n: task.ahead })}>{t('tree.unfinishedShort', { n: task.ahead })}</span>}

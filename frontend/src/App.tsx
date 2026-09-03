@@ -57,6 +57,7 @@ import { ProjectTree, firstSessionOf, taskPathOf } from './components/shell/Proj
 import { InspectorPanels, type InspectorPanelKind } from './components/shell/InspectorPanels'
 import { buildTaskTree } from './components/shell/task-tree'
 import { taskKeyOf, isLooseTask, looseSessionOf, type TaskKey } from './components/sessions/task-key'
+import RenameSessionModal from './components/sessions/RenameSessionModal'
 import { setSessionLabels, sessionLabel, sessionDisplay } from './components/sessions/session-label'
 import LinkStatus from './p2p/LinkStatus'
 import { startControlLink, stopControlLink } from './p2p/transport'
@@ -216,6 +217,11 @@ export default function App() {
   const activateSession = (n: string) => { setActive(n); const key = activeTaskRef.current; if (key) setActiveFile((m) => (m[key] ? { ...m, [key]: '' } : m)) }
   // 左栏树的三份原料（22 设计 §3.2）：/projects 与每项目的 worktree 挂在下面那条 15s 轮询上，/sessions 挂 5s 那条
   const [treeSrc, setTreeSrc] = useState<{ projects: any[]; worktrees: Record<string, any[]> }>({ projects: [], worktrees: {} })
+  // 建了新会话就立刻把会话表 / 归属表 / worktree 都刷一遍，不等下一轮（分别 5s / 15s / 60s）
+  const sessReload = useRef<(() => void) | null>(null)
+  const treeReload = useRef<(() => void) | null>(null)
+  // 树里双击任务 / 会话行改名（任务名就是它第一个会话的展示名）
+  const [renameInTree, setRenameInTree] = useState<string | null>(null)
   const [sessList, setSessList] = useState<{ name: string; label?: string }[]>([])
   // URL 上待还原的 id/名字（还没拿到 id 映射前先原样存着）
   const urlTerms = useRef<string[]>(readTermTokens().terms)
@@ -330,9 +336,10 @@ export default function App() {
       } catch { /* 轮询失败就保持上一轮的值，不清空 */ }
     }
     let wtAt = 0
+    treeReload.current = () => { wtAt = 0; void load() }
     load()
     const i = setInterval(load, 15000)
-    return () => { stop = true; clearInterval(i) }
+    return () => { stop = true; clearInterval(i); treeReload.current = null }
   }, [authed, hasSider])
 
   // Canvas 滚动位置（14 §6.3.5）：终端一开，Canvas 变窄、卡片重排，scrollHeight
@@ -458,9 +465,10 @@ export default function App() {
       setSessList((cur) => (cur.length === names.length && cur.every((x, i) => x.name === names[i].name && x.label === names[i].label) ? cur : names))
       setSessionLabels(labels) // 展示名（@roam_name）：界面显示「名字（id）」，handle 仍是会话名
     }).catch(() => { if (!stop) setSessIds((m) => m || { byId: {}, byName: {} }) }) // 拉不到也要放行还原，别把标签卡在空白
+    sessReload.current = load
     load()
     const t = setInterval(load, 5000)
-    return () => { stop = true; clearInterval(t) }
+    return () => { stop = true; clearInterval(t); sessReload.current = null }
   }, [authed])
 
   // 还原标签：拿到 id 表后做一次。老链接里存的是名字，id 表里查不到就按名字用。
@@ -522,9 +530,9 @@ export default function App() {
 
   // 左栏树：三份原料 memo 一次；已打开会话探测到的 agent 比 /projects 的名单准
   const tree = useMemo(() => buildTaskTree({
-    projects: treeSrc.projects, worktrees: treeSrc.worktrees, sessions: sessList,
+    projects: treeSrc.projects, worktrees: treeSrc.worktrees, sessions: sessList, placement: projTable,
     agentOf: (n) => (claudeMap[n]?.running ? 'claude' : codexMap[n]?.running ? 'codex' : undefined),
-  }), [treeSrc, sessList, claudeMap, codexMap])
+  }), [treeSrc, sessList, claudeMap, codexMap, projTable])
 
   // hash 路由：URL #/xxx 与当前页同步（支持前进/后退、刷新保持、收藏分享）
   useEffect(() => {
@@ -539,7 +547,13 @@ export default function App() {
     if (!authed || terms.length === 0) return
     let stop = false
     const check = () => terms.forEach(async (n) => {
-      try { const r = await api('GET', `/sessions/${encodeURIComponent(n)}/claude`); if (!stop) setClaudeMap((m) => ({ ...m, [n]: r.data })) } catch {}
+      try {
+        const r = await api('GET', `/sessions/${encodeURIComponent(n)}/claude`)
+        if (stop) return
+        setClaudeMap((m) => ({ ...m, [n]: r.data }))
+        // 第一次探到 Claude 在跑就进对话视图：这是 Claude 会话的常态，终端是切过去看的那一面
+        if (r.data?.running) setClaudeView((v) => (n in v ? v : { ...v, [n]: true }))
+      } catch {}
       try { const r = await api('GET', `/sessions/${encodeURIComponent(n)}/codex`); if (!stop) setCodexMap((m) => ({ ...m, [n]: r.data })) } catch {}
     })
     check()
@@ -572,6 +586,8 @@ export default function App() {
     // tmux 自身会把 '.' ':' 替换为 '_'，前端也同步净化，
     // 确保标签名/WebSocket URL 与 tmux 实际 session 名一致。
     const name = rawName.replace(/[.:]/g, '_')
+    // 会话表里还没有它 = 刚建的：立刻刷会话表 / 归属表 / worktree，树上马上归位
+    if (!sessList.some((s) => s.name === name)) { sessReload.current?.(); treeReload.current?.() }
     setTerms((ts) => (ts.includes(name) ? ts : [...ts, name]))
     setActive(name)
     if (hasSider) {
@@ -596,6 +612,15 @@ export default function App() {
     space.setDockOpen(true); space.setFocus('none')
   }
   const onTreeSession = (key: TaskKey, name: string) => openTerm(name, key)
+  // 标签条「新任务」：回**当前项目**的主页、光标落进 composer——新任务从那里描述需求开出来（22 设计 §3.3）
+  const newTaskInProject = () => {
+    const key = activeTaskRef.current
+    const proj = key
+      ? tree.projects.find((p) => p.tasks.some((x) => x.key === key))?.key || (isLooseTask(key) ? sessionProject(looseSessionOf(key))?.key : undefined)
+      : undefined
+    go(proj ? 'projects/' + encodeURIComponent(proj) : 'projects')
+    requestIntent('compose')
+  }
   const onTreeProject = (key: string) => go('projects/' + encodeURIComponent(key))
   // 标签条「新建」：在当前任务的 worktree 里开 shell / Claude / Codex，名字与项目页「新开命令行」同款后缀
   const newTerminalInTask = async (kind: 'shell' | 'claude' | 'codex' = 'shell') => {
@@ -709,7 +734,7 @@ export default function App() {
       onReorder={reorderTerm}
       onNeedsInput={setMobileWaiting}
       visibleTerms={hasSider ? taskTerms : terms}
-      onNew={taskView ? { terminal: () => { void newTerminalInTask('shell') }, claude: () => { void newTerminalInTask('claude') }, codex: () => { void newTerminalInTask('codex') }, task: () => { go('projects'); requestIntent('new-project') } } : undefined}
+      onNew={taskView ? { terminal: () => { void newTerminalInTask('shell') }, claude: () => { void newTerminalInTask('claude') }, codex: () => { void newTerminalInTask('codex') }, task: newTaskInProject } : undefined}
       // 任务视图里对话点路径 / Git 都落到右栏三面板；手机与 Page 态退回 TerminalPane 自己的二级页
       onOpenFile={taskView ? (path, line) => openFileTab(path, line) : undefined}
       onOpenGit={taskView ? () => { setPanel('git'); if (space.inspectorCollapsed) space.toggleInspectorCollapsed() } : undefined}
@@ -912,7 +937,8 @@ export default function App() {
             searchHint={`${modKeyLabel}K`}
             tree={<ProjectTree tree={tree} activeTask={activeTask} activeSession={active}
               onProject={onTreeProject} onTask={onTreeTask} onSession={onTreeSession}
-              onAddProject={() => { go('projects'); requestIntent('new-project') }} />}
+              onAddProject={() => { go('projects'); requestIntent('new-project') }}
+              onRename={setRenameInTree} />}
             hubAlarm={hubHealth.level === 'ok' ? undefined : t('hub.why.' + (hubHealth.reasons[0] || 'unknown'))}
             node={curNode ? {
               name: curNode.name,
@@ -925,6 +951,7 @@ export default function App() {
             } : null}
             onToggleRail={() => space.setNavCollapsed(!space.navCollapsed)}
           />
+          <RenameSessionModal session={renameInTree} onClose={() => setRenameInTree(null)} onDone={renameOpenTerm} />
         </Sider>
       )}
 

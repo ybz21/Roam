@@ -799,6 +799,13 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
     composerRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
     promptRef.current?.focus?.()
   }
+  // 标签条「新任务」从任务视图切过来：留的意图在这儿取走（挂载时也取一次，事件早在本组件存在前就发完了）
+  useEffect(() => {
+    const on = () => { if (takeIntent('compose')) focusComposer() }
+    on()
+    window.addEventListener(INTENT_EVENT, on)
+    return () => window.removeEventListener(INTENT_EVENT, on)
+  }, [])
   const [activity, setActivity] = useState<any[]>([])
   const [finishing, setFinishing] = useState<any>(null)
   const [swarmExtras, setSwarmExtras] = useState<Record<string, { cols: Record<string, number>; last?: any }>>({})

@@ -64,3 +64,31 @@ describe('项目树读模型', () => {
     expect(LOOSE_PREFIX + 'htop').not.toMatch(/^\//)
   })
 })
+
+describe('buildTaskTree placement', () => {
+  const proj = { key: 'x', name: 'X', dir: '/x', git: true }
+  it('annotation 里已知 worktree 的新会话立刻挂到任务位，不等 worktree 轮询', () => {
+    const tree = buildTaskTree({
+      projects: [proj], worktrees: { x: [{ path: '/x', branch: 'main', isMain: true }] },
+      sessions: [{ name: 'new-cc', label: '检查项目' }],
+      placement: { 'new-cc': { key: 'x', worktree: '/x/.worktrees/a', branch: 'a' } },
+    })
+    expect(tree.loose).toEqual([])
+    expect(tree.projects[0].tasks.map((t) => [t.path, t.name, t.sessions.map((s) => s.name)])).toEqual([['/x/.worktrees/a', '检查项目', ['new-cc']]])
+  })
+  it('worktree 轮询已经有这个 worktree 但会话名单还旧：补进去、任务名换成会话名', () => {
+    const tree = buildTaskTree({
+      projects: [proj], worktrees: { x: [{ path: '/x/.worktrees/a/', branch: 'a', isMain: false, committedAhead: 2 }] },
+      sessions: [{ name: 'new-cc', label: '检查项目' }],
+      placement: { 'new-cc': { key: 'x', worktree: '/x/.worktrees/a' } },
+    })
+    const task = tree.projects[0].tasks[0]
+    expect(task.name).toBe('检查项目')
+    expect(task.unfinished).toBe(false)
+    expect(task.sessions.map((s) => s.name)).toEqual(['new-cc'])
+  })
+  it('annotation 指向主仓库的会话还是散会话', () => {
+    const tree = buildTaskTree({ projects: [proj], worktrees: {}, sessions: [{ name: 's' }], placement: { s: { key: 'x', worktree: '/x' } } })
+    expect(tree.loose.map((s) => s.name)).toEqual(['s'])
+  })
+})
