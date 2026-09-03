@@ -172,13 +172,14 @@ export default function App() {
   const taskTerms = activeTask ? terms.filter((n) => keyOf(n) === activeTask) : terms
   // 右栏三面板（22 设计 §3.4）：看哪个面板记本机；对话里点了路径要文件面板打开哪个
   const [panel, setPanelLocal] = useState<InspectorPanelKind>(() => {
-    try { const v = localStorage.getItem('roam.inspectorPanel'); return v === 'git' || v === 'worktree' ? v : 'files' } catch { return 'files' }
+    try { return localStorage.getItem('roam.inspectorPanel') === 'git' ? 'git' : 'files' } catch { return 'files' }
   })
   const setPanel = (p: InspectorPanelKind) => { setPanelLocal(p); try { localStorage.setItem('roam.inspectorPanel', p) } catch { /* 记不住而已 */ } }
   // 文件标签（22 设计 §3.3）：按任务分片；activeFile 非空 = 当前标签是文件，空 = 当前标签是会话
   const [fileTabs, setFileTabs] = useState<Record<TaskKey, FileTab[]>>({})
   const [activeFile, setActiveFile] = useState<Record<TaskKey, string>>({})
   const [reveal, setReveal] = useState<{ path: string; line: number; nonce: number } | undefined>()
+  const [searchNonce, setSearchNonce] = useState(0)
   const curFiles = activeTask ? fileTabs[activeTask] || [] : []
   const curFile = activeTask ? activeFile[activeTask] || '' : ''
   const isMd = (p: string) => /\.(md|markdown|mdx|html?)$/i.test(p)
@@ -378,6 +379,14 @@ export default function App() {
         if (taskView && !e.shiftKey) { space.toggleInspectorCollapsed(); return }
         if (e.shiftKey) space.toggleFocus()
         else { space.setFocus('none'); space.toggleDock() }
+        return
+      }
+      // ⌘⇧F：右栏切到「内容」搜索并聚焦（22 设计 §9）
+      if (mod && e.shiftKey && taskView && e.key.toLowerCase() === 'f') {
+        e.preventDefault()
+        setPanel('files')
+        if (space.inspectorCollapsed) space.toggleInspectorCollapsed()
+        setSearchNonce((n) => n + 1)
         return
       }
       // 右栏切面板：⌘⇧E 文件、⌘⇧G Git（22 设计 §9）
@@ -588,16 +597,22 @@ export default function App() {
   }
   const onTreeSession = (key: TaskKey, name: string) => openTerm(name, key)
   const onTreeProject = (key: string) => go('projects/' + encodeURIComponent(key))
-  // 标签条「新建 › 新终端」：在当前任务的 worktree 里开一个 shell，名字沿用项目页「新开命令行」的 -sh 后缀
-  const newTerminalInTask = async () => {
+  // 标签条「新建」：在当前任务的 worktree 里开 shell / Claude / Codex，名字与项目页「新开命令行」同款后缀
+  const newTerminalInTask = async (kind: 'shell' | 'claude' | 'codex' = 'shell') => {
     const key = activeTaskRef.current
     const dir = key ? (taskPathOf(tree, key) || sessionProject(looseSessionOf(key))?.dir || '') : ''
     const base = (key && firstSessionOf(tree, key)) || 'shell'
-    let name = `${base}-sh`
-    for (let i = 2; terms.includes(name); i++) name = `${base}-sh${i}`
+    const suffix = kind === 'shell' ? 'sh' : kind === 'claude' ? 'cc' : 'cx'
+    let name = `${base}-${suffix}`
+    for (let i = 2; terms.includes(name); i++) name = `${base}-${suffix}${i}`
     try {
       const res = await api('POST', '/sessions', dir ? { name, dir } : { name })
-      openTerm(res?.name || name, key || undefined)
+      const actual = res?.name || name
+      if (kind !== 'shell') {
+        const cmd = kind === 'claude' ? (prefs.claudeCommand || 'claude') : (prefs.codexCommand || 'codex')
+        await api('POST', '/tasks/_/send', { sess: actual, msg: cmd })
+      }
+      openTerm(actual, key || undefined)
     } catch (e: any) { antMessage.error(e.message) }
   }
   const renameOpenTerm = (oldName: string, newName: string) => {
@@ -694,7 +709,7 @@ export default function App() {
       onReorder={reorderTerm}
       onNeedsInput={setMobileWaiting}
       visibleTerms={hasSider ? taskTerms : terms}
-      onNew={taskView ? { terminal: () => { void newTerminalInTask() }, task: () => { go('projects'); requestIntent('new-project') } } : undefined}
+      onNew={taskView ? { terminal: () => { void newTerminalInTask('shell') }, claude: () => { void newTerminalInTask('claude') }, codex: () => { void newTerminalInTask('codex') }, task: () => { go('projects'); requestIntent('new-project') } } : undefined}
       // 任务视图里对话点路径 / Git 都落到右栏三面板；手机与 Page 态退回 TerminalPane 自己的二级页
       onOpenFile={taskView ? (path, line) => openFileTab(path, line) : undefined}
       onOpenGit={taskView ? () => { setPanel('git'); if (space.inspectorCollapsed) space.toggleInspectorCollapsed() } : undefined}
@@ -973,6 +988,7 @@ export default function App() {
           <InspectorPanels open={taskView} panel={panel} onPanel={setPanel} dir={dir} scope={scope}
             branch={task?.branch || activeProject?.branch} openTerm={openTerm}
             onOpenFile={(p) => openFileTab(p)} selectedPath={curFile}
+            searchNonce={searchNonce} onOpenLine={(p, line) => openFileTab(p, line)}
             onClose={() => { if (!space.inspectorCollapsed) space.toggleInspectorCollapsed() }} />
         )
       })()}

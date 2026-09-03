@@ -88,7 +88,7 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
           <span className="nm">{task.name}</span>
           {task.unfinished && <span className="bd" title={t('tree.unfinished', { n: task.ahead })}>{t('tree.unfinishedShort', { n: task.ahead })}</span>}
         </button>
-        {task.sessions.map((s) => sessionRow(task.key, s, lvl === 1 ? 2 : 3))}
+        {task.sessions.map((s) => sessionRow(task.key, s, lvl))}
       </div>
     )
   }
@@ -111,9 +111,7 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
         // 和正在干的活混排在一起，树就成了 git worktree list
         const live = p.tasks.filter((x) => x.sessions.length > 0)
         const unfinished = p.tasks.filter((x) => x.unfinished)
-        const idle = p.tasks.filter((x) => x.idle)
         const showUnfinished = idleOpen.has(p.key + ':fin')
-        const showIdle = idleOpen.has(p.key)
         return (
           <div key={p.key} className="tt-tree-proj">
             {/* 项目的身份就是项目卡上那枚按名字取色的首字母圆标（icoOf），不另画图标 */}
@@ -135,14 +133,8 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
                   </button>
                 )}
                 {showUnfinished && unfinished.map((x) => taskRows(x, 2))}
-                {idle.length > 0 && (
-                  <button type="button" className={`tt-nav-item tt-tree-row lvl1 more${showIdle ? '' : ' closed'}`} onClick={() => toggleIdle(p.key)}>
-                    <span className="ic chev"><ChevronDown size={13} /></span>
-                    <span className="nm">{t('tree.idleN', { n: idle.length })}</span>
-                  </button>
-                )}
-                {showIdle && idle.map((x) => taskRows(x, 2))}
-                {!p.tasks.length && <div className="tt-tree-empty">{t('tree.noTasks')}</div>}
+                {/* 既没会话也没未合并提交的 worktree 不显示：用户不需要关心、也记不住它们；要清理去项目页 */}
+                {!live.length && !unfinished.length && <div className="tt-tree-empty">{t('tree.noTasks')}</div>}
               </>
             )}
           </div>

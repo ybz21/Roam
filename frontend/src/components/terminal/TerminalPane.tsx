@@ -54,7 +54,7 @@ export default function TerminalPane(props: {
   /** 标签条只画这些（当前任务的会话，22 设计 §3.3）；terms 仍是全集——每个终端常驻挂载，只切可见 */
   visibleTerms?: string[]
   /** 标签条右端「新建 ▾」：在当前任务里开终端 / 去项目页开新任务。不传就不画 */
-  onNew?: { terminal: () => void; task: () => void }
+  onNew?: { terminal: () => void; claude: () => void; codex: () => void; task: () => void }
   /** 对话里点 Read/Edit 的路径 → 右栏文件面板打开（22 设计 §3.4）；不传就退回今天的路（文件页） */
   onOpenFile?: (path: string, line?: number) => void
   /** 对话里点「Git」→ 右栏切到 Git 面板 */
@@ -709,6 +709,9 @@ export default function TerminalPane(props: {
         <div className="tt-tabs-end">
           <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: [
             { key: 'terminal', icon: <TerminalIcon size={14} />, label: t('tabs.newTerminal'), onClick: onNew.terminal },
+            { key: 'claude', icon: <AgentLogo kind="claude" size={14} />, label: t('tabs.newClaude'), onClick: onNew.claude },
+            { key: 'codex', icon: <AgentLogo kind="codex" size={14} />, label: t('tabs.newCodex'), onClick: onNew.codex },
+            { type: 'divider' as const },
             { key: 'task', icon: <PlusIcon size={13} />, label: t('tabs.newTask'), onClick: onNew.task },
           ] }}>
             <button type="button" className="tt-tbtn" title={t('tabs.new')}>

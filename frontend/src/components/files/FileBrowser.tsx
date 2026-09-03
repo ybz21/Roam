@@ -347,7 +347,11 @@ export default function FileBrowser({
   onOpenFile,
   selectedPath,
   openRequest,
+  chrome = 'full',
 }: {
+  /** 'tree'：只要树 + 搜索（右栏当前任务的文件面板，22 设计 §3.4）——标题行、项目芯片、路径框都不画，
+      作用域头由外层给；'full' 是今天的文件管理器 */
+  chrome?: 'full' | 'tree'
   dir?: string
   accent?: string
   layout?: 'sidebar' | 'split' | 'dock'
@@ -396,7 +400,7 @@ export default function FileBrowser({
   // P2P 传输可见状态：按 transferId 维护进行中的下载，展示角标/进度/详情（§5.7）。
   const [transfers, setTransfers] = useState<TransferView[]>([])
   // 递归按文件名搜索（当前目录向下），放大镜开关切换；有查询词时列表区改显搜索结果。
-  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(chrome === 'tree') // 树模式一上来就带搜索框
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<{ path: string; name: string; rel: string }[] | null>(null)
   const [searching, setSearching] = useState(false)
@@ -774,12 +778,14 @@ export default function FileBrowser({
   const browserPane = (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, height: '100%', minHeight: 0, width: '100%', background: 'var(--bg-container)', borderLeft: '1px solid var(--border-subtle)', position: 'relative', overflow: 'hidden' }}>
       <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-          <span style={{ color: accent }}><FolderIcon /></span>
-          <span style={{ color: 'var(--text-bright)', fontWeight: 600, fontSize: 13 }}>{t('chat.fileManager')}</span>
-          <span style={{ flex: 1 }} />
-          {onClose && <ClosePanelButton title={t('file.closePanel')} onClick={onClose} />}
-        </div>
+        {chrome !== 'tree' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+            <span style={{ color: accent }}><FolderIcon /></span>
+            <span style={{ color: 'var(--text-bright)', fontWeight: 600, fontSize: 13 }}>{t('chat.fileManager')}</span>
+            <span style={{ flex: 1 }} />
+            {onClose && <ClosePanelButton title={t('file.closePanel')} onClick={onClose} />}
+          </div>
+        )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'nowrap', overflowX: 'auto' }}>
           <input ref={fileRef} type="file" multiple style={{ display: 'none' }}
             onChange={(e) => {
@@ -820,6 +826,7 @@ export default function FileBrowser({
           />
         </div>
       )}
+      {chrome !== 'tree' && (
       <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)' }}>
         {(() => {
           const chips: { label: string; path: string }[] = []
@@ -861,6 +868,7 @@ export default function FileBrowser({
           />
         </AutoComplete>
       </div>
+      )}
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 0' }}>
         {searchOpen && searchQ ? (
           searching && !results ? (

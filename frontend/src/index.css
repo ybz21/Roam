@@ -550,6 +550,28 @@ html[data-pointer="coarse"] .tt-ins-act { width: 44px; height: 40px; }
   font: 400 var(--fs-micro)/1.5 var(--mono); color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .tt-ins-body { flex: 1; min-height: 0; min-width: 0; flex-direction: column; }
+.tt-ins-seg { padding: 6px 10px 8px; flex: 0 0 auto; }
+/* 内容搜索：输入框 + 按文件分组的命中行 */
+.tt-csearch { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 0 10px 10px; }
+.tt-csearch-body { flex: 1; min-height: 0; overflow: auto; margin-top: var(--sp-2); }
+.tt-csearch-note { padding: 6px 4px; color: var(--text-dimmer); font-size: var(--fs-meta); }
+.tt-csearch-file { margin-bottom: 6px; }
+.tt-csearch-fname {
+  display: flex; align-items: center; gap: 6px; width: 100%; height: 26px; padding: 0 4px;
+  border: 0; border-radius: var(--r-xs); background: none; color: var(--text-bright); font-size: var(--fs-sm); text-align: left; cursor: pointer;
+}
+.tt-csearch-fname .fi { display: inline-flex; transform: scale(.72); margin: -2px; }
+.tt-csearch-fname .nm { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-csearch-fname .dir { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dimmer); font-size: var(--fs-micro); }
+.tt-csearch-fname .cnt { flex: 0 0 auto; color: var(--text-dimmer); font: var(--fs-micro) var(--mono); }
+.tt-csearch-line {
+  display: flex; align-items: center; gap: var(--sp-2); width: 100%; height: 24px; padding: 0 4px 0 24px;
+  border: 0; border-radius: 4px; background: none; color: var(--text-dim); font: var(--fs-meta)/1 var(--mono); text-align: left; cursor: pointer; overflow: hidden; white-space: nowrap;
+}
+.tt-csearch-line .no { flex: 0 0 auto; width: 32px; text-align: right; color: var(--text-dimmer); }
+.tt-csearch-line .tx { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+:where(html[data-pointer="fine"]) .tt-csearch-fname:hover, :where(html[data-pointer="fine"]) .tt-csearch-line:hover { background: var(--list-hover); color: var(--text-bright); }
+html[data-pointer="coarse"] .tt-csearch-line, html[data-pointer="coarse"] .tt-csearch-fname { height: 44px; }
 
 /* ── 项目树（22 设计 §3.2）：项目 → 任务 → 会话，塞在导航组下面原来空着的那段 ──
    树里每一行就是侧栏那枚 .tt-nav-item：高、图标槽、hover、选中态、计数徽标全是它的；

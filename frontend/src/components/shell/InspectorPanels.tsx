@@ -4,8 +4,9 @@
 // 现在 App 只挂**这一个** AdaptivePanel：顶上活动条切面板，下面写着当前是哪个 worktree、哪条分支。
 // 三个面板都挂着、只切 display——AdaptivePanel 文件头写过「是藏不是卸载」的账：卸载 Git 会连
 // 它子树里的 Worktree 一起没了。槽位机制（inspector.ts / InspectorColumn）一行不改，只是栈里最多一个。
-import { Suspense, type ReactNode } from 'react'
-import { Spin, Tooltip } from 'antd'
+import { Suspense, useEffect, useState, type ReactNode } from 'react'
+import { Segmented, Spin, Tooltip } from 'antd'
+import { ContentSearch } from './ContentSearch'
 import { useI18n } from '../../i18n'
 import { FolderIcon } from '../../icons'
 import { BranchIcon } from '../git/parts'
@@ -14,9 +15,8 @@ import AdaptivePanel from './AdaptivePanel'
 import { lazyRetry } from '../lazy-retry'
 
 const GitPanel = lazyRetry(() => import('../git/GitPanel'))
-const WorktreePanel = lazyRetry(() => import('../git/WorktreePanel'))
 
-export type InspectorPanelKind = 'files' | 'git' | 'worktree'
+export type InspectorPanelKind = 'files' | 'git'
 
 const gitIcon = (
   <svg viewBox="0 0 24 24" width={17} height={17} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -24,14 +24,8 @@ const gitIcon = (
     <path d="M6 8.2v7.6" /><path d="M8.2 6h3.3a4 4 0 0 1 4 4v.3" /><path d="M8.2 18h3.3a4 4 0 0 0 4-4v-.3" />
   </svg>
 )
-const worktreeIcon = (
-  <svg viewBox="0 0 24 24" width={17} height={17} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-    <circle cx="12" cy="4.8" r="2.2" /><circle cx="7" cy="19.2" r="2.2" /><circle cx="17" cy="19.2" r="2.2" />
-    <path d="M12 7v2.6" /><path d="M12 9.6a4.4 4.4 0 0 0-5 4.4v3" /><path d="M12 9.6a4.4 4.4 0 0 1 5 4.4v3" />
-  </svg>
-)
 
-export function InspectorPanels({ open, panel, onPanel, dir, scope, branch, openRequest, openTerm, onClose, onOpenFile, selectedPath }: {
+export function InspectorPanels({ open, panel, onPanel, dir, scope, branch, openRequest, openTerm, onClose, onOpenFile, selectedPath, searchNonce, onOpenLine }: {
   open: boolean
   panel: InspectorPanelKind
   onPanel: (p: InspectorPanelKind) => void
@@ -48,12 +42,20 @@ export function InspectorPanels({ open, panel, onPanel, dir, scope, branch, open
   onOpenFile?: (path: string) => void
   /** 中间当前的文件标签：树里高亮它 */
   selectedPath?: string
+  /** ⌘⇧F：切到「内容」并聚焦；自增触发 */
+  searchNonce?: number
+  /** 内容搜索点行：开标签并定位 */
+  onOpenLine?: (path: string, line?: number) => void
 }) {
   const { t } = useI18n()
+  // 文件面板上方两段：名称 = FileBrowser 自己的树 + 放大镜；内容 = ContentSearch（22 设计 §3.4）
+  const [view, setView] = useState<'files' | 'search'>('files')
+  useEffect(() => { if (searchNonce) setView('search') }, [searchNonce])
   const acts: { key: InspectorPanelKind; label: string; icon: ReactNode }[] = [
     { key: 'files', label: t('nav.files'), icon: <FolderIcon size={17} /> },
     { key: 'git', label: t('git.title'), icon: gitIcon },
-    { key: 'worktree', label: t('worktree.title'), icon: worktreeIcon },
+    // Worktree 面板先不上：WorktreePanel 是带 Drawer 壳的组件，嵌进列里会盖住活动条；
+    // Git 面板里本来就有 worktree 那一页。要单独一格得先把它的壳拆开（22 设计 §3.4 的第三格）
   ]
   const fallback = <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}><Spin /></div>
 
@@ -74,13 +76,19 @@ export function InspectorPanels({ open, panel, onPanel, dir, scope, branch, open
         </div>
         {/* 三个面板都挂着，只切 display：树的展开态、Git 的选中都留着 */}
         <div className="tt-ins-body" style={{ display: panel === 'files' ? 'flex' : 'none' }}>
-          <FileBrowser dir={dir} accent="var(--accent)" layout="dock" openRequest={openRequest} onOpenFile={onOpenFile} selectedPath={selectedPath || null} />
+          <div className="tt-ins-seg">
+            <Segmented size="small" block value={view} onChange={(v) => setView(v as 'files' | 'search')}
+              options={[{ label: t('search.byName'), value: 'files' }, { label: t('search.byContent'), value: 'search' }]} />
+          </div>
+          <div className="tt-ins-body" style={{ display: view === 'files' ? 'flex' : 'none' }}>
+            <FileBrowser dir={dir} accent="var(--accent)" layout="dock" chrome="tree" openRequest={openRequest} onOpenFile={onOpenFile} selectedPath={selectedPath || null} />
+          </div>
+          <div className="tt-ins-body" style={{ display: view === 'search' ? 'flex' : 'none' }}>
+            <ContentSearch dir={dir} focusNonce={searchNonce} onOpen={(p, line) => (onOpenLine || onOpenFile)?.(p, line as never)} />
+          </div>
         </div>
         <div className="tt-ins-body" style={{ display: panel === 'git' ? 'flex' : 'none' }}>
           <Suspense fallback={fallback}><GitPanel dir={dir} accent="var(--accent)" openTerm={openTerm} /></Suspense>
-        </div>
-        <div className="tt-ins-body" style={{ display: panel === 'worktree' ? 'flex' : 'none' }}>
-          <Suspense fallback={fallback}><WorktreePanel open onClose={() => onPanel('files')} openTerm={openTerm} initialDir={dir} /></Suspense>
         </div>
       </div>
     </AdaptivePanel>
