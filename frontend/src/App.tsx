@@ -926,7 +926,10 @@ export default function App() {
     // 用 position:fixed 的话上面那层照旧按 100dvh 算高，页面最后一行会永远
     // 压在条底下，而且横向滚动条一闪就把画布挪 10px（AGENTS「文档永远不滚动」）。
     <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-base)' }}>
-    <Layout style={{ flex: 1, minHeight: 0, overflow: 'hidden', background: 'var(--bg-base)' }}>
+    {/* overflow 用 clip 不用 hidden：hidden 仍是滚动容器，收起的终端坞（宽 0、内容仍挂着）里
+        一个 autoFocus 就能让浏览器把整个 Layout 往右「滚」出去，左侧栏只剩右边缘露在屏幕外——
+        会话页上就是这么被挤成一条窄轨的。clip 不是滚动容器，谁也滚不动它 */}
+    <Layout style={{ flex: 1, minHeight: 0, overflow: 'clip', background: 'var(--bg-base)' }}>
       <UpdateBanner />
       {/* Focus 时导航收成 64px 轨而不是消失——上下文始终可找回（14 §4.1，老 dockMax 的病根）。
           expanded 档也一律用轨：905–1279 展开 224 侧栏会把 Canvas 挤破契约。*/}

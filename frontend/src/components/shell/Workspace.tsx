@@ -172,7 +172,8 @@ export function Workspace({
     : {
         flex: mode === 'split' ? `0 0 ${dockWidth}px` : focus ? '1 1 auto' : '0 0 0px',
         width: mode === 'split' ? dockWidth : focus ? undefined : 0,
-        minWidth: 0, height: '100%', minHeight: 0, overflow: 'hidden',
+        // clip：page 态下这一列宽 0 但终端仍挂着，hidden 会让里面的 autoFocus 把祖先滚出屏幕
+        minWidth: 0, height: '100%', minHeight: 0, overflow: 'clip',
         display: 'flex', flexDirection: 'column',
         background: 'var(--bg-term)',
         transition: active ? 'none' : 'flex-basis .2s, width .2s',
