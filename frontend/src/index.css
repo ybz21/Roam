@@ -515,15 +515,14 @@ html[data-pointer="coarse"] .tt-nav-collapse::after {
 .tt-nav-account .dots { margin-left: auto; flex: 0 0 auto; display: flex; color: var(--text-dimmer); }
 
 /* ── 项目树（22 设计 §3.2）：项目 → 任务 → 会话，塞在导航组下面原来空着的那段 ──
-   侧栏别的一切照旧（行高 38 / 字号 14 / 组名 / 脚），树只借它的语言：同样的圆角、同样的
-   hover 底、选中同样是 3px 左线 + 淡蓝底。任务行与它的会话行是一整块，选中盖整组。 */
+   树里每一行就是侧栏那枚 .tt-nav-item：高、图标槽、hover、选中态、计数徽标全是它的；
+   这里只加缩进和图标槽里放的东西。不另起一套长相。 */
 .tt-nav-list.has-tree { flex: 0 0 auto; overflow: visible; }
 .tt-nav-tree {
   flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
   margin: 10px -8px 0; padding: 10px 8px 8px; border-top: 1px solid var(--border-subtle);
 }
-.tt-tree-head { display: flex; align-items: center; gap: var(--sp-1); padding: 0 2px 6px 2px; }
-.tt-tree-head .gl { flex: 1; padding-left: 8px; color: var(--text-dimmer); font-size: var(--fs-micro); font-weight: 700; letter-spacing: .1em; }
+.tt-tree-head { display: flex; align-items: center; gap: var(--sp-1); padding: 0 2px 8px 2px; }
 /* 搜索：实底 + 32 高的假输入框，点了开 ⌘K 面板。与底同色只描一圈边的话没人看得出这里能搜 */
 .tt-tree-search {
   flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--sp-2); height: 32px; padding: 0 10px;
@@ -537,56 +536,24 @@ html[data-pointer="coarse"] .tt-nav-collapse::after {
   background: var(--bg-base); color: var(--text-dim); font-size: var(--fs-micro); font-family: var(--mono);
 }
 .tt-tree-head .tt-act { color: var(--text-dimmer); }
-.tt-tree-proj { margin-top: 4px; }
-.tt-tree-proj.loose { margin-top: 12px; }
-/* 项目行：整行一个按钮，折叠箭头在右端——左边留给头像和名字，箭头在左会和任务行的状态点排成一列点 */
-.tt-tree-projrow {
-  display: flex; align-items: center; gap: var(--sp-2); width: 100%; min-height: 36px; padding: 0 8px 0 10px;
-  border: 0; border-radius: var(--r-sm); background: none; color: var(--text-bright);
-  font-size: var(--fs-body); font-weight: 600; text-align: left; cursor: pointer;
-}
-:where(html[data-pointer="fine"]) .tt-tree-projrow:hover { background: var(--list-hover); }
-.tt-tree-projrow .av {
-  flex: 0 0 auto; width: 20px; height: 20px; border-radius: var(--r-xs); display: grid; place-items: center;
-  border: 1px solid var(--accent-border); background: var(--accent-soft); color: var(--accent); font: 600 10px/1 var(--mono);
-}
-.tt-tree-projrow .tx { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tt-tree-projrow .chev { flex: 0 0 auto; display: grid; place-items: center; color: var(--text-dimmer); transition: transform .15s; }
-.tt-tree-projrow.closed .chev { transform: rotate(-90deg); }
-.tt-tree-projrow .bd, .tt-tree-task .bd {
-  flex: 0 0 auto; min-width: 18px; height: 18px; padding: 0 6px; border-radius: var(--r-pill);
-  border: 1px solid var(--warn-border); background: var(--warn-soft); color: var(--warn);
-  font: 600 var(--fs-micro)/16px var(--mono); text-align: center; white-space: nowrap;
-}
-.tt-tree-grp { position: relative; display: flex; flex-direction: column; margin: 1px 0 1px 8px; border-radius: var(--r-sm); }
-.tt-tree-grp.on { background: var(--accent-soft); }
-.tt-tree-grp.on::before { content: ""; position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 3px; height: 20px; border-radius: 0 3px 3px 0; background: var(--accent); }
-.tt-tree-task, .tt-tree-sess, .tt-tree-more {
-  display: flex; align-items: center; gap: var(--sp-2); width: 100%;
-  border: 0; background: none; border-radius: var(--r-sm); text-align: left; cursor: pointer; color: var(--text-bright);
-}
-.tt-tree-task { min-height: 34px; padding: 0 8px 0 12px; font-size: var(--fs-body); }
-.tt-tree-grp.on .tt-tree-task { font-weight: 600; }
-.tt-tree-sess { height: 30px; padding: 0 8px 0 30px; font-size: var(--fs-sm); color: var(--text-dim); }
-.tt-tree-grp .tt-tree-sess:last-child { margin-bottom: 3px; }
-:where(html[data-pointer="fine"]) .tt-tree-task:hover, :where(html[data-pointer="fine"]) .tt-tree-sess:hover, :where(html[data-pointer="fine"]) .tt-tree-more:hover { background: var(--list-hover); color: var(--text-bright); }
-.tt-tree-sess.on { background: var(--accent-soft); color: var(--text-bright); font-weight: 600; }
-.tt-tree-task .nm, .tt-tree-sess .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tt-tree-task .nm.br { font-family: var(--mono); font-size: var(--fs-sm); }
-.tt-tree-sess .ic { flex: 0 0 auto; width: 16px; height: 16px; display: grid; place-items: center; }
-/* 状态点：运行 / 等你 / 待收尾 才画，空闲不画——一列灰点什么也没说 */
-.tt-tree .dot { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; }
-.tt-tree-task .dot.idle { background: var(--text-dimmer); opacity: .45; }
+.tt-tree-proj + .tt-tree-proj { margin-top: 4px; }
+.tt-tree-proj.loose { margin-top: 10px; }
+.tt-tree-proj .gl { padding: 0 10px; margin-bottom: var(--sp-1); color: var(--text-dimmer); font-size: var(--fs-micro); font-weight: 700; letter-spacing: .1em; }
+/* 缩进：每层 22px，和图标槽 + 间距同宽，下一层的图标正好落在上一层文字的起点 */
+.tt-tree-row.lvl1 { padding-left: 32px; }
+.tt-tree-row.lvl2 { padding-left: 54px; }
+.tt-tree-row .chev { flex: 0 0 auto; display: grid; place-items: center; color: var(--text-dimmer); transition: transform .15s; }
+.tt-tree-row.closed .chev { transform: rotate(-90deg); }
+.tt-tree-row.more { color: var(--text-dimmer); font-size: var(--fs-sm); }
+/* 状态点住在图标槽正中：运行 / 等你 / 待收尾 才上色，空闲很淡 */
+.tt-tree .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-dimmer); }
+.tt-tree .dot.idle { opacity: .4; }
 .tt-tree .dot.run { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
 .tt-tree .dot.wait { background: var(--warn); box-shadow: 0 0 0 3px var(--warn-soft); }
 .tt-tree .dot.fin { background: var(--swarm); }
-/* 空闲 worktree 折成一行：灰字、小一号，点开才展开 */
-.tt-tree-more { min-height: 30px; margin-left: 8px; padding: 0 8px 0 12px; color: var(--text-dimmer); font-size: var(--fs-meta); }
-.tt-tree-more .chev { display: grid; place-items: center; transition: transform .15s; }
-.tt-tree-more.closed .chev { transform: rotate(-90deg); }
+/* 会话行末尾的状态点（只在运行 / 等你时有） */
+.tt-tree-row .nm + .dot { flex: 0 0 auto; margin-left: auto; }
 .tt-tree-empty { padding: 4px 12px 8px; color: var(--text-dimmer); font-size: var(--fs-meta); }
-html[data-pointer="coarse"] .tt-tree-task, html[data-pointer="coarse"] .tt-tree-projrow { min-height: 44px; }
-html[data-pointer="coarse"] .tt-tree-sess, html[data-pointer="coarse"] .tt-tree-more { height: 44px; }
 
 /* ── 标签条右端「新建 ▾」与任务空态（22 设计 §3.3）── */
 .tt-tabs-end { display: flex; align-items: center; flex: 0 0 auto; padding: 0 6px; border-left: 1px solid var(--border-subtle); }
