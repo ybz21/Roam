@@ -19,6 +19,8 @@ import {
 import { Viewer } from './fileview'
 import { InspectorLayers, type LayerSize } from '../shell/InspectorLayers'
 import { ArrowUp } from '../../icons'
+import { searchContent } from '../search/client'
+import type { SearchHit } from '../search/types'
 import { composingEnter, onEnterSubmit } from '../../enter-submit'
 
 interface Entry { name: string; dir: boolean; size: number; mtime: number; ctime: number }
@@ -348,7 +350,13 @@ export default function FileBrowser({
   selectedPath,
   openRequest,
   chrome = 'full',
+  onOpenLine,
+  focusSearchNonce,
 }: {
+  /** 全文搜索点中一行：开文件并定位到那一行；不传就只开文件 */
+  onOpenLine?: (path: string, line: number) => void
+  /** 外面（⌘⇧F）要求打开并聚焦搜索框；自增触发 */
+  focusSearchNonce?: number
   /** 'tree'：只要树 + 搜索（右栏当前任务的文件面板，22 设计 §3.4）——标题行、项目芯片、路径框都不画，
       作用域头由外层给；'full' 是今天的文件管理器 */
   chrome?: 'full' | 'tree'
@@ -402,6 +410,8 @@ export default function FileBrowser({
   // 递归按文件名搜索（当前目录向下），放大镜开关切换；有查询词时列表区改显搜索结果。
   const [searchOpen, setSearchOpen] = useState(chrome === 'tree') // 树模式一上来就带搜索框
   const [query, setQuery] = useState('')
+  const searchRef = useRef<import('antd').InputRef>(null)
+  useEffect(() => { if (focusSearchNonce) { setSearchOpen(true); setTimeout(() => searchRef.current?.focus(), 0) } }, [focusSearchNonce])
   const [results, setResults] = useState<{ path: string; name: string; rel: string }[] | null>(null)
   const [searching, setSearching] = useState(false)
   const [searchTrunc, setSearchTrunc] = useState(false)
@@ -493,6 +503,40 @@ export default function FileBrowser({
     }, 250)
     return () => { stop = true; clearTimeout(h) }
   }, [searchQ, searchOpen, cur, tick])
+
+  // 全文搜索（回车才跑：比名字搜索贵一到两个数量级）。同一个框：打字按名字过滤，回车搜内容；
+  // 改了字就退回名字结果。原来右栏另开一段「全文搜索」，两个搜索框并排没人分得清哪个是哪个
+  const [hits, setHits] = useState<SearchHit[] | null>(null)
+  const [hitsMeta, setHitsMeta] = useState<{ truncated: boolean; tookMs: number } | null>(null)
+  const [hitsBusy, setHitsBusy] = useState(false)
+  const [hitsErr, setHitsErr] = useState('')
+  const hitsAbort = useRef<AbortController | null>(null)
+  const runContentSearch = async () => {
+    const q = query.trim()
+    if (!q || !cur) return
+    hitsAbort.current?.abort()
+    const ac = new AbortController()
+    hitsAbort.current = ac
+    setHitsBusy(true); setHitsErr('')
+    try {
+      const r = await searchContent(q, { dir: cur, signal: ac.signal })
+      if (ac.signal.aborted) return
+      setHits(r.hits); setHitsMeta({ truncated: r.truncated, tookMs: r.tookMs })
+    } catch (e: any) {
+      if (!ac.signal.aborted) setHitsErr(e?.message || String(e))
+    } finally {
+      if (!ac.signal.aborted) setHitsBusy(false)
+    }
+  }
+  useEffect(() => { hitsAbort.current?.abort(); setHits(null); setHitsMeta(null); setHitsErr(''); setHitsBusy(false) }, [query, cur])
+  const hitGroups = useMemo(() => {
+    const groups: { path: string; rel: string; lines: SearchHit[] }[] = []
+    for (const h of hits || []) {
+      const g = groups.find((x) => x.path === h.path)
+      if (g) g.lines.push(h); else groups.push({ path: h.path!, rel: h.subtitle || h.path!, lines: [h] })
+    }
+    return groups
+  }, [hits])
 
   const doUpload = async (files: FileList | File[], targetDir = cur) => {
     if (!files || !files.length || !targetDir || uploading) return
@@ -814,13 +858,15 @@ export default function FileBrowser({
       {searchOpen && (
         <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)' }}>
           <Input
+            ref={searchRef}
             size="small"
             autoFocus
             allowClear
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onPressEnter={(e) => { if (composingEnter(e)) return; void runContentSearch() }}
             prefix={<span style={{ color: 'var(--text-dimmer)', display: 'inline-flex' }}><SearchIcon /></span>}
-            suffix={searching ? <Spin size="small" /> : null}
+            suffix={searching || hitsBusy ? <Spin size="small" /> : null}
             placeholder={t('file.searchPlaceholder')}
             style={{ fontSize: 12 }}
           />
@@ -870,13 +916,38 @@ export default function FileBrowser({
       </div>
       )}
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 0' }}>
-        {searchOpen && searchQ ? (
+        {searchOpen && searchQ && (hits !== null || hitsBusy || hitsErr) ? (
+          <div className="tt-csearch" style={{ padding: '0 6px 8px' }}>
+            {hitsBusy && <div className="tt-csearch-note"><Spin size="small" /></div>}
+            {!hitsBusy && hitsErr && <div className="tt-csearch-note">{hitsErr}</div>}
+            {!hitsBusy && !hitsErr && hits && hits.length === 0 && <div className="tt-csearch-note">{t('search.contentNone')}</div>}
+            {!hitsBusy && !hitsErr && hits && hits.length > 0 && hitsMeta && (
+              <div className="tt-csearch-note">{t('search.contentSummary', { n: hits.length, files: hitGroups.length, ms: hitsMeta.tookMs })}{hitsMeta.truncated ? ` · ${t('search.contentTruncated')}` : ''}</div>
+            )}
+            {!hitsBusy && hitGroups.map((g) => (
+              <div key={g.path} className="tt-csearch-file">
+                <button type="button" className="tt-csearch-fname" onClick={() => openFile(g.path)} title={g.path}>
+                  <span className="fi"><FileTypeIcon name={g.rel} /></span>
+                  <span className="nm">{g.rel.split('/').pop()}</span>
+                  <span className="dir">{g.rel.split('/').slice(0, -1).join('/')}</span>
+                  <span className="cnt">{g.lines.length}</span>
+                </button>
+                {g.lines.map((h) => (
+                  <button key={h.id} type="button" className="tt-csearch-line" onClick={() => (onOpenLine && h.line != null ? onOpenLine(g.path, h.line) : openFile(g.path))} title={`${g.rel}:${h.line}`}>
+                    <span className="no">{h.line}</span><span className="tx">{h.title}</span>
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+        ) : searchOpen && searchQ ? (
           searching && !results ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: 16 }}><Spin size="small" /></div>
           ) : results && results.length === 0 ? (
             <div style={{ color: 'var(--text-dimmer)', fontSize: 12, padding: '6px 10px' }}>{t('file.noMatches')}</div>
           ) : (
             <>
+              <div className="tt-csearch-note" style={{ padding: '4px 10px' }}>{t('file.enterForContent', { q: searchQ })}</div>
               {searchTrunc && <div style={{ color: '#d29922', fontSize: 11, padding: '4px 10px' }}>{t('file.searchTruncated')}</div>}
               {(results || []).map((r) => (
                 <div key={r.path} className="cc-filerow" draggable

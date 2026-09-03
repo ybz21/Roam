@@ -4,9 +4,8 @@
 // 现在 App 只挂**这一个** AdaptivePanel：顶上活动条切面板，下面写着当前是哪个 worktree、哪条分支。
 // 三个面板都挂着、只切 display——AdaptivePanel 文件头写过「是藏不是卸载」的账：卸载 Git 会连
 // 它子树里的 Worktree 一起没了。槽位机制（inspector.ts / InspectorColumn）一行不改，只是栈里最多一个。
-import { Suspense, useEffect, useState, type ReactNode } from 'react'
-import { Segmented, Spin, Tooltip } from 'antd'
-import { ContentSearch } from './ContentSearch'
+import { Suspense, type ReactNode } from 'react'
+import { Spin, Tooltip } from 'antd'
 import { useI18n } from '../../i18n'
 import { FolderIcon } from '../../icons'
 import { BranchIcon } from '../git/parts'
@@ -49,15 +48,12 @@ export function InspectorPanels({ open, panel, onPanel, dir, scope, branch, open
   onOpenFile?: (path: string) => void
   /** 中间当前的文件标签：树里高亮它 */
   selectedPath?: string
-  /** ⌘⇧F：切到「内容」并聚焦；自增触发 */
+  /** ⌘⇧F：聚焦文件面板的搜索框；自增触发 */
   searchNonce?: number
   /** 内容搜索点行：开标签并定位 */
   onOpenLine?: (path: string, line?: number) => void
 }) {
   const { t } = useI18n()
-  // 文件面板上方两段：名称 = FileBrowser 自己的树 + 放大镜；内容 = ContentSearch（22 设计 §3.4）
-  const [view, setView] = useState<'files' | 'search'>('files')
-  useEffect(() => { if (searchNonce) setView('search') }, [searchNonce])
   const acts: { key: InspectorPanelKind; label: string; icon: ReactNode }[] = [
     { key: 'files', label: t('nav.files'), icon: <FolderIcon size={17} /> },
     { key: 'git', label: t('git.title'), icon: gitIcon },
@@ -82,16 +78,9 @@ export function InspectorPanels({ open, panel, onPanel, dir, scope, branch, open
         </div>
         {/* 三个面板都挂着，只切 display：树的展开态、Git 的选中都留着 */}
         <div className="tt-ins-body" style={{ display: panel === 'files' ? 'flex' : 'none' }}>
-          <div className="tt-ins-seg">
-            <Segmented size="small" block value={view} onChange={(v) => setView(v as 'files' | 'search')}
-              options={[{ label: t('search.byName'), value: 'files' }, { label: t('search.byContent'), value: 'search' }]} />
-          </div>
-          <div className="tt-ins-body" style={{ display: view === 'files' ? 'flex' : 'none' }}>
-            <FileBrowser dir={dir} accent="var(--accent)" layout="dock" chrome="tree" openRequest={openRequest} onOpenFile={onOpenFile} selectedPath={selectedPath || null} />
-          </div>
-          <div className="tt-ins-body" style={{ display: view === 'search' ? 'flex' : 'none' }}>
-            <ContentSearch dir={dir} focusNonce={searchNonce} onOpen={(p, line) => (onOpenLine || onOpenFile)?.(p, line as never)} />
-          </div>
+          {/* 一个搜索框：打字按名字过滤，回车在文件内容里搜（22 设计 §3.4 的「名称 / 内容」两段并成了一框） */}
+          <FileBrowser dir={dir} accent="var(--accent)" layout="dock" chrome="tree" openRequest={openRequest} onOpenFile={onOpenFile} selectedPath={selectedPath || null}
+            onOpenLine={onOpenLine} focusSearchNonce={searchNonce} />
         </div>
         <div className="tt-ins-body" style={{ display: panel === 'git' ? 'flex' : 'none' }}>
           <Suspense fallback={fallback}><GitPanel dir={dir} accent="var(--accent)" openTerm={openTerm} /></Suspense>
