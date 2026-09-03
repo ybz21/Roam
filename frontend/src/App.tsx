@@ -172,7 +172,7 @@ export default function App() {
   const taskTerms = activeTask ? terms.filter((n) => keyOf(n) === activeTask) : terms
   // 右栏三面板（22 设计 §3.4）：看哪个面板记本机；对话里点了路径要文件面板打开哪个
   const [panel, setPanelLocal] = useState<InspectorPanelKind>(() => {
-    try { return localStorage.getItem('roam.inspectorPanel') === 'git' ? 'git' : 'files' } catch { return 'files' }
+    try { const v = localStorage.getItem('roam.inspectorPanel'); return v === 'git' || v === 'worktree' ? v : 'files' } catch { return 'files' }
   })
   const setPanel = (p: InspectorPanelKind) => { setPanelLocal(p); try { localStorage.setItem('roam.inspectorPanel', p) } catch { /* 记不住而已 */ } }
   // 文件标签（22 设计 §3.3）：按任务分片；activeFile 非空 = 当前标签是文件，空 = 当前标签是会话

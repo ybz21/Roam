@@ -15,9 +15,16 @@ import AdaptivePanel from './AdaptivePanel'
 import { lazyRetry } from '../lazy-retry'
 
 const GitPanel = lazyRetry(() => import('../git/GitPanel'))
+const WorktreePanel = lazyRetry(() => import('../git/WorktreePanel'))
 
-export type InspectorPanelKind = 'files' | 'git'
+export type InspectorPanelKind = 'files' | 'git' | 'worktree'
 
+const worktreeIcon = (
+  <svg viewBox="0 0 24 24" width={17} height={17} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <circle cx="12" cy="4.8" r="2.2" /><circle cx="7" cy="19.2" r="2.2" /><circle cx="17" cy="19.2" r="2.2" />
+    <path d="M12 7v2.6" /><path d="M12 9.6a4.4 4.4 0 0 0-5 4.4v3" /><path d="M12 9.6a4.4 4.4 0 0 1 5 4.4v3" />
+  </svg>
+)
 const gitIcon = (
   <svg viewBox="0 0 24 24" width={17} height={17} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <circle cx="6" cy="6" r="2.2" /><circle cx="6" cy="18" r="2.2" /><circle cx="18" cy="12" r="2.2" />
@@ -54,8 +61,7 @@ export function InspectorPanels({ open, panel, onPanel, dir, scope, branch, open
   const acts: { key: InspectorPanelKind; label: string; icon: ReactNode }[] = [
     { key: 'files', label: t('nav.files'), icon: <FolderIcon size={17} /> },
     { key: 'git', label: t('git.title'), icon: gitIcon },
-    // Worktree 面板先不上：WorktreePanel 是带 Drawer 壳的组件，嵌进列里会盖住活动条；
-    // Git 面板里本来就有 worktree 那一页。要单独一格得先把它的壳拆开（22 设计 §3.4 的第三格）
+    { key: 'worktree', label: t('worktree.title'), icon: worktreeIcon },
   ]
   const fallback = <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}><Spin /></div>
 
@@ -89,6 +95,10 @@ export function InspectorPanels({ open, panel, onPanel, dir, scope, branch, open
         </div>
         <div className="tt-ins-body" style={{ display: panel === 'git' ? 'flex' : 'none' }}>
           <Suspense fallback={fallback}><GitPanel dir={dir} accent="var(--accent)" openTerm={openTerm} /></Suspense>
+        </div>
+        <div className="tt-ins-body" style={{ display: panel === 'worktree' ? 'flex' : 'none' }}>
+          {/* embedded：不自己 claim 槽位（否则压在这块面板上面）、不画自己的标题行 */}
+          <Suspense fallback={fallback}><WorktreePanel embedded open onClose={() => onPanel('files')} openTerm={openTerm} initialDir={dir} /></Suspense>
         </div>
       </div>
     </AdaptivePanel>

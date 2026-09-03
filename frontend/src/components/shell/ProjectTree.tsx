@@ -48,17 +48,10 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
 }) {
   const { t } = useI18n()
   const [closed, setClosed] = useState<Set<string>>(readClosed)
-  // 「还有 N 个空闲 worktree」展开了哪些项目的：纯视图态，不记
-  const [idleOpen, setIdleOpen] = useState<Set<string>>(() => new Set())
   const toggle = (key: string) => setClosed((cur) => {
     const next = new Set(cur)
     if (next.has(key)) next.delete(key); else next.add(key)
     writeClosed(next)
-    return next
-  })
-  const toggleIdle = (key: string) => setIdleOpen((cur) => {
-    const next = new Set(cur)
-    if (next.has(key)) next.delete(key); else next.add(key)
     return next
   })
 
@@ -106,12 +99,10 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
 
       {tree.projects.map((p) => {
         const open = !closed.has(p.key)
-        // 三档：有会话的任务直接列；会话已关但还有未合并提交的折进「待收尾 N」；
-        // 既没会话也没提交的折进「空闲 worktree N」——后两种是 worktree 不是活着的任务，
-        // 和正在干的活混排在一起，树就成了 git worktree list
+        // 项目下只列**有会话的任务**。没会话的 worktree（待收尾 / 空闲）不进树：它们是 worktree
+        // 不是活着的任务，用户记不住也不该在这里管——待收尾的数量在项目行徽标上，处理去右栏
+        // Worktree 面板或项目主页
         const live = p.tasks.filter((x) => x.sessions.length > 0)
-        const unfinished = p.tasks.filter((x) => x.unfinished)
-        const showUnfinished = idleOpen.has(p.key + ':fin')
         return (
           <div key={p.key} className="tt-tree-proj">
             {/* 项目的身份就是项目卡上那枚按名字取色的首字母圆标（icoOf），不另画图标 */}
@@ -126,15 +117,7 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
             {open && (
               <>
                 {live.map((x) => taskRows(x, 1))}
-                {unfinished.length > 0 && (
-                  <button type="button" className={`tt-nav-item tt-tree-row lvl1 more${showUnfinished ? '' : ' closed'}`} onClick={() => toggleIdle(p.key + ':fin')}>
-                    <span className="ic chev"><ChevronDown size={13} /></span>
-                    <span className="nm">{t('tree.unfinishedN', { n: unfinished.length })}</span>
-                  </button>
-                )}
-                {showUnfinished && unfinished.map((x) => taskRows(x, 2))}
-                {/* 既没会话也没未合并提交的 worktree 不显示：用户不需要关心、也记不住它们；要清理去项目页 */}
-                {!live.length && !unfinished.length && <div className="tt-tree-empty">{t('tree.noTasks')}</div>}
+                {!live.length && <div className="tt-tree-empty">{t('tree.noTasks')}</div>}
               </>
             )}
           </div>

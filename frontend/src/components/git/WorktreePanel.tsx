@@ -53,9 +53,11 @@ const RAIL: Record<string, string> = {
   main: 'rgba(139,148,158,.45)', live: 'var(--ok)', orphan: '#d29922', external: 'rgba(139,148,158,.7)',
 }
 
-export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
+export default function WorktreePanel({ open, onClose, openTerm, initialDir, embedded = false }: {
   open: boolean
   onClose: () => void
+  /** 嵌在右栏三面板里（22 设计 §3.4）：不自己 claim Inspector 槽位、不画自己的标题行，壳由外层给 */
+  embedded?: boolean
   openTerm?: (name: string) => void
   initialDir?: string
 }) {
@@ -427,9 +429,9 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
     // 从右横切进场、右上角一个 ×、返回键不认它。
     // 桌面走 Inspector 列（14 panels-desktop.html）：抽屉的遮罩 + 横切进场是第三种
     // 「从右边出来一块」，和 Git 面板那两种并列。现在三者同一条 rail、同一套宽度记忆。
-    <AdaptivePanel open={open} onClose={onClose} title={t('worktree.title')}>
-      {/* 桌面档的面板头：抽屉原来提供的标题与关闭，进 Inspector 之后要自己长出来 */}
-      {wide && (
+    <PanelShell embedded={embedded} open={open} onClose={onClose} title={t('worktree.title')}>
+      {/* 桌面档的面板头：抽屉原来提供的标题与关闭，进 Inspector 之后要自己长出来；嵌入右栏时外层已经有活动条 */}
+      {wide && !embedded && (
         <div style={{
           flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 8,
           padding: '10px 12px', borderBottom: '1px solid var(--border-subtle)',
@@ -592,6 +594,12 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir }: {
         )}
       </Modal>
       </div>
-    </AdaptivePanel>
+    </PanelShell>
   )
+}
+
+/** 面板的壳：独立打开时是 AdaptivePanel（claim 槽位 / 手机二级页）；嵌在右栏三面板里时只是一个列容器 */
+function PanelShell({ embedded, open, onClose, title, children }: { embedded: boolean; open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
+  if (embedded) return <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, minWidth: 0 }}>{children}</div>
+  return <AdaptivePanel open={open} onClose={onClose} title={title}>{children}</AdaptivePanel>
 }
