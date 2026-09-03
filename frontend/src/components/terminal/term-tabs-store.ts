@@ -17,12 +17,13 @@ const KEY = 'roam.terms'
 /** 最多记几台机器的标签——超了按最后使用时间淘汰，别让它无限长 */
 const MAX_NODES = 8
 
-export type FileTab = { path: string; preview: boolean; mode: 'source' | 'preview' | 'changes' }
-/** 文件标签按任务分片（22 设计 §3.3）：key 是 TaskKey，diff 类标签不存 */
+/** 文件标签：task 是从哪个任务（worktree）开的——路径条的根、右栏跟着它走 */
+export type FileTab = { path: string; preview: boolean; mode: 'source' | 'preview' | 'changes'; task: string }
+/** 标签条不按任务隔离（用户拍板）：会话标签全显示，文件标签一条平铺列表；diff 类标签不存 */
 export type TabSet = {
   terms: string[]; active: string; task: string
-  files: Record<string, FileTab[]>
-  activeFile: Record<string, string>
+  files: FileTab[]
+  activeFile: string
 }
 type Entry = TabSet & { at: number }
 
@@ -44,7 +45,7 @@ function writeAll(all: Record<string, Entry>) {
 }
 
 /** 存一台机器当前开着的标签。terms 是**写进 URL 的那种 token**（会话 id），不是显示名。 */
-export function saveTabs(nodeId: string | null, terms: string[], active: string, task = '', files: Record<string, FileTab[]> = {}, activeFile: Record<string, string> = {}) {
+export function saveTabs(nodeId: string | null, terms: string[], active: string, task = '', files: FileTab[] = [], activeFile = '') {
   const all = readAll()
   const cur = slot(nodeId)
   // at 严格递增，不直接用 Date.now()：切标签是连着来的，同一毫秒内存好几次很正常，
@@ -63,21 +64,27 @@ export function saveTabs(nodeId: string | null, terms: string[], active: string,
 /** 取一台机器上次开着的标签；没记过就是空。 */
 export function loadTabs(nodeId: string | null): TabSet {
   const e = readAll()[slot(nodeId)]
-  if (!e || !Array.isArray(e.terms)) return { terms: [], active: '', task: '', files: {}, activeFile: {} }
-  // 老数据没有 task / files 字段：照常读，任务由还原时按 active 会话算出来
-  const files: Record<string, FileTab[]> = {}
-  if (e.files && typeof e.files === 'object') {
-    for (const [k, v] of Object.entries(e.files as Record<string, unknown>)) {
+  if (!e || !Array.isArray(e.terms)) return { terms: [], active: '', task: '', files: [], activeFile: '' }
+  // 老数据没有 task / files 字段：照常读。files 曾按任务分片存成 {任务: [...]}（22 设计第一版），
+  // 现在是一条平铺列表；老形状摊平、把分片键写进 task
+  const one = (f: any, task: string): FileTab | null => (f && typeof f.path === 'string')
+    ? { path: f.path, preview: !!f.preview, mode: f.mode === 'preview' || f.mode === 'changes' ? f.mode : 'source', task: typeof f.task === 'string' ? f.task : task }
+    : null
+  const files: FileTab[] = []
+  const rawFiles: unknown = e.files
+  if (Array.isArray(rawFiles)) {
+    for (const f of rawFiles) { const t = one(f, ''); if (t) files.push(t) }
+  } else if (rawFiles && typeof rawFiles === 'object') {
+    for (const [k, v] of Object.entries(rawFiles as Record<string, unknown>)) {
       if (!Array.isArray(v)) continue
-      files[k] = v.filter((f: any) => f && typeof f.path === 'string').map((f: any) => ({
-        path: f.path, preview: !!f.preview, mode: f.mode === 'preview' || f.mode === 'changes' ? f.mode : 'source',
-      }))
+      for (const f of v) { const t = one(f, k); if (t) files.push(t) }
     }
   }
-  const activeFile: Record<string, string> = {}
-  if (e.activeFile && typeof e.activeFile === 'object') {
-    for (const [k, v] of Object.entries(e.activeFile as Record<string, unknown>)) if (typeof v === 'string') activeFile[k] = v
-  }
+  const rawActive: unknown = e.activeFile
+  let activeFile = ''
+  if (typeof rawActive === 'string') activeFile = rawActive
+  else if (rawActive && typeof rawActive === 'object') activeFile = Object.values(rawActive as Record<string, unknown>).find((v): v is string => typeof v === 'string' && !!v) || ''
+  if (activeFile && !files.some((f) => f.path === activeFile)) activeFile = ''
   return { terms: e.terms.filter((x) => typeof x === 'string' && x), active: typeof e.active === 'string' ? e.active : '', task: typeof e.task === 'string' ? e.task : '', files, activeFile }
 }
 

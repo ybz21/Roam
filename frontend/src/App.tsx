@@ -68,7 +68,7 @@ import Tasks from './components/tasks/Tasks'
 import TerminalPane from './components/terminal/TerminalPane'
 import SoloTerminal from './components/terminal/SoloTerminal'
 import { ICONS } from './components/nav-icons'
-import { normalizeRoute, setHashParams, readTermTokens, readTask, NO_TERMS, TASK_ROUTE } from './route-hash'
+import { normalizeRoute, setHashParams, readTermTokens, NO_TERMS, TASK_ROUTE } from './route-hash'
 import type { ClaudeInfo } from './components/terminal/claude-info'
 import { dropDeadTokens, loadTabs, saveTabs, type FileTab } from './components/terminal/term-tabs-store'
 import type { FileTabMode } from './components/files/FilePathBar'
@@ -162,59 +162,60 @@ export default function App() {
   // 组件内部一律用会话名——后端 API / WebSocket 收发的都是名字。
   const [terms, setTerms] = useState<string[]>([])
   const [active, setActive] = useState<string | null>(null)
-  // 任务视图（22 设计）：当前任务只是标签条上的**过滤器**——terms 仍是全站会话集合，
-  // 哪些会话属于当前任务按 worktree 路径当场算（taskKeyOf），没有第二份列表，
-  // 所以 URL 同步、按机器持久化、⌘K 本地条目、claude/codex 轮询、会话坞一处都不用改。
-  const [activeTask, setActiveTask] = useState<TaskKey | null>(() => readTask() || null)
-  const activeTaskRef = useRef<TaskKey | null>(null)
-  activeTaskRef.current = activeTask
+  // 标签条**不按任务隔离**（用户拍板，推翻 22 设计 §3.3 的分片）：所有会话标签都在条上。
+  // 「当前任务」不是独立状态，而是从当前标签推出来的：会话标签看它的 worktree（taskKeyOf），
+  // 文件标签看它是从哪个任务开的。左树高亮、右栏的根、新建会话落进哪个目录，都跟着它走。
   const projTable = useSessionProjects()
-  const keyOf = (n: string) => taskKeyOf(n, projTable[n]?.worktree)
-  const taskTerms = activeTask ? terms.filter((n) => keyOf(n) === activeTask) : terms
+  // 树里点会话时树已经知道它在哪个任务（worktree 轮询的名单），归属表可能还没到：记一笔兜底
+  const taskHint = useRef<Record<string, TaskKey>>({})
+  const keyOf = (n: string) => {
+    const k = taskKeyOf(n, projTable[n]?.worktree)
+    return isLooseTask(k) && taskHint.current[n] ? taskHint.current[n] : k
+  }
   // 右栏三面板（22 设计 §3.4）：看哪个面板记本机；对话里点了路径要文件面板打开哪个
   const [panel, setPanelLocal] = useState<InspectorPanelKind>(() => {
     try { const v = localStorage.getItem('roam.inspectorPanel'); return v === 'git' || v === 'worktree' ? v : 'files' } catch { return 'files' }
   })
   const setPanel = (p: InspectorPanelKind) => { setPanelLocal(p); try { localStorage.setItem('roam.inspectorPanel', p) } catch { /* 记不住而已 */ } }
-  // 文件标签（22 设计 §3.3）：按任务分片；activeFile 非空 = 当前标签是文件，空 = 当前标签是会话
-  const [fileTabs, setFileTabs] = useState<Record<TaskKey, FileTab[]>>({})
-  const [activeFile, setActiveFile] = useState<Record<TaskKey, string>>({})
+  // 文件标签：一条平铺列表，每条记着从哪个任务开的；activeFile 非空 = 当前标签是文件，空 = 当前标签是会话
+  const [fileTabs, setFileTabs] = useState<FileTab[]>([])
+  const [activeFile, setActiveFile] = useState('')
   const [reveal, setReveal] = useState<{ path: string; line: number; nonce: number } | undefined>()
   const [searchNonce, setSearchNonce] = useState(0)
-  const curFiles = activeTask ? fileTabs[activeTask] || [] : []
-  const curFile = activeTask ? activeFile[activeTask] || '' : ''
+  const curFiles = fileTabs
+  const curFile = activeFile
+  const curFileTab = curFile ? fileTabs.find((f) => f.path === curFile) : undefined
+  // 当前任务：文件标签 → 它记的任务；会话标签 → 它的 worktree；什么都没开 → 没有
+  const activeTask: TaskKey | null = curFileTab ? (curFileTab.task || null) : active ? keyOf(active) : null
+  const activeTaskRef = useRef<TaskKey | null>(null)
+  activeTaskRef.current = activeTask
   const isMd = (p: string) => /\.(md|markdown|mdx|html?)$/i.test(p)
   // 单击开预览标签（斜体）；再单击别的文件替换它；已开着的直接激活
   const openFileTab = (path: string, line?: number) => {
-    const key = activeTaskRef.current
-    if (!key) return
-    setFileTabs((m) => {
-      const list = m[key] || []
-      if (list.some((f) => f.path === path)) return m
-      const tab: FileTab = { path, preview: true, mode: isMd(path) ? 'preview' : 'source' }
+    const key = activeTaskRef.current || ''
+    setFileTabs((list) => {
+      if (list.some((f) => f.path === path)) return list
+      const tab: FileTab = { path, preview: true, mode: isMd(path) ? 'preview' : 'source', task: key }
       const i = list.findIndex((f) => f.preview)
-      return { ...m, [key]: i < 0 ? [...list, tab] : list.map((f, k) => (k === i ? tab : f)) }
+      return i < 0 ? [...list, tab] : list.map((f, k) => (k === i ? tab : f))
     })
-    setActiveFile((m) => ({ ...m, [key]: path }))
+    setActiveFile(path)
     if (line && line > 0) setReveal((prev) => ({ path, line, nonce: (prev?.nonce || 0) + 1 }))
   }
-  const selectFileTab = (path: string) => { const key = activeTaskRef.current; if (key) setActiveFile((m) => ({ ...m, [key]: path })) }
-  const pinFileTab = (path: string) => { const key = activeTaskRef.current; if (key) setFileTabs((m) => ({ ...m, [key]: (m[key] || []).map((f) => (f.path === path ? { ...f, preview: false } : f)) })) }
-  const setFileMode = (path: string, mode: FileTabMode) => { const key = activeTaskRef.current; if (key) setFileTabs((m) => ({ ...m, [key]: (m[key] || []).map((f) => (f.path === path ? { ...f, mode, preview: false } : f)) })) }
+  const selectFileTab = (path: string) => setActiveFile(path)
+  const pinFileTab = (path: string) => setFileTabs((list) => list.map((f) => (f.path === path ? { ...f, preview: false } : f)))
+  const setFileMode = (path: string, mode: FileTabMode) => setFileTabs((list) => list.map((f) => (f.path === path ? { ...f, mode, preview: false } : f)))
   const closeFileTab = (path: string) => {
-    const key = activeTaskRef.current
-    if (!key) return
-    setFileTabs((m) => {
-      const list = m[key] || []
+    setFileTabs((list) => {
       const i = list.findIndex((f) => f.path === path)
       const next = list.filter((f) => f.path !== path)
       // 关掉当前文件标签：回到邻居文件，没有邻居就回会话
-      setActiveFile((am) => (am[key] === path ? { ...am, [key]: (next[i - 1] || next[i])?.path || '' } : am))
-      return { ...m, [key]: next }
+      setActiveFile((cur) => (cur === path ? (next[i - 1] || next[i])?.path || '' : cur))
+      return next
     })
   }
   // 点会话标签 = 文件标签让位
-  const activateSession = (n: string) => { setActive(n); const key = activeTaskRef.current; if (key) setActiveFile((m) => (m[key] ? { ...m, [key]: '' } : m)) }
+  const activateSession = (n: string) => { setActive(n); setActiveFile('') }
   // 左栏树的三份原料（22 设计 §3.2）：/projects 与每项目的 worktree 挂在下面那条 15s 轮询上，/sessions 挂 5s 那条
   const [treeSrc, setTreeSrc] = useState<{ projects: any[]; worktrees: Record<string, any[]> }>({ projects: [], worktrees: {} })
   // 建了新会话就立刻把会话表 / 归属表 / worktree 都刷一遍，不等下一轮（分别 5s / 15s / 60s）
@@ -233,7 +234,7 @@ export default function App() {
   const [overlay, setOverlay] = useState(false) // 手机/平板全屏终端
   const [moreOpen, setMoreOpen] = useState(false) // 手机「更多」sheet
   // 任务视图 = 桌面 + 路由 #/w + 有当前任务：中间整块给标签工作区，就是现成的 focus 几何
-  const taskView = hasSider && tab === TASK_ROUTE && !!activeTask
+  const taskView = hasSider && tab === TASK_ROUTE
   // 空间状态（Page / Split / Focus）与 Dock 宽度：唯一的尺寸契约来源
   const space = useWorkspaceLayout(terms.length > 0 || taskView, taskView)
   const { message: antMessage } = AntApp.useApp()
@@ -487,11 +488,9 @@ export default function App() {
     // 查无此会话的 id 直接丢：切机器、会话在别处被关掉，都会在这里长出打不开的空标签
     const names = Array.from(new Set(dropDeadTokens(saved ? saved.terms : fromUrl, sessIds.byId).map(toName)))
     if (!names.length) return
-    // 任务：URL 的 wt 优先（初始化时已读），没有就用本机记的；都没有则下面那个 effect 按 active 会话算
-    if (saved?.task) setActiveTask((cur) => cur || saved.task)
     // 文件标签只记在本机（URL 不写）：不管 URL 有没有说标签，都从本机那份读
     const stored = saved || loadTabs(curNodeId)
-    if (Object.keys(stored.files).length) { setFileTabs(stored.files); setActiveFile(stored.activeFile) }
+    if (stored.files.length) { setFileTabs(stored.files); setActiveFile(stored.activeFile) }
     // 用户在 id 表回来之前就点开了标签 → 以他的操作为准，别被 URL 还原顶掉
     setTerms((cur) => (cur.length ? cur : names))
     setActive((cur) => {
@@ -514,19 +513,11 @@ export default function App() {
     setHashParams({
       terms: toks.map(encodeURIComponent).join(','),
       active: activeTok ? encodeURIComponent(activeTok) : '',
-      wt: activeTask ? encodeURIComponent(activeTask) : '',
+      wt: '', // 当前任务从当前标签推出来，URL 不再单独写
     })
     // 同一份东西再按机器存一份：切走了还能切回来（见 term-tabs-store）
-    saveTabs(curNodeId, toks, activeTok, activeTask || '', fileTabs, activeFile)
-  }, [terms, active, activeTask, fileTabs, activeFile, sessIds, curNodeId])
-
-  // 没有当前任务（老链接、或归属表还没到）就按 active 会话算一个；归属表到了之后
-  // 「散会话」可能变成 worktree 任务，跟着纠正一次。别的情况不动：用户切了任务就是切了。
-  useEffect(() => {
-    if (!active) return
-    const k = taskKeyOf(active, projTable[active]?.worktree)
-    setActiveTask((cur) => (cur == null || (isLooseTask(cur) && looseSessionOf(cur) === active && cur !== k)) ? k : cur)
-  }, [active, projTable])
+    saveTabs(curNodeId, toks, activeTok, '', fileTabs, activeFile)
+  }, [terms, active, fileTabs, activeFile, sessIds, curNodeId])
 
   // 左栏树：三份原料 memo 一次；已打开会话探测到的 agent 比 /projects 的名单准
   const tree = useMemo(() => buildTaskTree({
@@ -589,24 +580,22 @@ export default function App() {
     // 会话表里还没有它 = 刚建的：立刻刷会话表 / 归属表 / worktree，树上马上归位
     if (!sessList.some((s) => s.name === name)) { sessReload.current?.(); treeReload.current?.() }
     setTerms((ts) => (ts.includes(name) ? ts : [...ts, name]))
-    setActive(name)
+    if (task) taskHint.current[name] = task
+    setActive(name); setActiveFile('')
     if (hasSider) {
-      // 桌面：会话归它的任务，进任务视图（22 设计）；Dock 那两个开关留着给手机与 Page 态
-      setActiveTask(task || keyOf(name))
+      // 桌面：进任务视图（22 设计）；Dock 那两个开关留着给手机与 Page 态
       go(TASK_ROUTE)
       space.setDockOpen(true); space.setFocus('none')
     }
     else setOverlay(true)           // 手机/平板：全屏
   }
-  // 树：点任务 → 切任务并回到它上次的标签；一个标签都没开就打开它的第一个会话
+  // 树：点任务 → 回到它已开着的会话标签；一个都没开就打开它的第一个会话
   const onTreeTask = (key: TaskKey) => {
-    setActiveTask(key)
     const open = terms.filter((n) => keyOf(n) === key)
-    if (open.length) setActive(active && open.includes(active) ? active : open[open.length - 1])
+    if (open.length) { setActive(active && open.includes(active) ? active : open[open.length - 1]); setActiveFile('') }
     else {
       const first = firstSessionOf(tree, key)
       if (first) { openTerm(first, key); return }
-      setActive(null)
     }
     go(TASK_ROUTE)
     space.setDockOpen(true); space.setFocus('none')
@@ -736,7 +725,7 @@ export default function App() {
       onCollapse={taskView ? undefined : () => { setOverlay(false); space.setDockOpen(false) }}
       onReorder={reorderTerm}
       onNeedsInput={setMobileWaiting}
-      visibleTerms={hasSider ? taskTerms : terms}
+      visibleTerms={terms}
       onNew={taskView ? { terminal: () => { void newTerminalInTask('shell') }, claude: () => { void newTerminalInTask('claude') }, codex: () => { void newTerminalInTask('codex') }, task: newTaskInProject } : undefined}
       // 任务视图里对话点路径 / Git 都落到右栏三面板；手机与 Page 态退回 TerminalPane 自己的二级页
       onOpenFile={taskView ? (path, line) => openFileTab(path, line) : undefined}
