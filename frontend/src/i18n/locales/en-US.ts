@@ -291,6 +291,8 @@ const enUS = {
   'tree.unfinishedN': 'Unfinished {n}',
   'tree.unfinishedShort': '↑{n}',
   'tabs.new': 'New',
+  'inspector.toggle': 'Right panel',
+  'chat.sendTo': 'Message {name}…',
   'pathbar.source': 'Source',
   'search.byName': 'Files',
   'search.byContent': 'Search in files',

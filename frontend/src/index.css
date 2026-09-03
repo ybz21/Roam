@@ -1475,6 +1475,7 @@ html[data-size="compact"] .ant-form-item-control-input-content > .ant-picker { w
    App.tsx 的 TBtn），一排安静的扁平按钮里突然吊着一个圈，重得很。
    静态只留一层底色说「这个面板开着」；指到它时才浮出一道同色细内环当反馈——
    环只在 hover 出现、不常驻，一排按钮就不会被边框切碎。 */
+.tt-tbtn.ico { width: 28px; padding: 0; justify-content: center; }
 .tt-tbtn.on { background: var(--accent-soft); color: var(--accent); }
 .tt-tbtn.on.ok { background: var(--ok-soft); color: var(--ok); }
 :where(html[data-pointer="fine"]) .tt-tbtn.on:hover { background: var(--accent-soft); color: var(--accent);
@@ -1617,6 +1618,7 @@ html[data-pointer="coarse"] .tt-act::after { content: ''; position: absolute; le
 :where(html[data-pointer="fine"]) .tt-pill:hover { color: var(--text-bright); border-color: var(--text-dim); }
 .tt-pill:focus-visible { outline: 1px solid var(--accent-border); outline-offset: 1px; }
 .tt-pill.on { color: var(--accent); border-color: var(--accent-border); background: var(--accent-soft); }
+.tt-pill.on.ok { color: var(--ok); border-color: var(--ok-border); background: var(--ok-soft); }
 .tt-pill.danger { color: var(--danger); border-color: var(--danger-border); }
 .tt-pill:disabled, .tt-pill.dis { opacity: .4; cursor: not-allowed; }
 /* 图标钮：动作名走 aria-label，不写进文案（图标硬规则） */

@@ -8,10 +8,12 @@ import { useTranscript, isPending, pairToolResults } from './useTranscript'
 import { buildTaskIndex } from './tasks'
 import { toAgentStatus } from './status'
 import { deriveFromMessages } from './status-derive'
+import { useSessionLabel } from '../sessions/session-label'
 import { useI18n } from '../../i18n'
 
 export default function ClaudeChat({ name, file, onOpenFile, onOpenGit, statusLead }: { name: string; file?: string; onOpenFile?: (path: string, line?: number) => void; onOpenGit?: () => void; statusLead?: ReactNode }) {
   const { t } = useI18n()
+  const label = useSessionLabel(name)
   const { msgs, err, status: raw, hasEarlier, loadEarlier } = useTranscript(name, file, 'transcript')
   const { results, view } = useMemo(() => pairToolResults(msgs), [msgs])
   const pending = isPending(view)
@@ -25,7 +27,7 @@ export default function ClaudeChat({ name, file, onOpenFile, onOpenGit, statusLe
     <ChatShell
       statusLead={statusLead}
       name={name} accent="var(--accent)" error={err} onOpenFile={onOpenFile} tasks={tasks} status={status} onOpenGit={onOpenGit} lastErrorId={derived.lastErrorId}
-      placeholder={t('chat.claudePlaceholder')}
+      placeholder={t('chat.sendTo', { name: label })} agent="claude"
       messages={view} results={results} hasEarlier={hasEarlier} onLoadEarlier={loadEarlier}
       renderMessage={(m, i) => <ChatMessage key={m.id || i} m={m} results={results} side="claude" />}
       pending={pending ? <Typing color="var(--accent)" /> : undefined}

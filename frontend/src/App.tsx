@@ -741,6 +741,7 @@ export default function App() {
       // 任务视图里对话点路径 / Git 都落到右栏三面板；手机与 Page 态退回 TerminalPane 自己的二级页
       onOpenFile={taskView ? (path, line) => openFileTab(path, line) : undefined}
       onOpenGit={taskView ? () => { setPanel('git'); if (space.inspectorCollapsed) space.toggleInspectorCollapsed() } : undefined}
+      inspector={taskView ? { open: !space.inspectorCollapsed, toggle: () => space.toggleInspectorCollapsed() } : undefined}
       fileTabs={taskView ? curFiles : undefined} activeFile={taskView ? curFile : undefined}
       taskDir={activeTask && !isLooseTask(activeTask) ? activeTask : (activeProject?.dir || '')}
       onFileTab={selectFileTab} onCloseFile={closeFileTab} onPinFile={pinFileTab} onFileMode={setFileMode} reveal={reveal}

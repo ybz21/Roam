@@ -33,7 +33,7 @@ import { DPad } from '../shell/DPad'
 import { MobileSheet, SheetRow, SheetSection } from '../shell/MobileSheet'
 import { SessionSwitchSheet } from '../shell/SessionDock'
 import { Button, Dropdown, Input, Modal, Spin, Tooltip, App as AntApp } from 'antd'
-import { AgentLogo, ChevronDown, PlusIcon, TerminalIcon } from '../../icons'
+import { AgentLogo, ChevronDown, PlusIcon, TerminalIcon, PanelRightIcon } from '../../icons'
 // ── 终端面板（多标签 + 工具栏 + 快捷键栏），桌面右栏与手机覆盖层共用 ──
 export default function TerminalPane(props: {
   terms: string[]; active: string | null; setActive: (n: string) => void; closeTerm: (n: string) => void
@@ -55,6 +55,8 @@ export default function TerminalPane(props: {
   visibleTerms?: string[]
   /** 标签条右端「新建 ▾」：在当前任务里开终端 / 去项目页开新任务。不传就不画 */
   onNew?: { terminal: () => void; claude: () => void; codex: () => void; task: () => void }
+  /** 右栏开关（任务视图）：亮着 = 开着 */
+  inspector?: { open: boolean; toggle: () => void }
   /** 对话里点 Read/Edit 的路径 → 右栏文件面板打开（22 设计 §3.4）；不传就退回今天的路（文件页） */
   onOpenFile?: (path: string, line?: number) => void
   /** 对话里点「Git」→ 右栏切到 Git 面板 */
@@ -72,7 +74,7 @@ export default function TerminalPane(props: {
   /** 从对话里点「path:line」跳过来要定位到那一行；nonce 让同一处点第二次也响 */
   reveal?: { path: string; line: number; nonce: number }
 }) {
-  const { terms, active, setActive, closeTerm, fontSize, setFontSize, statusMap, setStatus, termRefs, sendKey, onCollapse, claudeMap, claudeView, setClaudeView, codexMap, codexView, setCodexView, onRename, onReorder, onNeedsInput, focus, visibleTerms, onNew, onOpenFile, onOpenGit, fileTabs, activeFile, taskDir, onFileTab, onCloseFile, onPinFile, onFileMode, reveal } = props
+  const { terms, active, setActive, closeTerm, fontSize, setFontSize, statusMap, setStatus, termRefs, sendKey, onCollapse, claudeMap, claudeView, setClaudeView, codexMap, codexView, setCodexView, onRename, onReorder, onNeedsInput, focus, visibleTerms, onNew, inspector, onOpenFile, onOpenGit, fileTabs, activeFile, taskDir, onFileTab, onCloseFile, onPinFile, onFileMode, reveal } = props
   const tabs = visibleTerms ?? terms
   const curFile = activeFile || ''
   // 文件标签的脏标记：FileView 报上来，关标签前问一句（FileWorkspace 同款）
@@ -719,6 +721,12 @@ export default function TerminalPane(props: {
               <span style={{ color: 'var(--text-dimmer)', display: 'inline-flex' }}><ChevronDown size={11} /></span>
             </button>
           </Dropdown>
+          {inspector && (
+            <button type="button" className={`tt-tbtn ico${inspector.open ? ' on' : ''}`} onClick={inspector.toggle}
+              aria-label={t('inspector.toggle')} title={t('inspector.toggle')} aria-pressed={inspector.open}>
+              <PanelRightIcon size={15} />
+            </button>
+          )}
         </div>
       )}
     </div>

@@ -14,7 +14,7 @@ import { groupRuns } from './runs'
 import { ToolRun } from './ToolRun'
 import { LiveTail } from './LiveTail'
 import { useLayout } from '../../layout'
-import { ArrowToBottom, ArrowUp, FileTextIcon, PaperclipIcon, StopIcon, TerminalIcon } from '../../icons'
+import { ArrowToBottom, ArrowUp, FileTextIcon, PaperclipIcon, StopIcon, TerminalIcon, AgentLogo } from '../../icons'
 import { SESSION_MIME, buildIntro, canDrop, readDrag, type SessionDrag } from '../shell/session-drop'
 import { currentNodeId } from '../cluster/node-url'
 import { sessionDisplay } from '../sessions/session-label'
@@ -23,9 +23,11 @@ import type { TaskIndex } from './tasks'
 import { StatusBar, type StatusActions } from './StatusBar'
 import type { AgentStatus } from './status'
 
-export function ChatShell({ name, accent, placeholder, messages, results, renderMessage, pending, busy, error, onOpenFile, tasks, status, onOpenGit, lastErrorId, hasEarlier, onLoadEarlier, statusLead }: {
+export function ChatShell({ name, accent, placeholder, messages, results, renderMessage, pending, busy, error, onOpenFile, tasks, status, onOpenGit, lastErrorId, hasEarlier, onLoadEarlier, statusLead, agent }: {
   /** 状态条条头（连接状态 + 视图开关），由终端面板给 */
   statusLead?: ReactNode
+  /** 这条 composer 发给谁：左端那枚亮着的 agent pill（22 设计 §3.3） */
+  agent?: 'claude' | 'codex'
   name: string
   accent: string
   placeholder: string
@@ -332,6 +334,11 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
             />
             <div className="tt-cbar">
               <span className="tt-cgrp">
+                {agent && (
+                  <span className={`tt-pill on${agent === 'codex' ? ' ok' : ''}`} aria-label={agent === 'claude' ? 'Claude' : 'Codex'}>
+                    <AgentLogo kind={agent} size={12} />{agent === 'claude' ? 'Claude' : 'Codex'}
+                  </span>
+                )}
                 {/* 带字的 pill，和项目页 composer 同款：光一枚回形针认不出是「文件」 */}
                 <button type="button" className="tt-pill" title={t('chat.uploadToCwd')}
                   disabled={uploading} onMouseDown={noBlur} onClick={() => fileRef.current?.click()}>

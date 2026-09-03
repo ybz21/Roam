@@ -291,6 +291,8 @@ const zhCN = {
   'tree.unfinishedN': '待收尾 {n}',
   'tree.unfinishedShort': '↑{n}',
   'tabs.new': '新建',
+  'inspector.toggle': '右栏',
+  'chat.sendTo': '给 {name} 发消息…',
   'pathbar.source': '源码',
   'search.byName': '文件',
   'search.byContent': '全文搜索',

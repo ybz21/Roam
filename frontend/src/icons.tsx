@@ -124,6 +124,8 @@ export const DotIcon = ({ size = 13 }: P) => solid(<circle cx="12" cy="12" r="4.
 export const DiamondIcon = ({ size = 13 }: P) => solid(<path d="m12 3.5 8.5 8.5-8.5 8.5L3.5 12Z" />, size)
 
 // ── Agent 工具调用的类型图标（原来一列 emoji：📖 ✏️ 📓 🔍 🤖 🌐 ❓ ⚙）──
+/** 右栏开关：标签条右端，亮着 = 右栏开着（22 设计 §3.3） */
+export const PanelRightIcon = ({ size = 15 }: P) => line(<><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M15 4v16" /></>, size, 1.7)
 export const TerminalIcon = ({ size = 13 }: P) => line(<><rect x="3" y="4" width="18" height="16" rx="2" /><path d="m7 9 3 3-3 3" /><path d="M13 15h4" /></>, size)
 export const ReadIcon = ({ size = 13 }: P) => line(
   <><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H10a2 2 0 0 1 2 2v13a2 2 0 0 0-2-2H5.5A1.5 1.5 0 0 1 4 15.5Z" /><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H14a2 2 0 0 0-2 2v13a2 2 0 0 1 2-2h4.5a1.5 1.5 0 0 0 1.5-1.5Z" /></>, size)
