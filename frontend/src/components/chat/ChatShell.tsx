@@ -23,7 +23,9 @@ import type { TaskIndex } from './tasks'
 import { StatusBar, type StatusActions } from './StatusBar'
 import type { AgentStatus } from './status'
 
-export function ChatShell({ name, accent, placeholder, messages, results, renderMessage, pending, busy, error, onOpenFile, tasks, status, onOpenGit, lastErrorId, hasEarlier, onLoadEarlier }: {
+export function ChatShell({ name, accent, placeholder, messages, results, renderMessage, pending, busy, error, onOpenFile, tasks, status, onOpenGit, lastErrorId, hasEarlier, onLoadEarlier, statusLead }: {
+  /** 状态条条头（连接状态 + 视图开关），由终端面板给 */
+  statusLead?: ReactNode
   name: string
   accent: string
   placeholder: string
@@ -306,8 +308,8 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
           )}
         </div>
         {/* 状态条在选择框之上：选择框要人立刻动手，得离输入框更近 */}
-        {(hasStatus || unread > 0) && (
-          <StatusBar status={status || {}} accent={accent} unread={unread} onJump={jump} actions={statusActions} />
+        {(hasStatus || unread > 0 || statusLead) && (
+          <StatusBar status={status || {}} accent={accent} unread={unread} onJump={jump} actions={statusActions} lead={statusLead} />
         )}
         {/* 交互式选择框（权限确认/选项菜单）：检测到才显示，可点选 */}
         <PromptPanel name={name} accent={accent} />
@@ -330,9 +332,10 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
             />
             <div className="tt-cbar">
               <span className="tt-cgrp">
-                <button type="button" className="tt-pill ico" title={t('chat.uploadToCwd')} aria-label={t('chat.uploadToCwd')}
+                {/* 带字的 pill，和项目页 composer 同款：光一枚回形针认不出是「文件」 */}
+                <button type="button" className="tt-pill" title={t('chat.uploadToCwd')}
                   disabled={uploading} onMouseDown={noBlur} onClick={() => fileRef.current?.click()}>
-                  <PaperclipIcon size={13} />
+                  <PaperclipIcon size={13} />{t('chat.files')}
                 </button>
               </span>
               <span className="tt-cend">

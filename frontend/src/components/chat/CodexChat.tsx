@@ -1,6 +1,6 @@
 // Codex 对话面板（容器）：拉 codex rollout 转录 → 交给 ChatShell 渲染。
 // 消息渲染在 chat/Message（与 Claude 共用一份，只差 side），工具渲染在 chat/tool-render。
-import { useMemo } from 'react'
+import { type ReactNode, useMemo } from 'react'
 import { ChatShell } from './ChatShell'
 import { Typing } from './blocks'
 import { ChatMessage, CODEX_ACCENT } from './Message'
@@ -10,7 +10,7 @@ import { toAgentStatus } from './status'
 import { deriveFromMessages } from './status-derive'
 import { useI18n } from '../../i18n'
 
-export default function CodexChat({ name, file, onOpenFile, onOpenGit }: { name: string; file?: string; onOpenFile?: (path: string, line?: number) => void; onOpenGit?: () => void }) {
+export default function CodexChat({ name, file, onOpenFile, onOpenGit, statusLead }: { name: string; file?: string; onOpenFile?: (path: string, line?: number) => void; onOpenGit?: () => void; statusLead?: ReactNode }) {
   const { t } = useI18n()
   const { msgs, err, status: raw, hasEarlier, loadEarlier } = useTranscript(name, file, 'codex-transcript')
   const { results, view } = useMemo(() => pairToolResults(msgs), [msgs])
@@ -23,6 +23,7 @@ export default function CodexChat({ name, file, onOpenFile, onOpenGit }: { name:
 
   return (
     <ChatShell
+      statusLead={statusLead}
       name={name} accent={CODEX_ACCENT} error={err} onOpenFile={onOpenFile} tasks={tasks} status={status} onOpenGit={onOpenGit} lastErrorId={derived.lastErrorId}
       placeholder={t('chat.codexPlaceholder')}
       messages={view} results={results} hasEarlier={hasEarlier} onLoadEarlier={loadEarlier}

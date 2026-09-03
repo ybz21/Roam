@@ -801,12 +801,12 @@ export default function TerminalPane(props: {
   ) : null
 
   // 工具条分三段：左=会话身份与动作，中=面板开关，右（分段组）=只读的画面控制
-  const sessionToolbar = (
-    <div className="tt-tbar tt-session-toolbar">
-      <span className="tt-status">
-        {statusDot(dot, 7)}
-        {activeNeedsInput ? t('session.waiting') : st === 'connected' ? t('terminal.status.connected') : st === 'connecting' ? t('terminal.status.connecting') : t('terminal.status.disconnected')}
-      </span>
+  const connLabel = activeNeedsInput ? t('session.waiting') : st === 'connected' ? t('terminal.status.connected') : st === 'connecting' ? t('terminal.status.connecting') : t('terminal.status.disconnected')
+  // 连接状态 + Claude/Codex 视图开关：终端视图里在工具条左侧；对话视图里下沉到会话状态条条头
+  // （它们说的是这个会话的状态，和 auto / 上下文 / 分支排一起才对，工具条上只留动作）
+  const sessionLead = (
+    <>
+      <span className="tt-status">{statusDot(dot, 7)}{connLabel}</span>
       {active && claudeMap[active]?.running && (
         <TBtn icon={<AgentLogo kind="claude" size={14} />} label="Claude" on={!!claudeView[active]}
           title={t('chat.switchToClaude')} onClick={() => setClaudeView((v) => ({ ...v, [active!]: !v[active!] }))} />
@@ -815,7 +815,11 @@ export default function TerminalPane(props: {
         <TBtn icon={<AgentLogo kind="codex" size={14} />} label="Codex" tone="ok" on={!!codexView[active]}
           title={t('chat.switchToCodex')} onClick={() => setCodexView((v) => ({ ...v, [active!]: !v[active!] }))} />
       )}
-      <span className="tt-sep" />
+    </>
+  )
+  const sessionToolbar = (
+    <div className="tt-tbar tt-session-toolbar">
+      {!inChat && <>{sessionLead}<span className="tt-sep" /></>}
       <Dropdown trigger={['click']} menu={{ items: tmuxMenu(t) as any, onClick: ({ key }) => { if (key === PFX + 'x') openPaneCloseConfirm(); else sendKey(key) } }} placement="bottomLeft">
         <button type="button" className="tt-tbtn">{TI.tmux}<span>tmux</span><span style={{ color: 'var(--text-dimmer)', display: 'inline-flex' }}><ChevronDown size={11} /></span></button>
       </Dropdown>
@@ -919,12 +923,14 @@ export default function TerminalPane(props: {
               onImagePaste={(files) => { setActive(termName); pasteImage(termName, files) }} />
             {claudeView[termName] && claudeMap[termName]?.running && (
               <div style={{ position: 'absolute', inset: 0 }}>
-                <ClaudeChat name={termName} file={claudeMap[termName].file} onOpenFile={openFileFromChat} onOpenGit={openGitFromChat} />
+                <ClaudeChat name={termName} file={claudeMap[termName].file} onOpenFile={openFileFromChat} onOpenGit={openGitFromChat}
+                  statusLead={termName === active ? <span className="cc-st-lead">{sessionLead}</span> : undefined} />
               </div>
             )}
             {codexView[termName] && codexMap[termName]?.running && (
               <div style={{ position: 'absolute', inset: 0 }}>
-                <CodexChat name={termName} file={codexMap[termName].file} onOpenFile={openFileFromChat} onOpenGit={openGitFromChat} />
+                <CodexChat name={termName} file={codexMap[termName].file} onOpenFile={openFileFromChat} onOpenGit={openGitFromChat}
+                  statusLead={termName === active ? <span className="cc-st-lead">{sessionLead}</span> : undefined} />
               </div>
             )}
             {showVoice && !claudeView[termName] && !codexView[termName] && (
@@ -970,7 +976,7 @@ export default function TerminalPane(props: {
           手机上这 49px 直接等于终端少 3 行。桌面不受影响。
           `tt-keyrow` 给两侧渐隐 + 滚轮横移：这一条 15 个按钮宽 913，窄栏里只露得出 605，
           而原来既没有渐隐也没有滚动条，右边缘正好把某个键切成一半——看着就是"没显示全"。 */}
-      {!inChat && (!isPhone || typing) && (
+      {!inChat && isTouch && (!isPhone || typing) && (
         <div className="tt-keyrow" ref={keyRowRef}
           onScroll={syncKeyFade}
           onWheel={(e) => {

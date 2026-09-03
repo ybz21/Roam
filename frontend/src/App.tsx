@@ -626,10 +626,13 @@ export default function App() {
   const newTerminalInTask = async (kind: 'shell' | 'claude' | 'codex' = 'shell') => {
     const key = activeTaskRef.current
     const dir = key ? (taskPathOf(tree, key) || sessionProject(looseSessionOf(key))?.dir || '') : ''
-    const base = (key && firstSessionOf(tree, key)) || 'shell'
+    // 名字是展示名（@roam_name），后端另发 id：所以前缀用任务的展示名，不是那串 2026-… 的会话 id
+    const first = key ? firstSessionOf(tree, key) : null
+    const base = (first && sessionLabel(first)) || 'shell'
     const suffix = kind === 'shell' ? 'sh' : kind === 'claude' ? 'cc' : 'cx'
     let name = `${base}-${suffix}`
-    for (let i = 2; terms.includes(name); i++) name = `${base}-${suffix}${i}`
+    const taken = new Set(sessList.map((s) => s.label || s.name))
+    for (let i = 2; taken.has(name); i++) name = `${base}-${suffix}${i}`
     try {
       const res = await api('POST', '/sessions', dir ? { name, dir } : { name })
       const actual = res?.name || name

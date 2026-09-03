@@ -76,17 +76,26 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
   // lvl：直接列出的任务是 1，从「待收尾 / 空闲」折叠行里展开的是 2，它们的会话再深一级
   const taskRows = (task: TreeTask, lvl: 1 | 2 = 1) => {
     const on = activeTask === task.key
+    const open = task.sessions.length <= 1 || !closed.has(task.key)
     const running = task.sessions.some((s) => s.running)
     const waiting = task.sessions.some((s) => s.waiting)
     return (
       <div key={task.key} className="tt-tree-task">
-        <button type="button" className={`tt-nav-item tt-tree-row lvl${lvl}${on && !task.sessions.some((s) => s.name === activeSession) ? ' on' : ''}`}
+        <button type="button" className={`tt-nav-item tt-tree-row lvl${lvl}${on && !task.sessions.some((s) => s.name === activeSession) ? ' on' : ''}${open ? '' : ' closed'}`}
           onClick={() => onTask(task.key)} title={task.path} {...rename(task.sessions[0]?.name)}>
           <span className="ic">{dot({ running, waiting, unfinished: task.unfinished }, true)}</span>
           <span className="nm">{task.name}</span>
           {task.unfinished && <span className="bd" title={t('tree.unfinished', { n: task.ahead })}>{t('tree.unfinishedShort', { n: task.ahead })}</span>}
+          {/* 一个任务下开了一排 Claude 窗口时能收起来；收起时徽标写着里面有几个 */}
+          {task.sessions.length > 1 && (
+            <>
+              {!open && <span className="bd">{task.sessions.length}</span>}
+              <span className="chev" role="button" aria-label={open ? t('common.collapse') : t('common.expand')}
+                onClick={(e) => { e.stopPropagation(); toggle(task.key) }}><ChevronDown size={14} /></span>
+            </>
+          )}
         </button>
-        {task.sessions.map((s) => sessionRow(task.key, s, lvl))}
+        {open && task.sessions.map((s) => sessionRow(task.key, s, lvl))}
       </div>
     )
   }
