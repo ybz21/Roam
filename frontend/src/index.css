@@ -510,14 +510,17 @@ html[data-pointer="coarse"] .tt-nav-collapse::after {
 
 /* ── 侧栏搜索行（22 设计 §3.5）：顶栏 Command Center 撤了，⌘K 的可见入口回到品牌下面 ──
    实底 + 32 高的假输入框：与底同色只描一圈边的话没人看得出这里能搜（有人用了半年不知道有 ⌘K） */
+/* 搜索这一行是**导航行**，不是输入框：它下面紧跟着「项目 / 文件 / 浏览器…」一列扁平的行，
+   中间夹一枚带边框、带填充底的方框，读起来像另一个控件掉进了导航里（实测第一眼就是它最扎眼）。
+   现在跟 .tt-nav-item 同一副长相：同高、同图标槽、同 hover 底，只有右端多一枚 ⌘K 标。 */
 .tt-nav-search {
-  display: flex; align-items: center; gap: var(--sp-2); width: 100%; height: 32px;
-  margin: 0 0 var(--sp-2); padding: 0 10px;
-  border: 1px solid var(--border-subtle); border-radius: var(--r-sm);
-  background: var(--bg-elevated); color: var(--text-dim); font-size: var(--fs-sm);
-  text-align: left; cursor: pointer; transition: border-color .12s, color .12s;
+  display: flex; align-items: center; gap: 11px; width: 100%; min-height: 38px;
+  margin: 0 0 var(--sp-1); padding: 0 10px;
+  border: 0; border-radius: var(--r-sm);
+  background: none; color: var(--text-dim); font-size: var(--fs-body);
+  text-align: left; cursor: pointer; transition: background .14s, color .14s;
 }
-:where(html[data-pointer="fine"]) .tt-nav-search:hover { border-color: var(--accent-border); color: var(--text-bright); }
+:where(html[data-pointer="fine"]) .tt-nav-search:hover { background: var(--list-hover); color: var(--text-bright); }
 .tt-nav-search .ph { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tt-nav-search kbd {
   flex: 0 0 auto; padding: 1px 5px; border: 1px solid var(--border); border-radius: 5px;
@@ -1327,11 +1330,17 @@ html[data-pointer="coarse"] .tt-srow .acts { opacity: 1; }
    品牌行矮一截、错开 16px，顶上那道横线接不上。
    底部例外——手机上要给底栏/会话坞让位，否则画面被压在它们下面。 */
 .tt-page-phone,
-.tt-page-browser { padding: 0; }
+.tt-page-browser,
+.tt-page-files,
+.tt-page-plugins { padding: 0; }
 .tt-page-phone.tt-page-mobile,
-.tt-page-browser.tt-page-mobile { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+.tt-page-browser.tt-page-mobile,
+.tt-page-files.tt-page-mobile,
+.tt-page-plugins.tt-page-mobile { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
 .tt-page-phone.tt-page-mobile.has-dock,
-.tt-page-browser.tt-page-mobile.has-dock { padding-bottom: calc(126px + env(safe-area-inset-bottom)); }
+.tt-page-browser.tt-page-mobile.has-dock,
+.tt-page-files.tt-page-mobile.has-dock,
+.tt-page-plugins.tt-page-mobile.has-dock { padding-bottom: calc(126px + env(safe-area-inset-bottom)); }
 .tt-page-files > *,
 .tt-page-phone > *,
 .tt-page-browser > *,

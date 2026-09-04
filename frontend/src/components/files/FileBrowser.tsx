@@ -336,7 +336,7 @@ function FileTree({
 
 // dock 布局的两层折叠（文件树 ｜ 预览）交给 <InspectorLayers>——Git 的「改动列表 ｜ diff」
 // 用的是同一份机制，契约写在那个文件顶上。这里只给这两层的尺寸。
-const TREE: LayerSize = { key: 'ttmux.fileTreeW', min: 180, max: 480, def: 360 } // 再窄就只剩省略号
+const TREE: LayerSize = { key: 'ttmux.fileTreeW', min: 180, max: 480, def: 300 } // 再窄就只剩省略号；300 够放两级缩进 + 20 个字
 const PREVIEW: LayerSize = { key: 'ttmux.filePreviewW', min: 280, max: 1200, def: 560 } // 280 以下读不了代码；560 = 80 列等宽正文 + 留白
 
 export default function FileBrowser({

@@ -18,7 +18,7 @@ const TAB_MIME = 'application/x-ttmux-tab'
 const PATH_MIME = 'application/x-ttmux-path'
 const LEAD_MIME = 'application/x-ttmux-lead' // 拖会话(首)tab → 左右易位
 const PREVIEW_PREFIX = 'preview://' // 侧栏预览 tab 的标识前缀（区别于同文件的源码 tab）
-const DOCK_MIN = 160, DOCK_MAX = 640, DOCK_DEFAULT = 280
+const DOCK_MIN = 160, DOCK_MAX = 640, DOCK_DEFAULT = 240 // 240：文件名够看，正文那栏多出 40
 
 function baseName(p: string): string {
   return p.split('/').pop() || p
