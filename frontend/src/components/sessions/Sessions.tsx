@@ -3,19 +3,19 @@ import { Suspense, useEffect, useState } from 'react'
 import { RaceComparePanel, RaceCreateModal } from '../swarm/Race'
 import WorktreePanel from '../git/WorktreePanel'
 import { api } from '../../api'
-import { CloseWorktreeModal } from './CloseWorktreeModal'
+import { useSessionCloser } from './session-closer'
 import { NewSessionModal } from './NewSessionModal'
 import { useI18n } from '../../i18n'
 import { SessionHistory } from './SessionHistory'
 import { useLayout } from '../../layout'
 import { MemBar } from './session-memory'
 import { detectPrompt } from '../prompt'
-import { sessionDisplay, sessionLabel, setSessionLabels } from './session-label'
+import { sessionLabel, setSessionLabels } from './session-label'
 import { SESSION_MIME } from '../shell/session-drop'
 import { currentNodeId } from '../cluster/node-url'
 import { sessionLocation, useSessionProjects } from './session-project'
 import { absTime, relTime } from '../../time-format'
-import { Button, Checkbox, Empty, Input, List, Popconfirm, Segmented, Select, Space, Tag, Tooltip, App as AntApp } from 'antd'
+import { Button, Empty, Input, List, Popconfirm, Segmented, Select, Space, Tag, Tooltip, App as AntApp } from 'antd'
 import { AgentLogo, ArrowDown, ArrowUp, Disclosure, SearchIcon, WindowsIcon } from '../../icons'
 import { BranchIcon } from '../git/parts'
 import { Dropdown } from 'antd'
@@ -42,12 +42,9 @@ export default function Sessions({ openTerm, closeTerm, activeTerm, embedded }: 
   const [races, setRaces] = useState<any[]>([])
   const [raceOpen, setRaceOpen] = useState(false)
   const [compareId, setCompareId] = useState('')
-  // W7 关闭流程：confirmKill = 普通 Popconfirm 受控打开；closing = worktree 收尾三选一弹窗
-  const [confirmKill, setConfirmKill] = useState<string | null>(null)
-  const [closing, setClosing] = useState<{ name: string; st: any } | null>(null)
   // 派生子会话（fork）弹窗：值为父会话名
   const [forking, setForking] = useState<string | null>(null)
-  const { message, modal } = AntApp.useApp()
+  const { message } = AntApp.useApp()
   const { t } = useI18n()
   // tree=1：拿 parent 投影树后拍平（节点字段与平铺一致 + parent），W2 父子分组用
   const load = () => api('GET', '/sessions?tree=1').then((roots) => {
@@ -130,43 +127,9 @@ export default function Sessions({ openTerm, closeTerm, activeTerm, embedded }: 
     const t = setInterval(checkPrompts, 4000)
     return () => { stop = true; clearInterval(t) }
   }, [list])
-  const kill = async (n: string) => { try { await api('DELETE', '/sessions/' + encodeURIComponent(n)); message.success(t('session.closed')); closeTerm(n); load() } catch (e: any) { message.error(e.message) } }
+  // W7 关闭分流（非 worktree 确认后结束；worktree 有东西三选一；同 worktree 还有别人只关自己）和左树同一份
+  const closer = useSessionCloser(closeTerm, load)
   const goSwarm = (sw: string) => { location.hash = '#/swarm/' + encodeURIComponent(sw) }
-  // W7：点关闭先查会话是否在 worktree 内，据状态分流——
-  // 非 worktree/外部 → 原 Popconfirm；有未收尾内容 → 三选一；干净且 base 已知 → 确认框附「随会话删除」勾选
-  const closeWith = async (n: string, mode: 'keep' | 'merge' | 'discard', path?: string) => {
-    try {
-      await api('POST', `/sessions/${encodeURIComponent(n)}/close-with-worktree`, { mode, path })
-      message.success(t('session.closed')); closeTerm(n); load()
-    } catch (e: any) {
-      const ae = e.apiError || {}
-      message.error(ae.stage ? t('worktree.close.failedAtStage', { stage: ae.stage, msg: e.message }) : e.message)
-      throw e
-    }
-  }
-  const beginClose = async (n: string) => {
-    let st: any = null
-    try { st = (await api('GET', `/sessions/${encodeURIComponent(n)}/worktree-status`))?.data } catch {}
-    if (!st?.inWorktree || st.external) { setConfirmKill(n); return }
-    if ((st.dirty || 0) > 0 || (st.untracked || 0) > 0 || (st.committedAhead || 0) > 0) {
-      setClosing({ name: n, st })
-      return
-    }
-    if (!st.base) { setConfirmKill(n); return }
-    // 干净 worktree：默认勾选随会话删除（显式可见，不静默）
-    const removeToo = { current: true }
-    modal.confirm({
-      title: t('session.closeConfirm', { name: sessionDisplay(n) }),
-      content: (
-        <Checkbox defaultChecked onChange={(e) => { removeToo.current = e.target.checked }}>
-          {t('worktree.close.removeWithSession')}
-        </Checkbox>
-      ),
-      okText: t('session.close'),
-      onOk: () => closeWith(n, removeToo.current ? 'discard' : 'keep', st.path),
-    })
-  }
-
   // ── 筛选 / 搜索 ──
   const [q, setQ] = useState('')
   const [filter, setFilter] = useState<'all' | 'waiting' | 'claude' | 'codex' | 'swarm' | 'idle'>('all')
@@ -519,17 +482,11 @@ export default function Sessions({ openTerm, closeTerm, activeTerm, embedded }: 
                           title={t('session.closeSwarmSessionTitle')}
                           description={<div style={{ maxWidth: 280 }}>{t('session.closeSwarmSessionDesc', { swarm: sw.swarm, role: sw.role === 'leader' ? t('swarm.master') : t('swarm.member') })}</div>}
                           okText={t('session.closeAnyway')} okButtonProps={{ danger: true }} cancelText={t('common.cancel')}
-                          onConfirm={() => kill(s.name)}>
+                          onConfirm={() => closer.kill(s.name)}>
                           <a style={{ color: '#f85149' }}>{t('session.close')}</a>
                         </Popconfirm>
                       ) : (
-                        // 受控 Popconfirm：点「关闭」先查 worktree 状态，非 worktree 会话才打开本确认
-                        <Popconfirm title={t('session.closeConfirm', { name: s.label || s.name })} open={confirmKill === s.name}
-                          onConfirm={() => { setConfirmKill(null); kill(s.name) }}
-                          onCancel={() => setConfirmKill(null)}
-                          onOpenChange={(o) => { if (!o && confirmKill === s.name) setConfirmKill(null) }}>
-                          <a style={{ color: '#f85149' }} onClick={() => { if (confirmKill !== s.name) beginClose(s.name) }}>{t('session.close')}</a>
-                        </Popconfirm>
+                        <a style={{ color: '#f85149' }} onClick={() => { void closer.beginClose(s.name) }}>{t('session.close')}</a>
                       )}
                     </span>
                   </div>
@@ -542,7 +499,7 @@ export default function Sessions({ openTerm, closeTerm, activeTerm, embedded }: 
       <SessionHistory onRestored={(name) => { load(); openTerm(name) }} />
       <NewSessionModal open={newOpen || !!forking} parent={forking}
         onClose={() => { setNewOpen(false); setForking(null) }} onDone={(name) => { load(); openTerm(name) }} />
-      <CloseWorktreeModal info={closing} onClose={() => setClosing(null)} onDone={(name) => { closeTerm(name); load() }} />
+      {closer.node}
       <Suspense fallback={null}>
         <WorktreePanel open={wtOpen} onClose={() => { setWtOpen(false); setWtDir(undefined) }} openTerm={openTerm} initialDir={wtDir} />
       </Suspense>

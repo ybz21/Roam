@@ -56,8 +56,8 @@ function Chip({ onClick, title, tone, expanded, children }: {
 type Panel = 'none' | 'info' | 'tasks'
 
 export type StatusActions = {
-  /** 轮换权限模式：向会话注入 Shift+Tab */
-  onCycleMode?: () => void
+  /** 换模型：发 /model，Claude Code 自己弹选择框（PromptPanel 接住） */
+  onPickModel?: () => void
   /** 跳到最近一次失败的工具调用 */
   onJumpError?: () => void
   /** 打开 Git 面板 */
@@ -114,11 +114,13 @@ export function StatusBar({ status, accent, unread, onJump, actions = {} }: {
     <div className="cc-statusbar">
       <div className="cc-st-scroll" ref={stripRef} onScroll={syncFade}
         data-l={fade.l ? '' : undefined} data-r={fade.r ? '' : undefined}>
-        {status.mode && (
-          <button type="button" className={`cc-st-pill${actions.onCycleMode ? ' is-btn' : ''}`}
-            style={{ color: TONE[status.mode.tone] }} disabled={!actions.onCycleMode}
-            onClick={actions.onCycleMode} title={actions.onCycleMode ? t('chat.modeCycle') : modeText}>
-            <i style={{ background: TONE[status.mode.tone] }} />{modeText}
+        {/* 条头是模型名，点了换模型；权限模式（auto / plan …）只在信息面板里列——
+            条上一枚写着「auto」的 pill 没人看得懂是什么的 auto */}
+        {(status.model || actions.onPickModel) && (
+          <button type="button" className={`cc-st-pill${actions.onPickModel ? ' is-btn' : ''}`}
+            style={status.mode ? { color: TONE[status.mode.tone] } : undefined} disabled={!actions.onPickModel}
+            onClick={actions.onPickModel} title={actions.onPickModel ? t('chat.modelPick') : t('chat.model')}>
+            {status.mode && <i style={{ background: TONE[status.mode.tone] }} />}{status.model || t('chat.model')}
           </button>
         )}
 

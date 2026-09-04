@@ -65,14 +65,14 @@ func (c codex) ResumeCommand(convID string) string {
 // rolloutRE 从 rollout-2026-08-08T09-33-53-019fdf01-....jsonl 里抠出末尾的 uuid。
 var rolloutRE = regexp.MustCompile(`rollout-.*-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$`)
 
+// ConversationDir 不知道：rollout 文件名里没有 cwd，session_meta 里那个字段没核实过格式，
+// 猜错会把会话建到别的目录去。退回台账记的归属目录。
+func (codex) ConversationDir(string) string { return "" }
+
 // DetectConversationID 在 ~/.codex/sessions 下找最近写过的那段对话。
 //
 // **这是推断，不是事实**：codex 的 rollout 文件名里没有 cwd，同一时间在别处
 // 开的 codex 会赢。所以只在「刚拉起、且这台机器上没有别的 codex 在跑」时调用，
-// 不知道：rollout 文件名里没有 cwd，session_meta 里那个字段没核实过格式，
-// 猜错会把会话建到别的目录去。退回台账记的归属目录。
-func (codex) ConversationDir(string) string { return "" }
-
 // 认不出就老实返回空串——宁可这个会话恢复出来只有壳，也别接回别人的对话。
 func (codex) DetectConversationID(cwd string) string {
 	root := sessionsRoot()

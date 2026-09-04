@@ -150,8 +150,27 @@ function usePromptControl(name: string) {
     }
   }
 
-  const choose = (target: Choice) => {
-    press([String(target.num), 'Enter'])
+  // 点选项只发数字，350ms 后再看屏幕：同一个问题还在（数字只是挪了高亮）才补 Enter。
+  // 以前一律发「数字 + Enter」：Claude Code 的 AskUserQuestion 按数字就直接进下一题，
+  // 那个 Enter 落到下一题上，把它的第一个选项当成你的答案交了；多问一题就多错一题。
+  const choose = async (target: Choice) => {
+    const before = p
+    setBusy(true)
+    try {
+      await api('POST', `/sessions/${encodeURIComponent(name)}/keys`, { keys: [String(target.num)] })
+      await new Promise((r) => setTimeout(r, 350))
+      const after = await fetchPrompt(name)
+      if (after && before && after.kind === 'select' && before.kind === 'select' && after.question === before.question) {
+        await api('POST', `/sessions/${encodeURIComponent(name)}/keys`, { keys: ['Enter'] })
+        setTimeout(async () => { setP(await fetchPrompt(name)) }, 350)
+      } else {
+        setP(after)
+      }
+    } catch (err) {
+      console.error('failed to send prompt keys', err)
+    } finally {
+      setBusy(false)
+    }
   }
 
   return { p, busy, press, choose }

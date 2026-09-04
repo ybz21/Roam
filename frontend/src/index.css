@@ -17,7 +17,7 @@
   --bg-base: #0d1117;
   --bg-container: #161b22;
   --bg-elevated: #1b222b;
-  --bg-term: #06090d;
+  --bg-term: #0b0f14;
   --border: #30363d;
   --border-subtle: #21262d;
   --text-bright: #e6edf3;
@@ -54,7 +54,7 @@
   --scroll-thumb-hover: #3d444d;
   --card-hover-shadow: 0 8px 24px rgba(1, 4, 9, .5);
   --elevated-shadow: 0 16px 48px rgba(1, 4, 9, .55);
-  --xterm-bg: #06090d;
+  --xterm-bg: #0b0f14;
   --xterm-fg: #e6edf3;
   /* highlight.js token 配色（深色，GitHub-ish） */
   --hl-comment: #8b949e;
@@ -103,13 +103,11 @@
   --row-compact: 34px;
 
   /* 桌面壳层：Navigation ｜ Canvas ｜ rail ｜ Dock 的尺寸契约 */
-  --nav-w: 224px;
+  --nav-w: 280px;
   --nav-rail: 48px;
   --topbar-h: 40px;
   --status-h: 24px;               /* 底部状态条；粗指针下长到 --tap（见 .tt-statusbar） */
   --canvas-min: 560px;
-  --dock-min: 480px;
-  --dock-max: 880px;
   --split-rail: 8px;
   --split-hit: 20px;
   --activity-rail: 320px;
@@ -256,7 +254,6 @@ html[data-pointer="coarse"] .tt-rail-btn::after {
 /* 拖拽引导线。越过 splitMax（Canvas 会不足 560）时换成琥珀色：松手的后果从
    "再宽一点"变成"整页藏起来"，颜色先说一声。 */
 .tt-dock-guide { background: var(--accent); box-shadow: 0 0 0 1px rgba(88, 166, 255, .18); }
-.tt-dock-guide[data-focus='1'] { background: #d29922; box-shadow: 0 0 0 1px rgba(210, 153, 34, .25); }
 
 /* ── expanded 档（905–1279）的覆盖式终端面板（13 §13.1）──
    这一档并排最多只能挤出 561–735 的 Canvas，正是要消灭的「页面被压成预览条」。
@@ -345,7 +342,7 @@ html[data-pointer="coarse"] .tt-rail-btn::after {
   color: var(--text-dimmer); font-size: var(--fs-micro); font-weight: 700; letter-spacing: .1em;
 }
 
-.tt-nav-item, .tt-nav-account, .tt-nav-collapse {
+.tt-nav-item, .tt-nav-collapse {
   position: relative; display: flex; align-items: center; gap: 11px; width: 100%;
   min-height: 38px; padding: 0 10px; border: 0; border-radius: var(--r-sm);
   background: none; color: var(--text-dim); font-size: var(--fs-body); text-align: left;
@@ -354,17 +351,16 @@ html[data-pointer="coarse"] .tt-rail-btn::after {
 /* 轨态每项 36 高、铺满整轨、不带圆角：一条 48 宽的轨里再切圆角，悬停块两边各剩 6px
    黑边，读起来像一排小卡片而不是一列导航 */
 .tt-nav.rail .tt-nav-item,
-.tt-nav.rail .tt-nav-account,
 .tt-nav.rail .tt-nav-collapse {
   justify-content: center; min-height: 36px; padding: 0; border-radius: 0;
 }
-:where(html[data-pointer="fine"]) .tt-nav-item:hover, :where(html[data-pointer="fine"]) .tt-nav-account:hover, :where(html[data-pointer="fine"]) .tt-nav-collapse:hover { background: var(--list-hover); color: var(--text-bright); }
+:where(html[data-pointer="fine"]) .tt-nav-item:hover, :where(html[data-pointer="fine"]) .tt-nav-collapse:hover { background: var(--list-hover); color: var(--text-bright); }
 /* 图标槽：导航项 / 终端开关 / 账户 / 收起 用同一个 20px 方槽，图标才在一条竖线上。
    账户那枚以前是「蓝底圆角块」，在一列裸图标里自成一格——同一列里不要两种图标语言。 */
-.tt-nav-item .ic, .tt-nav-account .av, .tt-nav-collapse .ic {
+.tt-nav-item .ic, .tt-nav-collapse .ic {
   flex: 0 0 auto; width: 20px; height: 20px; display: grid; place-items: center;
 }
-.tt-nav-item .nm, .tt-nav-account .nm, .tt-nav-collapse .nm {
+.tt-nav-item .nm, .tt-nav-collapse .nm {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 /* ── 设置 › 多机：模式二选一 + 接入状态 + 两条入口 ───────────────── */
@@ -505,36 +501,174 @@ html[data-pointer="coarse"] .tt-devrow.acts > .tt-mode { padding-bottom: 58px; }
 
 /* 粗指针：视觉仍是 36 高，命中区用伪元素补到 44——直接把行画高会把这一列拉长一截 */
 html[data-pointer="coarse"] .tt-nav-item::after,
-html[data-pointer="coarse"] .tt-nav-account::after,
 html[data-pointer="coarse"] .tt-nav-collapse::after {
   content: ""; position: absolute; left: 0; right: 0; top: 50%;
   transform: translateY(-50%); height: 44px;
 }
 
 .tt-nav-foot { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; border-top: 1px solid var(--border-subtle); }
-.tt-nav-account .dots { margin-left: auto; flex: 0 0 auto; display: flex; color: var(--text-dimmer); }
 
-:where(html[data-pointer="fine"]) .tt-top-create:hover { border-color: var(--accent-border); color: var(--accent); }
+/* ── 侧栏搜索行（22 设计 §3.5）：顶栏 Command Center 撤了，⌘K 的可见入口回到品牌下面 ──
+   实底 + 32 高的假输入框：与底同色只描一圈边的话没人看得出这里能搜（有人用了半年不知道有 ⌘K） */
+.tt-nav-search {
+  display: flex; align-items: center; gap: var(--sp-2); width: 100%; height: 32px;
+  margin: 0 0 var(--sp-2); padding: 0 10px;
+  border: 1px solid var(--border-subtle); border-radius: var(--r-sm);
+  background: var(--bg-elevated); color: var(--text-dim); font-size: var(--fs-sm);
+  text-align: left; cursor: pointer; transition: border-color .12s, color .12s;
+}
+:where(html[data-pointer="fine"]) .tt-nav-search:hover { border-color: var(--accent-border); color: var(--text-bright); }
+.tt-nav-search .ph { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-nav-search kbd {
+  flex: 0 0 auto; padding: 1px 5px; border: 1px solid var(--border); border-radius: 5px;
+  background: var(--bg-base); color: var(--text-dim); font-size: var(--fs-micro); font-family: var(--mono);
+}
+.tt-nav.rail .tt-nav-search { justify-content: center; width: 36px; margin: 0 auto var(--sp-2); padding: 0; border-radius: var(--r-xs); }
 
-/* ── 顶栏搜索框 ──
-   实底（比顶栏亮一档）+ 32 高，不是描边框。旧版与顶栏同色、只有一圈 1px 边，
-   在一条本就低对比的横条上根本读不出「这里能搜」；有人用了半年不知道有 ⌘K。 */
-.tt-topsearch {
-  position: absolute; left: 50%; transform: translateX(-50%);
-  width: min(520px, 40%); height: 32px; padding: 0 var(--sp-3);
-  display: flex; align-items: center; gap: var(--sp-2);
-  border: 1px solid var(--border); border-radius: var(--r-xs);
-  background: var(--bg-elevated); color: var(--text-dim);
-  font-size: var(--fs-meta); cursor: pointer;
-  transition: border-color .12s, color .12s;
+/* ── 右栏三面板（22 设计 §3.4）：活动条 + 作用域头 + 文件 / Git / Worktree ── */
+.tt-ins { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
+.tt-ins-acts { display: flex; align-items: center; gap: 2px; height: 40px; padding: 0 8px; border-bottom: 1px solid var(--border-subtle); flex: 0 0 auto; }
+.tt-ins-act {
+  position: relative; width: 32px; height: 32px; display: grid; place-items: center;
+  border: 0; border-radius: var(--r-xs); background: none; color: var(--text-dim); cursor: pointer;
 }
-:where(html[data-pointer="fine"]) .tt-topsearch:hover { border-color: var(--accent-border); color: var(--text-bright); }
-.tt-topsearch .ph { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tt-topsearch kbd {
-  margin-left: auto; flex: 0 0 auto; padding: 1px 5px;
-  border: 1px solid var(--border); border-radius: 5px;
-  background: var(--bg-base); color: var(--text-dim); font-size: var(--fs-micro);
+:where(html[data-pointer="fine"]) .tt-ins-act:hover { background: var(--list-hover); color: var(--text-bright); }
+.tt-ins-act.on { color: var(--text-bright); }
+.tt-ins-act.on::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: -4px; height: 2px; border-radius: 2px; background: var(--accent); }
+html[data-pointer="coarse"] .tt-ins-act { width: 44px; height: 40px; }
+.tt-ins-scope { display: flex; align-items: center; height: 36px; padding: 0 14px; flex: 0 0 auto; font-size: var(--fs-sm); font-weight: 600; color: var(--text-bright); }
+.tt-ins-scope .nm { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-ins-body { flex: 1; min-height: 0; min-width: 0; flex-direction: column; }
+/* 内容搜索：输入框 + 按文件分组的命中行 */
+.tt-csearch { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 0 10px 10px; }
+.tt-csearch-note { padding: 6px 4px; color: var(--text-dimmer); font-size: var(--fs-meta); }
+.tt-csearch-file { margin-bottom: 6px; }
+.tt-csearch-fname {
+  display: flex; align-items: center; gap: 6px; width: 100%; height: 26px; padding: 0 4px;
+  border: 0; border-radius: var(--r-xs); background: none; color: var(--text-bright); font-size: var(--fs-sm); text-align: left; cursor: pointer;
 }
+.tt-csearch-fname .fi { display: inline-flex; transform: scale(.72); margin: -2px; }
+.tt-csearch-fname .nm { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-csearch-fname .dir { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dimmer); font-size: var(--fs-micro); }
+.tt-csearch-fname .cnt { flex: 0 0 auto; color: var(--text-dimmer); font: var(--fs-micro) var(--mono); }
+.tt-csearch-line {
+  display: flex; align-items: center; gap: var(--sp-2); width: 100%; height: 24px; padding: 0 4px 0 24px;
+  border: 0; border-radius: 4px; background: none; color: var(--text-dim); font: var(--fs-meta)/1 var(--mono); text-align: left; cursor: pointer; overflow: hidden; white-space: nowrap;
+}
+.tt-csearch-line .no { flex: 0 0 auto; width: 32px; text-align: right; color: var(--text-dimmer); }
+.tt-csearch-line .tx { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+:where(html[data-pointer="fine"]) .tt-csearch-fname:hover, :where(html[data-pointer="fine"]) .tt-csearch-line:hover { background: var(--list-hover); color: var(--text-bright); }
+html[data-pointer="coarse"] .tt-csearch-line, html[data-pointer="coarse"] .tt-csearch-fname { height: 44px; }
+
+/* ── 项目树（22 设计 §3.2）：项目 → 任务 → 会话，塞在导航组下面原来空着的那段 ──
+   树里每一行就是侧栏那枚 .tt-nav-item：高、图标槽、hover、选中态、计数徽标全是它的；
+   这里只加缩进和图标槽里放的东西。不另起一套长相。 */
+.tt-nav-list.has-tree { flex: 0 0 auto; overflow: visible; }
+.tt-nav-tree {
+  flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
+  margin: 10px -8px 0; padding: 10px 8px 8px; border-top: 1px solid var(--border-subtle);
+}
+.tt-tree-head { display: flex; align-items: center; gap: var(--sp-1); padding: 0 2px 8px 2px; }
+/* 搜索：实底 + 32 高的假输入框，点了开 ⌘K 面板。与底同色只描一圈边的话没人看得出这里能搜 */
+.tt-tree-head .gl { flex: 1; padding-left: 10px; color: var(--text-dimmer); font-size: var(--fs-micro); font-weight: 700; letter-spacing: .1em; }
+.tt-tree-head .tt-act { color: var(--text-dimmer); }
+/* 项目行的首字母圆标：项目卡那枚（icoOf 取色）缩到 20，住在图标槽里 */
+.tt-tree-row .av { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font: 700 11px/1 var(--mono); }
+.tt-tree-proj + .tt-tree-proj { margin-top: 4px; }
+.tt-tree-proj.loose { margin-top: 10px; }
+.tt-tree-proj .gl { padding: 0 10px; margin-bottom: var(--sp-1); color: var(--text-dimmer); font-size: var(--fs-micro); font-weight: 700; letter-spacing: .1em; }
+/* 散会话没有卡，行自己缩一级，和卡里的头行对齐 */
+.tt-tree-proj.loose .tt-tree-row { padding-left: 32px; }
+/* 箭头钉右端：没有计数徽标时也不能跟在名字后面 */
+.tt-tree-row .chev { flex: 0 0 auto; margin-left: auto; display: grid; place-items: center; color: var(--text-dimmer); transition: transform .15s; }
+.tt-tree-row .bd + .chev { margin-left: 0; }
+.tt-tree-row.closed .chev { transform: rotate(-90deg); }
+/* 状态点住在图标槽正中：运行 / 等你 / 待收尾 才上色，空闲很淡 */
+.tt-tree .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-dimmer); }
+.tt-tree .dot.idle { opacity: .4; }
+.tt-tree .dot.run { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
+.tt-tree .dot.wait { background: var(--warn); box-shadow: 0 0 0 3px var(--warn-soft); }
+.tt-tree .dot.fin { background: var(--swarm); }
+/* 任务卡（参照 Orca 侧栏）：一张卡 = 名字 / 分支 / 「N 个会话」头 / 会话行；卡之间留 4px，当前任务的卡描一圈 */
+.tt-tree-task { margin: 3px 6px 3px 12px; padding: 3px 0 4px; border-radius: var(--r-sm); background: var(--bg-container); border: 1px solid var(--border-subtle); }
+.tt-tree-task.on { border-color: var(--accent-border); }
+.tt-tree-task.idle { opacity: .72; border-style: dashed; }
+/* 项目行右端的 […] [+]：一直看得见（淡），悬停亮 */
+.tt-tree-row.proj .act { flex: 0 0 auto; width: 20px; height: 20px; display: grid; place-items: center; border-radius: var(--r-xs); color: var(--text-dimmer); }
+.tt-tree-row.proj .nm + .act, .tt-tree-row.proj .bd + .act { margin-left: auto; }
+.tt-tree-row.proj .act ~ .act, .tt-tree-row.proj .act ~ .chev { margin-left: 0; }
+:where(html[data-pointer="fine"]) .tt-tree-row.proj .act:hover { background: var(--accent-soft); color: var(--accent); }
+/* 树的滚动条：细一档，只在鼠标进树时露出来 */
+.tt-nav-tree { scrollbar-gutter: stable; scrollbar-color: transparent transparent; }
+.tt-nav-tree::-webkit-scrollbar { width: 6px; }
+.tt-nav-tree::-webkit-scrollbar-thumb { background: transparent; border: 0; }
+:where(html[data-pointer="fine"]) .tt-nav-tree:hover { scrollbar-color: var(--scroll-thumb) transparent; }
+:where(html[data-pointer="fine"]) .tt-nav-tree:hover::-webkit-scrollbar-thumb { background: var(--scroll-thumb); }
+.tt-tree-task > .tt-tree-row.head { padding-left: 10px; border-radius: var(--r-xs); }
+.tt-tree-task > .tt-tree-row.head .nm { font-weight: 500; font-size: var(--fs-sm); }
+/* 头行右端的分支状态图标（Orca 卡片右上角那枚）：颜色说状态，悬停看分支和数字 */
+.wtst { flex: 0 0 auto; width: 18px; height: 18px; display: inline-grid; place-items: center; border-radius: var(--r-xs); color: var(--text-dimmer); }
+.tt-tree-row .wtst { margin-left: auto; width: 20px; height: 20px; }
+.tt-tree-row .bd + .wtst { margin-left: 0; }
+.wtst.ok { color: var(--ok); } .wtst.warn { color: var(--warn); } .wtst.accent { color: var(--accent); }
+.wtst.btn { cursor: pointer; }
+:where(html[data-pointer="fine"]) .wtst.btn:hover { background: var(--list-hover); }
+/* 分支的 PR 卡（Orca 那张）：编号 + 去远端 / 标题 / 状态与检查两枚 pill / 分支与数字 */
+.tt-pr-pop .ant-popover-inner { padding: 0; }
+.tt-pr-card { width: 320px; padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+.tt-pr-card .hd { display: flex; align-items: center; gap: 6px; }
+.tt-pr-card .hd .ic { display: inline-flex; color: var(--text-dim); }
+.tt-pr-card .hd b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: var(--fs-sm); }
+.tt-pr-card .ttl { font-size: var(--fs-sm); font-weight: 600; color: var(--text-bright); line-height: 1.45; }
+.tt-pr-card .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.tt-pr-card .dim { color: var(--text-dimmer); font-size: var(--fs-meta); display: flex; align-items: center; gap: 6px; }
+.tt-pr-card .dim.mono { font-family: var(--mono); font-size: var(--fs-micro); }
+.tt-pill.sm { height: 22px; padding: 0 8px; font-size: var(--fs-micro); }
+.tt-pill.sm.ok { color: var(--ok); border-color: var(--ok-border); background: var(--ok-soft); }
+.tt-pill.sm.accent { color: var(--accent); border-color: var(--accent-border); background: var(--accent-soft); }
+.tt-pill.sm.danger { color: var(--danger); border-color: var(--danger-border); background: var(--danger-soft); }
+.tt-pill.sm.warn { color: var(--warn); border-color: var(--warn-border); background: var(--warn-soft); }
+.tt-pill.sm.dim { color: var(--text-dim); }
+.tt-tree-agents { display: flex; align-items: center; gap: 4px; width: calc(100% - 12px); margin: 2px 6px 0; height: 26px; padding: 0 6px 0 26px; border: 0; background: none; border-radius: var(--r-xs); color: var(--text-dim); font: inherit; font-size: var(--fs-meta); cursor: pointer; }
+.tt-tree-agents .nm { flex: 1; text-align: left; }
+.tt-tree-agents .chev { display: inline-flex; color: var(--text-dimmer); transition: transform .15s; }
+.tt-tree-agents.closed .chev { transform: rotate(-90deg); }
+:where(html[data-pointer="fine"]) .tt-tree-agents:hover { background: var(--list-hover); color: var(--text-bright); }
+.tt-tree-sessions .tt-tree-row { padding-left: 30px; padding-right: 8px; min-height: 30px; border-radius: var(--r-xs); margin: 0 6px; width: calc(100% - 12px); gap: 8px; }
+.tt-tree-sessions .tt-tree-row .nm { flex: 1 1 auto; }
+.tt-tree-sessions .tt-tree-row .nm { color: var(--text-dim); font-size: var(--fs-sm); font-weight: 400; }
+/* 休眠会话（重启带走、点开即在原目录重开）：整行淡一档 */
+.tt-tree-row.dormant .ic, .tt-tree-row.dormant .nm { opacity: .55; }
+.tt-tree-sessions .tt-tree-row.on .nm { color: var(--text-bright); }
+:where(html[data-pointer="fine"]) .tt-tree-sessions .tt-tree-row:hover .nm { color: var(--text-bright); }
+.tt-tree-sessions .tt-tree-row .tm { flex: 0 0 auto; margin-left: 0; color: var(--text-dimmer); font: 400 var(--fs-micro)/1 var(--mono); }
+.tt-tree-sessions .tt-tree-row .nm + .dot { margin-left: 0; }
+/* 收起：一枚「✳ +N ›」小药丸，点了展开 */
+.tt-tree-more { display: inline-flex; align-items: center; gap: 5px; margin: 2px 0 0 30px; height: 24px; padding: 0 8px; border-radius: var(--r-pill); border: 1px solid var(--border-subtle); background: var(--bg-elevated); color: var(--text-dim); font-size: var(--fs-meta); }
+.tt-tree-more .chev { display: inline-flex; color: var(--text-dimmer); transform: rotate(-90deg); }
+:where(html[data-pointer="fine"]) .tt-tree-more:hover { border-color: var(--accent-border); color: var(--text-bright); }
+/* 会话行末尾的状态点（只在运行 / 等你时有） */
+.tt-tree-row .nm + .dot { flex: 0 0 auto; margin-left: auto; }
+.tt-tree-empty { padding: 4px 12px 8px; color: var(--text-dimmer); font-size: var(--fs-meta); }
+
+/* ── 文件标签与路径条（22 设计 §3.3）── */
+.tt-tab-file .tt-tab-fi { display: inline-flex; transform: scale(.72); margin: -2px; }
+.tt-tab-file .tt-tab-nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-tab-file.prev .tt-tab-nm { font-style: italic; }
+.tt-tab-dirty { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--text-bright); }
+.tt-pathbar .crumbs { display: flex; align-items: center; gap: 2px; min-width: 0; overflow: hidden; white-space: nowrap; font-family: var(--mono); font-size: var(--fs-meta); color: var(--text-dim); padding-left: 6px; }
+.tt-pathbar .crumbs > span { display: inline-flex; align-items: center; }
+.tt-pathbar .crumbs .sep { color: var(--text-dimmer); margin: 0 4px; }
+.tt-pathbar .crumbs .leaf { color: var(--text-bright); }
+.tt-pathbar-empty { height: 100%; display: grid; place-items: center; color: var(--text-dimmer); font-size: var(--fs-sm); padding: var(--sp-4); text-align: center; }
+
+/* ── 标签条右端「新建 ▾」与任务空态（22 设计 §3.3）── */
+.tt-tabs-end { display: flex; align-items: center; flex: 0 0 auto; padding: 0 6px; border-left: 1px solid var(--border-subtle); }
+.tt-tabs-empty {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--sp-1); color: var(--text-dim); font-size: var(--fs-body);
+}
+.tt-tabs-empty small { color: var(--text-dimmer); font-size: var(--fs-meta); }
 
 /* ── ⌘K 搜索面板（shell/CommandPalette.tsx）── */
 .tt-palette {
@@ -1372,6 +1506,7 @@ html[data-size="compact"] .ant-form-item-control-input-content > .ant-picker { w
    App.tsx 的 TBtn），一排安静的扁平按钮里突然吊着一个圈，重得很。
    静态只留一层底色说「这个面板开着」；指到它时才浮出一道同色细内环当反馈——
    环只在 hover 出现、不常驻，一排按钮就不会被边框切碎。 */
+.tt-tbtn.ico { width: 28px; padding: 0; justify-content: center; }
 .tt-tbtn.on { background: var(--accent-soft); color: var(--accent); }
 .tt-tbtn.on.ok { background: var(--ok-soft); color: var(--ok); }
 :where(html[data-pointer="fine"]) .tt-tbtn.on:hover { background: var(--accent-soft); color: var(--accent);
@@ -1514,6 +1649,7 @@ html[data-pointer="coarse"] .tt-act::after { content: ''; position: absolute; le
 :where(html[data-pointer="fine"]) .tt-pill:hover { color: var(--text-bright); border-color: var(--text-dim); }
 .tt-pill:focus-visible { outline: 1px solid var(--accent-border); outline-offset: 1px; }
 .tt-pill.on { color: var(--accent); border-color: var(--accent-border); background: var(--accent-soft); }
+.tt-pill.on.ok { color: var(--ok); border-color: var(--ok-border); background: var(--ok-soft); }
 .tt-pill.danger { color: var(--danger); border-color: var(--danger-border); }
 .tt-pill:disabled, .tt-pill.dis { opacity: .4; cursor: not-allowed; }
 /* 图标钮：动作名走 aria-label，不写进文案（图标硬规则） */

@@ -111,7 +111,7 @@ export function systemCells(i: SystemInput): SystemCell[] {
     push(
       systemCell('roam.core', 'sessions', {
         label: '', priority: 70, tier: 2, render: 'text', icon: 'TerminalIcon', unit: 'count',
-        onClick: { kind: 'route', id: '#/sessions' },
+        onClick: { kind: 'route', id: '#/projects' }, // 会话页退役，会话数点开去项目页（23 设计 §5）
       }),
       { text: String(i.sessions), detail: i.t('nav.sessions') },
     )

@@ -780,7 +780,10 @@ func resolveCwd(ctx context.Context, cwd string) *AnnotationHit {
 			commonDir = filepath.Join(cwd, commonDir)
 		}
 		linked := canonical(gitDir) != canonical(commonDir)
-		branch, _ := git(ctx, cwd, "rev-parse", "--abbrev-ref", "HEAD")
+		branch, berr := git(ctx, cwd, "rev-parse", "--abbrev-ref", "HEAD")
+		if berr != nil {
+			branch = "" // 空仓库 HEAD 未出生：git 的报错文本不是分支名
+		}
 		repoRoot := top
 		if linked {
 			// 主仓库根 = common dir 的宿主目录

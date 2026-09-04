@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -154,25 +155,14 @@ func cmdlineHasClaude(pid int) bool { return argvIsClaude(processArgv(pid)) }
 
 // treeMatch 从 pid 起 DFS 子进程树，任一进程命中 match 即返回 true。
 func treeMatch(pid int, children map[int][]int, depth int, match func(int) bool) bool {
-	if depth > 12 {
-		return false
-	}
-	if match(pid) {
-		return true
-	}
-	for _, ch := range children[pid] {
-		if treeMatch(ch, children, depth+1, match) {
-			return true
-		}
-	}
-	return false
+	return treeFind(pid, children, depth, match) != 0
 }
 
-// paneToolDir 返回会话中进程树命中 match（某交互式 CLI）的 pane 的工作目录；没有则返回 ""。
-func paneToolDir(name string, match func(int) bool) string {
+// paneToolProc 返回会话中进程树命中 match（某交互式 CLI）的 pane 的工作目录和命中的进程 pid；没有则 "", 0。
+func paneToolProc(name string, match func(int) bool) (string, int) {
 	out, err := exec.Command("tmux", "list-panes", "-t", name, "-F", "#{pane_pid}\t#{pane_current_path}").Output()
 	if err != nil {
-		return ""
+		return "", 0
 	}
 	children := procChildren()
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
@@ -184,15 +174,20 @@ func paneToolDir(name string, match func(int) bool) string {
 		if err != nil {
 			continue
 		}
-		if treeMatch(pid, children, 0, match) {
-			return parts[1]
+		if got := treeFind(pid, children, 0, match); got != 0 {
+			return parts[1], got
 		}
 	}
-	return ""
+	return "", 0
 }
 
-// paneClaudeDir 返回会话中正在跑 claude 的 pane 的工作目录；没有则返回 ""。
-func paneClaudeDir(name string) string { return paneToolDir(name, cmdlineHasClaude) }
+func paneToolDir(name string, match func(int) bool) string {
+	d, _ := paneToolProc(name, match)
+	return d
+}
+
+// paneClaudeProc 返回正在跑 claude 的 pane 的工作目录和 claude 进程 pid；没有则返回 "", 0。
+func paneClaudeProc(name string) (string, int) { return paneToolProc(name, cmdlineHasClaude) }
 
 // runningAgentSessions 一次性扫全部 pane 的进程树，返回会话名 → 在跑的 agent（"claude"/"codex"）。
 // 供项目列表批量判「活跃」——绿点语义（设计 W2）：agent 进程在跑才算活跃。避免前端
@@ -200,64 +195,55 @@ func paneClaudeDir(name string) string { return paneToolDir(name, cmdlineHasClau
 // 当活跃代理的误判：后台干活没人看=灰、开着终端却 idle=绿 的反相。
 // 返回具体是哪个 agent 而不只是 bool：列表要画品牌标，压成 bool 前端就只能再问一遍。
 func runningAgentSessions() map[string]string {
-	out, err := exec.Command("tmux", "list-panes", "-a", "-F", "#{session_name}\t#{pane_pid}").Output()
+	out := map[string]string{}
+	for sess, p := range runningAgentProcs() {
+		out[sess] = p.Kind
+	}
+	return out
+}
+
+// runningAgentProcs 一次扫描：会话 → 正在跑的 agent 进程（种类、cwd、pid）。
+// 会话 ↔ 对话 id 的对账（agent-transcript-link.go）要 cwd 和 pid，绿点判活跃只要种类。
+func runningAgentProcs() map[string]agentProc {
+	out, err := exec.Command("tmux", "list-panes", "-a", "-F", "#{session_name}\t#{pane_pid}\t#{pane_current_path}").Output()
 	if err != nil {
 		return nil
 	}
 	children := procChildren()
-	running := map[string]string{}
+	running := map[string]agentProc{}
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		parts := strings.SplitN(line, "\t", 2)
-		if len(parts) != 2 || running[parts[0]] != "" {
+		parts := strings.SplitN(line, "\t", 3)
+		if len(parts) != 3 || running[parts[0]].Kind != "" {
 			continue
 		}
 		pid, err := strconv.Atoi(parts[1])
 		if err != nil {
 			continue
 		}
-		switch {
-		case treeMatch(pid, children, 0, cmdlineHasClaude):
-			running[parts[0]] = "claude"
-		case treeMatch(pid, children, 0, cmdlineHasCodex):
-			running[parts[0]] = "codex"
+		if got := treeFind(pid, children, 0, cmdlineHasClaude); got != 0 {
+			running[parts[0]] = agentProc{Kind: "claude", Dir: parts[2], Pid: got}
+		} else if got := treeFind(pid, children, 0, cmdlineHasCodex); got != 0 {
+			running[parts[0]] = agentProc{Kind: "codex", Dir: parts[2], Pid: got}
 		}
 	}
 	return running
 }
 
-// newestJSONL 返回目录中最近修改的 .jsonl（即当前活跃会话记录）。
-func newestJSONL(dir string) string {
-	ents, err := os.ReadDir(dir)
-	if err != nil {
-		return ""
-	}
-	best, bestMod := "", int64(0)
-	for _, e := range ents {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".jsonl") {
-			continue
-		}
-		fi, err := e.Info()
-		if err != nil {
-			continue
-		}
-		if m := fi.ModTime().UnixNano(); m > bestMod {
-			bestMod, best = m, filepath.Join(dir, e.Name())
-		}
-	}
-	return best
-}
+// newestJSONL 返回目录中最近修改的 .jsonl。
+func newestJSONL(dir string) string { return newestJSONLSince(dir, time.Time{}) }
 
 // ClaudeStatus GET /sessions/:name/claude —— 检测会话是否在跑 claude，并定位其 JSONL。
 func (a *API) ClaudeStatus(c *gin.Context) {
 	name := a.sessionTarget(c)
-	dir := paneClaudeDir(name)
+	dir, pid := paneClaudeProc(name)
 	if dir == "" {
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"running": false}})
 		return
 	}
 	home, _ := os.UserHomeDir()
 	pdir := filepath.Join(home, ".claude", "projects", encodeProject(dir))
-	file := newestJSONL(pdir)
+	// 按这个进程自己的命令行和启动时刻挑文件：新开的 claude 不认上一段的旧文件（claude-transcript-pick.go）
+	file := pickTranscript(pdir, processArgv(pid), processStart(pid))
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"running": true, "dir": dir, "file": file}})
 }
 
@@ -515,9 +501,9 @@ func scanStatus(line string, st cStatus) cStatus {
 func (a *API) ClaudeTranscript(c *gin.Context) {
 	file := c.Query("file")
 	if file == "" { // 未传则按会话现场定位
-		if dir := paneClaudeDir(a.sessionTarget(c)); dir != "" {
+		if dir, pid := paneClaudeProc(a.sessionTarget(c)); dir != "" {
 			home, _ := os.UserHomeDir()
-			file = newestJSONL(filepath.Join(home, ".claude", "projects", encodeProject(dir)))
+			file = pickTranscript(filepath.Join(home, ".claude", "projects", encodeProject(dir)), processArgv(pid), processStart(pid))
 		}
 	}
 	// 安全：限制在 ~/.claude/projects 下

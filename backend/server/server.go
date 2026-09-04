@@ -80,6 +80,8 @@ func New(cfg Config) *gin.Engine {
 	a := auth.New(cfg.Password, cfg.TOTPSecret, cfg.TOTPState, cfg.LockAfter, cfg.LockSecs, cfg.SavePassword)
 	h := api.New(tt, cfg.BrowserHome, cfg.DataDir, cfg.EmbeddedBin)
 	go h.SyncLoop()                 // 后台兜底远端同步（10 §3 第三档），失败静默
+	go h.AgentLinkLoop()            // 会话 ↔ claude 对话 id 对账、归属跟着 worktree 走（api/session-home-sync.go）
+	h.SyncClaudeThemeOnce()         // Claude Code 主题对齐 Roam 主题（api/claude-theme-sync.go）
 	browser.InitConfig(cfg.DataDir) // Chrome 启动配置持久化到 dataDir
 	phone.InitConfig(cfg.DataDir)   // 手机后端配置（本机模拟器/远程设备/真机）持久化到 dataDir
 	hub := stream.New(tt, cfg.LogsDir)
@@ -172,6 +174,7 @@ func New(cfg Config) *gin.Engine {
 		g.POST("/git/worktree/finish", h.WorktreeFinish) // P3 孤儿收尾：冻结→wip→merge→remove→留痕
 		g.POST("/git/worktree/sync", h.WorktreeSync)     // 远端轻量同步：ls-remote+fetch 合并目标，只动 refs/remotes（10 §3）
 		g.GET("/git/branches", h.GitBranches)            // 本地分支列表（W1 start-from）
+		g.GET("/git/pr", h.GitPR)                        // 这条分支在远端的 PR（gh CLI），分支状态弹层用
 		// ── Session API 增量 ──
 		g.GET("/sessions/annotations", h.SessionAnnotations)              // session→worktree 归属（cwd join）
 		g.GET("/sessions/:name/worktree-status", h.SessionWorktreeStatus) // W7 关闭前预检

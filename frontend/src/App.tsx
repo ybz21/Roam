@@ -3,7 +3,7 @@
 //   电脑 ≥1200 → 三栏：导航 Sider | 列表(页面) | 终端面板(常驻, 多标签)
 //   平板/手机   → 终端为全屏覆盖层；手机底部 Tab 导航
 // 终端：多标签 / 字号调节 / 复制 / 更多快捷键 / 断线自动重连。
-import { Suspense, useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { bootstrapCluster, setCurrentNode, useClusterNodes, useCurrentNodeId } from './components/cluster/node-url'
 import { NodeMark, nodeDotColor } from './components/cluster/NodeMark'
 import { useHubHealth } from './components/cluster/hub-health'
@@ -37,7 +37,7 @@ const HubPage = lazyRetry(() => import('./components/cluster/HubPage'))
 import UpdateBanner from './components/UpdateBanner'
 import { useThemeMode } from './theme'
 import { useI18n } from './i18n'
-import { usePreferences, loadPreferences } from './preferences'
+import { usePreferences, loadPreferences, savePreferences } from './preferences'
 import { detectPrompt } from './components/prompt'
 import type { PromptSignal } from './components/prompt'
 import { useLayout } from './layout'
@@ -50,10 +50,17 @@ import { SessionDock } from './components/shell/SessionDock'
 import { WorkspaceStatusBar } from './components/shell/WorkspaceStatusBar'
 import { systemCells } from './components/shell/status-system'
 import type { StatusAction } from './components/shell/status-cells'
-import { sessionProject, useSessionProject, setSessionProjects, buildSessionProjects } from './components/sessions/session-project'
+import { sessionProject, useSessionProject, useSessionProjects, setSessionProjects, buildSessionProjects } from './components/sessions/session-project'
 import { MobileSheet, SheetRow, SheetSection } from './components/shell/MobileSheet'
-import { WorkspaceTopbar, type PaletteActions, type PaletteItem } from './components/shell/WorkspaceTopbar'
-import { GlobalSearch, openPalette } from './components/shell/palette'
+import { GlobalSearch, openPalette, type PaletteActions, type PaletteItem } from './components/shell/palette'
+import { ProjectTree, firstSessionOf, taskPathOf } from './components/shell/ProjectTree'
+import { InspectorPanels, type InspectorPanelKind } from './components/shell/InspectorPanels'
+import { buildTaskTree, type TreeTask } from './components/shell/task-tree'
+import { useSessionCloser } from './components/sessions/session-closer'
+import { taskKeyOf, isLooseTask, looseSessionOf, type TaskKey } from './components/sessions/task-key'
+import RenameSessionModal from './components/sessions/RenameSessionModal'
+import { TaskComposer } from './components/sessions/TaskComposer'
+import { NewProjectModal } from './components/projects/Projects'
 import { setSessionLabels, sessionLabel, sessionDisplay } from './components/sessions/session-label'
 import LinkStatus from './p2p/LinkStatus'
 import { startControlLink, stopControlLink } from './p2p/transport'
@@ -64,9 +71,10 @@ import Tasks from './components/tasks/Tasks'
 import TerminalPane from './components/terminal/TerminalPane'
 import SoloTerminal from './components/terminal/SoloTerminal'
 import { ICONS } from './components/nav-icons'
-import { normalizeRoute, setHashParams, readTermTokens, NO_TERMS } from './route-hash'
+import { normalizeRoute, setHashParams, readTermTokens, NO_TERMS, TASK_ROUTE } from './route-hash'
 import type { ClaudeInfo } from './components/terminal/claude-info'
-import { dropDeadTokens, loadTabs, saveTabs } from './components/terminal/term-tabs-store'
+import { dropDeadTokens, loadTabs, saveTabs, type FileTab } from './components/terminal/term-tabs-store'
+import type { FileTabMode } from './components/files/FilePathBar'
 import { CloudIcon, ExitFullscreenIcon, FullscreenIcon, LogoutIcon, MoonIcon, MoreIcon, SearchIcon, SunIcon } from './icons'
 import { lazyRetry } from './components/lazy-retry'
 
@@ -82,7 +90,6 @@ const { Text } = Typography
 // 概览独有的问候条/行动队列/活动轨现在挂在项目列表页顶上。旧链接由 normalizeRoute 接住。
 const NAV = [
   { key: 'projects', labelKey: 'nav.projects' },
-  { key: 'sessions', labelKey: 'nav.sessions' },
   { key: 'files', labelKey: 'nav.files' },
   { key: 'browser', labelKey: 'nav.browser' },
   { key: 'phone', labelKey: 'nav.phone' },
@@ -102,7 +109,7 @@ const NAV_TOOLS = ['browser', 'phone', 'plugins']
 // 比原来 6 格的 65 宽出一截（13 §7.1 的命中区下限是 44，但相邻图标还要留够间隙）。
 const MOBILE_NAV_KEYS = ['projects', 'files', 'browser', 'phone']
 // 「更多」sheet 里的两段：会话属于工作区主线，不归到工具下面
-const MOBILE_MORE_WORKSPACE = ['sessions']
+const MOBILE_MORE_WORKSPACE: string[] = [] // 会话页退役（23 设计 §5）：不再有入口，路由留给老链接
 const MOBILE_MORE_TOOLS = ['plugins', 'settings']
 const MOBILE_MORE_KEYS = [...MOBILE_MORE_WORKSPACE, ...MOBILE_MORE_TOOLS]
 
@@ -113,6 +120,16 @@ const CQ_PAGES = new Set(['projects', 'sessions'])
 
 
 
+
+
+// 探测结果（running/file/dir 这几个标量）没变就保留旧对象：5s 一轮的空翻新会让依赖它的 effect 和 memo 全部重跑
+function sameProbe(a: any, b: any): boolean {
+  if (a === b) return true
+  if (!a || !b) return false
+  const ks = new Set([...Object.keys(a), ...Object.keys(b)])
+  for (const k of ks) if (a[k] !== b[k]) return false
+  return true
+}
 
 export default function App() {
   // 多机：底座那枚按钮 + 账户菜单顶部的机器列表。单机时两者都为空，界面与今天一致。
@@ -157,6 +174,77 @@ export default function App() {
   // 组件内部一律用会话名——后端 API / WebSocket 收发的都是名字。
   const [terms, setTerms] = useState<string[]>([])
   const [active, setActive] = useState<string | null>(null)
+  // 标签条**不按任务隔离**（用户拍板，推翻 22 设计 §3.3 的分片）：所有会话标签都在条上。
+  // 「当前任务」不是独立状态，而是从当前标签推出来的：会话标签看它的 worktree（taskKeyOf），
+  // 文件标签看它是从哪个任务开的。左树高亮、右栏的根、新建会话落进哪个目录，都跟着它走。
+  const projTable = useSessionProjects()
+  // 树里点会话时树已经知道它在哪个任务（worktree 轮询的名单），归属表可能还没到：记一笔兜底
+  const taskHint = useRef<Record<string, TaskKey>>({})
+  const keyOf = (n: string) => {
+    const k = taskKeyOf(n, projTable[n]?.worktree)
+    return isLooseTask(k) && taskHint.current[n] ? taskHint.current[n] : k
+  }
+  // 右栏三面板（22 设计 §3.4）：看哪个面板记本机；对话里点了路径要文件面板打开哪个
+  const [panel, setPanelLocal] = useState<InspectorPanelKind>(() => {
+    try { const v = localStorage.getItem('roam.inspectorPanel'); return v === 'git' || v === 'worktree' ? v : 'files' } catch { return 'files' }
+  })
+  const setPanel = (p: InspectorPanelKind) => { setPanelLocal(p); try { localStorage.setItem('roam.inspectorPanel', p) } catch { /* 记不住而已 */ } }
+  // 文件标签：一条平铺列表，每条记着从哪个任务开的；activeFile 非空 = 当前标签是文件，空 = 当前标签是会话
+  const [fileTabs, setFileTabs] = useState<FileTab[]>([])
+  const [activeFile, setActiveFile] = useState('')
+  const [reveal, setReveal] = useState<{ path: string; line: number; nonce: number } | undefined>()
+  const [searchNonce, setSearchNonce] = useState(0)
+  const curFile = activeFile
+  const curFileTab = curFile ? fileTabs.find((f) => f.path === curFile) : undefined
+  // 当前任务：文件标签 → 它记的任务；会话标签 → 它的 worktree；什么都没开 → 没有
+  const activeTask: TaskKey | null = curFileTab ? (curFileTab.task || null) : active ? keyOf(active) : null
+  const activeTaskRef = useRef<TaskKey | null>(null)
+  activeTaskRef.current = activeTask
+  const isMd = (p: string) => /\.(md|markdown|mdx|html?)$/i.test(p)
+  // 单击开预览标签（斜体）；再单击别的文件替换它；已开着的直接激活
+  const openFileTab = (path: string, line?: number) => {
+    const key = activeTaskRef.current || ''
+    setFileTabs((list) => {
+      if (list.some((f) => f.path === path)) return list
+      const tab: FileTab = { path, preview: true, mode: isMd(path) ? 'preview' : 'source', task: key }
+      const i = list.findIndex((f) => f.preview)
+      return i < 0 ? [...list, tab] : list.map((f, k) => (k === i ? tab : f))
+    })
+    setActiveFile(path)
+    if (line && line > 0) setReveal((prev) => ({ path, line, nonce: (prev?.nonce || 0) + 1 }))
+  }
+  const pinFileTab = (path: string) => setFileTabs((list) => list.map((f) => (f.path === path ? { ...f, preview: false } : f)))
+  const setFileMode = (path: string, mode: FileTabMode) => setFileTabs((list) => list.map((f) => (f.path === path ? { ...f, mode, preview: false } : f)))
+  const closeFileTab = (path: string) => {
+    setFileTabs((list) => {
+      const i = list.findIndex((f) => f.path === path)
+      const next = list.filter((f) => f.path !== path)
+      // 关掉当前文件标签：回到邻居文件，没有邻居就回会话
+      setActiveFile((cur) => (cur === path ? (next[i - 1] || next[i])?.path || '' : cur))
+      return next
+    })
+  }
+  // 点会话标签 = 文件标签让位
+  const activateSession = (n: string) => { setActive(n); setActiveFile('') }
+  // 左栏树的三份原料（22 设计 §3.2）：/projects 与每项目的 worktree 挂在下面那条 15s 轮询上，/sessions 挂 5s 那条
+  const [treeSrc, setTreeSrc] = useState<{ projects: any[]; worktrees: Record<string, any[]> }>({ projects: [], worktrees: {} })
+  // 建了新会话就立刻把会话表 / 归属表 / worktree 都刷一遍，不等下一轮（分别 5s / 15s / 60s）
+  const sessReload = useRef<(() => void) | null>(null)
+  const treeReload = useRef<(() => void) | null>(null)
+  // 真关会话（树的右键菜单）：和会话页同一套分流，关完刷树。
+  // **必须在下面两个提前 return 之前调**——hook 数量在登录前后不一致，React 会报 Rendered more hooks。
+  // closeTerm 在后面才定义，通过 ref 调
+  const closeTermRef = useRef<(n: string) => void>(() => {})
+  const closer = useSessionCloser((n) => closeTermRef.current(n), () => { sessReload.current?.(); treeReload.current?.() })
+  // 树里双击会话行改会话名；双击任务行给任务起名（偏好 taskNames，不动会话和分支）
+  const [renameInTree, setRenameInTree] = useState<string | null>(null)
+  const [renameTask, setRenameTask] = useState<{ key: TaskKey; name: string } | null>(null)
+  const [renameTaskVal, setRenameTaskVal] = useState('')
+  // 项目行「+」/ ⌘N：在这个项目下开新任务——弹的是项目主页那个 composer（TaskComposer），不是老表单
+  const [newTaskDir, setNewTaskDir] = useState<string | null>(null)
+  // 树头「+」：就地弹新建项目框，不再先跳去项目列表页（建完自己跳到新项目主页）
+  const [newProjectOpen, setNewProjectOpen] = useState(false)
+  const [sessList, setSessList] = useState<{ name: string; label?: string; lastActivity?: number; agent?: 'claude' | 'codex' }[]>([])
   // URL 上待还原的 id/名字（还没拿到 id 映射前先原样存着）
   const urlTerms = useRef<string[]>(readTermTokens().terms)
   const urlActive = useRef<string>(readTermTokens().active)
@@ -166,8 +254,11 @@ export default function App() {
   const restored = useRef(false) // 还原完成前不许回写 URL，否则会把待还原的参数抹掉
   const [overlay, setOverlay] = useState(false) // 手机/平板全屏终端
   const [moreOpen, setMoreOpen] = useState(false) // 手机「更多」sheet
+  // 任务视图 = 桌面 + 路由 #/w + 有当前任务：中间整块给标签工作区，就是现成的 focus 几何
+  const taskView = hasSider && tab === TASK_ROUTE
   // 空间状态（Page / Split / Focus）与 Dock 宽度：唯一的尺寸契约来源
-  const space = useWorkspaceLayout(terms.length > 0)
+  const space = useWorkspaceLayout(terms.length > 0 || taskView, taskView)
+  const { message: antMessage, modal: antModal } = AntApp.useApp()
   const modKeyLabel = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || '') ? '⌘' : 'Ctrl+'
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine)
   useEffect(() => {
@@ -205,8 +296,13 @@ export default function App() {
   const [git, setGit] = useState<{ branch: string; ahead: number; behind: number; files: number; state: string; conflicts: number } | null>(null)
   // 用**响应式**的那个：sessionProject() 是普通函数，归属表更新时不会触发重渲，
   // 于是切了会话之后分支那几格要等到下一次别的 state 变化才跟上。
+  // 树和当前项目在下面才算出来，快捷键里通过 ref 读（effect 挂得早）
+  const treeRef = useRef<ReturnType<typeof buildTaskTree> | null>(null)
+  const activeProjectRef = useRef<{ dir?: string } | null>(null)
   const activeProject = useSessionProject(active)
-  const gitDir = activeProject?.dir || ''
+  activeProjectRef.current = activeProject
+  // 分支那格看当前任务的 worktree，不是项目主仓库（22 设计 §3.2）
+  const gitDir = activeProject?.worktree || activeProject?.dir || ''
   const gitDirRef = useRef(gitDir)
   gitDirRef.current = gitDir
   const loadGit = async () => {
@@ -247,12 +343,30 @@ export default function App() {
         const swarms = Array.isArray(sw) ? sw : sw?.data || []
         setSwarmCount(swarms.filter((x: any) => x?.status && x.status !== 'archived').length)
         void loadGit()
+        // 左栏树要每个 git 项目的 worktree。后端每个 worktree 要跑十来条 git 命令，
+        // 八个项目并发着 15s 一轮会把机器打满（实测 CPU 60%、温度报警），所以：
+        // 串行、60s 一轮、项目列表照旧 15s 刷；手机没有树，不拉
+        if (hasSider && Date.now() - wtAt > 60000) {
+          wtAt = Date.now()
+          const worktrees: Record<string, any[]> = {}
+          for (const p of projects.filter((x: any) => x.git)) {
+            if (stop) return
+            try { worktrees[p.key] = (await api('GET', `/git/worktrees?dir=${encodeURIComponent(p.dir)}`))?.data || [] }
+            catch { worktrees[p.key] = [] }
+          }
+          if (stop) return
+          setTreeSrc({ projects, worktrees })
+        } else if (hasSider) {
+          setTreeSrc((cur) => ({ ...cur, projects }))
+        }
       } catch { /* 轮询失败就保持上一轮的值，不清空 */ }
     }
+    let wtAt = 0
+    treeReload.current = () => { wtAt = 0; void load() }
     load()
     const i = setInterval(load, 15000)
-    return () => { stop = true; clearInterval(i) }
-  }, [authed])
+    return () => { stop = true; clearInterval(i); treeReload.current = null }
+  }, [authed, hasSider])
 
   // Canvas 滚动位置（14 §6.3.5）：终端一开，Canvas 变窄、卡片重排，scrollHeight
   // 从 1108 掉到 781，浏览器顺手把 scrollTop 归零——"你看到哪儿了"就这么没了。
@@ -294,8 +408,41 @@ export default function App() {
       const mod = e.metaKey || e.ctrlKey
       if (mod && e.key.toLowerCase() === 'j') {
         e.preventDefault()
-        if (e.shiftKey) space.toggleFocus()
+        // 任务视图：⌘J 开合右栏（Dock 没了，这个键让给它）；⌘⇧J 仍是 Focus
+        if (taskView && !e.shiftKey) { space.toggleInspectorCollapsed(); return }
+        if (e.shiftKey) { if (taskView) space.setNavCollapsed(!space.navCollapsed); else space.toggleFocus() }
         else { space.setFocus('none'); space.toggleDock() }
+        return
+      }
+      // ⌘N 开任务（当前项目下，弹 composer）；⌘T 在当前 worktree 里派生终端；⌘W 收起当前标签（23 设计 §6）
+      if (mod && !e.shiftKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault()
+        const key = activeTaskRef.current
+        const tr = treeRef.current
+        const proj = key && tr ? tr.projects.find((p) => p.tasks.some((x) => x.key === key)) : undefined
+        const dir = proj?.dir || activeProjectRef.current?.dir || tr?.projects[0]?.dir
+        if (dir) setNewTaskDir(dir)
+        return
+      }
+      if (mod && !e.shiftKey && taskView && e.key.toLowerCase() === 't') { e.preventDefault(); void newTerminalInTask('shell'); return }
+      if (mod && !e.shiftKey && taskView && e.key.toLowerCase() === 'w') {
+        e.preventDefault()
+        if (curFile) closeFileTab(curFile); else if (active) closeTerm(active)
+        return
+      }
+      // ⌘⇧F：右栏切到「内容」搜索并聚焦（22 设计 §9）
+      if (mod && e.shiftKey && taskView && e.key.toLowerCase() === 'f') {
+        e.preventDefault()
+        setPanel('files')
+        if (space.inspectorCollapsed) space.toggleInspectorCollapsed()
+        setSearchNonce((n) => n + 1)
+        return
+      }
+      // 右栏切面板：⌘⇧E 文件、⌘⇧G Git（22 设计 §9）
+      if (mod && e.shiftKey && taskView && (e.key.toLowerCase() === 'e' || e.key.toLowerCase() === 'g')) {
+        e.preventDefault()
+        setPanel(e.key.toLowerCase() === 'e' ? 'files' : 'git')
+        if (space.inspectorCollapsed) space.toggleInspectorCollapsed()
         return
       }
       // Esc 收一层：覆盖态先收面板，聚焦态退回分栏。两者都不关终端、不离开页面。
@@ -304,13 +451,14 @@ export default function App() {
       // 了 Escape，事件根本冒泡不到 window。于是天然是对的——在 vim/Claude 里按 Esc
       // 进 TUI，焦点在页面上按 Esc 才收面板。改这段前先确认这条前提还成立。
       if (e.key === 'Escape') {
+        if (taskView) return // 任务视图里 focus 是常态，Esc 没有可退的层
         if (space.mode === 'overlay') space.setDockOpen(false)
         else if (space.focus !== 'none') space.setFocus('none')
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [hasSider, space])
+  }, [hasSider, space, taskView, curFile, active])
 
   // 启动：先确认登录态，**再**做多机引导，最后才放行渲染。
   //
@@ -348,16 +496,21 @@ export default function App() {
       const byId: Record<string, string> = {}
       const byName: Record<string, string> = {}
       const labels: Record<string, string> = {}
+      const names: { name: string; label?: string; lastActivity?: number; agent?: 'claude' | 'codex' }[] = []
       for (const s of Array.isArray(list) ? list : []) {
         if (s?.id && s?.name) { byId[s.id] = s.name; byName[s.name] = s.id }
         if (s?.name && s?.label) labels[s.name] = s.label
+        if (s?.name) names.push({ name: s.name, label: s.label || undefined, lastActivity: s.lastActivity || undefined, agent: s.agent === 'claude' || s.agent === 'codex' ? s.agent : undefined })
       }
       setSessIds({ byId, byName })
+      // 内容没变就不换引用：树是按它 memo 的，5s 一次的空翻新会让整棵树白重算
+      setSessList((cur) => (cur.length === names.length && cur.every((x, i) => x.name === names[i].name && x.label === names[i].label && x.lastActivity === names[i].lastActivity && x.agent === names[i].agent) ? cur : names))
       setSessionLabels(labels) // 展示名（@roam_name）：界面显示「名字（id）」，handle 仍是会话名
     }).catch(() => { if (!stop) setSessIds((m) => m || { byId: {}, byName: {} }) }) // 拉不到也要放行还原，别把标签卡在空白
+    sessReload.current = load
     load()
     const t = setInterval(load, 5000)
-    return () => { stop = true; clearInterval(t) }
+    return () => { stop = true; clearInterval(t); sessReload.current = null }
   }, [authed])
 
   // 还原标签：拿到 id 表后做一次。老链接里存的是名字，id 表里查不到就按名字用。
@@ -376,6 +529,9 @@ export default function App() {
     // 查无此会话的 id 直接丢：切机器、会话在别处被关掉，都会在这里长出打不开的空标签
     const names = Array.from(new Set(dropDeadTokens(saved ? saved.terms : fromUrl, sessIds.byId).map(toName)))
     if (!names.length) return
+    // 文件标签只记在本机（URL 不写）：不管 URL 有没有说标签，都从本机那份读
+    const stored = saved || loadTabs(curNodeId)
+    if (stored.files.length) { setFileTabs(stored.files); setActiveFile(stored.activeFile) }
     // 用户在 id 表回来之前就点开了标签 → 以他的操作为准，别被 URL 还原顶掉
     setTerms((cur) => (cur.length ? cur : names))
     setActive((cur) => {
@@ -400,8 +556,16 @@ export default function App() {
       active: activeTok ? encodeURIComponent(activeTok) : '',
     })
     // 同一份东西再按机器存一份：切走了还能切回来（见 term-tabs-store）
-    saveTabs(curNodeId, toks, activeTok)
-  }, [terms, active, sessIds, curNodeId])
+    saveTabs(curNodeId, toks, activeTok, fileTabs, activeFile)
+  }, [terms, active, fileTabs, activeFile, sessIds, curNodeId])
+
+  // 左栏树：三份原料 memo 一次；已打开会话探测到的 agent 比 /projects 的名单准
+  const tree = useMemo(() => buildTaskTree({
+    projects: treeSrc.projects, worktrees: treeSrc.worktrees, sessions: sessList, placement: projTable,
+    nameOf: (p) => prefs.taskNames?.[p] || undefined,
+    agentOf: (n) => (claudeMap[n]?.running ? 'claude' : codexMap[n]?.running ? 'codex' : undefined),
+  }), [treeSrc, sessList, claudeMap, codexMap, projTable, prefs.taskNames])
+  treeRef.current = tree
 
   // hash 路由：URL #/xxx 与当前页同步（支持前进/后退、刷新保持、收藏分享）
   useEffect(() => {
@@ -416,8 +580,14 @@ export default function App() {
     if (!authed || terms.length === 0) return
     let stop = false
     const check = () => terms.forEach(async (n) => {
-      try { const r = await api('GET', `/sessions/${encodeURIComponent(n)}/claude`); if (!stop) setClaudeMap((m) => ({ ...m, [n]: r.data })) } catch {}
-      try { const r = await api('GET', `/sessions/${encodeURIComponent(n)}/codex`); if (!stop) setCodexMap((m) => ({ ...m, [n]: r.data })) } catch {}
+      try {
+        const r = await api('GET', `/sessions/${encodeURIComponent(n)}/claude`)
+        if (stop) return
+        setClaudeMap((m) => (sameProbe(m[n], r.data) ? m : { ...m, [n]: r.data }))
+        // 第一次探到 Claude 在跑就进对话视图：这是 Claude 会话的常态，终端是切过去看的那一面
+        if (r.data?.running) setClaudeView((v) => (n in v ? v : { ...v, [n]: true }))
+      } catch {}
+      try { const r = await api('GET', `/sessions/${encodeURIComponent(n)}/codex`); if (!stop) setCodexMap((m) => (sameProbe(m[n], r.data) ? m : { ...m, [n]: r.data })) } catch {}
     })
     check()
     const t = setInterval(check, 5000)
@@ -445,14 +615,58 @@ export default function App() {
   const soloName = tab === 'term' && route.includes('/') ? decodeURIComponent(route.slice(route.indexOf('/') + 1)) : ''
   if (soloName) return <SoloTerminal name={soloName} />
 
-  const openTerm = (rawName: string) => {
+  const openTerm = (rawName: string, task?: TaskKey) => {
     // tmux 自身会把 '.' ':' 替换为 '_'，前端也同步净化，
     // 确保标签名/WebSocket URL 与 tmux 实际 session 名一致。
     const name = rawName.replace(/[.:]/g, '_')
+    // 会话表里还没有它 = 刚建的：立刻刷会话表 / 归属表 / worktree，树上马上归位
+    if (!sessList.some((s) => s.name === name)) { sessReload.current?.(); treeReload.current?.() }
     setTerms((ts) => (ts.includes(name) ? ts : [...ts, name]))
-    setActive(name)
-    if (hasSider) { space.setDockOpen(true); space.setFocus('none') } // 桌面：拉出右侧停靠栏
+    if (task) taskHint.current[name] = task
+    setActive(name); setActiveFile('')
+    if (hasSider) {
+      // 桌面：进任务视图（22 设计）；Dock 那两个开关留着给手机与 Page 态
+      go(TASK_ROUTE)
+      space.setDockOpen(true); space.setFocus('none')
+    }
     else setOverlay(true)           // 手机/平板：全屏
+  }
+  // 树：点任务 → 回到它已开着的会话标签；一个都没开就打开它的第一个会话
+  const onTreeTask = (key: TaskKey) => {
+    const open = terms.filter((n) => keyOf(n) === key)
+    if (open.length) { setActive(active && open.includes(active) ? active : open[open.length - 1]); setActiveFile('') }
+    else {
+      const first = firstSessionOf(tree, key)
+      if (first) { openTerm(first, key); return }
+    }
+    go(TASK_ROUTE)
+    space.setDockOpen(true); space.setFocus('none')
+  }
+  // 标签条「新建」菜单顶上写着派生自哪个任务
+  const activeTaskLabel = activeTask
+    ? (isLooseTask(activeTask) ? sessionLabel(looseSessionOf(activeTask)) : tree.projects.flatMap((p) => p.tasks).find((x) => x.key === activeTask)?.name || activeTask.split('/').pop() || '')
+    : ''
+  const onTreeProject = (key: string) => go('projects/' + encodeURIComponent(key))
+  // 标签条「新建」：在当前任务的 worktree 里开 shell / Claude / Codex，名字与项目页「新开命令行」同款后缀
+  const newTerminalInTask = async (kind: 'shell' | 'claude' | 'codex' = 'shell', keyArg?: TaskKey) => {
+    const key = keyArg ?? activeTaskRef.current
+    const dir = key ? (taskPathOf(tree, key) || sessionProject(looseSessionOf(key))?.dir || '') : ''
+    // 名字是展示名（@roam_name），后端另发 id：所以前缀用任务的展示名，不是那串 2026-… 的会话 id
+    const first = key ? firstSessionOf(tree, key) : null
+    const base = (first && sessionLabel(first)) || 'shell'
+    const suffix = kind === 'shell' ? 'sh' : kind === 'claude' ? 'cc' : 'cx'
+    let name = `${base}-${suffix}`
+    const taken = new Set(sessList.map((s) => s.label || s.name))
+    for (let i = 2; taken.has(name); i++) name = `${base}-${suffix}${i}`
+    try {
+      const res = await api('POST', '/sessions', dir ? { name, dir } : { name })
+      const actual = res?.name || name
+      if (kind !== 'shell') {
+        const cmd = kind === 'claude' ? (prefs.claudeCommand || 'claude') : (prefs.codexCommand || 'codex')
+        await api('POST', '/tasks/_/send', { sess: actual, msg: cmd })
+      }
+      openTerm(actual, key || undefined)
+    } catch (e: any) { antMessage.error(e.message) }
   }
   const renameOpenTerm = (oldName: string, newName: string) => {
     if (oldName === newName) return
@@ -498,17 +712,41 @@ export default function App() {
   const closeTerm = (name: string) => {
     setTerms((ts) => {
       const next = ts.filter((t) => t !== name)
-      setActive((a) => (a === name ? (next[next.length - 1] || null) : a))
+      // 「下一个」在当前任务里找，别跳到别的任务的会话上（22 设计 §3.3）
+      const cur = activeTaskRef.current
+      const pool = cur ? next.filter((n) => keyOf(n) === cur) : next
+      setActive((a) => (a === name ? (pool[pool.length - 1] || null) : a))
       if (next.length === 0) { setOverlay(false); space.setFocus('none') }
       return next
     })
     delete termRefs.current[name]
   }
+  closeTermRef.current = closeTerm
+  // 收尾一个任务：只有一个会话就走它的关闭分流（worktree 有东西会弹三选一）；多个会话先确认，
+  // 多余的直接结束，最后一个再走分流——worktree 的去留在那一步定
+  const finishTask = (task: TreeTask) => {
+    const [first, ...rest] = task.sessions.map((s) => s.name)
+    if (!first) return
+    if (!rest.length) { void closer.beginClose(first); return }
+    antModal.confirm({
+      title: t('tree.finishTaskConfirm', { name: task.name, n: task.sessions.length }),
+      okText: t('common.confirm'), okButtonProps: { danger: true }, cancelText: t('common.cancel'),
+      onOk: async () => { for (const n of rest) await closer.kill(n); await closer.beginClose(first) },
+    })
+  }
   const setStatus = (name: string, s: TermStatus) => setStatusMap((m) => ({ ...m, [name]: s }))
   const sendKey = (seq: string) => active && termRefs.current[active]?.send(seq)
 
   // 标签拖拽排序（14 §7.1）。顺序本来就写进 URL 的 terms=，所以持久化是白拿的。
-  const reorderTerm = (name: string, to: number) => setTerms((ts) => reorderTabs(ts, name, to))
+  // 标签条只画当前任务的那些，`to` 是可见列表里的位置：先在可见列表里排好，再按原位塞回全集。
+  const reorderTerm = (name: string, to: number) => setTerms((ts) => {
+    const cur = activeTaskRef.current
+    if (!cur) return reorderTabs(ts, name, to)
+    const inTask = (n: string) => keyOf(n) === cur
+    const vis = reorderTabs(ts.filter(inTask), name, to)
+    let i = 0
+    return ts.map((n) => (inTask(n) ? vis[i++] : n))
+  })
 
 
   // 全屏切换（标准 API + webkit 兜底）。不支持的浏览器（如 iOS Safari）隐藏按钮，改走「添加到主屏幕」
@@ -526,17 +764,27 @@ export default function App() {
 
   const termPane = (
     <TerminalPane
-      terms={terms} active={active} setActive={setActive} closeTerm={closeTerm}
+      terms={terms} active={active} setActive={activateSession} closeTerm={closeTerm}
       fontSize={fontSize} setFontSize={setFontSize} statusMap={statusMap} setStatus={setStatus}
       termRefs={termRefs} sendKey={sendKey}
       claudeMap={claudeMap} claudeView={claudeView} setClaudeView={setClaudeView}
       codexMap={codexMap} codexView={codexView} setCodexView={setCodexView}
       onRename={renameOpenTerm}
-      onCollapse={() => { setOverlay(false); space.setDockOpen(false) }}
+      // 任务视图里没有「收起」：中间整块就是它，收起等于回项目页——点导航去
+      onCollapse={taskView ? undefined : () => { setOverlay(false); space.setDockOpen(false) }}
       onReorder={reorderTerm}
       onNeedsInput={setMobileWaiting}
-      // Focus 只在桌面有意义：手机上终端本来就是全屏覆盖层
-      focus={hasSider ? { on: space.focus !== 'none', toggle: space.toggleFocus, hint: `${modKeyLabel}⇧J` } : undefined}
+      onNew={taskView ? { terminal: () => { void newTerminalInTask('shell') }, claude: () => { void newTerminalInTask('claude') }, codex: () => { void newTerminalInTask('codex') }, taskLabel: activeTaskLabel } : undefined}
+      // 任务视图里对话点路径 / Git 都落到右栏三面板；手机与 Page 态退回 TerminalPane 自己的二级页
+      onOpenFile={taskView ? (path, line) => openFileTab(path, line) : undefined}
+      onOpenGit={taskView ? () => { setPanel('git'); if (space.inspectorCollapsed) space.toggleInspectorCollapsed() } : undefined}
+      inspector={taskView ? { open: !space.inspectorCollapsed, toggle: () => space.toggleInspectorCollapsed() } : undefined}
+      fileTabs={taskView ? fileTabs : undefined} activeFile={taskView ? curFile : undefined}
+      taskDir={activeTask && !isLooseTask(activeTask) ? activeTask : (activeProject?.dir || '')}
+      onFileTab={setActiveFile} onCloseFile={closeFileTab} onPinFile={pinFileTab} onFileMode={setFileMode} reveal={reveal}
+      // Focus 只在桌面有意义：手机上终端本来就是全屏覆盖层；任务视图里 focus 是常态，没有开关
+      // 任务视图里不放 Focus 钮：它干的就是侧栏脚「收起」那件事（⌘⇧J 仍在）；expanded 档的覆盖面板才需要它
+      focus={!hasSider || taskView ? undefined : { on: space.focus !== 'none', toggle: space.toggleFocus, hint: `${modKeyLabel}⇧J` }}
     />
   )
 
@@ -545,7 +793,7 @@ export default function App() {
     projects: <Projects openTerm={openTerm} closeTerm={closeTerm} initialKey={projectSub || undefined} activeTerm={active} />,
     sessions: <Sessions openTerm={openTerm} closeTerm={closeTerm} activeTerm={active} />,
     files: <FilesPage openTerm={openTerm} />,
-    settings: <SettingsPage sub={settingsSub} onNav={(r) => go(r)} />,
+    settings: <SettingsPage sub={settingsSub} onNav={(r) => go(r)} onLogout={logout} />,
     hub: <HubPage />,
     plugins: <PluginsPanel initialId={pluginSub || undefined} />,
     browser: <BrowserView />,
@@ -553,7 +801,8 @@ export default function App() {
   }
   // 懒加载页面 chunk 拉取期间的兜底：居中转圈（体量小，通常一闪而过）
   const lazyFallback = <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}><Spin /></div>
-  const page = <Suspense fallback={lazyFallback}>{pages[tab] || pages.projects}</Suspense>
+  // 任务视图（#/w）时 Canvas 归零，页面不用画；#/w 不在 pages 里，退回项目页
+  const page = <Suspense fallback={lazyFallback}>{taskView ? null : (pages[tab] || pages.projects)}</Suspense>
   // browser 全幅(自带工具栏铺满)；phone 与概览/会话一致走 tt-page（同 16px 留白 + 满高，见 tt-page-phone）。
   // 浏览器页不再全幅特例：与 文件/手机 同走 tt-page 满高容器，五页左上角起点统一 (16,16)
   const pageNode = <div className={`tt-page tt-page-${tab}${isMobile ? ' tt-page-mobile' : ''}${isMobile && terms.length ? ' has-dock' : ''}`}>{page}</div>
@@ -571,7 +820,7 @@ export default function App() {
     ...terms.map((name) => ({
       key: `term:${name}`, group: t('workspace.groupSessions'),
       title: sessionDisplay(name), desc: name === active ? t('workspace.current') : undefined,
-      run: () => { setActive(name); space.setDockOpen(true); if (isMobile) setOverlay(true) },
+      run: () => openTerm(name),
     })),
   ]
 
@@ -580,7 +829,7 @@ export default function App() {
   const paletteActions: PaletteActions = {
     openRoute: (hash: string) => { location.hash = hash },
     openSession: (name: string) => openTerm(name),
-    openFile: (path: string) => { go('files'); requestIntent(OPEN_FILE_INTENT, { path }) },
+    openFile: (path: string) => { if (taskView) openFileTab(path); else { go('files'); requestIntent(OPEN_FILE_INTENT, { path }) } },
   }
 
   const canvasNode = (
@@ -596,9 +845,9 @@ export default function App() {
 
   // 导航分两组（14 §4.4）：工作区 = 干活的地方，工具 = 看别的东西的地方。
   // 设置 / 关于 不在任何一组里——它们进底部账户菜单，见下面的 accountMenu。
+  // 桌面不再分「工作区 / 工具」两组（22 设计评审：组名和组间空隙占掉树的位置）；手机「更多」sheet 仍分组
   const navGroups = [
-    { label: t('nav.groupWorkspace'), items: NAV_WORKSPACE },
-    { label: t('nav.groupTools'), items: NAV_TOOLS },
+    { label: '', items: [...NAV_WORKSPACE, ...NAV_TOOLS] },
   ].map((g) => ({
     label: g.label,
     items: g.items.map((key) => {
@@ -675,25 +924,12 @@ export default function App() {
     },
   ] : []
 
-  // 设置不在这里：它在侧栏底部有自己的入口，菜单里再放一条就是同一页两个门
-  const accountMenu: MenuProps['items'] = [
-    { key: 'about', icon: ICONS.github, label: t('nav.about'), onClick: () => go('about') },
-    { type: 'divider' },
-    { key: 'theme', icon: themeIcon, label: mode === 'dark' ? t('common.lightTheme') : t('common.darkTheme'), onClick: () => toggleTheme() },
-    ...(fsSupported ? [{ key: 'fs', icon: fsIcon, label: isFs ? t('common.exitFullscreen') : t('common.fullscreen'), onClick: () => toggleFs() }] : []),
-    { type: 'divider' },
-    {
-      key: 'logout', danger: true, label: t('common.logout'),
-      icon: <LogoutIcon />,
-      onClick: () => Modal.confirm({
-        title: t('common.logoutConfirm'), okText: t('common.logout'), cancelText: t('common.cancel'),
-        okButtonProps: { danger: true }, onOk: logout,
-      }),
-    },
-  ]
+  // 侧栏脚的「当前设备」账户菜单没了（22 设计 §3.2 拍板）：关于 / 主题本来在设置页，全屏 / 退出并进设置 › 外观。
+  // 手机「更多」sheet 里那几行还在（手机没有设置页的常驻入口）。
 
   // 侧栏是否是 64px 轨：用户手动收起 / Focus 聚焦 / 非 large 档（expanded 一律用轨）
-  const navRail = space.navCollapsed || space.mode === 'focus'
+  // 任务视图里 focus 是常态（22 设计），侧栏必须留着——树就在里面；只有用户 ⌘⇧J 的 Focus 才收轨
+  const navRail = space.navCollapsed || (space.mode === 'focus' && !taskView)
 
   // 状态条的系统格：全部由 App 已经有的 state 算出来，**一条新请求都不发**
   // （18 设计刚删掉过一套「每 6s 对 ≤14 个会话各发 3 条请求」的轮询，别再种一棵）。
@@ -725,7 +961,10 @@ export default function App() {
     // 用 position:fixed 的话上面那层照旧按 100dvh 算高，页面最后一行会永远
     // 压在条底下，而且横向滚动条一闪就把画布挪 10px（AGENTS「文档永远不滚动」）。
     <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-base)' }}>
-    <Layout style={{ flex: 1, minHeight: 0, overflow: 'hidden', background: 'var(--bg-base)' }}>
+    {/* overflow 用 clip 不用 hidden：hidden 仍是滚动容器，收起的终端坞（宽 0、内容仍挂着）里
+        一个 autoFocus 就能让浏览器把整个 Layout 往右「滚」出去，左侧栏只剩右边缘露在屏幕外——
+        会话页上就是这么被挤成一条窄轨的。clip 不是滚动容器，谁也滚不动它 */}
+    <Layout style={{ flex: 1, minHeight: 0, overflow: 'clip', background: 'var(--bg-base)' }}>
       <UpdateBanner />
       {/* Focus 时导航收成 64px 轨而不是消失——上下文始终可找回（14 §4.1，老 dockMax 的病根）。
           expanded 档也一律用轨：905–1279 展开 224 侧栏会把 Canvas 挤破契约。*/}
@@ -737,9 +976,20 @@ export default function App() {
             rail={navRail} active={tab} groups={navGroups} onGo={go}
             settings={{ key: 'settings', label: t('nav.env'), icon: ICONS.settings }}
             linkStatus={<LinkStatus collapsed={navRail} />}
-            accountName={t('nav.thisDevice')}
-            account={accountMenu}
             nodeMenu={nodeItems}
+            onSearch={openPalette}
+            searchHint={`${modKeyLabel}K`}
+            tree={<ProjectTree tree={tree} activeTask={activeTask} activeSession={active}
+              onProject={onTreeProject} onTask={onTreeTask} onSession={(key, name) => openTerm(name, key)}
+              onAddProject={() => setNewProjectOpen(true)}
+              onRename={setRenameInTree}
+              onRenameTask={(key, name) => { setRenameTask({ key, name }); setRenameTaskVal(prefs.taskNames?.[key] || name) }}
+              onNewTask={setNewTaskDir} onKill={(n) => { void closer.beginClose(n) }} onFinishTask={finishTask}
+              onNewInTask={(key, kind) => { void newTerminalInTask(kind, key) }}
+              onRemoveProject={(key) => antModal.confirm({
+                title: t('project.removeConfirm'), okText: t('project.remove'), okButtonProps: { danger: true }, cancelText: t('common.cancel'),
+                onOk: async () => { try { await api('DELETE', `/projects/${encodeURIComponent(key)}`); antMessage.success(t('project.removed')); treeReload.current?.() } catch (e: any) { antMessage.error(e.message) } },
+              })} />}
             hubAlarm={hubHealth.level === 'ok' ? undefined : t('hub.why.' + (hubHealth.reasons[0] || 'unknown'))}
             node={curNode ? {
               name: curNode.name,
@@ -752,39 +1002,52 @@ export default function App() {
             } : null}
             onToggleRail={() => space.setNavCollapsed(!space.navCollapsed)}
           />
+          <RenameSessionModal session={renameInTree} onClose={() => setRenameInTree(null)} onDone={renameOpenTerm} />
+          {closer.node}
+          <Modal open={!!renameTask} title={t('tree.renameTask')} okText={t('common.confirm')} cancelText={t('common.cancel')} destroyOnClose
+            onCancel={() => setRenameTask(null)}
+            onOk={() => {
+              if (!renameTask) return
+              const v = renameTaskVal.trim()
+              const next = { ...(prefs.taskNames || {}) }
+              if (v) next[renameTask.key] = v; else delete next[renameTask.key]
+              savePreferences({ taskNames: next })
+              setRenameTask(null)
+            }}>
+            <Input autoFocus value={renameTaskVal} onChange={(e) => setRenameTaskVal(e.target.value)} placeholder={renameTask?.name}
+              onPressEnter={() => document.querySelector<HTMLButtonElement>('.ant-modal .ant-btn-primary')?.click()} />
+            <div style={{ marginTop: 8, color: 'var(--text-dimmer)', fontSize: 'var(--fs-meta)' }}>{t('tree.taskNameHint')}</div>
+          </Modal>
+          {/* 开任务（照 Orca 的「创建工作树」框）：顶上先选项目，下面就是项目主页那个 composer */}
+          <Modal open={!!newTaskDir} footer={null} width={860} destroyOnClose onCancel={() => setNewTaskDir(null)} title={t('tree.newTask')}>
+            {newTaskDir && (
+              <>
+                <div className="tt-lbl">{t('tree.projectField')}</div>
+                <Select value={newTaskDir} onChange={(v) => setNewTaskDir(v)} style={{ width: '100%', marginBottom: 12 }}
+                  options={treeSrc.projects.map((p: any) => ({ value: p.dir, label: <span>{p.name} <span style={{ color: 'var(--text-dimmer)', fontFamily: 'var(--mono)', fontSize: 'var(--fs-micro)', marginLeft: 8 }}>{p.dir}</span></span> }))} />
+                <TaskComposer key={newTaskDir} dir={newTaskDir} isGit={treeSrc.projects.find((p: any) => p.dir === newTaskDir)?.git !== false}
+                  openTerm={openTerm} onCreated={() => setNewTaskDir(null)} autoFocus />
+              </>
+            )}
+          </Modal>
+          {/* 建完立刻刷树：项目列表 15s 一轮、worktree 60s 一轮，不刷就得等 */}
+          <NewProjectModal open={newProjectOpen} onClose={() => setNewProjectOpen(false)} onCreated={() => treeReload.current?.()} />
         </Sider>
       )}
 
-      {/* 主区：Command Center ｜ (Canvas ｜ 8px 分隔条 ｜ Dock)。
-          顶栏横跨页面与终端，位置不因 Dock 开合跳动；终端**常驻挂载**
-          （收起时宽度归零、Focus 时页面归零），换形态不断连接。*/}
+      {/* 主区：Canvas ｜ Dock ｜ Inspector。终端**常驻挂载**（收起时宽度归零、Focus 时页面归零），换形态不断连接。*/}
       <Layout style={{ background: 'var(--bg-base)', minWidth: 0 }}>
-        {hasSider && (
-          <WorkspaceTopbar
-            modKey={modKeyLabel}
-            dockCount={terms.length} dockOpen={space.dockVisible}
-            onToggleDock={() => { space.setFocus('none'); space.toggleDock() }}
-            // 切到项目页并留下「要新建」的意图，由那一页挂载后消费（见 intents.ts）。
-            // 从任何页面点「＋ 新建」都是同一条路径，不必在每页各摆一枚按钮。
-            onCreate={() => { go('projects'); requestIntent('new-project') }}
-          />
-        )}
-        {hasSider && terms.length > 0 ? (
-          // 四态（page / split / overlay / focus）都走同一个 Workspace：换的是几何，
+        {/* 顶栏 Command Center 撤了（22 设计 §3.5）：搜索去了侧栏、「新建」去了标签条与项目页、终端数状态条本来就有 */}
+        {hasSider && (terms.length > 0 || taskView) ? (
+          // 三态（page / overlay / focus）都走同一个 Workspace：换的是几何，
           // 不是组件树，终端因此不会在开合时被卸载重建。
           <Workspace
             mode={space.mode} canvas={canvasNode} dock={dockNode}
-            dockWidth={space.dockRenderWidth} bounds={space.bounds} splitMax={space.splitMax}
-            onResize={space.setDockWidth} onReset={space.resetDockWidth}
-            onFocus={() => space.setFocus('dock')}
             onDismiss={() => space.setDockOpen(false)}
-            splitCapable={space.splitCapable}
-            onToggleDock={() => { space.setFocus('none'); space.toggleDock() }}
-            onExitFocus={() => space.setFocus('none')}
             inspectorCollapsed={space.inspectorCollapsed}
             onToggleInspector={space.toggleInspectorCollapsed}
             inspectorWidth={space.inspectorWidth} inspectorBounds={space.inspectorBounds}
-            inspectorOverlay={!space.splitCapable} canvasFitsInspector={space.canvasFitsInspector}
+            inspectorOverlay={!space.large} canvasFitsInspector={space.canvasFitsInspector}
             onInspectorResize={space.setInspectorWidth} onInspectorReset={space.resetInspectorWidth}
             capsule={space.overlayCapable && space.mode === 'page' ? (
               // 胶囊只有 320px，显示 sessionLabel 而不是 sessionDisplay——后者带
@@ -805,13 +1068,29 @@ export default function App() {
             {canvasNode}
             {hasSider && (
               <InspectorColumn width={space.inspectorWidth} bounds={space.inspectorBounds}
-                overlay={!space.splitCapable} onResize={space.setInspectorWidth}
+                overlay={!space.large} onResize={space.setInspectorWidth}
                 onReset={space.resetInspectorWidth}
                 collapsed={space.inspectorCollapsed} onToggleCollapsed={space.toggleInspectorCollapsed} />
             )}
           </div>
         )}
       </Layout>
+
+      {/* 右栏三面板：唯一的 AdaptivePanel，portal 进 InspectorColumn 的槽位；Page 态 open=false 自动收起 */}
+      {hasSider && (() => {
+        const loose = activeTask ? isLooseTask(activeTask) : false
+        const owner = activeTask && !loose ? tree.projects.find((p) => p.tasks.some((x) => x.key === activeTask)) : undefined
+        const task = owner?.tasks.find((x) => x.key === activeTask)
+        const dir = activeTask && !loose ? activeTask : (activeProject?.dir || '')
+        const scope = owner && task ? `${owner.name} · ${task.name}` : (active ? sessionLabel(active) || active : '')
+        return (
+          <InspectorPanels open={taskView} panel={panel} onPanel={setPanel} dir={dir} scope={scope}
+            openTerm={openTerm}
+            onOpenFile={(p) => openFileTab(p)} selectedPath={curFile}
+            searchNonce={searchNonce} onOpenLine={(p, line) => openFileTab(p, line)}
+            onClose={() => { if (!space.inspectorCollapsed) space.toggleInspectorCollapsed() }} />
+        )
+      })()}
 
       {/* 底栏 6 格 + 会话坞（13 §4.1/§4.2）：概览/项目/文件/浏览器/手机 + 更多。
           360px 下每格 60px，标签 11px 单行截断——所以格数到此为止，再加就只剩图标了。
@@ -905,7 +1184,7 @@ export default function App() {
       {/* 全局搜索挂在这里而不是顶栏里：手机没有顶栏、终端聚焦时 xterm 会吃掉按键，
           都得靠这一处（见 shell/palette/GlobalSearch）。入口另给：顶栏那枚框、
           手机「更多」里那一行、以及 ⌘K / Ctrl+K。 */}
-      <GlobalSearch items={paletteItems} actions={paletteActions} dir={sessionProject(active)?.dir} />
+      <GlobalSearch items={paletteItems} actions={paletteActions} dir={activeProject?.worktree || activeProject?.dir} />
 
       {/* 手机/平板：全屏会话覆盖层（桌面用右侧停靠栏，不走这里）*/}
       {isMobile && overlay && (

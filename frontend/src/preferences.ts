@@ -3,6 +3,7 @@ import { api } from './api'
 
 export interface Preferences {
   theme: 'dark' | 'light'
+  claudeThemeSync: boolean // 切 Roam 主题时把 Claude Code 的主题（~/.claude/settings.json）一起切，服务端做
   locale: string
   browserQuality: string
   browserDevice: string
@@ -21,6 +22,7 @@ export interface Preferences {
   p2pMinSpeedKBps: number // P2P 直连测速回退阈值(KB/s)：平均落盘速率长期低于此值就回退 frp；0=禁用，永远坚持 P2P。默认 200
   workspace: WorkspacePreference // 工作区外壳偏好（13/14 设计共用一份，见下）
   statusBar: StatusBarPreference // 底部状态条（20 设计）
+  taskNames: Record<string, string> // 任务（worktree 路径）→ 人起的显示名；没起就用第一个会话的名字
   _migrated: boolean
 }
 
@@ -45,7 +47,6 @@ export interface StatusBarPreference {
 export interface WorkspacePreference {
   navCollapsed: boolean // 桌面侧栏收成 64px 轨
   dockOpen: boolean // 终端区是否展开
-  dockWidth: number // 终端区宽度 px；恢复时按当前视口钳制，旧大屏宽度不挤爆新窗口
   inspectorWidth: number // Git/Worktree 列宽 px；同样按当前几何钳制
   workspaceFocus: 'none' | 'page' | 'dock' // 单区聚焦
   density: 'cozy' | 'compact' // 信息密度，与窗口档正交
@@ -62,7 +63,6 @@ const WORKSPACE_DEFAULTS: WorkspacePreference = {
   // 收成轨是 648。已经存过偏好的浏览器不受影响，这只是没拖过时给什么。
   navCollapsed: true,
   dockOpen: true,
-  dockWidth: 0, // 0 = 还没拖过，用该档默认（clamp(480, 42vw, 880)）
   inspectorWidth: 0, // 0 = 还没拖过，用 INSPECTOR_DEFAULT
   workspaceFocus: 'none',
   density: 'cozy',
@@ -75,6 +75,7 @@ const STATUSBAR_DEFAULTS: StatusBarPreference = { enabled: true, hidden: [], opt
 
 const DEFAULTS: Preferences = {
   theme: 'dark',
+  claudeThemeSync: true,
   locale: 'zh-CN',
   browserQuality: 'auto',
   browserDevice: '',
@@ -93,6 +94,7 @@ const DEFAULTS: Preferences = {
   p2pMinSpeedKBps: 200,
   workspace: WORKSPACE_DEFAULTS,
   statusBar: STATUSBAR_DEFAULTS,
+  taskNames: {},
   _migrated: false,
 }
 

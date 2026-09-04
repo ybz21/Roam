@@ -6,7 +6,6 @@ import { appendPaths, atPath } from '../../agent-paths'
 import { Button, Input, App as AntApp } from 'antd'
 import { api, upload, makeClipboardImageFile } from '../../api'
 import { PromptPanel } from '../prompt'
-import { usePreferences } from '../../preferences'
 import { useI18n } from '../../i18n'
 import { VoiceInput } from './VoiceInput'
 import type { Block, Msg } from './types'
@@ -14,7 +13,7 @@ import { groupRuns } from './runs'
 import { ToolRun } from './ToolRun'
 import { LiveTail } from './LiveTail'
 import { useLayout } from '../../layout'
-import { ArrowToBottom, ArrowUp, FileTextIcon, PaperclipIcon, StopIcon, TerminalIcon } from '../../icons'
+import { ArrowToBottom, ArrowUp, FileTextIcon, PaperclipIcon, StopIcon, TerminalIcon, AgentLogo } from '../../icons'
 import { SESSION_MIME, buildIntro, canDrop, readDrag, type SessionDrag } from '../shell/session-drop'
 import { currentNodeId } from '../cluster/node-url'
 import { sessionDisplay } from '../sessions/session-label'
@@ -23,7 +22,11 @@ import type { TaskIndex } from './tasks'
 import { StatusBar, type StatusActions } from './StatusBar'
 import type { AgentStatus } from './status'
 
-export function ChatShell({ name, accent, placeholder, messages, results, renderMessage, pending, busy, error, onOpenFile, tasks, status, onOpenGit, lastErrorId, hasEarlier, onLoadEarlier }: {
+export function ChatShell({ name, accent, placeholder, messages, results, renderMessage, pending, busy, error, onOpenFile, tasks, status, onOpenGit, lastErrorId, hasEarlier, onLoadEarlier, agent, emptyHint, active }: {
+  /** 这条 composer 发给谁：左端那枚亮着的 agent pill（22 设计 §3.3） */
+  agent?: 'claude' | 'codex'
+  /** 还没有对话文件（agent 刚起、一句没说）：显示这句而不是「加载中」 */
+  emptyHint?: string
   name: string
   accent: string
   placeholder: string
@@ -43,7 +46,14 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
   hasEarlier?: boolean
   /** 把首屏窗口放大一档重取（往回翻） */
   onLoadEarlier?: () => void
+  /**
+   * 是不是当前标签。所有跑着 agent 的会话对话都常驻挂着（切标签只翻 visibility），
+   * 不在前台的那几份不渲染消息列表——否则点一下标签，N 份 × 200 条消息一起重建 DOM、
+   * 各做一次同步回流，切换要卡好几秒。
+   */
+  active?: boolean
 }) {
+  const live = active !== false
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [sendErr, setSendErr] = useState('')
@@ -63,8 +73,6 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
   // 手机窄屏：输入区换成「文本框独占一行 + 按钮行」竖排，避免挤成一坨
   const { phone: isMobile } = useLayout()
   // 语音按钮的显隐跟终端工具条那颗「语音输入」开关是同一个偏好：关了就整个页面都不出现麦克风。
-  const [prefs] = usePreferences()
-  const showVoice = prefs.showVoiceButton !== false
   // 触屏上点按钮不夺走文本框焦点 → 软键盘不收起 → 布局不回弹，click 不会落空（同 App 的 noBlur）。
   const noBlur = (e: React.MouseEvent) => { if (isMobile) e.preventDefault() }
 
@@ -150,7 +158,8 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
   }, [messages])
 
   const hidden = Math.max(0, messages.length - limit)
-  const visible = hidden > 0 ? messages.slice(-limit) : messages
+  // 必须 memo：slice 每次都是新数组，下面的分组 useMemo 和 layout effect 全靠它的引用判「没变」
+  const visible = useMemo(() => (hidden > 0 ? messages.slice(-limit) : messages), [messages, limit, hidden])
   // 连着的同族工具调用并成运行组（设计 16）。分组只能在这一层做：Claude 每次工具调用
   // 单独成一条消息，一串 5 条命令就是 5 条消息，消息内部的分段对它无能为力。
   const items = useMemo(() => (results ? groupRuns(visible, results) : null), [visible, results])
@@ -165,7 +174,7 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
   const anchor = useRef({ height: 0, top: 0, firstId: '' })
   useLayoutEffect(() => {
     const el = boxRef.current
-    if (!el) return
+    if (!el || !live) return
     const firstId = visible[0]?.id || ''
     if (atBottom.current) {
       el.scrollTop = el.scrollHeight
@@ -178,7 +187,7 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
       setUnread(Math.max(0, messages.length - seenCount.current))
     }
     anchor.current = { height: el.scrollHeight, top: el.scrollTop, firstId }
-  }, [messages, pending, visible])
+  }, [messages, pending, visible, live])
 
   const onScroll = () => {
     const el = boxRef.current
@@ -231,7 +240,6 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
   const statusActions: StatusActions = useMemo(() => ({
     // 轮换权限模式＝在 TUI 里按 Shift+Tab，跟人手动按是同一个动作。
     // 乐观更新没意义：下一轮转录会带回真实的 permission-mode 行，等它对账即可。
-    onCycleMode: () => { api('POST', `/sessions/${encodeURIComponent(name)}/keys`, { keys: ['BTab'] }).catch(() => {}) },
     onOpenGit,
     onJumpError: lastErrorId ? () => {
       const el = boxRef.current?.querySelector<HTMLElement>(`[data-msg-id="${CSS.escape(lastErrorId)}"]`)
@@ -242,6 +250,7 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
       setTimeout(() => el.classList.remove('cc-flash'), 1200)
     } : undefined,
     onCompact: () => { api('POST', '/tasks/_/send', { sess: name, msg: '/compact' }).catch(() => {}) },
+    onPickModel: () => { api('POST', '/tasks/_/send', { sess: name, msg: '/model' }).catch(() => {}) },
   }), [name, onOpenGit, lastErrorId])
 
   return (
@@ -278,7 +287,7 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
         )}
         <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex' }}>
           <div ref={boxRef} onScroll={onScroll} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', padding: '8px 12px' }}>
-            {messages.length === 0 && !pending && <div style={{ color: 'var(--text-dim)', textAlign: 'center', marginTop: 30 }}>{t('chat.loadingTranscript')}</div>}
+            {messages.length === 0 && !pending && <div style={{ color: 'var(--text-dim)', textAlign: 'center', marginTop: 30 }}>{emptyHint || t('chat.loadingTranscript')}</div>}
             {(hidden > 0 || hasEarlier) && (
               <div style={{ textAlign: 'center', margin: '2px 0 8px' }}>
                 {/* 先放本地渲染窗口(手里已有的)，手里这些都放完了再回后端要更早的 */}
@@ -287,14 +296,14 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
                 </button>
               </div>
             )}
-            {items
+            {live && (items
               ? items.map((it, i) => (it.kind === 'run'
                 ? <ToolRun key={it.run.key} run={it.run} isLast={i === items.length - 1} />
                 : renderMessage(it.msg, it.index)))
-              : visible.map(renderMessage)}
+              : visible.map(renderMessage))}
             {/* 实时回显自带「正在生成」那颗脉冲点，扒不到东西时才退回省略号气泡——
                 两个都画等于同一件事说两遍（见截图里那块重复） */}
-            {busy ? <LiveTail name={name} accent={accent} idle={pending} lastUser={lastUserText} /> : pending}
+            {live && (busy ? <LiveTail name={name} accent={accent} idle={pending} lastUser={lastUserText} /> : pending)}
           </div>
           {/* 「回到底部」已并进下方状态条（带未读数）；状态条一个字段都没有时（刚进页面、
               转录还没扫出状态）才退回这颗悬浮钮，免得离底了没处点。 */}
@@ -330,23 +339,33 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
             />
             <div className="tt-cbar">
               <span className="tt-cgrp">
-                <button type="button" className="tt-pill ico" title={t('chat.uploadToCwd')} aria-label={t('chat.uploadToCwd')}
+                {agent && (
+                  <span className={`tt-pill on${agent === 'codex' ? ' ok' : ''}`} aria-label={agent === 'claude' ? 'Claude' : 'Codex'}>
+                    <AgentLogo kind={agent} size={12} />{agent === 'claude' ? 'Claude' : 'Codex'}
+                  </span>
+                )}
+                {/* 带字的 pill，和项目页 composer 同款：光一枚回形针认不出是「文件」 */}
+                <button type="button" className="tt-pill" title={t('chat.uploadToCwd')}
                   disabled={uploading} onMouseDown={noBlur} onClick={() => fileRef.current?.click()}>
-                  <PaperclipIcon size={13} />
+                  <PaperclipIcon size={13} />{t('chat.files')}
                 </button>
-                {showVoice && <VoiceInput inline accent={accent} onResult={appendText} />}
               </span>
               <span className="tt-cend">
-                {busy && (
-                  <button type="button" className="tt-pill danger" title={t('chat.stopTitle')}
+                {/* 话筒贴着发送键：pill 是「带什么」，话筒是「怎么说」，分开放（22 设计 §3.3） */}
+                <VoiceInput inline accent={accent} onResult={appendText} />
+                {/* agent 在跑、又没在打字：那枚圆钮就是「停止」；打了字它又是「发送」（可以边跑边排队）。
+                    不另摆一枚「停止」pill——同一个位置一钮两用，和别的对话产品一个习惯 */}
+                {busy && !input.trim() ? (
+                  <button type="button" className="tt-send stop" aria-label={t('chat.stop')} title={t('chat.stopTitle')}
                     onMouseDown={noBlur} onClick={stop}>
-                    <StopIcon size={10} />{t('chat.stop')}
+                    <StopIcon size={12} />
+                  </button>
+                ) : (
+                  <button type="button" className="tt-send" aria-label={t('common.send')} title={t('common.send')}
+                    disabled={sending || !input.trim()} onMouseDown={noBlur} onClick={send}>
+                    <ArrowUp size={16} />
                   </button>
                 )}
-                <button type="button" className="tt-send" aria-label={t('common.send')} title={t('common.send')}
-                  disabled={sending || !input.trim()} onMouseDown={noBlur} onClick={send}>
-                  <ArrowUp size={16} />
-                </button>
               </span>
             </div>
           </div>

@@ -4,6 +4,10 @@ import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import ClaudeChat from '../chat/ClaudeChat'
 import CodexChat from '../chat/CodexChat'
 import FileBrowser from '../files/FileBrowser'
+import { FileView } from '../files/fileview'
+import { FileTypeIcon } from '../files/file-icons'
+import { ChangesView, FilePathBar, type FileTabMode } from '../files/FilePathBar'
+import type { FileTab } from './term-tabs-store'
 import FileWorkspace from '../files/FileWorkspace'
 import GitPanel from '../git/GitPanel'
 import MobileSubPage from '../MobileSubPage'
@@ -29,7 +33,7 @@ import { DPad } from '../shell/DPad'
 import { MobileSheet, SheetRow, SheetSection } from '../shell/MobileSheet'
 import { SessionSwitchSheet } from '../shell/SessionDock'
 import { Button, Dropdown, Input, Modal, Spin, Tooltip, App as AntApp } from 'antd'
-import { AgentLogo, ChevronDown, TerminalIcon } from '../../icons'
+import { AgentLogo, ChevronDown, PlusIcon, TerminalIcon, PanelRightIcon } from '../../icons'
 // ── 终端面板（多标签 + 工具栏 + 快捷键栏），桌面右栏与手机覆盖层共用 ──
 export default function TerminalPane(props: {
   terms: string[]; active: string | null; setActive: (n: string) => void; closeTerm: (n: string) => void
@@ -47,11 +51,50 @@ export default function TerminalPane(props: {
   /** 终端 Focus：传了才渲染工具条右侧那枚按钮（手机没有这个概念） */
   focus?: { on: boolean; toggle: () => void; hint: string }
   fileDock?: 'right' | 'left'   // 文件面板停靠：'right'=右侧浮动抽屉（默认），'left'=左侧 VSCode 栏（新标签全屏页）
+  /** 标签条右端「新建 ▾」：在当前任务里开终端 / 去项目页开新任务。不传就不画 */
+  /** 标签条「新建」：三样都在当前任务的 worktree 里派生；taskLabel 写在菜单顶上说明白 */
+  onNew?: { terminal: () => void; claude: () => void; codex: () => void; taskLabel?: string }
+  /** 右栏开关（任务视图）：亮着 = 开着 */
+  inspector?: { open: boolean; toggle: () => void }
+  /** 对话里点 Read/Edit 的路径 → 右栏文件面板打开（22 设计 §3.4）；不传就退回今天的路（文件页） */
+  onOpenFile?: (path: string, line?: number) => void
+  /** 对话里点「Git」→ 右栏切到 Git 面板 */
+  onOpenGit?: () => void
+  /** 当前任务的文件标签（22 设计 §3.3）：会话标签后面接着画；内容用 FileView，只有当前一个渲染 Monaco */
+  fileTabs?: FileTab[]
+  /** 当前标签是哪个文件；空 = 当前标签是会话 */
+  activeFile?: string
+  /** 当前任务的 worktree 根：路径条面包屑与「改动」都从它算 */
+  taskDir?: string
+  onFileTab?: (path: string) => void
+  onCloseFile?: (path: string) => void
+  onPinFile?: (path: string) => void
+  onFileMode?: (path: string, mode: FileTabMode) => void
+  /** 从对话里点「path:line」跳过来要定位到那一行；nonce 让同一处点第二次也响 */
+  reveal?: { path: string; line: number; nonce: number }
 }) {
-  const { terms, active, setActive, closeTerm, fontSize, setFontSize, statusMap, setStatus, termRefs, sendKey, onCollapse, claudeMap, claudeView, setClaudeView, codexMap, codexView, setCodexView, onRename, onReorder, onNeedsInput, focus } = props
+  const { terms, active, setActive, closeTerm, fontSize, setFontSize, statusMap, setStatus, termRefs, sendKey, onCollapse, claudeMap, claudeView, setClaudeView, codexMap, codexView, setCodexView, onRename, onReorder, onNeedsInput, focus, onNew, inspector, onOpenFile, onOpenGit, fileTabs, activeFile, taskDir, onFileTab, onCloseFile, onPinFile, onFileMode, reveal } = props
+  const tabs = terms
+  const curFile = activeFile || ''
+  // 文件标签的脏标记：FileView 报上来，关标签前问一句（FileWorkspace 同款）
+  const [dirtyFiles, setDirtyFiles] = useState<Set<string>>(() => new Set())
+  const setFileDirty = (p: string, dirty: boolean) => setDirtyFiles((prev) => {
+    if (prev.has(p) === dirty) return prev
+    const n = new Set(prev); dirty ? n.add(p) : n.delete(p); return n
+  })
   const fileDock = props.fileDock || 'right'
   const { message, modal } = AntApp.useApp()
   const { t } = useI18n()
+  const closeFile = (p: string) => {
+    if (!onCloseFile) return
+    if (dirtyFiles.has(p)) {
+      modal.confirm({
+        title: t('file.closeUnsavedTitle'), content: p.split('/').pop() || p,
+        okText: t('file.closeWithoutSaving'), cancelText: t('common.cancel'),
+        okButtonProps: { danger: true }, onOk: () => { setFileDirty(p, false); onCloseFile(p) },
+      })
+    } else onCloseFile(p)
+  }
   const st = active ? statusMap[active] : undefined
   const [termNeedsInput, setTermNeedsInput] = useState<Record<string, boolean>>({})
   const promptSignals = useRef<Record<string, PromptSignal>>({})
@@ -113,6 +156,7 @@ export default function TerminalPane(props: {
   const promptOff = !!prefsData.promptPopupOff
   const togglePromptOff = () => savePreferences({ promptPopupOff: !promptOff })
 
+  // 语音开关不再在桌面工具条上（22 设计 §3.3 语音归 composer）；手机「⋯」sheet 里那一行与设置页仍能关掉
   const showVoice = prefsData.showVoiceButton !== false
   const setShowVoice = (v: boolean | ((prev: boolean) => boolean)) => {
     const next = typeof v === 'function' ? v(showVoice) : v
@@ -124,14 +168,14 @@ export default function TerminalPane(props: {
   const [showFiles, setShowFiles] = useState(fileDock === 'left')
   const [showGit, setShowGit] = useState(false)
   const [cwd, setCwd] = useState('')
-  // 右侧停靠时文件与 Git 是**同一个抽屉的两种内容**：Inspector 是个栈，只画栈顶那个。
-  // 所以两个按钮不能同时亮着——亮着的那个必须是你现在看得见的那个，否则「文件」亮着、
-  // 露出来的却是 Git，关掉 Git 又冒出个没人叫的文件面板。开一个就收另一个。
-  // 左侧停靠时文件走左栏、Git 走右抽屉，天然并列，不受此限。
-  const oneDrawer = fileDock === 'right'
-  const toggleFiles = () => setShowFiles((s) => { if (!s && oneDrawer) setShowGit(false); return !s })
-  const toggleGit = () => setShowGit((s) => { if (!s && oneDrawer) setShowFiles(false); return !s })
-  const openGitFromChat = () => { if (oneDrawer) setShowFiles(false); setShowGit(true) }
+  // 右侧停靠：文件 / Git 不再是这里的抽屉，归右栏三面板（InspectorPanels，22 设计 §3.4），
+  // 这里只把「要看哪个」递上去。左侧停靠（#/term 独立页）的 FileWorkspace 照旧。
+  const toggleFiles = () => setShowFiles((s) => !s)
+  const toggleGit = () => setShowGit((s) => !s)
+  // 稳定引用：这两个回调经 ChatShell 的 context 送到每一条工具行，引用一变整卷对话的 memo 全失效
+  const openGitRef = useRef(() => {})
+  openGitRef.current = () => { if (onOpenGit) onOpenGit(); else setShowGit(true) }
+  const openGitFromChat = useCallback(() => openGitRef.current(), [])
   // 对话页里点工具行的文件路径 → 在文件面板打开（带行号就跳到那一行）。
   // 左侧停靠时 <FileWorkspace> 已挂载在同一页，直接发意图即可开成对话旁边的标签页；
   // 否则先切到文件页再发，跟 ⌘K 搜索结果打开文件是同一条路（见 intents.ts）。
@@ -149,20 +193,23 @@ export default function TerminalPane(props: {
   // 换了会话也照开（那是上个会话工作目录里的文件）。开完就丢，关抽屉/换会话时清干净。
   useEffect(() => { if (!showFiles) setDockFileReq(null) }, [showFiles])
   useEffect(() => { setDockFileReq(null) }, [active])
-  const openFileFromChat = (path: string, line?: number) => {
+  const openFileRef = useRef<(path: string, line?: number) => void>(() => {})
+  openFileRef.current = (path, line) => {
     if (fileDock === 'left') {
       requestIntent(OPEN_FILE_INTENT, { path, line, side: true })
       return
     }
-    if (oneDrawer) setShowGit(false)
+    if (onOpenFile) { onOpenFile(path, line); return }
     setShowFiles(true)
     setDockFileReq((prev) => ({ path, nonce: (prev?.nonce || 0) + 1 }))
   }
+  const openFileFromChat = useCallback((path: string, line?: number) => openFileRef.current(path, line), [])
 
   // 标签条是单行横向滑动（见 index.css .tt-tabs）：窄栏/手机上会话一多，当前标签会滑出视口，
   // 切换后把它带回可视区（block:'nearest' → 只横向滚标签条，不牵动整页）。
   const activeTabRef = useRef<HTMLSpanElement | null>(null)
-  useEffect(() => { activeTabRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' }) }, [active])
+  // 文件标签激活时 active（会话）不变，也得滚：否则点开的文件标签在条外，人不知道开在哪了
+  useEffect(() => { activeTabRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' }) }, [active, activeFile])
 
   // 标签溢出时两侧给渐隐，提示"这边还有"（14 §7.1）。滚动条本身是隐藏的，
   // 没有这个提示，窄栏下多出来的标签等于不存在。
@@ -563,7 +610,7 @@ export default function TerminalPane(props: {
           if (!el || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return
           el.scrollLeft += e.deltaY
         }}>
-        {terms.map((termName, i) => {
+        {tabs.map((termName, i) => {
           const on = termName === active
           const waiting = termNeedsInput[termName]
           const proj = sessionProject(termName)
@@ -612,7 +659,7 @@ export default function TerminalPane(props: {
                 // 源标签从 dataTransfer 读，不从 dragTab 状态读：状态只用来画拖拽反馈，
                 // 落点判定必须只依赖事件本身，否则 setState 还没刷新时这一拖就静默丢了
                 const from = Number(e.dataTransfer.getData('application/x-tt-tab'))
-                const name = terms[from]
+                const name = tabs[from]
                 if (name) onReorder?.(name, dropIndexAt(e, i))
                 setDragTab(null); setDropAt(null)
               }}
@@ -636,19 +683,58 @@ export default function TerminalPane(props: {
             ] }}>{tab}</Dropdown>
           )
         })}
+        {/* 文件标签（22 设计 §3.3）：接在会话标签后面，同一款 .tt-tab；预览态斜体，单击别的文件会替换它，
+            双击转正；脏了标签上带点。文件标签第一期不参与拖拽排序。 */}
+        {(fileTabs || []).map((f) => {
+          const on = curFile === f.path
+          const name = f.path.split('/').pop() || f.path
+          const dirty = dirtyFiles.has(f.path)
+          return (
+            <span key={'file:' + f.path} ref={on ? activeTabRef : undefined}
+              className={`tt-tab tt-tab-file${on ? ' on' : ''}${f.preview ? ' prev' : ''}${dirty ? ' dirty' : ''}`}
+              title={f.path} onClick={() => onFileTab?.(f.path)} onDoubleClick={() => onPinFile?.(f.path)}>
+              <span className="tt-tab-fi"><FileTypeIcon name={name} /></span>
+              <span className="tt-tab-nm">{name}</span>
+              <a className="tt-x" title={dirty ? t('file.unsaved') : t('common.close')} onClick={(e) => { e.stopPropagation(); closeFile(f.path) }}>{dirty ? <span className="tt-tab-dirty" /> : TI.close}</a>
+            </span>
+          )
+        })}
         {/* 拖到最右侧：最后一个标签的右半边已经给出 i+1，这里只补"空白区也能落" */}
         {dragTab && (
           <span className="tt-tab-tail"
-            onDragOver={(e) => { if (!isTabDrag(e)) return; e.preventDefault(); setDropAt(terms.length) }}
+            onDragOver={(e) => { if (!isTabDrag(e)) return; e.preventDefault(); setDropAt(tabs.length) }}
             onDrop={(e) => {
               if (!isTabDrag(e)) return
               e.preventDefault()
-              const name = terms[Number(e.dataTransfer.getData('application/x-tt-tab'))]
-              if (name) onReorder?.(name, terms.length)
+              const name = tabs[Number(e.dataTransfer.getData('application/x-tt-tab'))]
+              if (name) onReorder?.(name, tabs.length)
               setDragTab(null); setDropAt(null)
             }} />
         )}
       </div>
+      {onNew && (
+        <div className="tt-tabs-end">
+          <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: [{
+            type: 'group' as const, label: onNew.taskLabel ? t('tabs.newInTask', { task: onNew.taskLabel }) : t('tabs.newHere'),
+            children: [
+              { key: 'terminal', icon: <TerminalIcon size={14} />, label: t('tabs.newTerminal'), onClick: onNew.terminal },
+              { key: 'claude', icon: <AgentLogo kind="claude" size={14} />, label: t('tabs.newClaude'), onClick: onNew.claude },
+              { key: 'codex', icon: <AgentLogo kind="codex" size={14} />, label: t('tabs.newCodex'), onClick: onNew.codex },
+            ],
+          }] }}>
+            <button type="button" className="tt-tbtn" title={t('tabs.new')}>
+              <PlusIcon size={13} /><span>{t('tabs.new')}</span>
+              <span style={{ color: 'var(--text-dimmer)', display: 'inline-flex' }}><ChevronDown size={11} /></span>
+            </button>
+          </Dropdown>
+          {inspector && (
+            <button type="button" className={`tt-tbtn ico${inspector.open ? ' on' : ''}`} onClick={inspector.toggle}
+              aria-label={t('inspector.toggle')} title={t('inspector.toggle')} aria-pressed={inspector.open}>
+              <PanelRightIcon size={15} />
+            </button>
+          )}
+        </div>
+      )}
     </div>
   )
   // ── 手机会话页顶栏（13 §5.1）：一行 50，取代「标签条 + 工具条」两行 79 ──
@@ -729,12 +815,11 @@ export default function TerminalPane(props: {
   ) : null
 
   // 工具条分三段：左=会话身份与动作，中=面板开关，右（分段组）=只读的画面控制
-  const sessionToolbar = (
-    <div className="tt-tbar tt-session-toolbar">
-      <span className="tt-status">
-        {statusDot(dot, 7)}
-        {activeNeedsInput ? t('session.waiting') : st === 'connected' ? t('terminal.status.connected') : st === 'connecting' ? t('terminal.status.connecting') : t('terminal.status.disconnected')}
-      </span>
+  const connLabel = activeNeedsInput ? t('session.waiting') : st === 'connected' ? t('terminal.status.connected') : st === 'connecting' ? t('terminal.status.connecting') : t('terminal.status.disconnected')
+  // 连接状态 + Claude/Codex 视图开关：工具条左侧，终端视图和对话视图一样
+  const sessionLead = (
+    <>
+      <span className="tt-status">{statusDot(dot, 7)}{connLabel}</span>
       {active && claudeMap[active]?.running && (
         <TBtn icon={<AgentLogo kind="claude" size={14} />} label="Claude" on={!!claudeView[active]}
           title={t('chat.switchToClaude')} onClick={() => setClaudeView((v) => ({ ...v, [active!]: !v[active!] }))} />
@@ -743,21 +828,22 @@ export default function TerminalPane(props: {
         <TBtn icon={<AgentLogo kind="codex" size={14} />} label="Codex" tone="ok" on={!!codexView[active]}
           title={t('chat.switchToCodex')} onClick={() => setCodexView((v) => ({ ...v, [active!]: !v[active!] }))} />
       )}
-      <span className="tt-sep" />
+    </>
+  )
+  const sessionToolbar = (
+    <div className="tt-tbar tt-session-toolbar">
+      {sessionLead}<span className="tt-sep" />
       <Dropdown trigger={['click']} menu={{ items: tmuxMenu(t) as any, onClick: ({ key }) => { if (key === PFX + 'x') openPaneCloseConfirm(); else sendKey(key) } }} placement="bottomLeft">
         <button type="button" className="tt-tbtn">{TI.tmux}<span>tmux</span><span style={{ color: 'var(--text-dimmer)', display: 'inline-flex' }}><ChevronDown size={11} /></span></button>
       </Dropdown>
-      {active && (
-        <TBtn icon={TI.newTab} label={t('terminal.newTab')} title={t('terminal.openInNewTabTitle')}
-          onClick={() => window.open(`/#/term/${encodeURIComponent(active)}`, '_blank')} />
-      )}
+      {/* 「新标签」进了标签右键菜单（标签条上已有「新建」）；文件 / Git 归右栏活动条；
+          语音归 composer——22 设计 §3.3 去掉的四枚。独立页（左停靠）没有右栏，文件 / Git 仍在这 */}
       {active && <TBtn icon={TI.rename} label={t('session.rename')} title={t('session.renameTitle')} onClick={() => setRenameSession(active)} />}
       <span className="tt-sep" />
       <TBtn icon={promptOff ? TI.bellOff : TI.bellOn} label={t('prompt.popup')} on={!promptOff}
         title={promptOff ? t('prompt.popupOff') : t('prompt.popupOn')} onClick={togglePromptOff} />
-      <TBtn icon={TI.folder} label={t('chat.files')} on={showFiles} title={t('terminal.fileBrowserTitle')} onClick={toggleFiles} />
-      <TBtn icon={TI.git} label={t('git.title')} on={showGit} title={t('terminal.gitPanelTitle')} onClick={toggleGit} />
-      <TBtn icon={TI.mic} label={t('voice.input')} on={showVoice} title={showVoice ? t('voice.hideButton') : t('voice.showButton')} onClick={() => setShowVoice((v) => !v)} />
+      {fileDock === 'left' && <TBtn icon={TI.folder} label={t('chat.files')} on={showFiles} title={t('terminal.fileBrowserTitle')} onClick={toggleFiles} />}
+      {fileDock === 'left' && <TBtn icon={TI.git} label={t('git.title')} on={showGit} title={t('terminal.gitPanelTitle')} onClick={toggleGit} />}
       <span className="tt-spacer" />
       <span className="tt-tgroup">
         <TBtn icon={TI.scrollUp} title={t('terminal.scrollHistory')} onClick={() => active && termRefs.current[active]?.scroll(-12)} />
@@ -830,15 +916,18 @@ export default function TerminalPane(props: {
         }}>{t('terminal.dropToMention')}</div>
       )}
       <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+        {!active && !curFile && onNew && (
+          <div className="tt-tabs-empty">{t('tabs.empty')}<small>{t('tabs.emptyHint')}</small></div>
+        )}
         {terms.map((termName) => (
           // 非当前终端不能用 display:none：xterm 会暂停渲染且容器尺寸归零，切换或关闭当前标签时
           // 下一张 WebGL 画布要经过“重新量尺寸 → 清画布 → 重画”，中间会露出 1~2 帧黑屏。
           // visibility:hidden 保留真实尺寸并让后台画布保持就绪；pointerEvents/zIndex 隔离交互与层叠。
           <div key={termName} style={{
             position: 'absolute', inset: 0, padding: 6,
-            visibility: termName === active ? 'visible' : 'hidden',
-            pointerEvents: termName === active ? 'auto' : 'none',
-            zIndex: termName === active ? 1 : 0,
+            visibility: termName === active && !curFile ? 'visible' : 'hidden',
+            pointerEvents: termName === active && !curFile ? 'auto' : 'none',
+            zIndex: termName === active && !curFile ? 1 : 0,
           }}>
             <Term ref={(h) => { termRefs.current[termName] = h }} name={termName} fontSize={fontSize} active={termName === active} onStatus={(s) => setStatus(termName, s)} onRevived={onRename}
               onContextMenu={({ x, y, selection }) => { setActive(termName); setCtx({ x, y, session: termName, selection }) }}
@@ -847,12 +936,12 @@ export default function TerminalPane(props: {
               onImagePaste={(files) => { setActive(termName); pasteImage(termName, files) }} />
             {claudeView[termName] && claudeMap[termName]?.running && (
               <div style={{ position: 'absolute', inset: 0 }}>
-                <ClaudeChat name={termName} file={claudeMap[termName].file} onOpenFile={openFileFromChat} onOpenGit={openGitFromChat} />
+                <ClaudeChat name={termName} file={claudeMap[termName].file} onOpenFile={openFileFromChat} onOpenGit={openGitFromChat} active={termName === active && !curFile} />
               </div>
             )}
             {codexView[termName] && codexMap[termName]?.running && (
               <div style={{ position: 'absolute', inset: 0 }}>
-                <CodexChat name={termName} file={codexMap[termName].file} onOpenFile={openFileFromChat} onOpenGit={openGitFromChat} />
+                <CodexChat name={termName} file={codexMap[termName].file} onOpenFile={openFileFromChat} onOpenGit={openGitFromChat} active={termName === active && !curFile} />
               </div>
             )}
             {showVoice && !claudeView[termName] && !codexView[termName] && (
@@ -860,6 +949,23 @@ export default function TerminalPane(props: {
             )}
           </div>
         ))}
+        {/* 文件层（22 设计 §3.3）：每个文件标签一层，只有当前那层显示；FileView 的 active 只给当前，
+            其余的 Monaco 不渲染、draft 留着——二十个标签只有一个编辑器实例 */}
+        {(fileTabs || []).map((f) => {
+          const on = curFile === f.path
+          return (
+            <div key={'file:' + f.path} style={{ position: 'absolute', inset: 0, zIndex: on ? 7 : 0, display: on ? 'block' : 'none', background: 'var(--bg-base)' }}>
+              {f.mode === 'changes'
+                ? (on && <ChangesView path={f.path} root={taskDir || ''} />)
+                : (
+                  <FileView path={f.path} accent="var(--accent)" inline tabbed forcePreview={f.mode === 'preview'} active={on}
+                    onClose={() => closeFile(f.path)} onOpenPath={(p) => onFileTab?.(p)}
+                    onDirtyChange={(p, d) => { setFileDirty(p, d); if (d) onPinFile?.(p) }}
+                    revealLine={reveal?.path === f.path ? { line: reveal.line, nonce: reveal.nonce } : undefined} />
+                )}
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -881,7 +987,7 @@ export default function TerminalPane(props: {
           手机上这 49px 直接等于终端少 3 行。桌面不受影响。
           `tt-keyrow` 给两侧渐隐 + 滚轮横移：这一条 15 个按钮宽 913，窄栏里只露得出 605，
           而原来既没有渐隐也没有滚动条，右边缘正好把某个键切成一半——看着就是"没显示全"。 */}
-      {!inChat && (!isPhone || typing) && (
+      {!inChat && isTouch && (!isPhone || typing) && (
         <div className="tt-keyrow" ref={keyRowRef}
           onScroll={syncKeyFade}
           onWheel={(e) => {
@@ -979,25 +1085,27 @@ export default function TerminalPane(props: {
       ) : (
         <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
           <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-            {phoneChrome || <>{tabStrip}{sessionToolbar}</>}
+            {phoneChrome || <>{tabStrip}{curFile
+              ? <FilePathBar path={curFile} root={taskDir || ''} mode={(fileTabs || []).find((f) => f.path === curFile)?.mode || 'source'} onMode={(m) => onFileMode?.(curFile, m)} />
+              : sessionToolbar}</>}
             {terminalArea}
-            {sessionBottom}
+            {!curFile && sessionBottom}
           </div>
         </div>
       )}
       {/* 文件树也进 Inspector：它是最后一种「从右边出来一块」的浮层（420 fixed，
           同样盖住终端）。收进来之后 文件 / Git / Worktree 三者互斥——同一时刻只有一个
           Inspector，关掉栈顶自然露出下面那个（图纸 panels-desktop.html §二）。 */}
-      {fileDock === 'right' && (
+      {/* 右停靠的文件 / Git 抽屉没了：归右栏 InspectorPanels（22 设计 §3.4）。
+          这里只剩左停靠（#/term 独立页）和手机上没有右栏时的文件 / Git 二级页。 */}
+      {fileDock === 'right' && !onOpenFile && (
         <AdaptivePanel open={showFiles} layer="session" title={t('nav.files')}
           onClose={() => setShowFiles(false)}>
           <FileBrowser dir={cwd} accent="var(--accent)" layout="dock" onClose={() => setShowFiles(false)}
             openRequest={dockFileReq || undefined} />
         </AdaptivePanel>
       )}
-      {/* 手机走全屏二级页（13 §6）：420 的浮层在 360 屏上盖到 92vw，还压着底栏、不吃安全区。
-          桌面维持右缘浮动面板不变。layer="session" —— 这一层是从会话全屏(100)里唤起的。 */}
-      <AdaptivePanel open={showGit} layer="session" title={t('git.title')}
+      <AdaptivePanel open={showGit && !onOpenGit} layer="session" title={t('git.title')}
         onClose={() => setShowGit(false)}>
         <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}><Spin /></div>}>
           <GitPanel dir={cwd} accent="var(--accent)" onClose={() => setShowGit(false)} />

@@ -8,7 +8,7 @@
 // 会话胶囊、标签右键菜单）散在各处，数据源却只有 App 那一份轮询。
 import { useSyncExternalStore } from 'react'
 
-export type SessionProject = { key: string; name: string; dir: string; branch?: string }
+export type SessionProject = { key: string; name: string; dir: string; branch?: string; worktree?: string }
 
 let table: Record<string, SessionProject> = {}
 const listeners = new Set<() => void>()
@@ -18,7 +18,7 @@ export function setSessionProjects(next: Record<string, SessionProject>) {
   const keys = Object.keys(next)
   const same = keys.length === Object.keys(table).length && keys.every((k) => {
     const a = table[k], b = next[k]
-    return a && b && a.key === b.key && a.name === b.name && a.branch === b.branch
+    return a && b && a.key === b.key && a.name === b.name && a.branch === b.branch && a.worktree === b.worktree
   })
   if (same) return
   table = next
@@ -78,7 +78,8 @@ export function buildSessionProjects(
   for (const [session, ann] of Object.entries(annotations || {})) {
     const primary = (ann as any)?.primary
     const hit = primary?.repo && byDir.get(primary.repo)
-    if (hit) out[session] = { ...hit, branch: primary.branch || undefined }
+    // worktree 绝对路径就是任务的 key（22 设计 §3.2）：annotation 里本来就带着，多抄一个字段
+    if (hit) out[session] = { ...hit, branch: primary.branch || undefined, worktree: primary.worktree || undefined }
   }
   // 非 git 项目兜底：已经有归属的不覆盖（annotation 比 top 名单准）
   for (const p of projects) {

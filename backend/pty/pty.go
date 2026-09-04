@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	creackpty "github.com/creack/pty"
 	"github.com/gin-gonic/gin"
@@ -252,9 +253,23 @@ func tmuxMoveCursorAt(name string, col, row int) {
 		}
 		dx, dy := (col-left)-cx, (row-top)-cy
 		if alt {
-			// 点在对话/输出区（离输入行太远）忽略；否则只按水平差移光标，竖直不动。
-			if dy > 8 || dy < -8 {
+			// 备用屏只认光标所在那一行的点击：别的行是对话/输出区，点它只是想聚焦。
+			// 原来 ±8 行内都发 →，而 Claude Code 把行尾的 → 和 Tab 一样当成「接受建议提示」
+			// （interactive-mode 文档 Prompt suggestions 一节）——用户点一下窗口，
+			// 输入框里灰色的建议就变成真实输入了。
+			if dy != 0 {
 				return
+			}
+			if dx > 0 {
+				// 往右不越过这一行最后一个真实字符：建议提示是暗色/灰色渲染的，当空白算。
+				// 光标已经停在真实文字末尾时什么都不发——那正是 → 会被当成接受的位置。
+				last := lastRealCol(capturePaneRow(parts[0], cy))
+				if cx+dx > last+1 {
+					dx = last + 1 - cx
+				}
+				if dx <= 0 {
+					return
+				}
 			}
 			sendArrows(parts[0], 0, dx)
 		} else {
@@ -269,6 +284,103 @@ func tmuxMoveCursorAt(name string, col, row int) {
 
 // sendArrows 先竖直后水平发方向键。用 tmux 命名键(Up/Down/Left/Right)而非裸序列，
 // 让 tmux 按应用的光标键模式(DECCKM)选 CSI/SS3 编码。
+// capturePaneRow 取 pane 第 row 行（0 起）的内容，带 SGR 转义（-e），供 lastRealCol 判断。
+func capturePaneRow(pane string, row int) string {
+	out, err := exec.Command("tmux", "capture-pane", "-p", "-e", "-t", pane,
+		"-S", strconv.Itoa(row), "-E", strconv.Itoa(row)).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimRight(string(out), "\n")
+}
+
+// lastRealCol 返回一行里最后一个「真实字符」所在的列（0 起），没有则 -1。
+// 暗色（SGR 2）或灰色前景（90、38;5;8、38;5;232–250、38;2 三分量相等且 ≤ 0xa0）渲染的字符
+// 当空白：TUI 的占位符 / 建议提示都长这样，把光标挪到它们后面等于替用户接受它们。
+func lastRealCol(line string) int {
+	col, last := 0, -1
+	dim, gray := false, false
+	for i := 0; i < len(line); {
+		if line[i] == 0x1b && i+1 < len(line) && line[i+1] == '[' {
+			j := i + 2
+			for j < len(line) && (line[j] < 0x40 || line[j] > 0x7e) {
+				j++
+			}
+			if j < len(line) && line[j] == 'm' {
+				dim, gray = applySGR(line[i+2:j], dim, gray)
+			}
+			i = j + 1
+			continue
+		}
+		r, size := utf8.DecodeRuneInString(line[i:])
+		w := cellWidth(r)
+		if r != ' ' && !dim && !gray && w > 0 {
+			last = col + w - 1
+		}
+		col += w
+		i += size
+	}
+	return last
+}
+
+// applySGR 按一段 SGR 参数更新「暗 / 灰」两个标志。只关心会把字渲染成占位色的那几个。
+func applySGR(params string, dim, gray bool) (bool, bool) {
+	if params == "" {
+		return false, false
+	}
+	ps := strings.Split(params, ";")
+	for i := 0; i < len(ps); i++ {
+		n, err := strconv.Atoi(ps[i])
+		if err != nil {
+			continue
+		}
+		switch {
+		case n == 0:
+			dim, gray = false, false
+		case n == 2:
+			dim = true
+		case n == 22:
+			dim = false
+		case n == 90:
+			gray = true
+		case n == 39, (n >= 30 && n <= 37), (n >= 91 && n <= 97):
+			gray = false
+		case n == 38 && i+1 < len(ps):
+			if ps[i+1] == "5" && i+2 < len(ps) {
+				c, _ := strconv.Atoi(ps[i+2])
+				gray = c == 8 || (c >= 232 && c <= 250)
+				i += 2
+			} else if ps[i+1] == "2" && i+4 < len(ps) {
+				r, _ := strconv.Atoi(ps[i+2])
+				g, _ := strconv.Atoi(ps[i+3])
+				b, _ := strconv.Atoi(ps[i+4])
+				gray = r == g && g == b && r <= 0xa0
+				i += 4
+			}
+		}
+	}
+	return dim, gray
+}
+
+// cellWidth 是终端里一个字符占几列：宽字符（CJK 等）2、组合标记 0、其余 1。
+// 只用来算光标钳位，不追求 wcwidth 全表精确。
+func cellWidth(r rune) int {
+	switch {
+	case r == 0:
+		return 0
+	case r < 0x300:
+		return 1
+	case r >= 0x300 && r <= 0x36f, r >= 0x200b && r <= 0x200f:
+		return 0
+	case r >= 0x1100 && r <= 0x115f, r >= 0x2e80 && r <= 0xa4cf, r >= 0xac00 && r <= 0xd7a3,
+		r >= 0xf900 && r <= 0xfaff, r >= 0xfe30 && r <= 0xfe4f, r >= 0xff00 && r <= 0xff60,
+		r >= 0xffe0 && r <= 0xffe6, r >= 0x1f300 && r <= 0x1f64f, r >= 0x1f900 && r <= 0x1f9ff,
+		r >= 0x20000 && r <= 0x3fffd:
+		return 2
+	}
+	return 1
+}
+
 func sendArrows(pane string, dy, dx int) {
 	send := func(key string, n int) {
 		if n > 0 {

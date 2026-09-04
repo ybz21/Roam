@@ -19,6 +19,7 @@ import { ChangePasswordSettings, TwoFactorSettings, CertDownloadButton } from '.
 import { AboutSettings } from './about-settings'
 import { ClusterSettings } from '../cluster/ClusterSettings'
 import { StatusBarSettings } from './status-bar-settings'
+import { AccountActions } from './account-actions'
 
 export const MAX_ROWS = 6
 
@@ -98,6 +99,8 @@ export function buildSettings(deps: {
   prefs: any
   setPrefs: (p: any) => void
   setWorkspace: (p: any) => void
+  /** 退出登录：原来在侧栏脚「当前设备」菜单里，22 设计把它并进设置页 */
+  onLogout?: () => void
   nodeLabel: string
   isHub: boolean
   onBrowserRestart: () => void
@@ -112,6 +115,17 @@ export function buildSettings(deps: {
       kind: 'segment', get: () => deps.theme, set: (v) => deps.setTheme(v as 'dark' | 'light'),
       options: [{ value: 'dark', label: t('common.darkTheme') }, { value: 'light', label: t('common.lightTheme') }],
     },
+  }
+  const claudeThemeItem: SettingItem = {
+    id: 'claudeThemeSync', label: t('set.claudeTheme'), desc: t('set.claudeThemeHelp'), key: 'claudeThemeSync',
+    keywords: 'claude theme 主题 对比度',
+    control: { kind: 'switch', get: () => prefs.claudeThemeSync !== false, set: (on) => deps.setPrefs({ claudeThemeSync: on }) },
+  }
+  // 全屏 / 退出登录：原来挂在侧栏脚「当前设备」那枚账户菜单里（22 设计 §3.2 拍板：侧栏脚只留 设置 / 收起）
+  const accountItem: SettingItem = {
+    id: 'account', label: t('set.account'), desc: t('set.accountDesc'),
+    keywords: '全屏 退出 登录 fullscreen logout',
+    control: { kind: 'custom', node: <AccountActions onLogout={deps.onLogout} /> },
   }
   const localeItem: SettingItem = {
     id: 'locale', label: t('settings.language'), desc: t('settings.languageHelp'), key: 'locale',
@@ -160,6 +174,8 @@ export function buildSettings(deps: {
       id: 'ui.look', name: t('set.pageLook'), parent: t('set.groupUi'), scope: 'mine',
       items: [
         themeItem,
+        claudeThemeItem,
+        accountItem,
         localeItem,
         {
           id: 'density', label: t('set.density'), desc: t('set.densityHelp'), key: 'workspace.density',

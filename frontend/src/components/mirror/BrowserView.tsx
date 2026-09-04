@@ -128,7 +128,6 @@ export default function BrowserView() {
   const wheelRef = useRef({ x: 0, y: 0, dx: 0, dy: 0, m: 0, timer: 0 as any })
   const touchRef = useRef({ x: 0, y: 0, t: 0, moved: false })
   const lastEmuRef = useRef('')       // 上次已发的 emulate 载荷（去重：载荷没变绝不重发 → 不重设视口 → 不跳）
-  const emuTimerRef = useRef(0 as any) // emulate 防抖计时器
   // 中文等输入法（IME）输入：普通 div 持焦时浏览器不会启动输入法组合，敲拼音只会落下
   // 原始字母。用一个视觉隐藏的 textarea 承接焦点与组合过程，组合结束后把整段文本经
   // 现有 char 消息发往远端（后端 Input.insertText 支持多字符）。textarea 定位在最近

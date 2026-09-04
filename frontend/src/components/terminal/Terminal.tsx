@@ -7,6 +7,7 @@ import { FitAddon } from '@xterm/addon-fit'
 // 0.19+ 是给 xterm 6 内核的：卸载时读 `_core._store._isDisposed` 判断内核有没有拆，
 // 5.5 内核根本没有 `_store` → 每次拆终端必抛 TypeError（升级前先确认这个字段还在）。
 import { WebglAddon } from '@xterm/addon-webgl'
+import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
 // 终端符号补字集（约 46KB，仅覆盖框线/箭头/技术符号等区段）：见 FONT_FAMILY 的说明
 import '../../assets/fonts/roam-symbols.css'
@@ -114,13 +115,20 @@ function loadStoredTerminalFrame(name: string): string | undefined {
 // xterm 不认 CSS var()，需具体色值：读 <html> 上的同名变量，随黑/白主题切换。
 function xtermTheme() {
   const cs = getComputedStyle(document.documentElement)
-  const bg = cs.getPropertyValue('--xterm-bg').trim() || '#06090d'
+  const bg = cs.getPropertyValue('--xterm-bg').trim() || '#0b0f14'
   const fg = cs.getPropertyValue('--xterm-fg').trim() || '#e6edf3'
   // 光标同样吃全站强调色（--accent），这里必须取解析后的值——xterm 不认 var()
   const cursor = cs.getPropertyValue('--accent').trim() || '#58a6ff'
   // 选区色必须跟主题走：xterm 缺省是白色半透明，浅色底上选了什么根本看不见
   const selectionBackground = cs.getPropertyValue('--xterm-selection').trim() || 'rgba(88, 166, 255, .35)'
   return { background: bg, foreground: fg, cursor, selectionBackground }
+}
+// 浅色主题下强制最低对比度：Claude Code / Codex 按自己的（缺省深色）主题吐颜色，代码高亮里一堆
+// 近白色，落在白底上就看不见了。xterm 会把对比不够的前景色往深处拉，深色主题不动（1 = 关）。
+// 浅色下只兜底近白色的文字（3），不再往上拉：Claude Code 深色配色落白底，4 会把选中行和别的行一起压成灰。
+// 正路是服务端把 Claude Code 的主题跟着切成 light（claude-theme-sync.go），配色对了就不用拉。
+function minContrast(): number {
+  return document.documentElement.dataset.theme === 'light' ? 3 : 1
 }
 
 // 滤掉应用(Claude Code/Codex/vim 等)开启「鼠标上报」的 DECSET 序列 ESC[?1000/1001/1002/1003h。
@@ -598,9 +606,16 @@ const Term = forwardRef<TermHandle, {
       // 渲染器生效，DOM 渲染器下无效——所以下面必须把 WebGL 渲染器挂上。
       rescaleOverlappingGlyphs: true,
       theme: xtermTheme(),
+      minimumContrastRatio: minContrast(),
     })
     const fit = new FitAddon()
     term.loadAddon(fit)
+    // 网址悬停下划线，点一下就在新标签页打开（不要求按 Ctrl：点到网址上就是想开它，移光标那点副作用无所谓）
+    // 不用 features 串里的 noopener：Chrome 把它当弹窗特性，新标签页开在后台不切过去；手动断 opener 再 focus
+    term.loadAddon(new WebLinksAddon((_e, uri) => {
+      const w = window.open(uri, '_blank')
+      if (w) { w.opener = null; w.focus() }
+    }))
     term.open(elRef.current!)
     termRef.current = term
     fitRef.current = fit
@@ -789,7 +804,7 @@ const Term = forwardRef<TermHandle, {
     })
 
     // 跟随全局黑/白主题：监听 <html data-theme> 变化，热更新终端配色
-    const themeObs = new MutationObserver(() => { try { term.options.theme = xtermTheme() } catch {} })
+    const themeObs = new MutationObserver(() => { try { term.options.theme = xtermTheme(); term.options.minimumContrastRatio = minContrast() } catch {} })
     themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
 
     // ponytail: IME 切英文时 macOS commit 未选中拼音（"s c p"），xterm 发给 pty 造成垃圾。

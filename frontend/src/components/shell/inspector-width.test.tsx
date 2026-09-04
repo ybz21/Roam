@@ -65,7 +65,7 @@ describe('文件预览要列宽', () => {
     const m = await freshModules()
     const { result, rerender } = renderHook(() => m.useWorkspaceLayout(true))
 
-    // 两档都是 large（splitCapable 不变），变的只有终端让出来的余量——
+    // 两档都是 large（large 不变），变的只有终端让出来的余量——
     // 否则「变宽后好了」可能只是因为这一档本来就不给 Inspector，验不到要验的东西。
     window.innerWidth = 1400          // 并排：上界只有五百多，945 会被钳
     window.dispatchEvent(new Event('resize'))

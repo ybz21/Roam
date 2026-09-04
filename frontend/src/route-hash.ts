@@ -29,6 +29,9 @@ export function setHashParams(params: Record<string, string>) {
 
 export const NO_TERMS = 'none'
 
+/** 任务视图的页面名：#/w（22 设计 §7）。当前任务从当前标签推出来，URL 不写 */
+export const TASK_ROUTE = 'w'
+
 // URL 上的终端标签参数（terms=打开的标签、active=当前标签）。
 // 现在写进去的是会话 id；老链接里存的是会话名，两者都能读——还原时按 id 表判别（见 resolveToken）。
 //

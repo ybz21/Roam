@@ -27,7 +27,7 @@ describe('按机器记终端标签', () => {
 
   it('没记过的机器返回空，不返回别人的', () => {
     saveTabs('node-a', ['x'], 'x')
-    expect(loadTabs('node-zzz')).toEqual({ terms: [], active: '' })
+    expect(loadTabs('node-zzz')).toEqual({ terms: [], active: '', files: [], activeFile: '' })
   })
 
   it('最多记 8 台，按最后使用淘汰', () => {
@@ -40,7 +40,7 @@ describe('按机器记终端标签', () => {
 
   it('localStorage 里是垃圾时按空处理，不抛', () => {
     localStorage.setItem('roam.terms', '{{{')
-    expect(loadTabs('node-a')).toEqual({ terms: [], active: '' })
+    expect(loadTabs('node-a')).toEqual({ terms: [], active: '', files: [], activeFile: '' })
   })
 })
 
@@ -81,5 +81,31 @@ describe('还原前滤掉死 token', () => {
 
   it('全都查无此会话时还原出空，而不是一排空标签', () => {
     expect(dropDeadTokens(['2026-0101-1200-dead', '2026-0101-1200-gone'], known)).toEqual([])
+  })
+})
+
+describe('文件标签一起记（标签条不按任务隔离）', () => {
+  beforeEach(() => localStorage.clear())
+
+  it('存了就能读回来，只认得 path / preview / mode / task 四个字段', () => {
+    saveTabs('a', ['x'], 'x', [{ path: '/w/.worktrees/a/README.md', preview: true, mode: 'preview', task: '/w/.worktrees/a' }], '/w/.worktrees/a/README.md')
+    const got = loadTabs('a')
+    expect(got.files).toEqual([{ path: '/w/.worktrees/a/README.md', preview: true, mode: 'preview', task: '/w/.worktrees/a' }])
+    expect(got.activeFile).toBe('/w/.worktrees/a/README.md')
+  })
+
+  it('坏掉的 mode 退回 source，缺 path 的丢掉；activeFile 指向不存在的标签就清空', () => {
+    localStorage.setItem('roam.terms', JSON.stringify({ '': { terms: [], active: '', at: 1, files: [{ path: '/p', mode: 'rich' }, { preview: true }], activeFile: '/gone' } }))
+    expect(loadTabs(null)).toEqual({ terms: [], active: '', files: [{ path: '/p', preview: false, mode: 'source', task: '' }], activeFile: '' })
+  })
+
+  it('老形状（按任务分片的对象）摊平，分片键写进 task', () => {
+    localStorage.setItem('roam.terms', JSON.stringify({ '': { terms: [], active: '', at: 1, files: { '/w/a': [{ path: '/w/a/x.md', preview: false, mode: 'preview' }], 'loose:s': [{ path: '/tmp/y', mode: 'source' }] }, activeFile: { '/w/a': '/w/a/x.md' } } }))
+    const got = loadTabs(null)
+    expect(got.files).toEqual([
+      { path: '/w/a/x.md', preview: false, mode: 'preview', task: '/w/a' },
+      { path: '/tmp/y', preview: false, mode: 'source', task: 'loose:s' },
+    ])
+    expect(got.activeFile).toBe('/w/a/x.md')
   })
 })

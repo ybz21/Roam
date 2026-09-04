@@ -1,9 +1,11 @@
 // Git 面板共用的小零件：图标、引用徽标、行内动作按钮、分组标题。
 // 视觉基调沿用全局 CSS 变量（黑白主题自动跟随），只在泳道色上用固定 HSL。
-import type { ReactNode } from 'react'
-import { Tooltip } from 'antd'
+import { useEffect, useState, type ReactNode } from 'react'
+import { api } from '../../api'
+import { Tooltip, Popover, Spin } from 'antd'
+import { useI18n } from '../../i18n'
 import type { RawRef } from './graph'
-import { ArrowDown, ArrowUp, CloudIcon, WindowsIcon } from '../../icons'
+import { ArrowDown, ArrowUp, CloudIcon, WindowsIcon, MergeIcon, OpenInIcon } from '../../icons'
 
 export { CloudIcon }
 
@@ -109,5 +111,85 @@ export function AheadBehind({ ahead, behind, size = 11 }: { ahead?: number; behi
       {!!behind && <span style={{ color: 'hsl(32,85%,55%)', display: 'inline-flex', alignItems: 'center', gap: 1 }}><ArrowDown size={size} />{behind}</span>}
       {!!ahead && <span style={{ color: 'var(--ok)', display: 'inline-flex', alignItems: 'center', gap: 1 }}><ArrowUp size={size} />{ahead}</span>}
     </span>
+  )
+}
+
+
+/** worktree 的分支状态图标（Orca 卡片右上角那枚 PR 标的位置）：颜色说状态，悬停看分支和数字，
+ *  点开是这条分支的 PR 卡（/git/pr，本机 gh）：编号、标题、状态、检查结果，一键去远端。 */
+export function WtStatusIcon({ branch, dir, merged, dirty = 0, ahead = 0, behind = 0, pushed }: {
+  branch?: string; dir?: string; merged?: boolean; dirty?: number; ahead?: number; behind?: number; pushed?: boolean
+}) {
+  const { t } = useI18n()
+  const [open, setOpen] = useState(false)
+  const tone = merged ? 'ok' : dirty ? 'warn' : ahead > 0 ? 'accent' : 'dim'
+  const bits = [
+    merged ? t('tree.merged') : ahead > 0 ? t('tree.aheadN', { n: ahead }) : '',
+    pushed && !merged ? t('tree.pushed') : '',
+    dirty ? t('tree.dirtyN', { n: dirty }) : '',
+    behind ? t('tree.behindN', { n: behind }) : '',
+  ].filter(Boolean)
+  const tip = [branch, ...bits].filter(Boolean).join(' · ')
+  const icon = (
+    <span className={`wtst ${tone}${dir ? ' btn' : ''}`} role={dir ? 'button' : undefined} aria-label={tip} title={open ? undefined : tip}
+      onClick={dir ? (e) => { e.stopPropagation() /* 开合由 Popover 的 trigger 管，这里只拦住任务行的点击 */ } : undefined}
+      onDoubleClick={(e) => e.stopPropagation()} onContextMenu={(e) => e.stopPropagation()}>
+      {merged ? <MergeIcon size={13} /> : <BranchIcon size={13} />}
+    </span>
+  )
+  if (!dir || !branch) return icon
+  return (
+    <Popover open={open} onOpenChange={setOpen} trigger="click" placement="rightTop" destroyTooltipOnHide
+      content={<PrCard dir={dir} branch={branch} bits={bits} />} overlayClassName="tt-pr-pop">
+      {icon}
+    </Popover>
+  )
+}
+
+type PrInfo = { found: boolean; reason?: string; number?: number; title?: string; state?: string; draft?: boolean; url?: string; checks?: string }
+
+function PrCard({ dir, branch, bits }: { dir: string; branch: string; bits: string[] }) {
+  const { t } = useI18n()
+  const [info, setInfo] = useState<PrInfo | null>(null)
+  const [err, setErr] = useState('')
+  useEffect(() => {
+    let stop = false
+    setInfo(null); setErr('')
+    api('GET', `/git/pr?dir=${encodeURIComponent(dir)}&branch=${encodeURIComponent(branch)}`)
+      .then((r) => { if (!stop) setInfo(r?.data || { found: false, reason: 'error' }) })
+      .catch((e: any) => { if (!stop) setErr(e.message) })
+    return () => { stop = true }
+  }, [dir, branch])
+  const stateLabel = (s?: string, draft?: boolean) => draft ? t('pr.draft') : s === 'MERGED' ? t('pr.merged') : s === 'CLOSED' ? t('pr.closed') : t('pr.openState')
+  const stateTone = (s?: string, draft?: boolean) => draft ? 'dim' : s === 'MERGED' ? 'ok' : s === 'CLOSED' ? 'danger' : 'accent'
+  const checksLabel = (c?: string) => c === 'passing' ? t('pr.passing') : c === 'failing' ? t('pr.failing') : c === 'pending' ? t('pr.pending') : ''
+  const checksTone = (c?: string) => c === 'passing' ? 'ok' : c === 'failing' ? 'danger' : 'warn'
+  return (
+    <div className="tt-pr-card" onClick={(e) => e.stopPropagation()}>
+      <div className="hd">
+        <span className="ic"><BranchIcon size={13} /></span>
+        <b>{info?.found ? `PR #${info.number}` : branch}</b>
+        {info?.found && info.url && (
+          <button type="button" className="tt-act ico" title={t('pr.open')} aria-label={t('pr.open')} onClick={() => window.open(info.url, '_blank', 'noopener')}>
+            <OpenInIcon size={13} />
+          </button>
+        )}
+      </div>
+      {!info && !err && <div className="dim"><Spin size="small" /> {t('pr.loading')}</div>}
+      {err && <div className="dim">{err}</div>}
+      {info && !info.found && (
+        <div className="dim">{info.reason === 'no-gh' ? t('pr.noGh') : info.reason === 'no-auth' ? t('pr.noAuth') : info.reason === 'error' ? t('pr.error') : t('pr.none')}</div>
+      )}
+      {info?.found && (
+        <>
+          <div className="ttl">{info.title}</div>
+          <div className="chips">
+            <span className={`tt-pill sm ${stateTone(info.state, info.draft)}`}><BranchIcon size={11} />{t('pr.state')}: {stateLabel(info.state, info.draft)}</span>
+            {info.checks && info.checks !== 'none' && <span className={`tt-pill sm ${checksTone(info.checks)}`}>Checks: {checksLabel(info.checks)}</span>}
+          </div>
+        </>
+      )}
+      {bits.length > 0 && <div className="dim mono">{branch} · {bits.join(' · ')}</div>}
+    </div>
   )
 }

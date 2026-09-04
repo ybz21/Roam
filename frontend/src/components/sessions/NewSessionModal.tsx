@@ -30,7 +30,8 @@ export function NewSessionModal({ open, parent, onClose, onDone }: { open: boole
   const [pick, setPick] = useState(false)
   const [agent, setAgent] = useState<'none' | 'claude' | 'codex'>('claude')
   // 工作区三选一（W1 交互修订）：主仓库 / 新建隔离 worktree / 进入已有 worktree
-  const [wtMode, setWtMode] = useState<'repo' | 'new' | 'existing'>('repo')
+  // 工作区两选一（22 设计 D4）：新建 worktree / 已有 worktree；非 git 目录才退回「就在这个目录」
+  const [wtMode, setWtMode] = useState<'repo' | 'new' | 'existing'>('new')
   const [existingWts, setExistingWts] = useState<any[]>([])
   const [wtPath, setWtPath] = useState('')
   const [autoReview, setAutoReview] = useState(false)
@@ -49,7 +50,7 @@ export function NewSessionModal({ open, parent, onClose, onDone }: { open: boole
   const [prefs] = usePreferences()
   useEffect(() => {
     if (!open) return
-    setPrompt(''); setName(''); setNameTouched(false); setDir(''); setAgent('claude'); setWtMode('repo'); setAutoReview(false); setIsGitRepo(false)
+    setPrompt(''); setName(''); setNameTouched(false); setDir(''); setAgent('claude'); setWtMode('new'); setAutoReview(false); setIsGitRepo(false)
     setBase(''); setBranches([]); setRemoteBranches([]); setDefBranch(''); setExistingWts([]); setWtPath('')
     // 派生模式：目录默认父会话 cwd（可改成任意目录，与新建一致）
     if (parent) {
@@ -203,10 +204,11 @@ export function NewSessionModal({ open, parent, onClose, onDone }: { open: boole
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <span style={{ color: 'var(--text-dim)', fontSize: 13, flex: '0 0 auto' }}>{t('session.wt.where')}</span>
               <Tooltip title={isGitRepo ? '' : parent ? t('session.fork.parentNotRepo') : t('session.worktreeNeedsRepo')}>
-                <Segmented size="small" value={isGitRepo ? wtMode : 'repo'} onChange={(v) => setWtMode(v as any)} options={[
+                <Segmented size="small" value={isGitRepo ? (wtMode === 'repo' ? 'new' : wtMode) : 'repo'} onChange={(v) => setWtMode(v as any)} options={isGitRepo ? [
+                  { label: t('session.wt.newWt'), value: 'new' },
+                  { label: t('session.wt.existingWt', { count: existingWts.length }), value: 'existing', disabled: !existingWts.length },
+                ] : [
                   { label: parent ? t('session.fork.parentDir') : t('session.wt.mainRepo'), value: 'repo' },
-                  { label: t('session.wt.newWt'), value: 'new', disabled: !isGitRepo },
-                  { label: t('session.wt.existingWt', { count: existingWts.length }), value: 'existing', disabled: !isGitRepo || !existingWts.length },
                 ]} />
               </Tooltip>
             </div>

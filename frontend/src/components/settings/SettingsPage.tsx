@@ -71,7 +71,7 @@ function PaneHead({ page, model, compact }: { page: SettingsPageDef; model: Sett
   )
 }
 
-export default function SettingsPage({ sub, onNav }: { sub?: string; onNav?: (route: string) => void }) {
+export default function SettingsPage({ sub, onNav, onLogout }: { sub?: string; onNav?: (route: string) => void; onLogout?: () => void }) {
   const { t, locale, setLocale } = useI18n()
   const { message, modal } = AntApp.useApp()
   const { mode, setMode } = useThemeMode()
@@ -87,14 +87,14 @@ export default function SettingsPage({ sub, onNav }: { sub?: string; onNav?: (ro
   const nodeLabel = nodes.find((n) => n.id === nodeId)?.name || ''
   const model = useMemo(() => buildSettings({
     t, theme: mode, setTheme: setMode, locale, setLocale, prefs, setPrefs,
-    setWorkspace: saveWorkspace, nodeLabel, isHub: false,
+    setWorkspace: saveWorkspace, nodeLabel, isHub: false, onLogout,
     onBrowserRestart: async () => {
       const r = await api('POST', '/browser/relaunch')
       if (r?.data?.attached) message.warning(t('settings.browserAttached'))
       else message.success(t('settings.browserRelaunched'))
     },
     onEnvPush: async () => { await api('POST', '/env/push'); message.success(t('env.pushed')) },
-  }), [t, mode, locale, prefs, nodeLabel])
+  }), [t, mode, locale, prefs, nodeLabel, onLogout])
 
   const routed = pageFromRoute(sub || '')
   const current = model.pages[routed] ? routed : DEFAULT_PAGE
