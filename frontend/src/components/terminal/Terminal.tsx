@@ -611,7 +611,11 @@ const Term = forwardRef<TermHandle, {
     const fit = new FitAddon()
     term.loadAddon(fit)
     // 网址悬停下划线，点一下就在新标签页打开（不要求按 Ctrl：点到网址上就是想开它，移光标那点副作用无所谓）
-    term.loadAddon(new WebLinksAddon((_e, uri) => { window.open(uri, '_blank', 'noopener') }))
+    // 不用 features 串里的 noopener：Chrome 把它当弹窗特性，新标签页开在后台不切过去；手动断 opener 再 focus
+    term.loadAddon(new WebLinksAddon((_e, uri) => {
+      const w = window.open(uri, '_blank')
+      if (w) { w.opener = null; w.focus() }
+    }))
     term.open(elRef.current!)
     termRef.current = term
     fitRef.current = fit
