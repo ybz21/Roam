@@ -59,7 +59,8 @@ import { buildTaskTree, type TreeTask } from './components/shell/task-tree'
 import { useSessionCloser } from './components/sessions/session-closer'
 import { taskKeyOf, isLooseTask, looseSessionOf, type TaskKey } from './components/sessions/task-key'
 import RenameSessionModal from './components/sessions/RenameSessionModal'
-import { NewSessionModal } from './components/sessions/NewSessionModal'
+import { TaskComposer } from './components/sessions/TaskComposer'
+import { NewProjectModal } from './components/projects/Projects'
 import { setSessionLabels, sessionLabel, sessionDisplay } from './components/sessions/session-label'
 import LinkStatus from './p2p/LinkStatus'
 import { startControlLink, stopControlLink } from './p2p/transport'
@@ -227,8 +228,10 @@ export default function App() {
   const [renameInTree, setRenameInTree] = useState<string | null>(null)
   const [renameTask, setRenameTask] = useState<{ key: TaskKey; name: string } | null>(null)
   const [renameTaskVal, setRenameTaskVal] = useState('')
-  // 项目行「+」：在这个项目下开新任务（弹新建会话框，目录预设、默认新建 worktree）
+  // 项目行「+」/ ⌘N：在这个项目下开新任务——弹的是项目主页那个 composer（TaskComposer），不是老表单
   const [newTaskDir, setNewTaskDir] = useState<string | null>(null)
+  // 树头「+」：就地弹新建项目框，不再先跳去项目列表页（建完自己跳到新项目主页）
+  const [newProjectOpen, setNewProjectOpen] = useState(false)
   const [sessList, setSessList] = useState<{ name: string; label?: string }[]>([])
   // URL 上待还原的 id/名字（还没拿到 id 映射前先原样存着）
   const urlTerms = useRef<string[]>(readTermTokens().terms)
@@ -281,7 +284,11 @@ export default function App() {
   const [git, setGit] = useState<{ branch: string; ahead: number; behind: number; files: number; state: string; conflicts: number } | null>(null)
   // 用**响应式**的那个：sessionProject() 是普通函数，归属表更新时不会触发重渲，
   // 于是切了会话之后分支那几格要等到下一次别的 state 变化才跟上。
+  // 树和当前项目在下面才算出来，快捷键里通过 ref 读（effect 挂得早）
+  const treeRef = useRef<ReturnType<typeof buildTaskTree> | null>(null)
+  const activeProjectRef = useRef<{ dir?: string } | null>(null)
   const activeProject = useSessionProject(active)
+  activeProjectRef.current = activeProject
   // 分支那格看当前任务的 worktree，不是项目主仓库（22 设计 §3.2）
   const gitDir = activeProject?.worktree || activeProject?.dir || ''
   const gitDirRef = useRef(gitDir)
@@ -395,6 +402,22 @@ export default function App() {
         else { space.setFocus('none'); space.toggleDock() }
         return
       }
+      // ⌘N 开任务（当前项目下，弹 composer）；⌘T 在当前 worktree 里派生终端；⌘W 收起当前标签（23 设计 §6）
+      if (mod && !e.shiftKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault()
+        const key = activeTaskRef.current
+        const tr = treeRef.current
+        const proj = key && tr ? tr.projects.find((p) => p.tasks.some((x) => x.key === key)) : undefined
+        const dir = proj?.dir || activeProjectRef.current?.dir || tr?.projects[0]?.dir
+        if (dir) setNewTaskDir(dir)
+        return
+      }
+      if (mod && !e.shiftKey && taskView && e.key.toLowerCase() === 't') { e.preventDefault(); void newTerminalInTask('shell'); return }
+      if (mod && !e.shiftKey && taskView && e.key.toLowerCase() === 'w') {
+        e.preventDefault()
+        if (curFile) closeFileTab(curFile); else if (active) closeTerm(active)
+        return
+      }
       // ⌘⇧F：右栏切到「内容」搜索并聚焦（22 设计 §9）
       if (mod && e.shiftKey && taskView && e.key.toLowerCase() === 'f') {
         e.preventDefault()
@@ -423,7 +446,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [hasSider, space, taskView])
+  }, [hasSider, space, taskView, curFile, active])
 
   // 启动：先确认登录态，**再**做多机引导，最后才放行渲染。
   //
@@ -531,6 +554,7 @@ export default function App() {
     nameOf: (p) => prefs.taskNames?.[p] || undefined,
     agentOf: (n) => (claudeMap[n]?.running ? 'claude' : codexMap[n]?.running ? 'codex' : undefined),
   }), [treeSrc, sessList, claudeMap, codexMap, projTable, prefs.taskNames])
+  treeRef.current = tree
 
   // hash 路由：URL #/xxx 与当前页同步（支持前进/后退、刷新保持、收藏分享）
   useEffect(() => {
@@ -951,7 +975,7 @@ export default function App() {
             searchHint={`${modKeyLabel}K`}
             tree={<ProjectTree tree={tree} activeTask={activeTask} activeSession={active}
               onProject={onTreeProject} onTask={onTreeTask} onSession={onTreeSession}
-              onAddProject={() => { go('projects'); requestIntent('new-project') }}
+              onAddProject={() => setNewProjectOpen(true)}
               onRename={setRenameInTree}
               onRenameTask={(key, name) => { setRenameTask({ key, name }); setRenameTaskVal(prefs.taskNames?.[key] || name) }}
               onNewTask={setNewTaskDir} onKill={(n) => { void closer.beginClose(n) }} onFinishTask={finishTask}
@@ -984,8 +1008,14 @@ export default function App() {
               onPressEnter={() => document.querySelector<HTMLButtonElement>('.ant-modal .ant-btn-primary')?.click()} />
             <div style={{ marginTop: 8, color: 'var(--text-dimmer)', fontSize: 'var(--fs-meta)' }}>{t('tree.taskNameHint')}</div>
           </Modal>
-          <NewSessionModal open={!!newTaskDir} initialDir={newTaskDir || ''} onClose={() => setNewTaskDir(null)}
-            onDone={(name) => { setNewTaskDir(null); openTerm(name) }} />
+          <Modal open={!!newTaskDir} footer={null} width={720} destroyOnClose onCancel={() => setNewTaskDir(null)}
+            title={t('tree.newTaskIn', { name: (newTaskDir || '').replace(/\/+$/, '').split('/').pop() || '' })}>
+            {newTaskDir && (
+              <TaskComposer dir={newTaskDir} isGit={treeSrc.projects.find((p: any) => p.dir === newTaskDir)?.git !== false}
+                openTerm={openTerm} onCreated={() => setNewTaskDir(null)} autoFocus />
+            )}
+          </Modal>
+          <NewProjectModal open={newProjectOpen} onClose={() => setNewProjectOpen(false)} />
         </Sider>
       )}
 

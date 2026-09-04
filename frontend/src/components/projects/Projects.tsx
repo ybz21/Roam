@@ -27,7 +27,8 @@ import { useLayout } from '../../layout'
 import { detectPrompt } from '../prompt'
 import { relTime } from '../../time-format'
 import { shellQuote as shq } from '../../shell-quote'
-import { NewSessionModal, taskNameFromPrompt } from '../sessions/NewSessionModal'
+import { NewSessionModal } from '../sessions/NewSessionModal'
+import { TaskComposer, type TaskComposerHandle } from '../sessions/TaskComposer'
 import { CloseWorktreeModal } from '../sessions/CloseWorktreeModal'
 import { DirPicker, recentDirs, pushRecentDir } from '../sessions/DirPicker'
 import { projNeeds, runningCount, waitingCount } from './project-list/project-model'
@@ -300,7 +301,7 @@ export default function Projects({ openTerm, closeTerm, initialKey, activeTerm }
 
 // ── 新项目弹窗：创建的是「项目」这个存储对象（POST /projects），不建任何会话。
 // 项目 = 任意目录（git 可选）；开 session / 建 feature 是进项目之后 composer 的事。
-function NewProjectModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useI18n()
   const { message } = AntApp.useApp()
   const [dir, setDir] = useState('')
@@ -794,10 +795,10 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
   const [swarmOpen, setSwarmOpen] = useState(false)
   // 「＋ 开始」的主动作：回到 composer 并聚焦——这一页最主要的事就是在这儿描述需求
   const composerRef = useRef<HTMLDivElement>(null)
-  const promptRef = useRef<any>(null)
+  const composerApi = useRef<TaskComposerHandle>(null)
   const focusComposer = () => {
     composerRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-    promptRef.current?.focus?.()
+    composerApi.current?.focus()
   }
   // 标签条「新任务」从任务视图切过来：留的意图在这儿取走（挂载时也取一次，事件早在本组件存在前就发完了）
   useEffect(() => {
@@ -1037,89 +1038,6 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
   const wtOf = (s: any) => wts.find((w: any) => w.path === ann[s.name]?.primary?.worktree)
 
   // 图片上传到 /tmp 并把绝对路径插进需求框：开干时路径会随命令传给 agent，模型按绝对路径读图（同对话页 Ctrl+V）
-  const uploadImages = async (images: File[]) => {
-    if (!images.length || uploading) return
-    setUploading(true)
-    try {
-      const res = await upload('/tmp', images)
-      setPrompt((v) => appendPaths(v, res.saved))
-      message.success(t('chat.uploadedFiles', { count: images.length, dir: '/tmp' }))
-    } catch (e: any) { message.error(t('chat.uploadFailed', { message: e.message })) }
-    finally { setUploading(false) }
-  }
-
-  // Ctrl+V 粘贴图片：一次只取一张（同张截图常以多种 MIME 重复出现，全收会插入两次）
-  const onPasteComposer = (e: React.ClipboardEvent) => {
-    if (!e.clipboardData?.items) return
-    for (const item of Array.from(e.clipboardData.items)) {
-      if (item.type.startsWith('image/')) {
-        const f = item.getAsFile()
-        if (f) { e.preventDefault(); uploadImages([makeClipboardImageFile(f, item.type, 0)]); return }
-      }
-    }
-  }
-
-  // composer 提交：与 NewSessionModal 完全同款的派生/编排/命名约定（W1 修订 2/3/4）
-  // 「基于」显示名：远端分支存的是 remote:<remote>:<branch>，展示时还原成 remote/branch
-  const baseLabel = (() => {
-    const v = base || defBranch
-    if (!v) return t('project.baseDefault')
-    if (!v.startsWith('remote:')) return v
-    const rest = v.slice('remote:'.length)
-    const sep = rest.indexOf(':')
-    return `${rest.slice(0, sep)}/${rest.slice(sep + 1)}`
-  })()
-
-  const goCreate = async () => {
-    if (!dir || creating) return
-    if (!prompt.trim()) { message.error(t('session.promptOrNameRequired')); return }
-    // 名字一律从需求派生：composer 上再放一个输入框，等于让人为「叫什么」分心，
-    // 而这件事 agent 开工后自己会改（前置约定第 3 条就是 ttmux rename）
-    let finalName = taskNameFromPrompt(prompt).slice(0, 16).replace(/[-，。,.\s]+$/g, '')
-    if (!finalName) {
-      const d = new Date()
-      finalName = 'task-' + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0') + '-' + String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0')
-    }
-    try {
-      setCreating(true)
-      let actual: string
-      const wantWt = isGit && wtMode === 'new'
-      let sessionDir = dir
-      if (wantWt) {
-        // 「基于」：本地分支存裸名，远端分支编码成 remote:<remote>:<branch>（冒号在 ref 名里非法，
-        // 无歧义），提交前拆回 {base, remote}——与 NewSessionModal 同一套约定
-        let baseReq: { base?: string; remote?: string } = base && base !== defBranch ? { base } : {}
-        if (base.startsWith('remote:')) {
-          const rest = base.slice('remote:'.length)
-          const sep = rest.indexOf(':')
-          baseReq = { base: rest.slice(sep + 1), remote: rest.slice(0, sep) }
-        }
-        const res = await api('POST', '/worktree-sessions', { name: finalName, dir, ...baseReq })
-        actual = res.name || res.data?.session || finalName
-        sessionDir = res.data?.path || dir
-      } else {
-        sessionDir = isGit && wtMode === 'existing' && wtPath ? wtPath : dir
-        const res = await api('POST', '/sessions', { name: finalName, dir: sessionDir })
-        actual = res.name || finalName
-      }
-      if (agent !== 'none') {
-        const cmd = agent === 'claude' ? (prefs.claudeCommand || 'claude') : (prefs.codexCommand || 'codex')
-        // 前置约定按工作区形态分两版：Roam 已建 worktree 的只要改分支名；
-        // 在主仓库/已有 worktree 里干活的，得让 agent 自己开分支——否则一堆任务全提交在主干上。
-        const naming = t(wantWt ? 'session.wt.namingHint' : 'session.wt.namingHintRepo') + '\n\n'
-        await api('POST', '/tasks/_/send', { sess: actual, msg: prompt.trim() ? `${cmd} ${shq(naming + prompt.trim())}` : cmd })
-        // 自动互审：登记跟踪并拉起 review-<会话> 监控会话，对话空闲即互审、意见回灌
-        if (autoReview) {
-          await api('POST', '/plugin/track', {
-            session: actual,
-            labels: { 'review:auto': 'true', role: 'author', workdir: sessionDir },
-          }).catch((e: any) => message.warning(t('session.autoReviewTrackFailed') + ': ' + e.message))
-        }
-      }
-      setPrompt(''); message.success(t('session.created')); openTerm(actual); refresh()
-    } catch (e: any) { message.error(e.message) }
-    finally { setCreating(false) }
-  }
   // 新开命令行（P4）：shell = 裸会话；Claude/Codex = 会话 + 启动 agent。孤儿复活/外部收编同款。
   const newCli = async (w: any, kind: 'shell' | 'claude' | 'codex') => {
     const base = (w.branch || 'wt').replace(/[^a-zA-Z0-9_.-]+/g, '-')
@@ -1460,83 +1378,9 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
           </span>
         </div>
 
-        {/* Composer（hero）：需求 ⏎ 开干 */}
-        <div ref={composerRef} className="tt-composer prj-in" style={{ animationDelay: '60ms' }}>
-          <Input.TextArea ref={promptRef} value={prompt} onChange={(e) => setPrompt(e.target.value)}
-            placeholder={isGit ? t('project.composerPlaceholder') : t('project.composerPlain')} autoSize={{ minRows: 2, maxRows: 6 }} variant="borderless"
-            onPaste={onPasteComposer}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); goCreate() } }} />
-          <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: 'none' }}
-            onChange={(e) => { const fs = e.target.files ? Array.from(e.target.files) : []; e.target.value = ''; if (fs.length) uploadImages(fs) }} />
-          {/* 控制条按「在哪干活 / 谁来干 / 动作」三组排，组内 6px、组间 16px——
-              从前是一长串等距的 pill 加一根竖分隔线，换行之后那根线孤零零吊在行尾。
-              分组一律用间距，不画线（设计 17 §5.3 同一条规矩）。
-              「基于哪个分支」「已有 worktree」也做成 pill 形下拉：一条工具条只有一种
-              控件长相，antd 的 Select 方框混在圆角 pill 里，高度和形状都对不上。 */}
-          <div className="tt-cbar">
-            {isGit && (
-              <span className="tt-cgrp">
-                {/* pill 一律是真按钮：<span onClick> 聚不上焦、键盘按不动，长得也不像能点 */}
-                <button type="button" className={`tt-pill${wtMode === 'new' ? ' on' : ''}`} aria-pressed={wtMode === 'new'} onClick={() => setWtMode('new')}><BranchIcon size={11} />{t('project.where.new')}</button>
-                <button type="button" className={`tt-pill${wtMode === 'existing' ? ' on' : ''}`} aria-pressed={wtMode === 'existing'}
-                  disabled={!wts.length} onClick={() => setWtMode('existing')}>{t('project.where.existing', { count: wts.length })}</button>
-                {wtMode === 'existing' && (
-                  <Dropdown trigger={['click']} menu={{
-                    selectedKeys: [wtPath],
-                    items: wts.map((w: any) => ({ key: w.path, label: w.branch || w.path.split('/').pop(), onClick: () => setWtPath(w.path) })),
-                  }}>
-                    <button type="button" className="tt-pill sel" title={t('session.wt.pickExisting')}>
-                      <BranchIcon size={11} />
-                      <b>{wts.find((w: any) => w.path === wtPath)?.branch || wtPath.split('/').pop() || '—'}</b>
-                      <ChevronDown size={10} />
-                    </button>
-                  </Dropdown>
-                )}
-                {/* 「基于」：本地 + 远端分支就地可选（远端编码成 remote:<remote>:<branch>） */}
-                {wtMode === 'new' && (
-                  <Dropdown trigger={['click']} menu={{
-                    selectedKeys: [base || defBranch],
-                    items: [
-                      ...(branches.length ? [{ key: 'g-local', type: 'group' as const, label: t('session.wt.localBranches'),
-                        children: branches.map((b) => ({ key: b, label: b, onClick: () => setBase(b) })) }] : []),
-                      ...(remoteBranches.length ? [{ key: 'g-remote', type: 'group' as const, label: t('session.wt.remoteBranches'),
-                        children: remoteBranches.map((r) => ({ key: `remote:${r.remote}:${r.name}`, label: `${r.remote}/${r.name}`, onClick: () => setBase(`remote:${r.remote}:${r.name}`) })) }] : []),
-                    ],
-                  }}>
-                    <button type="button" className="tt-pill sel" title={t('session.wt.base')}>
-                      {t('project.basedOnShort')}
-                      <b>{baseLabel}</b>
-                      <ChevronDown size={10} />
-                    </button>
-                  </Dropdown>
-                )}
-              </span>
-            )}
-            <span className="tt-cgrp">
-              <button type="button" className={`tt-pill${agent === 'claude' ? ' on' : ''}`} aria-pressed={agent === 'claude'} onClick={() => setAgent('claude')}>Claude</button>
-              <button type="button" className={`tt-pill${agent === 'codex' ? ' on' : ''}`} aria-pressed={agent === 'codex'} onClick={() => setAgent('codex')}>Codex</button>
-              <button type="button" className={`tt-pill${agent === 'none' ? ' on' : ''}`} aria-pressed={agent === 'none'} onClick={() => setAgent('none')}>{t('project.agent.none')}</button>
-            </span>
-            {/* 互审是开关不是三选一，自成一组——组间 16 的间距就是那道"隔开一档" */}
-            {agent !== 'none' && (
-              <span className="tt-cgrp">
-                <button type="button" className={`tt-pill${autoReview ? ' on' : ''}`} title={t('session.autoReviewTip')}
-                  aria-pressed={autoReview} onClick={() => setAutoReview((v) => !v)}>
-                  {autoReview ? <CheckIcon size={11} /> : <CircleIcon size={11} />}{t('session.autoReview')}
-                </button>
-              </span>
-            )}
-            {/* 动作组贴右：📎 和「开干」都是动作，跟左边那些「怎么干」的选项分开 */}
-            <span className="tt-cend">
-              {/* 与对话页 composer 同一枚话筒、同一位置（22 设计 §3.4） */}
-              <VoiceInput inline accent="var(--accent)" onResult={(text) => setPrompt((v) => (v ? v + ' ' : '') + text)} />
-              <button type="button" className="tt-pill ico" title={t('project.attachImage')} aria-label={t('project.attachImage')}
-                disabled={uploading} onClick={() => fileRef.current?.click()}>
-                <PaperclipIcon size={13} />
-              </button>
-              <Button type="primary" size="small" className="prj-go" loading={creating} onClick={goCreate}>{t('project.go')}</Button>
-            </span>
-          </div>
+        {/* Composer（hero）：需求 ⏎ 开干——抽成 TaskComposer，项目行「+」/ ⌘N 的弹窗用同一份 */}
+        <div ref={composerRef}>
+          <TaskComposer ref={composerApi} dir={dir} isGit={isGit} openTerm={openTerm} onCreated={() => refresh()} />
         </div>
 
         {/* Tabs：任务 | Worktree | 编队 | 活动（非 git 只有任务）。同样 sticky，贴在项目头下面 */}
@@ -1942,7 +1786,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
             <FileBrowser
               dir={proj.dir}
               layout="split"
-              onInsertPath={(p) => setPrompt((cur) => appendPaths(cur, [p]))}
+              onInsertPath={(p) => composerApi.current?.insert(p)}
             />
           </div>
         )}
