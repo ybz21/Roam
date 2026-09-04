@@ -12,7 +12,7 @@ import { useState, type ReactNode } from 'react'
 import { Dropdown, Tooltip } from 'antd'
 import { useI18n } from '../../i18n'
 import { relTime } from '../../time-format'
-import { AgentLogo, ChevronDown, PlusIcon, TerminalIcon } from '../../icons'
+import { AgentLogo, ChevronDown, MoreIcon, PlusIcon, TerminalIcon } from '../../icons'
 import { icoOf } from '../projects/project-list/project-model'
 import { isLooseTask, taskKeyOf, type TaskKey } from '../sessions/task-key'
 import type { TaskTree, TreeSession, TreeTask } from './task-tree'
@@ -37,7 +37,7 @@ function dot(o: { running?: boolean; waiting?: boolean; unfinished?: boolean }, 
   return idlePlaceholder ? <i className="dot idle" /> : null
 }
 
-export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask, onSession, onAddProject, onRename, onRenameTask, onNewTask, onKill, onFinishTask, onNewInTask }: {
+export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask, onSession, onAddProject, onRename, onRenameTask, onNewTask, onKill, onFinishTask, onNewInTask, onRemoveProject }: {
   tree: TaskTree
   activeTask: TaskKey | null
   /** 当前标签是哪个会话：它所在的会话行再铺一层底 */
@@ -58,9 +58,13 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
   onFinishTask?: (task: TreeTask) => void
   /** 右键任务行：在它的 worktree 里派生一个终端 / Claude / Codex */
   onNewInTask?: (key: TaskKey, kind: 'shell' | 'claude' | 'codex') => void
+  /** 项目行「…」菜单里的「移除项目」（只动台账，不动目录和会话） */
+  onRemoveProject?: (key: string) => void
 }) {
   const { t } = useI18n()
   const [closed, setClosed] = useState<Set<string>>(readClosed)
+  // 「显示空闲 worktree」：没会话的 worktree 平时不进树（Orca 的 hidden worktrees），从「…」菜单打开才列出来；纯视图态
+  const [showIdle, setShowIdle] = useState<Set<string>>(() => new Set())
   const toggle = (key: string) => setClosed((cur) => {
     const next = new Set(cur)
     if (next.has(key)) next.delete(key); else next.add(key)
@@ -151,6 +155,20 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
     )
   }
 
+  // 空闲 / 待收尾的 worktree：淡一档的卡，没有会话行；右键（或「…」）能派生、收尾
+  const idleCard = (task: TreeTask) => (
+    <div key={task.key} className="tt-tree-task idle">
+      <Dropdown trigger={['contextMenu']} menu={taskMenu(task)}>
+      <button type="button" className="tt-nav-item tt-tree-row head" onClick={() => onTask(task.key)} title={task.path}>
+        <span className="ic">{dot({ unfinished: task.unfinished }, true)}</span>
+        <span className="nm">{task.name}</span>
+        <span className="bd">{task.unfinished ? t('tree.unfinishedShort', { n: task.ahead }) : t('tree.idle')}</span>
+      </button>
+      </Dropdown>
+      {task.branch && <div className="tt-tree-branch"><span className="br">{task.branch}</span>{task.merged && <span className="st ok">{t('tree.merged')}</span>}</div>}
+    </div>
+  )
+
   return (
     <div className="tt-tree">
       <div className="tt-tree-head">
@@ -168,27 +186,35 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
         // 不是活着的任务，用户记不住也不该在这里管——待收尾的数量在项目行徽标上，处理去右栏
         // Worktree 面板或项目主页
         const live = p.tasks.filter((x) => x.sessions.length > 0)
+        const idle = p.tasks.filter((x) => x.sessions.length === 0)
         return (
           <div key={p.key} className="tt-tree-proj">
             {/* 项目的身份就是项目卡上那枚按名字取色的首字母圆标（icoOf），不另画图标 */}
-            {/* 项目行右键：开新任务（⌘N 同款）/ 项目主页——行里不放「+」，一排图标里多一枚没人认得 */}
-            <Dropdown trigger={['contextMenu']} menu={{ items: [
-              ...(onNewTask ? [{ key: 'new', icon: <PlusIcon size={13} />, label: t('tree.menu.newTask'), onClick: () => onNewTask(p.dir) }] : []),
-              { key: 'home', label: t('tree.menu.projectHome'), onClick: () => onProject(p.key) },
-            ] }}>
-            <button type="button" className={`tt-nav-item tt-tree-row${open ? '' : ' closed'}`} title={p.dir} onClick={() => onProject(p.key)}>
+            {/* 项目行右端照 Orca：[…] 菜单 · [+] 开任务 · [˅] 折叠，都是看得见的按钮，不靠右键 */}
+            <button type="button" className={`tt-nav-item tt-tree-row proj${open ? '' : ' closed'}`} title={p.dir} onClick={() => onProject(p.key)}>
               <span className="ic"><span className="av" style={{ color: icoOf(p.key)[0], background: icoOf(p.key)[1] }}>{p.name.slice(0, 1).toUpperCase()}</span></span>
               <span className="nm">{p.name}</span>
               {p.needs > 0 && <span className="bd">{p.needs}</span>}
-              {/* 折叠箭头是行内第二个可点目标：点它只折不跳，点别处进项目主页 */}
+              <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: [
+                { key: 'home', label: t('tree.menu.projectHome'), onClick: () => onProject(p.key) },
+                { key: 'idle', label: showIdle.has(p.key) ? t('tree.menu.hideIdle') : t('tree.menu.showIdle', { n: idle.length }), disabled: !idle.length && !showIdle.has(p.key),
+                  onClick: () => setShowIdle((cur) => { const next = new Set(cur); if (next.has(p.key)) next.delete(p.key); else next.add(p.key); return next }) },
+                ...(onRemoveProject ? [{ type: 'divider' as const }, { key: 'remove', label: t('project.remove'), danger: true, onClick: () => onRemoveProject(p.key) }] : []),
+              ] }}>
+                <span className="act" role="button" aria-label={t('common.more')} onClick={(e) => e.stopPropagation()}><MoreIcon size={14} /></span>
+              </Dropdown>
+              {onNewTask && (
+                <span className="act" role="button" aria-label={t('tree.menu.newTask')} title={t('tree.menu.newTask')}
+                  onClick={(e) => { e.stopPropagation(); onNewTask(p.dir) }}><PlusIcon size={13} /></span>
+              )}
               <span className="chev" role="button" aria-label={open ? t('common.collapse') : t('common.expand')}
                 onClick={(e) => { e.stopPropagation(); toggle(p.key) }}><ChevronDown size={14} /></span>
             </button>
-            </Dropdown>
             {open && (
               <>
                 {live.map((x) => taskRows(x, 1))}
-                {!live.length && <div className="tt-tree-empty">{t('tree.noTasks')}</div>}
+                {showIdle.has(p.key) && idle.map((x) => idleCard(x))}
+                {!live.length && !showIdle.has(p.key) && <div className="tt-tree-empty">{t('tree.noTasks')}</div>}
               </>
             )}
           </div>

@@ -979,7 +979,11 @@ export default function App() {
               onRename={setRenameInTree}
               onRenameTask={(key, name) => { setRenameTask({ key, name }); setRenameTaskVal(prefs.taskNames?.[key] || name) }}
               onNewTask={setNewTaskDir} onKill={(n) => { void closer.beginClose(n) }} onFinishTask={finishTask}
-              onNewInTask={(key, kind) => { void newTerminalInTask(kind, key) }} />}
+              onNewInTask={(key, kind) => { void newTerminalInTask(kind, key) }}
+              onRemoveProject={(key) => antModal.confirm({
+                title: t('project.removeConfirm'), okText: t('project.remove'), okButtonProps: { danger: true }, cancelText: t('common.cancel'),
+                onOk: async () => { try { await api('DELETE', `/projects/${encodeURIComponent(key)}`); antMessage.success(t('project.removed')); treeReload.current?.() } catch (e: any) { antMessage.error(e.message) } },
+              })} />}
             hubAlarm={hubHealth.level === 'ok' ? undefined : t('hub.why.' + (hubHealth.reasons[0] || 'unknown'))}
             node={curNode ? {
               name: curNode.name,
@@ -1008,11 +1012,16 @@ export default function App() {
               onPressEnter={() => document.querySelector<HTMLButtonElement>('.ant-modal .ant-btn-primary')?.click()} />
             <div style={{ marginTop: 8, color: 'var(--text-dimmer)', fontSize: 'var(--fs-meta)' }}>{t('tree.taskNameHint')}</div>
           </Modal>
-          <Modal open={!!newTaskDir} footer={null} width={860} destroyOnClose onCancel={() => setNewTaskDir(null)}
-            title={t('tree.newTaskIn', { name: (newTaskDir || '').replace(/\/+$/, '').split('/').pop() || '' })}>
+          {/* 开任务（照 Orca 的「创建工作树」框）：顶上先选项目，下面就是项目主页那个 composer */}
+          <Modal open={!!newTaskDir} footer={null} width={860} destroyOnClose onCancel={() => setNewTaskDir(null)} title={t('tree.newTask')}>
             {newTaskDir && (
-              <TaskComposer dir={newTaskDir} isGit={treeSrc.projects.find((p: any) => p.dir === newTaskDir)?.git !== false}
-                openTerm={openTerm} onCreated={() => setNewTaskDir(null)} autoFocus />
+              <>
+                <div className="tt-lbl">{t('tree.projectField')}</div>
+                <Select value={newTaskDir} onChange={(v) => setNewTaskDir(v)} style={{ width: '100%', marginBottom: 12 }}
+                  options={treeSrc.projects.map((p: any) => ({ value: p.dir, label: <span>{p.name} <span style={{ color: 'var(--text-dimmer)', fontFamily: 'var(--mono)', fontSize: 'var(--fs-micro)', marginLeft: 8 }}>{p.dir}</span></span> }))} />
+                <TaskComposer key={newTaskDir} dir={newTaskDir} isGit={treeSrc.projects.find((p: any) => p.dir === newTaskDir)?.git !== false}
+                  openTerm={openTerm} onCreated={() => setNewTaskDir(null)} autoFocus />
+              </>
             )}
           </Modal>
           <NewProjectModal open={newProjectOpen} onClose={() => setNewProjectOpen(false)} />
