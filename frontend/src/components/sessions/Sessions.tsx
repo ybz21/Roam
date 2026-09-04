@@ -148,6 +148,7 @@ export default function Sessions({ openTerm, closeTerm, activeTerm, embedded }: 
     let st: any = null
     try { st = (await api('GET', `/sessions/${encodeURIComponent(n)}/worktree-status`))?.data } catch {}
     if (!st?.inWorktree || st.external) { setConfirmKill(n); return }
+    if ((st.others || 0) > 0) { setConfirmKill(n); return } // 同 worktree 还有别的会话：只关会话，不碰 worktree
     if ((st.dirty || 0) > 0 || (st.untracked || 0) > 0 || (st.committedAhead || 0) > 0) {
       setClosing({ name: n, st })
       return

@@ -32,6 +32,16 @@ export function useSessionCloser(closeTerm: (n: string) => void, afterClose?: ()
     let st: any = null
     try { st = (await api('GET', `/sessions/${encodeURIComponent(n)}/worktree-status`))?.data } catch {}
     const unfinished = (st?.dirty || 0) > 0 || (st?.untracked || 0) > 0 || (st?.committedAhead || 0) > 0
+    // worktree 里还有别的会话：只关这一个，worktree 和分支一根毛都不碰（收尾整个任务走 finishTask）
+    if (st?.inWorktree && (st.others || 0) > 0) {
+      modal.confirm({
+        title: t('session.closeConfirm', { name: sessionDisplay(n) }),
+        content: <div style={{ color: 'var(--text-dim)', fontSize: 'var(--fs-sm)' }}>{t('session.closeOthersNote', { n: st.others })}</div>,
+        okText: t('session.close'), okButtonProps: { danger: true }, cancelText: t('common.cancel'),
+        onOk: () => kill(n),
+      })
+      return
+    }
     if (!st?.inWorktree || st.external || (!unfinished && !st.base)) {
       modal.confirm({
         title: t('session.closeConfirm', { name: sessionDisplay(n) }),

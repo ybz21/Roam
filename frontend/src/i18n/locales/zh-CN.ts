@@ -588,6 +588,7 @@ const zhCN = {
   'session.closeAnyway': '仍要关闭',
   'session.close': '关闭',
   'session.closeConfirm': '关闭 {name}？',
+  'session.closeOthersNote': '这个 worktree 里还有 {n} 个会话在用，只结束这一个，worktree 和分支不动。',
   'dirPicker.title': '选择工作目录',
   'dirPicker.chooseCurrent': '选择此目录',
   'dirPicker.home': '家目录',

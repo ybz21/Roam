@@ -255,6 +255,14 @@ func (a *API) SessionWorktreeStatus(c *gin.Context) {
 				res["pushed"] = w.Pushed         // 三态细化：已提交/已推送
 				res["mergedInto"] = w.MergedInto // 合入检测（10 §5）：W7 弹窗按此改文案
 				res["mergedKind"] = w.MergedKind
+				// 这个 worktree 里除了自己还有几个会话：>0 时前端只关会话、不碰 worktree
+				others := 0
+				for _, s := range w.Sessions {
+					if s.Session != name {
+						others++
+					}
+				}
+				res["others"] = others
 			}
 		}
 	}
@@ -452,6 +460,7 @@ func (a *API) SessionCloseWithWorktree(c *gin.Context) {
 		Path         string `json:"path"`
 		Strategy     string `json:"strategy"`
 		ExpectedHead string `json:"expectedHead"`
+		Force        bool   `json:"force"` // worktree 里还有别的会话也照删（收尾整个任务时前端已经确认过）
 	}
 	if err := c.ShouldBindJSON(&b); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
@@ -471,6 +480,27 @@ func (a *API) SessionCloseWithWorktree(c *gin.Context) {
 			return
 		}
 		c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "STAGE_FAILED", "message": err.Error(), "stage": stage, "done": stages}})
+	}
+	// merge / discard 会删 worktree：里面还有别的会话在跑就拒绝——之前 IgnoreSessions 一路放行，
+	// 关掉一个会话把同 worktree 的另外两个会话的目录一起删了（分支也没了）
+	if (b.Mode == "merge" || b.Mode == "discard") && b.Path != "" && !b.Force {
+		if list, err := a.WT.List(ctx, b.Path); err == nil {
+			for _, w := range list {
+				if w.Path != b.Path {
+					continue
+				}
+				others := []string{}
+				for _, s := range w.Sessions {
+					if s.Session != name {
+						others = append(others, s.Session)
+					}
+				}
+				if len(others) > 0 {
+					c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "WORKTREE_IN_USE", "message": "worktree 里还有别的会话", "sessions": others}})
+					return
+				}
+			}
+		}
 	}
 	kill := func() error {
 		out, err := a.TT.Run("kill", name, "--yes")
