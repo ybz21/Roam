@@ -103,13 +103,13 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
   const sessionRow = (task: TaskKey, s: TreeSession, lvl: 1 | 2 | 3) => (
     <Dropdown key={s.name} trigger={['contextMenu']} menu={sessionMenu(task, s)}>
       <button type="button"
-        className={`tt-nav-item tt-tree-row lvl${lvl}${activeTask === task && activeSession === s.name ? ' on' : ''}`}
-        onClick={() => onSession(task, s.name)} title={s.name} onDoubleClick={onRename ? () => onRename(s.name) : undefined}
+        className={`tt-nav-item tt-tree-row lvl${lvl}${activeTask === task && activeSession === s.name ? ' on' : ''}${s.dormant ? ' dormant' : ''}`}
+        onClick={() => onSession(task, s.name)} title={s.dormant ? t('session.dormant.hint') : s.name} onDoubleClick={onRename ? () => onRename(s.name) : undefined}
         aria-current={activeTask === task && activeSession === s.name ? 'true' : undefined}>
         <span className="ic">{s.agent ? <AgentLogo kind={s.agent} size={15} /> : <TerminalIcon size={15} />}</span>
         <span className="nm">{s.label}</span>
-        {dot(s, false)}
-        {s.at ? <span className="tm">{ago(s.at, t)}</span> : null}
+        {s.dormant ? <span className="bd">{t('tree.dormant')}</span> : dot(s, false)}
+        {!s.dormant && s.at ? <span className="tm">{ago(s.at, t)}</span> : null}
       </button>
     </Dropdown>
   )

@@ -335,6 +335,7 @@ const enUS = {
   'tree.menu.showIdle': 'Show idle worktrees ({n})',
   'tree.menu.hideIdle': 'Hide idle worktrees',
   'tree.idle': 'idle',
+  'tree.dormant': 'dormant',
   'tree.newTask': 'New task',
   'tree.projectField': 'Project',
   'tree.menu.projectHome': 'Project home',

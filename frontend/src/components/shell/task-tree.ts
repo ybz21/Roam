@@ -12,6 +12,8 @@ export type TreeSession = {
   label: string
   /** 最近活动（unix 秒），行尾的「1d」 */
   at?: number
+  /** 休眠：被重启带走、台账还认得，点开即在原目录重开 */
+  dormant?: boolean
   agent?: 'claude' | 'codex'
   running?: boolean
   waiting?: boolean
@@ -43,10 +45,10 @@ export type TaskTree = { projects: TreeProject[]; loose: TreeSession[] }
 type ProjIn = {
   key: string; name: string; dir: string; git: boolean
   waiting?: number; unfinished?: number
-  top?: { name: string; label?: string; running?: boolean; waiting?: boolean; agent?: 'claude' | 'codex' }[] | null
-  needs?: { name: string; label?: string; running?: boolean; waiting?: boolean; agent?: 'claude' | 'codex' }[] | null
+  top?: { name: string; label?: string; running?: boolean; waiting?: boolean; agent?: 'claude' | 'codex'; state?: string }[] | null
+  needs?: { name: string; label?: string; running?: boolean; waiting?: boolean; agent?: 'claude' | 'codex'; state?: string }[] | null
 }
-type WtIn = { path: string; branch: string; isMain: boolean; committedAhead?: number; dirty?: number; untracked?: number; behind?: number; mergedInto?: string; pushed?: boolean; sessions?: { session: string }[] | null }
+type WtIn = { path: string; branch: string; isMain: boolean; committedAhead?: number; dirty?: number; untracked?: number; behind?: number; mergedInto?: string; pushed?: boolean; sessions?: { session: string; dormant?: boolean }[] | null }
 type SessIn = { name: string; label?: string; lastActivity?: number; agent?: 'claude' | 'codex' }
 
 export function buildTaskTree(o: {
@@ -63,12 +65,13 @@ export function buildTaskTree(o: {
 }): TaskTree {
   // 会话的展示信息：先从 /projects 的 top / needs 里捞（带 agent / running / waiting），再补 /sessions 的 label
   const info = new Map<string, TreeSession>()
-  const put = (s: { name: string; label?: string; running?: boolean; waiting?: boolean; agent?: 'claude' | 'codex'; lastActivity?: number }) => {
+  const put = (s: { name: string; label?: string; running?: boolean; waiting?: boolean; agent?: 'claude' | 'codex'; lastActivity?: number; state?: string; dormant?: boolean }) => {
     const cur = info.get(s.name) || { name: s.name, label: s.label || s.name }
     info.set(s.name, {
       ...cur,
       label: s.label || cur.label,
       at: s.lastActivity || cur.at,
+      dormant: s.dormant || s.state === 'dormant' || cur.dormant,
       agent: s.agent || cur.agent,
       running: s.running ?? cur.running,
       waiting: s.waiting ?? cur.waiting,
@@ -92,6 +95,7 @@ export function buildTaskTree(o: {
       if (wt.isMain) continue // 主仓库不是任务位：里面的会话归散会话（D4）
       const names = (wt.sessions || []).map((s) => s.session).filter(Boolean)
       names.forEach((n) => placed.add(n))
+      for (const s of wt.sessions || []) if (s.dormant) put({ name: s.session, dormant: true })
       const sessions = names.map(sess)
       const ahead = wt.committedAhead || 0
       tasks.push({

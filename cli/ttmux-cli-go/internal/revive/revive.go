@@ -157,8 +157,10 @@ func Revive(rt runtime.Runtime, meta *sessmeta.Store, name string) (Result, erro
 		if cd := agent.ConversationDirFor(row.AgentKind, uuid); cd != "" && cd != dir {
 			return res, nil
 		}
+		// 只把命令**填在命令行上**，不替人回车：接不接、什么时候接由人定——
+		// 一次点开十几个会话同时 resume 会把机器卡住，而且有的只是想看看目录
 		_ = meta.SetAgentSession(sess, uuid)
-		_ = rt.Tmux("send-keys", "-t", "="+sess+":", cmd, "C-m")
+		_ = rt.Tmux("send-keys", "-t", "="+sess+":", cmd)
 		res.Resumed = uuid
 	}
 	return res, nil

@@ -661,6 +661,8 @@ html[data-pointer="coarse"] .tt-csearch-line, html[data-pointer="coarse"] .tt-cs
 .tt-tree-sessions .tt-tree-row { padding-left: 30px; padding-right: 8px; min-height: 30px; border-radius: var(--r-xs); margin: 0 6px; width: calc(100% - 12px); gap: 8px; }
 .tt-tree-sessions .tt-tree-row .nm { flex: 1 1 auto; }
 .tt-tree-sessions .tt-tree-row .nm { color: var(--text-dim); font-size: var(--fs-sm); font-weight: 400; }
+/* 休眠会话（重启带走、点开即在原目录重开）：整行淡一档 */
+.tt-tree-row.dormant .ic, .tt-tree-row.dormant .nm { opacity: .55; }
 .tt-tree-sessions .tt-tree-row.on .nm { color: var(--text-bright); }
 :where(html[data-pointer="fine"]) .tt-tree-sessions .tt-tree-row:hover .nm { color: var(--text-bright); }
 .tt-tree-sessions .tt-tree-row .tm { flex: 0 0 auto; margin-left: 0; color: var(--text-dimmer); font: 400 var(--fs-micro)/1 var(--mono); }

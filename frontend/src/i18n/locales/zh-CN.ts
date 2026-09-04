@@ -335,6 +335,7 @@ const zhCN = {
   'tree.menu.showIdle': '显示空闲 worktree（{n}）',
   'tree.menu.hideIdle': '隐藏空闲 worktree',
   'tree.idle': '空闲',
+  'tree.dormant': '休眠',
   'tree.newTask': '开任务',
   'tree.projectField': '项目',
   'tree.menu.projectHome': '项目主页',
