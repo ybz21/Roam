@@ -7,224 +7,133 @@ import (
 	"time"
 )
 
-// linkFixture 造一个 transcript 目录，并允许「在某个时刻之后写出一份新对话」。
+// linkFixture：假的项目夹 + 假的进程（命令行、启动时刻），reconcile 只看这些。
 type linkFixture struct {
 	t     *testing.T
-	dirs  map[string]string // 会话归属目录 → 该目录的 transcript 目录
+	dirs  map[string]string // cwd → 该 cwd 的对话目录
+	argv  map[int][]string  // pid → 命令行
+	start map[int]time.Time // pid → 启动时刻
 	got   map[string]string // 会话 → 认到的 uuid
-	kinds map[string]string // 会话 → 一起落台账的 agent 类型
 }
 
 func newLinkFixture(t *testing.T) *linkFixture {
-	return &linkFixture{t: t, dirs: map[string]string{}, got: map[string]string{}, kinds: map[string]string{}}
+	return &linkFixture{t: t, dirs: map[string]string{}, argv: map[int][]string{}, start: map[int]time.Time{}, got: map[string]string{}}
 }
 
-// project 注册一个工作目录，返回它的 transcript 目录。
-func (f *linkFixture) project(home string) string {
+func (f *linkFixture) project(cwd string) { f.dirs[cwd] = f.t.TempDir() }
+
+// proc 造一个进程：启动于 startAgo 之前，命令行 argv
+func (f *linkFixture) proc(pid int, startAgo time.Duration, argv ...string) {
+	f.argv[pid] = argv
+	f.start[pid] = time.Now().Add(-startAgo)
+}
+
+// transcript 在某 cwd 的对话目录里写一份，mtime = modAgo 之前
+func (f *linkFixture) transcript(cwd, uuid string, modAgo time.Duration) {
 	f.t.Helper()
-	dir := f.t.TempDir()
-	f.dirs[home] = dir
-	return dir
-}
-
-func (f *linkFixture) homeOf(sess string) string {
-	for home := range f.dirs {
-		if sess == "" {
-			continue
-		}
-		// 测试里会话名以其归属目录为前缀，简单映射即可
-		if len(sess) > len(home) && sess[:len(home)] == home {
-			return home
-		}
-	}
-	return ""
-}
-
-func (f *linkFixture) link(sess, uuid, kind string) { f.got[sess] = uuid; f.kinds[sess] = kind }
-
-// writeTranscript 在某工作目录的 transcript 目录里写一份对话。
-func (f *linkFixture) writeTranscript(home, uuid string) {
-	f.t.Helper()
-	p := filepath.Join(f.dirs[home], uuid+".jsonl")
-	if err := os.WriteFile(p, []byte(`{"sessionId":"`+uuid+`"}`+"\n"), 0o600); err != nil {
+	p := filepath.Join(f.dirs[cwd], uuid+".jsonl")
+	if err := os.WriteFile(p, []byte("{}\n"), 0o600); err != nil {
 		f.t.Fatal(err)
 	}
-	// 确保 mtime 严格晚于上一轮扫描时刻
-	now := time.Now().Add(time.Second)
-	_ = os.Chtimes(p, now, now)
+	m := time.Now().Add(-modAgo)
+	_ = os.Chtimes(p, m, m)
 }
 
-// linkerWith 把 claudeProjectDir 换成 fixture 的映射（生产里它算的是 ~/.claude/projects）。
-func (f *linkFixture) run(l *agentLinker, running map[string]string) {
-	orig := projectDirFor
+func (f *linkFixture) run(l *agentLinker, procs map[string]agentProc) {
+	o1, o2, o3 := projectDirFor, procArgvOf, procStartOf
 	projectDirFor = func(dir string) string { return f.dirs[dir] }
-	defer func() { projectDirFor = orig }()
-	l.note(running, f.homeOf, f.link)
+	procArgvOf = func(pid int) []string { return f.argv[pid] }
+	procStartOf = func(pid int) time.Time { return f.start[pid] }
+	defer func() { projectDirFor, procArgvOf, procStartOf = o1, o2, o3 }()
+	l.reconcile(procs, func(sess, uuid, _ string) { f.got[sess] = uuid })
 }
 
-// 正常路径，且**对话是迟到的**：Claude Code 要等第一条消息才把对话落盘，
-// 中间隔多久取决于人什么时候开口。所以不能只看跃迁后那一轮。
-func TestLinksWhenTranscriptArrivesLate(t *testing.T) {
+const u1, u2, u3 = "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222", "33333333-3333-3333-3333-333333333333"
+
+// 新开的 claude：对话是迟到的（等第一条消息才落盘），出现前不认、出现后认；上一段的旧文件不算
+func TestLinksNewTranscriptOnlyAfterStart(t *testing.T) {
 	f := newLinkFixture(t)
 	f.project("/repo/a")
+	f.transcript("/repo/a", u1, time.Hour) // 上一段
+	f.proc(1, 10*time.Minute, "claude")
 	l := newAgentLinker()
-
-	// 第一轮只建基线：此刻在跑的会话可能早就跑着了，认不得
-	f.run(l, map[string]string{"/repo/a-1": "claude"})
+	procs := map[string]agentProc{"s1": {Kind: "claude", Dir: "/repo/a", Pid: 1}}
+	f.run(l, procs)
 	if len(f.got) != 0 {
-		t.Fatalf("第一轮不该认任何东西: %v", f.got)
+		t.Fatalf("还没说话不该认（更不该认上一段）: %v", f.got)
 	}
-
-	// 第二轮：另一个会话刚起来，但用户还没开口，目录里什么都没多
-	f.run(l, map[string]string{"/repo/a-1": "claude", "/repo/a-2": "claude"})
-	if len(f.got) != 0 {
-		t.Fatalf("对话还没出现时不该认: %v", f.got)
-	}
-
-	// 又过了几轮，用户开口了，对话这才落盘
-	f.writeTranscript("/repo/a", "uuid-new")
-	f.run(l, map[string]string{"/repo/a-1": "claude", "/repo/a-2": "claude"})
-	if f.got["/repo/a-2"] != "uuid-new" {
-		t.Fatalf("迟到的对话也该认到: %v", f.got)
-	}
-	// 类型要一起落台账：恢复那一侧不猜类型，没有它就只开壳
-	if f.kinds["/repo/a-2"] != "claude" {
-		t.Fatalf("认到对话时该把类型一起交出去: %v", f.kinds)
-	}
-	if _, ok := f.got["/repo/a-1"]; ok {
-		t.Fatal("上一轮就在跑的会话不该被认（它的对话早写完了）")
+	f.transcript("/repo/a", u2, 0)
+	f.run(l, procs)
+	if f.got["s1"] != u2 {
+		t.Fatalf("落盘后该认到: %v", f.got)
 	}
 }
 
-// 同目录里**别的会话**继续说话会刷新它自己那份的 mtime——那不算「新出现」。
-// 判据必须是文件名集合的差集，不是 mtime。
-func TestOtherSessionsWritesDoNotCountAsNew(t *testing.T) {
+// --resume <id>：命令行就是事实，文件在不在都认
+func TestResumeIdWinsEvenBeforeFile(t *testing.T) {
 	f := newLinkFixture(t)
 	f.project("/repo/a")
+	f.proc(1, time.Minute, "claude", "--resume", u3)
 	l := newAgentLinker()
-	// 目录里先有一份别人的对话
-	f.writeTranscript("/repo/a", "uuid-someone-else")
-	f.run(l, map[string]string{})
-
-	// 我们的会话起来了；随后那份**旧**对话被刷新（别人在说话）
-	f.run(l, map[string]string{"/repo/a-1": "claude"})
-	f.writeTranscript("/repo/a", "uuid-someone-else") // 重写 = mtime 变新
-	f.run(l, map[string]string{"/repo/a-1": "claude"})
-	if len(f.got) != 0 {
-		t.Fatalf("别人那份被刷新不该被当成我们的: %v", f.got)
-	}
-
-	// 真正属于我们的那份出现了，才认
-	f.writeTranscript("/repo/a", "uuid-ours")
-	f.run(l, map[string]string{"/repo/a-1": "claude"})
-	if f.got["/repo/a-1"] != "uuid-ours" {
-		t.Fatalf("该认 uuid-ours: %v", f.got)
+	f.run(l, map[string]agentProc{"s1": {Kind: "claude", Dir: "/repo/a", Pid: 1}})
+	if f.got["s1"] != u3 {
+		t.Fatalf("该认命令行里的 id: %v", f.got)
 	}
 }
 
-// 等太久就放弃：隔了半小时才冒出来的那份更可能是用户自己另开的。
-func TestGivesUpAfterWindow(t *testing.T) {
+// 同一目录同时跑两个 claude：靠文件猜不准，谁都不认；带 --resume 的那个照认
+func TestSkipsAmbiguousSameDir(t *testing.T) {
 	f := newLinkFixture(t)
 	f.project("/repo/a")
+	f.transcript("/repo/a", u1, 0)
+	f.proc(1, time.Minute, "claude")
+	f.proc(2, time.Minute, "claude", "--resume", u2)
 	l := newAgentLinker()
-	base := time.Now()
-	linkNow = func() time.Time { return base }
-	defer func() { linkNow = time.Now }()
-
-	f.run(l, map[string]string{})
-	f.run(l, map[string]string{"/repo/a-1": "claude"}) // 进入等待
-
-	linkNow = func() time.Time { return base.Add(linkWindow + time.Minute) }
-	f.writeTranscript("/repo/a", "uuid-late")
-	f.run(l, map[string]string{"/repo/a-1": "claude"})
-	if len(f.got) != 0 {
-		t.Fatalf("超窗之后不该再认: %v", f.got)
+	f.run(l, map[string]agentProc{"s1": {Kind: "claude", Dir: "/repo/a", Pid: 1}, "s2": {Kind: "claude", Dir: "/repo/a", Pid: 2}})
+	if _, ok := f.got["s1"]; ok {
+		t.Fatalf("同目录两个 claude 不该靠文件认: %v", f.got)
+	}
+	if f.got["s2"] != u2 {
+		t.Fatalf("带 --resume 的照认: %v", f.got)
 	}
 }
 
-// 同一目录同时起了两个会话 → 分不清谁是谁，一个都不认。
-func TestSkipsWhenTwoSessionsStartInSameDir(t *testing.T) {
+// claude 停了再起，新对话换掉旧的；同一段不重复写台账
+func TestRelinksAfterRestart(t *testing.T) {
 	f := newLinkFixture(t)
 	f.project("/repo/a")
+	f.proc(1, 10*time.Minute, "claude")
+	f.transcript("/repo/a", u1, time.Minute)
 	l := newAgentLinker()
-	f.run(l, map[string]string{})
-
-	f.run(l, map[string]string{"/repo/a-1": "claude", "/repo/a-2": "claude"})
-	f.writeTranscript("/repo/a", "uuid-x")
-	f.run(l, map[string]string{"/repo/a-1": "claude", "/repo/a-2": "claude"})
+	procs := map[string]agentProc{"s1": {Kind: "claude", Dir: "/repo/a", Pid: 1}}
+	f.run(l, procs)
+	if f.got["s1"] != u1 {
+		t.Fatalf("首次该认到: %v", f.got)
+	}
+	delete(f.got, "s1")
+	f.run(l, procs)
 	if len(f.got) != 0 {
-		t.Fatalf("同目录两个会话同时起来时不该认: %v", f.got)
+		t.Fatalf("同一段不该重复写: %v", f.got)
+	}
+	// 停了
+	f.run(l, map[string]agentProc{})
+	// 再起，新对话
+	f.proc(2, 0, "claude")
+	f.transcript("/repo/a", u2, 0)
+	f.run(l, map[string]agentProc{"s1": {Kind: "claude", Dir: "/repo/a", Pid: 2}})
+	if f.got["s1"] != u2 {
+		t.Fatalf("重开后该认新对话: %v", f.got)
 	}
 }
 
-// 一轮里冒出好几份对话 → 同样不敢认。
-func TestSkipsWhenSeveralTranscriptsAppear(t *testing.T) {
-	f := newLinkFixture(t)
-	f.project("/repo/a")
-	l := newAgentLinker()
-	f.run(l, map[string]string{})
-
-	f.run(l, map[string]string{"/repo/a-1": "claude"})
-	f.writeTranscript("/repo/a", "uuid-1")
-	f.writeTranscript("/repo/a", "uuid-2")
-	f.run(l, map[string]string{"/repo/a-1": "claude"})
-	if len(f.got) != 0 {
-		t.Fatalf("一次冒出多份对话时不该认: %v", f.got)
-	}
-}
-
-// 没有新对话（会话跑的不是 claude，或对话还没落盘）→ 不认，下一轮再说。
-func TestSkipsWhenNoNewTranscript(t *testing.T) {
-	f := newLinkFixture(t)
-	f.project("/repo/a")
-	l := newAgentLinker()
-	f.run(l, map[string]string{})
-	f.run(l, map[string]string{"/repo/a-1": "claude"})
-	if len(f.got) != 0 {
-		t.Fatalf("没有新对话时不该认: %v", f.got)
-	}
-}
-
-// codex 不走这条路（它没有 --session-id，对话也不在 ~/.claude/projects）。
 func TestIgnoresCodex(t *testing.T) {
 	f := newLinkFixture(t)
 	f.project("/repo/a")
+	f.transcript("/repo/a", u1, 0)
+	f.proc(1, 0, "codex")
 	l := newAgentLinker()
-	f.run(l, map[string]string{"/repo/a-1": "codex"})
-	f.writeTranscript("/repo/a", "uuid-1")
-	f.run(l, map[string]string{"/repo/a-1": "codex"})
+	f.run(l, map[string]agentProc{"s1": {Kind: "codex", Dir: "/repo/a", Pid: 1}})
 	if len(f.got) != 0 {
 		t.Fatalf("codex 不该被认: %v", f.got)
-	}
-}
-
-// 认过一次、claude 还在跑：不再重复 exec CLI。但 claude 停了又起，新冒出来的那份就是这个
-// 会话的新对话，台账得跟着换——否则重启后接回的是上一段（用户看到的「记忆串了」）。
-func TestRelinksAfterAgentRestart(t *testing.T) {
-	f := newLinkFixture(t)
-	f.project("/repo/a")
-	l := newAgentLinker()
-	f.run(l, map[string]string{})
-
-	f.run(l, map[string]string{"/repo/a-1": "claude"})
-	f.writeTranscript("/repo/a", "uuid-1")
-	f.run(l, map[string]string{"/repo/a-1": "claude"})
-	if f.got["/repo/a-1"] != "uuid-1" {
-		t.Fatalf("首次该认到: %v", f.got)
-	}
-	// claude 还在跑、目录里又多一份（别的会话的）：不改
-	delete(f.got, "/repo/a-1")
-	f.writeTranscript("/repo/a", "uuid-x")
-	f.run(l, map[string]string{"/repo/a-1": "claude"})
-	if len(f.got) != 0 {
-		t.Fatalf("没停过就不该再认: %v", f.got)
-	}
-	// 停了又起，再冒出一份：这是新对话，换掉
-	f.run(l, map[string]string{})
-	f.run(l, map[string]string{"/repo/a-1": "claude"})
-	f.writeTranscript("/repo/a", "uuid-2")
-	f.run(l, map[string]string{"/repo/a-1": "claude"})
-	if f.got["/repo/a-1"] != "uuid-2" {
-		t.Fatalf("重开后该认到新对话: %v", f.got)
 	}
 }

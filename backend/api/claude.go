@@ -223,26 +223,35 @@ func paneClaudeProc(name string) (string, int) {
 // 当活跃代理的误判：后台干活没人看=灰、开着终端却 idle=绿 的反相。
 // 返回具体是哪个 agent 而不只是 bool：列表要画品牌标，压成 bool 前端就只能再问一遍。
 func runningAgentSessions() map[string]string {
-	out, err := exec.Command("tmux", "list-panes", "-a", "-F", "#{session_name}\t#{pane_pid}").Output()
+	out := map[string]string{}
+	for sess, p := range runningAgentProcs() {
+		out[sess] = p.Kind
+	}
+	return out
+}
+
+// runningAgentProcs 一次扫描：会话 → 正在跑的 agent 进程（种类、cwd、pid）。
+// 会话 ↔ 对话 id 的对账（agent-transcript-link.go）要 cwd 和 pid，绿点判活跃只要种类。
+func runningAgentProcs() map[string]agentProc {
+	out, err := exec.Command("tmux", "list-panes", "-a", "-F", "#{session_name}\t#{pane_pid}\t#{pane_current_path}").Output()
 	if err != nil {
 		return nil
 	}
 	children := procChildren()
-	running := map[string]string{}
+	running := map[string]agentProc{}
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		parts := strings.SplitN(line, "\t", 2)
-		if len(parts) != 2 || running[parts[0]] != "" {
+		parts := strings.SplitN(line, "\t", 3)
+		if len(parts) != 3 || running[parts[0]].Kind != "" {
 			continue
 		}
 		pid, err := strconv.Atoi(parts[1])
 		if err != nil {
 			continue
 		}
-		switch {
-		case treeMatch(pid, children, 0, cmdlineHasClaude):
-			running[parts[0]] = "claude"
-		case treeMatch(pid, children, 0, cmdlineHasCodex):
-			running[parts[0]] = "codex"
+		if got := treeFind(pid, children, 0, cmdlineHasClaude); got != 0 {
+			running[parts[0]] = agentProc{Kind: "claude", Dir: parts[2], Pid: got}
+		} else if got := treeFind(pid, children, 0, cmdlineHasCodex); got != 0 {
+			running[parts[0]] = agentProc{Kind: "codex", Dir: parts[2], Pid: got}
 		}
 	}
 	return running
