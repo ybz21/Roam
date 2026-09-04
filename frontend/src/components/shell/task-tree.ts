@@ -5,6 +5,7 @@
 //   /git/worktrees?dir=  每个 git 项目的 worktree 与挂在上面的会话
 //   /sessions            全部会话（散会话从这里来：不在任何 worktree 上的）
 // 纯函数：App 把三份数据拿到手后 useMemo 一次，数据没变就不重算。
+import { isInfraSession } from '../sessions/infra-session'
 import { taskKeyOf, type TaskKey } from '../sessions/task-key'
 
 export type TreeSession = {
@@ -92,12 +93,14 @@ export function buildTaskTree(o: {
   const projects: TreeProject[] = o.projects.map((p) => {
     const tasks: TreeTask[] = []
     for (const wt of o.worktrees[p.key] || []) {
-      const names = (wt.sessions || []).map((s) => s.session).filter(Boolean)
+      // worktree 带来的会话列表是**另一条来源**（不是 /sessions），基础设施会话得在这里
+      // 再滤一遍——上一版只滤了 /sessions，于是 _ttmux-plugind 照样从这条路挂进任务里。
+      const names = (wt.sessions || []).map((s) => s.session).filter((n) => n && !isInfraSession(n))
       // 主仓库检出：有会话才立卡（在仓库根目录开的 claude 也得归到项目下，不能丢进散会话）；
       // 没会话不立——它不是一个可收尾的任务位，每个项目都挂一张空的「main」只会碍事
       if (wt.isMain && names.length === 0) continue
       names.forEach((n) => placed.add(n))
-      for (const s of wt.sessions || []) if (s.dormant) put({ name: s.session, dormant: true })
+      for (const s of wt.sessions || []) if (s.dormant && !isInfraSession(s.session)) put({ name: s.session, dormant: true })
       const sessions = names.map(sess)
       const ahead = wt.committedAhead || 0
       tasks.push({

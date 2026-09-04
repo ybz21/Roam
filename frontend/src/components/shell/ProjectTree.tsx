@@ -13,7 +13,6 @@ import { Dropdown, Tooltip } from 'antd'
 import { useI18n } from '../../i18n'
 
 import { AgentLogo, ArchiveIcon, ChevronDown, CloseIcon, HomeIcon, MoreIcon, OpenInIcon, PencilIcon, PlusIcon, TerminalIcon, TrashIcon, WorktreeIcon } from '../../icons'
-import { WtStatusIcon } from '../git/parts'
 import { icoOf } from '../projects/project-list/project-model'
 import { isLooseTask, taskKeyOf, type TaskKey } from '../sessions/task-key'
 import type { TaskTree, TreeSession, TreeTask } from './task-tree'
@@ -114,11 +113,11 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
     </Dropdown>
   )
 
-  // 头行右端一枚分支状态图标（照 Orca 卡片右上角那枚 PR 标）：分支名不再单独占一行——底部状态条已经有；
-  // 颜色说状态：已合入 = 绿，有未合入提交 = 蓝，有未提交改动 = 黄，干净 = 灰；悬停看分支和数字，点开是 PR 卡
-  const wtStatus = (task: TreeTask) => task.branch
-    ? <WtStatusIcon branch={task.branch} dir={task.path} merged={task.merged} dirty={task.dirty} ahead={task.ahead} behind={task.behind} pushed={task.pushed} />
-    : null
+  // 分支不在这棵树里出现。
+  //
+  // 这一栏回答的是「我有哪些活、开在哪」，分支是那件活的实现细节：一枚谁也说不清含义的
+  // ⑂ 挂在每个任务后面，只是把本来就窄的行再挤掉 20px。真要看分支状态，底部状态条上有一格，
+  // 右栏的 Git 面板里更全。
 
   // 任务卡的头行：状态点 + 任务名 + 徽标 + 分支状态图标。活着的任务和空闲 worktree 共用，只差徽标写什么
   const taskHead = (task: TreeTask, badge: ReactNode, on: boolean) => (
@@ -129,7 +128,6 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
         <span className="ic">{dot({ running: task.sessions.some((s) => s.running), waiting: task.sessions.some((s) => s.waiting), unfinished: task.unfinished }, true)}</span>
         <span className="nm">{task.name}</span>
         {badge}
-        {wtStatus(task)}
       </button>
     </Dropdown>
   )
@@ -161,7 +159,6 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
         <span className="nm">{s.label}</span>
         {task.unfinished && taskBadge(task)}
         {s.dormant ? <span className="bd">{t('tree.dormant')}</span> : dot(s, false)}
-        {wtStatus(task)}
         {!s.dormant && s.at ? <span className="tm">{ago(s.at, t)}</span> : null}
       </button>
     </Dropdown>
