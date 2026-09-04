@@ -132,7 +132,7 @@ export function WtStatusIcon({ branch, dir, merged, dirty = 0, ahead = 0, behind
   const tip = [branch, ...bits].filter(Boolean).join(' · ')
   const icon = (
     <span className={`wtst ${tone}${dir ? ' btn' : ''}`} role={dir ? 'button' : undefined} aria-label={tip} title={open ? undefined : tip}
-      onClick={dir ? (e) => { e.stopPropagation(); setOpen((v) => !v) } : undefined}
+      onClick={dir ? (e) => { e.stopPropagation() /* 开合由 Popover 的 trigger 管，这里只拦住任务行的点击 */ } : undefined}
       onDoubleClick={(e) => e.stopPropagation()} onContextMenu={(e) => e.stopPropagation()}>
       {merged ? <MergeIcon size={13} /> : <BranchIcon size={13} />}
     </span>

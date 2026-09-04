@@ -627,7 +627,7 @@ html[data-pointer="coarse"] .tt-csearch-line, html[data-pointer="coarse"] .tt-cs
 :where(html[data-pointer="fine"]) .tt-nav-tree:hover { scrollbar-color: var(--scroll-thumb) transparent; }
 :where(html[data-pointer="fine"]) .tt-nav-tree:hover::-webkit-scrollbar-thumb { background: var(--scroll-thumb); }
 .tt-tree-task > .tt-tree-row.head { padding-left: 10px; border-radius: var(--r-xs); }
-.tt-tree-task > .tt-tree-row.head .nm { font-weight: 600; }
+.tt-tree-task > .tt-tree-row.head .nm { font-weight: 500; font-size: var(--fs-sm); }
 .tt-tree-branch { display: flex; align-items: center; gap: 6px; padding: 0 10px 2px 32px; color: var(--text-dimmer); font: 400 var(--fs-micro)/1.5 var(--mono); white-space: nowrap; min-width: 0; }
 .tt-tree-branch .br { overflow: hidden; text-overflow: ellipsis; min-width: 36px; flex: 1 1 auto; }
 /* 头行右端的分支状态图标（Orca 卡片右上角那枚）：颜色说状态，悬停看分支和数字 */
@@ -660,7 +660,7 @@ html[data-pointer="coarse"] .tt-csearch-line, html[data-pointer="coarse"] .tt-cs
 :where(html[data-pointer="fine"]) .tt-tree-agents:hover { background: var(--list-hover); color: var(--text-bright); }
 .tt-tree-sessions .tt-tree-row { padding-left: 30px; padding-right: 8px; min-height: 30px; border-radius: var(--r-xs); margin: 0 6px; width: calc(100% - 12px); gap: 8px; }
 .tt-tree-sessions .tt-tree-row .nm { flex: 1 1 auto; }
-.tt-tree-sessions .tt-tree-row .nm { color: var(--text-dim); font-size: var(--fs-sm); }
+.tt-tree-sessions .tt-tree-row .nm { color: var(--text-dim); font-size: var(--fs-sm); font-weight: 400; }
 .tt-tree-sessions .tt-tree-row.on .nm { color: var(--text-bright); }
 :where(html[data-pointer="fine"]) .tt-tree-sessions .tt-tree-row:hover .nm { color: var(--text-bright); }
 .tt-tree-sessions .tt-tree-row .tm { flex: 0 0 auto; margin-left: 0; color: var(--text-dimmer); font: 400 var(--fs-micro)/1 var(--mono); }
