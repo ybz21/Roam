@@ -592,6 +592,7 @@ const enUS = {
   'dirPicker.title': 'Choose working directory',
   'dirPicker.chooseCurrent': 'Choose this directory',
   'dirPicker.home': 'Home',
+  'chat.noTranscriptYet': 'This agent just started and has no transcript yet; send a message to begin.',
   'chat.claudePlaceholder': 'Message Claude (Enter to send, Shift+Enter for newline)',
   'chat.codexPlaceholder': 'Message Codex (Enter to send, Shift+Enter for newline)',
   'chat.files': 'Files',

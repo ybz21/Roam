@@ -592,6 +592,7 @@ const zhCN = {
   'dirPicker.title': '选择工作目录',
   'dirPicker.chooseCurrent': '选择此目录',
   'dirPicker.home': '家目录',
+  'chat.noTranscriptYet': '这个 agent 刚起来，还没说过话；发一句它就有记录了。',
   'chat.claudePlaceholder': '给 Claude 发消息（Enter 发送，Shift+Enter 换行）',
   'chat.codexPlaceholder': '给 Codex 发消息（Enter 发送，Shift+Enter 换行）',
   'chat.files': '文件',

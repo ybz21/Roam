@@ -192,7 +192,30 @@ func paneToolDir(name string, match func(int) bool) string {
 }
 
 // paneClaudeDir 返回会话中正在跑 claude 的 pane 的工作目录；没有则返回 ""。
-func paneClaudeDir(name string) string { return paneToolDir(name, cmdlineHasClaude) }
+func paneClaudeDir(name string) string { d, _ := paneClaudeProc(name); return d }
+
+// paneClaudeProc 返回正在跑 claude 的 pane 的工作目录和 claude 进程 pid；没有则返回 "", 0。
+func paneClaudeProc(name string) (string, int) {
+	out, err := exec.Command("tmux", "list-panes", "-t", name, "-F", "#{pane_pid}\t#{pane_current_path}").Output()
+	if err != nil {
+		return "", 0
+	}
+	children := procChildren()
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		parts := strings.SplitN(line, "\t", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		pid, err := strconv.Atoi(parts[0])
+		if err != nil {
+			continue
+		}
+		if got := treeFind(pid, children, 0, cmdlineHasClaude); got != 0 {
+			return parts[1], got
+		}
+	}
+	return "", 0
+}
 
 // runningAgentSessions 一次性扫全部 pane 的进程树，返回会话名 → 在跑的 agent（"claude"/"codex"）。
 // 供项目列表批量判「活跃」——绿点语义（设计 W2）：agent 进程在跑才算活跃。避免前端
@@ -250,14 +273,15 @@ func newestJSONL(dir string) string {
 // ClaudeStatus GET /sessions/:name/claude —— 检测会话是否在跑 claude，并定位其 JSONL。
 func (a *API) ClaudeStatus(c *gin.Context) {
 	name := a.sessionTarget(c)
-	dir := paneClaudeDir(name)
+	dir, pid := paneClaudeProc(name)
 	if dir == "" {
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"running": false}})
 		return
 	}
 	home, _ := os.UserHomeDir()
 	pdir := filepath.Join(home, ".claude", "projects", encodeProject(dir))
-	file := newestJSONL(pdir)
+	// 按这个进程自己的命令行和启动时刻挑文件：新开的 claude 不认上一段的旧文件（claude-transcript-pick.go）
+	file := pickTranscript(pdir, processArgv(pid), processStart(pid))
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"running": true, "dir": dir, "file": file}})
 }
 

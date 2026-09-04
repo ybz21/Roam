@@ -22,9 +22,11 @@ import type { TaskIndex } from './tasks'
 import { StatusBar, type StatusActions } from './StatusBar'
 import type { AgentStatus } from './status'
 
-export function ChatShell({ name, accent, placeholder, messages, results, renderMessage, pending, busy, error, onOpenFile, tasks, status, onOpenGit, lastErrorId, hasEarlier, onLoadEarlier, agent }: {
+export function ChatShell({ name, accent, placeholder, messages, results, renderMessage, pending, busy, error, onOpenFile, tasks, status, onOpenGit, lastErrorId, hasEarlier, onLoadEarlier, agent, emptyHint }: {
   /** 这条 composer 发给谁：左端那枚亮着的 agent pill（22 设计 §3.3） */
   agent?: 'claude' | 'codex'
+  /** 还没有对话文件（agent 刚起、一句没说）：显示这句而不是「加载中」 */
+  emptyHint?: string
   name: string
   accent: string
   placeholder: string
@@ -278,7 +280,7 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
         )}
         <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex' }}>
           <div ref={boxRef} onScroll={onScroll} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', padding: '8px 12px' }}>
-            {messages.length === 0 && !pending && <div style={{ color: 'var(--text-dim)', textAlign: 'center', marginTop: 30 }}>{t('chat.loadingTranscript')}</div>}
+            {messages.length === 0 && !pending && <div style={{ color: 'var(--text-dim)', textAlign: 'center', marginTop: 30 }}>{emptyHint || t('chat.loadingTranscript')}</div>}
             {(hidden > 0 || hasEarlier) && (
               <div style={{ textAlign: 'center', margin: '2px 0 8px' }}>
                 {/* 先放本地渲染窗口(手里已有的)，手里这些都放完了再回后端要更早的 */}

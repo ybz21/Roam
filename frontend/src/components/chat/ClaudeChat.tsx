@@ -25,6 +25,7 @@ export default function ClaudeChat({ name, file, onOpenFile, onOpenGit }: { name
 
   return (
     <ChatShell
+      emptyHint={file ? undefined : t('chat.noTranscriptYet')}
       name={name} accent="var(--accent)" error={err} onOpenFile={onOpenFile} tasks={tasks} status={status} onOpenGit={onOpenGit} lastErrorId={derived.lastErrorId}
       placeholder={t('chat.sendTo', { name: label })} agent="claude"
       messages={view} results={results} hasEarlier={hasEarlier} onLoadEarlier={loadEarlier}
