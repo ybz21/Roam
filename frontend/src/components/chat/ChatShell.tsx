@@ -22,7 +22,7 @@ import type { TaskIndex } from './tasks'
 import { StatusBar, type StatusActions } from './StatusBar'
 import type { AgentStatus } from './status'
 
-export function ChatShell({ name, accent, placeholder, messages, results, renderMessage, pending, busy, error, onOpenFile, tasks, status, onOpenGit, lastErrorId, hasEarlier, onLoadEarlier, agent, emptyHint }: {
+export function ChatShell({ name, accent, placeholder, messages, results, renderMessage, pending, busy, error, onOpenFile, tasks, status, onOpenGit, lastErrorId, hasEarlier, onLoadEarlier, agent, emptyHint, active }: {
   /** 这条 composer 发给谁：左端那枚亮着的 agent pill（22 设计 §3.3） */
   agent?: 'claude' | 'codex'
   /** 还没有对话文件（agent 刚起、一句没说）：显示这句而不是「加载中」 */
@@ -46,7 +46,14 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
   hasEarlier?: boolean
   /** 把首屏窗口放大一档重取（往回翻） */
   onLoadEarlier?: () => void
+  /**
+   * 是不是当前标签。所有跑着 agent 的会话对话都常驻挂着（切标签只翻 visibility），
+   * 不在前台的那几份不渲染消息列表——否则点一下标签，N 份 × 200 条消息一起重建 DOM、
+   * 各做一次同步回流，切换要卡好几秒。
+   */
+  active?: boolean
 }) {
+  const live = active !== false
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [sendErr, setSendErr] = useState('')
@@ -151,7 +158,8 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
   }, [messages])
 
   const hidden = Math.max(0, messages.length - limit)
-  const visible = hidden > 0 ? messages.slice(-limit) : messages
+  // 必须 memo：slice 每次都是新数组，下面的分组 useMemo 和 layout effect 全靠它的引用判「没变」
+  const visible = useMemo(() => (hidden > 0 ? messages.slice(-limit) : messages), [messages, limit, hidden])
   // 连着的同族工具调用并成运行组（设计 16）。分组只能在这一层做：Claude 每次工具调用
   // 单独成一条消息，一串 5 条命令就是 5 条消息，消息内部的分段对它无能为力。
   const items = useMemo(() => (results ? groupRuns(visible, results) : null), [visible, results])
@@ -166,7 +174,7 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
   const anchor = useRef({ height: 0, top: 0, firstId: '' })
   useLayoutEffect(() => {
     const el = boxRef.current
-    if (!el) return
+    if (!el || !live) return
     const firstId = visible[0]?.id || ''
     if (atBottom.current) {
       el.scrollTop = el.scrollHeight
@@ -179,7 +187,7 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
       setUnread(Math.max(0, messages.length - seenCount.current))
     }
     anchor.current = { height: el.scrollHeight, top: el.scrollTop, firstId }
-  }, [messages, pending, visible])
+  }, [messages, pending, visible, live])
 
   const onScroll = () => {
     const el = boxRef.current
@@ -288,14 +296,14 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
                 </button>
               </div>
             )}
-            {items
+            {live && (items
               ? items.map((it, i) => (it.kind === 'run'
                 ? <ToolRun key={it.run.key} run={it.run} isLast={i === items.length - 1} />
                 : renderMessage(it.msg, it.index)))
-              : visible.map(renderMessage)}
+              : visible.map(renderMessage))}
             {/* 实时回显自带「正在生成」那颗脉冲点，扒不到东西时才退回省略号气泡——
                 两个都画等于同一件事说两遍（见截图里那块重复） */}
-            {busy ? <LiveTail name={name} accent={accent} idle={pending} lastUser={lastUserText} /> : pending}
+            {live && (busy ? <LiveTail name={name} accent={accent} idle={pending} lastUser={lastUserText} /> : pending)}
           </div>
           {/* 「回到底部」已并进下方状态条（带未读数）；状态条一个字段都没有时（刚进页面、
               转录还没扫出状态）才退回这颗悬浮钮，免得离底了没处点。 */}

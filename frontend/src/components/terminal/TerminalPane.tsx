@@ -172,7 +172,10 @@ export default function TerminalPane(props: {
   // 这里只把「要看哪个」递上去。左侧停靠（#/term 独立页）的 FileWorkspace 照旧。
   const toggleFiles = () => setShowFiles((s) => !s)
   const toggleGit = () => setShowGit((s) => !s)
-  const openGitFromChat = () => { if (onOpenGit) onOpenGit(); else setShowGit(true) }
+  // 稳定引用：这两个回调经 ChatShell 的 context 送到每一条工具行，引用一变整卷对话的 memo 全失效
+  const openGitRef = useRef(() => {})
+  openGitRef.current = () => { if (onOpenGit) onOpenGit(); else setShowGit(true) }
+  const openGitFromChat = useCallback(() => openGitRef.current(), [])
   // 对话页里点工具行的文件路径 → 在文件面板打开（带行号就跳到那一行）。
   // 左侧停靠时 <FileWorkspace> 已挂载在同一页，直接发意图即可开成对话旁边的标签页；
   // 否则先切到文件页再发，跟 ⌘K 搜索结果打开文件是同一条路（见 intents.ts）。
@@ -190,7 +193,8 @@ export default function TerminalPane(props: {
   // 换了会话也照开（那是上个会话工作目录里的文件）。开完就丢，关抽屉/换会话时清干净。
   useEffect(() => { if (!showFiles) setDockFileReq(null) }, [showFiles])
   useEffect(() => { setDockFileReq(null) }, [active])
-  const openFileFromChat = (path: string, line?: number) => {
+  const openFileRef = useRef<(path: string, line?: number) => void>(() => {})
+  openFileRef.current = (path, line) => {
     if (fileDock === 'left') {
       requestIntent(OPEN_FILE_INTENT, { path, line, side: true })
       return
@@ -199,6 +203,7 @@ export default function TerminalPane(props: {
     setShowFiles(true)
     setDockFileReq((prev) => ({ path, nonce: (prev?.nonce || 0) + 1 }))
   }
+  const openFileFromChat = useCallback((path: string, line?: number) => openFileRef.current(path, line), [])
 
   // 标签条是单行横向滑动（见 index.css .tt-tabs）：窄栏/手机上会话一多，当前标签会滑出视口，
   // 切换后把它带回可视区（block:'nearest' → 只横向滚标签条，不牵动整页）。
@@ -931,12 +936,12 @@ export default function TerminalPane(props: {
               onImagePaste={(files) => { setActive(termName); pasteImage(termName, files) }} />
             {claudeView[termName] && claudeMap[termName]?.running && (
               <div style={{ position: 'absolute', inset: 0 }}>
-                <ClaudeChat name={termName} file={claudeMap[termName].file} onOpenFile={openFileFromChat} onOpenGit={openGitFromChat} />
+                <ClaudeChat name={termName} file={claudeMap[termName].file} onOpenFile={openFileFromChat} onOpenGit={openGitFromChat} active={termName === active && !curFile} />
               </div>
             )}
             {codexView[termName] && codexMap[termName]?.running && (
               <div style={{ position: 'absolute', inset: 0 }}>
-                <CodexChat name={termName} file={codexMap[termName].file} onOpenFile={openFileFromChat} onOpenGit={openGitFromChat} />
+                <CodexChat name={termName} file={codexMap[termName].file} onOpenFile={openFileFromChat} onOpenGit={openGitFromChat} active={termName === active && !curFile} />
               </div>
             )}
             {showVoice && !claudeView[termName] && !codexView[termName] && (

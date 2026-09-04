@@ -4,7 +4,7 @@
 // 后端 2026-08-30 把它从行号改成字节偏移，这里一行没动——行号逼着后端每次轮询
 // 从第 1 行重数一遍，一次请求就分配一整个文件（见 backend/api/transcript-read.go）。
 // Claude 与 Codex 共用，只是 path 不同(transcript / codex-transcript)。
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../../api'
 import type { Block, Msg } from './types'
 import type { RawStatus } from './status'
@@ -23,6 +23,9 @@ export function useTranscript(name: string, file: string | undefined, path: stri
   const [hasEarlier, setHasEarlier] = useState(false)
   const [tail, setTail] = useState(FIRST_PAGE)
   const refresh = useCallback(() => setRefreshKey((n) => n + 1), [])
+  // 间隔走 ref：后台会话把间隔放宽时不能重启 effect——重启等于清空重拉整个首屏
+  const intervalRef = useRef(interval)
+  intervalRef.current = interval
   // 加载更早：把首屏窗口放大一档重取。往回翻是低频动作，值得用一次全量重取换实现上的简单。
   const loadEarlier = useCallback(() => setTail((n) => n + 400), [])
   useEffect(() => {
@@ -61,9 +64,13 @@ export function useTranscript(name: string, file: string | undefined, path: stri
         else if (typeof d.nextOffset === 'number') offset = d.nextOffset
       } catch (e: any) { if (!stop) setErr(e.message) }
     }
-    poll()
-    const t = setInterval(poll, interval)
-    return () => { stop = true; clearInterval(t) }
+    let t: ReturnType<typeof setTimeout> | undefined
+    const tick = async () => {
+      await poll()
+      if (!stop) t = setTimeout(tick, intervalRef.current)
+    }
+    void tick()
+    return () => { stop = true; clearTimeout(t) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, file, path, refreshKey, tail])
   return { msgs, err, refresh, status, hasEarlier, loadEarlier }

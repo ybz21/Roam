@@ -1,6 +1,6 @@
 // Claude Code 对话面板（容器）：拉转录 → 把 tool_result 按 id 挂回 tool_use → 交给 ChatShell 渲染。
 // 消息渲染在 chat/Message（Claude / Codex 共用），工具渲染在 chat/tool-render，外壳在 chat/ChatShell。
-import { useMemo } from 'react'
+import { memo, useMemo } from 'react'
 import { ChatShell } from './ChatShell'
 import { Typing } from './blocks'
 import { ChatMessage } from './Message'
@@ -11,10 +11,11 @@ import { deriveFromMessages } from './status-derive'
 import { useSessionLabel } from '../sessions/session-label'
 import { useI18n } from '../../i18n'
 
-export default function ClaudeChat({ name, file, onOpenFile, onOpenGit }: { name: string; file?: string; onOpenFile?: (path: string, line?: number) => void; onOpenGit?: () => void }) {
+// memo：父层（TerminalPane）任何 setState 都会重渲，N 个常驻对话不该跟着一起重算
+export default memo(function ClaudeChat({ name, file, onOpenFile, onOpenGit, active }: { name: string; file?: string; onOpenFile?: (path: string, line?: number) => void; onOpenGit?: () => void; active?: boolean }) {
   const { t } = useI18n()
   const label = useSessionLabel(name)
-  const { msgs, err, status: raw, hasEarlier, loadEarlier } = useTranscript(name, file, 'transcript')
+  const { msgs, err, status: raw, hasEarlier, loadEarlier } = useTranscript(name, file, 'transcript', active === false ? 6000 : 1500)
   const { results, view } = useMemo(() => pairToolResults(msgs), [msgs])
   const pending = isPending(view)
   // TaskUpdate 只给 {taskId,status}，标题在更早那次 TaskCreate 的结果里 —— 跨消息扫一遍才接得上
@@ -31,7 +32,7 @@ export default function ClaudeChat({ name, file, onOpenFile, onOpenGit }: { name
       messages={view} results={results} hasEarlier={hasEarlier} onLoadEarlier={loadEarlier}
       renderMessage={(m, i) => <ChatMessage key={m.id || i} m={m} results={results} side="claude" />}
       pending={pending ? <Typing color="var(--accent)" /> : undefined}
-      busy={pending}
+      busy={pending} active={active}
     />
   )
-}
+})

@@ -121,6 +121,16 @@ const CQ_PAGES = new Set(['projects', 'sessions'])
 
 
 
+
+// 探测结果（running/file/dir 这几个标量）没变就保留旧对象：5s 一轮的空翻新会让依赖它的 effect 和 memo 全部重跑
+function sameProbe(a: any, b: any): boolean {
+  if (a === b) return true
+  if (!a || !b) return false
+  const ks = new Set([...Object.keys(a), ...Object.keys(b)])
+  for (const k of ks) if (a[k] !== b[k]) return false
+  return true
+}
+
 export default function App() {
   // 多机：底座那枚按钮 + 账户菜单顶部的机器列表。单机时两者都为空，界面与今天一致。
   // **必须在任何提前 return 之前**——这个组件下面有 `if (!authed) return <Login/>` 这类分支，
@@ -573,11 +583,11 @@ export default function App() {
       try {
         const r = await api('GET', `/sessions/${encodeURIComponent(n)}/claude`)
         if (stop) return
-        setClaudeMap((m) => ({ ...m, [n]: r.data }))
+        setClaudeMap((m) => (sameProbe(m[n], r.data) ? m : { ...m, [n]: r.data }))
         // 第一次探到 Claude 在跑就进对话视图：这是 Claude 会话的常态，终端是切过去看的那一面
         if (r.data?.running) setClaudeView((v) => (n in v ? v : { ...v, [n]: true }))
       } catch {}
-      try { const r = await api('GET', `/sessions/${encodeURIComponent(n)}/codex`); if (!stop) setCodexMap((m) => ({ ...m, [n]: r.data })) } catch {}
+      try { const r = await api('GET', `/sessions/${encodeURIComponent(n)}/codex`); if (!stop) setCodexMap((m) => (sameProbe(m[n], r.data) ? m : { ...m, [n]: r.data })) } catch {}
     })
     check()
     const t = setInterval(check, 5000)
