@@ -434,7 +434,7 @@ export default function App() {
       if (mod && e.shiftKey && taskView && e.key.toLowerCase() === 'f') {
         e.preventDefault()
         setPanel('files')
-        if (space.inspectorCollapsed) space.toggleInspectorCollapsed()
+        space.setInspectorCollapsed(false)
         setSearchNonce((n) => n + 1)
         return
       }
@@ -442,7 +442,7 @@ export default function App() {
       if (mod && e.shiftKey && taskView && (e.key.toLowerCase() === 'e' || e.key.toLowerCase() === 'g')) {
         e.preventDefault()
         setPanel(e.key.toLowerCase() === 'e' ? 'files' : 'git')
-        if (space.inspectorCollapsed) space.toggleInspectorCollapsed()
+        space.setInspectorCollapsed(false)
         return
       }
       // Esc 收一层：覆盖态先收面板，聚焦态退回分栏。两者都不关终端、不离开页面。
@@ -777,7 +777,7 @@ export default function App() {
       onNew={taskView ? { terminal: () => { void newTerminalInTask('shell') }, claude: () => { void newTerminalInTask('claude') }, codex: () => { void newTerminalInTask('codex') }, taskLabel: activeTaskLabel } : undefined}
       // 任务视图里对话点路径 / Git 都落到右栏三面板；手机与 Page 态退回 TerminalPane 自己的二级页
       onOpenFile={taskView ? (path, line) => openFileTab(path, line) : undefined}
-      onOpenGit={taskView ? () => { setPanel('git'); if (space.inspectorCollapsed) space.toggleInspectorCollapsed() } : undefined}
+      onOpenGit={taskView ? () => { setPanel('git'); space.setInspectorCollapsed(false) } : undefined}
       inspector={taskView ? { open: !space.inspectorCollapsed, toggle: () => space.toggleInspectorCollapsed() } : undefined}
       fileTabs={taskView ? fileTabs : undefined} activeFile={taskView ? curFile : undefined}
       taskDir={activeTask && !isLooseTask(activeTask) ? activeTask : (activeProject?.dir || '')}
