@@ -3,6 +3,7 @@ import { api } from './api'
 
 export interface Preferences {
   theme: 'dark' | 'light'
+  claudeThemeSync: boolean // 切 Roam 主题时把 Claude Code 的主题（~/.claude/settings.json）一起切，服务端做
   locale: string
   browserQuality: string
   browserDevice: string
@@ -74,6 +75,7 @@ const STATUSBAR_DEFAULTS: StatusBarPreference = { enabled: true, hidden: [], opt
 
 const DEFAULTS: Preferences = {
   theme: 'dark',
+  claudeThemeSync: true,
   locale: 'zh-CN',
   browserQuality: 'auto',
   browserDevice: '',

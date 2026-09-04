@@ -49,6 +49,16 @@ func (s *PreferencesStore) set(raw json.RawMessage) error {
 	return os.Rename(tmp, s.file)
 }
 
+// SyncClaudeThemeOnce 启动时按存着的偏好对一次 Claude Code 主题：升级上来的用户没再切过主题也能对上。
+func (a *API) SyncClaudeThemeOnce() {
+	if a.Prefs == nil {
+		return
+	}
+	if b, err := json.Marshal(a.Prefs.get()); err == nil {
+		syncClaudeTheme(prefsClaudeTheme(b))
+	}
+}
+
 func (a *API) GetPreferences(c *gin.Context) {
 	if a.Prefs == nil {
 		c.JSON(http.StatusOK, gin.H{"data": map[string]interface{}{}})
@@ -71,5 +81,6 @@ func (a *API) SetPreferences(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "WRITE_ERROR", "message": err.Error()}})
 		return
 	}
+	syncClaudeTheme(prefsClaudeTheme(raw))
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"ok": true}})
 }

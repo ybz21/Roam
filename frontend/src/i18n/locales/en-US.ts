@@ -1227,6 +1227,8 @@ const enUS = {
   'settings.language': 'Language',
   'settings.languageHelp': 'Change the interface language and save the preference',
   'settings.themeHelp': 'Changes apply immediately and preferences are saved',
+  'set.claudeTheme': 'Claude Code follows theme',
+  'set.claudeThemeHelp': 'Switching the Roam theme also switches Claude Code\'s own theme (~/.claude/settings.json). Running Claude sessions need /theme or a restart',
   'nav.about': 'About',
   'about.intro': 'Roam turns your development machine into an always-on AI coding workstation. From anywhere, on a phone, tablet, or laptop, connect back to your own machine to keep coding, run tests, watch logs, debug in a browser, and supervise AI agents like Claude Code and Codex — the real work keeps running on the dev machine, surviving device switches, network drops, and time away.',
   'settings.version': 'Version',

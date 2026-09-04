@@ -1229,6 +1229,8 @@ const zhCN = {
   'settings.language': '语言',
   'settings.languageHelp': '切换界面语言并记住偏好',
   'settings.themeHelp': '切换即时生效并记住偏好',
+  'set.claudeTheme': 'Claude Code 主题跟随',
+  'set.claudeThemeHelp': '切 Roam 主题时把 Claude Code 自己的主题一起切过去（写 ~/.claude/settings.json）。已经开着的 Claude 要在里面敲 /theme 或重开才换',
   'nav.about': '关于',
   'about.intro': 'Roam 把你的开发机变成随身可控的 AI 编程工作站：用手机、平板或笔记本，随时随地连回自己的开发机，继续写代码、跑测试、看日志、在浏览器里调试，并指挥 Claude Code、Codex 等 AI 智能体——真正的工作始终运行在开发机上，换设备、断网、离开座位都不会中断。',
   'settings.version': '版本',

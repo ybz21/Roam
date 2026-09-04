@@ -124,10 +124,10 @@ function xtermTheme() {
 }
 // 浅色主题下强制最低对比度：Claude Code / Codex 按自己的（缺省深色）主题吐颜色，代码高亮里一堆
 // 近白色，落在白底上就看不见了。xterm 会把对比不够的前景色往深处拉，深色主题不动（1 = 关）。
-// 4 是试出来的：4.5 把 Claude Code 选中项那种浅蓝压成深灰，选中行和别的行分不出；3 又淡得看不清。
-// 真正治本是让 Claude Code 自己切浅色主题（它的 /theme）——它按深色配色吐的颜色，白底上怎么拉都勉强。
+// 浅色下只兜底近白色的文字（3），不再往上拉：Claude Code 深色配色落白底，4 会把选中行和别的行一起压成灰。
+// 正路是服务端把 Claude Code 的主题跟着切成 light（claude-theme-sync.go），配色对了就不用拉。
 function minContrast(): number {
-  return document.documentElement.dataset.theme === 'light' ? 4 : 1
+  return document.documentElement.dataset.theme === 'light' ? 3 : 1
 }
 
 // 滤掉应用(Claude Code/Codex/vim 等)开启「鼠标上报」的 DECSET 序列 ESC[?1000/1001/1002/1003h。

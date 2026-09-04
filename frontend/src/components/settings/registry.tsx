@@ -116,6 +116,11 @@ export function buildSettings(deps: {
       options: [{ value: 'dark', label: t('common.darkTheme') }, { value: 'light', label: t('common.lightTheme') }],
     },
   }
+  const claudeThemeItem: SettingItem = {
+    id: 'claudeThemeSync', label: t('set.claudeTheme'), desc: t('set.claudeThemeHelp'), key: 'claudeThemeSync',
+    keywords: 'claude theme 主题 对比度',
+    control: { kind: 'switch', get: () => prefs.claudeThemeSync !== false, set: (on) => deps.setPrefs({ claudeThemeSync: on }) },
+  }
   // 全屏 / 退出登录：原来挂在侧栏脚「当前设备」那枚账户菜单里（22 设计 §3.2 拍板：侧栏脚只留 设置 / 收起）
   const accountItem: SettingItem = {
     id: 'account', label: t('set.account'), desc: t('set.accountDesc'),
@@ -169,6 +174,7 @@ export function buildSettings(deps: {
       id: 'ui.look', name: t('set.pageLook'), parent: t('set.groupUi'), scope: 'mine',
       items: [
         themeItem,
+        claudeThemeItem,
         accountItem,
         localeItem,
         {
