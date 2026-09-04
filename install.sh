@@ -212,6 +212,8 @@ Wants=network-online.target
 ExecStart=${BIN_DIR}/roam
 Restart=always
 RestartSec=3
+# roam 起的 tmux server 在同一个 cgroup 里：默认 KillMode 会在 restart 时连 tmux 一起杀，所有会话当场没了
+KillMode=process
 
 [Install]
 WantedBy=default.target
@@ -243,6 +245,8 @@ Environment=HOME=${home}
 ExecStart=${BIN_DIR}/roam
 Restart=always
 RestartSec=3
+# roam 起的 tmux server 在同一个 cgroup 里：默认 KillMode 会在 restart 时连 tmux 一起杀，所有会话当场没了
+KillMode=process
 
 [Install]
 WantedBy=multi-user.target

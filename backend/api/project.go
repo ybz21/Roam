@@ -205,7 +205,11 @@ func (a *API) ProjectsList(c *gin.Context) {
 	agentRunning := runningAgentSessions() // 一次进程树扫描，供绿点判活跃（设计 W2）
 	// 顺带认一次「刚开始跑 claude 的会话 ↔ 它那段对话」。挂在这里是因为进程树
 	// 已经扫过了，不额外付代价；只在完全无歧义时才记（见 agent-transcript-link.go）。
-	a.agentLink.note(agentRunning, a.WT.SessionHome, a.linkAgentSession)
+	// 挂接看的是 claude 进程自己的 cwd（对话文件就按它归档），不是台账归属：会话 cd 进 worktree
+	// 之后再起 claude，归属目录下永远等不到那份新对话
+	a.agentLink.note(agentRunning, paneClaudeDir, a.linkAgentSession)
+	// 顺带把跑进 worktree 的会话在台账里改钉过去，重启后按台账重开才回得到原地
+	a.syncSessionHomes(ann)
 
 	addSession := func(p *projectSummary, top *[]projectSession, name, label string, attached bool, last int64, branch string, linked, dormant bool) {
 		claimed[name] = true

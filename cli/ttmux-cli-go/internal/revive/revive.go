@@ -66,16 +66,20 @@ func restorable(row sessmeta.Row) bool {
 	return d != "" && isDir(d)
 }
 
-// targetDir 重开该回到哪个目录。
+// targetDir 重开该回到哪个目录：**台账目录**。
 //
-// 台账记的是建会话那一刻的目录；agent 中途进了 worktree，对话文件就跟着搬到
-// 那里，回到原目录敲 resume 是找不到它的——用户看到的就是「会话记忆丢了」。
-// 所以对话文件自己说的目录优先，没有或已被清掉再退回台账。
+// 后端会把跑进 worktree 的会话在台账里改钉过去（api/session-home-sync.go），所以台账目录
+// 就是树上显示它的那个位置。只有台账目录没了（worktree 被清）才退回对话文件自己记的目录。
+// 从前是反过来的：对话文件优先——而对话 id 是靠「目录下新冒出来的文件」猜的，猜错一次，
+// 恢复就跑到一个八竿子打不着的目录去接一段别人的对话。
 func targetDir(row sessmeta.Row) string {
+	if d := row.Dir(); d != "" && isDir(d) {
+		return d
+	}
 	if d := agent.ConversationDirFor(row.AgentKind, row.AgentUUID); d != "" && isDir(d) {
 		return d
 	}
-	return row.Dir()
+	return ""
 }
 
 func isDir(p string) bool {
@@ -148,6 +152,11 @@ func Revive(rt runtime.Runtime, meta *sessmeta.Store, name string) (Result, erro
 
 	res := Result{Session: sess, Label: label, Dir: dir, From: name}
 	if cmd, uuid := resumeCommand(row); cmd != "" {
+		// 对话文件自己记的目录和重开的目录对不上：这段对话不是这个目录里的，不接——
+		// 接了就是拿别处的记忆冒充这里的。壳照开，人要接可以自己 claude --resume
+		if cd := agent.ConversationDirFor(row.AgentKind, uuid); cd != "" && cd != dir {
+			return res, nil
+		}
 		_ = meta.SetAgentSession(sess, uuid)
 		_ = rt.Tmux("send-keys", "-t", "="+sess+":", cmd, "C-m")
 		res.Resumed = uuid

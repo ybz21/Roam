@@ -102,10 +102,17 @@ func (l *agentLinker) note(running map[string]string, homeOf func(string) string
 		l.pending[sess] = &pendingLink{dir: dir, kind: kind, since: now, seen: transcriptSet(projectDirFor(dir))}
 	}
 
-	// 2) 会话不跑 claude 了（关了/退出了），或等太久 → 放弃
+	// 2) 会话不跑 claude 了（关了/退出了），或等太久 → 放弃。
+	//    退出的同时把「已认领」也清掉：下次在这个会话里再起一个 claude 就是一段新对话，
+	//    台账得跟着换——否则重启后接回的是上一段，用户看到的就是「记忆串了」
 	for sess, p := range l.pending {
 		if running[sess] != "claude" || now.Sub(p.since) > linkWindow {
 			delete(l.pending, sess)
+		}
+	}
+	for sess := range prev {
+		if prev[sess] == "claude" && running[sess] != "claude" {
+			delete(l.linked, sess)
 		}
 	}
 

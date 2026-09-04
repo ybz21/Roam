@@ -198,8 +198,9 @@ func TestIgnoresCodex(t *testing.T) {
 	}
 }
 
-// 认过一次就不再重复 exec CLI（台账那边也只记一次，这里少走一趟子进程）。
-func TestLinksOnlyOncePerSession(t *testing.T) {
+// 认过一次、claude 还在跑：不再重复 exec CLI。但 claude 停了又起，新冒出来的那份就是这个
+// 会话的新对话，台账得跟着换——否则重启后接回的是上一段（用户看到的「记忆串了」）。
+func TestRelinksAfterAgentRestart(t *testing.T) {
 	f := newLinkFixture(t)
 	f.project("/repo/a")
 	l := newAgentLinker()
@@ -211,13 +212,19 @@ func TestLinksOnlyOncePerSession(t *testing.T) {
 	if f.got["/repo/a-1"] != "uuid-1" {
 		t.Fatalf("首次该认到: %v", f.got)
 	}
-	// 会话停了又起，目录里再冒出一份——已经认过就不再改
+	// claude 还在跑、目录里又多一份（别的会话的）：不改
 	delete(f.got, "/repo/a-1")
+	f.writeTranscript("/repo/a", "uuid-x")
+	f.run(l, map[string]string{"/repo/a-1": "claude"})
+	if len(f.got) != 0 {
+		t.Fatalf("没停过就不该再认: %v", f.got)
+	}
+	// 停了又起，再冒出一份：这是新对话，换掉
 	f.run(l, map[string]string{})
 	f.run(l, map[string]string{"/repo/a-1": "claude"})
 	f.writeTranscript("/repo/a", "uuid-2")
 	f.run(l, map[string]string{"/repo/a-1": "claude"})
-	if len(f.got) != 0 {
-		t.Fatalf("同一会话不该认第二次: %v", f.got)
+	if f.got["/repo/a-1"] != "uuid-2" {
+		t.Fatalf("重开后该认到新对话: %v", f.got)
 	}
 }
