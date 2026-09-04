@@ -311,6 +311,8 @@ const zhCN = {
   'tree.newTaskIn': '在 {name} 下开新任务',
   'tree.renameTask': '给任务起名',
   'tree.menu.open': '打开',
+  'tree.menu.newTask': '开新任务…',
+  'tree.menu.projectHome': '项目主页',
   'tree.menu.close': '关闭会话（结束进程）',
   'tree.menu.deriveHere': '在这个 worktree 里派生',
   'tree.menu.finish': '收尾（关闭会话并处理 worktree）',

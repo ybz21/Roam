@@ -311,6 +311,8 @@ const enUS = {
   'tree.newTaskIn': 'New task under {name}',
   'tree.renameTask': 'Name this task',
   'tree.menu.open': 'Open',
+  'tree.menu.newTask': 'New task…',
+  'tree.menu.projectHome': 'Project home',
   'tree.menu.close': 'Close session (end process)',
   'tree.menu.deriveHere': 'Derive in this worktree',
   'tree.menu.finish': 'Finish (close sessions, settle worktree)',

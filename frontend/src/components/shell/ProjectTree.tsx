@@ -49,7 +49,7 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
   onRename?: (session: string) => void
   /** 双击 / 右键任务行：给任务起名（偏好 taskNames），不动会话和分支 */
   onRenameTask?: (key: TaskKey, name: string) => void
-  /** 项目行的「+」：在这个项目下开新任务（弹新建会话框，默认新建 worktree） */
+  /** 项目行右键「开新任务」：弹 composer，目录预设成这个项目、默认新建 worktree */
   onNewTask?: (dir: string) => void
   /** 右键会话行「关闭会话」：真的结束它（标签条的 × 只是收起标签） */
   onKill?: (session: string) => void
@@ -149,19 +149,20 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
         return (
           <div key={p.key} className="tt-tree-proj">
             {/* 项目的身份就是项目卡上那枚按名字取色的首字母圆标（icoOf），不另画图标 */}
+            {/* 项目行右键：开新任务（⌘N 同款）/ 项目主页——行里不放「+」，一排图标里多一枚没人认得 */}
+            <Dropdown trigger={['contextMenu']} menu={{ items: [
+              ...(onNewTask ? [{ key: 'new', icon: <PlusIcon size={13} />, label: t('tree.menu.newTask'), onClick: () => onNewTask(p.dir) }] : []),
+              { key: 'home', label: t('tree.menu.projectHome'), onClick: () => onProject(p.key) },
+            ] }}>
             <button type="button" className={`tt-nav-item tt-tree-row${open ? '' : ' closed'}`} title={p.dir} onClick={() => onProject(p.key)}>
               <span className="ic"><span className="av" style={{ color: icoOf(p.key)[0], background: icoOf(p.key)[1] }}>{p.name.slice(0, 1).toUpperCase()}</span></span>
               <span className="nm">{p.name}</span>
-              {/* 「+」= 在这个项目下开新任务；和标签条的「新建」分开：那个是在当前 worktree 里派生 */}
-              {onNewTask && (
-                <span className="add" role="button" aria-label={t('tree.newTaskIn', { name: p.name })} title={t('tree.newTaskIn', { name: p.name })}
-                  onClick={(e) => { e.stopPropagation(); onNewTask(p.dir) }}><PlusIcon size={13} /></span>
-              )}
               {p.needs > 0 && <span className="bd">{p.needs}</span>}
               {/* 折叠箭头是行内第二个可点目标：点它只折不跳，点别处进项目主页 */}
               <span className="chev" role="button" aria-label={open ? t('common.collapse') : t('common.expand')}
                 onClick={(e) => { e.stopPropagation(); toggle(p.key) }}><ChevronDown size={14} /></span>
             </button>
+            </Dropdown>
             {open && (
               <>
                 {live.map((x) => taskRows(x, 1))}
