@@ -24,6 +24,8 @@ export type TreeTask = {
   /** 任务名：第一个会话的展示名，没有会话就用分支名 */
   name: string
   branch: string
+  /** 主仓库检出：只在有会话时立一张卡（标「主仓库」），没会话不算空闲 worktree，也不能收尾 */
+  main?: boolean
   path: string
   /** 领先 base 的提交数；会话都关了还有未合并提交 = 待收尾 */
   ahead: number
@@ -90,8 +92,10 @@ export function buildTaskTree(o: {
   const projects: TreeProject[] = o.projects.map((p) => {
     const tasks: TreeTask[] = []
     for (const wt of o.worktrees[p.key] || []) {
-      if (wt.isMain) continue // 主仓库不是任务位：里面的会话归散会话（D4）
       const names = (wt.sessions || []).map((s) => s.session).filter(Boolean)
+      // 主仓库检出：有会话才立卡（在仓库根目录开的 claude 也得归到项目下，不能丢进散会话）；
+      // 没会话不立——它不是一个可收尾的任务位，每个项目都挂一张空的「main」只会碍事
+      if (wt.isMain && names.length === 0) continue
       names.forEach((n) => placed.add(n))
       for (const s of wt.sessions || []) if (s.dormant) put({ name: s.session, dormant: true })
       const sessions = names.map(sess)
@@ -103,8 +107,9 @@ export function buildTaskTree(o: {
         path: wt.path,
         ahead,
         dirty: (wt.dirty || 0) + (wt.untracked || 0), behind: wt.behind || 0, merged: !!wt.mergedInto, pushed: !!wt.pushed,
-        unfinished: sessions.length === 0 && ahead > 0,
+        unfinished: !wt.isMain && sessions.length === 0 && ahead > 0,
         sessions,
+        ...(wt.isMain ? { main: true } : {}),
       })
     }
     // 刚建的会话：worktree 轮询 60s 一轮还没追上，但 annotation 已经知道它在哪个 worktree——
@@ -114,7 +119,8 @@ export function buildTaskTree(o: {
       if (placed.has(s.name)) continue
       const pl = o.placement?.[s.name]
       const wt = pl?.worktree?.replace(/\/+$/, '')
-      if (!pl || pl.key !== p.key || !wt || wt === root) continue // 主仓库不是任务位
+      if (!pl || pl.key !== p.key || !wt) continue
+      const isMain = wt === root
       placed.add(s.name)
       const hit = tasks.find((x) => x.path.replace(/\/+$/, '') === wt)
       if (hit) {
@@ -124,7 +130,7 @@ export function buildTaskTree(o: {
         continue
       }
       const ss = [sess(s.name)]
-      tasks.push({ key: taskKeyOf('', wt), name: o.nameOf?.(wt) || ss[0].label, branch: pl.branch || '', path: wt, ahead: 0, unfinished: false, sessions: ss })
+      tasks.push({ key: taskKeyOf('', wt), name: o.nameOf?.(wt) || ss[0].label, branch: pl.branch || '', path: wt, ahead: 0, unfinished: false, sessions: ss, ...(isMain ? { main: true } : {}) })
     }
     return { key: p.key, name: p.name, dir: p.dir, needs: (p.waiting || 0) + (p.unfinished || 0), tasks }
   })

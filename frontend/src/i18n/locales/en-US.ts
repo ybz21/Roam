@@ -325,6 +325,7 @@ const enUS = {
   'tree.menu.hideIdle': 'Hide idle worktrees',
   'tree.idle': 'idle',
   'tree.dormant': 'dormant',
+  'tree.mainRepo': 'main repo',
   'tree.newTask': 'New task',
   'tree.projectField': 'Project',
   'tree.menu.projectHome': 'Project home',

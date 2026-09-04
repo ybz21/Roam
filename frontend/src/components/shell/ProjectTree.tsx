@@ -98,7 +98,7 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
       { key: 'cc', icon: <AgentLogo kind="claude" size={14} />, label: t('tabs.newClaude'), onClick: () => onNewInTask(task.key, 'claude') },
       { key: 'cx', icon: <AgentLogo kind="codex" size={14} />, label: t('tabs.newCodex'), onClick: () => onNewInTask(task.key, 'codex') },
     ] }] : []),
-    ...(onFinishTask ? [{ type: 'divider' as const }, { key: 'finish', icon: <ArchiveIcon size={14} />, label: t('tree.menu.finish'), danger: true, onClick: () => onFinishTask(task) }] : []),
+    ...(onFinishTask && !task.main ? [{ type: 'divider' as const }, { key: 'finish', icon: <ArchiveIcon size={14} />, label: t('tree.menu.finish'), danger: true, onClick: () => onFinishTask(task) }] : []),
   ] })
   const sessionRow = (task: TaskKey, s: TreeSession) => (
     <Dropdown key={s.name} trigger={['contextMenu']} menu={sessionMenu(task, s)}>
@@ -143,7 +143,7 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
     const agents = task.sessions.filter((s) => s.agent)
     return (
       <div key={task.key} className={`tt-tree-task${on ? ' on' : ''}`}>
-        {taskHead(task, task.unfinished && <span className="bd" title={t('tree.unfinished', { n: task.ahead })}>{t('tree.unfinishedShort', { n: task.ahead })}</span>, on && !hasActive)}
+        {taskHead(task, task.main ? <span className="bd" title={task.path}>{t('tree.mainRepo')}</span> : task.unfinished && <span className="bd" title={t('tree.unfinished', { n: task.ahead })}>{t('tree.unfinishedShort', { n: task.ahead })}</span>, on && !hasActive)}
         {many && (
           <button type="button" className={`tt-tree-agents${open ? '' : ' closed'}`} onClick={() => toggle(task.key)}
             aria-expanded={open} aria-label={open ? t('common.collapse') : t('common.expand')}>
