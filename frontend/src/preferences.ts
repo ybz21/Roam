@@ -48,6 +48,7 @@ export interface WorkspacePreference {
   navCollapsed: boolean // 桌面侧栏收成 64px 轨
   dockOpen: boolean // 终端区是否展开
   inspectorWidth: number // Git/Worktree 列宽 px；同样按当前几何钳制
+  inspectorCollapsed: boolean // 右栏收起（只剩把手）。第一次进来是收着的，见 WORKSPACE_DEFAULTS
   workspaceFocus: 'none' | 'page' | 'dock' // 单区聚焦
   density: 'cozy' | 'compact' // 信息密度，与窗口档正交
   dpadOn: boolean // 手机方向簇
@@ -64,6 +65,10 @@ const WORKSPACE_DEFAULTS: WorkspacePreference = {
   navCollapsed: true,
   dockOpen: true,
   inspectorWidth: 0, // 0 = 还没拖过，用 INSPECTOR_DEFAULT
+  // 第一次进来右栏是收着的：新用户开门看见的应该是「会话在哪、终端在哪」，
+  // 而不是一列 Git/文件面板占掉三分之一屏——那一列是查东西时才叫出来的。
+  // 自己拉开过就记住，下次照旧开着。
+  inspectorCollapsed: true,
   workspaceFocus: 'none',
   density: 'cozy',
   dpadOn: true,

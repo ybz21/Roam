@@ -138,6 +138,11 @@ export function systemCells(i: SystemInput): SystemCell[] {
     const stateKey = 'status.gitState.' + g.state
     const stateText = g.state ? i.t(stateKey) : ''
     const state = stateText === stateKey ? g.state : stateText
+    // 分支名可以很长（fix/tabstrip-tree-and-mirror-frame 就是 34 个字符）。整条状态条是
+    // 一行、装不下就按档位丢格，而丢弃顺序是「右半先于左半」——于是一个长分支能把右边的
+    // 版本号整格挤没。截到 24 个字符，完整名字进 detail（title/aria 里还看得到全名）。
+    const full = state ? `${g.branch} · ${state}` : g.branch
+    const text = full.length > 24 ? full.slice(0, 23) + '…' : full
     push(
       systemCell('roam.git', 'branch', {
         label: '', priority: 85, tier: 3, render: 'text', icon: 'ForkIcon',
@@ -146,8 +151,9 @@ export function systemCells(i: SystemInput): SystemCell[] {
         onClick: { kind: 'route', id: gitRoute },
       }),
       {
-        text: state ? `${g.branch} · ${state}` : g.branch,
-        detail: g.conflicts ? i.t('status.conflictsN', { n: g.conflicts }) : undefined,
+        text,
+        detail: [text === full ? '' : full, g.conflicts ? i.t('status.conflictsN', { n: g.conflicts }) : '']
+          .filter(Boolean).join(' · ') || undefined,
         severity: g.conflicts ? 'danger' : g.state ? 'warn' : 'ok',
       },
     )

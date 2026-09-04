@@ -589,6 +589,7 @@ const zhCN = {
   'dirPicker.home': '家目录',
   'chat.noTranscriptYet': '这个 agent 刚起来，还没说过话；发一句它就有记录了。',
   'chat.files': '文件',
+  'chat.queued': '排队中，等它忙完',
   'chat.fileManager': '文件管理',
   'chat.switchToClaude': '切换到 Claude Code 对话界面',
   'chat.switchToCodex': '切换到 Codex 对话界面',

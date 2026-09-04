@@ -113,6 +113,7 @@ export function useWorkspaceLayout(hasTerms: boolean, taskView = false): Workspa
   const [focus, setFocusLocal] = useState<FocusTarget>(ws.workspaceFocus)
   const [navCollapsed, setNavCollapsedLocal] = useState(ws.navCollapsed)
   const [insWidth, setInsWidthLocal] = useState(ws.inspectorWidth || 0)
+  const [inspectorCollapsed, setInspectorCollapsedLocal] = useState(ws.inspectorCollapsed)
   const hydrated = useRef(false)
 
   /**
@@ -132,6 +133,7 @@ export function useWorkspaceLayout(hasTerms: boolean, taskView = false): Workspa
     setFocusLocal(ws.workspaceFocus)
     setNavCollapsedLocal(ws.navCollapsed)
     setInsWidthLocal(ws.inspectorWidth || 0)
+    setInspectorCollapsedLocal(ws.inspectorCollapsed)
   }, [ws])
 
   const large = layout.size === 'large'
@@ -200,10 +202,23 @@ export function useWorkspaceLayout(hasTerms: boolean, taskView = false): Workspa
     saveWorkspace({ navCollapsed: collapsed })
   }, [])
 
-  // Inspector 折起是**临时**视图态，不进偏好：面板下次打开时理应看得见自己，
-  // 记住「折起」等于下回点 Git 出来一列 0 宽的空气。
-  const [inspectorCollapsed, setInspectorCollapsed] = useState(false)
-  useEffect(() => { if (inspectorOpen) setInspectorCollapsed(false) }, [inspectorOpen])
+  const setInspectorCollapsed = useCallback((collapsed: boolean) => {
+    hydrated.current = true
+    setInspectorCollapsedLocal(collapsed)
+    saveWorkspace({ inspectorCollapsed: collapsed })
+  }, [])
+
+  // Inspector 折起进偏好：第一次进来收着（WORKSPACE_DEFAULTS），自己拉开过就一直开着。
+  //
+  // 「面板下次打开时理应看得见自己」这条约束还在，但只在**从没有面板到有面板**的那一刻
+  // 生效：任务页上 InspectorPanels 是常驻 claim 的（open 恒为真），拿 open 当条件的话，
+  // 每次进任务页都会把收起态强行掰开——那就等于这格偏好不存在。
+  const prevInspectorOpen = useRef(inspectorOpen)
+  useEffect(() => {
+    const rose = !prevInspectorOpen.current && inspectorOpen
+    prevInspectorOpen.current = inspectorOpen
+    if (rose) setInspectorCollapsed(false)
+  }, [inspectorOpen])
 
   return {
     mode,
@@ -218,7 +233,7 @@ export function useWorkspaceLayout(hasTerms: boolean, taskView = false): Workspa
     resetInspectorWidth: () => { hydrated.current = true; setInsWidthLocal(0); saveWorkspace({ inspectorWidth: 0 }) },
     canvasFitsInspector: canvasFitsWith({ workspaceWidth, inspectorWidth }),
     inspectorCollapsed,
-    toggleInspectorCollapsed: () => setInspectorCollapsed((v) => !v),
+    toggleInspectorCollapsed: () => setInspectorCollapsed(!inspectorCollapsed),
     toggleDock: () => setDockOpen(!dockOpen),
     setDockOpen,
     setFocus,

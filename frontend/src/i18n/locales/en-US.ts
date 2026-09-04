@@ -589,6 +589,7 @@ const enUS = {
   'dirPicker.home': 'Home',
   'chat.noTranscriptYet': 'This agent just started and has no transcript yet; send a message to begin.',
   'chat.files': 'Files',
+  'chat.queued': 'Queued — waiting for the agent',
   'chat.fileManager': 'File manager',
   'chat.switchToClaude': 'Switch to Claude Code chat view',
   'chat.switchToCodex': 'Switch to Codex chat view',

@@ -203,11 +203,42 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
     if (boxRef.current) boxRef.current.scrollTop = boxRef.current.scrollHeight
   }
 
+  /**
+   * 发出去了、但还没出现在转录里的消息。
+   *
+   * Agent 正忙的时候，消息进的是 TUI 自己的排队区（「Press up to edit queued messages」），
+   * 它不在转录文件里——而这一页画的就是转录。于是从用户视角看：打了一句、按了回车、
+   * 输入框清空了，然后什么都没有，连自己刚说了什么都翻不到。这里本地留一份，画成
+   * 「排队中」的气泡，等它真进转录（下面那个 effect 按原文对账）再撤掉。
+   */
+  const [outbox, setOutbox] = useState<{ id: number; text: string }[]>([])
+  // 兜底：忙完了就把排队区清空。按原文对账是主路，但转录里的用户消息可能被加工过
+  //（命令展开、系统提醒拼进同一条），万一对不上，这条保证气泡不会永远挂着——
+  //  Agent 闲下来就说明队列已经消化完了。
+  const wasBusy = useRef(busy)
+  useEffect(() => {
+    if (wasBusy.current && !busy) setOutbox([])
+    wasBusy.current = busy
+  }, [busy])
+  useEffect(() => {
+    setOutbox((q) => {
+      if (!q.length) return q
+      const said = new Set(messages.filter((m) => m.role === 'user')
+        .map((m) => m.blocks.map((b) => b.text || '').join('\n').trim()))
+      const next = q.filter((x) => !said.has(x.text))
+      return next.length === q.length ? q : next
+    })
+  }, [messages])
+
   const send = async () => {
     const text = input.trim()
     if (!text || sending) return
     setSending(true); setSendErr('')
-    try { await api('POST', '/tasks/_/send', { sess: name, msg: text }); setInput(''); atBottom.current = true }
+    try {
+      await api('POST', '/tasks/_/send', { sess: name, msg: text })
+      setInput(''); atBottom.current = true
+      setOutbox((q) => [...q, { id: q.length ? q[q.length - 1].id + 1 : 1, text }])
+    }
     catch (e: any) { setSendErr(e.message) }
     finally { setSending(false) }
   }
@@ -303,6 +334,14 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
               : visible.map(renderMessage))}
             {/* 实时回显自带「正在生成」那颗脉冲点，扒不到东西时才退回省略号气泡——
                 两个都画等于同一件事说两遍（见截图里那块重复） */}
+            {outbox.map((q) => (
+              <div key={q.id} className="cc-msg cc-queued" style={{ display: 'flex', justifyContent: 'flex-end', margin: 'var(--sp-1) 0' }}>
+                <div style={{ maxWidth: '86%', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                  <div style={{ background: accent, borderRadius: 'var(--r-card)', padding: 'var(--sp-2) var(--sp-3)', color: '#fff', opacity: .55, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{q.text}</div>
+                  <span style={{ fontSize: 'var(--fs-micro)', color: 'var(--text-dimmer)' }}>{t('chat.queued')}</span>
+                </div>
+              </div>
+            ))}
             {live && (busy ? <LiveTail name={name} accent={accent} idle={pending} lastUser={lastUserText} /> : pending)}
           </div>
           {/* 「回到底部」已并进下方状态条（带未读数）；状态条一个字段都没有时（刚进页面、

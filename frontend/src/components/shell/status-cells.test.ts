@@ -197,3 +197,27 @@ describe('版本号只留标签那一截', () => {
     })
   })
 })
+
+// 长分支名不该把右边的版本挤掉：条是一行，装不下就按档位丢格，而右半先于左半被丢。
+describe('状态条：分支名截断', () => {
+  const input = (branch: string) => ({
+    t: (k: string) => k,
+    git: { branch, ahead: 0, behind: 0, files: 0, state: '', conflicts: 0 },
+  })
+
+  it('短分支原样出', async () => {
+    const { systemCells } = await import('./status-system')
+    const git = systemCells(input('main') as any).find((c) => c.spec.id === 'roam.git/branch')
+    expect(git?.val.text).toBe('main')
+    expect(git?.val.detail).toBeUndefined()
+  })
+
+  it('长分支截断，完整名字留在 detail（title/aria 还读得到）', async () => {
+    const { systemCells } = await import('./status-system')
+    const long = 'fix/tabstrip-tree-and-mirror-frame'
+    const git = systemCells(input(long) as any).find((c) => c.spec.id === 'roam.git/branch')
+    expect(git?.val.text?.length).toBeLessThanOrEqual(24)
+    expect(git?.val.text?.endsWith('…')).toBe(true)
+    expect(git?.val.detail).toContain(long)
+  })
+})
