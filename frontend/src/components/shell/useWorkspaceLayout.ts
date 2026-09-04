@@ -89,6 +89,8 @@ export type WorkspaceLayout = {
   canvasFitsInspector: boolean
   /** Inspector 折起（面板仍挂着，只是这一列宽度归零）；把手上那枚握把切它 */
   inspectorCollapsed: boolean
+  /** 展开右栏。只有人的动作该调它（开关钮 / ⌘⇧E·G·F / 对话工具行的 Git） */
+  setInspectorCollapsed: (collapsed: boolean) => void
   toggleInspectorCollapsed: () => void
 }
 
@@ -210,15 +212,12 @@ export function useWorkspaceLayout(hasTerms: boolean, taskView = false): Workspa
 
   // Inspector 折起进偏好：第一次进来收着（WORKSPACE_DEFAULTS），自己拉开过就一直开着。
   //
-  // 「面板下次打开时理应看得见自己」这条约束还在，但只在**从没有面板到有面板**的那一刻
-  // 生效：任务页上 InspectorPanels 是常驻 claim 的（open 恒为真），拿 open 当条件的话，
-  // 每次进任务页都会把收起态强行掰开——那就等于这格偏好不存在。
-  const prevInspectorOpen = useRef(inspectorOpen)
-  useEffect(() => {
-    const rose = !prevInspectorOpen.current && inspectorOpen
-    prevInspectorOpen.current = inspectorOpen
-    if (rose) setInspectorCollapsed(false)
-  }, [inspectorOpen])
+  // 这里**不再**根据「有没有面板占着槽位」自动展开。原来那条（open 为真就展开）等于让这格
+  // 偏好不存在——任务页上 InspectorPanels 是常驻 claim 的。改成只看「从无到有」也不行：
+  // 槽位是在 mount 之后的 effect 里 claim 的，于是每次进任务页都恰好是一次 false→true，
+  // 照样把收起态掰开（实测：点会话进来右栏还是开着）。
+  // 展开只由**人**触发：标签条右端那枚开关、⌘⇧E/G/F、对话工具行里的「Git」——
+  // 那几处各自调 setInspectorCollapsed(false)，见 App.tsx。
 
   return {
     mode,
@@ -233,6 +232,7 @@ export function useWorkspaceLayout(hasTerms: boolean, taskView = false): Workspa
     resetInspectorWidth: () => { hydrated.current = true; setInsWidthLocal(0); saveWorkspace({ inspectorWidth: 0 }) },
     canvasFitsInspector: canvasFitsWith({ workspaceWidth, inspectorWidth }),
     inspectorCollapsed,
+    setInspectorCollapsed,
     toggleInspectorCollapsed: () => setInspectorCollapsed(!inspectorCollapsed),
     toggleDock: () => setDockOpen(!dockOpen),
     setDockOpen,
