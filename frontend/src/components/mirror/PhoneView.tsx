@@ -4,14 +4,14 @@
 //   发 {type:'ack',n} | {type:'ping',t} | {type:'tap'|'swipe'|'text'|'key'}
 import { useEffect, useRef, useState } from 'react'
 import { nodeWs } from '../cluster/node-url'
-import { Dropdown, Input, App as AntApp } from 'antd'
+import { ConfigProvider, Dropdown, Input, App as AntApp } from 'antd'
 import type { MenuProps } from 'antd'
 import { api } from '../../api'
 import { useI18n } from '../../i18n'
 import { connect, type DuplexTransport } from '../../p2p/transport'
 import { devKindText, devStateText, listPhoneDevices, selectPhoneDevice, type PhoneDevice } from '../../phone-devices'
-import { AppsIcon, ChevronDown, DeviceIcon, OpenInIcon, PhoneAssistIcon, PhoneBackIcon, PhoneHomeIcon, PhoneRecentsIcon, PowerIcon, RefreshIcon, SearchIcon } from '../../icons'
-import { fmtRate, IconBtn, MirrorChrome, MirrorMenu, Omnibox, StreamControl, useShelf, type Quality } from './mirror'
+import { AppsIcon, ChevronDown, DeviceIcon, ExitFullscreenIcon, FullscreenIcon, OpenInIcon, PhoneAssistIcon, PhoneBackIcon, PhoneHomeIcon, PhoneRecentsIcon, PowerIcon, RefreshIcon, SearchIcon } from '../../icons'
+import { fmtRate, IconBtn, MirrorChrome, MirrorMenu, Omnibox, StreamControl, useFullscreen, useShelf, type Quality } from './mirror'
 
 interface PhoneApp { id: string; name?: string }
 
@@ -23,6 +23,7 @@ export default function PhoneView() {
   const { t } = useI18n()
   const imgRef = useRef<HTMLImageElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
   // 镜像收发底层：p2p 时是 media PC 上的不可靠 DataChannel，回退时是 /api/phone/stream 的 WS。
   // 二进制帧解析/ack/ping/输入逻辑不感知底层（DuplexTransport ≈ WebSocket）。
   const tpRef = useRef<DuplexTransport | null>(null)
@@ -45,6 +46,7 @@ export default function PhoneView() {
   const [shelf, shelfRef] = useShelf()
   const [reconnectKey, setReconnectKey] = useState(0)
   const [platform, setPlatform] = useState<'android' | 'ios'>('android')
+  const fs = useFullscreen(rootRef)
   const [devices, setDevices] = useState<PhoneDevice[]>([])
   const [latency, setLatency] = useState<number | null>(null)
   const [bw, setBw] = useState(0)
@@ -225,6 +227,12 @@ export default function PhoneView() {
 
   // ⋯ 菜单：低频动作。Android 的锁屏/唤醒不在三键里，收在这儿正好。
   const menuItems: MenuProps['items'] = [
+    // 全屏摆在最前，跟浏览器页一致：铺满显示器时黑边最少
+    ...(fs.supported ? [
+      { key: 'fs', icon: fs.on ? <ExitFullscreenIcon size={14} /> : <FullscreenIcon size={14} />,
+        label: fs.on ? t('common.exitFullscreen') : t('common.fullscreen'), onClick: fs.toggle },
+      { type: 'divider' as const, key: 'd0' },
+    ] : []),
     ...(platform === 'ios' ? [] : [
       { key: 'lock', icon: <PowerIcon size={14} />, label: t('phone.lock'), onClick: () => pressKey('lock') },
     ]),
@@ -282,96 +290,101 @@ export default function PhoneView() {
   )
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* 页头（设计 17 §6）：与浏览器页同一套语法，只是主角从「地址」换成「设备」。
-          devbox 只读——它是身份不是输入；换设备走状态芯片，不为了跟 omnibox 对称硬做成输入框。 */}
-      <MirrorChrome
-        chromeRef={shelfRef}
-        main={<>
-          <Omnibox
-            readOnly
-            value={devName || t('nav.phone')}
-            identity={deviceIdentity}
-            sub={[devOs, `${sizeRef.current.w}×${sizeRef.current.h}`].filter(Boolean).join(' · ')}
-            lead={<StreamControl
-              connected={connected} label={connected ? t('phone.connected') : t('phone.disconnected')}
-              quality={quality} onQuality={changeQuality}
-              level={quality === 'auto' ? levelName : undefined}
-              latency={latency} bytesPerSec={bw} fps={fps}
-              variant="badge" showLabel={shelf !== 'narrow'} />}
-            trailing={shelf === 'wide'
-              ? <span className="mc-omni-num">{`${latency == null ? '—' : latency + 'ms'} · ${fmtRate(bw)} · ${fps}fps`}</span>
-              : undefined}
-          />
-          {/* 应用启动器：从前是个 160px 的 Select，窄屏上要独占一整行 */}
-          <Dropdown trigger={['click']} placement="bottomRight" open={appsOpen} onOpenChange={(v) => { setAppsOpen(v); if (v) loadApps() }}
-            popupRender={() => (
-              <div className="mc-menu mc-applauncher">
-                <Input size="small" prefix={<SearchIcon size={12} />} placeholder={t('phone.searchApp')}
-                  value={appQuery} onChange={(e) => setAppQuery(e.target.value)} allowClear />
-                <div className="mc-applist">
-                  {apps
-                    .filter((a) => !appQuery || `${a.name || ''} ${a.id}`.toLowerCase().includes(appQuery.toLowerCase()))
-                    .slice(0, 60)
-                    .map((a) => (
-                      <button key={a.id} type="button" className="mc-appitem"
-                        onClick={() => { launch(a.id); setAppsOpen(false) }}>
-                        <span className="ic" aria-hidden>{(a.name || a.id).slice(0, 1).toUpperCase()}</span>
-                        <span className="nm">{a.name || a.id}</span>
-                      </button>
-                    ))}
+    // 背景色写在根上：全屏时这一块就是整块屏幕。position:relative 给 getPopupContainer 当基准。
+    <div ref={rootRef} style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)' }}>
+      {/* 浮层挂进这一块而不是 document.body：全屏时只有全屏元素的子树会被画出来，
+          挂 body 上的菜单在全屏下看不见也点不着（浏览器页那边踩过，见 BrowserView）。 */}
+      <ConfigProvider getPopupContainer={() => rootRef.current || document.body}>
+        {/* 页头（设计 17 §6）：与浏览器页同一套语法，只是主角从「地址」换成「设备」。
+            devbox 只读——它是身份不是输入；换设备走状态芯片，不为了跟 omnibox 对称硬做成输入框。 */}
+        <MirrorChrome
+          chromeRef={shelfRef}
+          main={<>
+            <Omnibox
+              readOnly
+              value={devName || t('nav.phone')}
+              identity={deviceIdentity}
+              sub={[devOs, `${sizeRef.current.w}×${sizeRef.current.h}`].filter(Boolean).join(' · ')}
+              lead={<StreamControl
+                connected={connected} label={connected ? t('phone.connected') : t('phone.disconnected')}
+                quality={quality} onQuality={changeQuality}
+                level={quality === 'auto' ? levelName : undefined}
+                latency={latency} bytesPerSec={bw} fps={fps}
+                variant="badge" showLabel={shelf !== 'narrow'} />}
+              trailing={shelf === 'wide'
+                ? <span className="mc-omni-num">{`${latency == null ? '—' : latency + 'ms'} · ${fmtRate(bw)} · ${fps}fps`}</span>
+                : undefined}
+            />
+            {/* 应用启动器：从前是个 160px 的 Select，窄屏上要独占一整行 */}
+            <Dropdown trigger={['click']} placement="bottomRight" open={appsOpen} onOpenChange={(v) => { setAppsOpen(v); if (v) loadApps() }}
+              popupRender={() => (
+                <div className="mc-menu mc-applauncher">
+                  <Input size="small" prefix={<SearchIcon size={12} />} placeholder={t('phone.searchApp')}
+                    value={appQuery} onChange={(e) => setAppQuery(e.target.value)} allowClear />
+                  <div className="mc-applist">
+                    {apps
+                      .filter((a) => !appQuery || `${a.name || ''} ${a.id}`.toLowerCase().includes(appQuery.toLowerCase()))
+                      .slice(0, 60)
+                      .map((a) => (
+                        <button key={a.id} type="button" className="mc-appitem"
+                          onClick={() => { launch(a.id); setAppsOpen(false) }}>
+                          <span className="ic" aria-hidden>{(a.name || a.id).slice(0, 1).toUpperCase()}</span>
+                          <span className="nm">{a.name || a.id}</span>
+                        </button>
+                      ))}
+                  </div>
+                  <div className="mc-appcount">{t('phone.appCount', { count: apps.length })}</div>
                 </div>
-                <div className="mc-appcount">{t('phone.appCount', { count: apps.length })}</div>
-              </div>
-            )}>
-            <button type="button" className="mc-ib" title={t('phone.launchApp')} aria-label={t('phone.launchApp')}>
-              <AppsIcon />
-            </button>
-          </Dropdown>
-          <MirrorMenu label={t('common.more')} items={menuItems} />
-        </>}
-      />
-
-      <style>{`
-        .pv-ripple{position:absolute;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;
-          border:2px solid var(--accent);pointer-events:none;animation:pvRip .45s ease-out forwards;}
-        @keyframes pvRip{from{transform:scale(.3);opacity:.9}to{transform:scale(2.6);opacity:0}}
-      `}</style>
-
-      {/* 画面舞台 */}
-      <div
-        ref={stageRef}
-        tabIndex={0}
-        onKeyDown={onKey}
-        onMouseDown={(e) => { e.preventDefault(); onDown(e.clientX, e.clientY) }}
-        onMouseUp={(e) => onUp(e.clientX, e.clientY)}
-        onTouchStart={(e) => { const t0 = e.touches[0]; if (t0) onDown(t0.clientX, t0.clientY) }}
-        onTouchEnd={(e) => { const t0 = e.changedTouches[0]; if (t0) onUp(t0.clientX, t0.clientY) }}
-        style={{
-          flex: 1, minHeight: 0, background: '#000', overflow: 'hidden', position: 'relative',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', outline: 'none', touchAction: 'none',
-        }}
-      >
-        <img
-          ref={imgRef}
-          draggable={false}
-          // 绝对填满舞台 + object-fit:contain：尺寸对着舞台的确定盒子解析，避免
-          // maxHeight:100% 在 flex 列里初次布局拿不到确定高度→需 resize 才显示的 bug。
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block', userSelect: 'none' }}
+              )}>
+              <button type="button" className="mc-ib" title={t('phone.launchApp')} aria-label={t('phone.launchApp')}>
+                <AppsIcon />
+              </button>
+            </Dropdown>
+            <MirrorMenu label={t('common.more')} items={menuItems} />
+          </>}
         />
-        {ripples.map((p) => (<span key={p.id} className="pv-ripple" style={{ left: p.x, top: p.y }} />))}
-        {!connected && healthMsg && (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, pointerEvents: 'none' }}>
-            <div style={{ maxWidth: 520, padding: 'var(--sp-3) var(--sp-4)', borderRadius: 'var(--r-sm)', background: 'rgba(0,0,0,.72)', border: '1px solid var(--danger-border)', color: 'var(--danger)', fontSize: 'var(--fs-sm)', lineHeight: 1.6, textAlign: 'center' }}>
-              {t('phone.unavailable')}<br />{healthMsg}
-            </div>
-          </div>
-        )}
-        {shelf !== 'narrow' && deviceKeys}
-      </div>
-      {/* 窄档贴底成实条：392 的屏上画面已经顶到边，浮层会压住内容 */}
-      {shelf === 'narrow' && deviceKeys}
 
+        <style>{`
+          .pv-ripple{position:absolute;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;
+            border:2px solid var(--accent);pointer-events:none;animation:pvRip .45s ease-out forwards;}
+          @keyframes pvRip{from{transform:scale(.3);opacity:.9}to{transform:scale(2.6);opacity:0}}
+        `}</style>
+
+        {/* 画面舞台 */}
+        <div
+          ref={stageRef}
+          tabIndex={0}
+          onKeyDown={onKey}
+          onMouseDown={(e) => { e.preventDefault(); onDown(e.clientX, e.clientY) }}
+          onMouseUp={(e) => onUp(e.clientX, e.clientY)}
+          onTouchStart={(e) => { const t0 = e.touches[0]; if (t0) onDown(t0.clientX, t0.clientY) }}
+          onTouchEnd={(e) => { const t0 = e.changedTouches[0]; if (t0) onUp(t0.clientX, t0.clientY) }}
+          style={{
+            flex: 1, minHeight: 0, background: '#000', overflow: 'hidden', position: 'relative',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', outline: 'none', touchAction: 'none',
+          }}
+        >
+          <img
+            ref={imgRef}
+            draggable={false}
+            // 绝对填满舞台 + object-fit:contain：尺寸对着舞台的确定盒子解析，避免
+            // maxHeight:100% 在 flex 列里初次布局拿不到确定高度→需 resize 才显示的 bug。
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block', userSelect: 'none' }}
+          />
+          {ripples.map((p) => (<span key={p.id} className="pv-ripple" style={{ left: p.x, top: p.y }} />))}
+          {!connected && healthMsg && (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, pointerEvents: 'none' }}>
+              <div style={{ maxWidth: 520, padding: 'var(--sp-3) var(--sp-4)', borderRadius: 'var(--r-sm)', background: 'rgba(0,0,0,.72)', border: '1px solid var(--danger-border)', color: 'var(--danger)', fontSize: 'var(--fs-sm)', lineHeight: 1.6, textAlign: 'center' }}>
+                {t('phone.unavailable')}<br />{healthMsg}
+              </div>
+            </div>
+          )}
+          {shelf !== 'narrow' && deviceKeys}
+        </div>
+        {/* 窄档贴底成实条：392 的屏上画面已经顶到边，浮层会压住内容 */}
+        {shelf === 'narrow' && deviceKeys}
+
+      </ConfigProvider>
     </div>
   )
 }

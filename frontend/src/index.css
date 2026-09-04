@@ -1358,7 +1358,12 @@ html[data-pointer="coarse"] .tt-srow .acts { opacity: 1; }
 .tt-page-phone,
 .tt-page-browser,
 .tt-page-files,
-.tt-page-plugins { padding: 0; }
+.tt-page-plugins,
+/* 项目页与设置页同样满幅：五页外框这才真的是一套。留白不再由页面容器给，
+   而是各自的内容段自己带（.prj-head/.prj-tabs/.prj-layout、.tt-set-head/.tt-set-pane）——
+   这样 sticky 头和分割线能一路铺到边，跟文件/插件页的那条竖线是同一种做法。 */
+.tt-page-projects,
+.tt-page-settings { padding: 0; }
 .tt-page-phone.tt-page-mobile,
 .tt-page-browser.tt-page-mobile,
 .tt-page-files.tt-page-mobile,
@@ -3079,7 +3084,7 @@ html[data-size="compact"] .cc-run-slot { width: auto; }
    右边只画选中的那一类，页内不滚——一页装不下就是这一类该拆（registry 的 MAX_ROWS
    在 dev 下会喊）。唯一允许滚的是搜索结果页 .tt-set-pane.scroll，它跨类、条数不可控。 */
 .tt-set { display: flex; flex-direction: column; height: 100%; min-height: 0; }
-.tt-set-head { flex: 0 0 auto; padding-bottom: var(--sp-3); border-bottom: 1px solid var(--border-subtle); }
+.tt-set-head { flex: 0 0 auto; padding: var(--sp-3) var(--pad-page); border-bottom: 1px solid var(--border-subtle); }
 /* 页名 + 搜索 + JSON 一行（与会话页同一套：.tt-pagename 在手机档自动隐藏） */
 .tt-set-headrow { display: flex; align-items: center; gap: var(--sp-2); }
 .tt-set-search {
@@ -3106,7 +3111,7 @@ html[data-size="compact"] .cc-run-slot { width: auto; }
 /* 分类树：纵向两级，没有横向 tab 的数量上限 */
 .tt-set-tree {
   width: 196px; flex: 0 0 196px; overflow: auto;
-  padding: var(--sp-3) var(--sp-2) var(--sp-5) 0; border-right: 1px solid var(--border-subtle);
+  padding: var(--sp-3) var(--sp-2) var(--sp-5) var(--pad-page); border-right: 1px solid var(--border-subtle);
 }
 .tt-set-tree .grp {
   padding: 14px 10px 5px; font-size: var(--fs-micro); font-weight: 700;
@@ -3137,7 +3142,7 @@ html[data-size="compact"] .cc-run-slot { width: auto; }
 /* 一类一页 */
 .tt-set-pane {
   flex: 1; min-width: 0; display: flex; flex-direction: column;
-  padding: var(--sp-4) 0 var(--sp-2) var(--sp-4); overflow: hidden;
+  padding: var(--sp-4) var(--pad-page) var(--sp-2) var(--sp-4); overflow: hidden;
 }
 .tt-set-pane .crumb { font-size: var(--fs-meta); color: var(--text-dimmer); }
 .tt-set-pane .ptitle { display: flex; align-items: center; gap: var(--sp-2); margin: 2px 0; }

@@ -72,7 +72,8 @@ const PRJ_CSS = `
 .prj-wrap-wide{max-width:var(--content-overview);margin:0;padding:0 0 32px;
   display:flex;flex-direction:column;gap:var(--sp-3)}
 /* 栅格与右轨。阈值一律看 Canvas 容器，不看 viewport——终端坞开合只改 Canvas 宽度 */
-.prj-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--sp-4);align-items:start}
+.prj-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--sp-4);align-items:start;
+  padding-inline:var(--pad-page)}
 .prj-feed{min-width:0;display:flex;flex-direction:column}
 @container canvas (min-width: 1180px){
   .prj-layout{grid-template-columns:minmax(0,1fr) var(--activity-rail)}
@@ -92,10 +93,13 @@ const PRJ_CSS = `
 
 /* 项目头 64 / Tabs 40，两者 sticky（14 §6.2）：往下翻任务流时「我在哪个项目、
    要新建什么、在看哪个 tab」始终在手边 */
+/* 页面容器不再给 16px 外框（见 index.css .tt-page-projects），留白改由这几段自己带：
+   sticky 头和它那条分割线因此能一路铺到边，跟文件/插件页的竖线是同一种做法。 */
 .prj-head{position:sticky;top:0;z-index:calc(var(--z-sticky) + 1);min-height:64px;
+  padding:var(--sp-3) var(--pad-page) 0;
   background:var(--bg-base);border-bottom:1px solid var(--border-subtle);margin-bottom:12px}
 .prj-tabs{position:sticky;top:64px;z-index:var(--z-sticky);
-  display:flex;gap:2px;margin:20px 0 2px;min-height:40px;
+  display:flex;gap:2px;margin:20px 0 2px;min-height:40px;padding-inline:var(--pad-page);
   background:var(--bg-base);border-bottom:1px solid var(--border-subtle)}
 .prj-tab{padding:8px 13px 9px;font-size:13px;color:var(--text-dim);cursor:pointer;user-select:none;
   display:inline-flex;align-items:center;gap:6px;border-bottom:2px solid transparent;margin-bottom:-1px;
