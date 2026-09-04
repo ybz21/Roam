@@ -159,7 +159,7 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
   // 头行右端一枚分支状态图标（照 Orca 卡片右上角那枚 PR 标）：分支名不再单独占一行——底部状态条已经有；
   // 颜色说状态：已合入 = 绿，有未合入提交 = 蓝，有未提交改动 = 黄，干净 = 灰；悬停看分支和数字
   const wtStatus = (task: TreeTask) => task.branch
-    ? <WtStatusIcon branch={task.branch} merged={task.merged} dirty={task.dirty} ahead={task.ahead} behind={task.behind} pushed={task.pushed} />
+    ? <WtStatusIcon branch={task.branch} dir={isLooseTask(task.key) ? undefined : task.path} merged={task.merged} dirty={task.dirty} ahead={task.ahead} behind={task.behind} pushed={task.pushed} />
     : null
   // 空闲 / 待收尾的 worktree：淡一档的卡，没有会话行；右键（或「…」）能派生、收尾
   const idleCard = (task: TreeTask) => (

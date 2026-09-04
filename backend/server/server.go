@@ -172,6 +172,7 @@ func New(cfg Config) *gin.Engine {
 		g.POST("/git/worktree/finish", h.WorktreeFinish) // P3 孤儿收尾：冻结→wip→merge→remove→留痕
 		g.POST("/git/worktree/sync", h.WorktreeSync)     // 远端轻量同步：ls-remote+fetch 合并目标，只动 refs/remotes（10 §3）
 		g.GET("/git/branches", h.GitBranches)            // 本地分支列表（W1 start-from）
+		g.GET("/git/pr", h.GitPR)                        // 这条分支在远端的 PR（gh CLI），分支状态弹层用
 		// ── Session API 增量 ──
 		g.GET("/sessions/annotations", h.SessionAnnotations)              // session→worktree 归属（cwd join）
 		g.GET("/sessions/:name/worktree-status", h.SessionWorktreeStatus) // W7 关闭前预检

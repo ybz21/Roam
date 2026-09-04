@@ -635,6 +635,24 @@ html[data-pointer="coarse"] .tt-csearch-line, html[data-pointer="coarse"] .tt-cs
 .tt-tree-row .wtst { margin-left: auto; width: 20px; height: 20px; }
 .tt-tree-row .bd + .wtst { margin-left: 0; }
 .wtst.ok { color: var(--ok); } .wtst.warn { color: var(--warn); } .wtst.accent { color: var(--accent); }
+.wtst.btn { cursor: pointer; }
+:where(html[data-pointer="fine"]) .wtst.btn:hover { background: var(--list-hover); }
+/* 分支的 PR 卡（Orca 那张）：编号 + 去远端 / 标题 / 状态与检查两枚 pill / 分支与数字 */
+.tt-pr-pop .ant-popover-inner { padding: 0; }
+.tt-pr-card { width: 320px; padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+.tt-pr-card .hd { display: flex; align-items: center; gap: 6px; }
+.tt-pr-card .hd .ic { display: inline-flex; color: var(--text-dim); }
+.tt-pr-card .hd b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: var(--fs-sm); }
+.tt-pr-card .ttl { font-size: var(--fs-sm); font-weight: 600; color: var(--text-bright); line-height: 1.45; }
+.tt-pr-card .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.tt-pr-card .dim { color: var(--text-dimmer); font-size: var(--fs-meta); display: flex; align-items: center; gap: 6px; }
+.tt-pr-card .dim.mono { font-family: var(--mono); font-size: var(--fs-micro); }
+.tt-pill.sm { height: 22px; padding: 0 8px; font-size: var(--fs-micro); }
+.tt-pill.sm.ok { color: var(--ok); border-color: var(--ok-border); background: var(--ok-soft); }
+.tt-pill.sm.accent { color: var(--accent); border-color: var(--accent-border); background: var(--accent-soft); }
+.tt-pill.sm.danger { color: var(--danger); border-color: var(--danger-border); background: var(--danger-soft); }
+.tt-pill.sm.warn { color: var(--warn); border-color: var(--warn-border); background: var(--warn-soft); }
+.tt-pill.sm.dim { color: var(--text-dim); }
 .tt-tree-agents { display: flex; align-items: center; gap: 4px; width: calc(100% - 12px); margin: 2px 6px 0; height: 26px; padding: 0 6px 0 26px; border: 0; background: none; border-radius: var(--r-xs); color: var(--text-dim); font: inherit; font-size: var(--fs-meta); cursor: pointer; }
 .tt-tree-agents .nm { flex: 1; text-align: left; }
 .tt-tree-agents .chev { display: inline-flex; color: var(--text-dimmer); transition: transform .15s; }
