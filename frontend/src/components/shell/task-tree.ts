@@ -10,6 +10,8 @@ import { taskKeyOf, type TaskKey } from '../sessions/task-key'
 export type TreeSession = {
   name: string
   label: string
+  /** 最近活动（unix 秒），行尾的「1d」 */
+  at?: number
   agent?: 'claude' | 'codex'
   running?: boolean
   waiting?: boolean
@@ -40,7 +42,7 @@ type ProjIn = {
   needs?: { name: string; label?: string; running?: boolean; waiting?: boolean; agent?: 'claude' | 'codex' }[] | null
 }
 type WtIn = { path: string; branch: string; isMain: boolean; committedAhead?: number; sessions?: { session: string }[] | null }
-type SessIn = { name: string; label?: string }
+type SessIn = { name: string; label?: string; lastActivity?: number; agent?: 'claude' | 'codex' }
 
 export function buildTaskTree(o: {
   projects: ProjIn[]
@@ -56,11 +58,12 @@ export function buildTaskTree(o: {
 }): TaskTree {
   // 会话的展示信息：先从 /projects 的 top / needs 里捞（带 agent / running / waiting），再补 /sessions 的 label
   const info = new Map<string, TreeSession>()
-  const put = (s: { name: string; label?: string; running?: boolean; waiting?: boolean; agent?: 'claude' | 'codex' }) => {
+  const put = (s: { name: string; label?: string; running?: boolean; waiting?: boolean; agent?: 'claude' | 'codex'; lastActivity?: number }) => {
     const cur = info.get(s.name) || { name: s.name, label: s.label || s.name }
     info.set(s.name, {
       ...cur,
       label: s.label || cur.label,
+      at: s.lastActivity || cur.at,
       agent: s.agent || cur.agent,
       running: s.running ?? cur.running,
       waiting: s.waiting ?? cur.waiting,

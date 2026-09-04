@@ -311,6 +311,7 @@ const enUS = {
   'tree.newTaskIn': 'New task under {name}',
   'tree.renameTask': 'Name this task',
   'tree.menu.open': 'Open',
+  'tree.sessionsN': '{n} sessions',
   'tree.menu.newTask': 'New task…',
   'tree.menu.projectHome': 'Project home',
   'tree.menu.close': 'Close session (end process)',

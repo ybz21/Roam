@@ -232,7 +232,7 @@ export default function App() {
   const [newTaskDir, setNewTaskDir] = useState<string | null>(null)
   // 树头「+」：就地弹新建项目框，不再先跳去项目列表页（建完自己跳到新项目主页）
   const [newProjectOpen, setNewProjectOpen] = useState(false)
-  const [sessList, setSessList] = useState<{ name: string; label?: string }[]>([])
+  const [sessList, setSessList] = useState<{ name: string; label?: string; lastActivity?: number; agent?: 'claude' | 'codex' }[]>([])
   // URL 上待还原的 id/名字（还没拿到 id 映射前先原样存着）
   const urlTerms = useRef<string[]>(readTermTokens().terms)
   const urlActive = useRef<string>(readTermTokens().active)
@@ -484,15 +484,15 @@ export default function App() {
       const byId: Record<string, string> = {}
       const byName: Record<string, string> = {}
       const labels: Record<string, string> = {}
-      const names: { name: string; label?: string }[] = []
+      const names: { name: string; label?: string; lastActivity?: number; agent?: 'claude' | 'codex' }[] = []
       for (const s of Array.isArray(list) ? list : []) {
         if (s?.id && s?.name) { byId[s.id] = s.name; byName[s.name] = s.id }
         if (s?.name && s?.label) labels[s.name] = s.label
-        if (s?.name) names.push({ name: s.name, label: s.label || undefined })
+        if (s?.name) names.push({ name: s.name, label: s.label || undefined, lastActivity: s.lastActivity || undefined, agent: s.agent === 'claude' || s.agent === 'codex' ? s.agent : undefined })
       }
       setSessIds({ byId, byName })
       // 内容没变就不换引用：树是按它 memo 的，5s 一次的空翻新会让整棵树白重算
-      setSessList((cur) => (cur.length === names.length && cur.every((x, i) => x.name === names[i].name && x.label === names[i].label) ? cur : names))
+      setSessList((cur) => (cur.length === names.length && cur.every((x, i) => x.name === names[i].name && x.label === names[i].label && x.lastActivity === names[i].lastActivity && x.agent === names[i].agent) ? cur : names))
       setSessionLabels(labels) // 展示名（@roam_name）：界面显示「名字（id）」，handle 仍是会话名
     }).catch(() => { if (!stop) setSessIds((m) => m || { byId: {}, byName: {} }) }) // 拉不到也要放行还原，别把标签卡在空白
     sessReload.current = load

@@ -11,6 +11,7 @@
 import { useState, type ReactNode } from 'react'
 import { Dropdown, Tooltip } from 'antd'
 import { useI18n } from '../../i18n'
+import { relTime } from '../../time-format'
 import { AgentLogo, ChevronDown, PlusIcon, TerminalIcon } from '../../icons'
 import { icoOf } from '../projects/project-list/project-model'
 import { isLooseTask, taskKeyOf, type TaskKey } from '../sessions/task-key'
@@ -91,40 +92,52 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
         className={`tt-nav-item tt-tree-row lvl${lvl}${activeTask === task && activeSession === s.name ? ' on' : ''}`}
         onClick={() => onSession(task, s.name)} title={s.name} onDoubleClick={onRename ? () => onRename(s.name) : undefined}
         aria-current={activeTask === task && activeSession === s.name ? 'true' : undefined}>
-        <span className="ic">{s.agent ? <AgentLogo kind={s.agent} size={16} /> : <TerminalIcon size={16} />}</span>
+        <span className="ic">{s.agent ? <AgentLogo kind={s.agent} size={15} /> : <TerminalIcon size={15} />}</span>
         <span className="nm">{s.label}</span>
         {dot(s, false)}
+        {s.at ? <span className="tm">{relTime(s.at, t)}</span> : null}
       </button>
     </Dropdown>
   )
 
-  // lvl：直接列出的任务是 1，从「待收尾 / 空闲」折叠行里展开的是 2，它们的会话再深一级
-  const taskRows = (task: TreeTask, lvl: 1 | 2 = 1) => {
+  // 任务是一张卡（参照 Orca 的侧栏）：名字一行、分支一行（淡、等宽）、「N 个会话」折叠头、会话行带时间；
+  // 收起时只剩一枚「✳ +N ›」。lvl 只在散会话那组用（它们没有卡）
+  const taskRows = (task: TreeTask, _lvl: 1 | 2 = 1) => {
     const on = activeTask === task.key
-    const open = task.sessions.length <= 1 || !closed.has(task.key)
+    const many = task.sessions.length > 1
+    const open = !many || !closed.has(task.key)
     const running = task.sessions.some((s) => s.running)
     const waiting = task.sessions.some((s) => s.waiting)
+    const hasActive = task.sessions.some((s) => s.name === activeSession)
+    const agents = task.sessions.filter((s) => s.agent)
     return (
-      <div key={task.key} className="tt-tree-task">
+      <div key={task.key} className={`tt-tree-task${on ? ' on' : ''}`}>
         <Dropdown trigger={['contextMenu']} menu={taskMenu(task)}>
-        <button type="button" className={`tt-nav-item tt-tree-row lvl${lvl}${on && !task.sessions.some((s) => s.name === activeSession) ? ' on' : ''}${open ? '' : ' closed'}`}
+        <button type="button" className={`tt-nav-item tt-tree-row head${on && !hasActive ? ' on' : ''}`}
           onClick={() => onTask(task.key)} title={task.path}
           onDoubleClick={onRenameTask && !isLooseTask(task.key) ? () => onRenameTask(task.key, task.name) : undefined}>
           <span className="ic">{dot({ running, waiting, unfinished: task.unfinished }, true)}</span>
           <span className="nm">{task.name}</span>
           {task.unfinished && <span className="bd" title={t('tree.unfinished', { n: task.ahead })}>{t('tree.unfinishedShort', { n: task.ahead })}</span>}
-          {/* 一个任务下开了一排 Claude 窗口时能收起来；收起时徽标写着里面有几个 */}
-          {task.sessions.length > 1 && (
-            <>
-              {!open && <span className="bd">{task.sessions.length}</span>}
-              <span className="chev" role="button" aria-label={open ? t('common.collapse') : t('common.expand')}
-                onClick={(e) => { e.stopPropagation(); toggle(task.key) }}><ChevronDown size={14} /></span>
-            </>
-          )}
         </button>
         </Dropdown>
-        {/* 会话缩进一级、左边一根从任务状态点垂下来的引线 + 每行一个小肘：谁派生自谁一眼看出来 */}
-        {open && <div className="tt-tree-sessions">{task.sessions.map((s) => sessionRow(task.key, s, (lvl + 1) as 2 | 3))}</div>}
+        {task.branch && <div className="tt-tree-branch" title={task.branch}>{task.branch}</div>}
+        {many && (
+          <button type="button" className={`tt-tree-agents${open ? '' : ' closed'}`} onClick={() => toggle(task.key)}
+            aria-expanded={open} aria-label={open ? t('common.collapse') : t('common.expand')}>
+            <span className="nm">{t('tree.sessionsN', { n: task.sessions.length })}</span>
+            <span className="chev"><ChevronDown size={13} /></span>
+          </button>
+        )}
+        {open
+          ? <div className="tt-tree-sessions">{task.sessions.map((s) => sessionRow(task.key, s, 2))}</div>
+          : (
+            <button type="button" className="tt-tree-more" onClick={() => toggle(task.key)} title={t('common.expand')}>
+              {agents[0] ? <AgentLogo kind={agents[0].agent!} size={13} /> : <TerminalIcon size={13} />}
+              <span>+{task.sessions.length}</span>
+              <span className="chev"><ChevronDown size={12} /></span>
+            </button>
+          )}
       </div>
     )
   }

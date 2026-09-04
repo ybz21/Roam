@@ -611,18 +611,27 @@ html[data-pointer="coarse"] .tt-csearch-line, html[data-pointer="coarse"] .tt-cs
 .tt-tree .dot.run { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
 .tt-tree .dot.wait { background: var(--warn); box-shadow: 0 0 0 3px var(--warn-soft); }
 .tt-tree .dot.fin { background: var(--swarm); }
-/* 任务 → 会话的从属：任务名加粗；会话缩一级，左边一根从任务状态点垂下来的引线，每行一个小肘接到图标。
-   引线钉在任务行图标槽正中（padding 32 + 槽 20 / 2 = 42），肘从引线伸到会话行的图标槽（54）。 */
-.tt-tree-task > .tt-tree-row .nm { font-weight: 600; }
-.tt-tree-sessions { position: relative; }
-.tt-tree-sessions::before { content: ''; position: absolute; left: 41.5px; top: -4px; bottom: 15px; width: 1px; background: var(--border); }
-.tt-tree-sessions .tt-tree-row { position: relative; }
-.tt-tree-sessions .tt-tree-row::after { content: ''; position: absolute; left: 41.5px; top: 50%; width: 10px; height: 1px; background: var(--border); }
+/* 任务卡（参照 Orca 侧栏）：一张卡 = 名字 / 分支 / 「N 个会话」头 / 会话行；卡之间留 4px，当前任务的卡描一圈 */
+.tt-tree-task { margin: 3px 8px 3px 22px; padding: 3px 0 4px; border-radius: var(--r-sm); background: var(--bg-container); border: 1px solid transparent; }
+.tt-tree-task.on { border-color: var(--accent-border); }
+.tt-tree-task > .tt-tree-row.head { padding-left: 10px; border-radius: var(--r-xs); }
+.tt-tree-task > .tt-tree-row.head .nm { font-weight: 600; }
+.tt-tree-branch { padding: 0 10px 2px 38px; color: var(--text-dimmer); font: 400 var(--fs-micro)/1.5 var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-tree-agents { display: flex; align-items: center; gap: 4px; width: calc(100% - 12px); margin: 2px 6px 0; height: 26px; padding: 0 6px 0 32px; border-radius: var(--r-xs); color: var(--text-dim); font-size: var(--fs-meta); }
+.tt-tree-agents .nm { flex: 1; text-align: left; }
+.tt-tree-agents .chev { display: inline-flex; color: var(--text-dimmer); transition: transform .15s; }
+.tt-tree-agents.closed .chev { transform: rotate(-90deg); }
+:where(html[data-pointer="fine"]) .tt-tree-agents:hover { background: var(--list-hover); color: var(--text-bright); }
+.tt-tree-sessions .tt-tree-row { padding-left: 38px; padding-right: 8px; min-height: 30px; border-radius: var(--r-xs); margin: 0 6px; width: calc(100% - 12px); }
 .tt-tree-sessions .tt-tree-row .nm { color: var(--text-dim); font-size: var(--fs-sm); }
 .tt-tree-sessions .tt-tree-row.on .nm { color: var(--text-bright); }
 :where(html[data-pointer="fine"]) .tt-tree-sessions .tt-tree-row:hover .nm { color: var(--text-bright); }
-/* 这一组里有当前标签：引线跟着亮成蓝，一眼看出当前会话挂在哪个任务下 */
-.tt-tree-task:has(.tt-tree-row.on) .tt-tree-sessions::before, .tt-tree-task:has(.tt-tree-row.on) .tt-tree-sessions .tt-tree-row::after { background: var(--accent-border); }
+.tt-tree-sessions .tt-tree-row .tm { flex: 0 0 auto; margin-left: 6px; color: var(--text-dimmer); font: 400 var(--fs-micro)/1 var(--mono); }
+.tt-tree-sessions .tt-tree-row .nm + .tm { margin-left: auto; }
+/* 收起：一枚「✳ +N ›」小药丸，点了展开 */
+.tt-tree-more { display: inline-flex; align-items: center; gap: 5px; margin: 2px 0 0 38px; height: 24px; padding: 0 8px; border-radius: var(--r-pill); border: 1px solid var(--border-subtle); background: var(--bg-elevated); color: var(--text-dim); font-size: var(--fs-meta); }
+.tt-tree-more .chev { display: inline-flex; color: var(--text-dimmer); transform: rotate(-90deg); }
+:where(html[data-pointer="fine"]) .tt-tree-more:hover { border-color: var(--accent-border); color: var(--text-bright); }
 /* 会话行末尾的状态点（只在运行 / 等你时有） */
 .tt-tree-row .nm + .dot { flex: 0 0 auto; margin-left: auto; }
 .tt-tree-empty { padding: 4px 12px 8px; color: var(--text-dimmer); font-size: var(--fs-meta); }
