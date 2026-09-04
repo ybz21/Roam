@@ -29,6 +29,8 @@ func Activate(ctx *sdk.Ctx) sdk.Plugin {
 		Commands: map[string]sdk.CommandHandler{
 			"stats":      stats,
 			"swap-clear": swapClear,
+			// 后台任务本体:由 swap-clear 起的脱离子进程调用,同步跑完 swapoff+swapon
+			"swap-cycle": swapCycle,
 		},
 	}
 }

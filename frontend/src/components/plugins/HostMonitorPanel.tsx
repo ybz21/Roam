@@ -49,20 +49,29 @@ function usageColor(p: number): string {
 // 前兆**——一旦换页无处可去，内核就在直接回收里空转，ping 还通（内核收发 ICMP 不换页）
 // 但 ssh 再也进不来，只能按电源键。本机 2026-08-12 那次就是这么冻的，而那三天里 swap
 // 一直贴着 98%——数字一直在这块面板上，只是画成了一根永不变色的灰条，和 5% 长得一样。
-function SwapBar({ used, total, t, onClear }: {
+function SwapBar({ used, total, t, onClear, job }: {
   used: number; total: number
   t: (k: string, vars?: Record<string, string | number>) => string
   /** 清一次；没给就不画那颗钮（比如快照是外部喂的、没有真插件可调） */
   onClear?: () => void
+  /** 后台任务在跑时的进度（起步换出多少 / 现在还剩多少） */
+  job?: { state: string; startSwap: number; swapUsed: number } | null
 }) {
   const pct = Math.round((used / total) * 100)
+  const running = job?.state === 'running'
   return (
     <div style={{ marginTop: 'var(--sp-2)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
         <Typography.Text type="secondary" style={{ fontSize: 'var(--fs-meta)' }}>
           Swap {fmtBytes(used)} / {fmtBytes(total)}
         </Typography.Text>
-        {onClear && used > 0 && (
+        {running ? (
+          // 跑着的时候不给按钮：再点一次就是第二个 swapoff 抢同一块内存。
+          // 数字本身就是进度——「还剩多少没读回来」比一个百分比条更说明问题。
+          <Typography.Text type="secondary" style={{ marginLeft: 'auto', fontSize: 'var(--fs-meta)', color: 'var(--accent)' }}>
+            {t('plugins.monitor.swapRunning', { left: fmtBytes(job?.swapUsed ?? used) })}
+          </Typography.Text>
+        ) : onClear && used > 0 && (
           <button type="button" className="tt-act" style={{ marginLeft: 'auto' }} onClick={onClear}>
             {t('plugins.monitor.swapClear')}
           </button>
@@ -151,6 +160,27 @@ export default function HostMonitorPanel({ pluginId, enabled, t, fetchSnapshot }
   // 把「换出多少 / 可用多少 / 读回来还剩多少」摆在确认框上，人点了才真干。
   const run = (args: Record<string, string>) =>
     api('POST', `/plugins/${encodeURIComponent(pluginId)}/run`, { command: 'host-monitor.swap-clear', args })
+
+  // 后台任务的进度。running 时每 2 秒问一次（比整块快照的 3 秒密一点：这是人盯着看的东西）
+  const [swapJob, setSwapJob] = useState<{ state: string; startSwap: number; swapUsed: number; err?: string } | null>(null)
+  useEffect(() => {
+    if (swapJob?.state !== 'running') return
+    let stop = false
+    const tick = async () => {
+      try {
+        const st = (await run({ status: '1' }))?.data ?? {}
+        if (stop) return
+        setSwapJob({ state: st.state || 'idle', startSwap: st.startSwap || 0, swapUsed: st.swapUsed || 0, err: st.err })
+        if (st.state === 'done') { message.success(t('plugins.monitor.swapCleared')); poll() }
+        if (st.state === 'failed') {
+          message.error(String(st.err).includes('need-sudo') ? t('plugins.monitor.swapNeedSudo') : (st.err || ''))
+        }
+      } catch { /* 轮询失败就等下一轮 */ }
+    }
+    const timer = setInterval(tick, 2000)
+    tick()
+    return () => { stop = true; clearInterval(timer) }
+  }, [swapJob?.state])
   const clearSwap = async () => {
     let plan: any
     try { plan = (await run({}))?.data ?? await run({}) } catch (e: any) { message.error(e.message); return }
@@ -169,9 +199,10 @@ export default function HostMonitorPanel({ pluginId, enabled, t, fetchSnapshot }
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
-          await run({ apply: '1' })
-          message.success(t('plugins.monitor.swapCleared'))
-          poll()
+          // 只是把任务**起**起来：swapoff 读回 7 GB 要几十秒到几分钟，等在请求里的话
+          // 页面就一直转圈、超时、刷一下还不知道它在不在跑。这里立刻返回，进度靠轮询。
+          const st = (await run({ apply: '1' }))?.data ?? {}
+          setSwapJob({ state: st.state || 'running', startSwap: st.startSwap || plan.swapUsed, swapUsed: st.swapUsed || plan.swapUsed })
         } catch (e: any) {
           // 没开免密时给出那一行 sudoers，而不是干巴巴一句「失败」
           message.error(String(e.message).includes('need-sudo')
@@ -254,7 +285,7 @@ export default function HostMonitorPanel({ pluginId, enabled, t, fetchSnapshot }
               <Sparkline series={history.map((h) => h.mem)} color="var(--hl-title)" max={100} />
             </div>
           </Space>
-          {memory.swapTotal > 0 && <SwapBar used={memory.swapUsed} total={memory.swapTotal} t={t} onClear={fetchSnapshot ? undefined : clearSwap} />}
+          {memory.swapTotal > 0 && <SwapBar used={memory.swapUsed} total={memory.swapTotal} t={t} onClear={fetchSnapshot ? undefined : clearSwap} job={swapJob} />}
         </StatCard>
 
         {/* GPU */}

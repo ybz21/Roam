@@ -121,8 +121,11 @@ export default function PluginsPanel({ initialId }: { initialId?: string } = {})
   if (loading) return <div style={{ padding: 48, textAlign: 'center' }}><Spin /></div>
 
   return (
-    <div style={{ display: 'flex', gap: 16, height: '100%', minHeight: 0 }}>
-      <Card size="small" style={isMobile ? { flex: 1, minWidth: 0, overflow: 'auto' } : { width: 300, flex: '0 0 300px', overflow: 'auto' }} title={t('plugins.title')}
+    // 两栏贴在一起、共用同一张底：这一页从前是「两张浮在页面上的卡片」，圆角 + 16px 缝 +
+    // 比页面亮一档的底，和会话工作区/镜像页那种「一整块，靠 1px 线断句」完全不是一套语言。
+    // 卡片本身留着（antd 的头/体布局还用得上），外观由 .tt-plugins 收平，见 index.css。
+    <div className="tt-plugins" style={{ display: 'flex', height: '100%', minHeight: 0 }}>
+      <Card size="small" className="tt-plugins-list" style={isMobile ? { flex: 1, minWidth: 0, overflow: 'auto' } : { width: 280, flex: '0 0 280px', overflow: 'auto' }} title={t('plugins.title')}
         extra={<Space size={4}>
           <Button size="small" type="primary" onClick={() => setInstallOpen(true)}>{t('plugins.install')}</Button>
           <Tooltip title={t('plugins.marketSoon')}>
@@ -139,9 +142,11 @@ export default function PluginsPanel({ initialId }: { initialId?: string } = {})
           renderItem={(p) => (
             <List.Item
               onClick={() => { setSelected(p.manifest.id); if (isMobile) setMobileDetail(true) }}
+              // 直角、通栏：一列 8px 圆角的小块贴在一整块底上，读起来像卡片里又摞了一叠卡片
               style={{
-                cursor: 'pointer', borderRadius: 'var(--r-sm)', padding: '8px 10px',
-                background: !isMobile && p.manifest.id === selected ? 'var(--bg-elevated, rgba(88,166,255,.12))' : undefined,
+                cursor: 'pointer', borderRadius: 0, padding: '8px 10px',
+                background: !isMobile && p.manifest.id === selected ? 'var(--list-hover)' : undefined,
+                boxShadow: !isMobile && p.manifest.id === selected ? 'inset 2px 0 0 var(--accent)' : undefined,
               }}
               actions={[<Switch key="sw" size="small" checked={p.enabled}
                 onClick={(v, e) => { e.stopPropagation(); toggle(p, v) }} />]}
@@ -157,7 +162,7 @@ export default function PluginsPanel({ initialId }: { initialId?: string } = {})
         />
       </Card>
       {!isMobile && (
-        <div style={{ flex: 1, minWidth: 0, overflow: 'auto' }}>
+        <div className="tt-plugins-detail" style={{ flex: 1, minWidth: 0, overflow: 'auto' }}>
           {current
             ? <PluginDetail key={current.manifest.id} plugin={current} locale={locale} t={t}
                 onChanged={() => { setSelected(''); reload() }} />

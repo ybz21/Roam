@@ -31,6 +31,7 @@ func Manifest() manifest.Manifest {
 			Commands: []manifest.CommandContrib{
 				{ID: "host-monitor.stats", Title: manifest.LocaleText{"zh-CN": "采集一次资源快照(含近期趋势)", "en-US": "Take a resource snapshot (with recent trend)"}},
 				{ID: "host-monitor.swap-clear", Title: manifest.LocaleText{"zh-CN": "把换出去的页读回内存(swapoff -a && swapon -a)", "en-US": "Read swapped-out pages back into RAM (swapoff -a && swapon -a)"}},
+				{ID: "host-monitor.swap-cycle", Title: manifest.LocaleText{"zh-CN": "读回内存(后台任务本体,由上一条派生)", "en-US": "Read pages back (the background job itself, spawned by swap-clear)"}},
 			},
 			StatusItems: statusItems(),
 		},

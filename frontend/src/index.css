@@ -528,6 +528,21 @@ html[data-pointer="coarse"] .tt-nav-collapse::after {
 }
 .tt-nav.rail .tt-nav-search { justify-content: center; width: 36px; margin: 0 auto var(--sp-2); padding: 0; border-radius: var(--r-xs); }
 
+/* ── 插件页：一整块，不是两张卡片（跟会话工作区/镜像页同一套语言）──
+   原来是两张 antd Card：圆角、投影、比页面亮一档的底，中间 16px 缝。五个页面里只有这一页
+   长这样。这里把卡片外观收平——直角、无边框、无投影、底色跟页面一致，两栏之间只留 1px 线。 */
+.tt-plugins { gap: 0; }
+.tt-plugins .ant-card {
+  border: 0; border-radius: 0; background: transparent; box-shadow: none;
+}
+.tt-plugins .ant-card-head {
+  border-radius: 0; background: transparent;
+  border-bottom: 1px solid var(--border-subtle);
+}
+/* 左栏靠一条竖线跟右栏断句；两栏同底，不再一亮一暗 */
+.tt-plugins > .tt-plugins-list { border-right: 1px solid var(--border-subtle); }
+.tt-plugins-detail > .ant-card > .ant-card-body { padding-inline: var(--sp-4); }
+
 /* ── 右栏三面板（22 设计 §3.4）：活动条 + 作用域头 + 文件 / Git / Worktree ── */
 .tt-ins { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
 .tt-ins-acts { display: flex; align-items: center; gap: 2px; height: 40px; padding: 0 8px; border-bottom: 1px solid var(--border-subtle); flex: 0 0 auto; }
