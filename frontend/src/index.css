@@ -1334,6 +1334,10 @@ html[data-pointer="coarse"] .tt-srow .acts { opacity: 1; }
 .tt-page-files,
 .tt-page-phone,
 .tt-page-browser,
+/* 插件页也满高：不给的话它只有 min-height，里面那块 height:100% 落到 auto 上，
+   于是左右两栏的高度由内容决定——列表下面一空，中间那条竖线就断在半路（截图里它到
+   最后一个插件就没了）。线要到底，列就得先到底。 */
+.tt-page-plugins,
 /* 设置页自己管滚动：搜索框与分类树必须钉住，只有内容区可以动 */
 .tt-page-settings {
   height: 100%;
@@ -1359,6 +1363,7 @@ html[data-pointer="coarse"] .tt-srow .acts { opacity: 1; }
 .tt-page-files > *,
 .tt-page-phone > *,
 .tt-page-browser > *,
+.tt-page-plugins > *,
 .tt-page-settings > * {
   height: 100%;
   min-height: 0;
