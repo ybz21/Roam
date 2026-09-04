@@ -8,12 +8,28 @@
 package api
 
 import (
+	"context"
 	"log"
 	"sync"
+	"time"
 
 	"ttmux-web/ttmux"
 	"ttmux-web/worktree"
 )
+
+// AgentLinkLoop 后台每 15s 扫一次进程树：对「会话 ↔ claude 对话 id」的账、把跑进 worktree 的会话
+// 在台账里改钉过去。**不挂在 /projects 请求上**：没开浏览器时起的 claude 也得认得，重启后也得马上补账。
+func (a *API) AgentLinkLoop() {
+	t := time.NewTicker(15 * time.Second)
+	defer t.Stop()
+	for {
+		a.agentLink.reconcile(runningAgentProcs(), a.linkAgentSession)
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		a.syncSessionHomes(a.WT.Annotations(ctx))
+		cancel()
+		<-t.C
+	}
+}
 
 var homeSynced sync.Map // 会话名 → 上次已同步的 worktree 路径
 

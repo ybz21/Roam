@@ -58,13 +58,7 @@ func Candidate(meta *sessmeta.Store, name string) (sessmeta.Row, bool) {
 
 // restorable 目录还在才谈得上重开。worktree 被清是常事——据实报错，
 // 别糊里糊涂在别处建一个会话出来。
-func restorable(row sessmeta.Row) bool {
-	if row.Status != "dead" {
-		return false
-	}
-	d := targetDir(row)
-	return d != "" && isDir(d)
-}
+func restorable(row sessmeta.Row) bool { return row.Status == "dead" && targetDir(row) != "" }
 
 // targetDir 重开该回到哪个目录：**台账目录**。
 //
@@ -120,12 +114,9 @@ func Revive(rt runtime.Runtime, meta *sessmeta.Store, name string) (Result, erro
 	if row.Status != "dead" {
 		return Result{}, fmt.Errorf("会话 %s 还活着，不需要重开", name)
 	}
-	if row.Dir() == "" {
-		return Result{}, fmt.Errorf("会话 %s 没有记下归属目录，无法重开", name)
-	}
-	dir := targetDir(row)
-	if !restorable(row) {
-		return Result{}, fmt.Errorf("原目录已不存在：%s", dir)
+	dir := targetDir(row) // 台账目录还在就回台账目录，否则退回对话文件记的目录；都没了才是真没了
+	if dir == "" {
+		return Result{}, fmt.Errorf("会话 %s 的目录已不存在：%s", name, row.Dir())
 	}
 
 	// 名字**一定要带过去**，而且要落库。

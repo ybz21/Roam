@@ -30,16 +30,15 @@ type prInfo struct {
 	Checks string `json:"checks,omitempty"` // passing | failing | pending | none
 }
 
-var prCache = struct {
-	sync.Mutex
-	m map[string]struct {
-		at   time.Time
-		info prInfo
-	}
-}{m: map[string]struct {
+type prCacheEntry struct {
 	at   time.Time
 	info prInfo
-}{}}
+}
+
+var prCache = struct {
+	sync.Mutex
+	m map[string]prCacheEntry
+}{m: map[string]prCacheEntry{}}
 
 const prCacheTTL = 60 * time.Second
 
@@ -64,10 +63,7 @@ func (a *API) GitPR(c *gin.Context) {
 	defer cancel()
 	info := lookupPR(ctx, dir, branch)
 	prCache.Lock()
-	prCache.m[key] = struct {
-		at   time.Time
-		info prInfo
-	}{time.Now(), info}
+	prCache.m[key] = prCacheEntry{time.Now(), info}
 	prCache.Unlock()
 	c.JSON(http.StatusOK, gin.H{"data": info})
 }

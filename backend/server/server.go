@@ -80,6 +80,7 @@ func New(cfg Config) *gin.Engine {
 	a := auth.New(cfg.Password, cfg.TOTPSecret, cfg.TOTPState, cfg.LockAfter, cfg.LockSecs, cfg.SavePassword)
 	h := api.New(tt, cfg.BrowserHome, cfg.DataDir, cfg.EmbeddedBin)
 	go h.SyncLoop()                 // 后台兜底远端同步（10 §3 第三档），失败静默
+	go h.AgentLinkLoop()            // 会话 ↔ claude 对话 id 对账、归属跟着 worktree 走（api/session-home-sync.go）
 	browser.InitConfig(cfg.DataDir) // Chrome 启动配置持久化到 dataDir
 	phone.InitConfig(cfg.DataDir)   // 手机后端配置（本机模拟器/远程设备/真机）持久化到 dataDir
 	hub := stream.New(tt, cfg.LogsDir)

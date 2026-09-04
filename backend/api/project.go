@@ -202,15 +202,7 @@ func (a *API) ProjectsList(c *gin.Context) {
 		}
 	}
 
-	agentProcs := runningAgentProcs() // 一次进程树扫描，供绿点判活跃（设计 W2）
-	agentRunning := map[string]string{}
-	for sess, p := range agentProcs {
-		agentRunning[sess] = p.Kind
-	}
-	// 顺带按事实对一遍「会话 ↔ 它那段 claude 对话」（agent-transcript-link.go）：进程树已经扫过，不额外付代价
-	a.agentLink.reconcile(agentProcs, a.linkAgentSession)
-	// 顺带把跑进 worktree 的会话在台账里改钉过去，重启后按台账重开才回得到原地
-	a.syncSessionHomes(ann)
+	agentRunning := runningAgentSessions() // 一次进程树扫描，供绿点判活跃（设计 W2）
 
 	addSession := func(p *projectSummary, top *[]projectSession, name, label string, attached bool, last int64, branch string, linked, dormant bool) {
 		claimed[name] = true
