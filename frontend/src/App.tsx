@@ -773,9 +773,8 @@ export default function App() {
       taskDir={activeTask && !isLooseTask(activeTask) ? activeTask : (activeProject?.dir || '')}
       onFileTab={setActiveFile} onCloseFile={closeFileTab} onPinFile={pinFileTab} onFileMode={setFileMode} reveal={reveal}
       // Focus 只在桌面有意义：手机上终端本来就是全屏覆盖层；任务视图里 focus 是常态，没有开关
-      focus={!hasSider ? undefined : taskView
-        ? { on: space.navCollapsed, toggle: () => space.setNavCollapsed(!space.navCollapsed), hint: `${modKeyLabel}⇧J` }
-        : { on: space.focus !== 'none', toggle: space.toggleFocus, hint: `${modKeyLabel}⇧J` }}
+      // 任务视图里不放 Focus 钮：它干的就是侧栏脚「收起」那件事（⌘⇧J 仍在）；expanded 档的覆盖面板才需要它
+      focus={!hasSider || taskView ? undefined : { on: space.focus !== 'none', toggle: space.toggleFocus, hint: `${modKeyLabel}⇧J` }}
     />
   )
 

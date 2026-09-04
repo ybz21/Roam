@@ -12,7 +12,7 @@ import { useState, type ReactNode } from 'react'
 import { Dropdown, Tooltip } from 'antd'
 import { useI18n } from '../../i18n'
 
-import { AgentLogo, ChevronDown, MoreIcon, PlusIcon, TerminalIcon } from '../../icons'
+import { AgentLogo, ArchiveIcon, ChevronDown, CloseIcon, HomeIcon, MoreIcon, OpenInIcon, PencilIcon, PlusIcon, TerminalIcon, TrashIcon, WorktreeIcon } from '../../icons'
 import { WtStatusIcon } from '../git/parts'
 import { icoOf } from '../projects/project-list/project-model'
 import { isLooseTask, taskKeyOf, type TaskKey } from '../sessions/task-key'
@@ -87,18 +87,18 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
   // 右键菜单：会话行 = 打开 / 重命名 / 关闭会话；任务行 = 起名 / 派生三样 / 收尾。
   // 标签条的 × 只是收起标签，会话还活着、树上还在——真要关，在这里
   const sessionMenu = (task: TaskKey, s: TreeSession) => ({ items: [
-    { key: 'open', label: t('tree.menu.open'), onClick: () => onSession(task, s.name) },
-    ...(onRename ? [{ key: 'rename', label: t('session.rename'), onClick: () => onRename(s.name) }] : []),
-    ...(onKill ? [{ type: 'divider' as const }, { key: 'kill', label: t('tree.menu.close'), danger: true, onClick: () => onKill(s.name) }] : []),
+    { key: 'open', icon: <OpenInIcon size={14} />, label: t('tree.menu.open'), onClick: () => onSession(task, s.name) },
+    ...(onRename ? [{ key: 'rename', icon: <PencilIcon size={14} />, label: t('session.rename'), onClick: () => onRename(s.name) }] : []),
+    ...(onKill ? [{ type: 'divider' as const }, { key: 'kill', icon: <CloseIcon size={14} />, label: t('tree.menu.close'), danger: true, onClick: () => onKill(s.name) }] : []),
   ] })
   const taskMenu = (task: TreeTask) => ({ items: [
-    ...(onRenameTask ? [{ key: 'name', label: t('tree.renameTask'), onClick: () => onRenameTask(task.key, task.name) }] : []),
+    ...(onRenameTask ? [{ key: 'name', icon: <PencilIcon size={14} />, label: t('session.rename'), onClick: () => onRenameTask(task.key, task.name) }] : []),
     ...(onNewInTask ? [{ type: 'group' as const, label: t('tree.menu.deriveHere'), children: [
       { key: 'sh', icon: <TerminalIcon size={14} />, label: t('tabs.newTerminal'), onClick: () => onNewInTask(task.key, 'shell') },
       { key: 'cc', icon: <AgentLogo kind="claude" size={14} />, label: t('tabs.newClaude'), onClick: () => onNewInTask(task.key, 'claude') },
       { key: 'cx', icon: <AgentLogo kind="codex" size={14} />, label: t('tabs.newCodex'), onClick: () => onNewInTask(task.key, 'codex') },
     ] }] : []),
-    ...(onFinishTask ? [{ type: 'divider' as const }, { key: 'finish', label: t('tree.menu.finish'), danger: true, onClick: () => onFinishTask(task) }] : []),
+    ...(onFinishTask ? [{ type: 'divider' as const }, { key: 'finish', icon: <ArchiveIcon size={14} />, label: t('tree.menu.finish'), danger: true, onClick: () => onFinishTask(task) }] : []),
   ] })
   const sessionRow = (task: TaskKey, s: TreeSession) => (
     <Dropdown key={s.name} trigger={['contextMenu']} menu={sessionMenu(task, s)}>
@@ -198,10 +198,10 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
               <span className="nm">{p.name}</span>
               {p.needs > 0 && <span className="bd">{p.needs}</span>}
               <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: [
-                { key: 'home', label: t('tree.menu.projectHome'), onClick: () => onProject(p.key) },
-                { key: 'idle', label: showIdle.has(p.key) ? t('tree.menu.hideIdle') : t('tree.menu.showIdle', { n: idle.length }), disabled: !idle.length && !showIdle.has(p.key),
+                { key: 'home', icon: <HomeIcon size={14} />, label: t('tree.menu.projectHome'), onClick: () => onProject(p.key) },
+                { key: 'idle', icon: <WorktreeIcon size={14} />, label: showIdle.has(p.key) ? t('tree.menu.hideIdle') : t('tree.menu.showIdle', { n: idle.length }), disabled: !idle.length && !showIdle.has(p.key),
                   onClick: () => setShowIdle((cur) => { const next = new Set(cur); if (next.has(p.key)) next.delete(p.key); else next.add(p.key); return next }) },
-                ...(onRemoveProject ? [{ type: 'divider' as const }, { key: 'remove', label: t('project.remove'), danger: true, onClick: () => onRemoveProject(p.key) }] : []),
+                ...(onRemoveProject ? [{ type: 'divider' as const }, { key: 'remove', icon: <TrashIcon size={14} />, label: t('project.remove'), danger: true, onClick: () => onRemoveProject(p.key) }] : []),
               ] }}>
                 <span className="act" role="button" aria-label={t('common.more')} onClick={(e) => e.stopPropagation()}><MoreIcon size={14} /></span>
               </Dropdown>

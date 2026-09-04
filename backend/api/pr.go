@@ -95,6 +95,31 @@ func lookupPR(ctx context.Context, dir, branch string) prInfo {
 		}
 		return prInfo{Reason: "error"}
 	}
+	if info, ok := parsePRList(out); ok {
+		return info
+	}
+	// 本地分支名和 PR 的 head 分支名常常不是一个（本地叫 tmp/xxx，推上去改了名）：
+	// 找远端上包含本地 HEAD 的分支，按它们再查一遍
+	seen := map[string]bool{branch: true}
+	for _, ref := range append(upstreamBranch(ctx, dir), remoteBranchesContainingHead(ctx, dir)...) {
+		if seen[ref] {
+			continue
+		}
+		seen[ref] = true
+		cmd := exec.CommandContext(ctx, gh, "pr", "list", "--head", ref, "--state", "all", "--limit", "1",
+			"--json", "number,title,state,url,isDraft,statusCheckRollup")
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GH_PROMPT_DISABLED=1", "GH_NO_UPDATE_NOTIFIER=1", "NO_COLOR=1")
+		if out, err := cmd.Output(); err == nil {
+			if info, ok := parsePRList(out); ok {
+				return info
+			}
+		}
+	}
+	return prInfo{Reason: "none"}
+}
+
+func parsePRList(out []byte) (prInfo, bool) {
 	var rows []struct {
 		Number            int       `json:"number"`
 		Title             string    `json:"title"`
@@ -104,10 +129,52 @@ func lookupPR(ctx context.Context, dir, branch string) prInfo {
 		StatusCheckRollup []ghCheck `json:"statusCheckRollup"`
 	}
 	if err := json.Unmarshal(out, &rows); err != nil || len(rows) == 0 {
-		return prInfo{Reason: "none"}
+		return prInfo{}, false
 	}
 	r := rows[0]
-	return prInfo{Found: true, Number: r.Number, Title: r.Title, State: r.State, Draft: r.IsDraft, URL: r.URL, Checks: summarizeChecks(r.StatusCheckRollup)}
+	return prInfo{Found: true, Number: r.Number, Title: r.Title, State: r.State, Draft: r.IsDraft, URL: r.URL, Checks: summarizeChecks(r.StatusCheckRollup)}, true
+}
+
+// upstreamBranch 本地分支跟踪的远端分支名（去掉 remote 前缀）：本地改过名、推上去叫别的，PR 挂在那个名字上。
+func upstreamBranch(ctx context.Context, dir string) []string {
+	out, err := runGit(ctx, dir, "rev-parse", "--abbrev-ref", "@{upstream}")
+	if err != nil {
+		return nil
+	}
+	name := strings.TrimSpace(out)
+	if i := strings.IndexByte(name, '/'); i >= 0 {
+		name = name[i+1:]
+	}
+	if name == "" {
+		return nil
+	}
+	return []string{name}
+}
+
+// remoteBranchesContainingHead 远端上包含本地 HEAD 的分支（去掉 remote 前缀和 HEAD / main 这类），最多 5 条。
+func remoteBranchesContainingHead(ctx context.Context, dir string) []string {
+	out, err := runGit(ctx, dir, "for-each-ref", "--format=%(refname:short)", "--contains", "HEAD", "refs/remotes/")
+	if err != nil {
+		return nil
+	}
+	var refs []string
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		line = strings.TrimSpace(line)
+		i := strings.IndexByte(line, '/')
+		if line == "" || i < 0 {
+			continue
+		}
+		name := line[i+1:]
+		switch name {
+		case "HEAD", "main", "master", "develop":
+			continue
+		}
+		refs = append(refs, name)
+		if len(refs) >= 5 {
+			break
+		}
+	}
+	return refs
 }
 
 // summarizeChecks 把一串检查压成一个词：有失败就 failing，否则有没跑完的就 pending，否则 passing；空 = none。
