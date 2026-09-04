@@ -1,70 +1,35 @@
-// 工作区容器：Canvas ｜ Dock 的四种几何（14 设计 §4.1–§4.3 / 13 §13.1）。
+// 工作区容器：Canvas ｜ Dock ｜ Inspector 的三种几何（14 设计 §4.1 / 13 §13.1 / 22 D1）。
 //
-// **一个组件管四态，是为了让终端永远不换挂载点。**上一版把 split 和其余三态分成
-// 两棵不同的 JSX 树，于是每按一次 ⌘J，React 都在同一位置看到不同的组件类型 →
-// 卸载重建 → 终端连接跟着断一次。现在 {canvas} 和 {dock} 在四态里都是同一个位置，
-// 变的只有它们的样式。
+// **一个组件管三态，是为了让终端永远不换挂载点。**把不同态分成不同的 JSX 树，每换一次态
+// React 都在同一位置看到不同的组件类型 → 卸载重建 → 终端连接跟着断一次。现在 {canvas} 和
+// {dock} 在三态里都是同一个位置，变的只有它们的样式。
 //
 //   page     Canvas 铺满，Dock 宽度 0（仍挂载）
-//   split    Canvas ｜ 8px 分隔条 ｜ Dock（large 档，≥1280）
 //   overlay  Canvas 铺满不动，Dock 从右侧覆盖 480 + 遮罩（expanded 档，905–1279）
-//   focus    Canvas 归零，Dock 铺满（用户显式 ⌘⇧J）
+//   focus    Canvas 归零，Dock 铺满（任务视图；expanded 档上是用户显式 ⌘⇧J）
 //
-// overlay 的关键是 Dock **脱离文档流**：终端开合前后 Canvas 宽度一模一样，
-// 概览的容器查询不会因为开个终端就跳列（13 §13.1）。
-//
-// 分隔条替掉的是那条 18px 全高把手：它把屏高切成三段——上半"向左扩展"、中间拖拽、
-// 下半"向右收起"，还配竖排文字。一条 18px 的常驻噪音同时承担四种语义，
-// 鼠标过去得先辨认方向而不是直接拖；而且操作对象其实是"页面宽"，
-// 用户心里想的却是"调终端宽"。现在只剩一件事：拖。
-//
-// 拖拽有两条硬约束，都是踩出来的账：
-//
-// ① **指针要能穿过 iframe**（#140）：iframe 有独立 document，普通 window
-//    pointermove/up 在指针进入 iframe 后就断。走 usePointerResize —— pointer
-//    capture 连续跟踪 + body portal 遮罩兜底。
-//
-// ② **拖动期间不许改布局**（#139）：每帧改页面/终端宽度会让 HTML iframe 高频
-//    重排、ResizeObserver 反复 fit → SIGWINCH → tmux 整屏重排，肉眼就是闪屏。
-//    所以拖动时**只移动一条引导线**，`pointerup` 才提交一次宽度。
-import { useCallback, useRef, type CSSProperties, type ReactNode } from 'react'
+// 14 稿的 split（页面 ｜ 拖拽分隔条 ｜ 终端）已作废（22 D1）：终端不再和页面抢宽度，
+// 分隔条、引导线、拖过头落 Focus 那套都不在了。overlay 的关键是 Dock **脱离文档流**：
+// 终端开合前后 Canvas 宽度一模一样，概览的容器查询不会因为开个终端就跳列。
+import { type CSSProperties, type ReactNode } from 'react'
 import { useI18n } from '../../i18n'
-import { PointerResizeShield, usePointerResize } from '../mirror/PointerResize'
 import { OVERLAY_DOCK, type SpaceMode } from './useWorkspaceLayout'
 import { useInspectorOpen } from './inspector'
 import { InspectorColumn } from './InspectorColumn'
-import { RailControls, RAIL_STEP, isGripEvent, isStepEvent } from './RailGrip'
 
 export function Workspace({
-  mode, canvas, dock, dockWidth, bounds, splitMax, onResize, onReset, onFocus, onDismiss, capsule,
-  splitCapable, onToggleDock, onExitFocus,
+  mode, canvas, dock, onDismiss, capsule,
   inspectorWidth, inspectorBounds, inspectorOverlay, canvasFitsInspector, onInspectorResize, onInspectorReset,
-  inspectorCollapsed, onToggleInspector, hideRail,
+  inspectorCollapsed, onToggleInspector,
 }: {
   mode: SpaceMode
-  /** 任务视图：focus 是常态，没有「页面」可叫回，那条 rail 不画 */
-  hideRail?: boolean
   canvas: ReactNode
   dock: ReactNode
-  dockWidth: number
-  /** 拖拽区间，上界 = Canvas 归零处 */
-  bounds: { min: number; max: number }
-  /** 超过它 Canvas 就不足 560：松手时落进 Focus 而不是留一条废条 */
-  splitMax: number
-  onResize: (width: number) => void
-  onReset: () => void
-  /** 拖过头：页面藏起来，终端铺满 */
-  onFocus: () => void
   /** 覆盖态点遮罩收起 */
   onDismiss: () => void
   /** 覆盖态收起时右下角的会话胶囊（13 §13.1）；其余档传 null */
   capsule?: ReactNode
-  /** large 档：终端收起后把手仍留在原地，点它把终端叫回来 */
-  splitCapable: boolean
-  onToggleDock: () => void
-  /** Focus 态（页面已藏）时把手上那枚握把用来把页面叫回来 */
-  onExitFocus: () => void
-  /** Inspector（Git / Worktree）列宽与区间 */
+  /** Inspector（文件 / Git / Worktree）列宽与区间 */
   inspectorWidth: number
   inspectorBounds: { min: number; max: number }
   /** expanded 档：Inspector 也走覆盖式（与 Dock 同语义） */
@@ -77,83 +42,11 @@ export function Workspace({
   onToggleInspector: () => void
 }) {
   const { t } = useI18n()
-  const { active, start } = usePointerResize()
-  const railRef = useRef<HTMLDivElement>(null)
-  const guideRef = useRef<HTMLDivElement>(null)
-  const pending = useRef<number | null>(null)
-
-  const clamp = useCallback(
-    (w: number) => Math.round(Math.max(bounds.min, Math.min(bounds.max, w))),
-    [bounds],
-  )
-
-  const onPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    const rail = railRef.current
-    const guide = guideRef.current
-    if (!rail || isStepEvent(e)) return
-    // 按在握把上但一路没挪 → 这是一次点击，交给开合；挪了就还是拖拽（握把不挡拖）
-    const onGrip = isGripEvent(e)
-    let moved = false
-    const startX = e.clientX
-    const startWidth = dockWidth
-    const railCenter = rail.getBoundingClientRect().left + rail.offsetWidth / 2
-    if (guide) {
-      guide.style.display = 'block'
-      guide.style.left = `${railCenter}px`
-    }
-    start(e, {
-      onMove: (ev) => {
-        if (Math.abs(ev.clientX - startX) > 3) moved = true
-        // 往左拖 = 终端变宽，所以是减；钳制交给 clamp，引导线也就停在边界上
-        const next = clamp(startWidth - (ev.clientX - startX))
-        pending.current = next
-        // 分隔条最终会左移 (next - startWidth)，引导线按这个位移走
-        if (guide) {
-          guide.style.left = `${railCenter - (next - startWidth)}px`
-          // 越过 splitMax 换色：松手不是"再宽一点"，而是"整页藏起来"，得先说一声
-          guide.dataset.focus = next > splitMax ? '1' : ''
-        }
-      },
-      onEnd: () => {
-        if (guide) guide.style.display = 'none'
-        const next = pending.current
-        pending.current = null
-        if (onGrip && !moved) { onToggleDock(); return }
-        if (next == null) return
-        // 拖过 splitMax = Canvas 已经不足 560：与其留一条 300px 的废页面，不如整页藏起来。
-        // 这样「一直往左拖」这个动作有终点，而不是拖到某处就顶死不动。
-        if (next > splitMax) onFocus()
-        else onResize(next)
-      },
-    })
-  }, [dockWidth, clamp, onResize, onFocus, splitMax, start, onToggleDock])
-
-
-  // 按钮一档一档地挪，与键盘同一条路径（都是一次提交，不存在高频重排）
-  const stepDock = useCallback((dir: -1 | 1) => {
-    const next = clamp(dockWidth - dir * RAIL_STEP)
-    if (next > splitMax) onFocus(); else onResize(next)
-  }, [dockWidth, clamp, splitMax, onFocus, onResize])
-
-  // 键盘调宽是一次一档，不存在高频重排，直接提交
-  const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === 'ArrowLeft') {
-      const next = clamp(dockWidth + 16)
-      if (next > splitMax) onFocus(); else onResize(next)
-    }
-    else if (e.key === 'ArrowRight') onResize(clamp(dockWidth - 16))
-    else if (e.key === 'Home') onResize(bounds.min)
-    else if (e.key === 'End') onFocus()
-    else return
-    e.preventDefault()
-  }, [dockWidth, bounds, splitMax, clamp, onResize, onFocus])
-
   const focus = mode === 'focus'
   const overlay = mode === 'overlay'
 
   // Inspector 占用与否由槽位登记决定（面板自己 portal 进来），Shell 只管留不留这一列
-  const insOpen = useInspectorOpen()
-  const insInline = insOpen && !inspectorOverlay
+  const insInline = useInspectorOpen() && !inspectorOverlay
   // 三列摆不下时让 Canvas（图纸 §三：让页面，不让终端）
   const canvasHidden = focus || (insInline && !canvasFitsInspector)
 
@@ -170,19 +63,16 @@ export function Workspace({
         animation: 'ttDockIn .2s cubic-bezier(.2,.85,.3,1)',
       }
     : {
-        flex: mode === 'split' ? `0 0 ${dockWidth}px` : focus ? '1 1 auto' : '0 0 0px',
-        width: mode === 'split' ? dockWidth : focus ? undefined : 0,
         // clip：page 态下这一列宽 0 但终端仍挂着，hidden 会让里面的 autoFocus 把祖先滚出屏幕
+        flex: focus ? '1 1 auto' : '0 0 0px', width: focus ? undefined : 0,
         minWidth: 0, height: '100%', minHeight: 0, overflow: 'clip',
         display: 'flex', flexDirection: 'column',
         background: 'var(--bg-term)',
-        transition: active ? 'none' : 'flex-basis .2s, width .2s',
       }
 
   return (
-    // 这里**不能**写 height:100dvh：这一层挂在 40px 的 Command Center 下面，
-    // 100dvh 会让整列比可视区高出正好一个顶栏，最底下那条快捷键条只露得出几像素
-    // （终端也跟着多算 40px，最后一行同样看不见）。跟着 Layout 的列走 flex:1 即可。
+    // 这里**不能**写 height:100dvh：100dvh 会让整列比可视区高出一个顶栏，最底下那条快捷键条只露得出几像素。
+    // 跟着 Layout 的列走 flex:1 即可。
     <div style={{ position: 'relative', display: 'flex', height: '100%', minHeight: 0, minWidth: 0, flex: 1 }}>
       <div style={{
         flex: canvasHidden ? '0 0 0px' : '1 1 auto', width: canvasHidden ? 0 : undefined,
@@ -191,38 +81,7 @@ export function Workspace({
         {canvas}
       </div>
 
-      {/* 三种态里把手都在，只有覆盖态没有（那一档终端是盖上来的，没有列可分）：
-            split  拖宽 + 点握把收起终端
-            page   终端已收起，握把把它叫回来
-            focus  页面已藏起（往左拖到底的落点），握把把页面叫回来——
-                   否则拖到底之后这条路只剩快捷键，而用户刚刚就是用拖走过来的。 */}
-      {!hideRail && (mode === 'split' || mode === 'focus' || (mode === 'page' && splitCapable)) && (
-        <div
-          ref={railRef}
-          role="separator"
-          aria-orientation="vertical"
-          aria-label={t('workspace.resizeDock')}
-          aria-valuemin={bounds.min}
-          aria-valuemax={bounds.max}
-          aria-valuenow={mode === 'split' ? dockWidth : 0}
-          tabIndex={0}
-          onPointerDown={mode === 'split' ? onPointerDown : undefined}
-          onDoubleClick={mode === 'split' ? onReset : undefined}
-          onKeyDown={mode === 'split' ? onKeyDown : undefined}
-          className={`tt-split-rail${mode === 'split' ? '' : ' collapsed'}`}
-        >
-          {focus
-            ? <RailControls collapsed side="left" onToggle={onExitFocus} label={t('workspace.showCanvas')} />
-            : (
-              <RailControls collapsed={mode !== 'split'} side="right" onToggle={onToggleDock}
-                label={mode === 'split' ? t('workspace.collapseDock') : t('workspace.expandDock')}
-                onStep={stepDock}
-                stepLabels={{ minus: t('workspace.widenDock'), plus: t('workspace.narrowDock') }} />
-            )}
-        </div>
-      )}
-
-      {/* 遮罩只盖 Canvas，不盖导航轨和顶栏——「上下文不消失」也适用于覆盖态 */}
+      {/* 遮罩只盖 Canvas，不盖导航轨——「上下文不消失」也适用于覆盖态 */}
       {overlay && <div className="tt-dock-scrim" onClick={onDismiss} aria-hidden="true" />}
 
       <div style={dockStyle}
@@ -231,20 +90,12 @@ export function Workspace({
         {dock}
       </div>
 
-      {/* Inspector：Git / Worktree 这一列（图纸 panels-desktop.html）。
-          它自带 rail 与拖拽——没有终端时 App 走的是另一棵树，那边也要有同一列。 */}
+      {/* Inspector：文件 / Git / Worktree 这一列（图纸 panels-desktop.html）。它自带 rail 与拖拽。 */}
       <InspectorColumn width={inspectorWidth} bounds={inspectorBounds}
         overlay={inspectorOverlay} onResize={onInspectorResize} onReset={onInspectorReset}
         collapsed={inspectorCollapsed} onToggleCollapsed={onToggleInspector} />
 
       {capsule}
-
-      {/* 拖动期间只有这条线跟着指针走，布局纹丝不动 */}
-      <div ref={guideRef} data-dock-resize-guide aria-hidden="true" style={{
-        display: 'none', position: 'fixed', top: 0, bottom: 0, width: 2,
-        zIndex: 1000, pointerEvents: 'none',
-      }} className="tt-dock-guide" />
-      <PointerResizeShield active={active} />
     </div>
   )
 }

@@ -108,8 +108,6 @@
   --topbar-h: 40px;
   --status-h: 24px;               /* 底部状态条；粗指针下长到 --tap（见 .tt-statusbar） */
   --canvas-min: 560px;
-  --dock-min: 480px;
-  --dock-max: 880px;
   --split-rail: 8px;
   --split-hit: 20px;
   --activity-rail: 320px;
@@ -256,7 +254,6 @@ html[data-pointer="coarse"] .tt-rail-btn::after {
 /* 拖拽引导线。越过 splitMax（Canvas 会不足 560）时换成琥珀色：松手的后果从
    "再宽一点"变成"整页藏起来"，颜色先说一声。 */
 .tt-dock-guide { background: var(--accent); box-shadow: 0 0 0 1px rgba(88, 166, 255, .18); }
-.tt-dock-guide[data-focus='1'] { background: #d29922; box-shadow: 0 0 0 1px rgba(210, 153, 34, .25); }
 
 /* ── expanded 档（905–1279）的覆盖式终端面板（13 §13.1）──
    这一档并排最多只能挤出 561–735 的 Canvas，正是要消灭的「页面被压成预览条」。

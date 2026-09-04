@@ -90,7 +90,6 @@ const { Text } = Typography
 // 概览独有的问候条/行动队列/活动轨现在挂在项目列表页顶上。旧链接由 normalizeRoute 接住。
 const NAV = [
   { key: 'projects', labelKey: 'nav.projects' },
-  { key: 'sessions', labelKey: 'nav.sessions' },
   { key: 'files', labelKey: 'nav.files' },
   { key: 'browser', labelKey: 'nav.browser' },
   { key: 'phone', labelKey: 'nav.phone' },
@@ -110,7 +109,7 @@ const NAV_TOOLS = ['browser', 'phone', 'plugins']
 // 比原来 6 格的 65 宽出一截（13 §7.1 的命中区下限是 44，但相邻图标还要留够间隙）。
 const MOBILE_NAV_KEYS = ['projects', 'files', 'browser', 'phone']
 // 「更多」sheet 里的两段：会话属于工作区主线，不归到工具下面
-const MOBILE_MORE_WORKSPACE = ['sessions']
+const MOBILE_MORE_WORKSPACE: string[] = [] // 会话页退役（23 设计 §5）：不再有入口，路由留给老链接
 const MOBILE_MORE_TOOLS = ['plugins', 'settings']
 const MOBILE_MORE_KEYS = [...MOBILE_MORE_WORKSPACE, ...MOBILE_MORE_TOOLS]
 
@@ -1027,27 +1026,19 @@ export default function App() {
         </Sider>
       )}
 
-      {/* 主区：Command Center ｜ (Canvas ｜ 8px 分隔条 ｜ Dock)。
-          顶栏横跨页面与终端，位置不因 Dock 开合跳动；终端**常驻挂载**
-          （收起时宽度归零、Focus 时页面归零），换形态不断连接。*/}
+      {/* 主区：Canvas ｜ Dock ｜ Inspector。终端**常驻挂载**（收起时宽度归零、Focus 时页面归零），换形态不断连接。*/}
       <Layout style={{ background: 'var(--bg-base)', minWidth: 0 }}>
         {/* 顶栏 Command Center 撤了（22 设计 §3.5）：搜索去了侧栏、「新建」去了标签条与项目页、终端数状态条本来就有 */}
         {hasSider && (terms.length > 0 || taskView) ? (
-          // 四态（page / split / overlay / focus）都走同一个 Workspace：换的是几何，
+          // 三态（page / overlay / focus）都走同一个 Workspace：换的是几何，
           // 不是组件树，终端因此不会在开合时被卸载重建。
           <Workspace
-            mode={space.mode} canvas={canvasNode} dock={dockNode} hideRail={taskView}
-            dockWidth={space.dockRenderWidth} bounds={space.bounds} splitMax={space.splitMax}
-            onResize={space.setDockWidth} onReset={space.resetDockWidth}
-            onFocus={() => space.setFocus('dock')}
+            mode={space.mode} canvas={canvasNode} dock={dockNode}
             onDismiss={() => space.setDockOpen(false)}
-            splitCapable={space.splitCapable}
-            onToggleDock={() => { space.setFocus('none'); space.toggleDock() }}
-            onExitFocus={() => space.setFocus('none')}
             inspectorCollapsed={space.inspectorCollapsed}
             onToggleInspector={space.toggleInspectorCollapsed}
             inspectorWidth={space.inspectorWidth} inspectorBounds={space.inspectorBounds}
-            inspectorOverlay={!space.splitCapable} canvasFitsInspector={space.canvasFitsInspector}
+            inspectorOverlay={!space.large} canvasFitsInspector={space.canvasFitsInspector}
             onInspectorResize={space.setInspectorWidth} onInspectorReset={space.resetInspectorWidth}
             capsule={space.overlayCapable && space.mode === 'page' ? (
               // 胶囊只有 320px，显示 sessionLabel 而不是 sessionDisplay——后者带
@@ -1068,7 +1059,7 @@ export default function App() {
             {canvasNode}
             {hasSider && (
               <InspectorColumn width={space.inspectorWidth} bounds={space.inspectorBounds}
-                overlay={!space.splitCapable} onResize={space.setInspectorWidth}
+                overlay={!space.large} onResize={space.setInspectorWidth}
                 onReset={space.resetInspectorWidth}
                 collapsed={space.inspectorCollapsed} onToggleCollapsed={space.toggleInspectorCollapsed} />
             )}

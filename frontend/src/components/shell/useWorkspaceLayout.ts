@@ -1,21 +1,19 @@
-// 工作区空间状态：Page / Split / Focus 三态与 Dock 宽度（14 设计 §4.1–§4.3）。
+// 工作区空间状态：Page / Focus / Overlay 三态与右栏（Inspector）宽度。
 //
 // 这里只有尺寸与状态，不含任何 JSX——分栏契约是纯算术，值得单独测。
 //
-// 旧实现的问题是**主次颠倒**：页宽按页面类型写死（files 520–900 / sessions 420 /
-// 其余 300），终端 `minWidth: 480` 拿走剩余全部。用户从项目页开个终端，项目上下文
-// 就被压成 300px。新契约反过来：Canvas 最小 560、Dock 最小 480，谁也不能把对方
-// 挤破；空间不够就整体切 Focus，绝不横向溢出。
+// 14 稿的「页面 ｜ 终端」并排（split）已按 22 设计 D1 作废：large 档要么整块页面（Page），
+// 要么整块任务工作区（Focus，即任务视图）；终端不再和页面抢宽度，Dock 宽度、拖拽分隔条、
+// 42vw 默认值那一整套算术随之删掉。expanded 档（905–1279）终端仍是覆盖式面板，手机全屏。
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLayout, type WindowSize } from '../../layout'
 import { usePreferences, preferencesLoaded, saveWorkspace } from '../../preferences'
 import { reportInspectorCap, useInspectorOpen, useInspectorWantWidth } from './inspector'
 
-/** 尺寸契约，与 index.css 的 --canvas-min / --dock-* 同源（14 §8.2）。 */
+/** 页面最窄 560，与 index.css 的 --canvas-min 同源（14 §8.2）：右栏再宽也不能把页面挤破，挤破就整页让位 */
 export const CANVAS_MIN = 560
-export const DOCK_MIN = 480
-export const DOCK_MAX = 880
-export const SPLIT_RAIL = 8
+/** 右栏那条 8px 分隔条 */
+export const RAIL = 8
 export const NAV_WIDTH = 280 // 22 设计 §5：左栏 280，树里的任务卡才摆得下名字 + 状态
 // 轨态 48：一列 20px 图标要的就是这个宽度（VS Code 活动栏同宽）。64 是给「图标 + 文字」
 // 留的位子，可轨态本来就没有文字，多出来的 16px 只是一条空黑边贴在页面左边。
@@ -23,130 +21,34 @@ export const NAV_RAIL = 48
 /** expanded 档覆盖式终端面板的宽度（13 §13.1）。 */
 export const OVERLAY_DOCK = 480
 
-/** Inspector（Git / Worktree 列）的尺寸契约，见 14-desktop-workspace/panels-desktop.html */
+/** Inspector（右栏：文件 / Git / Worktree）的尺寸契约，见 14-desktop-workspace/panels-desktop.html */
 export const INSPECTOR_MIN = 280
 export const INSPECTOR_DEFAULT = 350
 // 文件抽屉是两层折叠（文件夹层 + 预览层），两层加起来能到一千出头——880 会把预览截短。
 // 真正的上界仍由 inspectorBounds 按剩余空间给，这里只是"用户最多能拖多宽"。
 export const INSPECTOR_MAX = 1200
 
-export type SpaceMode = 'page' | 'split' | 'focus' | 'overlay'
+export type SpaceMode = 'page' | 'focus' | 'overlay'
 export type FocusTarget = 'none' | 'page' | 'dock'
 
-/**
- * Dock 宽度上界：可用宽减去 Canvas 最小宽和分隔条。
- *
- * 不钳这一下就会横向溢出——1280 展开侧栏时 `42vw = 538`，Canvas 只剩 510，
- * 自己先破 560 的契约。**拖拽、双击复位、恢复偏好三条路径都必须过这个函数**，
- * 这是「不制造横向滚动」的唯一保证（14 §4.2）。
- *
- * 这里**不再压 880**：880 是"默认给多宽"（见 defaultDockWidth），不该同时充当
- * "用户最多能拖多宽"。用户显式拖到 1200，就该是 1200。
- */
-export function dockBounds(workspaceWidth: number): { min: number; max: number } {
-  const room = workspaceWidth - SPLIT_RAIL - CANVAS_MIN
-  return { min: DOCK_MIN, max: Math.max(DOCK_MIN, room) }
+/** 右栏打开之后，页面还保不保得住 560。保不住就整页让位（Workspace 把 Canvas 归零） */
+export function canvasFitsWith(o: { workspaceWidth: number; inspectorWidth: number }): boolean {
+  return o.workspaceWidth - o.inspectorWidth - RAIL >= CANVAS_MIN
 }
 
-/**
- * 拖拽能到的最远处：Canvas 归零。
- *
- * 只让拖到 `dockBounds().max` 的话，1440 屏（侧栏 224）上界就是 648——用户想把终端
- * 再拉宽一点，界面直接不动了，除非他知道还有个「终端聚焦」按钮。现在允许一路拖过去，
- * 松手时若 Canvas 已经低于 560 就落进 Focus：**页面要么 ≥560，要么干脆藏起来，
- * 不留一条 300px 的废条**——这正是 CANVAS_MIN 想守的东西，只是换成了拖拽也能表达。
- */
-export function dragMaxWidth(workspaceWidth: number): number {
-  return Math.max(DOCK_MIN, workspaceWidth - SPLIT_RAIL)
-}
-
-/** 松手时该不该落进 Focus：Canvas 已经不足最小宽 */
-export function shouldFocusAt(workspaceWidth: number, dockWidth: number): boolean {
-  return workspaceWidth - SPLIT_RAIL - dockWidth < CANVAS_MIN
-}
-
-/**
- * 该档的默认 Dock 宽度：clamp(480, 42vw, 880)，再过一次几何上界。
- *
- * **880 只在这里**：它是"默认给多宽"，不是"用户最多能拖多宽"。dockBounds 不再压它。
- */
-export function defaultDockWidth(viewportWidth: number, workspaceWidth: number): number {
-  const wish = Math.min(DOCK_MAX, Math.round(viewportWidth * 0.42))
-  const { min, max } = dockBounds(workspaceWidth)
-  return Math.max(min, Math.min(max, wish))
-}
-
-/**
- * Inspector 打开之后，Canvas 还保不保得住 560。
- *
- * 判据用 **Dock 的下限**而不是它当前的宽度：宽屏上默认 Dock 是 42vw（1920 上 806），
- * 拿当前宽度判的话三列永远凑不齐——1920 都要把页面整个让掉，而那正是买大屏要避免的。
- * 所以顺序是「**先从 Dock 借，借不够再让 Canvas**」，见 effectiveDockWidth。
- */
-export function canvasFitsWith(o: {
-  workspaceWidth: number; inspectorWidth: number; hasDock: boolean
-}): boolean {
-  const used = (o.hasDock ? DOCK_MIN + SPLIT_RAIL : 0) + o.inspectorWidth + SPLIT_RAIL
-  return o.workspaceWidth - used >= CANVAS_MIN
-}
-
-/**
- * Inspector 打开时 Dock 实际渲染多宽。让位次序三步，一步比一步肉疼：
- *
- *   1. 保得住 Canvas 560 → 从 Dock 借到刚好（不低于 480、不超过用户拖出来的宽度）；
- *   2. 保不住 → Canvas 让位，终端**长满**它腾出来的宽度（页面反正要让掉，
- *      就别再折腾终端；也别让那条宽度谁都不要，空在右边成一道黑边）；
- *   3. Canvas 让光了还不够 → **终端跟着让**，让到 480 为止。
- *
- * 第 3 步是「抽屉向左长」这件事的地基：抽屉两层加起来能到一千出头，终端一寸不让的话
- * 那个宽度永远只是个愿望（inspectorBounds 会把它钳回剩余空间），diff / 预览就永远
- * 挤在四五百里。这里给了它一条真正能长的路：终端按需要退，退到自己的下限。
- */
-export function effectiveDockWidth(o: {
-  workspaceWidth: number; dockWidth: number; inspectorWidth: number; inspectorOpen: boolean
-}): number {
-  if (!o.inspectorOpen) return o.dockWidth
-  // 三步共用的硬底线：Dock + Inspector 不许撑破工作区（撑破 = 文档横向溢出 = 10px 滚动条）
-  const hard = o.workspaceWidth - SPLIT_RAIL * 2 - o.inspectorWidth
-  if (!canvasFitsWith({ workspaceWidth: o.workspaceWidth, inspectorWidth: o.inspectorWidth, hasDock: true })) {
-    // Canvas 已经让光，这条剩余宽度没有第三者要用 —— 终端把它吃满。
-    // 从前这里是 min(dockWidth, hard)：终端守着自己拖出来的宽度不动，
-    // Inspector 守着自己的，两者加起来不满工作区，右边就空出一条黑边
-    // （1366 的笔记本上实测 192px）。「终端一寸不让」说的是不缩，不是不长。
-    return Math.max(DOCK_MIN, hard)
-  }
-  const room = o.workspaceWidth - CANVAS_MIN - SPLIT_RAIL * 2 - o.inspectorWidth
-  return Math.max(DOCK_MIN, Math.min(o.dockWidth, room, hard))
-}
-
-/**
- * Inspector 的拖拽区间：下界 360，上界按**终端让到底**之后的余量算。
- *
- * 原先这里减的是 Dock 当前的宽度，于是「终端会让位」这条规矩在上界这一步就被否掉了：
- * 抽屉报 945、当场被钳成 552，终端根本没机会让。上界改用 DOCK_MIN，让位由
- * effectiveDockWidth 按次序执行（先 Canvas 后终端），两边说的才是同一套规矩。
- */
-export function inspectorBounds(o: {
-  workspaceWidth: number; hasDock: boolean
-}): { min: number; max: number } {
-  const room = o.workspaceWidth - SPLIT_RAIL - (o.hasDock ? DOCK_MIN + SPLIT_RAIL : 0)
+/** 右栏的拖拽区间：下界 280，上界不超过 1200、也不撑破工作区（撑破 = 文档横向溢出 = 10px 滚动条） */
+export function inspectorBounds(o: { workspaceWidth: number }): { min: number; max: number } {
+  const room = o.workspaceWidth - RAIL
   return { min: INSPECTOR_MIN, max: Math.max(INSPECTOR_MIN, Math.min(INSPECTOR_MAX, room)) }
 }
 
-/** 并排是否成立：Canvas 560 + rail 8 + Dock 480（不含导航）。 */
-export function canSplit(workspaceWidth: number): boolean {
-  return workspaceWidth >= CANVAS_MIN + SPLIT_RAIL + DOCK_MIN
-}
-
 /**
- * 四态判定（14 §4.1 + 13 §13.1）。抽成纯函数是因为它已经不止两个分支了，
- * 而「哪一档进哪一态」正是这次最容易改错的地方。
+ * 三态判定（14 §4.1 + 13 §13.1 + 22 D1）。抽成纯函数是因为「哪一档进哪一态」正是最容易改错的地方。
  *
- * expanded（905–1279）走 **overlay**：这一档并排最多只能挤出 561–735 的 Canvas，
- * 正是 14 §2.2 要消灭的「页面被压成预览条」。覆盖式面板换来的是 Canvas 布局在
- * 终端开合前后完全不变——概览的项目卡不会因为开个终端就跳列。
- *
- * Focus 仍然优先于一切：它是用户显式按 ⌘⇧J 要的，不该被档位悄悄改掉。
+ * large：任务视图是 focus（中间整块给标签工作区），其余一律 page——终端只在任务视图里出现。
+ * expanded（905–1279）走 **overlay**：并排最多只能挤出 561–735 的页面，正是 14 §2.2 要消灭的
+ * 「页面被压成预览条」；覆盖式面板换来的是页面布局在终端开合前后完全不变。
+ * Focus 在 expanded 上仍优先于覆盖：它是用户显式按 ⌘⇧J 要的。
  */
 export function resolveMode(o: {
   hasTerms: boolean; dockOpen: boolean; focus: FocusTarget
@@ -155,8 +57,6 @@ export function resolveMode(o: {
   taskView?: boolean
 }): SpaceMode {
   if (o.taskView) return 'focus'
-  // large 档：页面态就是整块页面，终端不并排（22 设计 D1 已定）——split 在这一档作废，
-  // 终端只在任务视图里出现。expanded 与手机照旧：覆盖式 / 全屏。
   if (o.size === 'large') return 'page'
   if (!o.hasTerms || !o.dockOpen) return 'page'
   if (o.focus !== 'none') return 'focus'
@@ -167,39 +67,29 @@ export function resolveMode(o: {
 export type WorkspaceLayout = {
   /** 当前空间状态 */
   mode: SpaceMode
-  /** Dock 实际宽度 px（mode !== 'split' 时无意义） */
-  dockWidth: number
-  /** 终端区是否可见（split 或 dock-focus 或手机全屏） */
+  /** 终端区是否可见（任务视图、覆盖面板或手机全屏） */
   dockVisible: boolean
   focus: FocusTarget
   navCollapsed: boolean
-  /** 这一档是否允许并排（expanded 及以下一律覆盖式，见 13 §13.1） */
-  splitCapable: boolean
+  /** large 档：有展开的侧栏和右栏这一列；expanded 及以下右栏走覆盖式（见 13 §13.1） */
+  large: boolean
   /** 这一档的终端是覆盖式面板：收起时右下角留会话胶囊（13 §13.1） */
   overlayCapable: boolean
   toggleDock: () => void
   setDockOpen: (open: boolean) => void
-  setDockWidth: (width: number) => void
-  resetDockWidth: () => void
   setFocus: (target: FocusTarget) => void
   toggleFocus: () => void
   setNavCollapsed: (collapsed: boolean) => void
-  /** 供分隔条读：当前允许拖到的区间（上界 = Canvas 归零处） */
-  bounds: { min: number; max: number }
-  /** 超过这个宽度就该落进 Focus（Canvas 会低于 560） */
-  splitMax: number
-  /** Inspector 列宽（Git / Worktree），已按当前几何钳过 */
+  /** Inspector 列宽（文件 / Git / Worktree），已按当前几何钳过 */
   inspectorWidth: number
   inspectorBounds: { min: number; max: number }
   setInspectorWidth: (width: number) => void
   resetInspectorWidth: () => void
-  /** Inspector 打开时 Canvas 还够不够 560——不够就让位 */
+  /** Inspector 打开时页面还够不够 560——不够就让位 */
   canvasFitsInspector: boolean
   /** Inspector 折起（面板仍挂着，只是这一列宽度归零）；把手上那枚握把切它 */
   inspectorCollapsed: boolean
   toggleInspectorCollapsed: () => void
-  /** Dock 实际渲染宽度：Inspector 打开时可能被借走一部分 */
-  dockRenderWidth: number
 }
 
 /**
@@ -222,7 +112,6 @@ export function useWorkspaceLayout(hasTerms: boolean, taskView = false): Workspa
   const [dockOpen, setDockOpenLocal] = useState(ws.dockOpen)
   const [focus, setFocusLocal] = useState<FocusTarget>(ws.workspaceFocus)
   const [navCollapsed, setNavCollapsedLocal] = useState(ws.navCollapsed)
-  const [width, setWidthLocal] = useState(ws.dockWidth || 0)
   const [insWidth, setInsWidthLocal] = useState(ws.inspectorWidth || 0)
   const hydrated = useRef(false)
 
@@ -231,8 +120,7 @@ export function useWorkspaceLayout(hasTerms: boolean, taskView = false): Workspa
    *
    * 判「到达」必须问 `preferencesLoaded()`，不能拿"effect 跑过一次"充数：偏好是
    * 异步 GET 的，mount 那一跑手里还是默认值，旧写法在那时就把 hydrated 置了位，
-   * 真正带着用户宽度的那一跑被 early-return 挡掉——**拖过的分隔条存了却从没读回来**，
-   * 每次刷新都弹回 42vw 默认位。
+   * 真正带着用户宽度的那一跑被 early-return 挡掉——**拖过的分隔条存了却从没读回来**。
    *
    * 用户已经动过手（拖/收/聚焦）之后就不再回填：偏好 GET 与他的操作可能撞在一起，
    * 那时候盖回去等于当着面把他刚拖的位置抹掉。
@@ -243,32 +131,18 @@ export function useWorkspaceLayout(hasTerms: boolean, taskView = false): Workspa
     setDockOpenLocal(ws.dockOpen)
     setFocusLocal(ws.workspaceFocus)
     setNavCollapsedLocal(ws.navCollapsed)
-    setWidthLocal(ws.dockWidth || 0)
     setInsWidthLocal(ws.inspectorWidth || 0)
   }, [ws])
 
-  const splitCapable = layout.size === 'large'
-  const navWidth = splitCapable ? (navCollapsed ? NAV_RAIL : NAV_WIDTH) : NAV_RAIL
+  const large = layout.size === 'large'
+  const navWidth = large ? (navCollapsed ? NAV_RAIL : NAV_WIDTH) : NAV_RAIL
   const workspaceWidth = Math.max(0, viewport - navWidth)
-  const bounds = useMemo(() => ({ min: DOCK_MIN, max: dragMaxWidth(workspaceWidth) }), [workspaceWidth])
-  const splitMax = useMemo(() => dockBounds(workspaceWidth).max, [workspaceWidth])
-
-  // 恢复偏好时先钳制：换到小窗口不能拿旧大屏的宽度把 Canvas 挤爆（14 §9.3）
-  const dockWidth = useMemo(() => {
-    const wish = width || defaultDockWidth(viewport, workspaceWidth)
-    const b = dockBounds(workspaceWidth)
-    return Math.max(b.min, Math.min(b.max, wish))
-  }, [width, viewport, workspaceWidth])
 
   const mode = resolveMode({ hasTerms, dockOpen, focus, size: layout.size, workspaceWidth, taskView })
 
-  // Inspector 宽度同样先钳后用：换到窄窗口不能拿旧大屏的宽度把终端挤到下限之下
-  const hasDock = mode === 'split'
-  const inspectorOpen = useInspectorOpen() && splitCapable
-  const insBounds = useMemo(
-    () => inspectorBounds({ workspaceWidth, hasDock }),
-    [workspaceWidth, hasDock],
-  )
+  // Inspector 宽度先钳后用：换到窄窗口不能拿旧大屏的宽度撑破工作区
+  const inspectorOpen = useInspectorOpen() && large
+  const insBounds = useMemo(() => inspectorBounds({ workspaceWidth }), [workspaceWidth])
   const inspectorWidth = useMemo(() => {
     const wish = insWidth || INSPECTOR_DEFAULT
     return Math.max(insBounds.min, Math.min(insBounds.max, wish))
@@ -285,17 +159,6 @@ export function useWorkspaceLayout(hasTerms: boolean, taskView = false): Workspa
     setFocusLocal(target)
     saveWorkspace({ workspaceFocus: target })
   }, [])
-
-  const setDockWidth = useCallback((next: number) => {
-    hydrated.current = true
-    const { min, max } = dockBounds(workspaceWidth)
-    const clamped = Math.round(Math.max(min, Math.min(max, next)))
-    setWidthLocal(clamped)
-    saveWorkspace({ dockWidth: clamped })
-  }, [workspaceWidth])
-
-  // 打开 Inspector 时先从 Dock 借宽；借不够时 Canvas 让位（此时 Dock 用回原宽）
-  const dockRenderWidth = effectiveDockWidth({ workspaceWidth, dockWidth, inspectorWidth, inspectorOpen: inspectorOpen && hasDock })
 
   const setInspectorWidth = useCallback((next: number) => {
     hydrated.current = true
@@ -317,15 +180,14 @@ export function useWorkspaceLayout(hasTerms: boolean, taskView = false): Workspa
   const appliedWant = useRef(0)
   const appliedMax = useRef(0)
   useEffect(() => {
-    if (!splitCapable) return
+    if (!large) return
     // 上界变了也要重来一次：报进来的值会被当场钳到当时的上界，钳完就没人再提这茬——
-    // 窗口后来变宽、终端后来让位，抽屉也永远停在被钳出来的那个宽度。
-    // 实测：1600 并排时抽屉要 945 只拿到 552，拉到 2200 仍是 552。
+    // 窗口后来变宽，抽屉也永远停在被钳出来的那个宽度。
     if (wantInspector === appliedWant.current && insBounds.max === appliedMax.current) return
     appliedWant.current = wantInspector
     appliedMax.current = insBounds.max
     if (wantInspector > 0) setInspectorWidth(wantInspector)
-  }, [wantInspector, insBounds.max, setInspectorWidth, splitCapable])
+  }, [wantInspector, insBounds.max, setInspectorWidth, large])
 
   // 给不了就说一声：面板据此把「Shell 钳的」和「用户拖的」分开（见 inspector.ts）。
   useEffect(() => {
@@ -345,26 +207,20 @@ export function useWorkspaceLayout(hasTerms: boolean, taskView = false): Workspa
 
   return {
     mode,
-    dockWidth,
     dockVisible: taskView || (hasTerms && dockOpen),
     focus,
-    navCollapsed: splitCapable ? navCollapsed : true,
-    splitCapable,
+    navCollapsed: large ? navCollapsed : true,
+    large,
     overlayCapable: layout.size === 'expanded',
-    bounds,
-    splitMax,
     inspectorWidth,
     inspectorBounds: insBounds,
     setInspectorWidth,
     resetInspectorWidth: () => { hydrated.current = true; setInsWidthLocal(0); saveWorkspace({ inspectorWidth: 0 }) },
-    canvasFitsInspector: canvasFitsWith({ workspaceWidth, inspectorWidth, hasDock }),
+    canvasFitsInspector: canvasFitsWith({ workspaceWidth, inspectorWidth }),
     inspectorCollapsed,
     toggleInspectorCollapsed: () => setInspectorCollapsed((v) => !v),
-    dockRenderWidth,
     toggleDock: () => setDockOpen(!dockOpen),
     setDockOpen,
-    setDockWidth,
-    resetDockWidth: () => { hydrated.current = true; setWidthLocal(0); saveWorkspace({ dockWidth: 0 }) },
     setFocus,
     toggleFocus: () => setFocus(focus === 'dock' ? 'none' : 'dock'),
     setNavCollapsed,
