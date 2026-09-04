@@ -37,6 +37,18 @@ func TestPickTranscript(t *testing.T) {
 	if got := pickTranscript(dir, []string{"node", "claude"}, start); got != fresh {
 		t.Fatalf("新开写了文件后该认它: %q", got)
 	}
+	// 跨目录 resume：id 的文件在别的项目夹里，也要找到
+	other := filepath.Join(filepath.Dir(dir), "other-project")
+	if err := os.MkdirAll(other, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	far := filepath.Join(other, "33333333-3333-3333-3333-333333333333.jsonl")
+	if err := os.WriteFile(far, []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := pickTranscript(dir, []string{"claude", "--resume", "33333333-3333-3333-3333-333333333333"}, start); got != far {
+		t.Fatalf("跨目录 resume 该全盘找到: %q", got)
+	}
 	// 启动时刻未知（零值）：退回取最新
 	if got := pickTranscript(dir, []string{"claude"}, time.Time{}); got != fresh {
 		t.Fatalf("零值该退回最新: %q", got)

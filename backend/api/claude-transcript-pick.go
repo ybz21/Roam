@@ -27,9 +27,10 @@ func pickTranscript(pdir string, argv []string, start time.Time) string {
 	for i, a := range argv {
 		switch a {
 		case "--resume", "-r":
+			// 跨目录 resume（会话重开时 cwd 变了）：Claude Code 继续写**原来**那份文件，
+			// 它躺在原目录的项目夹里，不在当前 cwd 的夹里——按 id 全盘找
 			if i+1 < len(argv) && uuidLike.MatchString(argv[i+1]) {
-				p := filepath.Join(pdir, argv[i+1]+".jsonl")
-				if _, err := os.Stat(p); err == nil {
+				if p := findTranscript(filepath.Dir(pdir), pdir, argv[i+1]); p != "" {
 					return p
 				}
 			}
@@ -41,6 +42,28 @@ func pickTranscript(pdir string, argv []string, start time.Time) string {
 	// 新开：只认启动之后动过的文件。留 3s 余量：文件系统时间戳和进程启动时刻不是一个钟
 	return newestJSONLSince(pdir, start.Add(-3*time.Second))
 }
+
+// findTranscript 先看 pdir，再扫 ~/.claude/projects 下所有项目夹找 <id>.jsonl。
+func findTranscript(root, pdir, id string) string {
+	if p := filepath.Join(pdir, id+".jsonl"); fileExists(p) {
+		return p
+	}
+	ents, err := os.ReadDir(root)
+	if err != nil {
+		return ""
+	}
+	for _, e := range ents {
+		if !e.IsDir() {
+			continue
+		}
+		if p := filepath.Join(root, e.Name(), id+".jsonl"); fileExists(p) {
+			return p
+		}
+	}
+	return ""
+}
+
+func fileExists(p string) bool { _, err := os.Stat(p); return err == nil }
 
 func newestJSONLSince(dir string, since time.Time) string {
 	ents, err := os.ReadDir(dir)
