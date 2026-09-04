@@ -7,6 +7,7 @@ import { FitAddon } from '@xterm/addon-fit'
 // 0.19+ 是给 xterm 6 内核的：卸载时读 `_core._store._isDisposed` 判断内核有没有拆，
 // 5.5 内核根本没有 `_store` → 每次拆终端必抛 TypeError（升级前先确认这个字段还在）。
 import { WebglAddon } from '@xterm/addon-webgl'
+import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
 // 终端符号补字集（约 46KB，仅覆盖框线/箭头/技术符号等区段）：见 FONT_FAMILY 的说明
 import '../../assets/fonts/roam-symbols.css'
@@ -609,6 +610,8 @@ const Term = forwardRef<TermHandle, {
     })
     const fit = new FitAddon()
     term.loadAddon(fit)
+    // 网址悬停下划线，点一下就在新标签页打开（不要求按 Ctrl：点到网址上就是想开它，移光标那点副作用无所谓）
+    term.loadAddon(new WebLinksAddon((_e, uri) => { window.open(uri, '_blank', 'noopener') }))
     term.open(elRef.current!)
     termRef.current = term
     fitRef.current = fit
