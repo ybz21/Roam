@@ -25,6 +25,11 @@ export type TreeTask = {
   path: string
   /** 领先 base 的提交数；会话都关了还有未合并提交 = 待收尾 */
   ahead: number
+  /** worktree 状态（卡片第二行的小字）：未提交改动数、落后 base、已合入 base、已推送 */
+  dirty?: number
+  behind?: number
+  merged?: boolean
+  pushed?: boolean
   unfinished: boolean
   /** 没会话也没未合并提交：树里折进「还有 N 个空闲 worktree」，别一排灰点占满 */
   idle: boolean
@@ -41,7 +46,7 @@ type ProjIn = {
   top?: { name: string; label?: string; running?: boolean; waiting?: boolean; agent?: 'claude' | 'codex' }[] | null
   needs?: { name: string; label?: string; running?: boolean; waiting?: boolean; agent?: 'claude' | 'codex' }[] | null
 }
-type WtIn = { path: string; branch: string; isMain: boolean; committedAhead?: number; sessions?: { session: string }[] | null }
+type WtIn = { path: string; branch: string; isMain: boolean; committedAhead?: number; dirty?: number; untracked?: number; behind?: number; mergedInto?: string; pushed?: boolean; sessions?: { session: string }[] | null }
 type SessIn = { name: string; label?: string; lastActivity?: number; agent?: 'claude' | 'codex' }
 
 export function buildTaskTree(o: {
@@ -95,6 +100,7 @@ export function buildTaskTree(o: {
         branch: wt.branch || '',
         path: wt.path,
         ahead,
+        dirty: (wt.dirty || 0) + (wt.untracked || 0), behind: wt.behind || 0, merged: !!wt.mergedInto, pushed: !!wt.pushed,
         unfinished: sessions.length === 0 && ahead > 0,
         idle: sessions.length === 0 && ahead === 0,
         sessions,

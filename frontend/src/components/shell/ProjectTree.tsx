@@ -121,7 +121,16 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
           {task.unfinished && <span className="bd" title={t('tree.unfinished', { n: task.ahead })}>{t('tree.unfinishedShort', { n: task.ahead })}</span>}
         </button>
         </Dropdown>
-        {task.branch && <div className="tt-tree-branch" title={task.branch}>{task.branch}</div>}
+        {task.branch && (
+          <div className="tt-tree-branch" title={task.path}>
+            <span className="br">{task.branch}</span>
+            {task.merged
+              ? <span className="st ok">{t('tree.merged')}</span>
+              : task.ahead > 0 && <span className="st">{t('tree.aheadN', { n: task.ahead })}{task.pushed ? ` · ${t('tree.pushed')}` : ''}</span>}
+            {!!task.dirty && <span className="st warn">{t('tree.dirtyN', { n: task.dirty })}</span>}
+            {!!task.behind && <span className="st">{t('tree.behindN', { n: task.behind })}</span>}
+          </div>
+        )}
         {many && (
           <button type="button" className={`tt-tree-agents${open ? '' : ' closed'}`} onClick={() => toggle(task.key)}
             aria-expanded={open} aria-label={open ? t('common.collapse') : t('common.expand')}>
