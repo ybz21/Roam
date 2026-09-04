@@ -224,6 +224,11 @@ export default function App() {
   // 建了新会话就立刻把会话表 / 归属表 / worktree 都刷一遍，不等下一轮（分别 5s / 15s / 60s）
   const sessReload = useRef<(() => void) | null>(null)
   const treeReload = useRef<(() => void) | null>(null)
+  // 真关会话（树的右键菜单）：和会话页同一套分流，关完刷树。
+  // **必须在下面两个提前 return 之前调**——hook 数量在登录前后不一致，React 会报 Rendered more hooks。
+  // closeTerm 在后面才定义，通过 ref 调
+  const closeTermRef = useRef<(n: string) => void>(() => {})
+  const closer = useSessionCloser((n) => closeTermRef.current(n), () => { sessReload.current?.(); treeReload.current?.() })
   // 树里双击会话行改会话名；双击任务行给任务起名（偏好 taskNames，不动会话和分支）
   const [renameInTree, setRenameInTree] = useState<string | null>(null)
   const [renameTask, setRenameTask] = useState<{ key: TaskKey; name: string } | null>(null)
@@ -711,8 +716,7 @@ export default function App() {
     })
     delete termRefs.current[name]
   }
-  // 真关会话（树的右键菜单）：和会话页同一套分流，关完刷树
-  const closer = useSessionCloser(closeTerm, () => { sessReload.current?.(); treeReload.current?.() })
+  closeTermRef.current = closeTerm
   // 收尾一个任务：只有一个会话就走它的关闭分流（worktree 有东西会弹三选一）；多个会话先确认，
   // 多余的直接结束，最后一个再走分流——worktree 的去留在那一步定
   const finishTask = (task: TreeTask) => {
