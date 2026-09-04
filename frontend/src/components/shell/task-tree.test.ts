@@ -100,3 +100,15 @@ describe('buildTaskTree placement', () => {
     expect(tree.projects[0].tasks.map((t) => [t.path, t.main, t.sessions.map((s) => s.name)])).toEqual([['/x', true, ['s']]])
   })
 })
+
+// _ttmux- 是基础设施会话的命名空间（插件守护进程、IM 监听）。它们跑在真 tmux 会话里，
+// 于是会顺着 /sessions 混进项目树，挂在某个任务下面——既不属于那个任务，人也不该点进去。
+describe('基础设施会话不进树', () => {
+  it('_ttmux-plugind 既不进任务，也不进散会话', async () => {
+    const { isInfraSession } = await import('../sessions/infra-session')
+    expect(isInfraSession('_ttmux-plugind')).toBe(true)
+    expect(isInfraSession('_ttmux-im')).toBe(true)
+    expect(isInfraSession('roam优化')).toBe(false)
+    expect(isInfraSession('2026-0904-2359-abcd')).toBe(false)
+  })
+})

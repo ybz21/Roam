@@ -1715,6 +1715,7 @@ const enUS = {
   'plugins.monitor.swapRefuse.wont-fit': 'Cannot clear: {used} swapped out but only {avail} available — reading it back would OOM',
   'plugins.monitor.swapRefuse.empty': 'Swap is empty, nothing to clear',
   'plugins.monitor.swapCleared': 'Cleared — everything in swap is back in RAM',
+  'plugins.monitor.swapRunning': 'Reading pages back… {left} left',
   'plugins.monitor.swapNeedSudo': 'Clearing swap needs root. Run once on this machine: sudo visudo -f /etc/sudoers.d/roam-swap and add: <your-user> ALL=(root) NOPASSWD: /usr/sbin/swapoff -a, /usr/sbin/swapon -a',
   'plugins.monitor.swapCritical': 'Swap is nearly exhausted — more pressure will hang the whole machine (ping still replies, SSH will not).',
   'plugins.monitor.gpu': 'GPU',

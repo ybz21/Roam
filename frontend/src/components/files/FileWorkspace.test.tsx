@@ -56,21 +56,24 @@ describe('FileWorkspace resize shield', () => {
     const handle = container.querySelector<HTMLElement>('[data-resize-handle="dock"]')!
     const dock = handle.previousElementSibling as HTMLElement
 
-    fireEvent.pointerDown(handle, { pointerId: 7, clientX: 280 })
+    // 起点按**当前实际宽度**取，别写死默认值：默认宽度调过一次（280 → 240），
+    // 写死的话这条测的就成了「默认值有没有被改」，而它想测的是「拖动跟不跟手」。
+    const startW = parseInt(dock.style.flex.split(' ')[2], 10)
+    fireEvent.pointerDown(handle, { pointerId: 7, clientX: startW })
 
     const shield = document.body.querySelector<HTMLElement>('[data-pointer-resize-shield="true"]')!
     expect(shield).not.toBeNull()
     expect(document.body.style.userSelect).toBe('none')
     expect(document.body.style.cursor).toBe('col-resize')
 
-    fireEvent.pointerMove(shield, { pointerId: 7, clientX: 360 })
-    expect(dock.style.flex).toBe('0 0 360px')
+    fireEvent.pointerMove(shield, { pointerId: 7, clientX: startW + 80 })
+    expect(dock.style.flex).toBe(`0 0 ${startW + 80}px`)
 
-    fireEvent.pointerUp(shield, { pointerId: 7, clientX: 360 })
+    fireEvent.pointerUp(shield, { pointerId: 7, clientX: startW + 80 })
     expect(document.body.querySelector('[data-pointer-resize-shield="true"]')).toBeNull()
     expect(document.body.style.userSelect).toBe('')
     expect(document.body.style.cursor).toBe('')
-    expect(localStorage.getItem('ttmux.fileDockW')).toBe('360')
+    expect(localStorage.getItem('ttmux.fileDockW')).toBe(String(startW + 80))
   })
 
   it('removes the shield and restores page styles when the window loses focus', () => {

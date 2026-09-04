@@ -57,6 +57,7 @@ import { ProjectTree, firstSessionOf, taskPathOf } from './components/shell/Proj
 import { InspectorPanels, type InspectorPanelKind } from './components/shell/InspectorPanels'
 import { buildTaskTree, type TreeTask } from './components/shell/task-tree'
 import { useSessionCloser } from './components/sessions/session-closer'
+import { isInfraSession } from './components/sessions/infra-session'
 import { taskKeyOf, isLooseTask, looseSessionOf, type TaskKey } from './components/sessions/task-key'
 import RenameSessionModal from './components/sessions/RenameSessionModal'
 import { TaskComposer } from './components/sessions/TaskComposer'
@@ -498,6 +499,8 @@ export default function App() {
       const labels: Record<string, string> = {}
       const names: { name: string; label?: string; lastActivity?: number; agent?: 'claude' | 'codex' }[] = []
       for (const s of Array.isArray(list) ? list : []) {
+        // 基础设施会话（_ttmux-plugind / _ttmux-im）不进任何人看的列表：树、标签、⌘K、计数
+        if (s?.name && isInfraSession(s.name)) continue
         if (s?.id && s?.name) { byId[s.id] = s.name; byName[s.name] = s.id }
         if (s?.name && s?.label) labels[s.name] = s.label
         if (s?.name) names.push({ name: s.name, label: s.label || undefined, lastActivity: s.lastActivity || undefined, agent: s.agent === 'claude' || s.agent === 'codex' ? s.agent : undefined })

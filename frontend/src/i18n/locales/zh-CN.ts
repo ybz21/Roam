@@ -1720,6 +1720,7 @@ const zhCN = {
   'plugins.monitor.swapRefuse.wont-fit': '不能清：换出 {used}，可用只有 {avail}，读回来会直接 OOM',
   'plugins.monitor.swapRefuse.empty': 'swap 是空的，没什么可清',
   'plugins.monitor.swapCleared': '已清空，swap 里的页都读回内存了',
+  'plugins.monitor.swapRunning': '正在读回内存…还剩 {left}',
   'plugins.monitor.swapNeedSudo': '清 swap 要 root。先在这台机器上执行一次：sudo visudo -f /etc/sudoers.d/roam-swap，写入一行 <你的用户名> ALL=(root) NOPASSWD: /usr/sbin/swapoff -a, /usr/sbin/swapon -a',
   'plugins.monitor.swapCritical': '交换空间快用完了 —— 再吃内存整机会卡死到只能按电源键（ping 还通，ssh 进不来）',
   'plugins.monitor.gpu': 'GPU',
