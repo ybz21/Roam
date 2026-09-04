@@ -1008,7 +1008,7 @@ export default function App() {
               onPressEnter={() => document.querySelector<HTMLButtonElement>('.ant-modal .ant-btn-primary')?.click()} />
             <div style={{ marginTop: 8, color: 'var(--text-dimmer)', fontSize: 'var(--fs-meta)' }}>{t('tree.taskNameHint')}</div>
           </Modal>
-          <Modal open={!!newTaskDir} footer={null} width={720} destroyOnClose onCancel={() => setNewTaskDir(null)}
+          <Modal open={!!newTaskDir} footer={null} width={860} destroyOnClose onCancel={() => setNewTaskDir(null)}
             title={t('tree.newTaskIn', { name: (newTaskDir || '').replace(/\/+$/, '').split('/').pop() || '' })}>
             {newTaskDir && (
               <TaskComposer dir={newTaskDir} isGit={treeSrc.projects.find((p: any) => p.dir === newTaskDir)?.git !== false}
