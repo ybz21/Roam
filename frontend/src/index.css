@@ -17,7 +17,7 @@
   --bg-base: #0d1117;
   --bg-container: #161b22;
   --bg-elevated: #1b222b;
-  --bg-term: #06090d;
+  --bg-term: #0b0f14;
   --border: #30363d;
   --border-subtle: #21262d;
   --text-bright: #e6edf3;
@@ -54,7 +54,7 @@
   --scroll-thumb-hover: #3d444d;
   --card-hover-shadow: 0 8px 24px rgba(1, 4, 9, .5);
   --elevated-shadow: 0 16px 48px rgba(1, 4, 9, .55);
-  --xterm-bg: #06090d;
+  --xterm-bg: #0b0f14;
   --xterm-fg: #e6edf3;
   /* highlight.js token 配色（深色，GitHub-ish） */
   --hl-comment: #8b949e;

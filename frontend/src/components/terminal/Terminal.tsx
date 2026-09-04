@@ -114,7 +114,7 @@ function loadStoredTerminalFrame(name: string): string | undefined {
 // xterm 不认 CSS var()，需具体色值：读 <html> 上的同名变量，随黑/白主题切换。
 function xtermTheme() {
   const cs = getComputedStyle(document.documentElement)
-  const bg = cs.getPropertyValue('--xterm-bg').trim() || '#06090d'
+  const bg = cs.getPropertyValue('--xterm-bg').trim() || '#0b0f14'
   const fg = cs.getPropertyValue('--xterm-fg').trim() || '#e6edf3'
   // 光标同样吃全站强调色（--accent），这里必须取解析后的值——xterm 不认 var()
   const cursor = cs.getPropertyValue('--accent').trim() || '#58a6ff'
@@ -124,8 +124,10 @@ function xtermTheme() {
 }
 // 浅色主题下强制最低对比度：Claude Code / Codex 按自己的（缺省深色）主题吐颜色，代码高亮里一堆
 // 近白色，落在白底上就看不见了。xterm 会把对比不够的前景色往深处拉，深色主题不动（1 = 关）。
+// 用 3 不用 4.5：4.5 把 Claude Code 选中项那种浅蓝也压成了深灰，选中行和别的行分不出来；
+// 3 刚好让近白色可读，浅蓝还留着色相。真正治本是让 Claude Code 自己切浅色主题（/theme）。
 function minContrast(): number {
-  return document.documentElement.dataset.theme === 'light' ? 4.5 : 1
+  return document.documentElement.dataset.theme === 'light' ? 3 : 1
 }
 
 // 滤掉应用(Claude Code/Codex/vim 等)开启「鼠标上报」的 DECSET 序列 ESC[?1000/1001/1002/1003h。
