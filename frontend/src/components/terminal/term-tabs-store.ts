@@ -21,7 +21,7 @@ const MAX_NODES = 8
 export type FileTab = { path: string; preview: boolean; mode: 'source' | 'preview' | 'changes'; task: string }
 /** 标签条不按任务隔离（用户拍板）：会话标签全显示，文件标签一条平铺列表；diff 类标签不存 */
 export type TabSet = {
-  terms: string[]; active: string; task: string
+  terms: string[]; active: string
   files: FileTab[]
   activeFile: string
 }
@@ -45,13 +45,13 @@ function writeAll(all: Record<string, Entry>) {
 }
 
 /** 存一台机器当前开着的标签。terms 是**写进 URL 的那种 token**（会话 id），不是显示名。 */
-export function saveTabs(nodeId: string | null, terms: string[], active: string, task = '', files: FileTab[] = [], activeFile = '') {
+export function saveTabs(nodeId: string | null, terms: string[], active: string, files: FileTab[] = [], activeFile = '') {
   const all = readAll()
   const cur = slot(nodeId)
   // at 严格递增，不直接用 Date.now()：切标签是连着来的，同一毫秒内存好几次很正常，
   // 时间戳一撞，下面的淘汰就只能按 key 顺序瞎猜，可能把刚用过的那台挤掉。
   const maxAt = Object.values(all).reduce((m, e) => Math.max(m, e?.at || 0), 0)
-  all[cur] = { terms, active, task, files, activeFile, at: Math.max(Date.now(), maxAt + 1) }
+  all[cur] = { terms, active, files, activeFile, at: Math.max(Date.now(), maxAt + 1) }
   // 刚写的这台永远留着，只在**其余**里淘汰——否则「存一次就把自己挤掉」是可能的
   const others = Object.keys(all).filter((k) => k !== cur)
   if (others.length > MAX_NODES - 1) {
@@ -64,8 +64,8 @@ export function saveTabs(nodeId: string | null, terms: string[], active: string,
 /** 取一台机器上次开着的标签；没记过就是空。 */
 export function loadTabs(nodeId: string | null): TabSet {
   const e = readAll()[slot(nodeId)]
-  if (!e || !Array.isArray(e.terms)) return { terms: [], active: '', task: '', files: [], activeFile: '' }
-  // 老数据没有 task / files 字段：照常读。files 曾按任务分片存成 {任务: [...]}（22 设计第一版），
+  if (!e || !Array.isArray(e.terms)) return { terms: [], active: '', files: [], activeFile: '' }
+  // 老数据没有 files 字段：照常读。files 曾按任务分片存成 {任务: [...]}（22 设计第一版），
   // 现在是一条平铺列表；老形状摊平、把分片键写进 task
   const one = (f: any, task: string): FileTab | null => (f && typeof f.path === 'string')
     ? { path: f.path, preview: !!f.preview, mode: f.mode === 'preview' || f.mode === 'changes' ? f.mode : 'source', task: typeof f.task === 'string' ? f.task : task }
@@ -85,7 +85,7 @@ export function loadTabs(nodeId: string | null): TabSet {
   if (typeof rawActive === 'string') activeFile = rawActive
   else if (rawActive && typeof rawActive === 'object') activeFile = Object.values(rawActive as Record<string, unknown>).find((v): v is string => typeof v === 'string' && !!v) || ''
   if (activeFile && !files.some((f) => f.path === activeFile)) activeFile = ''
-  return { terms: e.terms.filter((x) => typeof x === 'string' && x), active: typeof e.active === 'string' ? e.active : '', task: typeof e.task === 'string' ? e.task : '', files, activeFile }
+  return { terms: e.terms.filter((x) => typeof x === 'string' && x), active: typeof e.active === 'string' ? e.active : '', files, activeFile }
 }
 
 /** 会话 id 的形状（后端 internal/id：YYYY-MMDD-HHMM-rand4）。 */

@@ -56,8 +56,6 @@ function Chip({ onClick, title, tone, expanded, children }: {
 type Panel = 'none' | 'info' | 'tasks'
 
 export type StatusActions = {
-  /** 轮换权限模式：向会话注入 Shift+Tab */
-  onCycleMode?: () => void
   /** 换模型：发 /model，Claude Code 自己弹选择框（PromptPanel 接住） */
   onPickModel?: () => void
   /** 跳到最近一次失败的工具调用 */

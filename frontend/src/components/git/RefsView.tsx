@@ -27,6 +27,9 @@ export interface WtInfo {
 }
 
 // 通用的两行清单行：左标记 + 名字 + 右侧动作，第二行是副标题和时间。
+// worktree 行和检出在 worktree 里的分支行共用一枚状态图标（parts.tsx WtStatusIcon）
+const wtIcon = (w: WtInfo) => <WtStatusIcon branch={w.branch} dir={w.path} merged={!!w.mergedInto} dirty={w.dirty + w.untracked} ahead={w.committedAhead} />
+
 function RefRow({ icon, name, mono = true, accent, badge, sub, time, active, menu, onClick, quick }: {
   icon?: React.ReactNode; name: string; mono?: boolean; accent?: string
   badge?: React.ReactNode; sub?: string; time?: string; active?: boolean
@@ -143,9 +146,7 @@ export default function RefsView({
               badge={<>
                 <AheadBehind ahead={b.ahead} behind={b.behind} />
                 {b.gone && <Tooltip title={t('git.refs.upstreamGone')}><span style={{ fontSize: 10, color: 'hsl(0,60%,60%)' }}>gone</span></Tooltip>}
-                {!!b.worktree && !b.current && <Tooltip title={b.worktree}><span style={{ fontSize: 10, color: 'hsl(190,60%,50%)' }}>wt</span></Tooltip>}
-                {(() => { const w = b.worktree ? wts.find((x) => x.path === b.worktree) : undefined
-                  return w ? <WtStatusIcon branch={w.branch} dir={w.path} merged={!!w.mergedInto} dirty={w.dirty + w.untracked} ahead={w.committedAhead} /> : null })()}
+                {(() => { const w = b.worktree ? wts.find((x) => x.path === b.worktree) : undefined; return w ? wtIcon(w) : null })()}
               </>}
               sub={b.subject} time={relTime(b.date, '', locale)}
               onClick={() => onLocate(b.name)}
@@ -184,7 +185,7 @@ export default function RefsView({
                     {!!w.committedAhead && <span style={{ fontFamily: MONO, fontSize: 11, color: 'var(--ok)', display: 'inline-flex', alignItems: 'center', gap: 1 }}><ArrowUp size={10} />{w.committedAhead}</span>}
                     {cleanable && <span style={{ display: 'inline-flex', color: 'var(--ok)' }}><CheckIcon size={11} /></span>}
                     {w.external && <span style={{ fontSize: 10, color: 'var(--text-dimmer)' }}>{t('git.refs.externalWt')}</span>}
-                    <WtStatusIcon branch={w.branch} dir={w.path} merged={!!w.mergedInto} dirty={w.dirty + w.untracked} ahead={w.committedAhead} />
+                    {wtIcon(w)}
                   </>}
                   sub={w.path}
                   time={live ? t('git.refs.wtSessions', { count: live }) : cleanable ? t('git.refs.wtCleanable') : t('git.refs.wtOrphan')}

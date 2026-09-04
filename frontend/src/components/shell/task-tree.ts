@@ -33,8 +33,6 @@ export type TreeTask = {
   merged?: boolean
   pushed?: boolean
   unfinished: boolean
-  /** 没会话也没未合并提交：树里折进「还有 N 个空闲 worktree」，别一排灰点占满 */
-  idle: boolean
   sessions: TreeSession[]
 }
 
@@ -106,7 +104,6 @@ export function buildTaskTree(o: {
         ahead,
         dirty: (wt.dirty || 0) + (wt.untracked || 0), behind: wt.behind || 0, merged: !!wt.mergedInto, pushed: !!wt.pushed,
         unfinished: sessions.length === 0 && ahead > 0,
-        idle: sessions.length === 0 && ahead === 0,
         sessions,
       })
     }
@@ -123,11 +120,11 @@ export function buildTaskTree(o: {
       if (hit) {
         hit.sessions.push(sess(s.name))
         hit.name = o.nameOf?.(hit.path) || hit.sessions[0].label
-        hit.unfinished = false; hit.idle = false
+        hit.unfinished = false
         continue
       }
       const ss = [sess(s.name)]
-      tasks.push({ key: taskKeyOf('', wt), name: o.nameOf?.(wt) || ss[0].label, branch: pl.branch || '', path: wt, ahead: 0, unfinished: false, idle: false, sessions: ss })
+      tasks.push({ key: taskKeyOf('', wt), name: o.nameOf?.(wt) || ss[0].label, branch: pl.branch || '', path: wt, ahead: 0, unfinished: false, sessions: ss })
     }
     return { key: p.key, name: p.name, dir: p.dir, needs: (p.waiting || 0) + (p.unfinished || 0), tasks }
   })

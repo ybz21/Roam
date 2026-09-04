@@ -8,7 +8,6 @@
 // （渐变卡面 + focus 辉光环）、git 数据一律等宽字、行 hover 左导轨渐显、
 // 分区头沿用设计图纸体例、入场一次性 stagger。全部颜色走 index.css token。
 import {Suspense, useEffect, useMemo, useRef, useState } from 'react'
-import { appendPaths } from '../../agent-paths'
 import { MemBar } from '../sessions/session-memory'
 import type { ReactNode } from 'react'
 import { App as AntApp, AutoComplete, Button, Dropdown, Input, Modal, Popconfirm, Segmented, Select, Space, Spin, Tag, Tooltip, Typography } from 'antd'
@@ -17,16 +16,14 @@ import { sessionLabel, sessionDisplay } from '../sessions/session-label'
 import { SESSION_MIME, buildIntro, canDrop } from '../shell/session-drop'
 import { currentNodeId } from '../cluster/node-url'
 import { dirTailName } from '../files/dir-name'
-import { api, upload, makeClipboardImageFile } from '../../api'
+import { api } from '../../api'
 import { useI18n } from '../../i18n'
 import { usePreferences } from '../../preferences'
-import { INTENT_EVENT, takeIntent } from '../../intents'
 import { MobileSheet, SheetRow } from '../shell/MobileSheet'
 import AdaptivePanel from '../shell/AdaptivePanel'
 import { useLayout } from '../../layout'
 import { detectPrompt } from '../prompt'
 import { relTime } from '../../time-format'
-import { shellQuote as shq } from '../../shell-quote'
 import { NewSessionModal } from '../sessions/NewSessionModal'
 import { TaskComposer, type TaskComposerHandle } from '../sessions/TaskComposer'
 import { CloseWorktreeModal } from '../sessions/CloseWorktreeModal'
@@ -38,8 +35,7 @@ import { ActivityRail, useRecentActivity, RAIL_CSS } from './project-list/activi
 import { ProjectCard, CARD_CSS } from './project-list/project-card'
 import { useSwarmProjection, normDir } from './project-list/swarm-projection'
 import FileBrowser from '../files/FileBrowser'
-import { VoiceInput } from '../chat/VoiceInput'
-import { AgentLogo, ArchiveIcon, ArrowDown, ArrowUp, CheckIcon, ChevronDown, CircleIcon, CloseIcon, DiffIcon, ForkIcon, MergeIcon, PaperclipIcon, PlayIcon, PlusIcon, PushIcon, SwarmIcon, TerminalIcon, TrashIcon, WarnIcon, WindowsIcon } from '../../icons'
+import { AgentLogo, ArchiveIcon, ArrowDown, ArrowUp, CheckIcon, ChevronDown, CloseIcon, DiffIcon, ForkIcon, MergeIcon, PlayIcon, PlusIcon, PushIcon, SwarmIcon, TerminalIcon, TrashIcon, WarnIcon, WindowsIcon } from '../../icons'
 import { BranchIcon } from '../git/parts'
 import { lazyRetry } from '../lazy-retry'
 
@@ -412,14 +408,6 @@ function ProjectList({ data, loaded, openTerm, refresh }: {
     } catch { return 'needs' }
   })
   const changeSort = (v: ProjSort) => { setSortBy(v); try { localStorage.setItem(SORT_KEY, v) } catch {} }
-  // 新建项目的按钮有两枚（顶栏 Command Center 与本页页头，14 §4.5），都只切页 + 留意图，
-  // 这里挂载时取走。挂载时也要取一次——从别的页面点过来时，事件早在本组件存在之前就发完了。
-  useEffect(() => {
-    const on = () => { if (takeIntent('new-project')) setNewOpen(true) }
-    on()
-    window.addEventListener(INTENT_EVENT, on)
-    return () => window.removeEventListener(INTENT_EVENT, on)
-  }, [])
 
   const swarms = useSwarmProjection(data.projects)
   const acts = useRecentActivity(data.projects)
@@ -773,18 +761,8 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
   const { message } = AntApp.useApp()
   const [prefs] = usePreferences()
   const [tab, setTab] = useState<'tasks' | 'wt' | 'race' | 'act' | 'files'>('tasks')
-  const [prompt, setPrompt] = useState('')
-  const [wtMode, setWtMode] = useState<'new' | 'repo' | 'existing'>('new')
-  const [agent, setAgent] = useState<'claude' | 'codex' | 'none'>('claude')
   const [wtsAll, setWtsAll] = useState<any[]>([])
-  const [wtPath, setWtPath] = useState('')
   const [defBranch, setDefBranch] = useState('')
-  // composer 就是完整表单（不再有「完整表单 ›」弹窗入口）：会话名、基于哪个分支、
-  // 自动互审这三样从前只在弹窗里，于是「填全」必须先点一下——多一次点击、两套代码。
-  const [base, setBase] = useState('')
-  const [branches, setBranches] = useState<string[]>([])
-  const [remoteBranches, setRemoteBranches] = useState<{ remote: string; name: string }[]>([])
-  const [autoReview, setAutoReview] = useState(false)
   const [sessions, setSessions] = useState<any[]>([])
   const [ann, setAnn] = useState<Record<string, any>>({})
   const [cc, setCc] = useState<Record<string, boolean>>({})
@@ -800,13 +778,6 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
     composerRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
     composerApi.current?.focus()
   }
-  // 标签条「新任务」从任务视图切过来：留的意图在这儿取走（挂载时也取一次，事件早在本组件存在前就发完了）
-  useEffect(() => {
-    const on = () => { if (takeIntent('compose')) focusComposer() }
-    on()
-    window.addEventListener(INTENT_EVENT, on)
-    return () => window.removeEventListener(INTENT_EVENT, on)
-  }, [])
   const [activity, setActivity] = useState<any[]>([])
   const [finishing, setFinishing] = useState<any>(null)
   const [swarmExtras, setSwarmExtras] = useState<Record<string, { cols: Record<string, number>; last?: any }>>({})
@@ -815,8 +786,6 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [peeks, setPeeks] = useState<Record<string, string>>({})
   const [creating, setCreating] = useState(false)
-  const [uploading, setUploading] = useState(false)
-  const fileRef = useRef<HTMLInputElement>(null)
   const [wtOpen, setWtOpen] = useState(false)
   const [gitOpen, setGitOpen] = useState(false)
   const [gitAt, setGitAt] = useState<{ dir: string; tab: 'changes' | 'base' } | null>(null) // Git 面板落点（分叉图「对比 base」用）
@@ -845,10 +814,6 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
     api('GET', `/git/branches?dir=${encodeURIComponent(dir)}`).then((r) => {
       const def = r?.data?.default || ''
       setDefBranch(def)
-      setBranches(r?.data?.branches || [])
-      setRemoteBranches(r?.data?.remotes || [])
-      // 「基于」默认跟主干走；用户选过就不再被覆盖
-      setBase((prev) => prev || def)
     }).catch(() => {})
   }, [dir, isGit])
   // 远端轻量同步（10 §3 驻留档）：进项目页即同步一次，驻留期间每 5 分钟一次；
@@ -863,9 +828,6 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
   const wts = useMemo(() => wtsAll.filter((w: any) => !w.isMain && !w.prunable), [wtsAll])
   const mainWt = useMemo(() => wtsAll.find((w: any) => w.isMain), [wtsAll])
   const mainHead = useMemo(() => (wtsAll.find((w: any) => w.isMain)?.head || '').slice(0, 7), [wtsAll])
-  useEffect(() => {
-    setWtPath((prev) => (prev && wts.some((w: any) => w.path === prev) ? prev : (wts[0]?.path || '')))
-  }, [wts])
   // 会话 + 归属注解（任务流数据源，与会话页同两条接口）
   useEffect(() => {
     let stop = false

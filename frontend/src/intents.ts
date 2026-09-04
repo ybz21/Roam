@@ -19,12 +19,7 @@ export function requestIntent(name: string, data?: unknown) {
   window.dispatchEvent(new Event(INTENT_EVENT))
 }
 
-/** 目标页面调用：是我的意图就消费掉并返回 true */
-export function takeIntent(name: string): boolean {
-  return takeIntentData(name) !== null
-}
-
-/** 同 takeIntent，但把随行数据一起取走；没有我的意图返回 null（无参意图返回 true） */
+/** 目标页面调用：是我的意图就消费掉，把随行数据一起取走；没有我的意图返回 null（无参意图返回 true） */
 export function takeIntentData<T = unknown>(name: string): T | true | null {
   if (!pending || pending.name !== name) return null
   const fresh = Date.now() - pending.at < TTL

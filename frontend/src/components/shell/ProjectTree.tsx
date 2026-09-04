@@ -82,8 +82,8 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
     return next
   })
 
-  // 每一行都是侧栏那枚 .tt-nav-item：同样的高、图标槽、hover、选中的左线 + 淡蓝底、同一款计数徽标。
-  // 区别只有缩进（lvl1 / lvl2）和图标槽里放什么：项目放文件夹，任务放状态点，会话放 agent 标。
+  // 每一行都是侧栏那枚 .tt-nav-item：同样的高、图标槽、hover、选中态、同一款计数徽标。
+  // 区别只有图标槽里放什么：项目放首字母圆标，任务放状态点，会话放 agent 标。
   // 右键菜单：会话行 = 打开 / 重命名 / 关闭会话；任务行 = 起名 / 派生三样 / 收尾。
   // 标签条的 × 只是收起标签，会话还活着、树上还在——真要关，在这里
   const sessionMenu = (task: TaskKey, s: TreeSession) => ({ items: [
@@ -92,7 +92,7 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
     ...(onKill ? [{ type: 'divider' as const }, { key: 'kill', label: t('tree.menu.close'), danger: true, onClick: () => onKill(s.name) }] : []),
   ] })
   const taskMenu = (task: TreeTask) => ({ items: [
-    ...(onRenameTask && !isLooseTask(task.key) ? [{ key: 'name', label: t('tree.renameTask'), onClick: () => onRenameTask(task.key, task.name) }] : []),
+    ...(onRenameTask ? [{ key: 'name', label: t('tree.renameTask'), onClick: () => onRenameTask(task.key, task.name) }] : []),
     ...(onNewInTask ? [{ type: 'group' as const, label: t('tree.menu.deriveHere'), children: [
       { key: 'sh', icon: <TerminalIcon size={14} />, label: t('tabs.newTerminal'), onClick: () => onNewInTask(task.key, 'shell') },
       { key: 'cc', icon: <AgentLogo kind="claude" size={14} />, label: t('tabs.newClaude'), onClick: () => onNewInTask(task.key, 'claude') },
@@ -100,10 +100,10 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
     ] }] : []),
     ...(onFinishTask ? [{ type: 'divider' as const }, { key: 'finish', label: t('tree.menu.finish'), danger: true, onClick: () => onFinishTask(task) }] : []),
   ] })
-  const sessionRow = (task: TaskKey, s: TreeSession, lvl: 1 | 2 | 3) => (
+  const sessionRow = (task: TaskKey, s: TreeSession) => (
     <Dropdown key={s.name} trigger={['contextMenu']} menu={sessionMenu(task, s)}>
       <button type="button"
-        className={`tt-nav-item tt-tree-row lvl${lvl}${activeTask === task && activeSession === s.name ? ' on' : ''}${s.dormant ? ' dormant' : ''}`}
+        className={`tt-nav-item tt-tree-row${activeTask === task && activeSession === s.name ? ' on' : ''}${s.dormant ? ' dormant' : ''}`}
         onClick={() => onSession(task, s.name)} title={s.dormant ? t('session.dormant.hint') : s.name} onDoubleClick={onRename ? () => onRename(s.name) : undefined}
         aria-current={activeTask === task && activeSession === s.name ? 'true' : undefined}>
         <span className="ic">{s.agent ? <AgentLogo kind={s.agent} size={15} /> : <TerminalIcon size={15} />}</span>
@@ -114,28 +114,36 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
     </Dropdown>
   )
 
-  // 任务是一张卡（参照 Orca 的侧栏）：名字一行、分支一行（淡、等宽）、「N 个会话」折叠头、会话行带时间；
-  // 收起时只剩一枚「✳ +N ›」。lvl 只在散会话那组用（它们没有卡）
-  const taskRows = (task: TreeTask, _lvl: 1 | 2 = 1) => {
+  // 头行右端一枚分支状态图标（照 Orca 卡片右上角那枚 PR 标）：分支名不再单独占一行——底部状态条已经有；
+  // 颜色说状态：已合入 = 绿，有未合入提交 = 蓝，有未提交改动 = 黄，干净 = 灰；悬停看分支和数字，点开是 PR 卡
+  const wtStatus = (task: TreeTask) => task.branch
+    ? <WtStatusIcon branch={task.branch} dir={task.path} merged={task.merged} dirty={task.dirty} ahead={task.ahead} behind={task.behind} pushed={task.pushed} />
+    : null
+
+  // 任务卡的头行：状态点 + 任务名 + 徽标 + 分支状态图标。活着的任务和空闲 worktree 共用，只差徽标写什么
+  const taskHead = (task: TreeTask, badge: ReactNode, on: boolean) => (
+    <Dropdown trigger={['contextMenu']} menu={taskMenu(task)}>
+      <button type="button" className={`tt-nav-item tt-tree-row head${on ? ' on' : ''}`}
+        onClick={() => onTask(task.key)} title={task.path}
+        onDoubleClick={onRenameTask ? () => onRenameTask(task.key, task.name) : undefined}>
+        <span className="ic">{dot({ running: task.sessions.some((s) => s.running), waiting: task.sessions.some((s) => s.waiting), unfinished: task.unfinished }, true)}</span>
+        <span className="nm">{task.name}</span>
+        {badge}
+        {wtStatus(task)}
+      </button>
+    </Dropdown>
+  )
+
+  // 任务是一张卡（参照 Orca 的侧栏）：头行、「N 个会话」折叠头、会话行带时间；收起时只剩一枚「✳ +N ›」
+  const taskRows = (task: TreeTask) => {
     const on = activeTask === task.key
     const many = task.sessions.length > 1
     const open = !many || !closed.has(task.key)
-    const running = task.sessions.some((s) => s.running)
-    const waiting = task.sessions.some((s) => s.waiting)
     const hasActive = task.sessions.some((s) => s.name === activeSession)
     const agents = task.sessions.filter((s) => s.agent)
     return (
       <div key={task.key} className={`tt-tree-task${on ? ' on' : ''}`}>
-        <Dropdown trigger={['contextMenu']} menu={taskMenu(task)}>
-        <button type="button" className={`tt-nav-item tt-tree-row head${on && !hasActive ? ' on' : ''}`}
-          onClick={() => onTask(task.key)} title={task.path}
-          onDoubleClick={onRenameTask && !isLooseTask(task.key) ? () => onRenameTask(task.key, task.name) : undefined}>
-          <span className="ic">{dot({ running, waiting, unfinished: task.unfinished }, true)}</span>
-          <span className="nm">{task.name}</span>
-          {task.unfinished && <span className="bd" title={t('tree.unfinished', { n: task.ahead })}>{t('tree.unfinishedShort', { n: task.ahead })}</span>}
-          {wtStatus(task)}
-        </button>
-        </Dropdown>
+        {taskHead(task, task.unfinished && <span className="bd" title={t('tree.unfinished', { n: task.ahead })}>{t('tree.unfinishedShort', { n: task.ahead })}</span>, on && !hasActive)}
         {many && (
           <button type="button" className={`tt-tree-agents${open ? '' : ' closed'}`} onClick={() => toggle(task.key)}
             aria-expanded={open} aria-label={open ? t('common.collapse') : t('common.expand')}>
@@ -144,7 +152,7 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
           </button>
         )}
         {open
-          ? <div className="tt-tree-sessions">{task.sessions.map((s) => sessionRow(task.key, s, 2))}</div>
+          ? <div className="tt-tree-sessions">{task.sessions.map((s) => sessionRow(task.key, s))}</div>
           : (
             <button type="button" className="tt-tree-more" onClick={() => toggle(task.key)} title={t('common.expand')}>
               {agents[0] ? <AgentLogo kind={agents[0].agent!} size={13} /> : <TerminalIcon size={13} />}
@@ -156,23 +164,10 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
     )
   }
 
-  // 头行右端一枚分支状态图标（照 Orca 卡片右上角那枚 PR 标）：分支名不再单独占一行——底部状态条已经有；
-  // 颜色说状态：已合入 = 绿，有未合入提交 = 蓝，有未提交改动 = 黄，干净 = 灰；悬停看分支和数字
-  const wtStatus = (task: TreeTask) => task.branch
-    ? <WtStatusIcon branch={task.branch} dir={isLooseTask(task.key) ? undefined : task.path} merged={task.merged} dirty={task.dirty} ahead={task.ahead} behind={task.behind} pushed={task.pushed} />
-    : null
   // 空闲 / 待收尾的 worktree：淡一档的卡，没有会话行；右键（或「…」）能派生、收尾
   const idleCard = (task: TreeTask) => (
     <div key={task.key} className="tt-tree-task idle">
-      <Dropdown trigger={['contextMenu']} menu={taskMenu(task)}>
-      <button type="button" className="tt-nav-item tt-tree-row head" onClick={() => onTask(task.key)} title={task.path}>
-        <span className="ic">{dot({ unfinished: task.unfinished }, true)}</span>
-        <span className="nm">{task.name}</span>
-        <span className="bd">{task.unfinished ? t('tree.unfinishedShort', { n: task.ahead }) : t('tree.idle')}</span>
-        {wtStatus(task)}
-      </button>
-      </Dropdown>
-
+      {taskHead(task, <span className="bd">{task.unfinished ? t('tree.unfinishedShort', { n: task.ahead }) : t('tree.idle')}</span>, false)}
     </div>
   )
 
@@ -219,7 +214,7 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
             </button>
             {open && (
               <>
-                {live.map((x) => taskRows(x, 1))}
+                {live.map((x) => taskRows(x))}
                 {showIdle.has(p.key) && idle.map((x) => idleCard(x))}
                 {!live.length && !showIdle.has(p.key) && <div className="tt-tree-empty">{t('tree.noTasks')}</div>}
               </>
@@ -231,7 +226,7 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
       {tree.loose.length > 0 && (
         <div className="tt-tree-proj loose">
           <div className="gl">{t('tree.loose')}</div>
-          {tree.loose.map((s) => sessionRow(taskKeyOf(s.name), s, 1))}
+          {tree.loose.map((s) => sessionRow(taskKeyOf(s.name), s))}
         </div>
       )}
 

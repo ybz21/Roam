@@ -7,7 +7,7 @@
 import { Suspense, type ReactNode } from 'react'
 import { Spin, Tooltip } from 'antd'
 import { useI18n } from '../../i18n'
-import { FolderIcon } from '../../icons'
+import { FolderIcon, GitIcon, WorktreeIcon } from '../../icons'
 import FileBrowser from '../files/FileBrowser'
 import AdaptivePanel from './AdaptivePanel'
 import { lazyRetry } from '../lazy-retry'
@@ -17,20 +17,7 @@ const WorktreePanel = lazyRetry(() => import('../git/WorktreePanel'))
 
 export type InspectorPanelKind = 'files' | 'git' | 'worktree'
 
-const worktreeIcon = (
-  <svg viewBox="0 0 24 24" width={17} height={17} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-    <circle cx="12" cy="4.8" r="2.2" /><circle cx="7" cy="19.2" r="2.2" /><circle cx="17" cy="19.2" r="2.2" />
-    <path d="M12 7v2.6" /><path d="M12 9.6a4.4 4.4 0 0 0-5 4.4v3" /><path d="M12 9.6a4.4 4.4 0 0 1 5 4.4v3" />
-  </svg>
-)
-const gitIcon = (
-  <svg viewBox="0 0 24 24" width={17} height={17} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-    <circle cx="6" cy="6" r="2.2" /><circle cx="6" cy="18" r="2.2" /><circle cx="18" cy="12" r="2.2" />
-    <path d="M6 8.2v7.6" /><path d="M8.2 6h3.3a4 4 0 0 1 4 4v.3" /><path d="M8.2 18h3.3a4 4 0 0 0 4-4v-.3" />
-  </svg>
-)
-
-export function InspectorPanels({ open, panel, onPanel, dir, scope, openRequest, openTerm, onClose, onOpenFile, selectedPath, searchNonce, onOpenLine }: {
+export function InspectorPanels({ open, panel, onPanel, dir, scope, openTerm, onClose, onOpenFile, selectedPath, searchNonce, onOpenLine }: {
   open: boolean
   panel: InspectorPanelKind
   onPanel: (p: InspectorPanelKind) => void
@@ -38,8 +25,6 @@ export function InspectorPanels({ open, panel, onPanel, dir, scope, openRequest,
   dir: string
   /** 作用域头：「项目 · 任务名」 */
   scope: string
-  /** 对话里点了 Read/Edit 的路径：在文件面板里打开（nonce 让同一路径点第二次也响） */
-  openRequest?: { path: string; line?: number; nonce: number }
   openTerm?: (name: string) => void
   onClose: () => void
   /** 单击文件 → 中间开成标签（22 设计 §3.3）；不传就用 FileBrowser 自己的预览 */
@@ -54,8 +39,8 @@ export function InspectorPanels({ open, panel, onPanel, dir, scope, openRequest,
   const { t } = useI18n()
   const acts: { key: InspectorPanelKind; label: string; icon: ReactNode }[] = [
     { key: 'files', label: t('nav.files'), icon: <FolderIcon size={17} /> },
-    { key: 'git', label: t('git.title'), icon: gitIcon },
-    { key: 'worktree', label: t('worktree.title'), icon: worktreeIcon },
+    { key: 'git', label: t('git.title'), icon: <GitIcon size={17} /> },
+    { key: 'worktree', label: t('worktree.title'), icon: <WorktreeIcon size={17} /> },
   ]
   const fallback = <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}><Spin /></div>
 
@@ -75,7 +60,7 @@ export function InspectorPanels({ open, panel, onPanel, dir, scope, openRequest,
         {/* 三个面板都挂着，只切 display：树的展开态、Git 的选中都留着 */}
         <div className="tt-ins-body" style={{ display: panel === 'files' ? 'flex' : 'none' }}>
           {/* 一个搜索框：打字按名字过滤，回车在文件内容里搜（22 设计 §3.4 的「名称 / 内容」两段并成了一框） */}
-          <FileBrowser dir={dir} accent="var(--accent)" layout="dock" chrome="tree" openRequest={openRequest} onOpenFile={onOpenFile} selectedPath={selectedPath || null}
+          <FileBrowser dir={dir} accent="var(--accent)" layout="dock" chrome="tree" onOpenFile={onOpenFile} selectedPath={selectedPath || null}
             onOpenLine={onOpenLine} focusSearchNonce={searchNonce} />
         </div>
         <div className="tt-ins-body" style={{ display: panel === 'git' ? 'flex' : 'none' }}>

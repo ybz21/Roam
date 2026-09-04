@@ -22,7 +22,7 @@ export function taskNameFromPrompt(p: string): string {
   return base.slice(0, 24).trim().replace(/[，。,.!！？?;；:：\s]+$/g, '').replace(/\s+/g, '-')
 }
 
-export function NewSessionModal({ open, parent, onClose, onDone, initialDir }: { open: boolean; parent?: string | null; onClose: () => void; onDone: (name: string) => void; initialDir?: string }) {
+export function NewSessionModal({ open, parent, onClose, onDone }: { open: boolean; parent?: string | null; onClose: () => void; onDone: (name: string) => void }) {
   const [prompt, setPrompt] = useState('')
   const [name, setName] = useState('')
   const [nameTouched, setNameTouched] = useState(false)
@@ -50,7 +50,7 @@ export function NewSessionModal({ open, parent, onClose, onDone, initialDir }: {
   const [prefs] = usePreferences()
   useEffect(() => {
     if (!open) return
-    setPrompt(''); setName(''); setNameTouched(false); setDir(initialDir || ''); setAgent('claude'); setWtMode('new'); setAutoReview(false); setIsGitRepo(false)
+    setPrompt(''); setName(''); setNameTouched(false); setDir(''); setAgent('claude'); setWtMode('new'); setAutoReview(false); setIsGitRepo(false)
     setBase(''); setBranches([]); setRemoteBranches([]); setDefBranch(''); setExistingWts([]); setWtPath('')
     // 派生模式：目录默认父会话 cwd（可改成任意目录，与新建一致）
     if (parent) {
@@ -59,7 +59,7 @@ export function NewSessionModal({ open, parent, onClose, onDone, initialDir }: {
         .then((r) => { if (!cancelled) setDir(r?.data?.dir || '') }).catch(() => {})
       return () => { cancelled = true }
     }
-  }, [open, parent, initialDir])
+  }, [open, parent])
   useEffect(() => {
     const d = dir.trim()
     if (!d) { setIsGitRepo(false); return }
@@ -168,7 +168,7 @@ export function NewSessionModal({ open, parent, onClose, onDone, initialDir }: {
     <>
       <Modal open={open} onCancel={onClose} onOk={ok}
         okText={parent ? t('session.fork.ok') : t('file.create')}
-        title={parent ? t('session.fork.title', { parent }) : initialDir ? t('tree.newTaskIn', { name: initialDir.replace(/\/+$/, '').split('/').pop() || initialDir }) : t('session.new')} destroyOnClose
+        title={parent ? t('session.fork.title', { parent }) : t('session.new')} destroyOnClose
         confirmLoading={creating}>
         <Space direction="vertical" style={{ width: '100%' }}>
           {/* 名称是一等短输入(可留空自动命名)；需求是任务本体,发给 Agent/派生分支 */}

@@ -345,7 +345,7 @@ html[data-pointer="coarse"] .tt-rail-btn::after {
   color: var(--text-dimmer); font-size: var(--fs-micro); font-weight: 700; letter-spacing: .1em;
 }
 
-.tt-nav-item, .tt-nav-account, .tt-nav-collapse {
+.tt-nav-item, .tt-nav-collapse {
   position: relative; display: flex; align-items: center; gap: 11px; width: 100%;
   min-height: 38px; padding: 0 10px; border: 0; border-radius: var(--r-sm);
   background: none; color: var(--text-dim); font-size: var(--fs-body); text-align: left;
@@ -354,17 +354,16 @@ html[data-pointer="coarse"] .tt-rail-btn::after {
 /* 轨态每项 36 高、铺满整轨、不带圆角：一条 48 宽的轨里再切圆角，悬停块两边各剩 6px
    黑边，读起来像一排小卡片而不是一列导航 */
 .tt-nav.rail .tt-nav-item,
-.tt-nav.rail .tt-nav-account,
 .tt-nav.rail .tt-nav-collapse {
   justify-content: center; min-height: 36px; padding: 0; border-radius: 0;
 }
-:where(html[data-pointer="fine"]) .tt-nav-item:hover, :where(html[data-pointer="fine"]) .tt-nav-account:hover, :where(html[data-pointer="fine"]) .tt-nav-collapse:hover { background: var(--list-hover); color: var(--text-bright); }
+:where(html[data-pointer="fine"]) .tt-nav-item:hover, :where(html[data-pointer="fine"]) .tt-nav-collapse:hover { background: var(--list-hover); color: var(--text-bright); }
 /* 图标槽：导航项 / 终端开关 / 账户 / 收起 用同一个 20px 方槽，图标才在一条竖线上。
    账户那枚以前是「蓝底圆角块」，在一列裸图标里自成一格——同一列里不要两种图标语言。 */
-.tt-nav-item .ic, .tt-nav-account .av, .tt-nav-collapse .ic {
+.tt-nav-item .ic, .tt-nav-collapse .ic {
   flex: 0 0 auto; width: 20px; height: 20px; display: grid; place-items: center;
 }
-.tt-nav-item .nm, .tt-nav-account .nm, .tt-nav-collapse .nm {
+.tt-nav-item .nm, .tt-nav-collapse .nm {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 /* ── 设置 › 多机：模式二选一 + 接入状态 + 两条入口 ───────────────── */
@@ -505,14 +504,12 @@ html[data-pointer="coarse"] .tt-devrow.acts > .tt-mode { padding-bottom: 58px; }
 
 /* 粗指针：视觉仍是 36 高，命中区用伪元素补到 44——直接把行画高会把这一列拉长一截 */
 html[data-pointer="coarse"] .tt-nav-item::after,
-html[data-pointer="coarse"] .tt-nav-account::after,
 html[data-pointer="coarse"] .tt-nav-collapse::after {
   content: ""; position: absolute; left: 0; right: 0; top: 50%;
   transform: translateY(-50%); height: 44px;
 }
 
 .tt-nav-foot { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; border-top: 1px solid var(--border-subtle); }
-.tt-nav-account .dots { margin-left: auto; flex: 0 0 auto; display: flex; color: var(--text-dimmer); }
 
 /* ── 侧栏搜索行（22 设计 §3.5）：顶栏 Command Center 撤了，⌘K 的可见入口回到品牌下面 ──
    实底 + 32 高的假输入框：与底同色只描一圈边的话没人看得出这里能搜（有人用了半年不知道有 ⌘K） */
@@ -545,10 +542,8 @@ html[data-pointer="coarse"] .tt-ins-act { width: 44px; height: 40px; }
 .tt-ins-scope { display: flex; align-items: center; height: 36px; padding: 0 14px; flex: 0 0 auto; font-size: var(--fs-sm); font-weight: 600; color: var(--text-bright); }
 .tt-ins-scope .nm { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tt-ins-body { flex: 1; min-height: 0; min-width: 0; flex-direction: column; }
-.tt-ins-seg { padding: 6px 10px 8px; flex: 0 0 auto; }
 /* 内容搜索：输入框 + 按文件分组的命中行 */
 .tt-csearch { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 0 10px 10px; }
-.tt-csearch-body { flex: 1; min-height: 0; overflow: auto; margin-top: var(--sp-2); }
 .tt-csearch-note { padding: 6px 4px; color: var(--text-dimmer); font-size: var(--fs-meta); }
 .tt-csearch-file { margin-bottom: 6px; }
 .tt-csearch-fname {
@@ -578,17 +573,6 @@ html[data-pointer="coarse"] .tt-csearch-line, html[data-pointer="coarse"] .tt-cs
 }
 .tt-tree-head { display: flex; align-items: center; gap: var(--sp-1); padding: 0 2px 8px 2px; }
 /* 搜索：实底 + 32 高的假输入框，点了开 ⌘K 面板。与底同色只描一圈边的话没人看得出这里能搜 */
-.tt-tree-search {
-  flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--sp-2); height: 32px; padding: 0 10px;
-  border: 1px solid var(--border-subtle); border-radius: var(--r-sm); background: var(--bg-elevated);
-  color: var(--text-dim); font-size: var(--fs-sm); text-align: left; cursor: pointer; transition: border-color .12s, color .12s;
-}
-:where(html[data-pointer="fine"]) .tt-tree-search:hover { border-color: var(--accent-border); color: var(--text-bright); }
-.tt-tree-search .ph { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tt-tree-search kbd {
-  flex: 0 0 auto; padding: 1px 5px; border: 1px solid var(--border); border-radius: 5px;
-  background: var(--bg-base); color: var(--text-dim); font-size: var(--fs-micro); font-family: var(--mono);
-}
 .tt-tree-head .gl { flex: 1; padding-left: 10px; color: var(--text-dimmer); font-size: var(--fs-micro); font-weight: 700; letter-spacing: .1em; }
 .tt-tree-head .tt-act { color: var(--text-dimmer); }
 /* 项目行的首字母圆标：项目卡那枚（icoOf 取色）缩到 20，住在图标槽里 */
@@ -596,15 +580,12 @@ html[data-pointer="coarse"] .tt-csearch-line, html[data-pointer="coarse"] .tt-cs
 .tt-tree-proj + .tt-tree-proj { margin-top: 4px; }
 .tt-tree-proj.loose { margin-top: 10px; }
 .tt-tree-proj .gl { padding: 0 10px; margin-bottom: var(--sp-1); color: var(--text-dimmer); font-size: var(--fs-micro); font-weight: 700; letter-spacing: .1em; }
-/* 缩进：每层 22px，和图标槽 + 间距同宽，下一层的图标正好落在上一层文字的起点 */
-.tt-tree-row.lvl1 { padding-left: 32px; }
-.tt-tree-row.lvl2 { padding-left: 54px; }
+/* 散会话没有卡，行自己缩一级，和卡里的头行对齐 */
+.tt-tree-proj.loose .tt-tree-row { padding-left: 32px; }
 /* 箭头钉右端：没有计数徽标时也不能跟在名字后面 */
 .tt-tree-row .chev { flex: 0 0 auto; margin-left: auto; display: grid; place-items: center; color: var(--text-dimmer); transition: transform .15s; }
-.tt-tree-row .bd + .chev, .tt-tree-row .ic.chev { margin-left: 0; }
-.tt-tree-row.lvl3 { padding-left: 76px; }
+.tt-tree-row .bd + .chev { margin-left: 0; }
 .tt-tree-row.closed .chev { transform: rotate(-90deg); }
-.tt-tree-row.more { color: var(--text-dimmer); font-size: var(--fs-sm); }
 /* 状态点住在图标槽正中：运行 / 等你 / 待收尾 才上色，空闲很淡 */
 .tt-tree .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-dimmer); }
 .tt-tree .dot.idle { opacity: .4; }
@@ -628,8 +609,6 @@ html[data-pointer="coarse"] .tt-csearch-line, html[data-pointer="coarse"] .tt-cs
 :where(html[data-pointer="fine"]) .tt-nav-tree:hover::-webkit-scrollbar-thumb { background: var(--scroll-thumb); }
 .tt-tree-task > .tt-tree-row.head { padding-left: 10px; border-radius: var(--r-xs); }
 .tt-tree-task > .tt-tree-row.head .nm { font-weight: 500; font-size: var(--fs-sm); }
-.tt-tree-branch { display: flex; align-items: center; gap: 6px; padding: 0 10px 2px 32px; color: var(--text-dimmer); font: 400 var(--fs-micro)/1.5 var(--mono); white-space: nowrap; min-width: 0; }
-.tt-tree-branch .br { overflow: hidden; text-overflow: ellipsis; min-width: 36px; flex: 1 1 auto; }
 /* 头行右端的分支状态图标（Orca 卡片右上角那枚）：颜色说状态，悬停看分支和数字 */
 .wtst { flex: 0 0 auto; width: 18px; height: 18px; display: inline-grid; place-items: center; border-radius: var(--r-xs); color: var(--text-dimmer); }
 .tt-tree-row .wtst { margin-left: auto; width: 20px; height: 20px; }

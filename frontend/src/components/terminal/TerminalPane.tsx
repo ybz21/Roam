@@ -51,8 +51,6 @@ export default function TerminalPane(props: {
   /** 终端 Focus：传了才渲染工具条右侧那枚按钮（手机没有这个概念） */
   focus?: { on: boolean; toggle: () => void; hint: string }
   fileDock?: 'right' | 'left'   // 文件面板停靠：'right'=右侧浮动抽屉（默认），'left'=左侧 VSCode 栏（新标签全屏页）
-  /** 标签条只画这些（当前任务的会话，22 设计 §3.3）；terms 仍是全集——每个终端常驻挂载，只切可见 */
-  visibleTerms?: string[]
   /** 标签条右端「新建 ▾」：在当前任务里开终端 / 去项目页开新任务。不传就不画 */
   /** 标签条「新建」：三样都在当前任务的 worktree 里派生；taskLabel 写在菜单顶上说明白 */
   onNew?: { terminal: () => void; claude: () => void; codex: () => void; taskLabel?: string }
@@ -75,8 +73,8 @@ export default function TerminalPane(props: {
   /** 从对话里点「path:line」跳过来要定位到那一行；nonce 让同一处点第二次也响 */
   reveal?: { path: string; line: number; nonce: number }
 }) {
-  const { terms, active, setActive, closeTerm, fontSize, setFontSize, statusMap, setStatus, termRefs, sendKey, onCollapse, claudeMap, claudeView, setClaudeView, codexMap, codexView, setCodexView, onRename, onReorder, onNeedsInput, focus, visibleTerms, onNew, inspector, onOpenFile, onOpenGit, fileTabs, activeFile, taskDir, onFileTab, onCloseFile, onPinFile, onFileMode, reveal } = props
-  const tabs = visibleTerms ?? terms
+  const { terms, active, setActive, closeTerm, fontSize, setFontSize, statusMap, setStatus, termRefs, sendKey, onCollapse, claudeMap, claudeView, setClaudeView, codexMap, codexView, setCodexView, onRename, onReorder, onNeedsInput, focus, onNew, inspector, onOpenFile, onOpenGit, fileTabs, activeFile, taskDir, onFileTab, onCloseFile, onPinFile, onFileMode, reveal } = props
+  const tabs = terms
   const curFile = activeFile || ''
   // 文件标签的脏标记：FileView 报上来，关标签前问一句（FileWorkspace 同款）
   const [dirtyFiles, setDirtyFiles] = useState<Set<string>>(() => new Set())

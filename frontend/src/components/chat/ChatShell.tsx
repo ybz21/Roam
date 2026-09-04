@@ -232,7 +232,6 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
   const statusActions: StatusActions = useMemo(() => ({
     // 轮换权限模式＝在 TUI 里按 Shift+Tab，跟人手动按是同一个动作。
     // 乐观更新没意义：下一轮转录会带回真实的 permission-mode 行，等它对账即可。
-    onCycleMode: () => { api('POST', `/sessions/${encodeURIComponent(name)}/keys`, { keys: ['BTab'] }).catch(() => {}) },
     onOpenGit,
     onJumpError: lastErrorId ? () => {
       const el = boxRef.current?.querySelector<HTMLElement>(`[data-msg-id="${CSS.escape(lastErrorId)}"]`)

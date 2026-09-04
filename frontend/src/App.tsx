@@ -185,7 +185,6 @@ export default function App() {
   const [activeFile, setActiveFile] = useState('')
   const [reveal, setReveal] = useState<{ path: string; line: number; nonce: number } | undefined>()
   const [searchNonce, setSearchNonce] = useState(0)
-  const curFiles = fileTabs
   const curFile = activeFile
   const curFileTab = curFile ? fileTabs.find((f) => f.path === curFile) : undefined
   // 当前任务：文件标签 → 它记的任务；会话标签 → 它的 worktree；什么都没开 → 没有
@@ -205,7 +204,6 @@ export default function App() {
     setActiveFile(path)
     if (line && line > 0) setReveal((prev) => ({ path, line, nonce: (prev?.nonce || 0) + 1 }))
   }
-  const selectFileTab = (path: string) => setActiveFile(path)
   const pinFileTab = (path: string) => setFileTabs((list) => list.map((f) => (f.path === path ? { ...f, preview: false } : f)))
   const setFileMode = (path: string, mode: FileTabMode) => setFileTabs((list) => list.map((f) => (f.path === path ? { ...f, mode, preview: false } : f)))
   const closeFileTab = (path: string) => {
@@ -547,10 +545,9 @@ export default function App() {
     setHashParams({
       terms: toks.map(encodeURIComponent).join(','),
       active: activeTok ? encodeURIComponent(activeTok) : '',
-      wt: '', // 当前任务从当前标签推出来，URL 不再单独写
     })
     // 同一份东西再按机器存一份：切走了还能切回来（见 term-tabs-store）
-    saveTabs(curNodeId, toks, activeTok, '', fileTabs, activeFile)
+    saveTabs(curNodeId, toks, activeTok, fileTabs, activeFile)
   }, [terms, active, fileTabs, activeFile, sessIds, curNodeId])
 
   // 左栏树：三份原料 memo 一次；已打开会话探测到的 agent 比 /projects 的名单准
@@ -636,7 +633,6 @@ export default function App() {
     go(TASK_ROUTE)
     space.setDockOpen(true); space.setFocus('none')
   }
-  const onTreeSession = (key: TaskKey, name: string) => openTerm(name, key)
   // 标签条「新建」菜单顶上写着派生自哪个任务
   const activeTaskLabel = activeTask
     ? (isLooseTask(activeTask) ? sessionLabel(looseSessionOf(activeTask)) : tree.projects.flatMap((p) => p.tasks).find((x) => x.key === activeTask)?.name || activeTask.split('/').pop() || '')
@@ -769,15 +765,14 @@ export default function App() {
       onCollapse={taskView ? undefined : () => { setOverlay(false); space.setDockOpen(false) }}
       onReorder={reorderTerm}
       onNeedsInput={setMobileWaiting}
-      visibleTerms={terms}
       onNew={taskView ? { terminal: () => { void newTerminalInTask('shell') }, claude: () => { void newTerminalInTask('claude') }, codex: () => { void newTerminalInTask('codex') }, taskLabel: activeTaskLabel } : undefined}
       // 任务视图里对话点路径 / Git 都落到右栏三面板；手机与 Page 态退回 TerminalPane 自己的二级页
       onOpenFile={taskView ? (path, line) => openFileTab(path, line) : undefined}
       onOpenGit={taskView ? () => { setPanel('git'); if (space.inspectorCollapsed) space.toggleInspectorCollapsed() } : undefined}
       inspector={taskView ? { open: !space.inspectorCollapsed, toggle: () => space.toggleInspectorCollapsed() } : undefined}
-      fileTabs={taskView ? curFiles : undefined} activeFile={taskView ? curFile : undefined}
+      fileTabs={taskView ? fileTabs : undefined} activeFile={taskView ? curFile : undefined}
       taskDir={activeTask && !isLooseTask(activeTask) ? activeTask : (activeProject?.dir || '')}
-      onFileTab={selectFileTab} onCloseFile={closeFileTab} onPinFile={pinFileTab} onFileMode={setFileMode} reveal={reveal}
+      onFileTab={setActiveFile} onCloseFile={closeFileTab} onPinFile={pinFileTab} onFileMode={setFileMode} reveal={reveal}
       // Focus 只在桌面有意义：手机上终端本来就是全屏覆盖层；任务视图里 focus 是常态，没有开关
       focus={!hasSider ? undefined : taskView
         ? { on: space.navCollapsed, toggle: () => space.setNavCollapsed(!space.navCollapsed), hint: `${modKeyLabel}⇧J` }
@@ -798,9 +793,8 @@ export default function App() {
   }
   // 懒加载页面 chunk 拉取期间的兜底：居中转圈（体量小，通常一闪而过）
   const lazyFallback = <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}><Spin /></div>
-  // 任务视图（#/w）时 Canvas 归零，页面不用画；没有当前任务的 #/w 退回项目页
-  const pageKey = tab === TASK_ROUTE ? 'projects' : tab
-  const page = <Suspense fallback={lazyFallback}>{taskView ? null : (pages[pageKey] || pages.projects)}</Suspense>
+  // 任务视图（#/w）时 Canvas 归零，页面不用画；#/w 不在 pages 里，退回项目页
+  const page = <Suspense fallback={lazyFallback}>{taskView ? null : (pages[tab] || pages.projects)}</Suspense>
   // browser 全幅(自带工具栏铺满)；phone 与概览/会话一致走 tt-page（同 16px 留白 + 满高，见 tt-page-phone）。
   // 浏览器页不再全幅特例：与 文件/手机 同走 tt-page 满高容器，五页左上角起点统一 (16,16)
   const pageNode = <div className={`tt-page tt-page-${tab}${isMobile ? ' tt-page-mobile' : ''}${isMobile && terms.length ? ' has-dock' : ''}`}>{page}</div>
@@ -978,7 +972,7 @@ export default function App() {
             onSearch={openPalette}
             searchHint={`${modKeyLabel}K`}
             tree={<ProjectTree tree={tree} activeTask={activeTask} activeSession={active}
-              onProject={onTreeProject} onTask={onTreeTask} onSession={onTreeSession}
+              onProject={onTreeProject} onTask={onTreeTask} onSession={(key, name) => openTerm(name, key)}
               onAddProject={() => setNewProjectOpen(true)}
               onRename={setRenameInTree}
               onRenameTask={(key, name) => { setRenameTask({ key, name }); setRenameTaskVal(prefs.taskNames?.[key] || name) }}

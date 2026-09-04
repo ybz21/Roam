@@ -124,6 +124,9 @@ export const DotIcon = ({ size = 13 }: P) => solid(<circle cx="12" cy="12" r="4.
 export const DiamondIcon = ({ size = 13 }: P) => solid(<path d="m12 3.5 8.5 8.5-8.5 8.5L3.5 12Z" />, size)
 
 // ── Agent 工具调用的类型图标（原来一列 emoji：📖 ✏️ 📓 🔍 🤖 🌐 ❓ ⚙）──
+/** 右栏活动条的 Git / Worktree 两格（22 设计 §3.4） */
+export const GitIcon = ({ size = 17 }: P) => line(<><circle cx="6" cy="6" r="2.2" /><circle cx="6" cy="18" r="2.2" /><circle cx="18" cy="12" r="2.2" /><path d="M6 8.2v7.6" /><path d="M8.2 6h3.3a4 4 0 0 1 4 4v.3" /><path d="M8.2 18h3.3a4 4 0 0 0 4-4v-.3" /></>, size)
+export const WorktreeIcon = ({ size = 17 }: P) => line(<><circle cx="12" cy="4.8" r="2.2" /><circle cx="7" cy="19.2" r="2.2" /><circle cx="17" cy="19.2" r="2.2" /><path d="M12 7v2.6" /><path d="M12 9.6a4.4 4.4 0 0 0-5 4.4v3" /><path d="M12 9.6a4.4 4.4 0 0 1 5 4.4v3" /></>, size)
 /** 右栏开关：标签条右端，亮着 = 右栏开着（22 设计 §3.3） */
 export const PanelRightIcon = ({ size = 15 }: P) => line(<><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M15 4v16" /></>, size, 1.7)
 export const TerminalIcon = ({ size = 13 }: P) => line(<><rect x="3" y="4" width="18" height="16" rx="2" /><path d="m7 9 3 3-3 3" /><path d="M13 15h4" /></>, size)
