@@ -73,3 +73,52 @@ describe('工作区分隔条位置的恢复', () => {
     expect(result.current.inspectorWidth).toBe(700)
   })
 })
+
+describe('右栏：第一次进来收着，拉开过就记住', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    window.innerWidth = VIEWPORT
+    vi.stubGlobal('matchMedia', vi.fn((q: string) => ({
+      matches: q.includes('min-width'),
+      addEventListener: vi.fn(), removeEventListener: vi.fn(),
+      addListener: vi.fn(), removeListener: vi.fn(),
+    })))
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes('/api/preferences')) {
+        return jsonResponse({ data: { _migrated: true, workspace: { inspectorCollapsed: false } } })
+      }
+      return jsonResponse({ data: {} })
+    }))
+  })
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  it('没存过偏好 → 收着（新用户开门看见的是会话和终端，不是一列面板）', async () => {
+    const m = await freshModules()
+    const { result } = renderHook(() => m.useWorkspaceLayout(true, true))
+    expect(result.current.inspectorCollapsed).toBe(true)
+  })
+
+  it('拉开之后写进偏好，本地镜像里也有 → 下次首帧就是开着的', async () => {
+    const m = await freshModules()
+    const { result } = renderHook(() => m.useWorkspaceLayout(true, true))
+    result.current.toggleInspectorCollapsed()
+    await waitFor(() => expect(result.current.inspectorCollapsed).toBe(false))
+    await waitFor(() => {
+      const saved = JSON.parse(localStorage.getItem('ttmux.workspace') || '{}')
+      expect(saved.inspectorCollapsed).toBe(false)
+    })
+
+    const m2 = await freshModules()
+    const { result: r2 } = renderHook(() => m2.useWorkspaceLayout(true, true))
+    expect(r2.current.inspectorCollapsed).toBe(false)
+  })
+
+  it('服务端那份说开着，就按开着来（本机没记过时）', async () => {
+    localStorage.clear()
+    const m = await freshModules()
+    const { result } = renderHook(() => m.useWorkspaceLayout(true, true))
+    expect(result.current.inspectorCollapsed).toBe(true) // 首帧用默认
+    await m.loadPreferences()
+    await waitFor(() => expect(result.current.inspectorCollapsed).toBe(false))
+  })
+})

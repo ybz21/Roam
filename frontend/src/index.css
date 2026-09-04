@@ -826,7 +826,10 @@ html[data-size="compact"] .tt-pagedivider { display: none; }
   --ctl-h: 32px;
 }
 html[data-pointer="coarse"] .mc { --ctl-h: 36px; }
-.mc-row { display: flex; align-items: center; gap: var(--sp-1); padding: 6px var(--sp-2); min-width: 0; }
+/* 高度锁在 --topbar-h：镜像页是满幅的，它这条工具行就是页面最上面那道横线，
+   得和左栏顶上的品牌行（同样 --topbar-h）连成一条直线。从前是 6px 内边距 + 32 控件
+   自然长成 44，比品牌行高 4px——两栏挨着看，那道线是断的。 */
+.mc-row { display: flex; align-items: center; gap: var(--sp-1); height: var(--topbar-h); padding: 0 var(--sp-2); min-width: 0; }
 
 /* 图标钮：正方形、无边框，hover 才有底。全站这一行只有它一种按钮长相。 */
 .mc-ib {
@@ -947,14 +950,18 @@ html[data-pointer="coarse"] .mc { --ctl-h: 36px; }
 .mc-seg .ant-segmented-item { flex: 1; }
 
 /* 桌面标签条：激活那枚底色提到 --bg-container，与下面的工具行连成一片 */
+/* 标签条也锁在 --topbar-h（含那 1px 底边，box-sizing 已是 border-box）：浏览器页最上面
+   那道横线要和左栏品牌行的底边连成一条。原来 6+32+1=39，差 1px——差 1px 的两条线，
+   看起来就是一条断线。 */
 .mc-tabs {
   flex: 0 0 auto; display: flex; align-items: flex-end; gap: var(--sp-2);
-  padding: 6px var(--sp-2) 0; background: var(--bg-base);
+  box-sizing: border-box; height: var(--topbar-h);
+  padding: 0 var(--sp-2); background: var(--bg-base);
   border-bottom: 1px solid var(--border);
 }
 .mc-tabs-strip { display: flex; align-items: flex-end; gap: 2px; flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
 .mc-tabs-strip::-webkit-scrollbar { display: none; }
-.mc-tabs-end { flex: 0 0 auto; padding-bottom: 5px; }
+.mc-tabs-end { flex: 0 0 auto; padding-bottom: 3px; }
 .mc-tab {
   display: flex; align-items: center; gap: 7px;
   flex: 0 1 190px; min-width: 110px; height: 32px; padding: 0 10px;
@@ -1315,12 +1322,16 @@ html[data-pointer="coarse"] .tt-srow .acts { opacity: 1; }
   min-height: 0;
   overflow: hidden;
 }
-/* 手机镜像页满幅：这一页的主角是一块画面，四周留白只是把它按比例缩小一圈，
-   什么也没多说明。工具条自带底边框，不靠外边距跟画布分开。
+/* 镜像页（手机 / 浏览器）满幅：这两页的主角是一块画面，四周留白只是把它按比例缩小一圈，
+   什么也没多说明。工具条自带底边框，不靠外边距跟画布分开——留白反而让工具行比左栏的
+   品牌行矮一截、错开 16px，顶上那道横线接不上。
    底部例外——手机上要给底栏/会话坞让位，否则画面被压在它们下面。 */
-.tt-page-phone { padding: 0; }
-.tt-page-phone.tt-page-mobile { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
-.tt-page-phone.tt-page-mobile.has-dock { padding-bottom: calc(126px + env(safe-area-inset-bottom)); }
+.tt-page-phone,
+.tt-page-browser { padding: 0; }
+.tt-page-phone.tt-page-mobile,
+.tt-page-browser.tt-page-mobile { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+.tt-page-phone.tt-page-mobile.has-dock,
+.tt-page-browser.tt-page-mobile.has-dock { padding-bottom: calc(126px + env(safe-area-inset-bottom)); }
 .tt-page-files > *,
 .tt-page-phone > *,
 .tt-page-browser > *,
@@ -1426,6 +1437,22 @@ html[data-size="compact"] .ant-form-item-control-input-content > .ant-picker { w
 }
 .tt-tabs-wrap > .tt-tabs { flex: 1 1 auto; min-width: 0; border-bottom: 0; }
 .tt-tabs-lead { flex: 0 0 auto; display: flex; align-items: center; padding: 0 0 0 8px; }
+/* 两端的翻页钮 + 右端的「全部标签」清单：只在溢出时出现（fadeL/fadeR 决定挂不挂）。
+   渐隐只是暗示「这边还有」，没有横向滚轮的鼠标照样够不着——这几枚是能点的那一版。
+   它们在流内占位，不浮在标签上：浮着就压住最边上那枚标签的关闭钮。 */
+.tt-tabs-nav {
+  position: relative; flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center; gap: 3px;
+  width: 26px; height: 34px; padding: 0;
+  border: 0; background: transparent; color: var(--text-dim); cursor: pointer;
+}
+.tt-tabs-nav.wide { width: auto; padding: 0 7px; border-left: 1px solid var(--border-subtle); }
+.tt-tabs-nav b { font-size: var(--fs-micro); font-weight: 600; color: var(--text-dimmer); }
+:where(html[data-pointer="fine"]) .tt-tabs-nav:hover { background: var(--list-hover); color: var(--text-bright); }
+:where(html[data-pointer="fine"]) .tt-tabs-nav:hover b { color: var(--text-bright); }
+/* 手指档热区撑到 44：视觉尺寸不动，用伪元素长出去（标签条本身只有 34 高） */
+html[data-pointer="coarse"] .tt-tabs-nav::after { content: ''; position: absolute; inset: -5px -9px; }
+
 /* 渐隐用 mask 而不是叠一层渐变色块：底色是变量，叠色块在浅色主题下会露出接缝 */
 .tt-tabs[data-l][data-r] { mask-image: linear-gradient(90deg, transparent 0, #000 22px, #000 calc(100% - 22px), transparent 100%); }
 .tt-tabs[data-l]:not([data-r]) { mask-image: linear-gradient(90deg, transparent 0, #000 22px); }
