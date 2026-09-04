@@ -33,6 +33,9 @@
   --accent-solid: #1f6feb;
   --accent-soft: rgba(31, 111, 235, .14);
   --accent-border: rgba(88, 166, 255, .45);
+  /* 选中行的底：中性提亮，不带色相（见 theme.tsx 的注释）。
+     --accent-soft 留给强调件（芯片/徽标/聚焦光晕），两者不再混用。 */
+  --sel-bg: rgba(255, 255, 255, .065);
   /* 成功/运行绿：全站也只有这一组（见 theme.tsx） */
   --ok: #3fb950;
   --ok-solid: #238636;
@@ -454,11 +457,14 @@ html[data-pointer="coarse"] .tt-devrow.acts > .tt-mode { padding-bottom: 58px; }
 .tt-nodemark.off { color: var(--text-dimmer); border-style: dashed; background: transparent; }
 /* 机器切换器：摆在底部这一组的第一位。底下几样都是「上下文与账户」，
    而它是其中作用域最大的一个——切它，上面整列页面看的都换一台机器。 */
+/* 切机器这一枚是**导航行**，不是一张卡片：它上面是项目树、下面是「设置 / 收起」，
+   一色扁平的行里夹一枚带底、比别人矮 4px、左右缩进也不一样的方框，看着就是没对齐。
+   现在跟 .tt-nav-item 同高（38）、同缩进（10）、同图标槽（11px gap）、同 hover 底。 */
 .tt-nav-node {
-  position: relative; display: flex; align-items: center; gap: 8px; width: 100%;
-  height: 34px; padding: 0 8px; margin-bottom: 4px;
-  border: 0; border-radius: var(--r-sm); background: var(--bg-elevated); color: var(--text-dim);
-  font-size: var(--fs-meta); text-align: left;
+  position: relative; display: flex; align-items: center; gap: 11px; width: 100%;
+  min-height: 38px; padding: 0 10px; margin-bottom: 4px;
+  border: 0; border-radius: var(--r-sm); background: none; color: var(--text-dim);
+  font-size: var(--fs-body); text-align: left;
 }
 .tt-nav-node .av { flex: 0 0 auto; display: grid; place-items: center; }
 .tt-nav-node .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-bright); }
@@ -466,14 +472,15 @@ html[data-pointer="coarse"] .tt-devrow.acts > .tt-mode { padding-bottom: 58px; }
 .tt-nav-node .dots { flex: 0 0 auto; display: grid; place-items: center; color: var(--text-dimmer); }
 :where(html[data-pointer="fine"]) .tt-nav-node:hover { background: var(--list-hover); color: var(--text-bright); }
 /* 轨态：只剩方章，状态点叠在右下角（外描底色免得糊在方章边上） */
-.tt-nav.rail .tt-nav-node { width: 34px; justify-content: center; padding: 0; margin: 0 auto 4px; }
+.tt-nav.rail .tt-nav-node { width: 36px; justify-content: center; padding: 0; margin: 0 auto 4px; }
 .tt-nav.rail .tt-nav-node .nd { position: absolute; right: 1px; bottom: 1px; box-shadow: 0 0 0 2px var(--bg-base); }
 /* 它和下面的设置/账户是一组，但作用域不同：给一条分隔线把它单独拎出来 */
 .tt-nav-node { margin-bottom: 6px; padding-bottom: 6px; }
 .tt-nav-foot .tt-nav-node { border-bottom: 1px solid var(--border-subtle); border-radius: var(--r-sm); }
 
-/* 选中态：3px 左强调线 + 低饱和蓝底。整块高亮会把注意力从内容上夺走（14 §4.4） */
-.tt-nav-item.on { background: var(--accent-soft); color: var(--text-bright); }
+/* 选中态：3px 左强调线 + 中性淡底。整块高亮会把注意力从内容上夺走（14 §4.4）；
+   底色也不该带色相——深底上 14% 的蓝糊成一块脏 navy，而「就是这一条」那条线已经说清了。 */
+.tt-nav-item.on { background: var(--sel-bg); color: var(--text-bright); }
 .tt-nav-item.on::before {
   content: ""; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
   width: 3px; height: 20px; border-radius: 0 3px 3px 0; background: var(--accent);
@@ -729,7 +736,7 @@ html[data-size="compact"] .tt-palette {
   border: 0; border-radius: var(--r-sm); background: transparent;
   color: var(--text-bright); cursor: pointer;
 }
-.tt-palette-row.on { background: var(--accent-soft); }
+.tt-palette-row.on { background: var(--sel-bg); }
 .tt-palette-row .ic { flex: 0 0 18px; display: grid; place-items: center; color: var(--text-dim); }
 .tt-palette-row.on .ic { color: var(--accent); }
 .tt-palette-row .tx { min-width: 0; flex: 1; }
@@ -839,7 +846,7 @@ html[data-size="compact"] .tt-pagedivider { display: none; }
    排下来高低错半档，比单个控件丑得多。 */
 .mc {
   flex: 0 0 auto;
-  background: var(--bg-container);
+  background: var(--bg-base);
   border-bottom: 1px solid var(--border);
   --ctl-h: 32px;
 }
@@ -1452,7 +1459,7 @@ html[data-size="compact"] .ant-form-item-control-input-content > .ant-picker { w
 }
 .tt-tabs::-webkit-scrollbar, .tt-tbar::-webkit-scrollbar { height: 0; width: 0; }
 .tt-tabs > *, .tt-tbar > * { flex: 0 0 auto; }
-.tt-tabs { gap: 0; padding: 0; background: var(--bg-container); border-bottom: 1px solid var(--border-subtle); }
+.tt-tabs { gap: 0; padding: 0; background: var(--bg-base); border-bottom: 1px solid var(--border-subtle); }
 .tt-tbar { gap: 3px; padding: 5px 8px; background: var(--bg-base); border-bottom: 1px solid var(--border-subtle); }
 
 /* 竖线断句：把「状态 / 会话动作 / 面板开关」隔开 */
@@ -1462,7 +1469,7 @@ html[data-size="compact"] .ant-form-item-control-input-content > .ant-picker { w
 /* 标签条外壳：左侧「收起」固定，标签区独立横滚，两侧溢出给渐隐（14 §7.1） */
 .tt-tabs-wrap {
   position: relative; display: flex; align-items: center; min-width: 0;
-  background: var(--bg-container); border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-base); border-bottom: 1px solid var(--border-subtle);
 }
 .tt-tabs-wrap > .tt-tabs { flex: 1 1 auto; min-width: 0; border-bottom: 0; }
 .tt-tabs-lead { flex: 0 0 auto; display: flex; align-items: center; padding: 0 0 0 8px; }
@@ -1501,7 +1508,9 @@ html[data-pointer="coarse"] .tt-tabs-nav::after { content: ''; position: absolut
   transition: background .12s, color .12s;
 }
 :where(html[data-pointer="fine"]) .tt-tab:hover { background: var(--list-hover); color: var(--text-bright); }
-.tt-tab.on { background: var(--bg-base); color: var(--text-bright); font-weight: 600;
+/* 外壳统一成一张底之后，选中的标签不能再靠「和下面内容同底」显形了——那时它和整条一样黑。
+   改成选中底 + 顶上那条 accent 线：跟侧栏选中行是同一套语言（中性底 + 一条强调线）。 */
+.tt-tab.on { background: var(--sel-bg); color: var(--text-bright); font-weight: 600;
   box-shadow: inset 0 2px 0 var(--accent); }
 .tt-tab .tt-wait { flex: 0 0 auto; color: var(--warn); font-weight: 600; }
 /* 会话拖到标签上（21 设计）：落点亮成实心强调边。跟标签重排那条 .dropL
@@ -1784,7 +1793,7 @@ html[data-pointer="coarse"] .tt-send::after { content: ''; position: absolute; l
 .cc-filerow { border-radius: 6px; margin: 1px 4px; }
 :where(html[data-pointer="fine"]) .cc-filerow:hover { background: rgba(88, 166, 255, .08); }
 /* 右键菜单打开期间保持目标行高亮；状态留在菜单组件内，避免重渲染整棵文件列表。 */
-.tt-file-context-open > .cc-filerow { background: var(--accent-soft); }
+.tt-file-context-open > .cc-filerow { background: var(--sel-bg); }
 /* 手动控制的右键菜单不要被整行触发器拉伸到文件抽屉宽度。 */
 .tt-file-context-menu { width: max-content !important; min-width: 130px !important; }
 /* Git 分组标题上的操作按钮：平时半透明，hover 分组时变实 */
@@ -3115,7 +3124,7 @@ html[data-size="compact"] .cc-run-slot { width: auto; }
 }
 .tt-set-tree .row.kid, .tt-set-tree .row.solo { padding-left: 28px; }
 :where(html[data-pointer="fine"]) .tt-set-tree .row:hover { background: var(--list-hover); color: var(--text-bright); }
-.tt-set-tree .row.on { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+.tt-set-tree .row.on { background: var(--sel-bg); color: var(--accent); font-weight: 500; }
 .tt-set-tree .row.dim { opacity: .35; }
 .tt-set-tree .row .cv { flex: 0 0 12px; color: var(--text-dimmer); transition: transform .12s; }
 .tt-set-tree .row .n {
@@ -3201,7 +3210,7 @@ html[data-size="compact"] .cc-run-slot { width: auto; }
   flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   color: var(--text-dim);
 }
-.tt-nodemenu.on { background: var(--accent-soft); }
+.tt-nodemenu.on { background: var(--sel-bg); }
 .tt-nodemenu.on .nm { color: var(--text-bright); font-weight: 500; }
 .tt-nodemenu .lat {
   flex: 0 0 auto; font-family: var(--mono); font-size: var(--fs-micro); color: var(--text-dimmer);
@@ -3365,7 +3374,7 @@ html[data-size="compact"] .tt-histname { flex: 1 1 auto; max-width: none; }
   display: flex; align-items: stretch;
   height: calc(var(--status-h) + var(--safe-b));
   padding-bottom: var(--safe-b);
-  background: var(--bg-container);
+  background: var(--bg-base);
   border-top: 1px solid var(--border-subtle);
   font-size: var(--fs-meta); color: var(--text-dim);
   overflow: hidden; user-select: none;

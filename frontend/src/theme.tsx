@@ -41,11 +41,14 @@ export const THEME_TOKENS: Record<ThemeMode, ThemeTokens> = {
       // 强调色只有这一组，别再往组件里写死蓝色十六进制（见下面 buildTheme 的注释）：
       //   --accent       线 / 图标 / 链接（浅蓝，压在深底上够亮）
       //   --accent-solid 实心块：主按钮、Segmented 选中、徽标（深蓝，白字够对比）
-      //   --accent-soft  淡底：选中行、当前导航项
+      //   --accent-soft  淡底：强调件（芯片、徽标、聚焦光晕）——**不是**选中行
+      // 选中行走 --sel-bg：中性提亮，不带色相。深底上一层 14% 的蓝糊成一块脏navy，
+      // 而选中这件事本来就不该靠颜色喊——左边那条 3px accent 线已经说清了「就是这一条」。
       '--accent': '#58a6ff',
       '--accent-solid': '#1f6feb',
       '--accent-soft': 'rgba(31, 111, 235, .14)',
       '--accent-border': 'rgba(88, 166, 255, .45)',
+      '--sel-bg': 'rgba(255, 255, 255, .065)',
       // 成功/运行绿也只有这一组，同理别写死：--ok 线/文字（含 diff 的 +），
       // --ok-solid 实心块，--ok-soft 淡底，--ok-border 描边
       '--ok': '#3fb950',
@@ -102,6 +105,7 @@ export const THEME_TOKENS: Record<ThemeMode, ThemeTokens> = {
       '--accent': '#0969da',
       '--accent-solid': '#1f6feb',
       '--accent-soft': 'rgba(31, 111, 235, .10)',
+      '--sel-bg': 'rgba(27, 31, 36, .055)',
       '--accent-border': 'rgba(31, 111, 235, .40)',
       '--ok': '#1a7f37',
       '--ok-solid': '#1f883d',

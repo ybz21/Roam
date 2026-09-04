@@ -145,7 +145,7 @@ export default function PluginsPanel({ initialId }: { initialId?: string } = {})
               // 直角、通栏：一列 8px 圆角的小块贴在一整块底上，读起来像卡片里又摞了一叠卡片
               style={{
                 cursor: 'pointer', borderRadius: 0, padding: '8px 10px',
-                background: !isMobile && p.manifest.id === selected ? 'var(--list-hover)' : undefined,
+                background: !isMobile && p.manifest.id === selected ? 'var(--sel-bg)' : undefined,
                 boxShadow: !isMobile && p.manifest.id === selected ? 'inset 2px 0 0 var(--accent)' : undefined,
               }}
               actions={[<Switch key="sw" size="small" checked={p.enabled}
