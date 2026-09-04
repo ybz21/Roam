@@ -134,6 +134,39 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
     </Dropdown>
   )
 
+  // 任务徽标：只剩「未合入」。「主仓库」那一枚去掉了——项目行下面第一张卡本来就是主仓库，
+  // 它不是需要被指出来的状态，只是把每一行都挤窄一截。
+  const taskBadge = (task: TreeTask) => task.unfinished
+    ? <span className="bd" title={t('tree.unfinished', { n: task.ahead })}>{t('tree.unfinishedShort', { n: task.ahead })}</span>
+    : null
+
+  /**
+   * 任务只有一个会话、而且任务名就是这个会话的名字时，两行印的是同一个名字
+   * （任务没起名时，名字本来就是从头一个会话的 label 拿的，见 task-tree.ts）。
+   * 上下叠着两遍「XiaoHui-sh」，读的人以为是两样东西。这时候合成一行：
+   * 会话的身份（agent 标、状态点、时间）和任务的身份（主仓库徽标、分支状态）挤在同一枚上，
+   * 因为它们本来就是同一个东西。右键菜单也把两边的动作合起来，免得少了哪一样。
+   */
+  const soleRow = (task: TreeTask, s: TreeSession) => (
+    <Dropdown key={s.name} trigger={['contextMenu']} menu={{ items: [
+      ...sessionMenu(task.key, s).items,
+      ...(taskMenu(task).items.length ? [{ type: 'divider' as const, key: 'd-task' }, ...taskMenu(task).items] : []),
+    ] }}>
+      <button type="button"
+        className={`tt-nav-item tt-tree-row head${activeTask === task.key ? ' on' : ''}${s.dormant ? ' dormant' : ''}`}
+        onClick={() => onSession(task.key, s.name)} title={s.dormant ? t('session.dormant.hint') : task.path}
+        onDoubleClick={onRename ? () => onRename(s.name) : undefined}
+        aria-current={activeTask === task.key && activeSession === s.name ? 'true' : undefined}>
+        <span className="ic">{s.agent ? <AgentLogo kind={s.agent} size={15} /> : <TerminalIcon size={15} />}</span>
+        <span className="nm">{s.label}</span>
+        {task.unfinished && taskBadge(task)}
+        {s.dormant ? <span className="bd">{t('tree.dormant')}</span> : dot(s, false)}
+        {wtStatus(task)}
+        {!s.dormant && s.at ? <span className="tm">{ago(s.at, t)}</span> : null}
+      </button>
+    </Dropdown>
+  )
+
   // 任务是一张卡（参照 Orca 的侧栏）：头行、「N 个会话」折叠头、会话行带时间；收起时只剩一枚「✳ +N ›」
   const taskRows = (task: TreeTask) => {
     const on = activeTask === task.key
@@ -141,9 +174,11 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
     const open = !many || !closed.has(task.key)
     const hasActive = task.sessions.some((s) => s.name === activeSession)
     const agents = task.sessions.filter((s) => s.agent)
+    const sole = task.sessions.length === 1 && task.sessions[0].label === task.name ? task.sessions[0] : null
+    if (sole) return <div key={task.key} className={`tt-tree-task${on ? ' on' : ''}`}>{soleRow(task, sole)}</div>
     return (
       <div key={task.key} className={`tt-tree-task${on ? ' on' : ''}`}>
-        {taskHead(task, task.main ? <span className="bd" title={task.path}>{t('tree.mainRepo')}</span> : task.unfinished && <span className="bd" title={t('tree.unfinished', { n: task.ahead })}>{t('tree.unfinishedShort', { n: task.ahead })}</span>, on && !hasActive)}
+        {taskHead(task, taskBadge(task), on && !hasActive)}
         {many && (
           <button type="button" className={`tt-tree-agents${open ? '' : ' closed'}`} onClick={() => toggle(task.key)}
             aria-expanded={open} aria-label={open ? t('common.collapse') : t('common.expand')}>
@@ -193,7 +228,11 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
           <div key={p.key} className="tt-tree-proj">
             {/* 项目的身份就是项目卡上那枚按名字取色的首字母圆标（icoOf），不另画图标 */}
             {/* 项目行右端照 Orca：[…] 菜单 · [+] 开任务 · [˅] 折叠，都是看得见的按钮，不靠右键 */}
-            <button type="button" className={`tt-nav-item tt-tree-row proj${open ? '' : ' closed'}`} title={p.dir} onClick={() => onProject(p.key)}>
+            {/* 点整行 = 展开/收起，不是跳项目主页：树是拿来找会话的，找会话的动作应该就地发生，
+                点一下却整页换掉，回头还得再点回来。去主页留在「…」菜单第一项。
+                展开状态跟任务卡共用同一份 localStorage（roam.tree.closed），刷新/重开都还在。 */}
+            <button type="button" className={`tt-nav-item tt-tree-row proj${open ? '' : ' closed'}`} title={p.dir}
+              aria-expanded={open} onClick={() => toggle(p.key)}>
               <span className="ic"><span className="av" style={{ color: icoOf(p.key)[0], background: icoOf(p.key)[1] }}>{p.name.slice(0, 1).toUpperCase()}</span></span>
               <span className="nm">{p.name}</span>
               {p.needs > 0 && <span className="bd">{p.needs}</span>}

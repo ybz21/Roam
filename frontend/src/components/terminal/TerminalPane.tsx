@@ -33,7 +33,7 @@ import { DPad } from '../shell/DPad'
 import { MobileSheet, SheetRow, SheetSection } from '../shell/MobileSheet'
 import { SessionSwitchSheet } from '../shell/SessionDock'
 import { Button, Dropdown, Input, Modal, Spin, Tooltip, App as AntApp } from 'antd'
-import { AgentLogo, ChevronDown, PlusIcon, TerminalIcon, PanelRightIcon } from '../../icons'
+import { AgentLogo, ChevronDown, ChevronLeft, ChevronRight, PlusIcon, TabsIcon, TerminalIcon, PanelRightIcon } from '../../icons'
 // ── 终端面板（多标签 + 工具栏 + 快捷键栏），桌面右栏与手机覆盖层共用 ──
 export default function TerminalPane(props: {
   terms: string[]; active: string | null; setActive: (n: string) => void; closeTerm: (n: string) => void
@@ -205,11 +205,6 @@ export default function TerminalPane(props: {
   }
   const openFileFromChat = useCallback((path: string, line?: number) => openFileRef.current(path, line), [])
 
-  // 标签条是单行横向滑动（见 index.css .tt-tabs）：窄栏/手机上会话一多，当前标签会滑出视口，
-  // 切换后把它带回可视区（block:'nearest' → 只横向滚标签条，不牵动整页）。
-  const activeTabRef = useRef<HTMLSpanElement | null>(null)
-  // 文件标签激活时 active（会话）不变，也得滚：否则点开的文件标签在条外，人不知道开在哪了
-  useEffect(() => { activeTabRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' }) }, [active, activeFile])
 
   // 标签溢出时两侧给渐隐，提示"这边还有"（14 §7.1）。滚动条本身是隐藏的，
   // 没有这个提示，窄栏下多出来的标签等于不存在。
@@ -230,6 +225,33 @@ export default function TerminalPane(props: {
     ro.observe(el)
     return () => ro.disconnect()
   }, [syncFade, terms.length])
+  // 两端的翻页钮：一下翻八成可视宽（留两成重叠，翻完还认得出刚才看到哪儿了）。
+  // 渐隐只是「这边还有」的暗示，鼠标用户没有横向滚轮时照样够不着——这两枚是能点的那一版。
+  const scrollTabs = (dir: 1 | -1) => {
+    const el = tabScrollRef.current
+    if (!el) return
+    el.scrollBy({ left: dir * Math.max(160, Math.round(el.clientWidth * 0.8)), behavior: 'smooth' })
+  }
+
+  // 标签条是单行横向滑动（见 index.css .tt-tabs）：窄栏/手机上会话一多，当前标签会滑出视口，
+  // 切换后把它带回来——而且是带回**正中间**：贴在条边上的话，左右还有什么邻居全看不见，
+  // 居中之后两边各露一截，接着往哪边翻一目了然。
+  //
+  // 只动标签条自己的 scrollLeft，不用 Element.scrollIntoView：它会连着滚外层祖先
+  //（overflow:hidden 的祖先照滚，只是没有滚动条能看出来），于是页头被顶出可视区——
+  // 文件页那个被裁掉半截的「文件管理」标题就是这么来的。FileWorkspace 早先踩过同一个坑，
+  // 那边的注释还在。
+  const activeTabRef = useRef<HTMLSpanElement | null>(null)
+  // 文件标签激活时 active（会话）不变，也得滚：否则点开的文件标签在条外，人不知道开在哪了
+  useEffect(() => {
+    const strip = tabScrollRef.current
+    const el = activeTabRef.current
+    if (!strip || !el) return
+    const sr = strip.getBoundingClientRect(), er = el.getBoundingClientRect()
+    const delta = (er.left + er.width / 2) - (sr.left + sr.width / 2) // 标签中心 → 条中心
+    const next = Math.max(0, Math.min(strip.scrollWidth - strip.clientWidth, strip.scrollLeft + delta))
+    if (Math.abs(next - strip.scrollLeft) > 1) strip.scrollTo({ left: next, behavior: 'smooth' })
+  }, [active, activeFile])
 
   // 标签拖拽排序（14 §7.1）：dragTab / dropAt 只用来画反馈（半透明 + 插入线），
   // 落点判定全部走事件本身，见下面两个 helper。
@@ -602,6 +624,10 @@ export default function TerminalPane(props: {
           <span className="tt-sep" />
         </div>
       )}
+      {fadeL && (
+        <button type="button" className="tt-tabs-nav" aria-label={t('tabs.scrollLeft')} title={t('tabs.scrollLeft')}
+          onClick={() => scrollTabs(-1)}><ChevronLeft size={15} /></button>
+      )}
       <div className="tt-tabs" ref={tabScrollRef} data-l={fadeL ? '1' : undefined} data-r={fadeR ? '1' : undefined}
         onScroll={syncFade}
         // 竖滚轮横移：标签条只有一行，鼠标滚轮在它上面本来什么也不做
@@ -712,6 +738,37 @@ export default function TerminalPane(props: {
             }} />
         )}
       </div>
+      {fadeR && (
+        <button type="button" className="tt-tabs-nav" aria-label={t('tabs.scrollRight')} title={t('tabs.scrollRight')}
+          onClick={() => scrollTabs(1)}><ChevronRight size={15} /></button>
+      )}
+      {/* 开得多到一条装不下时，给一份清单：翻页钮是「往那边看看」，清单是「直接去那一个」。
+          一屏 8–10 行，比横着翻快一个数量级——标签条本身再怎么滑，也只能同时露出两三枚。 */}
+      {(fadeL || fadeR) && (
+        <Dropdown trigger={['click']} placement="bottomRight" menu={{
+          selectedKeys: [curFile ? 'file:' + curFile : 'term:' + active],
+          items: [
+            ...(tabs.length ? [{ type: 'group' as const, key: 'g-term', label: t('tabs.allSessions'),
+              children: tabs.map((n) => ({
+                key: 'term:' + n,
+                icon: claudeMap[n]?.running ? <AgentLogo kind="claude" size={13} /> : codexMap[n]?.running ? <AgentLogo kind="codex" size={13} /> : <TerminalIcon size={13} />,
+                label: sessionDisplay(n) || n,
+                onClick: () => setActive(n),
+              })) }] : []),
+            ...((fileTabs || []).length ? [{ type: 'group' as const, key: 'g-file', label: t('tabs.allFiles'),
+              children: (fileTabs || []).map((f) => ({
+                key: 'file:' + f.path,
+                icon: <FileTypeIcon name={f.path.split('/').pop() || f.path} />,
+                label: f.path.split('/').pop() || f.path,
+                onClick: () => onFileTab?.(f.path),
+              })) }] : []),
+          ],
+        }}>
+          <button type="button" className="tt-tabs-nav wide" aria-label={t('tabs.all')} title={t('tabs.all')}>
+            <TabsIcon size={15} /><b>{tabs.length + (fileTabs || []).length}</b>
+          </button>
+        </Dropdown>
+      )}
       {onNew && (
         <div className="tt-tabs-end">
           <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: [{
