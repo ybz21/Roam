@@ -16,7 +16,7 @@ export const CANVAS_MIN = 560
 export const DOCK_MIN = 480
 export const DOCK_MAX = 880
 export const SPLIT_RAIL = 8
-export const NAV_WIDTH = 224
+export const NAV_WIDTH = 280 // 22 设计 §5：左栏 280，树里的任务卡才摆得下名字 + 状态
 // 轨态 48：一列 20px 图标要的就是这个宽度（VS Code 活动栏同宽）。64 是给「图标 + 文字」
 // 留的位子，可轨态本来就没有文字，多出来的 16px 只是一条空黑边贴在页面左边。
 export const NAV_RAIL = 48

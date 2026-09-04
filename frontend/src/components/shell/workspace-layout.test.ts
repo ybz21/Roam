@@ -13,7 +13,8 @@ const workspace = (viewport: number, navExpanded = true) => viewport - (navExpan
 
 describe('Dock 宽度钳制', () => {
   it('上界永远给 Canvas 留够 560', () => {
-    for (const viewport of [1280, 1366, 1440, 1600, 1920, 2560]) {
+    // 侧栏 280（22 设计）之后 1280 展开侧栏放不下并排（见下面「刚好成立」那条），从 1366 起算
+    for (const viewport of [1366, 1440, 1600, 1920, 2560]) {
       for (const navExpanded of [true, false]) {
         const w = workspace(viewport, navExpanded)
         const { max } = dockBounds(w)
@@ -22,12 +23,12 @@ describe('Dock 宽度钳制', () => {
     }
   })
 
-  it('1280 展开侧栏时，42vw 的默认值会被压回去', () => {
-    // 42vw = 538，但 1280-224-8-538 = 510 < 560 —— 不钳就横向溢出
-    const w = workspace(1280)
-    expect(Math.round(1280 * 0.42)).toBe(538)
-    const dock = defaultDockWidth(1280, w)
-    expect(dock).toBeLessThan(538)
+  it('1366 展开侧栏时，42vw 的默认值会被压回去', () => {
+    // 42vw = 574，但 1366-280-8-574 = 504 < 560 —— 不钳就横向溢出
+    const w = workspace(1366)
+    expect(Math.round(1366 * 0.42)).toBe(574)
+    const dock = defaultDockWidth(1366, w)
+    expect(dock).toBeLessThan(574)
     expect(w - SPLIT_RAIL - dock).toBeGreaterThanOrEqual(CANVAS_MIN)
   })
 
@@ -62,9 +63,10 @@ describe('并排是否成立', () => {
     expect(canSplit(1048)).toBe(true)
   })
 
-  it('1280 + 展开侧栏刚好成立（1272 ≤ 1280）', () => {
-    expect(canSplit(workspace(1280))).toBe(true)
-    expect(NAV_WIDTH + CANVAS_MIN + SPLIT_RAIL + DOCK_MIN).toBe(1272)
+  it('1328 + 展开侧栏刚好成立；1280 放不下（侧栏 280 之后）', () => {
+    expect(canSplit(workspace(1328))).toBe(true)
+    expect(canSplit(workspace(1280))).toBe(false)
+    expect(NAV_WIDTH + CANVAS_MIN + SPLIT_RAIL + DOCK_MIN).toBe(1328)
   })
 
   it('expanded 档即使收起导航也不并排——这是设计决定，不是算不出来', () => {
@@ -78,16 +80,16 @@ describe('并排是否成立', () => {
 
 describe('拖过头落进 Focus（1440 屏上只能拖 43px 的病根）', () => {
   it('拖拽上界是 Canvas 归零处，不是 splitMax', () => {
-    const w = workspace(1440)                       // 1440 - 224 = 1216
-    expect(dockBounds(w).max).toBe(1216 - SPLIT_RAIL - CANVAS_MIN)   // 648：能并排的最宽
-    expect(dragMaxWidth(w)).toBe(1216 - SPLIT_RAIL)                  // 1208：能拖到的最远
+    const w = workspace(1440)                       // 1440 - 280 = 1160
+    expect(dockBounds(w).max).toBe(1160 - SPLIT_RAIL - CANVAS_MIN)   // 592：能并排的最宽
+    expect(dragMaxWidth(w)).toBe(1160 - SPLIT_RAIL)                  // 1152：能拖到的最远
   })
 
   it('松手时 Canvas 不足 560 就该藏页面，而不是留一条废条', () => {
     const w = workspace(1440)
-    expect(shouldFocusAt(w, 648)).toBe(false)   // 正好 560，还能并排
-    expect(shouldFocusAt(w, 649)).toBe(true)    // 差一像素就该整页藏起来
-    expect(shouldFocusAt(w, 1208)).toBe(true)
+    expect(shouldFocusAt(w, 592)).toBe(false)   // 正好 560，还能并排
+    expect(shouldFocusAt(w, 593)).toBe(true)    // 差一像素就该整页藏起来
+    expect(shouldFocusAt(w, 1152)).toBe(true)
   })
 })
 

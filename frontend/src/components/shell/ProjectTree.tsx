@@ -11,13 +11,23 @@
 import { useState, type ReactNode } from 'react'
 import { Dropdown, Tooltip } from 'antd'
 import { useI18n } from '../../i18n'
-import { relTime } from '../../time-format'
+
 import { AgentLogo, ChevronDown, MoreIcon, PlusIcon, TerminalIcon } from '../../icons'
+import { WtStatusIcon } from '../git/parts'
 import { icoOf } from '../projects/project-list/project-model'
 import { isLooseTask, taskKeyOf, type TaskKey } from '../sessions/task-key'
 import type { TaskTree, TreeSession, TreeTask } from './task-tree'
 
 const CLOSED_KEY = 'roam.tree.closed'
+
+/** 行尾的紧凑时间（Orca 的「1d」）：刚刚 / 3m / 2h / 1d——整句「1 分钟前」在 30px 高的行尾放不下 */
+function ago(sec: number, t: (k: string) => string): string {
+  const d = Math.max(0, Math.floor(Date.now() / 1000 - sec))
+  if (d < 60) return t('time.justNow')
+  if (d < 3600) return `${Math.floor(d / 60)}m`
+  if (d < 86400) return `${Math.floor(d / 3600)}h`
+  return `${Math.floor(d / 86400)}d`
+}
 
 /** 折叠态记本机：默认全展开，只记「收起了哪些项目」，新项目一出现就是展开的 */
 function readClosed(): Set<string> {
@@ -99,7 +109,7 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
         <span className="ic">{s.agent ? <AgentLogo kind={s.agent} size={15} /> : <TerminalIcon size={15} />}</span>
         <span className="nm">{s.label}</span>
         {dot(s, false)}
-        {s.at ? <span className="tm">{relTime(s.at, t)}</span> : null}
+        {s.at ? <span className="tm">{ago(s.at, t)}</span> : null}
       </button>
     </Dropdown>
   )
@@ -123,18 +133,9 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
           <span className="ic">{dot({ running, waiting, unfinished: task.unfinished }, true)}</span>
           <span className="nm">{task.name}</span>
           {task.unfinished && <span className="bd" title={t('tree.unfinished', { n: task.ahead })}>{t('tree.unfinishedShort', { n: task.ahead })}</span>}
+          {wtStatus(task)}
         </button>
         </Dropdown>
-        {task.branch && (
-          <div className="tt-tree-branch" title={task.path}>
-            <span className="br">{task.branch}</span>
-            {task.merged
-              ? <span className="st ok">{t('tree.merged')}</span>
-              : task.ahead > 0 && <span className="st">{t('tree.aheadN', { n: task.ahead })}{task.pushed ? ` · ${t('tree.pushed')}` : ''}</span>}
-            {!!task.dirty && <span className="st warn">{t('tree.dirtyN', { n: task.dirty })}</span>}
-            {!!task.behind && <span className="st">{t('tree.behindN', { n: task.behind })}</span>}
-          </div>
-        )}
         {many && (
           <button type="button" className={`tt-tree-agents${open ? '' : ' closed'}`} onClick={() => toggle(task.key)}
             aria-expanded={open} aria-label={open ? t('common.collapse') : t('common.expand')}>
@@ -155,6 +156,11 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
     )
   }
 
+  // 头行右端一枚分支状态图标（照 Orca 卡片右上角那枚 PR 标）：分支名不再单独占一行——底部状态条已经有；
+  // 颜色说状态：已合入 = 绿，有未合入提交 = 蓝，有未提交改动 = 黄，干净 = 灰；悬停看分支和数字
+  const wtStatus = (task: TreeTask) => task.branch
+    ? <WtStatusIcon branch={task.branch} merged={task.merged} dirty={task.dirty} ahead={task.ahead} behind={task.behind} pushed={task.pushed} />
+    : null
   // 空闲 / 待收尾的 worktree：淡一档的卡，没有会话行；右键（或「…」）能派生、收尾
   const idleCard = (task: TreeTask) => (
     <div key={task.key} className="tt-tree-task idle">
@@ -163,9 +169,10 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
         <span className="ic">{dot({ unfinished: task.unfinished }, true)}</span>
         <span className="nm">{task.name}</span>
         <span className="bd">{task.unfinished ? t('tree.unfinishedShort', { n: task.ahead }) : t('tree.idle')}</span>
+        {wtStatus(task)}
       </button>
       </Dropdown>
-      {task.branch && <div className="tt-tree-branch"><span className="br">{task.branch}</span>{task.merged && <span className="st ok">{t('tree.merged')}</span>}</div>}
+
     </div>
   )
 

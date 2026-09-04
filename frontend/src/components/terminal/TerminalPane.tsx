@@ -205,7 +205,8 @@ export default function TerminalPane(props: {
   // 标签条是单行横向滑动（见 index.css .tt-tabs）：窄栏/手机上会话一多，当前标签会滑出视口，
   // 切换后把它带回可视区（block:'nearest' → 只横向滚标签条，不牵动整页）。
   const activeTabRef = useRef<HTMLSpanElement | null>(null)
-  useEffect(() => { activeTabRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' }) }, [active])
+  // 文件标签激活时 active（会话）不变，也得滚：否则点开的文件标签在条外，人不知道开在哪了
+  useEffect(() => { activeTabRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' }) }, [active, activeFile])
 
   // 标签溢出时两侧给渐隐，提示"这边还有"（14 §7.1）。滚动条本身是隐藏的，
   // 没有这个提示，窄栏下多出来的标签等于不存在。

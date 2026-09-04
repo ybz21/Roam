@@ -301,7 +301,7 @@ export default function Projects({ openTerm, closeTerm, initialKey, activeTerm }
 
 // ── 新项目弹窗：创建的是「项目」这个存储对象（POST /projects），不建任何会话。
 // 项目 = 任意目录（git 可选）；开 session / 建 feature 是进项目之后 composer 的事。
-export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function NewProjectModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated?: () => void }) {
   const { t } = useI18n()
   const { message } = AntApp.useApp()
   const [dir, setDir] = useState('')
@@ -344,7 +344,7 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
       message.destroy('newproj')
       pushRecentDir(dir.trim())
       message.success(t('project.createdProject'))
-      onClose()
+      onClose(); onCreated?.()
       location.hash = '#/projects/' + encodeURIComponent(res.data.key)
     } catch (e: any) { message.destroy('newproj'); message.error(e.message) }
     finally { setCreating(false) }

@@ -1028,7 +1028,8 @@ export default function App() {
               </>
             )}
           </Modal>
-          <NewProjectModal open={newProjectOpen} onClose={() => setNewProjectOpen(false)} />
+          {/* 建完立刻刷树：项目列表 15s 一轮、worktree 60s 一轮，不刷就得等 */}
+          <NewProjectModal open={newProjectOpen} onClose={() => setNewProjectOpen(false)} onCreated={() => treeReload.current?.()} />
         </Sider>
       )}
 

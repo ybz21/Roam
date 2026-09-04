@@ -103,7 +103,7 @@
   --row-compact: 34px;
 
   /* 桌面壳层：Navigation ｜ Canvas ｜ rail ｜ Dock 的尺寸契约 */
-  --nav-w: 224px;
+  --nav-w: 280px;
   --nav-rail: 48px;
   --topbar-h: 40px;
   --status-h: 24px;               /* 底部状态条；粗指针下长到 --tap（见 .tt-statusbar） */
@@ -612,7 +612,7 @@ html[data-pointer="coarse"] .tt-csearch-line, html[data-pointer="coarse"] .tt-cs
 .tt-tree .dot.wait { background: var(--warn); box-shadow: 0 0 0 3px var(--warn-soft); }
 .tt-tree .dot.fin { background: var(--swarm); }
 /* 任务卡（参照 Orca 侧栏）：一张卡 = 名字 / 分支 / 「N 个会话」头 / 会话行；卡之间留 4px，当前任务的卡描一圈 */
-.tt-tree-task { margin: 3px 8px 3px 22px; padding: 3px 0 4px; border-radius: var(--r-sm); background: var(--bg-container); border: 1px solid var(--border-subtle); }
+.tt-tree-task { margin: 3px 6px 3px 12px; padding: 3px 0 4px; border-radius: var(--r-sm); background: var(--bg-container); border: 1px solid var(--border-subtle); }
 .tt-tree-task.on { border-color: var(--accent-border); }
 .tt-tree-task.idle { opacity: .72; border-style: dashed; }
 /* 项目行右端的 […] [+]：一直看得见（淡），悬停亮 */
@@ -628,24 +628,27 @@ html[data-pointer="coarse"] .tt-csearch-line, html[data-pointer="coarse"] .tt-cs
 :where(html[data-pointer="fine"]) .tt-nav-tree:hover::-webkit-scrollbar-thumb { background: var(--scroll-thumb); }
 .tt-tree-task > .tt-tree-row.head { padding-left: 10px; border-radius: var(--r-xs); }
 .tt-tree-task > .tt-tree-row.head .nm { font-weight: 600; }
-.tt-tree-branch { display: flex; align-items: center; gap: 6px; padding: 0 10px 2px 38px; color: var(--text-dimmer); font: 400 var(--fs-micro)/1.5 var(--mono); white-space: nowrap; min-width: 0; }
-.tt-tree-branch .br { overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
-/* worktree 状态小字：已合入（绿）/ ↑n 未合入（灰）/ n 改动（黄）/ ↓n（灰） */
-.tt-tree-branch .st { flex: 0 0 auto; font-family: inherit; }
-.tt-tree-branch .st.ok { color: var(--ok); } .tt-tree-branch .st.warn { color: var(--warn); }
-.tt-tree-agents { display: flex; align-items: center; gap: 4px; width: calc(100% - 12px); margin: 2px 6px 0; height: 26px; padding: 0 6px 0 32px; border-radius: var(--r-xs); color: var(--text-dim); font-size: var(--fs-meta); }
+.tt-tree-branch { display: flex; align-items: center; gap: 6px; padding: 0 10px 2px 32px; color: var(--text-dimmer); font: 400 var(--fs-micro)/1.5 var(--mono); white-space: nowrap; min-width: 0; }
+.tt-tree-branch .br { overflow: hidden; text-overflow: ellipsis; min-width: 36px; flex: 1 1 auto; }
+/* 头行右端的分支状态图标（Orca 卡片右上角那枚）：颜色说状态，悬停看分支和数字 */
+.wtst { flex: 0 0 auto; width: 18px; height: 18px; display: inline-grid; place-items: center; border-radius: var(--r-xs); color: var(--text-dimmer); }
+.tt-tree-row .wtst { margin-left: auto; width: 20px; height: 20px; }
+.tt-tree-row .bd + .wtst { margin-left: 0; }
+.wtst.ok { color: var(--ok); } .wtst.warn { color: var(--warn); } .wtst.accent { color: var(--accent); }
+.tt-tree-agents { display: flex; align-items: center; gap: 4px; width: calc(100% - 12px); margin: 2px 6px 0; height: 26px; padding: 0 6px 0 26px; border: 0; background: none; border-radius: var(--r-xs); color: var(--text-dim); font: inherit; font-size: var(--fs-meta); cursor: pointer; }
 .tt-tree-agents .nm { flex: 1; text-align: left; }
 .tt-tree-agents .chev { display: inline-flex; color: var(--text-dimmer); transition: transform .15s; }
 .tt-tree-agents.closed .chev { transform: rotate(-90deg); }
 :where(html[data-pointer="fine"]) .tt-tree-agents:hover { background: var(--list-hover); color: var(--text-bright); }
-.tt-tree-sessions .tt-tree-row { padding-left: 38px; padding-right: 8px; min-height: 30px; border-radius: var(--r-xs); margin: 0 6px; width: calc(100% - 12px); }
+.tt-tree-sessions .tt-tree-row { padding-left: 30px; padding-right: 8px; min-height: 30px; border-radius: var(--r-xs); margin: 0 6px; width: calc(100% - 12px); gap: 8px; }
+.tt-tree-sessions .tt-tree-row .nm { flex: 1 1 auto; }
 .tt-tree-sessions .tt-tree-row .nm { color: var(--text-dim); font-size: var(--fs-sm); }
 .tt-tree-sessions .tt-tree-row.on .nm { color: var(--text-bright); }
 :where(html[data-pointer="fine"]) .tt-tree-sessions .tt-tree-row:hover .nm { color: var(--text-bright); }
-.tt-tree-sessions .tt-tree-row .tm { flex: 0 0 auto; margin-left: 6px; color: var(--text-dimmer); font: 400 var(--fs-micro)/1 var(--mono); }
-.tt-tree-sessions .tt-tree-row .nm + .tm { margin-left: auto; }
+.tt-tree-sessions .tt-tree-row .tm { flex: 0 0 auto; margin-left: 0; color: var(--text-dimmer); font: 400 var(--fs-micro)/1 var(--mono); }
+.tt-tree-sessions .tt-tree-row .nm + .dot { margin-left: 0; }
 /* 收起：一枚「✳ +N ›」小药丸，点了展开 */
-.tt-tree-more { display: inline-flex; align-items: center; gap: 5px; margin: 2px 0 0 38px; height: 24px; padding: 0 8px; border-radius: var(--r-pill); border: 1px solid var(--border-subtle); background: var(--bg-elevated); color: var(--text-dim); font-size: var(--fs-meta); }
+.tt-tree-more { display: inline-flex; align-items: center; gap: 5px; margin: 2px 0 0 30px; height: 24px; padding: 0 8px; border-radius: var(--r-pill); border: 1px solid var(--border-subtle); background: var(--bg-elevated); color: var(--text-dim); font-size: var(--fs-meta); }
 .tt-tree-more .chev { display: inline-flex; color: var(--text-dimmer); transform: rotate(-90deg); }
 :where(html[data-pointer="fine"]) .tt-tree-more:hover { border-color: var(--accent-border); color: var(--text-bright); }
 /* 会话行末尾的状态点（只在运行 / 等你时有） */

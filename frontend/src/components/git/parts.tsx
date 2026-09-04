@@ -2,8 +2,9 @@
 // 视觉基调沿用全局 CSS 变量（黑白主题自动跟随），只在泳道色上用固定 HSL。
 import type { ReactNode } from 'react'
 import { Tooltip } from 'antd'
+import { useI18n } from '../../i18n'
 import type { RawRef } from './graph'
-import { ArrowDown, ArrowUp, CloudIcon, WindowsIcon } from '../../icons'
+import { ArrowDown, ArrowUp, CloudIcon, WindowsIcon, MergeIcon } from '../../icons'
 
 export { CloudIcon }
 
@@ -109,5 +110,27 @@ export function AheadBehind({ ahead, behind, size = 11 }: { ahead?: number; behi
       {!!behind && <span style={{ color: 'hsl(32,85%,55%)', display: 'inline-flex', alignItems: 'center', gap: 1 }}><ArrowDown size={size} />{behind}</span>}
       {!!ahead && <span style={{ color: 'var(--ok)', display: 'inline-flex', alignItems: 'center', gap: 1 }}><ArrowUp size={size} />{ahead}</span>}
     </span>
+  )
+}
+
+
+/** worktree 的分支状态图标（Orca 卡片右上角那枚 PR 标的位置）：颜色说状态，悬停看分支和数字。
+ *  已合入 = 绿 + 合并标；有未提交改动 = 黄；有未合入提交 = 蓝；干净 = 灰。 */
+export function WtStatusIcon({ branch, merged, dirty = 0, ahead = 0, behind = 0, pushed }: {
+  branch?: string; merged?: boolean; dirty?: number; ahead?: number; behind?: number; pushed?: boolean
+}) {
+  const { t } = useI18n()
+  const tone = merged ? 'ok' : dirty ? 'warn' : ahead > 0 ? 'accent' : 'dim'
+  const bits = [
+    merged ? t('tree.merged') : ahead > 0 ? t('tree.aheadN', { n: ahead }) : '',
+    pushed && !merged ? t('tree.pushed') : '',
+    dirty ? t('tree.dirtyN', { n: dirty }) : '',
+    behind ? t('tree.behindN', { n: behind }) : '',
+  ].filter(Boolean)
+  const tip = [branch, ...bits].filter(Boolean).join(' · ')
+  return (
+    <Tooltip title={tip} placement="right">
+      <span className={`wtst ${tone}`} aria-label={tip}>{merged ? <MergeIcon size={13} /> : <BranchIcon size={13} />}</span>
+    </Tooltip>
   )
 }

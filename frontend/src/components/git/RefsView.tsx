@@ -6,7 +6,7 @@ import { Dropdown, Input, Spin, Tooltip } from 'antd'
 import type { MenuProps } from 'antd'
 import { useI18n } from '../../i18n'
 import { relTime } from './graph'
-import { AheadBehind, BranchIcon, CloudIcon, MONO, MoreIcon, PlusIcon, Section, StashIcon, TagIcon } from './parts'
+import { AheadBehind, BranchIcon, CloudIcon, MONO, MoreIcon, PlusIcon, Section, StashIcon, TagIcon, WtStatusIcon } from './parts'
 import { ArrowUp, CheckIcon } from '../../icons'
 
 export interface BranchInfo {
@@ -144,6 +144,8 @@ export default function RefsView({
                 <AheadBehind ahead={b.ahead} behind={b.behind} />
                 {b.gone && <Tooltip title={t('git.refs.upstreamGone')}><span style={{ fontSize: 10, color: 'hsl(0,60%,60%)' }}>gone</span></Tooltip>}
                 {!!b.worktree && !b.current && <Tooltip title={b.worktree}><span style={{ fontSize: 10, color: 'hsl(190,60%,50%)' }}>wt</span></Tooltip>}
+                {(() => { const w = b.worktree ? wts.find((x) => x.path === b.worktree) : undefined
+                  return w ? <WtStatusIcon branch={w.branch} merged={!!w.mergedInto} dirty={w.dirty + w.untracked} ahead={w.committedAhead} /> : null })()}
               </>}
               sub={b.subject} time={relTime(b.date, '', locale)}
               onClick={() => onLocate(b.name)}
@@ -182,6 +184,7 @@ export default function RefsView({
                     {!!w.committedAhead && <span style={{ fontFamily: MONO, fontSize: 11, color: 'var(--ok)', display: 'inline-flex', alignItems: 'center', gap: 1 }}><ArrowUp size={10} />{w.committedAhead}</span>}
                     {cleanable && <span style={{ display: 'inline-flex', color: 'var(--ok)' }}><CheckIcon size={11} /></span>}
                     {w.external && <span style={{ fontSize: 10, color: 'var(--text-dimmer)' }}>{t('git.refs.externalWt')}</span>}
+                    <WtStatusIcon branch={w.branch} merged={!!w.mergedInto} dirty={w.dirty + w.untracked} ahead={w.committedAhead} />
                   </>}
                   sub={w.path}
                   time={live ? t('git.refs.wtSessions', { count: live }) : cleanable ? t('git.refs.wtCleanable') : t('git.refs.wtOrphan')}
