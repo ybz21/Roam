@@ -122,6 +122,11 @@ function xtermTheme() {
   const selectionBackground = cs.getPropertyValue('--xterm-selection').trim() || 'rgba(88, 166, 255, .35)'
   return { background: bg, foreground: fg, cursor, selectionBackground }
 }
+// 浅色主题下强制最低对比度：Claude Code / Codex 按自己的（缺省深色）主题吐颜色，代码高亮里一堆
+// 近白色，落在白底上就看不见了。xterm 会把对比不够的前景色往深处拉，深色主题不动（1 = 关）。
+function minContrast(): number {
+  return document.documentElement.dataset.theme === 'light' ? 4.5 : 1
+}
 
 // 滤掉应用(Claude Code/Codex/vim 等)开启「鼠标上报」的 DECSET 序列 ESC[?1000/1001/1002/1003h。
 // 否则 xterm 会把鼠标事件转发给应用，本地拖选失效 → 选不中文本、无法复制。
@@ -598,6 +603,7 @@ const Term = forwardRef<TermHandle, {
       // 渲染器生效，DOM 渲染器下无效——所以下面必须把 WebGL 渲染器挂上。
       rescaleOverlappingGlyphs: true,
       theme: xtermTheme(),
+      minimumContrastRatio: minContrast(),
     })
     const fit = new FitAddon()
     term.loadAddon(fit)
@@ -789,7 +795,7 @@ const Term = forwardRef<TermHandle, {
     })
 
     // 跟随全局黑/白主题：监听 <html data-theme> 变化，热更新终端配色
-    const themeObs = new MutationObserver(() => { try { term.options.theme = xtermTheme() } catch {} })
+    const themeObs = new MutationObserver(() => { try { term.options.theme = xtermTheme(); term.options.minimumContrastRatio = minContrast() } catch {} })
     themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
 
     // ponytail: IME 切英文时 macOS commit 未选中拼音（"s c p"），xterm 发给 pty 造成垃圾。
