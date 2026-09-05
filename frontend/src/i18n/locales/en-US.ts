@@ -1317,7 +1317,7 @@ const enUS = {
   'voice.failed': 'Speech recognition failed: {message}',
 
   'settings.speech': 'Voice input',
-  'settings.speechHelp': 'Configure a speech recognition service, then hold the mic at the bottom-right of a session',
+  'settings.speechHelp': 'Configure a speech recognition service; hold the mic on the session toolbar or in the composer (bottom-right on phones)',
   'settings.speechProvider': 'Service',
   'settings.speechProviderNone': 'Off',
   'settings.speechApiKey': 'API Key',
