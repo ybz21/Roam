@@ -1320,7 +1320,7 @@ const zhCN = {
   'voice.failed': '语音识别失败：{message}',
 
   'settings.speech': '语音输入',
-  'settings.speechHelp': '配置语音识别服务，会话页右下角即可长按说话',
+  'settings.speechHelp': '配置语音识别服务；会话工具条与输入框上的话筒按住说话，手机在右下角',
   'settings.speechProvider': '识别服务',
   'settings.speechProviderNone': '关闭',
   'settings.speechApiKey': 'API Key',
