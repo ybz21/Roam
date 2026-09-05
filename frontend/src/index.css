@@ -3075,6 +3075,45 @@ html[data-size="compact"] .cc-run-slot { width: auto; }
   .cc-st-scroll { min-height: 36px; }
 }
 
+/* ── 输入行的「+」面板（ComposerPlus）──
+   一张小卡片，不是一列菜单项：每行右端是**当前值**（权限模式 / 模型 / 上下文占用），
+   面板一打开先回答「现在什么样」。分组之间只用一条细线断开，不叠第二层卡。 */
+.cc-plus {
+  width: 272px; padding: var(--sp-1); border-radius: var(--r-sm);
+  background: var(--bg-elevated);
+  box-shadow: var(--elevated-shadow), inset 0 0 0 1px var(--border);
+}
+.cc-plus-grp + .cc-plus-grp { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--border-subtle); }
+.cc-plus-head { padding: 4px 8px 2px; color: var(--text-dimmer); font-size: var(--fs-micro); }
+.cc-plus-row {
+  display: flex; align-items: center; gap: var(--sp-2); width: 100%; min-height: 32px; padding: 0 8px;
+  border: 0; border-radius: var(--r-xs); background: transparent; color: var(--text-bright);
+  font: inherit; font-size: var(--fs-sm); text-align: left; cursor: pointer;
+}
+.cc-plus-row .ic { flex: 0 0 auto; display: inline-flex; color: var(--text-dim); }
+.cc-plus-row .nm { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 值：右对齐、弱一档。模型名可以很长（claude-opus-5-20260101），截断而不是撑宽面板 */
+.cc-plus-row .val {
+  flex: 0 1 auto; display: inline-flex; align-items: center; gap: 5px; max-width: 118px;
+  color: var(--text-dim); font-size: var(--fs-meta);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* 模式点：含义靠颜色说（计划蓝 / 自动接受绿 / 越权黄），和状态条上那颗同一支色 */
+.cc-plus-row .val i { flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%; }
+.cc-plus-row kbd {
+  flex: 0 0 auto; padding: 1px 5px; border: 1px solid var(--border); border-radius: var(--r-xs);
+  color: var(--text-dimmer); font: 500 var(--fs-micro)/1.6 var(--mono);
+}
+:where(html[data-pointer="fine"]) .cc-plus-row:not(:disabled):hover { background: var(--list-hover); }
+.cc-plus-row:focus-visible { outline: 1px solid var(--accent-border); outline-offset: -1px; }
+.cc-plus-row:disabled { opacity: .45; cursor: default; }
+/* 点了 Shift+Tab、新模式还没回来：值淡下去，别让人以为没生效又点一次 */
+.cc-plus-row.is-pending .val { opacity: .5; }
+@media (pointer: coarse) {
+  .cc-plus { width: 292px; }
+  .cc-plus-row { min-height: var(--tap); }
+}
+
 /* ── 语法高亮（highlight.js 类 → 主题变量；不引外部 CSS，随黑白主题切换） ── */
 .hljs { color: var(--text-bright); background: transparent; }
 .hljs-comment, .hljs-quote { color: var(--hl-comment); font-style: italic; }
