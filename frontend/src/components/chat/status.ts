@@ -57,6 +57,23 @@ const MODE_TONE: Record<string, ModeTone> = {
   'workspace-write': 'ok',
 }
 
+/** 模式色调 → 真实颜色。状态条和「+」面板共用一份：同一个「计划模式」在两处必须同一支蓝 */
+export const MODE_COLOR: Record<ModeTone, string> = {
+  accent: 'var(--accent)',
+  ok: 'var(--ok)',
+  warn: 'var(--warn)',
+  neutral: 'var(--text-dim)',
+}
+
+/** 上下文吃紧 / 见底的阈值。同上：两处显示同一个数字，不能各写一套 */
+export const CTX_TIGHT = 85
+export const CTX_FULL = 95
+
+/** 模式 id → 带色调的模式对象。转录给的和从 TUI 页脚读到的走同一条归一 */
+export function toMode(id: string): { id: string; tone: ModeTone } {
+  return { id, tone: MODE_TONE[id] || 'neutral' }
+}
+
 /** 模式 id → i18n key；认不出就原样显示 id（新模式先出现在 CLI 里是常态） */
 export function modeKey(id: string): string {
   return `chat.mode.${id}`
@@ -64,7 +81,7 @@ export function modeKey(id: string): string {
 
 export function toAgentStatus(raw: RawStatus, tasks?: TaskIndex): AgentStatus {
   const out: AgentStatus = {}
-  if (raw.mode) out.mode = { id: raw.mode, tone: MODE_TONE[raw.mode] || 'neutral' }
+  if (raw.mode) out.mode = toMode(raw.mode)
   if (raw.model) out.model = raw.model
   if (raw.effort) out.effort = raw.effort
   if (raw.used && raw.window) {
