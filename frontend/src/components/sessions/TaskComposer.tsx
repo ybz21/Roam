@@ -108,7 +108,7 @@ export const TaskComposer = forwardRef<TaskComposerHandle, {
     if (!dir || creating) return
     if (!prompt.trim()) { message.error(t('session.promptOrNameRequired')); return }
     // 名字一律从需求派生：这就是任务名（23 设计 §3.3 #6），agent 不再改它
-    let finalName = taskNameFromPrompt(prompt).slice(0, 16).replace(/[-，。,.\s]+$/g, '')
+    let finalName = taskNameFromPrompt(prompt)
     if (!finalName) {
       const d = new Date()
       finalName = 'task-' + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0') + '-' + String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0')
@@ -118,6 +118,8 @@ export const TaskComposer = forwardRef<TaskComposerHandle, {
       let actual: string
       const wantWt = isGit && wtMode === 'new'
       let sessionDir = dir
+      let wtBranch = ''   // 新建 worktree 时后端给的占位分支
+      let wtBase = ''     // 从哪个分支切出来的
       if (wantWt) {
         // 「基于」：本地分支存裸名，远端分支编码成 remote:<remote>:<branch>，提交前拆回 {base, remote}
         let baseReq: { base?: string; remote?: string } = base && base !== defBranch ? { base } : {}
@@ -129,6 +131,8 @@ export const TaskComposer = forwardRef<TaskComposerHandle, {
         const res = await api('POST', '/worktree-sessions', { name: finalName, dir, ...baseReq })
         actual = res.name || res.data?.session || finalName
         sessionDir = res.data?.path || dir
+        wtBranch = res.data?.branch || ''
+        wtBase = res.data?.base || base || defBranch
       } else {
         sessionDir = isGit && wtMode === 'existing' && wtPath ? wtPath : dir
         const res = await api('POST', '/sessions', { name: finalName, dir: sessionDir })
@@ -136,8 +140,15 @@ export const TaskComposer = forwardRef<TaskComposerHandle, {
       }
       if (agent !== 'none') {
         const cmd = agent === 'claude' ? (prefs.claudeCommand || 'claude') : (prefs.codexCommand || 'codex')
-        // 开工约定按工作区形态分两版：Roam 已建 worktree 的只要改分支名；在主仓库 / 已有 worktree 里的得自己开分支
-        const naming = t(wantWt ? 'session.wt.namingHint' : 'session.wt.namingHintRepo') + '\n\n'
+        // 开工简报：把这张表单上真正选了什么写给 agent——在哪个目录、从哪个分支切的、占位分支叫什么、
+        // 会话现在叫什么。从前这里是两条写死的话，agent 只能猜自己在哪儿，人也无从核对「选的和发出去的
+        // 是不是一回事」。会话改名那一条也回来了：派生出来的名字是需求原文的前 16 个字，
+        // 只配当占位，真名字得等 agent 看懂任务之后再起。
+        const existingWt = wtsAll.find((w: any) => w.path === sessionDir)
+        const naming = (wantWt
+          ? t('session.wt.briefNew', { path: sessionDir, base: wtBase || defBranch || 'main', branch: wtBranch || finalName, sess: actual })
+          : t('session.wt.briefRepo', { path: sessionDir, branch: existingWt?.branch || defBranch || 'main', sess: actual })
+        ) + (autoReview ? t('session.wt.briefReview') : '') + '\n\n'
         await api('POST', '/tasks/_/send', { sess: actual, msg: prompt.trim() ? `${cmd} ${shq(naming + prompt.trim())}` : cmd })
         if (autoReview) {
           await api('POST', '/plugin/track', {
