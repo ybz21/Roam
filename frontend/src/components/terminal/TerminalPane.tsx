@@ -896,6 +896,11 @@ export default function TerminalPane(props: {
       {/* 「新标签」进了标签右键菜单（标签条上已有「新建」）；文件 / Git 归右栏活动条；
           语音归 composer——22 设计 §3.3 去掉的四枚。独立页（左停靠）没有右栏，文件 / Git 仍在这 */}
       {active && <TBtn icon={TI.rename} label={t('session.rename')} title={t('session.renameTitle')} onClick={() => setRenameSession(active)} />}
+      {/* 终端视图的话筒：识别结果填到命令行上，回车才发（同 /type 的约定）。对话视图的话筒在 composer 里，不重复。
+          不看 showVoiceButton：那个开关管的是手机上的悬浮圆钮；工具条这枚和 composer 里那枚一样常在 */}
+      {active && !inChat && !isPhone && (
+        <VoiceInput toolbar accent="var(--accent)" onResult={(text) => { api('POST', `/sessions/${encodeURIComponent(active)}/type`, { text }).catch((e: any) => message.error(e.message)) }} />
+      )}
       <span className="tt-sep" />
       <TBtn icon={promptOff ? TI.bellOff : TI.bellOn} label={t('prompt.popup')} on={!promptOff}
         title={promptOff ? t('prompt.popupOff') : t('prompt.popupOn')} onClick={togglePromptOff} />
@@ -1001,7 +1006,8 @@ export default function TerminalPane(props: {
                 <CodexChat name={termName} file={codexMap[termName].file} onOpenFile={openFileFromChat} onOpenGit={openGitFromChat} active={termName === active && !curFile} />
               </div>
             )}
-            {showVoice && !claudeView[termName] && !codexView[termName] && (
+            {/* 悬浮话筒只留给手机：桌面的在工具条上（重命名旁边） */}
+            {showVoice && isPhone && !claudeView[termName] && !codexView[termName] && (
               <VoiceInput accent="var(--accent)" onResult={(text) => { api('POST', `/sessions/${encodeURIComponent(termName)}/type`, { text }).catch((e: any) => message.error(e.message)) }} />
             )}
           </div>

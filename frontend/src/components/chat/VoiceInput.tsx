@@ -13,7 +13,11 @@ const CANCEL_DY = 90
 // 录音时长下限：太短的误触不送去识别。
 const MIN_MS = 500
 
-export function VoiceInput({ accent, onResult, inline = false }: { accent: string; onResult: (text: string) => void; inline?: boolean }) {
+/**
+ * 三种形态：悬浮（默认，右下角圆钮，手机用）/ inline（composer 控制条上的 pill）/
+ * toolbar（会话工具条上的一枚扁平按钮，带「语音输入」字样——终端视图也能按住说话）。
+ */
+export function VoiceInput({ accent, onResult, inline = false, toolbar = false }: { accent: string; onResult: (text: string) => void; inline?: boolean; toolbar?: boolean }) {
   const { t } = useI18n()
   const { message } = AntApp.useApp()
   // 录音能力探测：getUserMedia/MediaRecorder 仅在安全上下文(HTTPS / localhost)可用。
@@ -153,7 +157,7 @@ export function VoiceInput({ accent, onResult, inline = false }: { accent: strin
       )}
       <button
         type="button"
-        className={inline ? `tt-pill ico tt-mic${active ? ' rec' : ''}` : undefined}
+        className={toolbar ? `tt-tbtn tt-mic${active ? ' rec' : ''}` : inline ? `tt-pill ico tt-mic${active ? ' rec' : ''}` : undefined}
         title={!micUsable ? micHint : configured ? t('voice.holdToTalk') : t('voice.notConfigured')}
         aria-label={t('voice.holdToTalk')}
         disabled={phase === 'transcribing'}
@@ -162,7 +166,7 @@ export function VoiceInput({ accent, onResult, inline = false }: { accent: strin
         onPointerMove={(e) => move(e.clientY)}
         onPointerUp={(e) => { e.preventDefault(); end() }}
         onPointerCancel={() => { cancelRef.current = true; end() }}
-        style={inline
+        style={toolbar ? { touchAction: 'none' } : inline
           // 内联：控制条上的一枚 pill——静息时安静，按住说话才亮成强调色（.tt-mic.rec）。
           // 从前它静息就是一整块实心强调色，跟旁边那颗实心发送键抢，一条控制条两个"主动作"。
           ? { background: cancelArmed ? 'var(--danger)' : undefined, touchAction: 'none' }
@@ -179,8 +183,9 @@ export function VoiceInput({ accent, onResult, inline = false }: { accent: strin
             opacity: (configured && micUsable) ? 1 : 0.92,
           }}>
         <span className={(phase === 'recording' || phase === 'transcribing') ? 'cc-pulse' : undefined} style={{ display: 'inline-flex' }}>
-          <MicIcon size={inline ? 15 : 26} silver={!inline || active} />
+          <MicIcon size={toolbar ? 14 : inline ? 15 : 26} silver={!(inline || toolbar) || active} />
         </span>
+        {toolbar && <span>{t('voice.input')}</span>}
       </button>
     </>
   )
