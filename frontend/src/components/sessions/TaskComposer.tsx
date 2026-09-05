@@ -147,7 +147,9 @@ export const TaskComposer = forwardRef<TaskComposerHandle, {
         const existingWt = wtsAll.find((w: any) => w.path === sessionDir)
         const naming = (wantWt
           ? t('session.wt.briefNew', { path: sessionDir, base: wtBase || defBranch || 'main', branch: wtBranch || finalName, sess: actual })
-          : t('session.wt.briefRepo', { path: sessionDir, branch: existingWt?.branch || defBranch || 'main', sess: actual })
+          : isGit
+            ? t('session.wt.briefRepo', { path: sessionDir, branch: existingWt?.branch || defBranch || 'main', sess: actual })
+            : t('session.wt.briefPlain', { path: sessionDir, sess: actual })
         ) + (autoReview ? t('session.wt.briefReview') : '') + '\n\n'
         await api('POST', '/tasks/_/send', { sess: actual, msg: prompt.trim() ? `${cmd} ${shq(naming + prompt.trim())}` : cmd })
         if (autoReview) {
