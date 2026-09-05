@@ -1307,6 +1307,8 @@ const zhCN = {
 
   'voice.input': '语音输入',
   'voice.holdToTalk': '长按说话',
+  'voice.hotkeyHint': '按 {key} 开始 / 结束',
+  'voice.hotkeyStop': '再按 {key} 识别 · Esc 取消',
   'voice.notConfigured': '请先在设置中配置语音识别',
   'voice.micDenied': '无法访问麦克风，请检查浏览器权限',
   'voice.insecureContext': '手机用语音需通过 HTTPS 访问；当前是 HTTP，浏览器已禁用麦克风',
@@ -1327,6 +1329,9 @@ const zhCN = {
   'settings.speechBaseUrl': '接口地址',
   'settings.speechModel': '模型',
   'settings.speechLanguage': '识别语言',
+  'settings.volcanoApiKey': 'API Key',
+  'settings.volcanoApiKeyHint': '新版控制台：豆包语音 › API 服务中心 › API Key',
+  'settings.volcanoLegacyHint': '旧版控制台没有 API Key 的，填下面的 App ID + Access Token；两种填一种即可，API Key 优先',
   'settings.volcanoAppId': 'App ID',
   'settings.volcanoAccessToken': 'Access Token',
   'settings.volcanoResourceId': 'Resource ID',

@@ -17,7 +17,16 @@ const MIN_MS = 500
  * 三种形态：悬浮（默认，右下角圆钮，手机用）/ inline（composer 控制条上的 pill）/
  * toolbar（会话工具条上的一枚扁平按钮，带「语音输入」字样——终端视图也能按住说话）。
  */
-export function VoiceInput({ accent, onResult, inline = false, toolbar = false }: { accent: string; onResult: (text: string) => void; inline?: boolean; toolbar?: boolean }) {
+/** 快捷键：Mac ⌘⇧S，其它 Ctrl+Shift+S。S 取 speak；Ctrl+Shift+V 是终端粘贴，不能占 */
+const HOTKEY_LABEL = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || '') ? '⌘⇧S' : 'Ctrl+Shift+S'
+const isHotkey = (e: KeyboardEvent) => (e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.code === 'KeyS'
+
+/**
+ * hotkey：这一枚响应全局快捷键。同一时刻页面上可能挂着好几枚话筒（每份对话的 composer 都有一枚），
+ * 只有当前视图的那枚传 true，不然一个键按下去几路一起录。
+ * 键盘开的录音没有「松手」：再按一次识别，Esc 取消。
+ */
+export function VoiceInput({ accent, onResult, inline = false, toolbar = false, hotkey = false }: { accent: string; onResult: (text: string) => void; inline?: boolean; toolbar?: boolean; hotkey?: boolean }) {
   const { t } = useI18n()
   const { message } = AntApp.useApp()
   // 录音能力探测：getUserMedia/MediaRecorder 仅在安全上下文(HTTPS / localhost)可用。
@@ -39,6 +48,8 @@ export function VoiceInput({ accent, onResult, inline = false, toolbar = false }
   const cancelRef = useRef(false)    // 松手时是否处于取消区
   const startYRef = useRef(0)
   const startTsRef = useRef(0)
+  const byKeyRef = useRef(false)     // 这段录音是快捷键开的：覆盖层文案不同，结束靠再按一次
+  const [byKey, setByKey] = useState(false)
   const timerRef = useRef<number | undefined>(undefined)
 
   // 探测后端是否已配置可用的 ASR 服务商，未配置则按钮置灰提示去设置。
@@ -48,7 +59,7 @@ export function VoiceInput({ accent, onResult, inline = false, toolbar = false }
       const ok = c.provider === 'openai'
         ? !!c.openai?.apiKey
         : c.provider === 'volcano'
-          ? !!(c.volcano?.appId && c.volcano?.accessToken)
+          ? !!(c.volcano?.apiKey || (c.volcano?.appId && c.volcano?.accessToken))
           : false
       setConfigured(ok)
     }).catch(() => setConfigured(false))
@@ -62,8 +73,10 @@ export function VoiceInput({ accent, onResult, inline = false, toolbar = false }
     streamRef.current = null
   }
 
-  const begin = async (clientY: number) => {
+  const begin = async (clientY: number, viaKey = false) => {
     if (phase !== 'idle') return
+    byKeyRef.current = viaKey
+    setByKey(viaKey)
     if (!micUsable) { message.error(micHint); return }
     if (!configured) { message.info(t('voice.notConfigured')); return }
     pressedRef.current = true
@@ -111,6 +124,31 @@ export function VoiceInput({ accent, onResult, inline = false, toolbar = false }
     try { recRef.current?.stop() } catch { stopTracks(); setPhase('idle') } // onstop 里走 finish()
   }
 
+  // 全局快捷键：keydown 捕获阶段拦下，别让 xterm / 输入框先吃掉。用 ref 读最新的 phase，监听器只挂一次
+  const phaseRef = useRef<Phase>('idle')
+  phaseRef.current = phase
+  const beginRef = useRef(begin); beginRef.current = begin
+  const endRef = useRef(end); endRef.current = end
+  useEffect(() => {
+    if (!hotkey) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.repeat) return
+      if (isHotkey(e)) {
+        e.preventDefault(); e.stopPropagation()
+        if (phaseRef.current === 'idle') void beginRef.current(0, true)
+        else if (phaseRef.current === 'recording' || phaseRef.current === 'requesting') endRef.current()
+        return
+      }
+      if (e.key === 'Escape' && byKeyRef.current && (phaseRef.current === 'recording' || phaseRef.current === 'requesting')) {
+        e.preventDefault(); e.stopPropagation()
+        cancelRef.current = true
+        endRef.current()
+      }
+    }
+    window.addEventListener('keydown', onKey, { capture: true })
+    return () => window.removeEventListener('keydown', onKey, { capture: true } as any)
+  }, [hotkey])
+
   // 录音停止后：取消 / 太短 / 正常识别。
   const finish = async () => {
     const dur = Date.now() - startTsRef.current
@@ -151,14 +189,14 @@ export function VoiceInput({ accent, onResult, inline = false, toolbar = false }
           </div>
           <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: 18, marginBottom: 6 }}>{mm}:{ss}</div>
           <div style={{ fontSize: 12, opacity: 0.85 }}>
-            {phase === 'requesting' ? t('voice.starting') : cancelArmed ? t('voice.releaseCancel') : t('voice.releaseSend')}
+            {phase === 'requesting' ? t('voice.starting') : byKey ? t('voice.hotkeyStop', { key: HOTKEY_LABEL }) : cancelArmed ? t('voice.releaseCancel') : t('voice.releaseSend')}
           </div>
         </div>
       )}
       <button
         type="button"
         className={toolbar ? `tt-tbtn tt-mic${active ? ' rec' : ''}` : inline ? `tt-pill ico tt-mic${active ? ' rec' : ''}` : undefined}
-        title={!micUsable ? micHint : configured ? t('voice.holdToTalk') : t('voice.notConfigured')}
+        title={!micUsable ? micHint : configured ? (hotkey ? `${t('voice.holdToTalk')} · ${t('voice.hotkeyHint', { key: HOTKEY_LABEL })}` : t('voice.holdToTalk')) : t('voice.notConfigured')}
         aria-label={t('voice.holdToTalk')}
         disabled={phase === 'transcribing'}
         onContextMenu={(e) => e.preventDefault()}

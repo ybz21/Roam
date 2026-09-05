@@ -20,6 +20,7 @@ function normalizeSpeech(d: any) {
       language: c.openai?.language || '',
     },
     volcano: {
+      apiKey: c.volcano?.apiKey || '',
       appId: c.volcano?.appId || '',
       accessToken: c.volcano?.accessToken || '',
       resourceId: c.volcano?.resourceId || SPEECH_DEFAULTS.volcano.resourceId,
@@ -66,6 +67,8 @@ export function SpeechSettings() {
         )}
         {cfg.provider === 'volcano' && (
           <Space direction="vertical" size="small" style={{ width: '100%', maxWidth: 520 }}>
+            <Input.Password addonBefore={t('settings.volcanoApiKey')} placeholder={t('settings.volcanoApiKeyHint')} value={cfg.volcano.apiKey} onChange={(e) => setVolc('apiKey', e.target.value)} />
+            <span className="tt-hint">{t('settings.volcanoLegacyHint')}</span>
             <Input addonBefore={t('settings.volcanoAppId')} value={cfg.volcano.appId} onChange={(e) => setVolc('appId', e.target.value)} />
             <Input.Password addonBefore={t('settings.volcanoAccessToken')} value={cfg.volcano.accessToken} onChange={(e) => setVolc('accessToken', e.target.value)} />
             <Input addonBefore={t('settings.volcanoResourceId')} value={cfg.volcano.resourceId} onChange={(e) => setVolc('resourceId', e.target.value)} />

@@ -1305,6 +1305,8 @@ const enUS = {
 
   'voice.input': 'Voice input',
   'voice.holdToTalk': 'Hold to talk',
+  'voice.hotkeyHint': 'Press {key} to start / stop',
+  'voice.hotkeyStop': 'Press {key} again to recognize · Esc to cancel',
   'voice.notConfigured': 'Configure speech recognition in Settings first',
   'voice.micDenied': 'Cannot access microphone, please check browser permissions',
   'voice.insecureContext': 'Voice on mobile needs HTTPS; the browser blocks the microphone over plain HTTP',
@@ -1325,6 +1327,9 @@ const enUS = {
   'settings.speechBaseUrl': 'Base URL',
   'settings.speechModel': 'Model',
   'settings.speechLanguage': 'Language',
+  'settings.volcanoApiKey': 'API Key',
+  'settings.volcanoApiKeyHint': 'New console: Doubao Speech › API Service Center › API Key',
+  'settings.volcanoLegacyHint': 'Old console without an API Key: fill App ID + Access Token below. Either works; the API Key wins',
   'settings.volcanoAppId': 'App ID',
   'settings.volcanoAccessToken': 'Access Token',
   'settings.volcanoResourceId': 'Resource ID',

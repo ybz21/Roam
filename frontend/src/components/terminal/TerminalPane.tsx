@@ -899,7 +899,7 @@ export default function TerminalPane(props: {
       {/* 终端视图的话筒：识别结果填到命令行上，回车才发（同 /type 的约定）。对话视图的话筒在 composer 里，不重复。
           不看 showVoiceButton：那个开关管的是手机上的悬浮圆钮；工具条这枚和 composer 里那枚一样常在 */}
       {active && !inChat && !isPhone && (
-        <VoiceInput toolbar accent="var(--accent)" onResult={(text) => { api('POST', `/sessions/${encodeURIComponent(active)}/type`, { text }).catch((e: any) => message.error(e.message)) }} />
+        <VoiceInput toolbar hotkey accent="var(--accent)" onResult={(text) => { api('POST', `/sessions/${encodeURIComponent(active)}/type`, { text }).catch((e: any) => message.error(e.message)) }} />
       )}
       <span className="tt-sep" />
       <TBtn icon={promptOff ? TI.bellOff : TI.bellOn} label={t('prompt.popup')} on={!promptOff}
