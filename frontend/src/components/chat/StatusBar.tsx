@@ -15,15 +15,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useI18n } from '../../i18n'
 import { ArrowToBottom, ChecklistIcon, ChevronRight, ClockIcon, WarnIcon } from '../../icons'
 import { BranchIcon } from '../git/parts'
-import { fmtElapsed, fmtTokens, modeKey, type AgentStatus, type ModeTone } from './status'
+import { CTX_FULL, CTX_TIGHT, MODE_COLOR, fmtElapsed, fmtTokens, modeKey, type AgentStatus } from './status'
 import { TodoPane } from './tool-parts'
-
-const TONE: Record<ModeTone, string> = {
-  accent: 'var(--accent)',
-  ok: 'var(--ok)',
-  warn: 'var(--warn)',
-  neutral: 'var(--text-dim)',
-}
 
 // 占用环。用 stroke-dasharray 画：16px 的图形上，一根描边比任何数字都快读。
 function Ring({ percent, color, size = 16 }: { percent: number; color: string; size?: number }) {
@@ -99,8 +92,8 @@ export function StatusBar({ status, accent, unread, onJump, actions = {} }: {
 
   const ctx = status.context
   // 上下文接近满了要变色：85% 起黄，95% 起红。这是唯一会「越用越糟」的指标。
-  const tight = !!ctx && ctx.percent >= 85
-  const ctxColor = !ctx ? accent : ctx.percent >= 95 ? 'var(--danger)' : tight ? 'var(--warn)' : accent
+  const tight = !!ctx && ctx.percent >= CTX_TIGHT
+  const ctxColor = !ctx ? accent : ctx.percent >= CTX_FULL ? 'var(--danger)' : tight ? 'var(--warn)' : accent
   const hasAny = status.mode || ctx || status.tasks || status.quota || status.branch || status.errors || unread > 0
   if (!hasAny) return null
 
@@ -118,9 +111,9 @@ export function StatusBar({ status, accent, unread, onJump, actions = {} }: {
             条上一枚写着「auto」的 pill 没人看得懂是什么的 auto */}
         {(status.model || actions.onPickModel) && (
           <button type="button" className={`cc-st-pill${actions.onPickModel ? ' is-btn' : ''}`}
-            style={status.mode ? { color: TONE[status.mode.tone] } : undefined} disabled={!actions.onPickModel}
+            style={status.mode ? { color: MODE_COLOR[status.mode.tone] } : undefined} disabled={!actions.onPickModel}
             onClick={actions.onPickModel} title={actions.onPickModel ? t('chat.modelPick') : t('chat.model')}>
-            {status.mode && <i style={{ background: TONE[status.mode.tone] }} />}{status.model || t('chat.model')}
+            {status.mode && <i style={{ background: MODE_COLOR[status.mode.tone] }} />}{status.model || t('chat.model')}
           </button>
         )}
 

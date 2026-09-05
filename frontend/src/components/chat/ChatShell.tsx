@@ -19,6 +19,7 @@ import { currentNodeId } from '../cluster/node-url'
 import { sessionDisplay } from '../sessions/session-label'
 import { ChatActionsProvider } from './actions'
 import type { TaskIndex } from './tasks'
+import { ComposerPlus } from './ComposerPlus'
 import { StatusBar, type StatusActions } from './StatusBar'
 import type { AgentStatus } from './status'
 
@@ -284,6 +285,12 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
     onPickModel: () => { api('POST', '/tasks/_/send', { sess: name, msg: '/model' }).catch(() => {}) },
   }), [name, onOpenGit, lastErrorId])
 
+  // 「+」面板要用的两件事：Shift+Tab 换权限模式，以及上传（走隐藏的 file input）。
+  // 换模型 / 压缩上下文与状态条同一份实现（statusActions），面板只是换一种问法。
+  // Shift+Tab 在 tmux 里叫 BTab；Claude Code 与 Codex 都用它轮换模式（codex 自己的提示
+  // 就写着 "shift+tab to cycle"），所以这一条不分端。
+  const cycleMode = () => { api('POST', `/sessions/${encodeURIComponent(name)}/keys`, { keys: ['BTab'] }).catch(() => {}) }
+
   return (
     <ChatActionsProvider value={actions}>
     <div style={{ display: 'flex', height: '100%', background: 'var(--bg-term)' }}>
@@ -378,16 +385,17 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
             />
             <div className="tt-cbar">
               <span className="tt-cgrp">
+                {/* 「+」：带什么进去（文件）、这一轮怎么干（权限模式 / 模型 / 压缩上下文）。
+                    输入行上只留最高频的两件事：说话和发送 */}
+                <ComposerPlus name={name} agent={agent} status={status} uploading={uploading} onMouseDown={noBlur}
+                  onFiles={() => fileRef.current?.click()} onCycleMode={cycleMode}
+                  onPickModel={statusActions.onPickModel!} onCompact={statusActions.onCompact!}
+                  onOpenGit={onOpenGit} />
                 {agent && (
                   <span className={`tt-pill on${agent === 'codex' ? ' ok' : ''}`} aria-label={agent === 'claude' ? 'Claude' : 'Codex'}>
                     <AgentLogo kind={agent} size={12} />{agent === 'claude' ? 'Claude' : 'Codex'}
                   </span>
                 )}
-                {/* 带字的 pill，和项目页 composer 同款：光一枚回形针认不出是「文件」 */}
-                <button type="button" className="tt-pill" title={t('chat.uploadToCwd')}
-                  disabled={uploading} onMouseDown={noBlur} onClick={() => fileRef.current?.click()}>
-                  <PaperclipIcon size={13} />{t('chat.files')}
-                </button>
               </span>
               <span className="tt-cend">
                 {/* 话筒贴着发送键：pill 是「带什么」，话筒是「怎么说」，分开放（22 设计 §3.3） */}

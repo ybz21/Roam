@@ -309,6 +309,8 @@ func (a *API) Capture(c *gin.Context) {
 var allowedKeys = map[string]bool{
 	"Up": true, "Down": true, "Left": true, "Right": true,
 	"Enter": true, "Escape": true, "Tab": true, "Space": true, "BSpace": true,
+	// BTab = Shift+Tab：Claude/Codex 用它轮换权限/审批模式，对话页的「+」菜单要发这一枚
+	"BTab": true,
 }
 
 // Keys POST /sessions/:name/keys —— 向会话注入原始按键（不追加回车）。
