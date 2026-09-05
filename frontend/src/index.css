@@ -666,7 +666,8 @@ html[data-pointer="coarse"] .tt-csearch-line, html[data-pointer="coarse"] .tt-cs
 .tt-tree-row.dormant .ic, .tt-tree-row.dormant .nm { opacity: .55; }
 .tt-tree-sessions .tt-tree-row.on .nm { color: var(--text-bright); }
 :where(html[data-pointer="fine"]) .tt-tree-sessions .tt-tree-row:hover .nm { color: var(--text-bright); }
-.tt-tree-sessions .tt-tree-row .tm { flex: 0 0 auto; margin-left: 0; color: var(--text-dimmer); font: 400 var(--fs-micro)/1 var(--mono); }
+/* 行尾时间在会话行和单会话任务卡头行都出现：不许收缩、不许折行——名字一长「刚刚」会被挤成竖排两个字 */
+.tt-tree-row .tm { flex: 0 0 auto; white-space: nowrap; margin-left: 0; color: var(--text-dimmer); font: 400 var(--fs-micro)/1 var(--mono); }
 .tt-tree-sessions .tt-tree-row .nm + .dot { margin-left: 0; }
 /* 收起：一枚「✳ +N ›」小药丸，点了展开 */
 .tt-tree-more { display: inline-flex; align-items: center; gap: 5px; margin: 2px 0 0 30px; height: 24px; padding: 0 8px; border-radius: var(--r-pill); border: 1px solid var(--border-subtle); background: var(--bg-elevated); color: var(--text-dim); font-size: var(--fs-meta); }
