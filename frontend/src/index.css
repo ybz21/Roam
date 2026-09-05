@@ -698,6 +698,11 @@ html[data-pointer="coarse"] .tt-csearch-line, html[data-pointer="coarse"] .tt-cs
 }
 .tt-tabs-empty small { color: var(--text-dimmer); font-size: var(--fs-meta); }
 
+/* antd 菜单项里的图标：我们传的是 24×24 的线性 SVG，antd 只有在用它自家 Icon 组件时
+   才套 .ant-dropdown-menu-item-icon 那个带 margin 的槽——我们的 svg 是裸的，于是图标
+   紧贴着字（「⊘切换权限模式」）。给菜单项一个 gap，图标和文案都不用各自改。 */
+.ant-dropdown-menu-item, .ant-dropdown-menu-submenu-title { gap: 8px; }
+
 /* ── ⌘K 搜索面板（shell/CommandPalette.tsx）── */
 .tt-palette {
   position: fixed; left: 50%; top: 88px; transform: translateX(-50%); z-index: var(--z-sheet);

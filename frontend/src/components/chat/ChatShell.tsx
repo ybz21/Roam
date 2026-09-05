@@ -3,7 +3,8 @@
 // Claude、Codex 共用，差异只在 accent、占位文案与消息渲染(renderMessage)。
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { appendPaths, atPath } from '../../agent-paths'
-import { Button, Input, App as AntApp } from 'antd'
+import { Button, Dropdown, Input, App as AntApp } from 'antd'
+import type { MenuProps } from 'antd'
 import { api, upload, makeClipboardImageFile } from '../../api'
 import { PromptPanel } from '../prompt'
 import { useI18n } from '../../i18n'
@@ -13,7 +14,7 @@ import { groupRuns } from './runs'
 import { ToolRun } from './ToolRun'
 import { LiveTail } from './LiveTail'
 import { useLayout } from '../../layout'
-import { ArrowToBottom, ArrowUp, FileTextIcon, PaperclipIcon, StopIcon, TerminalIcon, AgentLogo } from '../../icons'
+import { ArchiveIcon, ArrowToBottom, ArrowUp, BotIcon, FileTextIcon, ForkIcon, PaperclipIcon, PlusIcon, ShieldIcon, StopIcon, TerminalIcon, AgentLogo } from '../../icons'
 import { SESSION_MIME, buildIntro, canDrop, readDrag, type SessionDrag } from '../shell/session-drop'
 import { currentNodeId } from '../cluster/node-url'
 import { sessionDisplay } from '../sessions/session-label'
@@ -284,6 +285,26 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
     onPickModel: () => { api('POST', '/tasks/_/send', { sess: name, msg: '/model' }).catch(() => {}) },
   }), [name, onOpenGit, lastErrorId])
 
+  // 「+」菜单。项与 statusActions 复用同一批实现：状态条上那几格点开是同一件事，
+  // 只是那边按「读数」组织，这边按「我现在想干什么」组织。
+  const plusItems: MenuProps['items'] = [
+    { key: 'files', icon: <PaperclipIcon size={13} />, label: t('chat.uploadToCwd'), disabled: uploading,
+      onClick: () => fileRef.current?.click() },
+    { type: 'divider' as const, key: 'd1' },
+    // 权限/审批模式：注入 Shift+Tab（tmux 的 BTab），跟人在 TUI 里按是同一个动作。
+    // 轮到哪一档由 agent 自己说了算，这里不做乐观更新——下一轮转录会带回真实的模式行。
+    { key: 'mode', icon: <ShieldIcon size={13} />, label: t('chat.cycleMode'),
+      onClick: () => { api('POST', `/sessions/${encodeURIComponent(name)}/keys`, { keys: ['BTab'] }).catch(() => {}) } },
+    ...(agent === 'claude' ? [
+      { key: 'model', icon: <BotIcon size={13} />, label: t('chat.pickModel'),
+        onClick: () => { api('POST', '/tasks/_/send', { sess: name, msg: '/model' }).catch(() => {}) } },
+      { key: 'compact', icon: <ArchiveIcon size={13} />, label: t('chat.compact'),
+        onClick: () => { api('POST', '/tasks/_/send', { sess: name, msg: '/compact' }).catch(() => {}) } },
+    ] : []),
+    ...(onOpenGit ? [{ type: 'divider' as const, key: 'd2' },
+      { key: 'git', icon: <ForkIcon size={13} />, label: t('git.title'), onClick: onOpenGit }] : []),
+  ]
+
   return (
     <ChatActionsProvider value={actions}>
     <div style={{ display: 'flex', height: '100%', background: 'var(--bg-term)' }}>
@@ -378,16 +399,18 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
             />
             <div className="tt-cbar">
               <span className="tt-cgrp">
+                {/* 「+」：低频但常要找的那几样都在这儿——带什么进去（文件）、这一轮怎么干
+                    （权限模式 / 换模型 / 压缩上下文）。输入行上只留最高频的两件事：
+                    说话和发送；其余摆成一排 pill 只会把 392 宽的手机挤爆。 */}
+                <Dropdown trigger={['click']} placement="topLeft" menu={{ items: plusItems }}>
+                  <button type="button" className="tt-pill ico" aria-label={t('chat.more')} title={t('chat.more')}
+                    onMouseDown={noBlur}><PlusIcon size={14} /></button>
+                </Dropdown>
                 {agent && (
                   <span className={`tt-pill on${agent === 'codex' ? ' ok' : ''}`} aria-label={agent === 'claude' ? 'Claude' : 'Codex'}>
                     <AgentLogo kind={agent} size={12} />{agent === 'claude' ? 'Claude' : 'Codex'}
                   </span>
                 )}
-                {/* 带字的 pill，和项目页 composer 同款：光一枚回形针认不出是「文件」 */}
-                <button type="button" className="tt-pill" title={t('chat.uploadToCwd')}
-                  disabled={uploading} onMouseDown={noBlur} onClick={() => fileRef.current?.click()}>
-                  <PaperclipIcon size={13} />{t('chat.files')}
-                </button>
               </span>
               <span className="tt-cend">
                 {/* 话筒贴着发送键：pill 是「带什么」，话筒是「怎么说」，分开放（22 设计 §3.3） */}
