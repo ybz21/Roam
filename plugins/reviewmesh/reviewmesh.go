@@ -104,12 +104,12 @@ func onAgentExited(ctx *sdk.Ctx, payload json.RawMessage) error {
 			ctx.Logf("auto-review for %s deferred to its watch session", ev.Session)
 			return nil
 		}
-		reviewed, err := autoReviewOnce(ctx, ev.Session, workdir, resolveRounds(ctx, nil), false)
+		res, err := autoReviewOnce(ctx, ev.Session, workdir, resolveRounds(ctx, nil), false)
 		if err != nil {
 			ctx.Logf("auto-review for %s (%s): %v", ev.Session, workdir, err)
 			return nil // 无 diff 等情况不算错误,不重试
 		}
-		if reviewed {
+		if res.Reviewed {
 			ctx.Logf("final auto-review launched for exited session %s", ev.Session)
 		}
 		return nil
@@ -237,29 +237,64 @@ func watch(ctx *sdk.Ctx, args map[string]string) (any, error) {
 		// "成功"返回,曾让这个循环永远退不出去(陪跑会话变僵尸)
 		if !ctx.SessionAlive(dev) {
 			fmt.Fprintf(os.Stderr, "[%s] 开发会话已结束,做收尾检查\n", now())
-			_, _ = autoReviewOnce(ctx, dev, workdir, rounds, true)
-			return map[string]string{"stopped": "session exited"}, nil
+			res, _ := autoReviewOnce(ctx, dev, workdir, rounds, true)
+			return finish(ctx, dev, fmt.Sprintf("开发会话已结束，收尾检查 %d 个问题", res.Findings), "session exited")
 		}
 		out, err := ctx.SessionCapture(dev, 40)
 		if err != nil { // 会话没了:收尾前做最后一轮兜底互审
 			fmt.Fprintf(os.Stderr, "[%s] 开发会话已结束,做收尾检查\n", now())
-			_, _ = autoReviewOnce(ctx, dev, workdir, rounds, true)
-			return map[string]string{"stopped": "session exited"}, nil
+			res, _ := autoReviewOnce(ctx, dev, workdir, rounds, true)
+			return finish(ctx, dev, fmt.Sprintf("开发会话已结束，收尾检查 %d 个问题", res.Findings), "session exited")
 		}
 		sum := fmt.Sprintf("%x", sha1.Sum([]byte(out)))
 		if sum != lastPane {
 			lastPane, stableSince = sum, time.Now()
 		} else if time.Since(stableSince) >= 30*time.Second {
-			reviewed, err := autoReviewOnce(ctx, dev, workdir, rounds, true)
+			res, err := autoReviewOnce(ctx, dev, workdir, rounds, true)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "[%s] 互审失败: %v\n", now(), err)
 			}
-			if reviewed {
+			// 干净就收工：作者已经空闲、这份 diff 也审过了没问题，再守下去只是一个
+			// 每 5 秒抓屏的空转进程，人还得自己判断「它到底是审完了还是卡住了」。
+			// 要再审就再开一轮——起一次的成本远低于一直挂着看不出状态。
+			if res.Reviewed && res.Findings == 0 {
+				return finish(ctx, dev, fmt.Sprintf("互审通过：这份改动没发现问题（第 %d 轮）", roundsDone(ctx, dev)), "clean")
+			}
+			if res.Exhausted {
+				return finish(ctx, dev, fmt.Sprintf("已达 %d 轮上限，陪跑结束；要再审：ttmux plugin run review-mesh.review --workdir %s", rounds, workdir), "rounds-exhausted")
+			}
+			if res.Reviewed {
 				lastPane = "" // 回灌后画面会变;重置指纹等下一轮
 			}
 		}
 		time.Sleep(5 * time.Second)
 	}
+}
+
+// finish 收工：把结论留在通知中心（会话马上就没了，日志跟着一起没），再把自己这条
+// 陪跑会话关掉——树上不留一条已经不干活的死会话。
+func finish(ctx *sdk.Ctx, dev, msg, reason string) (any, error) {
+	fmt.Fprintf(os.Stderr, "[%s] %s\n", now(), msg)
+	_ = ctx.NotificationPublish(sdk.Notification{
+		Type: "review-mesh.done", Severity: "info",
+		Title: "互审结束 · " + dev, Body: msg,
+		DedupeKey: "review-mesh.done:" + dev,
+	})
+	self := dev + "-review"
+	if ctx.SessionAlive(self) {
+		// 自杀式关闭：这条命令就跑在那个会话里，kill 之后下面的 return 不一定还执行得到
+		go func() { time.Sleep(2 * time.Second); _ = ctx.SessionKill(self) }()
+	}
+	return map[string]string{"stopped": reason}, nil
+}
+
+// roundsDone 读一下这轮陪跑已经审了几轮，只为把结论写清楚。
+func roundsDone(ctx *sdk.Ctx, dev string) int {
+	st := autoState{}
+	if raw, err := ctx.StorageGet("auto:" + dev); err == nil && raw != "" {
+		_ = json.Unmarshal([]byte(raw), &st)
+	}
+	return st.Rounds
 }
 
 type autoState struct {
@@ -270,13 +305,21 @@ type autoState struct {
 // autoReviewOnce 对 dev 会话的 workdir 做一轮受控互审:diff 为空/未变化/
 // 轮次用尽(≥ maxRounds)都跳过;wait 时阻塞完成整轮并把 findings send 回
 // dev 会话,不 wait 则拉起异步会话 `<dev>-review-final`(消亡兜底路径)。
-func autoReviewOnce(ctx *sdk.Ctx, dev, workdir string, maxRounds int, wait bool) (bool, error) {
+//
+// 返回 outcome 告诉调用方这一轮的下场:陪跑要不要收工全看它。
+type outcome struct {
+	Reviewed  bool // 真跑了一轮(没被 diff 未变/轮次用尽跳过)
+	Findings  int  // 这一轮几个问题
+	Exhausted bool // 轮次用尽,不会再有下一轮
+}
+
+func autoReviewOnce(ctx *sdk.Ctx, dev, workdir string, maxRounds int, wait bool) (outcome, error) {
 	diff, err := ctx.WorkspaceDiff(workdir)
 	if err != nil {
-		return false, err
+		return outcome{}, err
 	}
 	if strings.TrimSpace(diff.Diff) == "" {
-		return false, nil
+		return outcome{}, nil
 	}
 	diffSum := fmt.Sprintf("%x", sha1.Sum([]byte(diff.Diff)))
 
@@ -286,12 +329,12 @@ func autoReviewOnce(ctx *sdk.Ctx, dev, workdir string, maxRounds int, wait bool)
 		_ = json.Unmarshal([]byte(raw), &st)
 	}
 	if st.LastDiff == diffSum {
-		return false, nil // 这份变更已审过(空闲但没新改动,或复审后未再动)
+		return outcome{}, nil // 这份变更已审过(空闲但没新改动,或复审后未再动)
 	}
 	if st.Rounds >= maxRounds {
 		fmt.Fprintf(os.Stderr, "[%s] 已达 %d 轮上限,不再自动复审(手动: ttmux plugin run review-mesh.review --workdir %s)\n",
 			now(), maxRounds, workdir)
-		return false, nil
+		return outcome{Exhausted: true}, nil
 	}
 
 	saveState := func() {
@@ -306,9 +349,9 @@ func autoReviewOnce(ctx *sdk.Ctx, dev, workdir string, maxRounds int, wait bool)
 		if err != nil {
 			st.LastDiff = ""
 			saveState()
-			return false, err
+			return outcome{}, err
 		}
-		return true, nil
+		return outcome{Reviewed: true}, nil
 	}
 
 	fmt.Fprintf(os.Stderr, "[%s] 第 %d 轮互审开始…\n", now(), st.Rounds)
@@ -316,7 +359,7 @@ func autoReviewOnce(ctx *sdk.Ctx, dev, workdir string, maxRounds int, wait bool)
 	if err != nil {
 		st.LastDiff = "" // 撤销哈希登记,下次空闲可重试这份 diff(轮次仍计数)
 		saveState()
-		return true, err
+		return outcome{Reviewed: true}, err
 	}
 	fmt.Fprintf(os.Stderr, "[%s] 第 %d 轮完成:%d 个 finding(blocking %d)\n",
 		now(), st.Rounds, len(fin.Findings), fin.Blocking)
@@ -329,7 +372,7 @@ func autoReviewOnce(ctx *sdk.Ctx, dev, workdir string, maxRounds int, wait bool)
 			fmt.Fprintf(os.Stderr, "[%s] 意见已回灌 %s,等待修复后复审\n", now(), dev)
 		}
 	}
-	return true, nil
+	return outcome{Reviewed: true, Findings: len(fin.Findings), Exhausted: st.Rounds >= maxRounds}, nil
 }
 
 // fixPrompt 是回灌给开发会话的单行修复指令(交互 TUI 里换行即提交)。

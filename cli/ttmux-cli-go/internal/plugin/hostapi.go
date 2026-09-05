@@ -551,9 +551,14 @@ func (h *HostAPI) commandExec(params json.RawMessage) (any, error) {
 }
 
 func runWithTimeout(cmd *exec.Cmd, d time.Duration) error {
-	// 独立进程组:超时要连 sh -c 的孙进程(codex/claude 本体)一起杀,
-	// 只杀直接子进程会留下孤儿 Agent 继续烧钱
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	// 独立**会话**(setsid)而不只是进程组:
+	//   · 超时要连 sh -c 的孙进程(codex/claude 本体)一起杀 —— Kill(-pid) 需要独立进程组,
+	//     setsid 顺带就给了;
+	//   · 更要紧的是**摘掉控制终端**。Setpgid 保留控制终端,于是 agent 一发现 /dev/tty 打得开
+	//     就按交互式 TUI 走,把光标移动序列直接画到宿主进程的那条 tty 上——那正是互审陪跑会话
+	//     里刷屏的一大片 ^[[C^[[D(截图里那几十行)。stdout/stderr 早就被收进 buffer 了,
+	//     漏的就是这条 /dev/tty 的旁路。
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := cmd.Start(); err != nil {
 		return err
 	}
