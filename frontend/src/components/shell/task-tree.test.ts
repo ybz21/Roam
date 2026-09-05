@@ -114,6 +114,12 @@ describe('已经关掉的会话不留在树上', () => {
     expect(t.projects[0].tasks[0].sessions.map((s) => s.name)).toEqual(['roam-cc'])
     expect(t.projects[0].tasks[0].unfinished).toBe(false)
   })
+  it('休眠会话不滤：点开即恢复的唯一入口不能因为两边错开一次就没了', () => {
+    const dw = { roam: [{ path: '/w/Roam/.worktrees/d', branch: 'fix/d', isMain: false, sessions: [{ session: 'napping', dormant: true }, { session: 'gone' }] }] }
+    const t = buildTaskTree({ projects: [roam], worktrees: dw, sessions: [], sessionsLoaded: true })
+    expect(t.projects[0].tasks[0].sessions.map((s) => s.name)).toEqual(['napping'])
+    expect(t.projects[0].tasks[0].sessions[0].dormant).toBe(true)
+  })
   it('会话全没了的 worktree 变回待收尾', () => {
     const t = buildTaskTree({ projects: [roam], worktrees: wt, sessions: [], sessionsLoaded: true })
     expect(t.projects[0].tasks[0].sessions).toEqual([])
