@@ -1404,6 +1404,7 @@ const zhCN = {
   // 得让 agent 自己开分支——否则一堆任务全提交在 main 上（真发生过）。
   'session.wt.briefNew': '开工前先做三件事，做完再开始下面的任务：\n1. 工作区：你已经在独立 worktree {path}（从 {base} 切出来，占位分支 {branch}）——把分支改成语义化名字：git branch -m <简短英文kebab-case>，前缀 feat/fix 等由你定；\n2. 初始化工作区：拉一下最新代码，需要装依赖就装（按仓库自己的约定来）；\n3. 把这个会话改名成一眼能认出的短名字：ttmux rename {sess} <新名字>——4~12 个字说清这是什么活，别照抄需求原文。',
   'session.wt.briefRepo': '开工前先做三件事，做完再开始下面的任务：\n1. 工作区：你在 {path}（当前分支 {branch}）——别直接在主干上改，先切一个语义化分支：git checkout -b <简短英文kebab-case>；任务大到需要隔离就自己开 worktree；\n2. 初始化工作区：拉一下最新代码，需要装依赖就装（按仓库自己的约定来）；\n3. 把这个会话改名成一眼能认出的短名字：ttmux rename {sess} <新名字>——4~12 个字说清这是什么活，别照抄需求原文。',
+  'session.wt.briefPlain': '开工前先做两件事，做完再开始下面的任务：\n1. 工作区：你在 {path}（这不是 git 仓库，别去 git init / 切分支，除非任务本身要求）；\n2. 把这个会话改名成一眼能认出的短名字：ttmux rename {sess} <新名字>——4~12 个字说清这是什么活，别照抄需求原文。',
   'session.wt.briefReview': '\n另外：这个任务开了「空闲自动互审」，你歇下来之后会有另一个 agent 来审你的改动。',
   'session.namePlaceholder2': '会话名(短,留空则从需求自动起名)',
   'session.wt.where': '在哪干活',

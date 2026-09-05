@@ -131,7 +131,11 @@ export function NewSessionModal({ open, parent, onClose, onDone }: { open: boole
       let actual: string
       let wtBranch = ''   // 新建 worktree 时后端给的占位分支
       let wtBase = ''     // 从哪个分支切出来的
-      if (wtMode === 'new' && isGitRepo && sessionDir) {
+      // 简报按**真正走的那条分支**选，不看 Segmented 显示成什么：非 git 目录时界面只是
+      // 把它画成 repo，wtMode 仍是 'new'，于是会发一份「你已经在独立 worktree、去 git branch -m」
+      // 的简报给一个连 .git 都没有的目录——agent 照做就是一串报错。
+      const madeWt = wtMode === 'new' && isGitRepo && !!sessionDir
+      if (madeWt) {
         // 组合 API（先会话后 worktree）：分支不传——后端按会话名占位，Agent 开工后语义化；
         // 派生模式走 fork-worktree（同编排 + meta 记父子）
         let baseReq: { base?: string; remote?: string } = base ? { base } : {}
@@ -169,9 +173,11 @@ export function NewSessionModal({ open, parent, onClose, onDone }: { open: boole
           // 开工简报按**这张表单真正选的**拼：在哪个目录、从哪个分支切的、占位分支叫什么、
           // 会话现在叫什么（见 TaskComposer 里同一段注释）
           const existingWt = existingWts.find((w: any) => w.path === sessionDir)
-          const naming = (wtMode === 'new'
+          const naming = (madeWt
             ? t('session.wt.briefNew', { path: sessionDir, base: wtBase || defBranch || 'main', branch: wtBranch || finalName, sess: actual })
-            : t('session.wt.briefRepo', { path: sessionDir || dir, branch: existingWt?.branch || defBranch || 'main', sess: actual })
+            : isGitRepo
+              ? t('session.wt.briefRepo', { path: sessionDir || dir, branch: existingWt?.branch || defBranch || 'main', sess: actual })
+              : t('session.wt.briefPlain', { path: sessionDir || dir, sess: actual })
           ) + (autoReview ? t('session.wt.briefReview') : '') + '\n\n'
           launch = `${cmd} ${shq(naming + prompt.trim())}`
         }
