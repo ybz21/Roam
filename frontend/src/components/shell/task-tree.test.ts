@@ -132,3 +132,36 @@ describe('基础设施会话不进树', () => {
     expect(isInfraSession('2026-0904-2359-abcd')).toBe(false)
   })
 })
+
+// 互审陪跑（reviewmesh 起的 `<被审会话id>-review`）：它按自己的 cwd 落进 worktree，
+// 常常挂到别人的任务下面，而那一行印的又是一串 id——两件事都得治。
+describe('互审陪跑归位', () => {
+  const proj = { key: 'x', name: 'X', dir: '/x', git: true }
+  const wts = { x: [
+    { path: '/x', branch: 'main', isMain: true, sessions: [{ session: 'roam优化' }, { session: '2026-0001-review' }] },
+    { path: '/x/.worktrees/a', branch: 'wt-a', isMain: false, sessions: [{ session: '提速' }] },
+  ] }
+
+  it('挪到被审会话那张卡，并紧跟在它后面', () => {
+    const tree = buildTaskTree({
+      projects: [proj], worktrees: wts,
+      sessions: [{ name: 'roam优化' }, { name: '提速' }, { name: '2026-0001-review' }],
+      nameOfId: (id) => (id === '2026-0001' ? '提速' : undefined),
+    })
+    const main = tree.projects[0].tasks.find((t) => t.path === '/x')!
+    const wt = tree.projects[0].tasks.find((t) => t.path === '/x/.worktrees/a')!
+    expect(main.sessions.map((s) => s.name)).toEqual(['roam优化'])
+    expect(wt.sessions.map((s) => s.name)).toEqual(['提速', '2026-0001-review'])
+    expect(wt.sessions[1].reviewOf).toBe('提速')
+  })
+
+  it('被审会话找不到时不乱挪，但仍标出它审的是谁', () => {
+    const tree = buildTaskTree({
+      projects: [proj], worktrees: { x: [{ path: '/x', branch: 'main', isMain: true, sessions: [{ session: 'ghost-review' }] }] },
+      sessions: [{ name: 'ghost-review' }],
+    })
+    const main = tree.projects[0].tasks[0]
+    expect(main.sessions.map((s) => s.name)).toEqual(['ghost-review'])
+    expect(main.sessions[0].reviewOf).toBe('ghost')
+  })
+})

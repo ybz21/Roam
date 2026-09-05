@@ -99,14 +99,18 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
     ] }] : []),
     ...(onFinishTask && !task.main ? [{ type: 'divider' as const }, { key: 'finish', icon: <ArchiveIcon size={14} />, label: t('tree.menu.finish'), danger: true, onClick: () => onFinishTask(task) }] : []),
   ] })
+  // 互审陪跑那一行：缩进半格挂在被审会话下面，名字写「互审 · 被审的是谁」——
+  // 它自己的会话名是一串 id（<被审id>-review），照原样印出来没人认得出这是什么。
+  const rowLabel = (s: TreeSession) => (s.reviewOf ? t('tree.reviewOf', { name: s.reviewOf }) : s.label)
+
   const sessionRow = (task: TaskKey, s: TreeSession) => (
     <Dropdown key={s.name} trigger={['contextMenu']} menu={sessionMenu(task, s)}>
       <button type="button"
-        className={`tt-nav-item tt-tree-row${activeTask === task && activeSession === s.name ? ' on' : ''}${s.dormant ? ' dormant' : ''}`}
+        className={`tt-nav-item tt-tree-row${activeTask === task && activeSession === s.name ? ' on' : ''}${s.dormant ? ' dormant' : ''}${s.reviewOf ? ' review' : ''}`}
         onClick={() => onSession(task, s.name)} title={s.dormant ? t('session.dormant.hint') : s.name} onDoubleClick={onRename ? () => onRename(s.name) : undefined}
         aria-current={activeTask === task && activeSession === s.name ? 'true' : undefined}>
         <span className="ic">{s.agent ? <AgentLogo kind={s.agent} size={15} /> : <TerminalIcon size={15} />}</span>
-        <span className="nm">{s.label}</span>
+        <span className="nm">{rowLabel(s)}</span>
         {s.dormant ? <span className="bd">{t('tree.dormant')}</span> : dot(s, false)}
         {!s.dormant && s.at ? <span className="tm">{ago(s.at, t)}</span> : null}
       </button>
@@ -171,7 +175,8 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
     const open = !many || !closed.has(task.key)
     const hasActive = task.sessions.some((s) => s.name === activeSession)
     const agents = task.sessions.filter((s) => s.agent)
-    const sole = task.sessions.length === 1 && task.sessions[0].label === task.name ? task.sessions[0] : null
+    const own = task.sessions.filter((x) => !x.reviewOf) // 互审是附属，不算「这个任务有几个会话」
+    const sole = own.length === 1 && task.sessions.length === 1 && own[0].label === task.name ? own[0] : null
     if (sole) return <div key={task.key} className={`tt-tree-task${on ? ' on' : ''}`}>{soleRow(task, sole)}</div>
     return (
       <div key={task.key} className={`tt-tree-task${on ? ' on' : ''}`}>
