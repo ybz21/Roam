@@ -63,6 +63,8 @@ export function buildTaskTree(o: {
   placement?: Record<string, { key: string; worktree?: string; branch?: string }>
   /** 人给任务起的名（偏好 taskNames）：有就用它，会话改名不再连带任务改名 */
   nameOf?: (path: string) => string | undefined
+  /** /sessions 已经回来过一轮：此后 sessions 就是「在」的全集，worktree 里多出来的名字都是已经没了的 */
+  sessionsLoaded?: boolean
 }): TaskTree {
   // 会话的展示信息：先从 /projects 的 top / needs 里捞（带 agent / running / waiting），再补 /sessions 的 label
   const info = new Map<string, TreeSession>()
@@ -89,18 +91,24 @@ export function buildTaskTree(o: {
     return agent ? { ...s, agent } : s
   }
 
+  // worktree 那份名单比 /sessions 旧（60s 一轮，还可能是刷新时先顶上的本地快照），
+  // 会话关掉后它还挂着人名——点进去是个不存在的会话。/sessions 是「在」的全集（live +
+  // dormant 都在里面），所以它一回来，就以它为准把已经没了的名字滤掉。
+  const live = o.sessionsLoaded ? new Set(o.sessions.map((s) => s.name)) : null
+  const alive = (n: string) => !live || live.has(n)
+
   const placed = new Set<string>()
   const projects: TreeProject[] = o.projects.map((p) => {
     const tasks: TreeTask[] = []
     for (const wt of o.worktrees[p.key] || []) {
       // worktree 带来的会话列表是**另一条来源**（不是 /sessions），基础设施会话得在这里
       // 再滤一遍——上一版只滤了 /sessions，于是 _ttmux-plugind 照样从这条路挂进任务里。
-      const names = (wt.sessions || []).map((s) => s.session).filter((n) => n && !isInfraSession(n))
+      const names = (wt.sessions || []).map((s) => s.session).filter((n) => n && !isInfraSession(n) && alive(n))
       // 主仓库检出：有会话才立卡（在仓库根目录开的 claude 也得归到项目下，不能丢进散会话）；
       // 没会话不立——它不是一个可收尾的任务位，每个项目都挂一张空的「main」只会碍事
       if (wt.isMain && names.length === 0) continue
       names.forEach((n) => placed.add(n))
-      for (const s of wt.sessions || []) if (s.dormant && !isInfraSession(s.session)) put({ name: s.session, dormant: true })
+      for (const s of wt.sessions || []) if (s.dormant && !isInfraSession(s.session) && alive(s.session)) put({ name: s.session, dormant: true })
       const sessions = names.map(sess)
       const ahead = wt.committedAhead || 0
       tasks.push({

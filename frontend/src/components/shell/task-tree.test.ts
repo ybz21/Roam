@@ -101,6 +101,26 @@ describe('buildTaskTree placement', () => {
   })
 })
 
+// worktree 名单（60s 一轮，刷新时还先顶本地快照）比 /sessions 旧：会话关掉后它还挂着人名，
+// 树上就留一行点进去不存在的会话。/sessions 一回来就以它为准。
+describe('已经关掉的会话不留在树上', () => {
+  const wt = { roam: [{ path: '/w/Roam/.worktrees/a', branch: 'chore/a', isMain: false, committedAhead: 2, sessions: [{ session: 'roam-cc' }, { session: 'gone' }] }] }
+  it('会话表还没回来时照旧全画（第一帧不能把快照清空）', () => {
+    const t = buildTaskTree({ projects: [roam], worktrees: wt, sessions: [] })
+    expect(t.projects[0].tasks[0].sessions.map((s) => s.name)).toEqual(['roam-cc', 'gone'])
+  })
+  it('会话表回来了就滤掉不在里面的名字，任务照旧留着', () => {
+    const t = buildTaskTree({ projects: [roam], worktrees: wt, sessions: [{ name: 'roam-cc' }], sessionsLoaded: true })
+    expect(t.projects[0].tasks[0].sessions.map((s) => s.name)).toEqual(['roam-cc'])
+    expect(t.projects[0].tasks[0].unfinished).toBe(false)
+  })
+  it('会话全没了的 worktree 变回待收尾', () => {
+    const t = buildTaskTree({ projects: [roam], worktrees: wt, sessions: [], sessionsLoaded: true })
+    expect(t.projects[0].tasks[0].sessions).toEqual([])
+    expect(t.projects[0].tasks[0].unfinished).toBe(true)
+  })
+})
+
 // _ttmux- 是基础设施会话的命名空间（插件守护进程、IM 监听）。它们跑在真 tmux 会话里，
 // 于是会顺着 /sessions 混进项目树，挂在某个任务下面——既不属于那个任务，人也不该点进去。
 describe('基础设施会话不进树', () => {
