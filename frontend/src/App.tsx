@@ -248,6 +248,10 @@ export default function App() {
   // 树头「+」：就地弹新建项目框，不再先跳去项目列表页（建完自己跳到新项目主页）
   const [newProjectOpen, setNewProjectOpen] = useState(false)
   const [sessList, setSessList] = useState<{ name: string; label?: string; lastActivity?: number; agent?: 'claude' | 'codex' }[]>([])
+  // /sessions **成功**回来过一轮才算数（树按它判会话还在不在）。不能拿 sessIds 当这个信号：
+  // 它在请求失败时也会被置成空表（那是为了放行标签还原），首轮就失败的话等于宣布「一个会话
+  // 都没有」，树上的任务和会话会被一起抹掉。
+  const [sessListLoaded, setSessListLoaded] = useState(false)
   // URL 上待还原的 id/名字（还没拿到 id 映射前先原样存着）
   const urlTerms = useRef<string[]>(readTermTokens().terms)
   const urlActive = useRef<string>(readTermTokens().active)
@@ -513,6 +517,7 @@ export default function App() {
         if (s?.name) names.push({ name: s.name, label: s.label || undefined, lastActivity: s.lastActivity || undefined, agent: s.agent === 'claude' || s.agent === 'codex' ? s.agent : undefined })
       }
       setSessIds({ byId, byName })
+      setSessListLoaded(true)
       // 内容没变就不换引用：树是按它 memo 的，5s 一次的空翻新会让整棵树白重算
       setSessList((cur) => (cur.length === names.length && cur.every((x, i) => x.name === names[i].name && x.label === names[i].label && x.lastActivity === names[i].lastActivity && x.agent === names[i].agent) ? cur : names))
       setSessionLabels(labels) // 展示名（@roam_name）：界面显示「名字（id）」，handle 仍是会话名
@@ -575,8 +580,8 @@ export default function App() {
     nameOf: (p) => prefs.taskNames?.[p] || undefined,
     agentOf: (n) => (claudeMap[n]?.running ? 'claude' : codexMap[n]?.running ? 'codex' : undefined),
     // 会话表一到就以它为准：快照/60s 的 worktree 名单里那些已经关掉的会话不该还挂在树上
-    sessionsLoaded: !!sessIds,
-  }), [treeSrc, sessList, claudeMap, codexMap, projTable, prefs.taskNames, sessIds])
+    sessionsLoaded: sessListLoaded,
+  }), [treeSrc, sessList, claudeMap, codexMap, projTable, prefs.taskNames, sessListLoaded])
   treeRef.current = tree
 
   // hash 路由：URL #/xxx 与当前页同步（支持前进/后退、刷新保持、收藏分享）

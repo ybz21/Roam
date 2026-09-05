@@ -93,9 +93,15 @@ export function buildTaskTree(o: {
 
   // worktree 那份名单比 /sessions 旧（60s 一轮，还可能是刷新时先顶上的本地快照），
   // 会话关掉后它还挂着人名——点进去是个不存在的会话。/sessions 是「在」的全集（live +
-  // dormant 都在里面），所以它一回来，就以它为准把已经没了的名字滤掉。
+  // dormant 都在里面：CLI 的 ls 收尾会 appendDormant），所以它一回来，就以它为准把已经
+  // 没了的名字滤掉。
+  //
+  // **休眠会话一律不滤**：两边的 dormant 都读同一张 sessions 表、同一套条件（见
+  // backend/worktree/sessionhome.go 的 dormantSQL 注释），照理不会打架；但两次查询之间
+  // 隔着 60s，真要错开一次，代价是「点开即恢复」的唯一入口从树上没了——这一格的保险
+  // 比那点整洁值钱。已经关掉的会话在快照里本来就是活的、不带这个标，照滤不误。
   const live = o.sessionsLoaded ? new Set(o.sessions.map((s) => s.name)) : null
-  const alive = (n: string) => !live || live.has(n)
+  const alive = (n: string, dormant?: boolean) => !live || dormant || live.has(n)
 
   const placed = new Set<string>()
   const projects: TreeProject[] = o.projects.map((p) => {
@@ -103,12 +109,12 @@ export function buildTaskTree(o: {
     for (const wt of o.worktrees[p.key] || []) {
       // worktree 带来的会话列表是**另一条来源**（不是 /sessions），基础设施会话得在这里
       // 再滤一遍——上一版只滤了 /sessions，于是 _ttmux-plugind 照样从这条路挂进任务里。
-      const names = (wt.sessions || []).map((s) => s.session).filter((n) => n && !isInfraSession(n) && alive(n))
+      const names = (wt.sessions || []).filter((s) => s.session && !isInfraSession(s.session) && alive(s.session, s.dormant)).map((s) => s.session)
       // 主仓库检出：有会话才立卡（在仓库根目录开的 claude 也得归到项目下，不能丢进散会话）；
       // 没会话不立——它不是一个可收尾的任务位，每个项目都挂一张空的「main」只会碍事
       if (wt.isMain && names.length === 0) continue
       names.forEach((n) => placed.add(n))
-      for (const s of wt.sessions || []) if (s.dormant && !isInfraSession(s.session) && alive(s.session)) put({ name: s.session, dormant: true })
+      for (const s of wt.sessions || []) if (s.dormant && !isInfraSession(s.session)) put({ name: s.session, dormant: true })
       const sessions = names.map(sess)
       const ahead = wt.committedAhead || 0
       tasks.push({
