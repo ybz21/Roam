@@ -56,6 +56,7 @@ import { GlobalSearch, openPalette, type PaletteActions, type PaletteItem } from
 import { ProjectTree, firstSessionOf, taskPathOf } from './components/shell/ProjectTree'
 import { InspectorPanels, type InspectorPanelKind } from './components/shell/InspectorPanels'
 import { buildTaskTree, type TreeTask } from './components/shell/task-tree'
+import { loadTreeSrc, saveTreeSrc, type TreeSrc } from './components/shell/task-tree-snapshot'
 import { useSessionCloser } from './components/sessions/session-closer'
 import { isInfraSession } from './components/sessions/infra-session'
 import { taskKeyOf, isLooseTask, looseSessionOf, type TaskKey } from './components/sessions/task-key'
@@ -227,8 +228,9 @@ export default function App() {
   }
   // 点会话标签 = 文件标签让位
   const activateSession = (n: string) => { setActive(n); setActiveFile('') }
-  // 左栏树的三份原料（22 设计 §3.2）：/projects 与每项目的 worktree 挂在下面那条 15s 轮询上，/sessions 挂 5s 那条
-  const [treeSrc, setTreeSrc] = useState<{ projects: any[]; worktrees: Record<string, any[]> }>({ projects: [], worktrees: {} })
+  // 左栏树的三份原料（22 设计 §3.2）：/projects 与每项目的 worktree 挂在下面那条 15s 轮询上，/sessions 挂 5s 那条。
+  // 初值取上一轮的本地快照：worktree 那一趟要 1~2s，等它就等于每次刷新都从空树长一遍（见 task-tree-snapshot）
+  const [treeSrc, setTreeSrc] = useState<TreeSrc>(() => loadTreeSrc())
   // 建了新会话就立刻把会话表 / 归属表 / worktree 都刷一遍，不等下一轮（分别 5s / 15s / 60s）
   const sessReload = useRef<(() => void) | null>(null)
   const treeReload = useRef<(() => void) | null>(null)
@@ -344,6 +346,8 @@ export default function App() {
         const swarms = Array.isArray(sw) ? sw : sw?.data || []
         setSwarmCount(swarms.filter((x: any) => x?.status && x.status !== 'archived').length)
         void loadGit()
+        // 项目行先画出来（/projects 是台账，几毫秒就回来）；worktree 慢，别让它压着项目一起等
+        if (hasSider) setTreeSrc((cur) => ({ ...cur, projects }))
         // 左栏树要每个 git 项目的 worktree。后端每个 worktree 要跑十来条 git 命令，
         // 八个项目并发着 15s 一轮会把机器打满（实测 CPU 60%、温度报警），所以：
         // 串行、60s 一轮、项目列表照旧 15s 刷；手机没有树，不拉
@@ -354,11 +358,14 @@ export default function App() {
             if (stop) return
             try { worktrees[p.key] = (await api('GET', `/git/worktrees?dir=${encodeURIComponent(p.dir)}`))?.data || [] }
             catch { worktrees[p.key] = [] }
+            if (stop) return
+            // 到一个画一个：串行扫完要 1~2s，攒到最后一起 set 等于整棵树在那儿干等
+            setTreeSrc((cur) => ({ projects, worktrees: { ...cur.worktrees, [p.key]: worktrees[p.key] } }))
           }
           if (stop) return
+          // 扫完整份替换：这一轮没见到的项目（删了/不再是 git）连同快照里的残留一起清掉
           setTreeSrc({ projects, worktrees })
-        } else if (hasSider) {
-          setTreeSrc((cur) => ({ ...cur, projects }))
+          saveTreeSrc({ projects, worktrees })
         }
       } catch { /* 轮询失败就保持上一轮的值，不清空 */ }
     }
@@ -567,7 +574,9 @@ export default function App() {
     projects: treeSrc.projects, worktrees: treeSrc.worktrees, sessions: sessList, placement: projTable,
     nameOf: (p) => prefs.taskNames?.[p] || undefined,
     agentOf: (n) => (claudeMap[n]?.running ? 'claude' : codexMap[n]?.running ? 'codex' : undefined),
-  }), [treeSrc, sessList, claudeMap, codexMap, projTable, prefs.taskNames])
+    // 会话表一到就以它为准：快照/60s 的 worktree 名单里那些已经关掉的会话不该还挂在树上
+    sessionsLoaded: !!sessIds,
+  }), [treeSrc, sessList, claudeMap, codexMap, projTable, prefs.taskNames, sessIds])
   treeRef.current = tree
 
   // hash 路由：URL #/xxx 与当前页同步（支持前进/后退、刷新保持、收藏分享）
