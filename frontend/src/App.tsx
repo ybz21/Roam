@@ -576,6 +576,8 @@ export default function App() {
     agentOf: (n) => (claudeMap[n]?.running ? 'claude' : codexMap[n]?.running ? 'codex' : undefined),
     // 会话表一到就以它为准：快照/60s 的 worktree 名单里那些已经关掉的会话不该还挂在树上
     sessionsLoaded: !!sessIds,
+    // 互审陪跑叫 `<被审会话id>-review`，靠 id 表还原成人看得懂的那个会话
+    nameOfId: (id) => sessIds?.byId[id],
   }), [treeSrc, sessList, claudeMap, codexMap, projTable, prefs.taskNames, sessIds])
   treeRef.current = tree
 

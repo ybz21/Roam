@@ -330,6 +330,7 @@ const zhCN = {
   'tree.menu.hideIdle': '隐藏空闲 worktree',
   'tree.idle': '空闲',
   'tree.dormant': '休眠',
+  'tree.reviewOf': '互审 · {name}',
   'tree.newTask': '开任务',
   'tree.projectField': '项目',
   'tree.menu.projectHome': '项目主页',
@@ -1401,8 +1402,9 @@ const zhCN = {
   // 开工前置约定。三件事：分支/工作区、会话名、然后才是任务。
   // 分两版：Roam 已经把 worktree 建好时只要改名；在主仓库/已有 worktree 里干活时
   // 得让 agent 自己开分支——否则一堆任务全提交在 main 上（真发生过）。
-  'session.wt.namingHint': '开工前先做两件事，做完再开始下面的任务：\n1. 你已经在一个独立 worktree 里，把占位分支改成语义化名字（git branch -m <简短英文kebab-case>，前缀 feat/fix 等由你定）；\n2. 初始化工作区：拉一下最新代码，需要装依赖就装（按仓库自己的约定来）。\n不要改这个会话的名字（不要运行 ttmux rename），名字由人来起。',
-  'session.wt.namingHintRepo': '开工前先做两件事，做完再开始下面的任务：\n1. 从主干切一个语义化分支（git checkout -b <简短英文kebab-case>，前缀 feat/fix 等由你定）——别直接在主干上改；任务大到需要隔离就自己开 worktree；\n2. 初始化工作区：拉一下最新代码，需要装依赖就装（按仓库自己的约定来）。\n不要改这个会话的名字（不要运行 ttmux rename），名字由人来起。',
+  'session.wt.briefNew': '开工前先做三件事，做完再开始下面的任务：\n1. 工作区：你已经在独立 worktree {path}（从 {base} 切出来，占位分支 {branch}）——把分支改成语义化名字：git branch -m <简短英文kebab-case>，前缀 feat/fix 等由你定；\n2. 初始化工作区：拉一下最新代码，需要装依赖就装（按仓库自己的约定来）；\n3. 把这个会话改名成一眼能认出的短名字：ttmux rename {sess} <新名字>——4~12 个字说清这是什么活，别照抄需求原文。',
+  'session.wt.briefRepo': '开工前先做三件事，做完再开始下面的任务：\n1. 工作区：你在 {path}（当前分支 {branch}）——别直接在主干上改，先切一个语义化分支：git checkout -b <简短英文kebab-case>；任务大到需要隔离就自己开 worktree；\n2. 初始化工作区：拉一下最新代码，需要装依赖就装（按仓库自己的约定来）；\n3. 把这个会话改名成一眼能认出的短名字：ttmux rename {sess} <新名字>——4~12 个字说清这是什么活，别照抄需求原文。',
+  'session.wt.briefReview': '\n另外：这个任务开了「空闲自动互审」，你歇下来之后会有另一个 agent 来审你的改动。',
   'session.namePlaceholder2': '会话名(短,留空则从需求自动起名)',
   'session.wt.where': '在哪干活',
   'session.wt.mainRepo': '主仓库',

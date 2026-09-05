@@ -14,12 +14,31 @@ import { BranchIcon } from '../git/parts'
 // 由 prompt 首句推会话名：派活时用户只写了要干什么，名字不该再问一遍。
 // worktree 分支默认名：会话名 slug（小写、非字母数字转 -）
 // prompt 派生任务名：取首行、去引号标点、截 24 字、空白转 -；中文原样保留（tmux 会话名支持中文）。
-export function taskNameFromPrompt(p: string): string {
+/**
+ * 从需求派生一个**占位**名字。真名字由 agent 开工后 `ttmux rename`（见 session.wt.brief*）。
+ *
+ * 三步：剥掉开头的招呼与人称（「你去/帮我/请…」——它们只说了「有人在派活」，
+ * 没说这是什么活）、在首个标点处断句、按长度截断但不切在拉丁词中间。
+ * 最后那条是这次修的：16 个字硬切，「你去英伟达的 DGX Spark 论坛…」被切成
+ * 「你去英伟达的-DGX-Spark」，半个词吊在名字末尾。
+ */
+export function taskNameFromPrompt(p: string, limit = 16): string {
   const first = (p.trim().split(/\n/)[0] || '').replace(/["'`«»""'']/g, '').trim()
-  // 优先在首个标点处断句（够长时），再截 24 字、去尾部标点、空白转 -
-  const seg = first.split(/[，。,.!！？?;；:：]/)[0]
-  const base = seg.length >= 4 ? seg : first
-  return base.slice(0, 24).trim().replace(/[，。,.!！？?;；:：\s]+$/g, '').replace(/\s+/g, '-')
+  const lead = first.replace(/^(?:请|麻烦|帮我|帮忙|你去|你来|你先|你把|你|我要|我想|我们|给我|来|去)+\s*/, '')
+  const seg = (lead || first).split(/[，。,.!！？?;；:：]/)[0]
+  const base = seg.length >= 4 ? seg : (lead || first)
+  let cut = base.slice(0, limit)
+  if (base.length > limit) {
+    // 切点落在拉丁词/数字中间 → 退回上一个边界，别留半个词（Spar…、5.…）
+    if (/[A-Za-z0-9.]/.test(base[limit - 1]) && /[A-Za-z0-9.]/.test(base[limit])) {
+      const back = cut.replace(/[A-Za-z0-9.]+$/, '')
+      if (back.trim().length >= 4) cut = back
+    }
+    // 末尾剩一个孤零零的汉字，多半是被切成两半的词（「论坛」→「论」）：丢掉
+    const lone = cut.replace(/[\s]([\u4e00-\u9fff])$/, '')
+    if (lone.trim().length >= 4) cut = lone
+  }
+  return cut.trim().replace(/[-，。,.!！？?;；:：\s]+$/g, '').replace(/\s+/g, '-')
 }
 
 export function NewSessionModal({ open, parent, onClose, onDone }: { open: boolean; parent?: string | null; onClose: () => void; onDone: (name: string) => void }) {
@@ -100,7 +119,7 @@ export function NewSessionModal({ open, parent, onClose, onDone }: { open: boole
     let finalName = name.trim()
     if (!finalName) {
       if (!prompt.trim()) return message.error(t('session.promptOrNameRequired'))
-      finalName = taskNameFromPrompt(prompt).slice(0, 16).replace(/[-，。,.\s]+$/g, '')
+      finalName = taskNameFromPrompt(prompt)
     }
     if (!finalName) {
       const d = new Date()
@@ -110,6 +129,8 @@ export function NewSessionModal({ open, parent, onClose, onDone }: { open: boole
       setCreating(true)
       let sessionDir = dir.trim()
       let actual: string
+      let wtBranch = ''   // 新建 worktree 时后端给的占位分支
+      let wtBase = ''     // 从哪个分支切出来的
       if (wtMode === 'new' && isGitRepo && sessionDir) {
         // 组合 API（先会话后 worktree）：分支不传——后端按会话名占位，Agent 开工后语义化；
         // 派生模式走 fork-worktree（同编排 + meta 记父子）
@@ -128,6 +149,8 @@ export function NewSessionModal({ open, parent, onClose, onDone }: { open: boole
           })
         actual = res.name || res.data?.session || finalName
         sessionDir = res.data?.path || sessionDir
+        wtBranch = res.data?.branch || ''
+        wtBase = res.data?.base || base || defBranch
       } else {
         // 主仓库直接用所选目录；「已有 worktree」= 会话 cwd 指进该 worktree；
         // 派生模式走 fork（dir 留空则继承父 cwd）
@@ -143,9 +166,13 @@ export function NewSessionModal({ open, parent, onClose, onDone }: { open: boole
         const cmd = agent === 'claude' ? (prefs.claudeCommand || 'claude') : (prefs.codexCommand || 'codex')
         let launch = cmd
         if (prompt.trim()) {
-          // prompt 作为 CLI 参数随启动一次带入；新建 worktree 时前置命名约定：
-          // 让 agent 开工前 git branch -m 一个语义化分支名（占位分支来自后端）
-          const naming = t(wtMode === 'new' ? 'session.wt.namingHint' : 'session.wt.namingHintRepo') + '\n\n'
+          // 开工简报按**这张表单真正选的**拼：在哪个目录、从哪个分支切的、占位分支叫什么、
+          // 会话现在叫什么（见 TaskComposer 里同一段注释）
+          const existingWt = existingWts.find((w: any) => w.path === sessionDir)
+          const naming = (wtMode === 'new'
+            ? t('session.wt.briefNew', { path: sessionDir, base: wtBase || defBranch || 'main', branch: wtBranch || finalName, sess: actual })
+            : t('session.wt.briefRepo', { path: sessionDir || dir, branch: existingWt?.branch || defBranch || 'main', sess: actual })
+          ) + (autoReview ? t('session.wt.briefReview') : '') + '\n\n'
           launch = `${cmd} ${shq(naming + prompt.trim())}`
         }
         await api('POST', '/tasks/_/send', { sess: actual, msg: launch })

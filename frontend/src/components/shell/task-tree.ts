@@ -18,6 +18,8 @@ export type TreeSession = {
   agent?: 'claude' | 'codex'
   running?: boolean
   waiting?: boolean
+  /** 互审陪跑会话（<被审会话>-review）：审谁写在这儿，树上挂到被审那条下面 */
+  reviewOf?: string
 }
 
 export type TreeTask = {
@@ -65,6 +67,8 @@ export function buildTaskTree(o: {
   nameOf?: (path: string) => string | undefined
   /** /sessions 已经回来过一轮：此后 sessions 就是「在」的全集，worktree 里多出来的名字都是已经没了的 */
   sessionsLoaded?: boolean
+  /** 会话 id → 会话名。互审陪跑叫 `<被审会话id>-review`，靠它把 id 还原成人看得懂的那个 */
+  nameOfId?: (id: string) => string | undefined
 }): TaskTree {
   // 会话的展示信息：先从 /projects 的 top / needs 里捞（带 agent / running / waiting），再补 /sessions 的 label
   const info = new Map<string, TreeSession>()
@@ -147,5 +151,40 @@ export function buildTaskTree(o: {
   })
 
   const loose = o.sessions.filter((s) => !placed.has(s.name)).map((s) => sess(s.name))
-  return { projects, loose }
+
+  // ── 互审陪跑归位 ────────────────────────────────────────────────────────
+  //
+  // reviewmesh 起的陪跑会话叫 `<被审会话>-review`（那个「被审会话」写的是 id）。
+  // 它按自己的 cwd 落进 worktree，于是常常挂到**别人**的任务下面：截图里
+  // 「2026-0905-2122-0076-review」挂在 roam优化 那张卡里，而它审的是隔壁那张卡的活。
+  // 光看那一行也说不清它是什么——名字是一串 id。
+  //
+  // 这里按名字把它认出来，挪到被审会话所在的任务、紧跟在被审那条后面，并记下 reviewOf，
+  // 让树自己决定怎么画（缩进 + 「互审 · 谁」）。
+  const authorOf = (name: string): string | null => {
+    if (!name.endsWith('-review')) return null
+    const token = name.slice(0, -'-review'.length)
+    return o.nameOfId?.(token) || token
+  }
+  const allTasks = projects.flatMap((p) => p.tasks)
+  const homeOf = new Map<string, TreeTask>() // 会话名 → 它所在的任务
+  for (const task of allTasks) for (const s of task.sessions) homeOf.set(s.name, task)
+
+  const relocate = (s: TreeSession, from: TreeTask | null) => {
+    const author = authorOf(s.name)
+    if (!author) return false
+    const home = homeOf.get(author)
+    // reviewOf 存的是**给人看的那个名字**：树上要写「互审 · 谁」，写会话名等于又印一串 id
+    s.reviewOf = home?.sessions.find((x) => x.name === author)?.label || author
+    if (!home || home === from) return false
+    if (from) from.sessions = from.sessions.filter((x) => x.name !== s.name)
+    const at = home.sessions.findIndex((x) => x.name === author)
+    home.sessions.splice(at < 0 ? home.sessions.length : at + 1, 0, s)
+    homeOf.set(s.name, home)
+    return true
+  }
+  for (const task of allTasks) for (const s of [...task.sessions]) relocate(s, task)
+  const stillLoose = loose.filter((s) => !relocate(s, null))
+
+  return { projects, loose: stillLoose }
 }
