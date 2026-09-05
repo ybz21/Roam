@@ -391,7 +391,7 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
               </span>
               <span className="tt-cend">
                 {/* 话筒贴着发送键：pill 是「带什么」，话筒是「怎么说」，分开放（22 设计 §3.3） */}
-                <VoiceInput inline accent={accent} onResult={appendText} />
+                <VoiceInput inline hotkey={live} accent={accent} onResult={appendText} />
                 {/* agent 在跑、又没在打字：那枚圆钮就是「停止」；打了字它又是「发送」（可以边跑边排队）。
                     不另摆一枚「停止」pill——同一个位置一钮两用，和别的对话产品一个习惯 */}
                 {busy && !input.trim() ? (
