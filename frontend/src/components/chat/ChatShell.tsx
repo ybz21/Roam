@@ -258,8 +258,37 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
     send()
   }
 
-  // 中断生成：向会话注入 Escape（Claude / Codex 都按 Esc 打断当前回合）
-  const stop = () => { api('POST', `/sessions/${encodeURIComponent(name)}/keys`, { keys: ['Escape'] }).catch(() => {}) }
+  /**
+   * 中断生成，两级。
+   *
+   * 第一下发 Esc——Claude / Codex 都按它打断当前回合，也是最温和的一档（TUI 回到输入行，
+   * 上下文还在）。但 Esc 只是「一个按键」：agent 卡在工具里的时候（跑了十分钟的 bash、
+   * 等不到响应的请求），底下那个子进程根本没收到信号，按钮看着按下去了、agent 照跑——
+   * 这就是「终止键不生效」。
+   *
+   * 所以 Esc 发过之后按钮就改口成 Ctrl+C（`.force`，红），再点一下把 ^C 打进 pty：
+   * 走的是终端真正的中断路径（SIGINT / TUI 的强制打断），停得下 Esc 停不下的东西。
+   *
+   * 发完 ^C 锁 2.5 秒：Claude Code 里短时间内连按两次 Ctrl+C 是「退出整个 TUI」，
+   * 手快点两下就不是中断而是把 agent 关了。
+   */
+  const [forceStop, setForceStop] = useState(false)
+  const [stopCooling, setStopCooling] = useState(false)
+  const coolTimer = useRef<ReturnType<typeof setTimeout>>()
+  useEffect(() => () => clearTimeout(coolTimer.current), [])
+  // 停下来了就把这枚钮收回「Esc」那一档，下一轮生成重新从温和的开始
+  useEffect(() => { if (!busy) { setForceStop(false); setStopCooling(false); clearTimeout(coolTimer.current) } }, [busy])
+
+  const sendKeys = (keys: string[]) =>
+    api('POST', `/sessions/${encodeURIComponent(name)}/keys`, { keys }).catch((e: any) => setSendErr(e.message))
+
+  const stop = () => {
+    if (stopCooling) return
+    if (!forceStop) { sendKeys(['Escape']); setForceStop(true); return }
+    sendKeys(['C-c'])
+    setStopCooling(true)
+    coolTimer.current = setTimeout(() => setStopCooling(false), 2500)
+  }
 
   const errMsg = sendErr || error
   // 工具行里的路径要能点开：用 context 送到最里层，不然要一路穿过工具注册表
@@ -395,7 +424,12 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
                 {/* agent 在跑、又没在打字：那枚圆钮就是「停止」；打了字它又是「发送」（可以边跑边排队）。
                     不另摆一枚「停止」pill——同一个位置一钮两用，和别的对话产品一个习惯 */}
                 {busy && !input.trim() ? (
-                  <button type="button" className="tt-send stop" aria-label={t('chat.stop')} title={t('chat.stopTitle')}
+                  // 同一枚钮两档：Esc → Ctrl+C。图标不换（同一件事，AGENTS.md「同一动作同一图标」），
+                  // 换的是颜色和名字，让人知道下一下按出去的分量不一样。
+                  <button type="button" className={`tt-send stop${forceStop ? ' force' : ''}`}
+                    aria-label={forceStop ? t('chat.forceStop') : t('chat.stop')}
+                    title={forceStop ? t('chat.forceStopTitle') : t('chat.stopTitle')}
+                    disabled={stopCooling}
                     onMouseDown={noBlur} onClick={stop}>
                     <StopIcon size={12} />
                   </button>
