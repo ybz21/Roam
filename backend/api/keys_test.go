@@ -68,3 +68,17 @@ func TestKeysRejectsOtherControlKeys(t *testing.T) {
 		t.Fatalf("rejected keys must not reach tmux, got %q", got)
 	}
 }
+
+// 对话页「+」里的「权限模式」发的就是 BTab（tmux 对 Shift+Tab 的叫法）：
+// Claude Code 与 Codex 都用它轮换权限/审批档。这一枚掉出白名单，那一行会静默失效
+// ——按钮照点、请求 400、界面什么也不说，正是最难发现的那种坏法。
+func TestKeysAllowsShiftTab(t *testing.T) {
+	r, name, args := keysSetup(t)
+	if code := postKeys(t, r, name, `{"keys":["BTab"]}`); code != http.StatusOK {
+		t.Fatalf("expected BTab to be allowed, got %d", code)
+	}
+	want := "send-keys\n-t\n=" + name + ":\nBTab\n"
+	if got := args(); got != want {
+		t.Fatalf("tmux args mismatch:\ngot  %q\nwant %q", got, want)
+	}
+}
