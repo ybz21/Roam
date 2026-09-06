@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -494,4 +495,87 @@ func scaleBytes(s string, ratio float64) string {
 		return ""
 	}
 	return strconv.FormatInt(int64(float64(n)*ratio), 10)
+}
+
+// SwapFree 交换区还剩多少（字节，读不到 0）。zram 交换设备也算在里面 ——
+// 对「回收出来的匿名页往哪儿放」这个问题，压缩块设备和磁盘 swap 是同一类答案。
+func SwapFree() int64 { return meminfoBytes("SwapFree:") }
+
+// SwapOf 这个 pane 已经被挤到交换区（含 zram）的字节数。
+// 总量闸靠它认出「这一轮压过了没有」——和 Braked() 一样，状态从内核读，不自己记。
+func SwapOf(pid int) (int64, bool) {
+	dir := cgroupDir(pid)
+	if dir == "" {
+		return 0, false
+	}
+	return readInt(filepath.Join(dir, "memory.swap.current"))
+}
+
+// 写 memory.reclaim 是**同步**的：内核回收够了（或放弃）才返回。会话列表每刷新
+// 一次就会走到这里，压太多会把列表卡住，所以单轮压一小口 + 等一小会儿，
+// 剩下的留给下一轮 —— 已经挤出去的那部分不会退回来。
+const reclaimWait = 900 * time.Millisecond
+
+// Reclaim 让内核把这个 pane 所在 scope 的 bytes 字节挤出去（写 memory.reclaim）。
+//
+// 这是总量闸的「先压后踩」里的**压**：把冷的匿名页压进 zram，进程照常跑。
+// 和踩刹车（memory.high）的区别是关键的一点 —— 软限不回收内存，它只是让内核在
+// 这个会话的**每一次分配**上做直接回收，回收得出来才叫减速；回收不出来就是干转，
+// PSI 跟着冲高，systemd-oomd 会把整条 scope 端掉（2026-09-06 22:09 就是这么没的）。
+func Reclaim(pid int, bytes int64) error {
+	if bytes <= 0 {
+		return errors.New("memguard: 要压的字节数得是正数")
+	}
+	dir := cgroupDir(pid)
+	if dir == "" {
+		return errors.New("memguard: 读不到这个 pane 的 cgroup 路径")
+	}
+	// 判据是**交换区真的接住了页**，不是「写调用返回 0」——和 Apply / SetHigh 同一条
+	// 教训。内核对压不动的请求既可能返回 EAGAIN，也可能拿 page cache 交差；
+	// 报成功而实际一页没动，就会告诉用户「已经替你压过了」，于是他不再管它。
+	before, _ := SwapOf(pid)
+	path := filepath.Join(dir, "memory.reclaim")
+	done := make(chan error, 1)
+	go func() { done <- reclaimWrite(path, bytes) }()
+	select {
+	case err := <-done:
+		if err != nil {
+			return err
+		}
+	case <-time.After(reclaimWait):
+		// 超时不算失败：内核这会儿正在压，压出去多少就算多少。
+	}
+	if after, ok := SwapOf(pid); !ok || after <= before {
+		return errors.New("memguard: 压不动 —— 交换区一页也没接住")
+	}
+	return nil
+}
+
+func reclaimWrite(path string, bytes int64) error {
+	n := strconv.FormatInt(bytes, 10)
+	// swappiness=200：这一档要压的就是**匿名页**。默认档会先啃 page cache，
+	// 而 agent 会话的大头是匿名页（cache 内核自己就会回收，不用我们催），
+	// 啃完缓存压力还在。参数是 6.9 才有的，老内核认不出会整条拒掉（EINVAL），
+	// 那就退回不带参数的写法。
+	err := writeFile(path, n+" swappiness=200")
+	if errors.Is(err, syscall.EINVAL) {
+		err = writeFile(path, n)
+	}
+	if errors.Is(err, syscall.EAGAIN) {
+		// 没凑够要的量。这是常态而不是错误：压出去的那部分算数，下一轮接着来。
+		return nil
+	}
+	return err
+}
+
+func writeFile(path, content string) error {
+	f, err := os.OpenFile(path, os.O_WRONLY, 0)
+	if err != nil {
+		return err
+	}
+	_, err = f.WriteString(content)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	return err
 }

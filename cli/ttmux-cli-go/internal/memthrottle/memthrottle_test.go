@@ -13,15 +13,22 @@ const G = int64(1) << 30
 func Plan2(h Host, samples []Sample) []Decision { return Plan(h, Defaults(), samples) }
 
 // 一台 32G 的机器；hi 是这个会话当前的软限，0 表示 L1 的默认（max×HighRatio）。
+//
+// Swap 给 2G：意思是「这个会话已经压出去过一轮了」。踩刹车是**压过之后**才轮到的
+// 那一步，所以刹车用例的样本都得先满足这个前提；测「先压」那一档的用例自己把
+// Swap 清零。
 func sample(name string, curGiB int, hi int64) Sample {
 	max := 12 * G
 	if hi == 0 {
 		hi = int64(float64(max) * memguard.HighRatio)
 	}
-	return Sample{Session: name, PIDs: []int{1}, Cur: int64(curGiB) * G, High: hi, Max: max}
+	return Sample{Session: name, PIDs: []int{1}, Cur: int64(curGiB) * G, Swap: 2 * G, High: hi, Max: max}
 }
 
-func host(availGiB int) Host { return Host{Total: 32 * G, Avail: int64(availGiB) * G} }
+// 机器有 4G 交换区余量、且是压缩的 —— 回收出来的页有地方放，L2 才轮得到动手。
+func host(availGiB int) Host {
+	return Host{Total: 32 * G, Avail: int64(availGiB) * G, SwapFree: 4 * G, Compressed: true}
+}
 
 func TestPlanDoesNothingWhenMemoryIsFine(t *testing.T) {
 	// 可用 10/32 = 31%，宽裕
@@ -112,8 +119,8 @@ func TestPlanDoesNotRebrakeAlreadyBraked(t *testing.T) {
 // 小会话踩了腾不出多少，代价却是把它拖垮。
 func TestPlanSkipsSessionsBelowFloor(t *testing.T) {
 	got := Plan2(host(3), []Sample{
-		{Session: "a", PIDs: []int{1}, Cur: 512 << 20, Max: 12 * G, High: 9 * G},
-		{Session: "b", PIDs: []int{2}, Cur: 11 * G, Max: 12 * G, High: 9 * G},
+		{Session: "a", PIDs: []int{1}, Cur: 512 << 20, Swap: 2 * G, Max: 12 * G, High: 9 * G},
+		{Session: "b", PIDs: []int{2}, Cur: 11 * G, Swap: 2 * G, Max: 12 * G, High: 9 * G},
 	})
 	if len(got) != 1 || got[0].Session != "b" {
 		t.Fatalf("只该踩过得了下限的 b，得到 %+v", got)
@@ -149,12 +156,12 @@ func TestApplyReportsOnlyWhatLanded(t *testing.T) {
 		{Session: "two-panes", PIDs: []int{1, 2}, High: 4 * G, Brake: true},
 		{Session: "all-fail", PIDs: []int{3}, High: 4 * G, Brake: true},
 	}
-	done := Apply(ds, func(pid int, _ int64) error {
+	done := Apply(ds, Effects{SetHigh: func(pid int, _ int64) error {
 		if pid == 1 || pid == 3 {
 			return errors.New("scope 没了")
 		}
 		return nil
-	})
+	}})
 	if len(done) != 1 || done[0].Session != "two-panes" {
 		t.Fatalf("只该报落下去的那个，得到 %+v", done)
 	}
@@ -215,7 +222,7 @@ func TestReleaseWithoutHardCapClearsSoftLimit(t *testing.T) {
 func TestBrakeAlwaysLandsBelowDefaultHigh(t *testing.T) {
 	max := 12 * G
 	for _, curGiB := range []int{9, 10, 11} { // 都在 0.75×max 之上
-		s := Sample{Session: "x", PIDs: []int{1}, Cur: int64(curGiB) * G,
+		s := Sample{Session: "x", PIDs: []int{1}, Cur: int64(curGiB) * G, Swap: 2 * G,
 			High: DefaultHigh(max), Max: max}
 		got := Plan(host(3), Thresholds{AvailLow: 0.20, AvailOK: 0.40, MinShare: 0.01}, []Sample{s})
 		if len(got) != 1 {
@@ -226,5 +233,103 @@ func TestBrakeAlwaysLandsBelowDefaultHigh(t *testing.T) {
 			t.Errorf("cur=%dG 踩成 %d，但 Braked() 认不出来（L1 默认 %d）",
 				curGiB, got[0].High, DefaultHigh(max))
 		}
+	}
+}
+
+// 先压后踩：没压过的会话，第一轮只做主动压缩回收，软限一动不动。
+//
+// 这是 2026-09-06 22:09 那次事故改出来的一档。在那之前 L2 直接踩软限，
+// 而软限不回收内存 —— 它只是让内核在每次分配上做直接回收，回收不出来就干转，
+// PSI 冲高，systemd-oomd 把整条 scope（shell 带 agent 20 个进程）一起端掉。
+func TestPlanCompressesBeforeBraking(t *testing.T) {
+	fresh := sample("big", 8, 0)
+	fresh.Swap = 0 // 还没压过
+	got := Plan2(host(3), []Sample{sample("small", 5, 0), fresh})
+	if len(got) != 1 || got[0].Session != "big" {
+		t.Fatalf("该动最大的 big，得到 %+v", got)
+	}
+	if got[0].Brake || got[0].High != 0 {
+		t.Errorf("第一轮只压不踩，软限该一动不动，得到 %+v", got[0])
+	}
+	cur := 8 * G // 经变量绕开常量表达式的精确转换要求
+	want := int64(float64(cur) * reclaimShare)
+	if want > reclaimCap {
+		want = reclaimCap
+	}
+	if got[0].Reclaim != want {
+		t.Errorf("该压 %d，得到 %d", want, got[0].Reclaim)
+	}
+}
+
+// 压过一轮还不够，下一轮才踩刹车。判据从内核读（memory.swap.current），
+// 不在进程里记 —— CLI 每次调用都是一个新进程，记在内存里的状态活不过这一轮。
+func TestPlanBrakesAfterCompressionDidNotHelp(t *testing.T) {
+	got := Plan2(host(3), []Sample{sample("small", 5, 0), sample("big", 8, 0)}) // sample() 自带 Swap=2G
+	if len(got) != 1 || !got[0].Brake {
+		t.Fatalf("压过之后该踩刹车，得到 %+v", got)
+	}
+	if got[0].Reclaim != 0 {
+		t.Errorf("踩刹车这一轮不该再压一次: %+v", got[0])
+	}
+}
+
+// 交换区见底 = 回收出来的页没地方放。这时**什么都不做**是有意的：
+// 踩下去只是干转，而单会话失控仍有 L1 的硬顶兜着（撞顶只杀它自己）。
+func TestPlanKeepsHandsOffWhenNowhereToPutPages(t *testing.T) {
+	h := host(3)
+	h.SwapFree, h.Compressed = 8<<20, false // 8M，等于没有
+	if got := Plan2(h, []Sample{sample("small", 5, 0), sample("big", 8, 0)}); len(got) != 0 {
+		t.Fatalf("没落点时不该动手，却得到 %+v", got)
+	}
+}
+
+// 动不了就得让人知道 —— 这一层自己解决不了（开 zram 要 root）。
+func TestStalledFiresOnlyWhenWeWouldHaveActed(t *testing.T) {
+	full := host(3)
+	full.SwapFree, full.Compressed = 8<<20, false
+	ours := []Sample{sample("small", 5, 0), sample("big", 8, 0)} // 合计 40% > 35%
+	if !Stalled(full, Defaults(), ours) {
+		t.Error("过线 + 主因是我们 + 没落点：该提醒")
+	}
+	if Stalled(host(3), Defaults(), ours) {
+		t.Error("交换区还有余量，动得了，不该提醒")
+	}
+	if Stalled(full, Defaults(), []Sample{sample("a", 3, 0), sample("b", 2, 0)}) {
+		t.Error("内存不是我们吃的，不该提醒")
+	}
+	if Stalled(full, Defaults(), nil) {
+		t.Error("没有会话可动，不该提醒")
+	}
+	// 机器宽裕的时候压根不该冒出这条
+	loose := host(20)
+	loose.SwapFree, loose.Compressed = 8<<20, false
+	if Stalled(loose, Defaults(), ours) {
+		t.Error("机器宽裕时不该提醒")
+	}
+}
+
+// 别开一张交换区兑不了的空头支票：要得比剩余还多，内核只会尽力而为，
+// 而下一轮 top.Swap 又达不到目标，于是每一轮都重压一次。
+func TestReclaimTargetNeverExceedsRoomOrCap(t *testing.T) {
+	if got := reclaimTarget(40*G, 100*G); got != reclaimCap {
+		t.Errorf("单轮该封顶在 %d，得到 %d", reclaimCap, got)
+	}
+	if got := reclaimTarget(8*G, 200<<20); got != 200<<20 {
+		t.Errorf("该被交换区余量卡到 200M，得到 %d", got)
+	}
+	if got := reclaimTarget(200<<20, 4*G); got != 0 {
+		t.Errorf("小到不值得压就别压，得到 %d", got)
+	}
+}
+
+// 一个会话多个 pane：压也是挨个 pane 压，落下一个就算这个会话动了。
+func TestApplyRoutesReclaimDecisions(t *testing.T) {
+	var got []int64
+	done := Apply([]Decision{{Session: "x", PIDs: []int{7}, Reclaim: 256 << 20}}, Effects{
+		SetHigh: func(int, int64) error { t.Error("这一轮不该动软限"); return nil },
+		Reclaim: func(_ int, n int64) error { got = append(got, n); return nil },
+	})
+	if len(done) != 1 || len(got) != 1 || got[0] != 256<<20 {
+		t.Fatalf("该只调压缩回收一次，得到 done=%+v calls=%v", done, got)
 	}
 }

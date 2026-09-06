@@ -56,7 +56,7 @@ func Collect(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool) 
 		})
 		brakes = append(brakes, memthrottle.Sample{
 			Session: live[i].Name, Label: live[i].Label,
-			PIDs: m.PIDs, Cur: m.Cur, High: m.High, Max: m.Limit,
+			PIDs: m.PIDs, Cur: m.Cur, Swap: m.Swap, High: m.High, Max: m.Limit,
 		})
 	}
 	// tmux 盲态（list-sessions 出错但不是「server 不在」）时 alive 为空，
@@ -80,10 +80,23 @@ func Collect(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool) 
 		if db, err := metadb.Open(rt.HomeDir, metadb.Options{DataDir: rt.DataDir}); err == nil {
 			memalert.Check(db, rt.Now(), samples)
 			// 总量闸（L2）：每个会话都守着自己的上限、加起来仍然把机器压垮的那一档。
-			// 稳态下 Plan 返回空（踩过的会话下一轮就认得出来），不花额外开销。
-			host := memthrottle.Host{Total: memguard.TotalMemory(), Avail: memguard.AvailableMemory()}
-			for _, d := range memthrottle.Apply(memthrottle.Plan(host, memthrottle.FromEnv(), brakes), memthrottle.SetHigh) {
+			// 稳态下 Plan 返回空（压过/踩过的会话下一轮就认得出来），不花额外开销。
+			room := memthrottle.ProbeSwapRoom()
+			host := memthrottle.Host{
+				Total: memguard.TotalMemory(), Avail: memguard.AvailableMemory(),
+				SwapFree: room.Free, Compressed: room.Compressed,
+			}
+			th := memthrottle.FromEnv()
+			for _, d := range memthrottle.Apply(memthrottle.Plan(host, th, brakes), memthrottle.Cgroup()) {
+				if d.Reclaim > 0 {
+					memalert.Compressed(db, rt.Now(), d.Session, d.Label, d.Reclaim)
+					continue
+				}
 				memalert.Throttled(db, rt.Now(), d.Session, d.Label, d.High, d.Brake)
+			}
+			// 该动手却没落点：这一层自己解决不了（开 zram 要 root），只能让人知道。
+			if memthrottle.Stalled(host, th, brakes) {
+				memalert.NoSwapRoom(db, rt.Now(), room.Compressed)
 			}
 		}
 	}
@@ -97,6 +110,7 @@ func Collect(rt runtime.Runtime, meta *sessmeta.Store, exclude map[string]bool) 
 // 上限取最大的那个——多 pane 时各自有各自的天花板，展示按最宽的算。
 type memSample struct {
 	Cur, Peak, Limit, OOMKills int64
+	Swap                       int64 // 已经挤到交换区的量（总量闸靠它认出这一轮压过没有）
 	High                       int64 // 当前软限（总量闸靠它认出谁已经踩着刹车）
 	PIDs                       []int
 	OK                         bool
@@ -115,6 +129,10 @@ func sampleMem(rt runtime.Runtime, sess string) memSample {
 		}
 		if l := memguard.Limit(pid); l > m.Limit {
 			m.Limit = l
+		}
+		// 交换区用量求和：一个会话多个 pane，压出去多少是它们的总和。
+		if sw, ok := memguard.SwapOf(pid); ok {
+			m.Swap += sw
 		}
 		// 软限取**最小**的那个：多 pane 时只要有一个被压过，这个会话就是踩着刹车的。
 		// 取最大会让「踩了一个 pane」看起来像没踩，下一轮又去踩一次，越踩越低。
