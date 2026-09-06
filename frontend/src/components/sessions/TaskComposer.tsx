@@ -14,6 +14,8 @@ import { taskNameFromPrompt } from './NewSessionModal'
 import { VoiceInput } from '../chat/VoiceInput'
 import { CheckIcon, ChevronDown, CircleIcon, PaperclipIcon } from '../../icons'
 import { BranchIcon } from '../git/parts'
+import type { LocalBranch } from '../git/local-branches'
+import { ExistingWorkPicker, pickBranch, pickWt, pickedBranch, pickedWtPath } from './ExistingWorkPicker'
 
 export type TaskComposerHandle = { focus: () => void; insert: (text: string) => void }
 
@@ -32,10 +34,11 @@ export const TaskComposer = forwardRef<TaskComposerHandle, {
   const [wtMode, setWtMode] = useState<'new' | 'existing'>('new')
   const [agent, setAgent] = useState<'claude' | 'codex' | 'none'>('claude')
   const [wtsAll, setWtsAll] = useState<any[]>([])
-  const [wtPath, setWtPath] = useState('')
+  // 「已有」选中值：'wt:<路径>'（进这个工作区）/ 'br:<分支>'（为这条分支开一个工作区）
+  const [existing, setExisting] = useState('')
   const [defBranch, setDefBranch] = useState('')
   const [base, setBase] = useState('')
-  const [branches, setBranches] = useState<string[]>([])
+  const [branches, setBranches] = useState<LocalBranch[]>([])
   const [remoteBranches, setRemoteBranches] = useState<{ remote: string; name: string }[]>([])
   const [autoReview, setAutoReview] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -59,20 +62,36 @@ export const TaskComposer = forwardRef<TaskComposerHandle, {
     const i = setInterval(loadWts, 5000)
     return () => { stop = true; clearInterval(i) }
   }, [dir, isGit])
+  // 分支清单同时喂两处：「基于」（新建档的起点）和「已有」（可收养的分支）。
+  // worktree 清单 5s 一轮，分支跟着一起——刚 push 完删掉工作区的分支得立刻能选到。
   useEffect(() => {
-    if (!dir || !isGit) return
-    api('GET', `/git/branches?dir=${encodeURIComponent(dir)}`).then((r) => {
+    if (!dir || !isGit) { setBranches([]); return }
+    let stop = false
+    const load = () => api('GET', `/git/branches?dir=${encodeURIComponent(dir)}`).then((r) => {
+      if (stop) return
       const def = r?.data?.default || ''
       setDefBranch(def)
       setBranches(r?.data?.branches || [])
       setRemoteBranches(r?.data?.remotes || [])
       setBase((prev) => prev || def) // 「基于」默认跟主干走；用户选过就不再被覆盖
     }).catch(() => {})
+    load()
+    const i = setInterval(load, 5000)
+    return () => { stop = true; clearInterval(i) }
   }, [dir, isGit])
   const wts = useMemo(() => wtsAll.filter((w: any) => !w.isMain && !w.prunable), [wtsAll])
+  const mainPath = useMemo(() => wtsAll.find((w: any) => w.isMain)?.path || '', [wtsAll])
+  // 可收养的分支 = 没被任何工作区检出的（主仓库检出的那条在单子里置灰，不算候选）
+  const freeBranches = useMemo(() => branches.filter((b) => !b.worktree), [branches])
+  const existingCount = wts.length + freeBranches.length
+  // 选中的东西没了（工作区被删、分支被开了工作区）就落到下一个候选，别停在一个不存在的值上
   useEffect(() => {
-    setWtPath((prev) => (prev && wts.some((w: any) => w.path === prev) ? prev : (wts[0]?.path || '')))
-  }, [wts])
+    setExisting((prev) => {
+      if (wts.some((w: any) => w.path === pickedWtPath(prev))) return prev
+      if (freeBranches.some((b) => b.name === pickedBranch(prev))) return prev
+      return wts[0] ? pickWt(wts[0].path) : (freeBranches[0] ? pickBranch(freeBranches[0].name) : '')
+    })
+  }, [wts, freeBranches])
 
   const uploadImages = async (images: File[]) => {
     if (!images.length || uploading) return
@@ -107,6 +126,7 @@ export const TaskComposer = forwardRef<TaskComposerHandle, {
   const goCreate = async () => {
     if (!dir || creating) return
     if (!prompt.trim()) { message.error(t('session.promptOrNameRequired')); return }
+    if (isGit && wtMode === 'existing' && !existing) { message.error(t('project.where.pickFirst')); return }
     // 名字一律从需求派生：这就是任务名（23 设计 §3.3 #6），agent 不再改它
     let finalName = taskNameFromPrompt(prompt)
     if (!finalName) {
@@ -117,10 +137,12 @@ export const TaskComposer = forwardRef<TaskComposerHandle, {
       setCreating(true)
       let actual: string
       const wantWt = isGit && wtMode === 'new'
+      // 选的是分支：同样走建 worktree 那条编排，只是分支已经有了（existing=true，后端检出而不新建）
+      const adopt = isGit && wtMode === 'existing' ? pickedBranch(existing) : ''
       let sessionDir = dir
-      let wtBranch = ''   // 新建 worktree 时后端给的占位分支
-      let wtBase = ''     // 从哪个分支切出来的
-      if (wantWt) {
+      let wtBranch = ''   // worktree 里的分支（新建档是后端给的占位名）
+      let wtBase = ''     // 从哪个分支切出来的 / 拿哪个分支当比对基准
+      if (wantWt || adopt) {
         // 「基于」：本地分支存裸名，远端分支编码成 remote:<remote>:<branch>，提交前拆回 {base, remote}
         let baseReq: { base?: string; remote?: string } = base && base !== defBranch ? { base } : {}
         if (base.startsWith('remote:')) {
@@ -128,13 +150,16 @@ export const TaskComposer = forwardRef<TaskComposerHandle, {
           const sep = rest.indexOf(':')
           baseReq = { base: rest.slice(sep + 1), remote: rest.slice(0, sep) }
         }
-        const res = await api('POST', '/worktree-sessions', { name: finalName, dir, ...baseReq })
+        const res = await api('POST', '/worktree-sessions', adopt
+          ? { name: finalName, dir, branch: adopt, existing: true }
+          : { name: finalName, dir, ...baseReq })
         actual = res.name || res.data?.session || finalName
         sessionDir = res.data?.path || dir
         wtBranch = res.data?.branch || ''
-        wtBase = res.data?.base || base || defBranch
+        wtBase = res.data?.base || (adopt ? defBranch : base || defBranch)
       } else {
-        sessionDir = isGit && wtMode === 'existing' && wtPath ? wtPath : dir
+        const wtPath = isGit && wtMode === 'existing' ? pickedWtPath(existing) : ''
+        sessionDir = wtPath || dir
         const res = await api('POST', '/sessions', { name: finalName, dir: sessionDir })
         actual = res.name || finalName
       }
@@ -147,9 +172,11 @@ export const TaskComposer = forwardRef<TaskComposerHandle, {
         const existingWt = wtsAll.find((w: any) => w.path === sessionDir)
         const naming = (wantWt
           ? t('session.wt.briefNew', { path: sessionDir, base: wtBase || defBranch || 'main', branch: wtBranch || finalName, sess: actual })
-          : isGit
-            ? t('session.wt.briefRepo', { path: sessionDir, branch: existingWt?.branch || defBranch || 'main', sess: actual })
-            : t('session.wt.briefPlain', { path: sessionDir, sess: actual })
+          : adopt
+            ? t('session.wt.briefAdopt', { path: sessionDir, branch: wtBranch || adopt, base: wtBase || defBranch || 'main', sess: actual })
+            : isGit
+              ? t('session.wt.briefRepo', { path: sessionDir, branch: existingWt?.branch || defBranch || 'main', sess: actual })
+              : t('session.wt.briefPlain', { path: sessionDir, sess: actual })
         ) + (autoReview ? t('session.wt.briefReview') : '') + '\n\n'
         await api('POST', '/tasks/_/send', { sess: actual, msg: prompt.trim() ? `${cmd} ${shq(naming + prompt.trim())}` : cmd })
         if (autoReview) {
@@ -178,25 +205,16 @@ export const TaskComposer = forwardRef<TaskComposerHandle, {
           <span className="tt-cgrp">
             <button type="button" className={`tt-pill${wtMode === 'new' ? ' on' : ''}`} aria-pressed={wtMode === 'new'} onClick={() => setWtMode('new')}><BranchIcon size={11} />{t('project.where.new')}</button>
             <button type="button" className={`tt-pill${wtMode === 'existing' ? ' on' : ''}`} aria-pressed={wtMode === 'existing'}
-              disabled={!wts.length} onClick={() => setWtMode('existing')}>{t('project.where.existing', { count: wts.length })}</button>
+              disabled={!existingCount} onClick={() => setWtMode('existing')}>{t('project.where.existing', { count: existingCount })}</button>
             {wtMode === 'existing' && (
-              <Dropdown trigger={['click']} menu={{
-                selectedKeys: [wtPath],
-                items: wts.map((w: any) => ({ key: w.path, label: w.branch || w.path.split('/').pop(), onClick: () => setWtPath(w.path) })),
-              }}>
-                <button type="button" className="tt-pill sel" title={t('session.wt.pickExisting')}>
-                  <BranchIcon size={11} />
-                  <b>{wts.find((w: any) => w.path === wtPath)?.branch || wtPath.split('/').pop() || '—'}</b>
-                  <ChevronDown size={10} />
-                </button>
-              </Dropdown>
+              <ExistingWorkPicker wts={wts} branches={branches} mainPath={mainPath} value={existing} onChange={setExisting} />
             )}
             {wtMode === 'new' && (
               <Dropdown trigger={['click']} menu={{
                 selectedKeys: [base || defBranch],
                 items: [
                   ...(branches.length ? [{ key: 'g-local', type: 'group' as const, label: t('session.wt.localBranches'),
-                    children: branches.map((b) => ({ key: b, label: b, onClick: () => setBase(b) })) }] : []),
+                    children: branches.map((b) => ({ key: b.name, label: b.name, onClick: () => setBase(b.name) })) }] : []),
                   ...(remoteBranches.length ? [{ key: 'g-remote', type: 'group' as const, label: t('session.wt.remoteBranches'),
                     children: remoteBranches.map((r) => ({ key: `remote:${r.remote}:${r.name}`, label: `${r.remote}/${r.name}`, onClick: () => setBase(`remote:${r.remote}:${r.name}`) })) }] : []),
                 ],

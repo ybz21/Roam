@@ -10,6 +10,7 @@ import { recentDirs } from '../sessions/DirPicker'
 import DiffView from '../files/DiffView'
 import { CloseIcon, PlusIcon } from '../../icons'
 import { BranchIcon } from '../git/parts'
+import { branchNames } from '../git/local-branches'
 
 export type RaceContestant = {
   // session 会话名(= 会话 id)：打开终端的 handle；label 展示名 `<竞赛>-<字母>`
@@ -62,7 +63,7 @@ export function RaceCreateModal({ open, onClose, onDone }: {
     let cancelled = false
     api('GET', `/git/branches?dir=${enc(dir.trim())}`).then((r) => {
       if (cancelled) return
-      const bs: string[] = r?.data?.branches || []
+      const bs = branchNames(r?.data?.branches)
       const def: string = r?.data?.default || ''
       setBranches(bs); setDefBranch(def)
       setBase((prev) => (prev && bs.includes(prev) ? prev : def))

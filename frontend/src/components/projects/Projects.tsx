@@ -655,7 +655,9 @@ function FinishModal({ w, base, onClose, onDone, onRevive }: {
   useEffect(() => {
     if (!w) return
     // 已合入（10 §5）：丢弃升为推荐首选——零损失，只是删掉本地载体
-    setMode(w.mergedInto ? 'discard' : 'merge'); setStrategy('squash'); setDelBranch(true); setDiff(null)
+    // 收养来的分支（开工时选的「已有分支」）不是随工作区建的：默认不勾「删分支」，
+    // 那是用户自己的东西，删了它连 reflog 之外都不剩什么
+    setMode(w.mergedInto ? 'discard' : 'merge'); setStrategy('squash'); setDelBranch(!w.adopted); setDiff(null)
     api('GET', `/git/worktree/diff?path=${encodeURIComponent(w.path)}`)
       .then((r) => setDiff(r?.data || null)).catch(() => {})
   }, [w])
@@ -742,6 +744,7 @@ function FinishModal({ w, base, onClose, onDone, onRevive }: {
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--fs-sm)', color: 'var(--text-dim)' }}>
             <input type="checkbox" checked={delBranch} onChange={(e) => setDelBranch(e.target.checked)} style={{ accentColor: 'var(--accent-solid)' }} />
             {t('project.finish.delBranch', { branch: w.branch })}
+            {w.adopted && <span style={{ color: 'var(--text-dimmer)', fontSize: 'var(--fs-micro)' }}>{t('worktree.adoptedKeepBranch')}</span>}
           </label>
         )}
       </Space>
@@ -1157,7 +1160,7 @@ function ProjectHome({ proj, allProjects, loaded, openTerm, closeTerm, refresh, 
       okText: t('project.cleanup'),
       onOk: async () => {
         try {
-          await api('POST', '/git/worktree/remove', { path: w.path, deleteBranch: true, forceDeleteBranch: true })
+          await api('POST', '/git/worktree/remove', { path: w.path, deleteBranch: !w.adopted, forceDeleteBranch: !w.adopted })
           message.success(t('project.cleaned'))
           refresh()
         } catch (e: any) { message.error(e.message) }

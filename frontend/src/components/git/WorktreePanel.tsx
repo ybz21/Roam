@@ -14,6 +14,7 @@ import AdaptivePanel from '../shell/AdaptivePanel'
 import { useBackDismiss } from '../shell/useBackDismiss'
 import { ArrowDown, ArrowUp, CloseIcon, PlusIcon } from '../../icons'
 import { BranchIcon } from './parts'
+import { branchNames } from './local-branches'
 import { WindowsIcon } from '../../icons'
 
 // 会话视图的 Git 面板挂在右侧浮动面板(--z-panel)里，本抽屉从那里打开时必须压过它，
@@ -27,7 +28,7 @@ type WtSession = { session: string; primary: boolean }
 type Worktree = {
   path: string; branch: string; head: string; isMain: boolean
   base: string; startOid: string; createdBy: string; createdAt: number
-  external: boolean; dirty: number; untracked: number
+  external: boolean; adopted?: boolean; dirty: number; untracked: number
   committedAhead: number; behind: number; lastCommitAt: number
   locked: boolean; prunable: boolean; sessions: WtSession[]
 }
@@ -122,10 +123,11 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir, emb
     try { await fn() } finally { setBusy((m) => ({ ...m, [path]: false })) }
   }
 
-  // 删除执行：默认 -d 删分支；409 分流兜底（占用/分支未合并——脏保护通常已被预检确认拦掉）
+  // 删除执行：默认 -d 删分支；409 分流兜底（占用/分支未合并——脏保护通常已被预检确认拦掉）。
+  // 收养来的分支（开工时选的「已有分支」）例外：工作区是我们建的，分支不是，默认留着。
   const doRemove = (wt: Worktree, extra: Record<string, any> = {}) => withBusy(wt.path, async () => {
     try {
-      await api('POST', '/git/worktree/remove', { path: wt.path, deleteBranch: true, ...extra })
+      await api('POST', '/git/worktree/remove', { path: wt.path, deleteBranch: !wt.adopted, ...extra })
       message.success(t('worktree.deleted'))
       load(dir, true)
     } catch (e: any) {
@@ -164,7 +166,7 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir, emb
     const dirtyAll = (wt.dirty || 0) + (wt.untracked || 0)
     const ahead = wt.committedAhead || 0
     if (dirtyAll === 0 && ahead === 0) { doRemove(wt); return }
-    const delBranch = { current: true }
+    const delBranch = { current: !wt.adopted }
     modal.confirm({
       title: t('worktree.deleteLossTitle', { branch: wt.branch || wt.path.split('/').pop() || '' }),
       okText: t('worktree.stillDelete'), okButtonProps: { danger: true },
@@ -179,9 +181,10 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir, emb
           </div>
           {!!wt.branch && (
             <label style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer' }}>
-              <input type="checkbox" defaultChecked style={{ accentColor: 'var(--accent-solid)' }}
+              <input type="checkbox" defaultChecked={!wt.adopted} style={{ accentColor: 'var(--accent-solid)' }}
                 onChange={(e) => { delBranch.current = e.target.checked }} />
-              <span>{t('worktree.deleteBranchToo')} <span style={{ fontFamily: 'ui-monospace, monospace', color: '#39c5cf' }}>{wt.branch}</span></span>
+              <span>{t('worktree.deleteBranchToo')} <span style={{ fontFamily: 'ui-monospace, monospace', color: '#39c5cf' }}>{wt.branch}</span>
+                {wt.adopted && <span style={{ color: 'var(--text-dimmer)', fontSize: 'var(--fs-micro)' }}> {t('worktree.adoptedKeepBranch')}</span>}</span>
             </label>
           )}
         </div>
@@ -204,7 +207,7 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir, emb
         title: t('worktree.deleteAfterMergeTitle', { branch: wt.branch }),
         content: t('worktree.deleteAfterMergeDesc'),
         okText: t('worktree.delete'),
-        onOk: () => { doRemove(wt, { ...(strategy === 'squash' ? { forceDeleteBranch: true } : {}) }) },
+        onOk: () => { doRemove(wt, { ...(strategy === 'squash' && !wt.adopted ? { forceDeleteBranch: true } : {}) }) },
       })
     } catch (e: any) {
       const ae = e.apiError || {}
@@ -244,7 +247,7 @@ export default function WorktreePanel({ open, onClose, openTerm, initialDir, emb
   useEffect(() => {
     if (!createOpen || !dir.trim()) return
     api('GET', `/git/branches?dir=${encodeURIComponent(dir.trim())}`).then((r) => {
-      setBranches(r?.data?.branches || [])
+      setBranches(branchNames(r?.data?.branches))
       setNewBase((prev) => prev || r?.data?.default || '')
     }).catch(() => {})
   }, [createOpen, dir])

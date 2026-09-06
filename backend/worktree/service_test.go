@@ -621,3 +621,87 @@ func TestCreateWithoutDirnameKeepsBranchSlug(t *testing.T) {
 		t.Fatalf("path = %s, want .worktrees/feat-x", resp.Path)
 	}
 }
+
+// 「已有」不只有 worktree：为一条**既有本地分支**开工作区 = 检出它，不新建分支。
+// 起点记与 base 的分叉点（记成分支尖端的话，分支上已有的提交会被算成「没干过活」），
+// 并打 adopted 标记——收尾时不该把用户自己的分支顺手删了。
+func TestCreateAdoptsExistingBranch(t *testing.T) {
+	ctx := context.Background()
+	s := New("", nil)
+	repo := mkRepo(t)
+	g := func(dir string, args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		cmd.Env = append(scrubGitEnv(),
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	g(repo, "checkout", "-q", "-b", "feat/old")
+	commitFile(t, repo, "old.txt", "x\n", "old work")
+	tip := g(repo, "rev-parse", "HEAD")
+	g(repo, "checkout", "-q", "main")
+	fork := g(repo, "merge-base", "main", "feat/old")
+
+	resp, err := s.Create(ctx, CreateReq{Dir: repo, Branch: "feat/old", Base: "main", Existing: true, Dirname: "sess-1"})
+	if err != nil {
+		t.Fatalf("adopt: %v", err)
+	}
+	if resp.Branch != "feat/old" {
+		t.Fatalf("branch = %q, want feat/old (no new branch)", resp.Branch)
+	}
+	if resp.StartOid != fork {
+		t.Fatalf("startOid = %s, want fork point %s", resp.StartOid, fork)
+	}
+	if got := g(resp.Path, "rev-parse", "HEAD"); got != tip {
+		t.Fatalf("worktree HEAD = %s, want branch tip %s", got, tip)
+	}
+
+	s.cache = map[string]listCache{}
+	list, err := s.List(ctx, repo)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	var wt *Worktree
+	for i := range list {
+		if list[i].Branch == "feat/old" {
+			wt = &list[i]
+		}
+	}
+	if wt == nil || !wt.Adopted || wt.External || wt.Base != "main" {
+		t.Fatalf("adopted worktree identity wrong: %+v", wt)
+	}
+
+	// 已被检出的分支收养不了：main 在主仓库、feat/old 在刚建的 worktree
+	for _, b := range []string{"feat/old", "main"} {
+		_, err := s.Create(ctx, CreateReq{Dir: repo, Branch: b, Base: "main", Existing: true, Dirname: "sess-2"})
+		we, ok := err.(*Err)
+		if !ok || we.Code != "BRANCH_CHECKED_OUT" {
+			t.Fatalf("adopt %s again: want BRANCH_CHECKED_OUT, got %v", b, err)
+		}
+	}
+	// 不存在的分支不许凭空建出来（那是「新建」档的事）
+	_, err = s.Create(ctx, CreateReq{Dir: repo, Branch: "nope", Base: "main", Existing: true, Dirname: "sess-3"})
+	if we, ok := err.(*Err); !ok || we.Code != "BAD_BRANCH" {
+		t.Fatalf("adopt missing branch: want BAD_BRANCH, got %v", err)
+	}
+
+	// Branches 要把「谁占着这条分支」一并给出来：选择器据此不把占用中的分支当候选
+	bs, _, _, err := s.Branches(ctx, repo)
+	if err != nil {
+		t.Fatalf("branches: %v", err)
+	}
+	seen := map[string]LocalBranch{}
+	for _, b := range bs {
+		seen[b.Name] = b
+	}
+	if got := seen["feat/old"]; canonical(got.Worktree) != canonical(resp.Path) {
+		t.Fatalf("feat/old worktree = %q, want %q", got.Worktree, resp.Path)
+	}
+	if got := seen["main"]; canonical(got.Worktree) != canonical(repo) || got.LastCommitAt == 0 {
+		t.Fatalf("main branch meta wrong: %+v", got)
+	}
+}
