@@ -298,9 +298,11 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
 
   // 状态条上每一格自己那件事。三件都落在这一层：这里既有会话名（能注入按键、能发消息），
   // 又有滚动容器（能定位到某条消息），再往上传反而绕。
+  // 发一条斜杠命令给 agent（/model /compact /review /goal /approvals）：
+  // TUI 自己弹选择框，PromptPanel 在页面里接住。状态条和「+」面板共用这一份。
+  const sendCommand = (cmd: string) => { api('POST', '/tasks/_/send', { sess: name, msg: cmd }).catch(() => {}) }
+
   const statusActions: StatusActions = useMemo(() => ({
-    // 轮换权限模式＝在 TUI 里按 Shift+Tab，跟人手动按是同一个动作。
-    // 乐观更新没意义：下一轮转录会带回真实的 permission-mode 行，等它对账即可。
     onOpenGit,
     onJumpError: lastErrorId ? () => {
       const el = boxRef.current?.querySelector<HTMLElement>(`[data-msg-id="${CSS.escape(lastErrorId)}"]`)
@@ -310,8 +312,8 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
       el.classList.add('cc-flash')
       setTimeout(() => el.classList.remove('cc-flash'), 1200)
     } : undefined,
-    onCompact: () => { api('POST', '/tasks/_/send', { sess: name, msg: '/compact' }).catch(() => {}) },
-    onPickModel: () => { api('POST', '/tasks/_/send', { sess: name, msg: '/model' }).catch(() => {}) },
+    onCompact: () => sendCommand('/compact'),
+    onPickModel: () => sendCommand('/model'),
   }), [name, onOpenGit, lastErrorId])
 
   // 「+」面板要用的两件事：Shift+Tab 换权限模式，以及上传（走隐藏的 file input）。
@@ -418,8 +420,7 @@ export function ChatShell({ name, accent, placeholder, messages, results, render
                     输入行上只留最高频的两件事：说话和发送 */}
                 <ComposerPlus name={name} agent={agent} status={status} uploading={uploading} onMouseDown={noBlur}
                   onFiles={() => fileRef.current?.click()} onCycleMode={cycleMode}
-                  onPickModel={statusActions.onPickModel!} onCompact={statusActions.onCompact!}
-                  onOpenGit={onOpenGit} />
+                  onCommand={sendCommand} onOpenGit={onOpenGit} />
                 {agent && (
                   <span className={`tt-pill on${agent === 'codex' ? ' ok' : ''}`} aria-label={agent === 'claude' ? 'Claude' : 'Codex'}>
                     <AgentLogo kind={agent} size={12} />{agent === 'claude' ? 'Claude' : 'Codex'}

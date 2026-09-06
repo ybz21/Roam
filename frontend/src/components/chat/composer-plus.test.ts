@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { modeFromPane, plusGroups } from './composer-plus'
+import { goalFromPane, modeChoices, modeFromPane, paneMode, plusGroups } from './composer-plus'
 import { toAgentStatus, toMode } from './status'
 
 // 面板文案不进这一层：测试的 t 只翻译认得的模式名，其余原样退回——
@@ -12,11 +12,19 @@ describe('plusGroups', () => {
     expect(g.map((x) => x.id)).toEqual(['bring'])
   })
 
-  it('Claude 与 Codex 拿到同一组：两端都认 /model、/compact 与 Shift+Tab', () => {
+  it('两端都认 /model、/compact、/review 与 Shift+Tab；目标是 Codex 独有的', () => {
     const ids = (agent: 'claude' | 'codex') =>
       plusGroups({ agent, t }).flatMap((x) => x.rows.map((r) => r.id))
-    expect(ids('claude')).toEqual(['files', 'mode', 'model', 'compact'])
-    expect(ids('codex')).toEqual(ids('claude'))
+    expect(ids('claude')).toEqual(['files', 'mode', 'model', 'compact', 'review'])
+    expect(ids('codex')).toEqual(['files', 'mode', 'goal', 'model', 'compact', 'review'])
+  })
+
+  it('目标卡住 / 额度用尽才上警戒色——「它停了而你不知道」才值得一支黄', () => {
+    const goalRow = (goal: any) => plusGroups({ agent: 'codex', goal, t })[1].rows[1]
+    expect(goalRow('stalled')).toMatchObject({ id: 'goal', value: 'chat.plus.goal.stalled', tone: 'var(--warn)' })
+    expect(goalRow('budget').tone).toBe('var(--warn)')
+    expect(goalRow('achieved').tone).toBeUndefined()
+    expect(goalRow(undefined).value).toBeUndefined()
   })
 
   it('模式那行带当前档与色点——菜单最该回答的是「现在是哪一档」', () => {
@@ -71,6 +79,8 @@ describe('modeFromPane', () => {
     expect(modeFromPane(CLAUDE_FOOTER.replace('auto mode on', 'plan mode on'))).toBe('plan')
     expect(modeFromPane(CLAUDE_FOOTER.replace('auto mode on', 'bypass permissions'))).toBe('bypassPermissions')
     expect(modeFromPane(CODEX_FOOTER)).toBe('plan')
+    // 「每步都问」那一档 Claude 不写 shift+tab 提示，只剩片前面那个 ⏸ 当锚
+    expect(modeFromPane('  ⏸ manual mode on · PR #250 · ← for agents')).toBe('manual')
   })
 
   it('只认带 shift+tab 提示的那一行——正文里说到 "plan mode" 不算', () => {
@@ -79,8 +89,13 @@ describe('modeFromPane', () => {
     expect(modeFromPane('› Ask Codex to do anything\n  gpt-5.6-sol medium · ~/codes/ttmux')).toBeUndefined()
   })
 
-  it('只看末尾几行：上面翻到的旧页脚不作数', () => {
-    expect(modeFromPane(CLAUDE_FOOTER + '\n' + Array(9).fill('...').join('\n'))).toBeUndefined()
+  it('末尾一串空行不能把页脚藏掉——Codex 的界面画在上半屏，抓下来后面全是空的', () => {
+    expect(modeFromPane(CODEX_FOOTER + '\n'.repeat(14))).toBe('plan')
+  })
+
+  it('翻上去还留着旧页脚时，以最后一次为准', () => {
+    const stale = CLAUDE_FOOTER.replace('auto mode on', 'plan mode on')
+    expect(modeFromPane(stale + '\n' + CLAUDE_FOOTER)).toBe('auto')
   })
 })
 
@@ -88,5 +103,34 @@ describe('plusGroups：画面读到的档盖过转录', () => {
   it('刚按完 Shift+Tab，转录还停在旧档，面板要显示新的那个', () => {
     const g = plusGroups({ agent: 'claude', status: toAgentStatus({ mode: 'auto' }), mode: toMode('plan'), t })
     expect(g[1].rows[0]).toMatchObject({ value: '计划模式', dot: 'var(--accent)' })
+  })
+})
+
+describe('paneMode / modeChoices', () => {
+  it('Codex 的默认档不画那枚片：读到画面、没有片，就是默认档', () => {
+    expect(paneMode('› Ask Codex to do anything\n  gpt-5.6-sol medium', 'codex')).toBe('default')
+    // Claude 每一档都画：读不出就是真读不出，交回转录那份，不猜
+    expect(paneMode('› \n  some other footer', 'claude')).toBeUndefined()
+    // 压根没读到画面（capture 失败/空）时两端都不许瞎报
+    expect(paneMode('   ', 'codex')).toBeUndefined()
+  })
+
+  it('可选的档按端给；当前这档一定在列（老版本报 default，新版本报 auto）', () => {
+    // 按「能自己动多少」从少到多排，不照抄 CLI 的轮换顺序
+    expect(modeChoices('claude')).toEqual(['plan', 'manual', 'auto', 'acceptEdits'])
+    expect(modeChoices('codex')).toEqual(['plan', 'default'])
+    // 启动时开的 bypassPermissions 不在常规列表里，但真在那一档时得看得见
+    expect(modeChoices('claude', 'bypassPermissions')[0]).toBe('bypassPermissions')
+    expect(modeChoices('codex', 'plan')).toEqual(['plan', 'default'])
+  })
+})
+
+describe('goalFromPane', () => {
+  it('长跑目标停下来了，页脚会说——那句话就是行尾那截状态', () => {
+    expect(goalFromPane('Goal paused (/goal resume)')).toBe('paused')
+    expect(goalFromPane('Goal stalled (/goal resume)')).toBe('stalled')
+    expect(goalFromPane('Goal hit usage limits (/goal resume)')).toBe('budget')
+    expect(goalFromPane('  Goal achieved  ')).toBe('achieved')
+    expect(goalFromPane('› Ask Codex to do anything')).toBeUndefined()
   })
 })
