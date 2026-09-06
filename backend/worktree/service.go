@@ -191,16 +191,19 @@ type SessRef struct {
 }
 
 type Worktree struct {
-	Path           string    `json:"path"`
-	Branch         string    `json:"branch"` // 短名；detached 为空
-	Head           string    `json:"head"`
-	IsMain         bool      `json:"isMain"`
-	Base           string    `json:"base"` // roam.baseref 短名；"" = unknown
-	StartOid       string    `json:"startOid,omitempty"`
-	CreatedBy      string    `json:"createdBy,omitempty"`
-	CreatedAt      string    `json:"createdAt,omitempty"`
-	External       bool      `json:"external"` // 非 roam 创建（无 roam.* 字段）
-	Dirty          int       `json:"dirty"`    // 未提交改动（含暂存）
+	Path      string `json:"path"`
+	Branch    string `json:"branch"` // 短名；detached 为空
+	Head      string `json:"head"`
+	IsMain    bool   `json:"isMain"`
+	Base      string `json:"base"` // roam.baseref 短名；"" = unknown
+	StartOid  string `json:"startOid,omitempty"`
+	CreatedBy string `json:"createdBy,omitempty"`
+	CreatedAt string `json:"createdAt,omitempty"`
+	External  bool   `json:"external"` // 非 roam 创建（无 roam.* 字段）
+	// Adopted = 这个 worktree 是给一条**既有分支**开的（roam.adopted），分支不是我们建的。
+	// 收尾时「顺手删分支」对它就是删用户自己的东西：调用方据此把删分支默认关掉。
+	Adopted        bool      `json:"adopted,omitempty"`
+	Dirty          int       `json:"dirty"` // 未提交改动（含暂存）
 	Untracked      int       `json:"untracked"`
 	CommittedAhead int       `json:"committedAhead"` // 未合并到 base 的提交（≠ 未推送）
 	Behind         int       `json:"behind"`
@@ -231,6 +234,9 @@ type CreateReq struct {
 	// 于是每个中文任务都叫 task/task-2/task-3，且 task 被收尾释放后原地复用同一路径，
 	// 新旧任务的会话归属、标注、开着的终端全指向同一个目录。会话 id 唯一且不回收。
 	Dirname string `json:"dirname"`
+	// Existing = Branch 指的是一条**已存在的本地分支**：检出它，不新建分支。
+	// 「已有」于是不只有 worktree：手上那条还没工作区的分支，也能直接开一个进去接着干。
+	Existing bool `json:"existing"`
 }
 
 type CreateResp struct {
@@ -283,7 +289,8 @@ func (s *Service) Create(ctx context.Context, req CreateReq) (CreateResp, error)
 	base := strings.TrimSpace(req.Base)
 	// 缺省基准（未显式指定 base/remote）：默认跟随远端主干最新处开分叉，
 	// 避免本地 base 落后于 origin 时新 worktree 从旧提交起步。
-	autoBase := base == "" && req.Remote == ""
+	// 收养既有分支（req.Existing）不看这些：起点就是那条分支自己，base 只作比对目标。
+	autoBase := base == "" && req.Remote == "" && !req.Existing
 	if base == "" {
 		base = s.defaultBase(ctx, repo)
 		if base == "" {
@@ -292,7 +299,9 @@ func (s *Service) Create(ctx context.Context, req CreateReq) (CreateResp, error)
 	}
 	// 远端 ref：显式 remote+ref，fetch 后锁定 OID（不做字符串猜测）
 	startRef := base
-	if req.Remote != "" {
+	if req.Existing {
+		// 起点在锁内按分支算（见下），这里不解析 startRef
+	} else if req.Remote != "" {
 		if out, e := git(ctx, repo.Root, "fetch", "--", req.Remote, base); e != nil {
 			return CreateResp{}, errf("FETCH_FAILED", "%s", out)
 		}
@@ -310,9 +319,13 @@ func (s *Service) Create(ctx context.Context, req CreateReq) (CreateResp, error)
 			startRef = "origin/" + base
 		}
 	}
-	startOid, e := git(ctx, repo.Root, "rev-parse", "--verify", "--end-of-options", startRef+"^{commit}")
-	if e != nil {
-		return CreateResp{}, errf("BAD_BASE", "cannot resolve %s: %s", startRef, startOid)
+	var startOid string
+	if !req.Existing {
+		oid, e := git(ctx, repo.Root, "rev-parse", "--verify", "--end-of-options", startRef+"^{commit}")
+		if e != nil {
+			return CreateResp{}, errf("BAD_BASE", "cannot resolve %s: %s", startRef, oid)
+		}
+		startOid = oid
 	}
 
 	unlock, err := s.lock(repo)
@@ -323,22 +336,51 @@ func (s *Service) Create(ctx context.Context, req CreateReq) (CreateResp, error)
 	defer s.invalidate(repo)
 
 	branch := strings.TrimSpace(req.Branch)
-	legacy := branch == ""
-	if legacy {
-		now := time.Now()
-		branch = "_" + now.Format("20060102150405") + fmt.Sprintf("%03d", now.Nanosecond()/1e6)
-	} else {
-		if out, e := git(ctx, repo.Root, "check-ref-format", "--branch", branch); e != nil {
-			return CreateResp{}, errf("BAD_BRANCH", "invalid branch name %q: %s", branch, out)
-		}
-	}
-	// 锁内分配最终 branch/path（冲突加序号后缀）
 	finalBranch := branch
-	for i := 2; branchExists(ctx, repo, finalBranch) && i < 100; i++ {
-		finalBranch = fmt.Sprintf("%s-%d", branch, i)
-	}
-	if branchExists(ctx, repo, finalBranch) {
-		return CreateResp{}, errf("BRANCH_TAKEN", "cannot allocate branch name from %q", branch)
+	if req.Existing {
+		// 收养：分支必须已存在、且没被别处检出（git 本就不许一条分支同时检出两次，
+		// 先自己查一遍是为了给出「谁占着」而不是一句 git 报错）。校验放锁内，
+		// 免得两个请求同时收养同一条分支。
+		if branch == "" {
+			return CreateResp{}, errf("BAD_BRANCH", "existing branch name required")
+		}
+		if !branchExists(ctx, repo, branch) {
+			return CreateResp{}, errf("BAD_BRANCH", "no such local branch: %s", branch)
+		}
+		if p := branchWorktree(ctx, repo, branch); p != "" {
+			return CreateResp{}, &Err{Code: "BRANCH_CHECKED_OUT", Message: "branch is already checked out at " + p,
+				Extra: map[string]any{"branch": branch, "path": p}}
+		}
+		// 起点记「与 base 的分叉点」而不是分支尖端：面板的 ahead / ownWork 都以
+		// StartOid 为基准，记成尖端的话分支上已有的提交会被算成「没干过活」。
+		if out, e := git(ctx, repo.Root, "merge-base", base, branch); e == nil {
+			startOid = strings.TrimSpace(out)
+		}
+		if startOid == "" {
+			out, e := git(ctx, repo.Root, "rev-parse", "--verify", "--end-of-options", branch+"^{commit}")
+			if e != nil {
+				return CreateResp{}, errf("BAD_BRANCH", "cannot resolve %s: %s", branch, out)
+			}
+			startOid = out
+		}
+	} else {
+		legacy := branch == ""
+		if legacy {
+			now := time.Now()
+			branch = "_" + now.Format("20060102150405") + fmt.Sprintf("%03d", now.Nanosecond()/1e6)
+		} else {
+			if out, e := git(ctx, repo.Root, "check-ref-format", "--branch", branch); e != nil {
+				return CreateResp{}, errf("BAD_BRANCH", "invalid branch name %q: %s", branch, out)
+			}
+		}
+		// 锁内分配最终 branch/path（冲突加序号后缀）
+		finalBranch = branch
+		for i := 2; branchExists(ctx, repo, finalBranch) && i < 100; i++ {
+			finalBranch = fmt.Sprintf("%s-%d", branch, i)
+		}
+		if branchExists(ctx, repo, finalBranch) {
+			return CreateResp{}, errf("BRANCH_TAKEN", "cannot allocate branch name from %q", branch)
+		}
 	}
 	wtDir := filepath.Join(repo.Root, ".worktrees")
 	if err := os.MkdirAll(wtDir, 0o755); err != nil {
@@ -353,21 +395,32 @@ func (s *Service) Create(ctx context.Context, req CreateReq) (CreateResp, error)
 		path = filepath.Join(wtDir, fmt.Sprintf("%s-%d", slug, i))
 	}
 
-	if out, e := git(ctx, repo.Root, "worktree", "add", "--no-track", "-b", finalBranch, "--", path, startOid); e != nil {
+	add := []string{"worktree", "add", "--no-track", "-b", finalBranch, "--", path, startOid}
+	if req.Existing {
+		add = []string{"worktree", "add", "--", path, finalBranch} // 检出既有分支，不新建
+	}
+	if out, e := git(ctx, repo.Root, add...); e != nil {
 		return CreateResp{}, errf("WORKTREE_ADD_FAILED", "%s", out)
 	}
 	// 身份写进 git：worktree-local config（先在 common 配置启用扩展）
 	_, _ = git(ctx, repo.Root, "config", "extensions.worktreeConfig", "true")
-	for k, v := range map[string]string{
+	ident := map[string]string{
 		"roam.baseref":   base,
 		"roam.startoid":  startOid,
 		"roam.createdby": "roam",
 		"roam.createdat": time.Now().Format(time.RFC3339),
-	} {
+	}
+	if req.Existing {
+		ident["roam.adopted"] = "1" // 分支不是我们建的：收尾时别顺手删掉它
+	}
+	for k, v := range ident {
 		if out, e := git(ctx, path, "config", "--worktree", k, v); e != nil {
-			// 写身份失败视为创建失败：反向补偿，绝不留下无身份的"roam worktree"
+			// 写身份失败视为创建失败：反向补偿，绝不留下无身份的"roam worktree"。
+			// 收养来的分支是用户自己的，补偿只拆 worktree，不许删分支。
 			_, _ = git(ctx, repo.Root, "worktree", "remove", "--force", "--", path)
-			_, _ = git(ctx, repo.Root, "branch", "-D", "--", finalBranch)
+			if !req.Existing {
+				_, _ = git(ctx, repo.Root, "branch", "-D", "--", finalBranch)
+			}
 			return CreateResp{}, errf("CONFIG_FAILED", "git config --worktree %s: %s", k, out)
 		}
 	}
@@ -378,6 +431,15 @@ func (s *Service) Create(ctx context.Context, req CreateReq) (CreateResp, error)
 func branchExists(ctx context.Context, repo Repo, name string) bool {
 	_, err := git(ctx, repo.Root, "show-ref", "--verify", "--quiet", "refs/heads/"+name)
 	return err == nil
+}
+
+// branchWorktree 返回检出着该分支的 worktree 路径（含主仓库），没被检出则为空。
+func branchWorktree(ctx context.Context, repo Repo, name string) string {
+	out, err := git(ctx, repo.Root, "for-each-ref", "--format=%(worktreepath)", "refs/heads/"+name)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(out)
 }
 
 func pathExists(p string) bool { _, err := os.Stat(p); return err == nil }
@@ -509,6 +571,9 @@ func (s *Service) List(ctx context.Context, dir string) ([]Worktree, error) {
 		}
 		if v, e := git(ctx, w.Path, "config", "--worktree", "--get", "roam.createdat"); e == nil {
 			w.CreatedAt = strings.TrimSpace(v)
+		}
+		if v, e := git(ctx, w.Path, "config", "--worktree", "--get", "roam.adopted"); e == nil {
+			w.Adopted = strings.TrimSpace(v) == "1"
 		}
 		w.External = w.CreatedBy != "roam"
 		// 状态
@@ -1319,22 +1384,41 @@ type RemoteBranch struct {
 	Name   string `json:"name"`
 }
 
+// LocalBranch 是本地分支及其挑选时要看的两件事：最近一次提交多久以前、
+// 有没有被某个 worktree（含主仓库）占着——占着的分支收养不了，git 不许同时检出两次。
+type LocalBranch struct {
+	Name         string `json:"name"`
+	LastCommitAt int64  `json:"at,omitempty"`
+	Worktree     string `json:"worktree,omitempty"`
+}
+
 // Branches 返回本地分支列表、默认 base 与已知远端分支（W1 start-from 选择器用）。
 // 远端分支来自本地已有的 remote-tracking ref（不主动 fetch——Create 选定后会 fetch 锁 OID）。
-func (s *Service) Branches(ctx context.Context, dir string) ([]string, string, []RemoteBranch, error) {
+func (s *Service) Branches(ctx context.Context, dir string) ([]LocalBranch, string, []RemoteBranch, error) {
 	repo, err := s.ResolveRepo(ctx, dir)
 	if err != nil {
 		return nil, "", nil, err
 	}
-	out, e := git(ctx, repo.Root, "for-each-ref", "refs/heads", "--format=%(refname:short)", "--sort=-committerdate")
+	out, e := git(ctx, repo.Root, "for-each-ref", "refs/heads",
+		"--format=%(refname:short)%00%(committerdate:unix)%00%(worktreepath)", "--sort=-committerdate")
 	if e != nil {
 		return nil, "", nil, errf("GIT_ERROR", "%s", out)
 	}
-	var branches []string
+	var branches []LocalBranch
 	for _, l := range strings.Split(out, "\n") {
-		if strings.TrimSpace(l) != "" {
-			branches = append(branches, strings.TrimSpace(l))
+		f := strings.Split(strings.TrimSpace(l), "\x00")
+		if len(f) == 0 || f[0] == "" {
+			continue
 		}
+		b := LocalBranch{Name: f[0]}
+		if len(f) > 1 {
+			at, _ := strconv.ParseInt(f[1], 10, 64)
+			b.LastCommitAt = at
+		}
+		if len(f) > 2 && f[2] != "" {
+			b.Worktree = canonical(f[2]) // 和 List 的 Path 同口径（软链接解开），前端才对得上
+		}
+		branches = append(branches, b)
 	}
 	return branches, s.defaultBase(ctx, repo), s.remoteBranches(ctx, repo), nil
 }

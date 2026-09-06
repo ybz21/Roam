@@ -212,6 +212,7 @@ func (a *API) WorktreePrune(c *gin.Context) {
 }
 
 // GitBranches GET /git/branches?dir= —— W1 start-from 选择器数据源。
+// branches 是对象数组 {name, at, worktree}：挑分支时要看它多久没动、有没有被工作区占着。
 func (a *API) GitBranches(c *gin.Context) {
 	ctx, cancel := wtCtx(c)
 	defer cancel()
@@ -305,19 +306,25 @@ func (a *API) cdInto(session, path string) error {
 	return err
 }
 
-// WorktreeSessionCreate POST /worktree-sessions {name, dir, branch?, base?, remote?}
+// WorktreeSessionCreate POST /worktree-sessions {name, dir, branch?, base?, remote?, existing?}
 // 编排（先会话后 worktree）：ttmux 建会话（cwd=所选目录）→ Worktree Service 建 worktree
-// （分支缺省自动占位）→ 会话内注入 cd；worktree 失败反向补偿 kill 会话。
+// （分支缺省自动占位；existing=true 则 branch 是已有分支，检出它不新建）→ 会话内注入 cd；
+// worktree 失败反向补偿 kill 会话。
 func (a *API) WorktreeSessionCreate(c *gin.Context) {
 	var b struct {
-		Name   string `json:"name"`
-		Dir    string `json:"dir"`
-		Branch string `json:"branch"`
-		Base   string `json:"base"`
-		Remote string `json:"remote"`
+		Name     string `json:"name"`
+		Dir      string `json:"dir"`
+		Branch   string `json:"branch"`
+		Base     string `json:"base"`
+		Remote   string `json:"remote"`
+		Existing bool   `json:"existing"`
 	}
 	if err := c.ShouldBindJSON(&b); err != nil || b.Name == "" || strings.TrimSpace(b.Dir) == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
+		return
+	}
+	if b.Existing && strings.TrimSpace(b.Branch) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST", "message": "existing requires branch"}})
 		return
 	}
 	label := strings.TrimSpace(b.Name)
@@ -334,7 +341,7 @@ func (a *API) WorktreeSessionCreate(c *gin.Context) {
 	if branch == "" {
 		branch = autoBranch(label)
 	}
-	wt, err := a.WT.Create(ctx, worktree.CreateReq{Dir: b.Dir, Branch: branch, Base: b.Base, Remote: b.Remote, Dirname: sess})
+	wt, err := a.WT.Create(ctx, worktree.CreateReq{Dir: b.Dir, Branch: branch, Base: b.Base, Remote: b.Remote, Dirname: sess, Existing: b.Existing})
 	if err != nil {
 		_, _ = a.TT.Run("kill", sess, "--yes")
 		wtErr(c, err)
@@ -383,14 +390,20 @@ func (a *API) SessionFork(c *gin.Context) {
 func (a *API) SessionForkWorktree(c *gin.Context) {
 	parent := a.sessionTarget(c)
 	var b struct {
-		Child  string `json:"child"`
-		Branch string `json:"branch"`
-		Base   string `json:"base"`
-		Remote string `json:"remote"`
-		Dir    string `json:"dir"`
+		Child    string `json:"child"`
+		Branch   string `json:"branch"`
+		Base     string `json:"base"`
+		Remote   string `json:"remote"`
+		Dir      string `json:"dir"`
+		Existing bool   `json:"existing"` // branch 是已有本地分支：检出它，不新建
 	}
 	if err := c.ShouldBindJSON(&b); err != nil || b.Child == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST"}})
+		return
+	}
+	// existing 缺 branch 在 fork 之前拦：fork 之后再返回会漏下一个空子会话
+	if b.Existing && strings.TrimSpace(b.Branch) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_REQUEST", "message": "existing requires branch"}})
 		return
 	}
 	label := strings.TrimSpace(b.Child)
@@ -422,7 +435,7 @@ func (a *API) SessionForkWorktree(c *gin.Context) {
 	if branch == "" {
 		branch = autoBranch(label) // 分支占位名按展示名派生，别派生出一串 id
 	}
-	wt, err := a.WT.Create(ctx, worktree.CreateReq{Dir: dir, Branch: branch, Base: b.Base, Remote: b.Remote, Dirname: child})
+	wt, err := a.WT.Create(ctx, worktree.CreateReq{Dir: dir, Branch: branch, Base: b.Base, Remote: b.Remote, Dirname: child, Existing: b.Existing})
 	if err != nil {
 		_, _ = a.TT.Run("kill", child, "--yes")
 		wtErr(c, err)

@@ -1732,6 +1732,35 @@ html[data-pointer="coarse"] .tt-act::after { content: ''; position: absolute; le
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tt-pill.on b { color: inherit; }
 
+/* 「已有」选择器的面板：上半是已有工作区，下半是还没有工作区的分支（选中即为它开一个）。
+   一栏到底、组标题只是一行小字——两组东西的差别不值得再做一个模式按钮。 */
+.tt-pickpanel { width: 300px; display: flex; flex-direction: column; gap: 6px; }
+.tt-picklist { max-height: 320px; overflow-y: auto; display: flex; flex-direction: column; }
+.tt-pickgrp { display: flex; align-items: baseline; gap: var(--sp-2); padding: 8px 6px 4px;
+  color: var(--text-dim); font-size: var(--fs-micro); }
+.tt-pickgrp i { font-style: normal; color: var(--text-dimmer); }
+.tt-pickitem { display: flex; align-items: center; gap: var(--sp-2); min-height: 32px; padding: 0 6px;
+  border: 0; border-radius: var(--r-xs); background: transparent; color: var(--text-bright);
+  font: inherit; font-size: var(--fs-meta); cursor: pointer; text-align: left; }
+.tt-pickitem > svg { flex: 0 0 auto; color: var(--text-dimmer); }
+.tt-pickitem .nm { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace; }
+.tt-pickitem .ex { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px;
+  color: var(--text-dimmer); font-size: var(--fs-micro); }
+.tt-pickitem .ex em { font-style: normal; }
+.tt-pickitem .ex em.ok { color: var(--ok); }
+.tt-pickitem .ex em.warn { color: var(--warn); }
+.tt-pickitem.on { color: var(--accent); background: var(--accent-soft); }
+.tt-pickitem.on > svg { color: inherit; }
+.tt-pickitem:disabled { opacity: .45; cursor: not-allowed; }
+:where(html[data-pointer="fine"]) .tt-pickitem:not(:disabled):hover { background: var(--list-hover); }
+.tt-pickempty { padding: 10px 6px; color: var(--text-dimmer); font-size: var(--fs-micro); }
+/* 触摸档：行高直接撑到 44——列表行的可视尺寸本来就该跟着手指走 */
+html[data-pointer="coarse"] .tt-pickitem { min-height: var(--tap); }
+/* pill 上的补充说明（「建工作区」）：比分支名弱一档，不抢名字 */
+.tt-pillnote { color: var(--text-dimmer); font-size: var(--fs-micro); }
+.tt-pill.on .tt-pillnote { color: inherit; opacity: .8; }
+
 /* 发送：一枚实心圆钮，控制条上唯一的实心块——「这是主动作」不用再写字说。 */
 .tt-send { width: 30px; height: 30px; border-radius: 50%; border: none; cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center;
