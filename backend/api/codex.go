@@ -351,10 +351,15 @@ func (a *API) CodexTranscript(c *gin.Context) {
 			file = newestCodexRollout(dir)
 		}
 	}
+	// 同 ClaudeTranscript：还没有 rollout 文件＝agent 刚起，不是坏请求。
+	if file == "" {
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"messages": []cMsg{}, "nextOffset": 0, "file": ""}})
+		return
+	}
 	// 安全：限制在 ~/.codex/sessions 下
 	root := codexSessionsRoot()
 	file = filepath.Clean(file)
-	if file == "" || !strings.HasPrefix(file, root) {
+	if !strings.HasPrefix(file, root) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_FILE"}})
 		return
 	}

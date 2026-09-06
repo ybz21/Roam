@@ -506,11 +506,18 @@ func (a *API) ClaudeTranscript(c *gin.Context) {
 			file = pickTranscript(filepath.Join(home, ".claude", "projects", encodeProject(dir)), processArgv(pid), processStart(pid))
 		}
 	}
+	// agent 刚起、一句没说（比如还卡在启动的信任确认上）时转录文件根本不存在。
+	// 这是正常起步态，不是坏请求：回 400 的话前端会在输入框上方挂一行红字 BAD_FILE，
+	// 而且它只在轮询出错时写、成功时不擦，于是那行红字一直挂着。
+	if file == "" {
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"messages": []cMsg{}, "nextOffset": 0, "file": ""}})
+		return
+	}
 	// 安全：限制在 ~/.claude/projects 下
 	home, _ := os.UserHomeDir()
 	root := filepath.Join(home, ".claude", "projects")
 	file = filepath.Clean(file)
-	if file == "" || !strings.HasPrefix(file, root) {
+	if !strings.HasPrefix(file, root) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "BAD_FILE"}})
 		return
 	}
