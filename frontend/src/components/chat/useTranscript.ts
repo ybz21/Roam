@@ -15,6 +15,9 @@ export const FIRST_PAGE = 200
 export function useTranscript(name: string, file: string | undefined, path: string, interval = 1500) {
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [err, setErr] = useState('')
+  // 后端这轮定位到的转录文件：undefined=第一轮还没回来，''=后端也没找到（agent 一句没说）。
+  // 空状态那行字靠它区分「加载中」和「还没有对话」，光看调用方传没传 file 会把两者混成一句。
+  const [resolvedFile, setResolvedFile] = useState<string | undefined>(undefined)
   // 状态是「上次成交价」：这一轮没扫到新行后端就回空，保留上次的值。
   // 会话闲着不动百分比就不动——那是对的，没发生新对话上下文确实没变。
   const [status, setStatus] = useState<RawStatus>({})
@@ -33,7 +36,7 @@ export function useTranscript(name: string, file: string | undefined, path: stri
     let offset = 0
     let f = file
     let lastFile = file || ''
-    setMsgs([]); setErr(''); setStatus({})
+    setMsgs([]); setErr(''); setStatus({}); setResolvedFile(undefined)
     const poll = async () => {
       try {
         // boff=1：告诉后端这个 offset 是字节偏移（升级前的页面不会带，后端据此重新锚定）
@@ -44,6 +47,8 @@ export function useTranscript(name: string, file: string | undefined, path: stri
         const r = await api('GET', `/sessions/${encodeURIComponent(name)}/${path}?${q.toString()}`)
         const d = r.data
         if (stop) return
+        setErr('') // 这轮通了就把上一轮的报错擦掉，否则一次抖动的红字会一直挂到重开面板
+        if (typeof d.file === 'string') setResolvedFile(d.file)
         if (d.file && d.file !== lastFile) {
           f = d.file
           lastFile = d.file
@@ -73,7 +78,7 @@ export function useTranscript(name: string, file: string | undefined, path: stri
     return () => { stop = true; clearTimeout(t) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, file, path, refreshKey, tail])
-  return { msgs, err, refresh, status, hasEarlier, loadEarlier }
+  return { msgs, err, refresh, status, hasEarlier, loadEarlier, resolvedFile }
 }
 
 // 只有非空字段才覆盖：后端每轮只回它这次扫到的东西，缺的字段不该把已知值抹掉。

@@ -15,7 +15,7 @@ import { useI18n } from '../../i18n'
 export default memo(function CodexChat({ name, file, onOpenFile, onOpenGit, active }: { name: string; file?: string; onOpenFile?: (path: string, line?: number) => void; onOpenGit?: () => void; active?: boolean }) {
   const { t } = useI18n()
   const label = useSessionLabel(name)
-  const { msgs, err, status: raw, hasEarlier, loadEarlier } = useTranscript(name, file, 'codex-transcript', active === false ? 6000 : 1500)
+  const { msgs, err, status: raw, hasEarlier, loadEarlier, resolvedFile } = useTranscript(name, file, 'codex-transcript', active === false ? 6000 : 1500)
   const { results, view } = useMemo(() => pairToolResults(msgs), [msgs])
   const pending = isPending(view)
   // TaskUpdate 只给 {taskId,status}，标题在更早那次 TaskCreate 的结果里 —— 跨消息扫一遍才接得上
@@ -26,7 +26,7 @@ export default memo(function CodexChat({ name, file, onOpenFile, onOpenGit, acti
 
   return (
     <ChatShell
-      emptyHint={file ? undefined : t('chat.noTranscriptYet')}
+      emptyHint={resolvedFile === '' ? t('chat.noTranscriptYet') : undefined}
       name={name} accent={CODEX_ACCENT} error={err} onOpenFile={onOpenFile} tasks={tasks} status={status} onOpenGit={onOpenGit} lastErrorId={derived.lastErrorId}
       placeholder={t('chat.sendTo', { name: label })} agent="codex"
       messages={view} results={results} hasEarlier={hasEarlier} onLoadEarlier={loadEarlier}

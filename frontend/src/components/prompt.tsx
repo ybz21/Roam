@@ -10,7 +10,8 @@ import { useI18n } from '../i18n'
 import { ArrowDown, ArrowUp, ChevronRight, DotIcon } from '../icons'
 
 export interface Choice { num: number; label: string; selected: boolean }
-export interface Prompt { kind: 'select' | 'yesno'; question: string; choices: Choice[] }
+/** numbered=false：选项没有 1./2. 编号，只能靠方向键挪游标（见 detectUnnumbered） */
+export interface Prompt { kind: 'select' | 'yesno'; question: string; choices: Choice[]; numbered?: boolean }
 
 const CURSOR_PREFIX = /^[❯➤▶►▸→›»☞◉●>]\s*/u           // 选中游标必须位于选项开头，不能匹配正文里的 > / ●
 const LEAD = /^[\s│┃|╎┆┊╭╰├╞┝─━═]+/u                  // 行首方框线/竖线/空白
@@ -20,10 +21,14 @@ const OPT = /^(?:[❯➤▶►▸→›»☞◉●>]\s*)?(\d+)[.)]\s+(\S.*)$/u /
 // Agent 的普通编号总结很容易命中，造成后台标签在“待确认/运行中”之间反复闪动。
 const QUESTION = /(?:would you like|do you want|are you sure|should (?:we|i)|(?:proceed|allow|continue|overwrite|approve|trust).*[?？]|是否(?:继续|允许|确认|执行)|(?:继续|允许|确认|执行).*[?？])/i
 const ACTION_HINT = /(?:(?:enter|return).*(?:select|confirm|continue|submit|accept)|(?:esc|escape).*(?:cancel|back)|(?:回车|enter).*(?:选择|确认|继续)|(?:按|press).*(?:y|n|yes|no).*(?:确认|confirm))/i
+const CURSOR_ONLY = /^(\s*)[❯➤▶►▸›»](\s+)(\S.*)$/u        // [缩进]游标 文本（无编号选项）
+const BOX_LEAD = /^\s*[│┃|╎┆┊╭╰├╞┝─━═]+/u                  // 只吃框线与它前面的空白，缩进要留着
 const ANSI = /\x1b\[[0-?]*[ -/]*[@-~]/g
 const CTRL = /[\x00-\x08\x0b-\x1f\x7f]/g
 const stripCtl = (s: string) => s.replace(ANSI, '').replace(CTRL, '')
 const clean = (s: string) => stripCtl(s).replace(LEAD, '').replace(TAIL, '').trim()
+// 同 clean，但**保留行首缩进**：无编号选择框全靠「文本起始列对齐」认出同一组选项。
+const inner = (s: string) => stripCtl(s).replace(BOX_LEAD, '').replace(TAIL, '')
 
 // 从一屏纯文本里解析当前是否有交互式选择框；没有则返回 null
 export function detectPrompt(capture: string): Prompt | null {
@@ -65,12 +70,76 @@ export function detectPrompt(capture: string): Prompt | null {
       return { kind: 'select', question, choices }
     }
   }
+  const un = detectUnnumbered(lines)
+  if (un) return un
   // y/n 兜底
   for (let i = lines.length - 1; i >= 0 && lines.length - i <= 12; i--) {
     const c = clean(lines[i])
     if (!c) continue
     if (/\((?:y\/n|yes\/no|y\/N|Y\/n)\)|\[y\/n\]/i.test(c)) return { kind: 'yesno', question: c, choices: [] }
     break // 只检查屏幕最后一条非空行，避免把历史说明文字里的 (y/n) 当作当前提示
+  }
+  return null
+}
+
+// 无编号选择框：Claude 起手的「信任这个文件夹吗」就长这样——
+//     ❯ No, exit
+//       Yes, I trust this folder
+//     Enter to confirm · Esc to cancel
+// 一个编号都没有，OPT 那条路一项都认不出，于是新 worktree 的会话在对话面板里看着像
+// 死了：既没消息也没提问框，人只能切回终端页去按键。
+// 判据严到基本只有 TUI 满足：游标行 + 起始列严格对齐的兄弟行 + 附近的 Enter/Esc 操作提示。
+function detectUnnumbered(lines: string[]): Prompt | null {
+  const rows = lines.map(inner)
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const m = rows[i].match(CURSOR_ONLY)
+    if (!m || OPT.test(clean(rows[i]))) continue // 有编号的走上面那条正路
+    const col = m[1].length + 1 + m[2].length    // 游标本身占一列
+    // 兄弟选项：正文起始列与游标行**严格相同**，前面不能有别的字
+    const sibling = (r: string): string | null => {
+      if (r.length <= col || r[col] === ' ' || r.slice(0, col).trim() !== '') return null
+      const label = r.slice(col).trim()
+      return label && label.length <= 80 ? label : null
+    }
+    const group = [{ label: m[3].trim(), selected: true, idx: i }]
+    for (let k = i - 1; k >= 0 && i - k <= 6; k--) {
+      const l = sibling(rows[k]); if (!l) break
+      group.unshift({ label: l, selected: false, idx: k })
+    }
+    for (let k = i + 1; k < rows.length && k - i <= 6; k++) {
+      const l = sibling(rows[k]); if (!l) break
+      group.push({ label: l, selected: false, idx: k })
+    }
+    if (group.length < 2) continue
+    const top = group[0].idx
+    const bottom = group[group.length - 1].idx
+    const around = rows.slice(Math.max(0, top - 12), Math.min(rows.length, bottom + 4)).map((r) => r.trim()).join(' ')
+    if (!ACTION_HINT.test(around)) continue
+    // 真正在问的那句离选项挺远：信任框里隔着一整段权限清单，窄屏上还会折成四五行。
+    // 所以按空行切成段、由近及远找带问号的那段（整段拼起来再判，问号常落在折行处），
+    // 找不到就退回最近的那段。
+    let question = ''
+    let block: string[] = []
+    const take = (b: string[]) => b.slice(-5).join(' ')
+    for (let k = top - 1; k >= 0 && top - k <= 20; k--) {
+      const c = clean(rows[k])
+      if (c) { block.unshift(c); continue }
+      if (!block.length) continue
+      const text = take(block)
+      if (!question) question = text
+      if (QUESTION.test(text)) { question = text; break }
+      block = []
+    }
+    if (block.length) {
+      const text = take(block)
+      if (!question || QUESTION.test(text)) question = text
+    }
+    return {
+      kind: 'select',
+      question,
+      choices: group.map((o, n) => ({ num: n + 1, label: o.label, selected: o.selected })),
+      numbered: false,
+    }
   }
   return null
 }
@@ -105,7 +174,7 @@ function PromptActions({ p, accent, busy, choose, press }: {
                 borderColor: ch.selected ? accent : 'var(--border)', color: 'var(--text-bright)',
                 background: ch.selected ? accent + '22' : 'transparent',
               }}>
-              <b style={{ color: accent, marginRight: 6, display: 'inline-flex', alignItems: 'center' }}>{ch.selected ? <ChevronRight size={12} /> : null}{ch.num}.</b>{ch.label}
+              <b style={{ color: accent, marginRight: 6, display: 'inline-flex', alignItems: 'center' }}>{ch.selected ? <ChevronRight size={12} /> : null}{p.numbered === false ? '' : `${ch.num}.`}</b>{ch.label}
             </Button>
           ))}
         </Space>
@@ -150,6 +219,25 @@ function usePromptControl(name: string) {
     }
   }
 
+  // 无编号选择框只能用方向键：先把游标挪到目标上，**确认它真的挪到了**再回车。
+  // 不核对就回车的代价是替用户答错——信任框的第一项正是「No, exit」，按错一格会话就没了。
+  const chooseByArrows = async (before: Prompt, target: Choice) => {
+    const from = before.choices.find((c) => c.selected)?.num ?? 1
+    const step = target.num - from
+    if (step !== 0) {
+      const keys = Array.from({ length: Math.abs(step) }, () => (step > 0 ? 'Down' : 'Up'))
+      await api('POST', `/sessions/${encodeURIComponent(name)}/keys`, { keys })
+      await new Promise((r) => setTimeout(r, 350))
+    }
+    const moved = await fetchPrompt(name)
+    // 同名选项也要认得出，所以位置和文本都对上才算挪到了
+    const landed = moved?.numbered === false && moved.choices.length === before.choices.length &&
+      moved.choices.find((c) => c.selected)?.num === target.num && moved.choices[target.num - 1]?.label === target.label
+    if (!landed) { setP(moved); return }
+    await api('POST', `/sessions/${encodeURIComponent(name)}/keys`, { keys: ['Enter'] })
+    setTimeout(async () => { setP(await fetchPrompt(name)) }, 350)
+  }
+
   // 点选项只发数字，350ms 后再看屏幕：同一个问题还在（数字只是挪了高亮）才补 Enter。
   // 以前一律发「数字 + Enter」：Claude Code 的 AskUserQuestion 按数字就直接进下一题，
   // 那个 Enter 落到下一题上，把它的第一个选项当成你的答案交了；多问一题就多错一题。
@@ -157,6 +245,7 @@ function usePromptControl(name: string) {
     const before = p
     setBusy(true)
     try {
+      if (before?.numbered === false) { await chooseByArrows(before, target); return }
       await api('POST', `/sessions/${encodeURIComponent(name)}/keys`, { keys: [String(target.num)] })
       await new Promise((r) => setTimeout(r, 350))
       const after = await fetchPrompt(name)

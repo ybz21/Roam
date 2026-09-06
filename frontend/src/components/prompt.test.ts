@@ -69,6 +69,65 @@ const QUOTED_LIST = `
    Done.
 `
 
+// Claude 起手的信任确认（真机 capture）：选项没有编号，只有一个 ❯ 游标。
+// 新建 worktree 的会话第一屏就是它——认不出来的话对话面板里什么都没有。
+const TRUST = `
+ Accessing workspace:
+
+ /tmp/probe
+
+ Quick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open source
+ project, or work from your team). If not, take a moment to review what's in this folder first.
+
+ Claude Code'll be able to read, edit, and execute files here.
+
+ ⚠ This folder pre-approves 1 tool permission in .claude/settings.local.json:
+   Bash(git log *)
+ These will apply without asking. Only proceed if you trust this configuration.
+
+ Security guide
+
+ ❯ No, exit
+   Yes, I trust this folder
+
+ Enter to confirm · Esc to cancel
+`
+
+// 输入框那行也是 ❯ 打头，底下跟着状态栏：没有对齐的兄弟项、也没有确认提示，不能当选择框
+const COMPOSER = `
+ ✻ Sautéed for 4m · done 7:50 PM
+
+ ❯ 帮我在配置中心配一个 logos 试试
+   ⏵⏵ auto mode on · 1 shell · ← for agents
+`
+
+// 窄屏（手机 attach 后 tmux 只剩四十来列）：提问被折成五行，离选项十几行远。
+const TRUST_NARROW = `
+ /tmp/trust-probe-e1
+
+ Quick safety check: Is this a project you
+ created or one you trust? (Like your own
+ code, a well-known open source project, or
+ work from your team). If not, take a moment
+ to review what's in this folder first.
+
+ Claude Code'll be able to read, edit, and
+ execute files here.
+
+ ⚠ This folder pre-approves 1 tool permission
+ in .claude/settings.local.json:
+   Bash(git log *)
+ These will apply without asking. Only proceed
+ if you trust this configuration.
+
+ Security guide
+
+ ❯ No, exit
+   Yes, I trust this folder
+
+ Enter to confirm · Esc to cancel
+`
+
 describe('detectPrompt', () => {
   it('宽屏选择框：识别出全部选项与当前游标', () => {
     const p = detectPrompt(WIDE)
@@ -100,6 +159,26 @@ describe('detectPrompt', () => {
 
   it('没有可见游标时，明确提问和操作提示组合仍可识别', () => {
     expect(detectPrompt(NO_CURSOR_PROMPT)?.kind).toBe('select')
+  })
+
+  it('无编号的信任确认框：认出两个选项和当前游标', () => {
+    const p = detectPrompt(TRUST)
+    expect(p?.kind).toBe('select')
+    expect(p?.numbered).toBe(false)
+    expect(p?.choices.map((c) => c.label)).toEqual(['No, exit', 'Yes, I trust this folder'])
+    expect(p?.choices.find((c) => c.selected)?.num).toBe(1)
+    expect(p?.question).toContain('trust')
+  })
+
+  it('窄屏折行的信任确认框：提问跨五行也要拼回来', () => {
+    const p = detectPrompt(TRUST_NARROW)
+    expect(p?.numbered).toBe(false)
+    expect(p?.choices.map((c) => c.label)).toEqual(['No, exit', 'Yes, I trust this folder'])
+    expect(p?.question).toContain('Quick safety check')
+  })
+
+  it('输入框那行 ❯ 不当选择框', () => {
+    expect(detectPrompt(COMPOSER)).toBeNull()
   })
 
   it('空屏返回 null', () => {
