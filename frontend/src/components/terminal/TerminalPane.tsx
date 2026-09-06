@@ -33,7 +33,7 @@ import { DPad } from '../shell/DPad'
 import { MobileSheet, SheetRow, SheetSection } from '../shell/MobileSheet'
 import { SessionSwitchSheet } from '../shell/SessionDock'
 import { Button, Dropdown, Input, Modal, Spin, Tooltip, App as AntApp } from 'antd'
-import { AgentLogo, ChevronDown, ChevronLeft, ChevronRight, PlusIcon, TabsIcon, TerminalIcon, PanelRightIcon } from '../../icons'
+import { AgentLogo, ChevronDown, ChevronLeft, ChevronRight, PlusIcon, StopIcon, TabsIcon, TerminalIcon, PanelRightIcon } from '../../icons'
 // ── 终端面板（多标签 + 工具栏 + 快捷键栏），桌面右栏与手机覆盖层共用 ──
 export default function TerminalPane(props: {
   terms: string[]; active: string | null; setActive: (n: string) => void; closeTerm: (n: string) => void
@@ -149,6 +149,21 @@ export default function TerminalPane(props: {
   const flushLine = () => { if (line) { exitCopyMode(); sendRaw(line); setLine('') } }   // 把输入框待发文本先送出（不带回车）
   const submitLine = () => { exitCopyMode(); sendRaw(line + '\r'); setLine('') }          // 整行 + 回车
   const tapKey = (seq: string) => { flushLine(); if (isTouch) sendRaw(seq); else sendKey(seq) } // 控制键：先 flush 待发文本
+
+  /**
+   * 中断当前会话（^C）。
+   *
+   * 走 HTTP 注入而不是终端 ws：真要按停的时候人常常不在终端画布上（在对话视图、
+   * 或刚从别处切回来 ws 还在重连），ws 那条路那一下就静悄悄地丢了。
+   * 只发一次——Claude Code 里短时间连按两次 Ctrl+C 是退出整个 TUI，不是中断。
+   */
+  const interruptActive = async () => {
+    if (!active) return
+    try {
+      await api('POST', `/sessions/${encodeURIComponent(active)}/keys`, { keys: ['C-c'] })
+      message.success(t('terminal.interruptSent'))
+    } catch (e: any) { message.error(e.message) }
+  }
   const noBlur = isTouch ? (e: React.MouseEvent) => e.preventDefault() : undefined        // 点按钮不夺走输入框焦点（软键盘保持）
 
   // 弹框提醒全局开关
@@ -845,6 +860,10 @@ export default function TerminalPane(props: {
         <SheetRow icon={TI.rename} title={t('session.rename')} onClick={() => { setMoreSheet(false); active && setRenameSession(active) }} />
         <SheetRow icon={TI.newTab} title={t('terminal.newTab')}
           onClick={() => { setMoreSheet(false); active && window.open(`/#/term/${encodeURIComponent(active)}`, '_blank') }} />
+        {/* 「中断」得在这儿常驻：带 ^C 的快捷键条只在打字时才升起来，而 agent 跑飞了要停它的
+            那一刻，手根本不在输入框上。danger 是给这一下的分量做的记号。 */}
+        <SheetRow icon={<StopIcon size={20} />} danger title={t('terminal.interrupt')} desc={t('terminal.interruptDesc')}
+          onClick={() => { setMoreSheet(false); void interruptActive() }} />
         <SheetSection>{t('mobile.groupPanels')}</SheetSection>
         <SheetRow icon={TI.folder} title={t('chat.files')} onClick={() => { setMoreSheet(false); toggleFiles() }} />
         <SheetRow icon={TI.git} title={t('git.title')} onClick={() => { setMoreSheet(false); toggleGit() }} />

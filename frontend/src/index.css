@@ -1739,6 +1739,10 @@ html[data-pointer="coarse"] .tt-act::after { content: ''; position: absolute; le
 .tt-send:disabled { opacity: .35; cursor: default; }
 :where(html[data-pointer="fine"]) .tt-send:not(:disabled):hover { transform: scale(1.06); }
 .tt-send:focus-visible { outline: 2px solid var(--accent-border); outline-offset: 2px; }
+/* 「停止」的第二档：Esc 没停住，下一下发的是 Ctrl+C。红色是给这一下的分量做的记号——
+   前一下只是打断回合，这一下是真往 pty 里打中断。 */
+.tt-send.force { background: var(--danger); }
+.tt-send.force:focus-visible { outline-color: var(--danger-border); }
 
 /* 按住说话：静息就是控制条上一枚安静的 pill，按住时才亮成强调色。
    `touch-action:none` 由组件给——长按说话要吃掉滚动手势。 */

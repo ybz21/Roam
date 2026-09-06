@@ -306,9 +306,12 @@ func (a *API) Capture(c *gin.Context) {
 }
 
 // 允许注入的具名按键（其余只允许单个字母/数字）。用于在专业渲染模式下响应 TUI 选择框。
+// C-c 是「强制中断」那一档：Esc 只回到 TUI 的输入行，卡在工具里的子进程（长跑的 bash、
+// 收不到响应的请求）压根没收到信号，得靠 ^C 才停得下来。
 var allowedKeys = map[string]bool{
 	"Up": true, "Down": true, "Left": true, "Right": true,
 	"Enter": true, "Escape": true, "Tab": true, "Space": true, "BSpace": true,
+	"C-c": true,
 }
 
 // Keys POST /sessions/:name/keys —— 向会话注入原始按键（不追加回车）。
