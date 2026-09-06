@@ -79,6 +79,9 @@ export const TrashIcon = ({ size = 13 }: P) => line(
 export const OpenInIcon = ({ size = 13 }: P) => line(<><path d="M14 4h6v6" /><path d="M20 4 11 13" /><path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4" /></>, size)
 
 // ── 状态 ──
+/** 权限/审批模式：一枚盾。对话页「+」菜单里那一项（轮换 Claude/Codex 的权限档） */
+export const ShieldIcon = ({ size = 13 }: P) => line(<path d="M12 3.5 19 6v6c0 4-3 7-7 8.5C8 19 5 16 5 12V6Z" />, size)
+
 export const WarnIcon = ({ size = 14 }: P) => line(
   <><path d="M10.3 4.3 2.6 17.5A2 2 0 0 0 4.3 20.5h15.4a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0Z" /><path d="M12 9.5v4" /><path d="M12 17h.01" /></>, size)
 export const InfoIcon = ({ size = 14 }: P) => line(<><circle cx="12" cy="12" r="9" /><path d="M12 11v5" /><path d="M12 8h.01" /></>, size)
