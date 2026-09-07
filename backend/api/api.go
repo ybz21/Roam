@@ -63,12 +63,38 @@ func New(tt *ttmux.Client, browserHome, dataDir, fallbackBin string) *API {
 
 // json 透传 ttmux 的 --json 输出
 func (a *API) json(c *gin.Context, args ...string) {
-	out, err := a.TT.Run(args...)
+	// 只认 stdout。日志走 stderr（插件 SDK 的 Logf 就是这么写的），混进来会让整份
+	// 响应不再是 JSON，浏览器那边只剩一句「Unexpected token 'r'」——定时任务保存
+	// 明明成功了，界面上却是一条报错，就是这么来的。
+	out, errOut, err := a.TT.RunJSON(args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "TTMUX_ERROR", "message": ttmux.StripANSI(out)}})
+		msg := strings.TrimSpace(ttmux.StripANSI(errOut))
+		if msg == "" {
+			msg = ttmux.StripANSI(out)
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "TTMUX_ERROR", "message": msg}})
 		return
 	}
-	c.Data(http.StatusOK, "application/json; charset=utf-8", []byte(out))
+	body := strings.TrimSpace(ttmux.StripANSI(out))
+	if !json.Valid([]byte(body)) {
+		// 命令说自己成功了，吐的却不是 JSON。把 stderr 原样报出去：那里通常写着原因，
+		// 而前端拿到半截 JSON 只会抛解析错，把真正的话盖掉。
+		msg := strings.TrimSpace(ttmux.StripANSI(errOut))
+		if msg == "" {
+			msg = firstLine(body)
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "BAD_JSON", "message": msg}})
+		return
+	}
+	c.Data(http.StatusOK, "application/json; charset=utf-8", []byte(body))
+}
+
+// firstLine 截第一行给错误消息用：命令失败时输出可能是一整屏。
+func firstLine(s string) string {
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		return s[:i]
+	}
+	return s
 }
 
 // text 返回写操作的纯文本结果（去 ANSI）
