@@ -171,3 +171,40 @@ describe('互审陪跑归位', () => {
     expect(main.sessions[0].reviewOf).toBe('ghost')
   })
 })
+
+// 非 git 目录建的项目（比如 /home/ai/codes 这种放着一堆仓库的目录）：没有 worktree，
+// 会话的归属只能来自 /projects 的 top/needs。原来这一层只认 worktree 与 annotation，
+// 于是项目页把会话列在项目下、左树却扔进「散会话」——同一件事两处不一致。
+it('项目页说它属于这个项目，左树就得挂在这个项目下（非 git 项目也是）', () => {
+  const tree = buildTaskTree({
+    projects: [{
+      key: 'p-codes', name: 'codes', dir: '/home/ai/codes', git: false,
+      top: [{ name: 's-plan', label: 'ai-combat-planner' }, { name: 's-cc', label: '排查CC连接中断' }],
+    }],
+    worktrees: {},
+    sessions: [{ name: 's-plan', label: 'ai-combat-planner' }, { name: 's-cc', label: '排查CC连接中断' }],
+    sessionsLoaded: true,
+  })
+
+  expect(tree.loose).toEqual([])
+  const [proj] = tree.projects
+  expect(proj.tasks).toHaveLength(1)
+  expect(proj.tasks[0].path).toBe('/home/ai/codes')
+  expect(proj.tasks[0].sessions.map((s) => s.label)).toEqual(['ai-combat-planner', '排查CC连接中断'])
+})
+
+it('worktree 已经安置过的不重复挂一遍', () => {
+  const tree = buildTaskTree({
+    projects: [{
+      key: 'p', name: 'repo', dir: '/repo', git: true,
+      top: [{ name: 's1', label: '活儿' }],
+    }],
+    worktrees: { p: [{ path: '/repo/.worktrees/a', branch: 'feat/a', isMain: false, sessions: [{ session: 's1' }] }] },
+    sessions: [{ name: 's1', label: '活儿' }],
+    sessionsLoaded: true,
+  })
+  const [proj] = tree.projects
+  expect(proj.tasks).toHaveLength(1)
+  expect(proj.tasks[0].path).toBe('/repo/.worktrees/a')
+  expect(proj.tasks[0].sessions).toHaveLength(1)
+})

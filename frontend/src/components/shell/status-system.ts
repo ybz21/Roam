@@ -25,7 +25,7 @@ export type SystemInput = {
   unfinished: number
   /** 有 Agent 在跑的会话数 */
   agents: number
-  /** Roam 版本；还没取到时为空，那一格就不出现 */
+  /** Roami 版本；还没取到时为空，那一格就不出现 */
   version: string
   /** 当前会话所属仓库；不在仓库里时为 null，分支那几格整组不出现 */
   git: { branch: string; ahead: number; behind: number; files: number; state: string; conflicts: number } | null
