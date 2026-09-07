@@ -42,6 +42,13 @@ type Job struct {
 	// action=exec(定时跑 shell 命令,经 sh -lc)
 	Command string `json:"command,omitempty"`
 
+	// 跑完通知我：拉 Agent 的等会话退出、跑命令的等命令返回，通知进 Roam 通知流
+	// (装了 IM 并绑定通知的话，同一条会渲染成飞书卡片)。
+	Notify bool `json:"notify,omitempty"`
+	// 产物文件(可选,支持 ~)：通知里带上它的路径、大小与末段——
+	// 「跑完了」这句话本身没用,人要的是结果在哪
+	Artifact string `json:"artifact,omitempty"`
+
 	NextRun int64 `json:"nextRun,omitempty"` // 下次触发(unix 秒)
 	LastRun int64 `json:"lastRun,omitempty"` // 上次触发(unix 秒)
 	Runs    int   `json:"runs,omitempty"`    // 累计触发次数
@@ -50,6 +57,10 @@ type Job struct {
 // Activate registers the plugin's commands (sdk.Serve 的入口)。
 func Activate(ctx *sdk.Ctx) sdk.Plugin {
 	return sdk.Plugin{
+		Events: map[string]sdk.EventHandler{
+			// 拉 Agent 的任务:会话退出才算这活干完(触发成功 ≠ 活干完了)
+			"session:agent.exited": onAgentExited,
+		},
 		Commands: map[string]sdk.CommandHandler{
 			"add":     add,
 			"list":    list,
@@ -57,6 +68,7 @@ func Activate(ctx *sdk.Ctx) sdk.Plugin {
 			"enable":  enable,
 			"disable": disable,
 			"run":     runNow,
+			"runs":    runsCmd,
 			"preview": preview,
 			"tick":    tick,
 			"serve":   serve,
@@ -114,10 +126,15 @@ func add(ctx *sdk.Ctx, args map[string]string) (any, error) {
 		Prompt:   args["prompt"],
 		Workdir:  args["workdir"],
 		Command:  args["command"],
+		Artifact: strings.TrimSpace(args["artifact"]),
 	}
 	// --interactive true/1 → 拉 Agent 时保持交互会话(仅 action=agent 有意义)
 	if v := strings.TrimSpace(args["interactive"]); v == "true" || v == "1" {
 		job.Interactive = true
+	}
+	// --notify true/1 → 跑完发通知(拉 Agent 等会话退出,跑命令等命令返回)
+	if v := strings.TrimSpace(args["notify"]); v == "true" || v == "1" {
+		job.Notify = true
 	}
 	if err := validateAction(job); err != nil {
 		return nil, err
@@ -217,6 +234,7 @@ func remove(ctx *sdk.Ctx, args map[string]string) (any, error) {
 	if !removed {
 		return nil, fmt.Errorf("没有名为 %q 的定时任务", name)
 	}
+	dropRuns(ctx, name)
 	if err := saveJobs(ctx, kept); err != nil {
 		return nil, err
 	}
@@ -280,7 +298,7 @@ func runNow(ctx *sdk.Ctx, args map[string]string) (any, error) {
 		if jobs[i].Name != name {
 			continue
 		}
-		res, ferr := fireJob(ctx, &jobs[i])
+		res, ferr := fireJob(ctx, &jobs[i], "manual")
 		if ferr != nil {
 			return nil, ferr
 		}
@@ -336,7 +354,7 @@ func tickOnce(ctx *sdk.Ctx) ([]string, error) {
 		if !j.Enabled || j.NextRun == 0 || time.Unix(j.NextRun, 0).After(now) {
 			continue
 		}
-		if _, ferr := fireJob(ctx, j); ferr != nil {
+		if _, ferr := fireJob(ctx, j, "schedule"); ferr != nil {
 			// 单个任务触发失败不阻断其余;记日志,排期照常推进避免热循环重试
 			fmt.Fprintf(os.Stderr, "[%s] 任务 %s 触发失败: %v\n", nowStr(now), j.Name, ferr)
 		} else {
@@ -359,18 +377,49 @@ func tickOnce(ctx *sdk.Ctx) ([]string, error) {
 	return fired, nil
 }
 
-// fireJob 执行一条任务的动作,并就地更新其 LastRun/Runs 计数。
-func fireJob(ctx *sdk.Ctx, j *Job) (any, error) {
+// fireJob 执行一条任务的动作,并就地更新其 LastRun/Runs 计数,再落一条执行记录。
+//
+// trigger 是「谁按的」:schedule=到点触发,manual=面板上的「立即触发」。
+// 记录哪怕写不进去也不影响这次触发的结果——它只是给人看的(见 recordRun)。
+func fireJob(ctx *sdk.Ctx, j *Job, trigger string) (any, error) {
 	j.Runs++
 	j.LastRun = time.Now().Unix()
+	rec := Run{Name: j.Name, At: j.LastRun, Trigger: trigger, Action: j.Action}
+
+	var res any
+	var err error
 	switch j.Action {
 	case "agent":
-		return fireAgent(ctx, j)
+		res, err = fireAgent(ctx, j)
 	case "exec":
-		return fireExec(ctx, j)
+		res, err = fireExec(ctx, j)
 	default:
-		return nil, fmt.Errorf("未知动作 %q", j.Action)
+		err = fmt.Errorf("未知动作 %q", j.Action)
 	}
+
+	rec.OK = err == nil
+	if err != nil {
+		rec.Error = err.Error()
+	}
+	if m, okMap := res.(map[string]any); okMap {
+		if s, okS := m["session"].(string); okS {
+			rec.Session = s
+		}
+		rec.Interactive = j.Interactive
+		if e, okE := m["exit"].(int); okE {
+			rec.Exit = &e
+		}
+		if o, okO := m["output"].(string); okO {
+			rec.Output = tailStr(o, 4000)
+		}
+	}
+	// 命令跑完了但 exit≠0 —— 对人来说这就是「这次没成」，不该在记录里画一颗绿点。
+	// （动作本身有没有发起成功是另一回事，那种失败上面已经填了 Error。）
+	if rec.Exit != nil && *rec.Exit != 0 {
+		rec.OK = false
+	}
+	recordRun(ctx, rec)
+	return res, err
 }
 
 func fireAgent(ctx *sdk.Ctx, j *Job) (any, error) {
@@ -402,7 +451,29 @@ func fireExec(ctx *sdk.Ctx, j *Job) (any, error) {
 		return nil, err
 	}
 	ctx.Logf("任务 %s 跑命令完成 exit=%d", j.Name, res.Exit)
-	if res.Exit != 0 {
+	// 跑命令是同步的,这里就是「活干完了」:开了通知就报一声,产物与输出末段一并带上
+	if j.Notify {
+		art, size := expandHome(j.Artifact), int64(0)
+		if art != "" {
+			size = -1
+			if st, err := os.Stat(art); err == nil {
+				size = st.Size()
+			}
+		}
+		title, sev := fmt.Sprintf("定时任务 %s 跑完了", j.Name), "info"
+		if res.Exit != 0 {
+			title, sev = fmt.Sprintf("定时任务 %s 失败(exit=%d)", j.Name, res.Exit), "warning"
+		}
+		_ = ctx.NotificationPublish(sdk.Notification{
+			Type:      "cron.done",
+			Severity:  sev,
+			Title:     title,
+			Body:      doneBody("", nil, art, size, tailStr(strings.TrimRight(res.Output, "\n"), artifactTail)),
+			DedupeKey: fmt.Sprintf("cron.done.%s.%d", j.Name, j.Runs),
+		})
+	}
+	// 没开通知的任务只在失败时吭一声——那是「它坏了而你不知道」，不吭声不行
+	if res.Exit != 0 && !j.Notify {
 		_ = ctx.NotificationPublish(sdk.Notification{
 			Type:      "cron.exec",
 			Severity:  "warning",
@@ -457,6 +528,8 @@ func jobView(j Job) map[string]any {
 		"prompt":      j.Prompt,
 		"workdir":     j.Workdir,
 		"interactive": j.Interactive,
+		"notify":      j.Notify,
+		"artifact":    j.Artifact,
 		"command":     j.Command,
 	}
 	if j.NextRun > 0 {

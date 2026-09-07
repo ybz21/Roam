@@ -40,7 +40,7 @@ func Manifest() manifest.Manifest {
 		ActivationEvents: []string{
 			"onCommand:cron.add", "onCommand:cron.list", "onCommand:cron.remove",
 			"onCommand:cron.enable", "onCommand:cron.disable",
-			"onCommand:cron.run", "onCommand:cron.preview",
+			"onCommand:cron.run", "onCommand:cron.runs", "onCommand:cron.preview",
 			"onCommand:cron.tick", "onCommand:cron.serve",
 		},
 		Contributes: manifest.Contribs{
@@ -51,6 +51,7 @@ func Manifest() manifest.Manifest {
 				{ID: "cron.enable", Title: manifest.LocaleText{"zh-CN": "启用一个定时任务", "en-US": "Enable a scheduled task"}},
 				{ID: "cron.disable", Title: manifest.LocaleText{"zh-CN": "停用一个定时任务", "en-US": "Disable a scheduled task"}},
 				{ID: "cron.run", Title: manifest.LocaleText{"zh-CN": "立即触发一个任务(不改动排期)", "en-US": "Run a task now (schedule untouched)"}},
+				{ID: "cron.runs", Title: manifest.LocaleText{"zh-CN": "查看执行记录(每次触发的结果、会话、输出)", "en-US": "Show run history (result, session, output)"}},
 				{ID: "cron.preview", Title: manifest.LocaleText{"zh-CN": "预览一条 cron 表达式接下来几次触发", "en-US": "Preview upcoming fire times for a cron expression"}},
 				{ID: "cron.tick", Title: manifest.LocaleText{"zh-CN": "巡检一次并触发所有到期任务", "en-US": "Fire all due tasks once"}},
 				{ID: "cron.serve", Title: manifest.LocaleText{"zh-CN": "常驻调度器:按点持续触发到期任务", "en-US": "Resident scheduler loop"}},

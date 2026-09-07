@@ -1438,6 +1438,63 @@ html[data-size="compact"] .ant-form-item-control-input-content > .ant-picker { w
   color: var(--text-dimmer); font-size: var(--fs-meta);
 }
 .tt-cron-card .ops { display: flex; gap: 6px; flex-wrap: wrap; }
+/* 任务名下那行摘要：一行截断（表格里它会把整列撑成四行） */
+.tt-cron-sum {
+  display: block; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--text-dim); font-size: var(--fs-meta);
+}
+
+/* ── 执行记录抽屉（定时任务）──
+   它是一条**时间线**，不是一叠卡片：一次触发一颗点，点串在一条竖脊上，
+   越往下越早。状态用点说（绿=成了/红=没成），不用两枚 antd Tag 挤在开头——
+   那两枚彩色标签一多，一眼扫过去只剩颜色，读不出「哪次、什么时候、怎么样」。 */
+.tt-runs-sum {
+  display: flex; align-items: baseline; gap: 8px; margin-bottom: var(--sp-3);
+  color: var(--text-dim); font-size: var(--fs-meta);
+}
+.tt-runs-sum .bad { color: var(--danger); font-weight: 600; }
+
+.tt-runs { display: flex; flex-direction: column; }
+.tt-runs .run { position: relative; display: flex; gap: 10px; padding: 0 0 var(--sp-3) 0; }
+/* 竖脊：连着上下两颗点。最后一条不画，线不该悬空垂下去 */
+.tt-runs .run::before {
+  content: ''; position: absolute; left: 4px; top: 16px; bottom: -2px; width: 1px;
+  background: var(--border);
+}
+.tt-runs .run:last-child::before { display: none; }
+.tt-runs .run .dot {
+  position: relative; z-index: 1; flex: 0 0 auto; width: 9px; height: 9px; margin-top: 5px;
+  border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px var(--bg-elevated);
+}
+.tt-runs .run.bad .dot { background: var(--danger); }
+.tt-runs .run .main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.tt-runs .run .hd { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.tt-runs .run .hd b { color: var(--text-bright); font-size: var(--fs-sm); font-weight: 600; }
+.tt-runs .run .hd .trig { color: var(--text-dimmer); font-size: var(--fs-micro); }
+.tt-runs .run .hd .ex { color: var(--text-dim); font: var(--fs-micro)/1 var(--mono); }
+.tt-runs .run .hd .ex.bad { color: var(--danger); }
+.tt-runs .run .err { color: var(--danger); font-size: var(--fs-meta); word-break: break-all; }
+.tt-runs .run .sess { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.tt-runs .run .sess code {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--text-dim); font: var(--fs-micro)/1.6 var(--mono);
+}
+.tt-runs .run .sess .gone { color: var(--text-dimmer); font-size: var(--fs-micro); }
+/* 产物那行：路径要看全（截断也留 title），大小/缺失跟在后面弱一档 */
+.tt-runs .run .art { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.tt-runs .run .art code {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--text-dim); font: var(--fs-micro)/1.6 var(--mono);
+}
+.tt-runs .run .art .gone { flex: 0 0 auto; color: var(--text-dimmer); font-size: var(--fs-micro); }
+/* 展开钮比行尾动作再小一号：它是「要不要多看一眼」，不是主动作 */
+.tt-runs .run .tt-act.sm { align-self: flex-start; height: 22px; padding: 0 8px; font-size: var(--fs-micro); }
+/* 输出收着，展开后自己滚：一条 npm test 能吐几百行 */
+.tt-runs .run .out {
+  margin: 0; max-height: 240px; overflow: auto; padding: 8px 10px;
+  border-radius: var(--r-xs); background: var(--bg-base); color: var(--text-dim);
+  font: var(--fs-micro)/1.6 var(--mono); white-space: pre-wrap; word-break: break-all;
+}
 
 /* antd 自带的几处不在刻度上：List 行 8、内联 code 3 且字号 .85em。一条收掉，
    不必逐个组件传 style（设计系统文档 §1）。 */
