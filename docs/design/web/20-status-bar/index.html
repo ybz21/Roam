@@ -544,8 +544,9 @@ Roam 抄过来有两个实际问题：壳里已经有强调蓝在导航选中项
   <div class="step"><div class="i r">4</div><div>
     <b>一个 provider 崩了，只熄它那几格</b>
     <small>宿主<b class="hl">永远不 await 插件来渲染第一帧</b>：条先画出来，格子有值了再填。
-    命令超时 1s、连续失败 3 次熄灯并退避到 60s 重试、值超过 <code>3×refresh</code> 判 stale
-    （变暗置 <code>--</code>，见 §08 ④）。插件死了条不动，这是底线。</small>
+    命令的超时预算是<b class="hl">一帧</b>（该组的 <code>refresh</code>）、连续失败 3 次熄灯并退避到
+    60s 重试、值超过 <code>3×refresh</code> 判 stale（变暗置 <code>--</code>，见 §08 ④）。
+    插件死了条不动，这是底线。<b class="hl">主线程被占住的时间不算在插件头上</b>——见下面那张表。</small>
   </div></div>
 </div>
 
@@ -556,7 +557,14 @@ Roam 抄过来有两个实际问题：壳里已经有强调蓝在导航选中项
 <tbody>
 <tr><td>每插件格数</td><td class="mono">2</td><td>内置 provider 可以多（主机监控 6 格），第三方 2 格封顶——一条 24px 装不下三个插件各五格</td></tr>
 <tr><td>最小 <code>refresh</code></td><td class="mono">2s</td><td><code>plugin run</code> 每次起一个子进程。主机监控自己的面板用的是 3s，条上沿用</td></tr>
-<tr><td>单次超时</td><td class="mono">1s</td><td>超时就不画这一帧，绝不卡住整条</td></tr>
+<tr><td>单次超时</td><td class="mono">一帧<br>（<code>refresh</code>，≥2s）</td>
+    <td>超时就不画这一帧，绝不卡住整条。到点还没回来的值，下一轮就会被新的取代，留着等没有意义。
+    <b class="hl">但主线程被占住的那段不计入</b>：超时是墙上时间量的，请求的收尾却要排在主线程上，
+    上面的编辑器/终端一次重渲染占住主线程一秒多，服务端 100ms 就答完的调用照样判超时——
+    真机 Chrome 里量过，阻塞 2s 连发三次全是 <code>AbortError</code>，而三次就够熄灯 60s，
+    六格主机监控于是「总在上面刚渲染完的时候消失」。计时器比约定时刻晚到多久，就是刚才卡了多久，
+    晚得离谱就重新计时（最多顺延 3 次，挂住的插件不能靠页面卡着无限续命）</td></tr>
+<tr><td>同组并发</td><td class="mono">1</td><td>上一轮还没回来就跳过这一轮——否则一次卡顿堆出同一个插件的一串子进程</td></tr>
 <tr><td>文本长度</td><td class="mono">24 字符</td><td>超出截断。一个插件不该有能力把条撑满</td></tr>
 <tr><td>第三方格默认可见性</td><td class="mono">关</td><td>装了插件 ≠ 同意它上我的状态条。插件详情页显示「想在状态条放 2 格」+ 一键打开；
     <b class="hl">内置 provider 默认开</b></td></tr>
@@ -1023,7 +1031,7 @@ M1 的后端改动只有 manifest 结构和一段 <code>statusItems</code> 声�
 <tr><td class="mono">M1</td><td class="mono">docs/design/plugin/05-manifest.md</td><td>贡献点表加 <code>statusItems</code> 一行（v1）；激活事件表加 <code>onStatusItem:&lt;id&gt;</code></td></tr>
 <tr><td class="mono">M1</td><td class="mono">shell/status-registry.ts</td><td><span class="tag new">新</span> 注册表：内置 provider 与插件贡献点合流、按段与 priority 排序、格数预算、失败熄灯与退避</td></tr>
 <tr><td class="mono">M1</td><td class="mono">shell/status-renderers.tsx</td><td><span class="tag new">新</span> 四种渲染器（<code>text/gauge/dot/progress</code>）。<b>插件只能选，不能自带</b></td></tr>
-<tr><td class="mono">M1</td><td class="mono">shell/status-poll.ts</td><td><span class="tag new">新</span> 插件拉取：同插件多 item 合并成一次 <code>run</code>、<code>document.hidden</code> 停、1s 超时、3 次熄灯</td></tr>
+<tr><td class="mono">M1</td><td class="mono">shell/status-poll.ts</td><td><span class="tag new">新</span> 插件拉取：同插件多 item 合并成一次 <code>run</code>、<code>document.hidden</code> 停、一帧超时（扣掉主线程卡住的时间）、同组不并发、3 次熄灯</td></tr>
 <tr><td class="mono">M1</td><td class="mono">frontend/src/components/shell/StatusBar.tsx</td><td><span class="tag new">新</span> 组件本体（只渲染左半 + 通知/版本）</td></tr>
 <tr><td class="mono">M1</td><td class="mono">shell/status-cells.ts · status-cells.test.ts</td><td><span class="tag new">新</span> 纯函数：阈值判等级、CPU 的 60s 滞后、按宽度四档挑格（钉住规则）</td></tr>
 <tr><td class="mono">M1</td><td class="mono">frontend/src/index.css</td><td><code>.tt-statusbar</code>；新令牌 <code>--status-h</code>；hover 一律 <code>:where(html[data-pointer="fine"])</code></td></tr>

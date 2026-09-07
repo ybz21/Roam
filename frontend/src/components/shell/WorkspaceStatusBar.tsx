@@ -34,12 +34,21 @@ export function WorkspaceStatusBar({ system, onAction }: {
 
   // 一次性拉插件清单——这是**注册表**，不是读数：不知道注册了什么就没法渲染。
   // 之后不再轮询，装/停用插件后刷新页面生效。
+  //
+  // 但这一发失败就等于整场会话都没有插件格（清单不重拉，错误又是咽掉的），所以
+  // 失败重试几次：开机那阵后端正在起一堆子进程，一次偶发的 5xx 不该让主机监控
+  // 消失到下次刷新页面为止。
   useEffect(() => {
     let stop = false
-    api('GET', '/plugins')
-      .then((r) => { if (!stop) setPlugins(Array.isArray(r) ? r : r?.data || []) })
-      .catch(() => {})
-    return () => { stop = true }
+    let tries = 0
+    let retry: ReturnType<typeof setTimeout> | undefined
+    const load = () => {
+      api('GET', '/plugins')
+        .then((r) => { if (!stop) setPlugins(Array.isArray(r) ? r : r?.data || []) })
+        .catch(() => { if (!stop && ++tries < 3) retry = setTimeout(load, 2000 * tries) })
+    }
+    load()
+    return () => { stop = true; clearTimeout(retry) }
   }, [])
 
   // 只量容器，不量格子：格宽是估出来的纯函数（status-cells.estimateWidth）。
