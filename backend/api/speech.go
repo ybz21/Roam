@@ -37,7 +37,8 @@ type OpenAISpeech struct {
 }
 
 type VolcanoSpeech struct {
-	AppID       string `json:"appId"`       // 火山控制台 App ID
+	APIKey      string `json:"apiKey"`      // 新版控制台：一个 API Key（请求头 X-Api-Key），填了就不看下面两个
+	AppID       string `json:"appId"`       // 旧版控制台 App ID
 	AccessToken string `json:"accessToken"` // 火山控制台 Access Token
 	ResourceID  string `json:"resourceId"`  // 默认 volc.bigasr.auc(大模型录音识别·标准版)；含 _turbo 走极速版
 	Endpoint    string `json:"endpoint"`    // 默认标准版 submit 接口(极速版用 recognize/flash)
@@ -249,8 +250,13 @@ func volcanoPost(client *http.Client, url string, cfg VolcanoSpeech, resourceID,
 		return "", "", nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Api-App-Key", cfg.AppID)
-	req.Header.Set("X-Api-Access-Key", cfg.AccessToken)
+	// 新版控制台只有一个 API Key（X-Api-Key）；旧版是 App ID + Access Token 两个头。其余头两版相同
+	if cfg.APIKey != "" {
+		req.Header.Set("X-Api-Key", cfg.APIKey)
+	} else {
+		req.Header.Set("X-Api-App-Key", cfg.AppID)
+		req.Header.Set("X-Api-Access-Key", cfg.AccessToken)
+	}
 	req.Header.Set("X-Api-Resource-Id", resourceID)
 	req.Header.Set("X-Api-Request-Id", reqID)
 	req.Header.Set("X-Api-Sequence", "-1")
@@ -279,7 +285,7 @@ func volcanoText(body []byte) (string, error) {
 // transcribeVolcano 调火山引擎豆包大模型录音识别，按 resourceId 自动选路：
 // 含 _turbo → 极速版(flash 一次性同步)；否则 → 标准版(submit→query 异步)。
 func transcribeVolcano(cfg VolcanoSpeech, audio []byte) (string, error) {
-	if cfg.AppID == "" || cfg.AccessToken == "" {
+	if cfg.APIKey == "" && (cfg.AppID == "" || cfg.AccessToken == "") {
 		return "", fmt.Errorf("volcano credentials not set")
 	}
 	resourceID := cfg.ResourceID
