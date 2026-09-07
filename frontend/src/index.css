@@ -1438,6 +1438,22 @@ html[data-size="compact"] .ant-form-item-control-input-content > .ant-picker { w
 }
 .tt-cron-card .ops { display: flex; gap: 6px; flex-wrap: wrap; }
 
+/* 执行记录抽屉：一次触发一张小卡，卡里按「什么时候 · 成没成 · 谁按的」开头 */
+.tt-cron-runs { display: flex; flex-direction: column; gap: 10px; }
+.tt-cron-runs .run {
+  padding: 10px 12px; border: 1px solid var(--border-subtle); border-radius: var(--r-card);
+  background: var(--bg-container); display: flex; flex-direction: column; gap: 6px;
+}
+.tt-cron-runs .hd { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tt-cron-runs .sess { display: flex; align-items: center; gap: 8px; }
+.tt-cron-runs .err { color: var(--danger); font-size: var(--fs-meta); word-break: break-all; }
+/* 输出只留末段（Go 侧就截好了），高度封顶自己滚——一条 npm test 能吐几百行 */
+.tt-cron-runs .out {
+  margin: 0; max-height: 220px; overflow: auto; padding: 8px 10px;
+  border-radius: var(--r-xs); background: var(--bg-base); color: var(--text-dim);
+  font: var(--fs-micro)/1.6 var(--mono); white-space: pre-wrap; word-break: break-all;
+}
+
 /* antd 自带的几处不在刻度上：List 行 8、内联 code 3 且字号 .85em。一条收掉，
    不必逐个组件传 style（设计系统文档 §1）。 */
 .ant-list-item.ant-list-item { border-radius: var(--r-sm); }

@@ -57,6 +57,7 @@ func Activate(ctx *sdk.Ctx) sdk.Plugin {
 			"enable":  enable,
 			"disable": disable,
 			"run":     runNow,
+			"runs":    runsCmd,
 			"preview": preview,
 			"tick":    tick,
 			"serve":   serve,
@@ -217,6 +218,7 @@ func remove(ctx *sdk.Ctx, args map[string]string) (any, error) {
 	if !removed {
 		return nil, fmt.Errorf("没有名为 %q 的定时任务", name)
 	}
+	dropRuns(ctx, name)
 	if err := saveJobs(ctx, kept); err != nil {
 		return nil, err
 	}
@@ -280,7 +282,7 @@ func runNow(ctx *sdk.Ctx, args map[string]string) (any, error) {
 		if jobs[i].Name != name {
 			continue
 		}
-		res, ferr := fireJob(ctx, &jobs[i])
+		res, ferr := fireJob(ctx, &jobs[i], "manual")
 		if ferr != nil {
 			return nil, ferr
 		}
@@ -336,7 +338,7 @@ func tickOnce(ctx *sdk.Ctx) ([]string, error) {
 		if !j.Enabled || j.NextRun == 0 || time.Unix(j.NextRun, 0).After(now) {
 			continue
 		}
-		if _, ferr := fireJob(ctx, j); ferr != nil {
+		if _, ferr := fireJob(ctx, j, "schedule"); ferr != nil {
 			// 单个任务触发失败不阻断其余;记日志,排期照常推进避免热循环重试
 			fmt.Fprintf(os.Stderr, "[%s] 任务 %s 触发失败: %v\n", nowStr(now), j.Name, ferr)
 		} else {
@@ -359,18 +361,44 @@ func tickOnce(ctx *sdk.Ctx) ([]string, error) {
 	return fired, nil
 }
 
-// fireJob 执行一条任务的动作,并就地更新其 LastRun/Runs 计数。
-func fireJob(ctx *sdk.Ctx, j *Job) (any, error) {
+// fireJob 执行一条任务的动作,并就地更新其 LastRun/Runs 计数,再落一条执行记录。
+//
+// trigger 是「谁按的」:schedule=到点触发,manual=面板上的「立即触发」。
+// 记录哪怕写不进去也不影响这次触发的结果——它只是给人看的(见 recordRun)。
+func fireJob(ctx *sdk.Ctx, j *Job, trigger string) (any, error) {
 	j.Runs++
 	j.LastRun = time.Now().Unix()
+	rec := Run{Name: j.Name, At: j.LastRun, Trigger: trigger, Action: j.Action}
+
+	var res any
+	var err error
 	switch j.Action {
 	case "agent":
-		return fireAgent(ctx, j)
+		res, err = fireAgent(ctx, j)
 	case "exec":
-		return fireExec(ctx, j)
+		res, err = fireExec(ctx, j)
 	default:
-		return nil, fmt.Errorf("未知动作 %q", j.Action)
+		err = fmt.Errorf("未知动作 %q", j.Action)
 	}
+
+	rec.OK = err == nil
+	if err != nil {
+		rec.Error = err.Error()
+	}
+	if m, okMap := res.(map[string]any); okMap {
+		if s, okS := m["session"].(string); okS {
+			rec.Session = s
+		}
+		rec.Interactive = j.Interactive
+		if e, okE := m["exit"].(int); okE {
+			rec.Exit = &e
+		}
+		if o, okO := m["output"].(string); okO {
+			rec.Output = tailStr(o, 4000)
+		}
+	}
+	recordRun(ctx, rec)
+	return res, err
 }
 
 func fireAgent(ctx *sdk.Ctx, j *Job) (any, error) {

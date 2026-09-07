@@ -3,7 +3,7 @@
 // (cron.add / list / remove / enable / disable / run)经 backend 薄封装 REST。
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
-  Alert, Button, Empty, Form, Input, Modal, Popconfirm, Select, Space, Spin, Switch, Table, Tag,
+  Alert, Button, Drawer, Empty, Form, Input, Modal, Popconfirm, Select, Space, Spin, Switch, Table, Tag,
   Typography, message,
 } from 'antd'
 import { api } from '../../api'
@@ -30,6 +30,21 @@ type Job = {
   lastRunAt?: string
 }
 
+// 一次触发的记录（与 Go 端 runsCmd 对齐）。「已触发 3」这个数字答不出的东西都在这儿。
+type Run = {
+  name: string
+  at: number
+  atStr: string
+  trigger: 'schedule' | 'manual'
+  action: Action
+  ok: boolean
+  error?: string
+  session?: string
+  interactive?: boolean
+  exit?: number
+  output?: string
+}
+
 type FormValues = {
   name: string
   cron: string
@@ -50,6 +65,7 @@ export default function CronPanel({ pluginId, enabled, t }: { pluginId: string; 
   const [editing, setEditing] = useState<Job | null>(null) // 非空=编辑;{} 视图当新增用 open 区分
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState('') // 正在执行动作的任务名(禁用其行内按钮)
+  const [runsOf, setRunsOf] = useState<Job | null>(null) // 正在看谁的执行记录
 
   // 调一个 cron 命令:command 传短名(cron.xxx),args 全为字符串。
   const runCmd = useCallback(async (command: string, args: Record<string, string> = {}) => {
@@ -106,6 +122,8 @@ export default function CronPanel({ pluginId, enabled, t }: { pluginId: string; 
     }
   }
 
+  const openRuns = (j: Job) => setRunsOf(j)
+
   const columns = useMemo(() => [
     {
       title: t('cron.colName'), dataIndex: 'name', key: 'name',
@@ -131,11 +149,14 @@ export default function CronPanel({ pluginId, enabled, t }: { pluginId: string; 
         : <Typography.Text type="secondary">{t('cron.paused')}</Typography.Text>,
     },
     {
-      title: t('cron.colRuns'), dataIndex: 'runs', key: 'runs', width: 80,
+      // 「已触发 3」本身答不出任何问题：哪次跑的、成没成、会话在哪。点开就是记录。
+      title: t('cron.colRuns'), dataIndex: 'runs', key: 'runs', width: 90,
       render: (n: number, j: Job) => (
-        <Tooltip label={j.lastRunAt ? t('cron.lastRun', { time: j.lastRunAt }) : t('cron.neverRun')}>
-          <span>{n || 0}</span>
-        </Tooltip>
+        <Button size="small" type="link" style={{ padding: 0 }} disabled={!n}
+          title={j.lastRunAt ? t('cron.lastRun', { time: j.lastRunAt }) : t('cron.neverRun')}
+          onClick={() => openRuns(j)}>
+          {n || 0}
+        </Button>
       ),
     },
     {
@@ -187,7 +208,10 @@ export default function CronPanel({ pluginId, enabled, t }: { pluginId: string; 
                 <div className="meta">
                   <Typography.Text code style={{ fontSize: 12 }}>{j.schedule}</Typography.Text>
                   <span>{j.enabled ? (j.nextRunAt || '—') : t('cron.paused')}</span>
-                  <span>{t('cron.colRuns')} {j.runs || 0}</span>
+                  <Button size="small" type="link" style={{ padding: 0, height: 'auto' }}
+                    disabled={!j.runs} onClick={() => openRuns(j)}>
+                    {t('cron.colRuns')} {j.runs || 0}
+                  </Button>
                 </div>
                 <div className="ops">
                   <Button size="small" disabled={!enabled || busy === j.name} onClick={() => runNow(j)}>{t('cron.runNow')}</Button>
@@ -202,6 +226,7 @@ export default function CronPanel({ pluginId, enabled, t }: { pluginId: string; 
           </div>
         ) : <Table<Job> size="small" rowKey="name" dataSource={jobs} columns={columns as any}
             pagination={{ pageSize: 20, hideOnSinglePage: true }} scroll={{ x: 720 }} />}
+      <RunsDrawer job={runsOf} t={t} runCmd={runCmd} onClose={() => setRunsOf(null)} />
       <JobModal open={open} job={editing} existing={jobs} t={t} pluginId={pluginId}
         onClose={() => setOpen(false)}
         onSaved={async () => { setOpen(false); await reload() }}
@@ -224,6 +249,144 @@ const ACTION_COLOR: Record<string, string> = { agent: 'purple', exec: 'orange' }
 // 轻量 tooltip(避免多引一个组件;antd Tooltip 用 title;此处用 span title 兜底)
 function Tooltip({ label, children }: { label: string; children: ReactNode }) {
   return <span title={label}>{children}</span>
+}
+
+// 工作目录：在项目里挑，而不是背路径。
+//
+// 「定时任务在哪跑」十有八九就是某个项目的目录——原来这里只有一个空输入框，
+// 等于每次都要自己去别处把绝对路径抄过来。项目清单直接读 /api/projects
+// （「临时」那种目录本身就在项目里，不用另立一档）；剩下的情况留「自定义路径」。
+const CUSTOM = '__custom__'
+
+function WorkdirPicker({ t, value, onChange }: { t: T; value: string; onChange: (v: string) => void }) {
+  const [projects, setProjects] = useState<{ name: string; dir: string }[]>([])
+  const [loading, setLoading] = useState(true)
+  const [custom, setCustom] = useState(false)
+
+  // /projects 这条要两秒上下（它顺带算了每个项目的 worktree 状态），
+  // 期间下拉里只有「默认」和「自定义」两项——不给个 loading，看着就像项目丢了
+  useEffect(() => {
+    let stop = false
+    api('GET', '/projects')
+      .then((r) => {
+        const list = (r?.data?.projects || r?.projects || []) as any[]
+        if (!stop) setProjects(list.map((p) => ({ name: p.name, dir: p.dir })).filter((p) => p.dir))
+      })
+      .catch(() => {})
+      .finally(() => { if (!stop) setLoading(false) })
+    return () => { stop = true }
+  }, [])
+
+  // 编辑既有任务：路径不在项目清单里就是自定义的，直接把输入框摊开
+  useEffect(() => {
+    if (value && !projects.some((p) => p.dir === value)) setCustom(true)
+  }, [value, projects])
+
+  const options = [
+    { value: '', label: t('cron.workdirDefault') },
+    ...projects.map((p) => ({ value: p.dir, label: `${p.name} · ${p.dir}` })),
+    { value: CUSTOM, label: t('cron.workdirCustom') },
+  ]
+
+  return (
+    <Space direction="vertical" style={{ width: '100%' }} size={6}>
+      <Select
+        value={custom ? CUSTOM : value || ''}
+        options={options}
+        loading={loading}
+        onChange={(v) => {
+          if (v === CUSTOM) { setCustom(true); return }
+          setCustom(false)
+          onChange(v)
+        }}
+      />
+      {custom && (
+        <Input placeholder={t('cron.workdirPlaceholder')} value={value}
+          onChange={(e) => onChange(e.target.value)} />
+      )}
+    </Space>
+  )
+}
+
+// ── 执行记录 ──
+//
+// 定时任务最要紧的问题不是「排期对不对」，而是**上次到底跑了没、跑成什么样**。
+// 表上原来只有一个「已触发 3」，点不开——出了事只能去翻 tmux 里那个会话还在不在。
+function RunsDrawer({ job, t, runCmd, onClose }: {
+  job: Job | null; t: T
+  runCmd: (command: string, args?: Record<string, string>) => Promise<any>
+  onClose: () => void
+}) {
+  const [runs, setRuns] = useState<Run[]>([])
+  const [loading, setLoading] = useState(false)
+  const [live, setLive] = useState<Set<string>>(new Set()) // 还活着的会话名
+
+  useEffect(() => {
+    if (!job) { setRuns([]); return }
+    let stop = false
+    setLoading(true)
+    ;(async () => {
+      try {
+        const data = await runCmd('cron.runs', { name: job.name, limit: '30' })
+        if (!stop) setRuns((data?.runs as Run[]) || [])
+        // 会话可能早就退了：拿一次在册名单，退了的那条就不给「打开会话」的入口，
+        // 免得点进去是个 4404
+        const ss = await api('GET', '/sessions').catch(() => null)
+        const list: any[] = Array.isArray(ss) ? ss : (ss?.data || [])
+        if (!stop) setLive(new Set(list.map((x: any) => x?.name).filter(Boolean)))
+      } catch (e: any) {
+        message.error(e.message)
+      } finally {
+        if (!stop) setLoading(false)
+      }
+    })()
+    return () => { stop = true }
+  }, [job, runCmd])
+
+  const openSession = (name: string) => {
+    // 会话在工作区里开，不在插件页：直接换路由，把它设成当前标签
+    location.hash = `#/w?terms=${encodeURIComponent(name)}&active=${encodeURIComponent(name)}`
+  }
+
+  return (
+    <Drawer open={!!job} onClose={onClose} width={560} destroyOnClose
+      title={job ? t('cron.runsTitle', { name: job.name }) : ''}>
+      {loading
+        ? <div style={{ padding: 24, textAlign: 'center' }}><Spin /></div>
+        : runs.length === 0
+          ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('cron.runsEmpty')} />
+          : (
+            <div className="tt-cron-runs">
+              {runs.map((r) => (
+                <div key={`${r.at}-${r.session || r.exit}`} className="run">
+                  <div className="hd">
+                    <Typography.Text code style={{ fontSize: 12 }}>{r.atStr}</Typography.Text>
+                    <Tag color={r.ok ? 'green' : 'red'} style={{ margin: 0 }}>
+                      {r.ok ? t('cron.runOk') : t('cron.runFail')}
+                    </Tag>
+                    <Tag style={{ margin: 0 }}>{t(`cron.trigger.${r.trigger}`)}</Tag>
+                    {r.exit != null && (
+                      <Typography.Text type={r.exit === 0 ? 'secondary' : 'danger'} style={{ fontSize: 12 }}>
+                        exit {r.exit}
+                      </Typography.Text>
+                    )}
+                  </div>
+                  {r.error && <div className="err">{r.error}</div>}
+                  {r.session && (
+                    <div className="sess">
+                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>{r.session}</Typography.Text>
+                      {live.has(r.session)
+                        ? <Button size="small" onClick={() => openSession(r.session!)}>{t('cron.openSession')}</Button>
+                        : <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('cron.sessionGone')}</Typography.Text>}
+                    </div>
+                  )}
+                  {r.output && <pre className="out">{r.output.trimEnd()}</pre>}
+                </div>
+              ))}
+            </div>
+          )}
+    </Drawer>
+  )
 }
 
 // ── 新增/编辑弹窗 ──
@@ -313,9 +476,11 @@ function JobModal({ open, job, existing, t, pluginId, onClose, onSaved, submit }
                 <Form.Item name="prompt" label={t('cron.fieldPrompt')} rules={[{ required: true, message: t('cron.promptRequired') }]}>
                   <Input.TextArea rows={5} placeholder={t('cron.promptPlaceholder')} />
                 </Form.Item>
-                <Form.Item name="workdir" label={t('cron.fieldWorkdir')}>
-                  <Input placeholder={t('cron.workdirPlaceholder')} />
+                <Form.Item label={t('cron.fieldWorkdir')} extra={t('cron.workdirHint')}>
+                  <WorkdirPicker t={t} value={getFieldValue('workdir') || ''}
+                    onChange={(v) => form.setFieldValue('workdir', v)} />
                 </Form.Item>
+                <Form.Item name="workdir" hidden><Input /></Form.Item>
                 <Form.Item name="interactive" valuePropName="checked" label={t('cron.fieldInteractive')}
                   extra={t('cron.interactiveHint')}>
                   <Switch />
