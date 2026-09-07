@@ -178,6 +178,33 @@ authority, it just no longer moves the layout under the user a beat after load.
 - The `commit-msg` hook enforces the format locally. PR titles must follow it too — squash merges
   turn the title into the final commit.
 
+## Pull Request 必须带截图
+
+每个 PR 都要能**看**出来改了什么，不能只读得出来。文字描述由写的人挑角度，截图不会。
+
+- **界面改动**：至少一张改后的截图；动的是既有界面就给改前 / 改后两张。手机档也受影响的，
+  桌面与手机各一张——`data-size` 与粗指针那套差别恰恰是最容易漏的一类。
+- **没有界面的改动**（后端 / CLI / 插件 / 脚本）：截能证明它真跑起来的那一屏——命令输出、
+  日志、测试结果。
+- **文档与规则类改动**：截「这条规则落地之后长什么样」。
+
+放法：仓库是公开的，截图走 `pr-shots` 这条**孤儿分支**（只存图，永不并入 `main`），
+正文里引 raw 链接。有脚本，别手搓：
+
+```bash
+scripts/dev/pr-shot.sh 253 menu-after.png      # 推图，并打印可直接粘的 markdown
+```
+
+```markdown
+![改后：合成行的右键菜单](https://raw.githubusercontent.com/ybz21/Roam/pr-shots/pr-253/menu-after.png)
+```
+
+脚本用 git plumbing 写（独立索引 + `commit-tree`），不切分支、不碰工作区——截图不该逼你
+把手里的活停下来；拉不到 `pr-shots` 时它宁可报错也不从空树重建（那样一推就把之前所有
+PR 的图抹了）。
+
+截图不要提交进 `main`：仓库里不留 PR 的一次性产物。
+
 ## Code Review
 
 - PRs are reviewed by the **Codex GitHub App** (`chatgpt-codex-connector` bot). See
