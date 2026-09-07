@@ -189,4 +189,4 @@ swarm.plaza.post(...)
 swarm.block/unblock({ name, reason, source })
 ```
 
-引入时机与前提见 [08-roadmap.md](08-roadmap.md) 阶段 5:插件只通过 hook 与稳定 API(board/plaza/block)参与,核心状态机仍由 Roam 管,v1 不把调度核心开放为可替换。
+引入时机与前提见 [08-roadmap.md](08-roadmap.md) 阶段 5:插件只通过 hook 与稳定 API(board/plaza/block)参与,核心状态机仍由 Roami 管,v1 不把调度核心开放为可替换。

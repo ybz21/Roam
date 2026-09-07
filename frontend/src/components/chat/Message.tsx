@@ -11,7 +11,7 @@ import type { Block, Msg } from './types'
 import { LooseResult, ToolView } from './tool-render'
 import { TerminalIcon } from '../../icons'
 import { splitAtPaths } from '../../agent-paths'
-import { ROAM_NOTICE_PREFIX } from '../shell/session-drop'
+import { noticePrefixOf } from '../shell/session-drop'
 import { IMG_EXT } from '../files/file-utils'
 import { MentionedImage } from './MentionedImage'
 
@@ -108,19 +108,20 @@ function BodyWithImages({ text, accent }: { text: string; accent: string }) {
   )
 }
 
-/** 整条消息就是 Roam 的注入：第一个文本块以标记开头 */
+/** 整条消息就是 Roami 的注入：第一个文本块以标记开头（改名前的 `[Roam]` 也认） */
 function isRoamNotice(m: Msg): boolean {
   const first = m.blocks.find((b) => b.kind === 'text')
-  return !!first?.text?.startsWith(ROAM_NOTICE_PREFIX)
+  return noticePrefixOf(first?.text) !== null
 }
 
 function RoamNotice({ m }: { m: Msg }) {
   const { t } = useI18n()
   const text = m.blocks.filter((b) => b.kind === 'text').map((b) => b.text || '').join('\n')
+  const prefix = noticePrefixOf(text) || ''
   // 默认收起：它是给 Agent 看的上下文，人只要知道「这儿发生过一次注入」就够了
   return (
     <div className="cc-msg" data-msg-id={m.id} style={{ margin: 'var(--sp-1) 0' }}>
-      <Collapsible label={t('chat.roamNotice')} text={text.replace(ROAM_NOTICE_PREFIX, '')} color="var(--text-dimmer)" />
+      <Collapsible label={t('chat.roamNotice')} text={prefix ? text.replace(prefix, '') : text} color="var(--text-dimmer)" />
     </div>
   )
 }

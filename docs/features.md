@@ -1,8 +1,8 @@
-# Roam — Feature List
+# Roami — Feature List
 
 **English** | [简体中文](features.zh-CN.md)
 
-A detailed list of what Roam does. For the overview and screenshots, see the
+A detailed list of what Roami does. For the overview and screenshots, see the
 [README](../README.md).
 
 ## Remote access & multi-device

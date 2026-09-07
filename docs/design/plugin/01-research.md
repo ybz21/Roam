@@ -15,11 +15,11 @@ VS Code 的扩展机制可以拆成四层:
 
 VS Code 官方文档明确:扩展通常结合 Contribution Points 和 VS Code API 扩展功能;`activate` 在激活事件发生后执行,`deactivate` 用于清理。扩展宿主负责运行扩展,桌面、Web、远程开发场景下可存在不同宿主位置和运行时。
 
-**特别注意**:VS Code 的安全模型本质是"安装即信任"——扩展进程与用户同权,`package.json` 里没有运行时权限 enforce,Workspace Trust 只控制"是否在不可信工作区启用扩展"。这对 Roam v1 的信任模型定位(见 [07-security.md](07-security.md))是最重要的参照:**不要假装普通子进程模型能做到 Figma 级别的沙箱**。
+**特别注意**:VS Code 的安全模型本质是"安装即信任"——扩展进程与用户同权,`package.json` 里没有运行时权限 enforce,Workspace Trust 只控制"是否在不可信工作区启用扩展"。这对 Roami v1 的信任模型定位(见 [07-security.md](07-security.md))是最重要的参照:**不要假装普通子进程模型能做到 Figma 级别的沙箱**。
 
-对 Roam 的直接启发:
+对 Roami 的直接启发:
 
-- 插件必须有 `roam-plugin.json`,先声明能力,再执行代码。
+- 插件必须有 `roami-plugin.json`,先声明能力,再执行代码。
 - UI、命令、配置、事件订阅都应是声明式 contribution。
 - 插件默认惰性激活,只有命令调用、事件命中、工作区条件满足时才启动。
 - 插件代码不跑在 `ttmux-web` 或 CLI 主进程里,至少进程级隔离。
@@ -31,9 +31,9 @@ VS Code 官方文档明确:扩展通常结合 Contribution Points 和 VS Code AP
 - extension point 分两类:接口型扩展点让第三方提供代码实现,Bean 型扩展点让第三方提供数据。
 - 动态插件要求安装、更新、卸载时不重启 IDE,但必须满足一系列限制:不使用旧 Components、只使用动态扩展点、正确清理资源、不缓存会阻止卸载的对象。
 
-对 Roam 的直接启发:
+对 Roami 的直接启发:
 
-- Roam 不只要"插件扩展 Roam",后续也要允许"插件定义二级扩展点",使生态可以分层。
+- Roami 不只要"插件扩展 Roami",后续也要允许"插件定义二级扩展点",使生态可以分层。
 - 插件必须有清晰生命周期:install、enable、activate、deactivate、disable、uninstall。
 - 动态卸载的难点在资源引用:长任务、watcher、PTY、浏览器会话、Agent 进程、缓存都必须可归属到插件并可清理。
 - extension point 要标注是否支持动态加载;不能动态卸载的插件应声明 `requiresServiceRestart`。
@@ -46,9 +46,9 @@ Figma 插件也以 `manifest.json` 为入口,包含 `main`、`ui`、`editorType`
 - 权限、能力和网络访问会展示给用户。
 - 插件 UI 和主逻辑分离,UI 通过受控通道与宿主通信。
 
-**关键前提**:Figma 能真正阻断未声明的网络访问,是因为插件主逻辑跑在浏览器沙箱(realm/iframe)里,宿主控制了全部 I/O 出口。Roam v1 的 Node/任意可执行文件子进程模型不具备这个前提,网络白名单在 v1 只能做"声明 + 展示 + 审计",不能宣称阻断。
+**关键前提**:Figma 能真正阻断未声明的网络访问,是因为插件主逻辑跑在浏览器沙箱(realm/iframe)里,宿主控制了全部 I/O 出口。Roami v1 的 Node/任意可执行文件子进程模型不具备这个前提,网络白名单在 v1 只能做"声明 + 展示 + 审计",不能宣称阻断。
 
-对 Roam 的直接启发:
+对 Roami 的直接启发:
 
 - 权限、网络域名必须显式声明并展示给用户——即便 v1 无法强制,声明本身就是信任决策的输入。
 - Web 插件面板(v2)应以 iframe 沙箱运行,通过 `postMessage`/RPC 与宿主通信——UI 层是可以做到真隔离的。
@@ -56,7 +56,7 @@ Figma 插件也以 `manifest.json` 为入口,包含 `main`、`ui`、`editorType`
 
 ## 4. 对比结论
 
-| 设计问题 | VS Code | JetBrains | Figma | Roam 取舍 |
+| 设计问题 | VS Code | JetBrains | Figma | Roami 取舍 |
 |---|---|---|---|---|
 | 插件身份 | `publisher.name` | 稳定 plugin id | 平台分配 id | `publisher.name`,后续加签名发布 id |
 | 静态能力 | `contributes` | `extensions/actions` | `menu/capabilities` | `contributes` 统一描述命令、watcher、通知、工具 |

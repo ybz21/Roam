@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Roam · 会话懒恢复（R2 v0.3）</title>
+<title>Roami · 会话懒恢复（R2 v0.3）</title>
 <style>
 /* ── 令牌：直接取 frontend/src/theme.tsx 的真值 ─────────────────────────── */
 :root {
@@ -149,7 +149,7 @@ td.mono { font-family:var(--mono); font-size:var(--fs-meta); }
 
 <div class="top">
   <div>
-    <div class="kicker">Roam · Reliability</div>
+    <div class="kicker">Roami · Reliability</div>
     <h1>R2 会话懒恢复</h1>
   </div>
   <div class="sp"></div>
@@ -186,7 +186,7 @@ td.mono { font-family:var(--mono); font-size:var(--fs-meta); }
   <div class="card">
     <h4>在（台账说了算）</h4>
     <p>这个会话属于哪个目录、叫什么名字、上次跑到哪、agent 对话 id 是多少。
-    <b>这些从来没丢过</b>，一直在 <code>~/.roam/meta.db</code> 里。
+    <b>这些从来没丢过</b>，一直在 <code>~/.roami/meta.db</code> 里。
     机器重启带不走它们。</p>
   </div>
   <div class="card">
@@ -363,7 +363,7 @@ type Session struct {
   都发现 tmux 里没有、都去 <code>restore</code> → <b>建出两个会话</b>，
   两个都顶着同一个名字、同一个目录，还都敲了 <code>claude --resume</code> 抢同一份 transcript。</p>
   <p><b>按会话名加锁</b>（进程内 <code>sync.Map</code> 的 per-name mutex 就够，
-  Roam 是单进程），拿到锁之后<b>再查一次</b> tmux——第二个请求会发现会话已经在了，
+  Roami 是单进程），拿到锁之后<b>再查一次</b> tmux——第二个请求会发现会话已经在了，
   直接 attach 上去，不再走恢复。这是经典的 double-checked locking，别省那第二次检查。</p>
 </div>
 
@@ -424,7 +424,7 @@ type Session struct {
 
 <span class="c">// Reconcile 每轮给所有 live 会话刷一次 last_seen（本来就在遍历，几乎零成本）</span>
 died_at = <span class="k">last_seen</span>        <span class="c">// host-restart：取最后一次看见它的时刻</span>
-died_at = now              <span class="c">// killed：Roam 在场，"现在"就是准的</span></code></pre>
+died_at = now              <span class="c">// killed：Roami 在场，"现在"就是准的</span></code></pre>
 
 <p>顺带修一个相关的二义性：<code>Runtime.Sessions()</code>（<code>runtime.go:122</code>）
 在「tmux server 没起」和「server 起着但零会话」两种情况下都返回 <code>nil</code>，
@@ -436,7 +436,7 @@ died_at = now              <span class="c">// killed：Roam 在场，"现在"就
 <h2><span class="n">08</span>还需要开机自启吗</h2>
 
 <p>需要，但目的变了：<b>不是为了「开机做恢复动作」</b>（懒恢复没有开机动作），
-而是为了「你打开浏览器时 Roam 已经在」。<code>install.sh:170-194</code> 本来就会注册
+而是为了「你打开浏览器时 Roami 已经在」。<code>install.sh:170-194</code> 本来就会注册
 user 级 systemd 服务并 <code>enable-linger</code>，只是这台机器没走那条路——
 当前 <code>ttmux-web</code> 是 <code>PPID=1</code> 的裸进程（09:37:38 起，start.sh 拉的）。</p>
 
@@ -484,7 +484,7 @@ user 级 systemd 服务并 <code>enable-linger</code>，只是这台机器没走
   <tr><td>7</td><td><code>last_seen</code> + died_at 取真实时刻</td><td>一列 + 一次 UPDATE</td>
       <td>休眠会话显示的「上次活动」是真的。</td></tr>
   <tr><td>8</td><td>补装 systemd 服务（环境变量先比对）</td><td>install.sh 已有</td>
-      <td>开机后 Roam 自己在。</td></tr>
+      <td>开机后 Roami 自己在。</td></tr>
 </table>
 
 <h2><span class="n">11</span>验收</h2>
@@ -509,8 +509,8 @@ user 级 systemd 服务并 <code>enable-linger</code>，只是这台机器没走
 </ul>
 
 <div class="foot">
-  Roam · docs/design/reliability/session-restore.html · v0.3 · 2026-08-23<br>
-  证据来源：<code>~/.roam/meta.db</code> sessions 表（host-restart 167 条，本次 17 条）、
+  Roami · docs/design/reliability/session-restore.html · v0.3 · 2026-08-23<br>
+  证据来源：<code>~/.roami/meta.db</code> sessions 表（host-restart 167 条，本次 17 条）、
   <code>backend/pty/pty.go:314</code>、<code>backend/api/api.go:185</code>、
   <code>frontend/src/App.tsx:334</code>、<code>internal/command/db/db.go:186</code>、
   <code>internal/runtime/runtime.go:122</code>、<code>install.sh:170-194</code>。

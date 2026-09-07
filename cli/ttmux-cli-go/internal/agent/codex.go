@@ -12,7 +12,7 @@ func init() { Register(codex{}) }
 
 // codex 是 OpenAI Codex CLI。
 //
-// 它与 claude 的关键差别：**启动时没法指定对话 id**。所以 Roam 只能事后认——
+// 它与 claude 的关键差别：**启动时没法指定对话 id**。所以 Roami 只能事后认——
 // 它把每段对话写成 ~/.codex/sessions/YYYY/MM/DD/rollout-<时间>-<uuid>.jsonl，
 // uuid 就在文件名里。
 //
@@ -43,7 +43,7 @@ func (codex) OneShotArgs(opt StartOpts) []string {
 	if opt.Model != "" {
 		a = append(a, "-m", opt.Model)
 	}
-	// codex 只有一个「全放开」开关，没有档位。Roam 这边的 auto 和
+	// codex 只有一个「全放开」开关，没有档位。Roami 这边的 auto 和
 	// dangerously-skip-permissions 都映射到它——都是「别停下来问」的意思。
 	if opt.Permission == "dangerously-skip-permissions" || opt.Permission == "auto" {
 		a = append(a, "--dangerously-bypass-approvals-and-sandbox")

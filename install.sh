@@ -1,29 +1,29 @@
 #!/usr/bin/env bash
 #
-# Roam 常驻安装器 —— 下载单一自包含二进制并注册为常驻服务（systemd）。适合 24 小时运行的机器。
+# Roami 常驻安装器 —— 下载单一自包含二进制并注册为常驻服务（systemd）。适合 24 小时运行的机器。
 #
 # 一行安装（推荐）：
 #   curl -fsSL https://raw.githubusercontent.com/ybz21/Roam/main/install.sh | bash
 #
-# roam 是自包含二进制（内嵌前端 + ttmux CLI），目标机无需 go/node/npm。
-# 配置与数据都在 ~/.roam/（首次启动自动生成 config.yaml）。首次打开网页设置登录口令。
+# roami 是自包含二进制（内嵌前端 + ttmux CLI），目标机无需 go/node/npm。
+# 配置与数据都在 ~/.roami/（首次启动自动生成 config.yaml）。首次打开网页设置登录口令。
 #
 # 环境开关：
-#   ROAM_VERSION=vX.Y.Z   指定版本（默认 latest）
-#   ROAM_BIN_DIR=DIR      安装目录（默认 ~/.local/bin）
-#   ROAM_NO_SERVICE=1     只装二进制，不注册 systemd 服务
-#   ROAM_SYSTEM=1         注册系统级 systemd 服务（/etc/systemd/system，需 root/sudo）
-#   ROAM_NO_KVM=1         跳过 /dev/kvm 授权（则本机 Android 模拟器起不来）
-#   ROAM_FROM_SOURCE=1    在仓库 clone 内从源码构建（需 go+node），而非下载 release
+#   ROAMI_VERSION=vX.Y.Z   指定版本（默认 latest）
+#   ROAMI_BIN_DIR=DIR      安装目录（默认 ~/.local/bin）
+#   ROAMI_NO_SERVICE=1     只装二进制，不注册 systemd 服务
+#   ROAMI_SYSTEM=1         注册系统级 systemd 服务（/etc/systemd/system，需 root/sudo）
+#   ROAMI_NO_KVM=1         跳过 /dev/kvm 授权（则本机 Android 模拟器起不来）
+#   ROAMI_FROM_SOURCE=1    在仓库 clone 内从源码构建（需 go+node），而非下载 release
 #
 # 开发/源码构建请用 start.sh --dev（会从源码构建 CLI/chrome/skills + 前后端）。
 #
 set -euo pipefail
 
 REPO="ybz21/Roam"
-VERSION="${ROAM_VERSION:-latest}"
-BIN_DIR="${ROAM_BIN_DIR:-${HOME}/.local/bin}"
-SERVICE_NAME="roam"
+VERSION="${ROAMI_VERSION:-latest}"
+BIN_DIR="${ROAMI_BIN_DIR:-${HOME}/.local/bin}"
+SERVICE_NAME="roami"
 
 # ── 输出助手 ─────────────────────────────────────────────────────
 if [ -t 1 ]; then
@@ -36,7 +36,7 @@ step() { echo -e " ${cyan}●${reset} $*"; }
 warn() { echo -e "  ${yellow}⚠ $*${reset}"; }
 die()  { echo -e " ✘ $*" >&2; exit 1; }
 
-# ── 平台检测 → release 资产名 roam-<os>-<arch> ───────────────────
+# ── 平台检测 → release 资产名 roami-<os>-<arch> ───────────────────
 detect_asset() {
   local os arch
   case "$(uname -s)" in
@@ -49,10 +49,10 @@ detect_asset() {
     aarch64|arm64) arch=arm64 ;;
     *) die "暂不支持的架构: $(uname -m)（支持 amd64 / arm64）" ;;
   esac
-  OS="$os"; ASSET="roam-${os}-${arch}"
+  OS="$os"; ASSET="roami-${os}-${arch}"
 }
 
-# 解析生效的 release tag：显式 ROAM_VERSION 直接用；否则优先 stable「latest」，
+# 解析生效的 release tag：显式 ROAMI_VERSION 直接用；否则优先 stable「latest」，
 # 若仓库只有 prerelease（latest 会 404）则退回 GitHub API 取最新一个 release（含 prerelease）。
 resolve_tag() {
   [ "$VERSION" != latest ] && { echo "$VERSION"; return; }
@@ -72,17 +72,18 @@ download_url() {  # <tag>
   fi
 }
 
-# ── 安装二进制：下载 release，或（ROAM_FROM_SOURCE / 下载失败且在 clone 内）从源码构建 ──
+# ── 安装二进制：下载 release，或（ROAMI_FROM_SOURCE / 下载失败且在 clone 内）从源码构建 ──
 install_binary() {
   mkdir -p "$BIN_DIR"
-  local dest="${BIN_DIR}/roam"
+  local dest="${BIN_DIR}/roami"
 
-  if [ "${ROAM_FROM_SOURCE:-0}" != 1 ]; then
+  if [ "${ROAMI_FROM_SOURCE:-0}" != 1 ]; then
     local tag url; tag="$(resolve_tag)"; url="$(download_url "$tag")"
     step "下载 ${ASSET} (${tag:-latest})..."
     if curl -fSL --progress-bar -o "${dest}.tmp" "$url"; then
       mv "${dest}.tmp" "$dest"; chmod +x "$dest"
-      info "roam 已安装到 $dest"
+      link_legacy_name "$dest"
+      info "roami 已安装到 $dest"
       return 0
     fi
     rm -f "${dest}.tmp"
@@ -91,20 +92,21 @@ install_binary() {
 
   # 源码构建回退（需在 clone 内，且有 go+node）
   local here; here="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo "")"
-  if [ -f "${here}/scripts/build/build-roam.sh" ] && command -v go >/dev/null && command -v npm >/dev/null; then
-    step "从源码构建 roam（scripts/build/build-roam.sh）..."
-    ( cd "$here" && bash scripts/build/build-roam.sh )
-    local built; built="$(ls -1 "${here}/backend/dist/roam-"* 2>/dev/null | head -1)"
+  if [ -f "${here}/scripts/build/build-roami.sh" ] && command -v go >/dev/null && command -v npm >/dev/null; then
+    step "从源码构建 roami（scripts/build/build-roami.sh）..."
+    ( cd "$here" && bash scripts/build/build-roami.sh )
+    local built; built="$(ls -1 "${here}/backend/dist/roami-"* 2>/dev/null | head -1)"
     [ -n "$built" ] || die "源码构建未产出二进制"
     # 服务正跑着时 cp 直接覆盖会报「文本文件忙」；先落临时名再 mv，rename 对运行中的二进制是原子的
     cp "$built" "${dest}.tmp"; chmod +x "${dest}.tmp"; mv -f "${dest}.tmp" "$dest"
-    info "roam 已从源码构建并安装到 $dest"
+    link_legacy_name "$dest"
+    info "roami 已从源码构建并安装到 $dest"
     return 0
   fi
-  die "无法安装 roam：下载失败且非源码环境（需 clone 仓库 + go/npm，或先发布 release）"
+  die "无法安装 roami：下载失败且非源码环境（需 clone 仓库 + go/npm，或先发布 release）"
 }
 
-# ── tmux（会话基座）：roam 内嵌 ttmux，但会话/蜂群仍需宿主机的 tmux ─────
+# ── tmux（会话基座）：roami 内嵌 ttmux，但会话/蜂群仍需宿主机的 tmux ─────
 ensure_tmux() {
   command -v tmux >/dev/null && { info "tmux 已就绪"; return 0; }
   local sudo=""; [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null && sudo=sudo
@@ -121,15 +123,15 @@ ensure_tmux() {
 }
 
 # ── Chromium（「浏览器」镜像页需要一台 Chrome/Chromium 才能投屏）─────
-# roam 后端按 google-chrome → chromium → chromium-browser 的顺序在 PATH 里探测，
-# 都没有就会「拉起 Chrome 失败」。ROAM_NO_CHROME=1 可跳过（则浏览器镜像页不可用）。
+# roami 后端按 google-chrome → chromium → chromium-browser 的顺序在 PATH 里探测，
+# 都没有就会「拉起 Chrome 失败」。ROAMI_NO_CHROME=1 可跳过（则浏览器镜像页不可用）。
 ensure_chrome() {
-  [ "${ROAM_NO_CHROME:-0}" = 1 ] && { step "ROAM_NO_CHROME=1：跳过 Chromium（浏览器镜像页将不可用）"; return 0; }
+  [ "${ROAMI_NO_CHROME:-0}" = 1 ] && { step "ROAMI_NO_CHROME=1：跳过 Chromium（浏览器镜像页将不可用）"; return 0; }
   if command -v google-chrome >/dev/null || command -v chromium >/dev/null || command -v chromium-browser >/dev/null; then
     info "Chrome/Chromium 已就绪（浏览器镜像可用）"; return 0
   fi
   local sudo=""; [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null && sudo=sudo
-  step "未检测到 Chrome/Chromium，尝试安装 Chromium（较大；ROAM_NO_CHROME=1 可跳过）..."
+  step "未检测到 Chrome/Chromium，尝试安装 Chromium（较大；ROAMI_NO_CHROME=1 可跳过）..."
   if   command -v apt-get >/dev/null; then
     $sudo apt-get install -y -qq chromium 2>/dev/null \
       || $sudo apt-get install -y -qq chromium-browser 2>/dev/null \
@@ -144,14 +146,14 @@ ensure_chrome() {
   if command -v google-chrome >/dev/null || command -v chromium >/dev/null || command -v chromium-browser >/dev/null; then
     info "Chromium 已安装（浏览器镜像可用）"
   else
-    warn "未能自动安装 Chromium：浏览器镜像页不可用。装好后 roam 会自动探测，或设 CHROME_BIN 指向可执行文件；重启：systemctl --user restart roam"
+    warn "未能自动安装 Chromium：浏览器镜像页不可用。装好后 roami 会自动探测，或设 CHROME_BIN 指向可执行文件；重启：systemctl --user restart roami"
   fi
 }
 
 # ── adb（「手机」镜像页需要 adb 才能连 Android 设备）─────────────────
-# ROAM_NO_ADB=1 可跳过（则手机镜像页不可用）。
+# ROAMI_NO_ADB=1 可跳过（则手机镜像页不可用）。
 ensure_adb() {
-  [ "${ROAM_NO_ADB:-0}" = 1 ] && { step "ROAM_NO_ADB=1：跳过 adb（手机镜像页将不可用）"; return 0; }
+  [ "${ROAMI_NO_ADB:-0}" = 1 ] && { step "ROAMI_NO_ADB=1：跳过 adb（手机镜像页将不可用）"; return 0; }
   command -v adb >/dev/null && { info "adb 已就绪（手机镜像可用）"; return 0; }
   local sudo=""; [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null && sudo=sudo
   step "未检测到 adb，尝试安装（手机镜像页用）..."
@@ -164,7 +166,7 @@ ensure_adb() {
   elif command -v brew    >/dev/null; then brew install --cask android-platform-tools 2>/dev/null || brew install android-platform-tools
   fi
   command -v adb >/dev/null && info "adb 已安装（手机镜像可用）" \
-    || warn "未能自动安装 adb：手机镜像页不可用，装好后重启：systemctl --user restart roam"
+    || warn "未能自动安装 adb：手机镜像页不可用，装好后重启：systemctl --user restart roami"
 }
 
 # ── KVM（本机 Android 模拟器要靠它跑起来）──────────────────────────
@@ -197,22 +199,47 @@ ensure_kvm() {
   [ "$lib" = "$here/scripts/install/kvm-access.sh" ] || rm -f "$lib"
 }
 
+# 旧名 roam 留一条软链：改名之前写好的脚本、别人的 crontab、自己的手指记忆都还在。
+# 已经存在同名**真文件**（旧版二进制）时也换成软链——留着两个二进制只会让人不知道跑的是哪个。
+link_legacy_name() {
+  local dest="$1" legacy="${BIN_DIR}/roam"
+  [ "$dest" = "$legacy" ] && return 0
+  if [ -e "$legacy" ] && [ ! -L "$legacy" ]; then
+    rm -f "$legacy"
+  fi
+  ln -sfn "$dest" "$legacy" 2>/dev/null && info "旧名 roam 已指向 roami（兼容软链）"
+}
+
+# 升级路径：把改名前的 roam.service 停掉再删，否则两个服务抢同一个端口，
+# 而且用户会看到一个永远重启失败的 roam.service。
+retire_legacy_service() {
+  command -v systemctl >/dev/null || return 0
+  if systemctl --user list-unit-files roam.service >/dev/null 2>&1 && \
+     systemctl --user cat roam.service >/dev/null 2>&1; then
+    step "停用改名前的 roam.service（数据与配置已迁移到 ~/.roami）"
+    systemctl --user disable --now roam.service >/dev/null 2>&1 || true
+    rm -f "${HOME}/.config/systemd/user/roam.service"
+    systemctl --user daemon-reload
+  fi
+}
+
 # ── systemd 常驻服务 ─────────────────────────────────────────────
 install_service_user() {
-  command -v systemctl >/dev/null || { warn "无 systemd，跳过服务注册；手动运行：${BIN_DIR}/roam"; return 0; }
+  command -v systemctl >/dev/null || { warn "无 systemd，跳过服务注册；手动运行：${BIN_DIR}/roami"; return 0; }
+  retire_legacy_service
   local unit_dir="${HOME}/.config/systemd/user"
   mkdir -p "$unit_dir"
   cat > "${unit_dir}/${SERVICE_NAME}.service" <<EOF
 [Unit]
-Description=Roam web console
+Description=Roami web console
 After=network-online.target
 Wants=network-online.target
 
 [Service]
-ExecStart=${BIN_DIR}/roam
+ExecStart=${BIN_DIR}/roami
 Restart=always
 RestartSec=3
-# roam 起的 tmux server 在同一个 cgroup 里：默认 KillMode 会在 restart 时连 tmux 一起杀，所有会话当场没了
+# roami 起的 tmux server 在同一个 cgroup 里：默认 KillMode 会在 restart 时连 tmux 一起杀，所有会话当场没了
 KillMode=process
 
 [Install]
@@ -235,17 +262,17 @@ install_service_system() {
   home="$(eval echo "~${user}")"
   $sudo tee "/etc/systemd/system/${SERVICE_NAME}.service" >/dev/null <<EOF
 [Unit]
-Description=Roam web console
+Description=Roami web console
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 User=${user}
 Environment=HOME=${home}
-ExecStart=${BIN_DIR}/roam
+ExecStart=${BIN_DIR}/roami
 Restart=always
 RestartSec=3
-# roam 起的 tmux server 在同一个 cgroup 里：默认 KillMode 会在 restart 时连 tmux 一起杀，所有会话当场没了
+# roami 起的 tmux server 在同一个 cgroup 里：默认 KillMode 会在 restart 时连 tmux 一起杀，所有会话当场没了
 KillMode=process
 
 [Install]
@@ -259,33 +286,33 @@ EOF
 
 # macOS：用 launchd（LaunchAgent）常驻，开机自启 + 崩溃重拉。
 install_service_launchd() {
-  local plist="${HOME}/Library/LaunchAgents/com.roam.console.plist"
-  mkdir -p "${HOME}/Library/LaunchAgents" "${HOME}/.roam"
+  local plist="${HOME}/Library/LaunchAgents/com.roami.console.plist"
+  mkdir -p "${HOME}/Library/LaunchAgents" "${HOME}/.roami"
   cat > "$plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key><string>com.roam.console</string>
-  <key>ProgramArguments</key><array><string>${BIN_DIR}/roam</string></array>
+  <key>Label</key><string>com.roami.console</string>
+  <key>ProgramArguments</key><array><string>${BIN_DIR}/roami</string></array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
-  <key>StandardOutPath</key><string>${HOME}/.roam/roam.log</string>
-  <key>StandardErrorPath</key><string>${HOME}/.roam/roam.log</string>
+  <key>StandardOutPath</key><string>${HOME}/.roami/roami.log</string>
+  <key>StandardErrorPath</key><string>${HOME}/.roami/roami.log</string>
 </dict>
 </plist>
 EOF
   launchctl unload "$plist" 2>/dev/null || true
   if launchctl load "$plist" 2>/dev/null; then
-    info "已注册 launchd 服务：launchctl {unload|load} ${plist}（日志 ~/.roam/roam.log）"
+    info "已注册 launchd 服务：launchctl {unload|load} ${plist}（日志 ~/.roami/roami.log）"
   else
-    warn "launchctl load 失败，可手动运行：${BIN_DIR}/roam"
+    warn "launchctl load 失败，可手动运行：${BIN_DIR}/roami"
   fi
 }
 
 # ── 主流程 ───────────────────────────────────────────────────────
 echo ""
-echo -e "  ${bold}Roam${reset} ${dim}— 常驻安装（下载二进制 + systemd/launchd 常驻）${reset}"
+echo -e "  ${bold}Roami${reset} ${dim}— 常驻安装（下载二进制 + systemd/launchd 常驻）${reset}"
 echo ""
 
 detect_asset
@@ -295,9 +322,9 @@ ensure_chrome
 ensure_adb
 ensure_kvm
 
-if [ "${ROAM_NO_SERVICE:-0}" = 1 ]; then
-  step "ROAM_NO_SERVICE=1：跳过服务注册"
-elif [ "${ROAM_SYSTEM:-0}" = 1 ]; then
+if [ "${ROAMI_NO_SERVICE:-0}" = 1 ]; then
+  step "ROAMI_NO_SERVICE=1：跳过服务注册"
+elif [ "${ROAMI_SYSTEM:-0}" = 1 ]; then
   install_service_system
 elif [ "$OS" = darwin ]; then
   install_service_launchd
@@ -314,10 +341,10 @@ PORT="13579"
 echo ""
 echo -e "  ${bold}完成!${reset}"
 echo -e "  ${dim}控制台:${reset} https://<本机IP>:${PORT}  ${dim}(默认自签 HTTPS；设 web.tls: false 退回 http)${reset}"
-echo -e "  ${dim}首次打开网页需设置登录口令；配置在 ~/.roam/config.yaml${reset}"
-if [ "${ROAM_NO_SERVICE:-0}" != 1 ]; then
+echo -e "  ${dim}首次打开网页需设置登录口令；配置在 ~/.roami/config.yaml${reset}"
+if [ "${ROAMI_NO_SERVICE:-0}" != 1 ]; then
   if [ "$OS" = darwin ]; then
-    echo -e "  ${dim}服务:${reset} launchctl {unload|load} ~/Library/LaunchAgents/com.roam.console.plist"
+    echo -e "  ${dim}服务:${reset} launchctl {unload|load} ~/Library/LaunchAgents/com.roami.console.plist"
   else
     echo -e "  ${dim}服务:${reset} systemctl --user {status|restart|stop} ${SERVICE_NAME}   ${dim}(或系统级 sudo systemctl …)${reset}"
   fi

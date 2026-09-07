@@ -4,7 +4,7 @@
 
 ## 1. 产品定位
 
-插件机制不是给 Roam 增加"脚本目录",而是把 Roam 变成一个可扩展的开发工作空间平台:插件能组织会话、拉起并串联 claude / codex 等 Agent、订阅事件、对接外部系统,形成智能工作流。
+插件机制不是给 Roami 增加"脚本目录",而是把 Roami 变成一个可扩展的开发工作空间平台:插件能组织会话、拉起并串联 claude / codex 等 Agent、订阅事件、对接外部系统,形成智能工作流。
 
 插件要服务三类用户:
 
@@ -14,7 +14,7 @@
 | 第三方开发者 | 用稳定 API 接入自己的 Agent、平台、流程 | v1 |
 | 团队管理员 | 统一分发插件、限制权限、锁定版本、审计执行记录 | v2+(依赖多用户体系,见下文校准) |
 
-**校准**:Roam 当前是单口令单用户(`backend/auth/auth.go`,HMAC token + 可选 TOTP),没有多用户与 RBAC。"团队管理员"的统一分发/限权诉求在 v1 只能通过**提交到仓库的 policy 文件**近似实现(`.ttmux/plugin-policy.json`),真正的组织治理依赖后续多用户体系。审计日志的"操作者"字段在 v1 取值为本机用户/Agent 会话名。
+**校准**:Roami 当前是单口令单用户(`backend/auth/auth.go`,HMAC token + 可选 TOTP),没有多用户与 RBAC。"团队管理员"的统一分发/限权诉求在 v1 只能通过**提交到仓库的 policy 文件**近似实现(`.ttmux/plugin-policy.json`),真正的组织治理依赖后续多用户体系。审计日志的"操作者"字段在 v1 取值为本机用户/Agent 会话名。
 
 ## 2. 插件的组成形态:后端为主体,前端可选
 
@@ -22,7 +22,7 @@
 
 | 形态 | 组成 | 例子 |
 |---|---|---|
-| 纯后端插件(v1 主流) | 仅 `main` 进程:命令 handler、watcher、事件订阅、外部 API 调用 | **飞书消息插件就是纯后端程序**:常驻订阅 Roam 通知 → 调飞书 API 发卡片;经宿主 webhook 网关接收飞书回调。没有自己的页面也完全成立 |
+| 纯后端插件(v1 主流) | 仅 `main` 进程:命令 handler、watcher、事件订阅、外部 API 调用 | **飞书消息插件就是纯后端程序**:常驻订阅 Roami 通知 → 调飞书 API 发卡片;经宿主 webhook 网关接收飞书回调。没有自己的页面也完全成立 |
 | 后端 + 设置页 | `main` + 配置 schema(宿主自动渲染设置表单,插件不用写前端) | 飞书插件的 app id/secret 配置、监控插件的巡检间隔 |
 | 后端 + 自带 UI(v2) | `main` + `ui`(iframe 沙箱里的静态页,postMessage 与宿主桥通信) | 评审插件的 finding 面板、CI 状态卡 |
 
@@ -47,7 +47,7 @@
 
 ```bash
 ttmux plugin install ./local-plugin              # v1:本地目录
-ttmux plugin install github.com/acme/roam-ci     # v1.5:GitHub 源
+ttmux plugin install github.com/acme/roami-ci     # v1.5:GitHub 源
 ttmux plugin install @acme/ci                    # v2:registry
 ```
 
@@ -97,7 +97,7 @@ Web 设置页提供同等管理能力(经 backend exec CLI `--json`,保持薄封
 
 | 层级 | 说明 | 默认信任 |
 |---|---|---|
-| Built-in | Roam 随仓库发布的官方插件(`plugins/builtin/`) | 高 |
+| Built-in | Roami 随仓库发布的官方插件(`plugins/builtin/`) | 高 |
 | Organization | 团队私有仓库、GitHub org allowlist(v1.5) | 中 |
 | Community | 第三方公开插件(v2) | 低 |
 

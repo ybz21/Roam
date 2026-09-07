@@ -1,10 +1,10 @@
-# Roam
+# Roami
 
 **English** | [Simplified Chinese](README.zh-CN.md)
 
 > **Turn your development machines into an always-on AI coding workstation.**
 
-**Roam** lets you **connect back to your own development machines from anywhere,
+**Roami** lets you **connect back to your own development machines from anywhere,
 at any time, using a phone, tablet, or laptop.** You can keep coding, run tests,
 watch logs, debug in a browser, and supervise Claude Code, Codex, or other AI
 coding agents while the real work continues on the machine that owns it.
@@ -16,7 +16,7 @@ can switch devices, disconnect, leave your desk, and come back to the same
 working scene. Unless you close them intentionally, the work does not disappear
 because a local terminal exited, a browser tab closed, or a laptop lid shut.
 
-**Roam at a glance:**
+**Roami at a glance:**
 
 - **Everything is organized by project**: each repository becomes a mission
   control with its tasks, worktrees, agent formations, and activity — the
@@ -35,12 +35,12 @@ because a local terminal exited, a browser tab closed, or a laptop lid shut.
   behind one console — switch between them from the same window, and one page
   tells you whether they are all healthy.
 
-Roam is not another cloud IDE. It connects to your real development machines and
+Roami is not another cloud IDE. It connects to your real development machines and
 puts projects, terminals, browser, files, tasks, and AI agents into a remotely
 controllable workspace. What you see is a console; behind it is still the
 development environment and toolchain you already use.
 
-![Roam — the workbench on the left, a live Claude Code session on the right](docs/screenshots/hero.en.png)
+![Roami — the workbench on the left, a live Claude Code session on the right](docs/screenshots/hero.en.png)
 
 <sub>One window: what needs you across every project, and the agent that is working right now.</sub>
 
@@ -135,7 +135,7 @@ no app to install — and land back in the same projects, tasks, and agents.
 A bottom bar carries the five places you actually go, and a session dock keeps the
 running agent one tap away.
 
-![Roam on a phone: the workbench and the session dock](docs/screenshots/mobile-office.en.png)
+![Roami on a phone: the workbench and the session dock](docs/screenshots/mobile-office.en.png)
 
 **Talk to an agent from your phone.** Open a session and read it as a
 conversation — the same cards, diffs, and status bar as the desktop — then type or
@@ -158,14 +158,14 @@ starts to hit many breakpoints:
 - and once there is more than one machine, you need to know which one a session
   is even on
 
-Roam treats the development machine as the single real working scene. The server
+Roami treats the development machine as the single real working scene. The server
 keeps work alive, and the Web console lets you reconnect from any device. When
 automation is needed, scriptable interfaces expose sessions, tasks, logs, and
 agent orchestration.
 
 ## Typical Use
 
-1. Start Roam on your development machine.
+1. Start Roami on your development machine.
 2. Open the Web console from a phone, tablet, or another computer.
 3. Open a project, enter an existing task or terminal, and continue the
    previous working scene.
@@ -176,7 +176,7 @@ agent orchestration.
 6. Come back later from any device: the workbench shows which projects need
    input, and each project shows where its tasks got to.
 
-Roam is not mainly "one more terminal tool." It turns the development machine
+Roami is not mainly "one more terminal tool." It turns the development machine
 into a continuously available workspace. The terminals, running services,
 debugging browser, AI agent conversations, and task state on that machine do not
 vanish just because a local device shut down, SSH disconnected, or a browser tab
@@ -184,9 +184,9 @@ closed.
 
 ## Install And Start
 
-`roam` is a single self-contained binary with the frontend and the `ttmux` CLI
+`roami` is a single self-contained binary with the frontend and the `ttmux` CLI
 embedded, so the target machine needs no go/node/npm. Config and data live in
-`~/.roam/` (`config.yaml` is generated on first run).
+`~/.roami/` (`config.yaml` is generated on first run).
 
 ### Option A — install as a service (recommended for always-on / 24×7 machines)
 
@@ -197,10 +197,10 @@ service (survives reboots and logout):
 curl -fsSL https://raw.githubusercontent.com/ybz21/Roam/main/install.sh | bash
 ```
 
-`install.sh` installs `roam` into `~/.local/bin` and sets up a user service —
-manage it with `systemctl --user {status|restart|stop} roam`. Env switches:
-`ROAM_VERSION=vX.Y.Z`, `ROAM_BIN_DIR=DIR`, `ROAM_SYSTEM=1` (system-wide service,
-needs sudo), `ROAM_NO_SERVICE=1` (install the binary only).
+`install.sh` installs `roami` into `~/.local/bin` and sets up a user service —
+manage it with `systemctl --user {status|restart|stop} roami`. Env switches:
+`ROAMI_VERSION=vX.Y.Z`, `ROAMI_BIN_DIR=DIR`, `ROAMI_SYSTEM=1` (system-wide service,
+needs sudo), `ROAMI_NO_SERVICE=1` (install the binary only).
 
 ### Option B — run the binary manually
 
@@ -210,17 +210,17 @@ service — good for macOS or a quick try):
 
 ```bash
 # example: Linux x86_64
-curl -fsSL -o ~/.local/bin/roam \
-  https://github.com/ybz21/Roam/releases/latest/download/roam-linux-amd64
-chmod +x ~/.local/bin/roam
-roam                    # starts the Web console on 0.0.0.0:13579
+curl -fsSL -o ~/.local/bin/roami \
+  https://github.com/ybz21/Roam/releases/latest/download/roami-linux-amd64
+chmod +x ~/.local/bin/roami
+roami                    # starts the Web console on 0.0.0.0:13579
 ```
 
 ### Option C — from source (development)
 
 ```bash
 git clone https://github.com/ybz21/Roam.git
-cd Roam
+cd Roami
 ./start.sh --dev       # build CLI/chrome/skills + frontend + backend from source, then run
 ```
 
@@ -229,12 +229,12 @@ runs already-built artifacts without recompiling.
 
 On first launch there is **no password**: open the Web console in a browser and
 set one before entering. Change it later under **Settings → Security**, or edit
-`~/.roam/config.yaml`. By default the console listens on `0.0.0.0:13579`
+`~/.roami/config.yaml`. By default the console listens on `0.0.0.0:13579`
 (self-signed HTTPS, because microphone and clipboard need a secure context), so
 devices on the same LAN can reach it. For remote access, prefer Tailscale,
 Cloudflare Tunnel, SSH forwarding, or frp.
 
-Exposing Roam through **frp with HTTPS** so mobile voice input and clipboard
+Exposing Roami through **frp with HTTPS** so mobile voice input and clipboard
 continue to work through the tunnel is covered in
 **[docs/deploy/frp.md](docs/deploy/frp.md)** (bilingual).
 
@@ -243,7 +243,7 @@ live in **[docs/install/](docs/install/)**.
 
 ## More Than One Machine
 
-A single Roam is a complete product; you only need this section when you have a
+A single Roami is a complete product; you only need this section when you have a
 second machine. Every machine keeps running its own sessions, agents, and files —
 the hub only routes to them, so nothing about a machine depends on the hub being
 alive except reaching it from outside.
@@ -252,19 +252,19 @@ alive except reaching it from outside.
 agents, and no browser — just the registry, the console, and the tunnel:
 
 ```yaml
-# ~/.roam/config.yaml on the hub
+# ~/.roami/config.yaml on the hub
 cluster:
   mode: hub
-  public_url: https://roam.example.com    # the address machines dial back on
+  public_url: https://roami.example.com    # the address machines dial back on
 ```
 
 **Each machine** dials out to the hub with a one-time enrollment token (issue it
 under **Settings → Cluster**), then swaps it for a long-lived credential:
 
 ```yaml
-# ~/.roam/config.yaml on a machine
+# ~/.roami/config.yaml on a machine
 cluster:
-  hub: https://roam.example.com
+  hub: https://roami.example.com
   token: <one-time enrollment token>
   name: workstation                        # display name, defaults to hostname
 ```
@@ -290,7 +290,7 @@ development machine, the project page is the fastest way to use it: describe a
 task and the agent starts in an isolated worktree on its own branch, so parallel
 tasks never step on each other. You can also race Claude Code and Codex on the
 same task and keep the better result, or run any tool directly inside a
-persistent Roam terminal. Execution, output, context, and the follow-up channel
+persistent Roami terminal. Execution, output, context, and the follow-up channel
 all stay on the development machine — when you return from a phone or tablet,
 you can read where it got to and add more instructions.
 
@@ -301,21 +301,21 @@ step when earlier work is done.
 
 ## Command Line And Automation
 
-Roam also provides command-line entry points for scripts, automation, and AI
+Roami also provides command-line entry points for scripts, automation, and AI
 agents. This is not the main entry point for most users; start from the Web
 console in most cases.
 
-`roam` is the single entry point. Plugin commands are grouped by plugin name
+`roami` is the single entry point. Plugin commands are grouped by plugin name
 (any unique prefix works), and anything else is forwarded to `ttmux`:
 
 ```bash
-roam help                        # what is installed and how to reach it
-roam cron list                   # scheduled tasks
-roam im send --text "done"       # message yourself through the IM bridge
-roam host stats                  # host resource snapshot
-roam ls                          # sessions — forwarded to ttmux
-roam ttmux swarm ls              # explicit passthrough when a name collides
-roam -addr 0.0.0.0:13579         # no subcommand: start the web console (unchanged)
+roami help                        # what is installed and how to reach it
+roami cron list                   # scheduled tasks
+roami im send --text "done"       # message yourself through the IM bridge
+roami host stats                  # host resource snapshot
+roami ls                          # sessions — forwarded to ttmux
+roami ttmux swarm ls              # explicit passthrough when a name collides
+roami -addr 0.0.0.0:13579         # no subcommand: start the web console (unchanged)
 ```
 
 Underneath:
@@ -327,12 +327,12 @@ Underneath:
 
 Plugins extend the console itself — `roam.host-monitor` contributes the resource
 monitor, `roam.cron` adds scheduled prompts with its own configuration panel.
-Whatever a plugin declares in its manifest shows up as a `roam <name> <command>`
+Whatever a plugin declares in its manifest shows up as a `roami <name> <command>`
 group with no extra wiring.
 
 Command details are intentionally not expanded on the home page, so the README
 does not become a tool manual. When needed, see
-**[docs/install/](docs/install/)**, `roam help`, `ttmux help`, and `chrome help`.
+**[docs/install/](docs/install/)**, `roami help`, `ttmux help`, and `chrome help`.
 
 ## Development And Contribution
 
@@ -382,7 +382,7 @@ in **[AGENTS.md](AGENTS.md)** — the single source both Codex and Claude Code r
 
 ## Security Notes
 
-Roam can control your development machine's terminal, files, browser, and
+Roami can control your development machine's terminal, files, browser, and
 agents. Treat it as close to SSH access. For real deployments:
 
 - Use a strong access password, and enable two-factor authentication when
@@ -392,7 +392,7 @@ agents. Treat it as close to SSH access. For real deployments:
 - Do not expose the Web console port directly to the public Internet.
 - Enrollment tokens are one-time and expire (30 minutes by default); machines
   keep a long-lived credential afterwards, and the hub stores only its hash.
-- The diagnostic endpoint (`ROAM_PPROF`) is off by default and refuses to bind
+- The diagnostic endpoint (`ROAMI_PPROF`) is off by default and refuses to bind
   anything but loopback.
 - Run it only on machines and accounts you trust.
 

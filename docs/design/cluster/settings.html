@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Roam · 设置 · 多机（模式与接入）</title>
+<title>Roami · 设置 · 多机（模式与接入）</title>
 <style>
 :root {
   --bg-base:#0d1117; --bg-container:#161b22; --bg-elevated:#1b222b; --bg-term:#06090d;
@@ -266,7 +266,7 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
 
 <div class="top">
   <div>
-    <div class="kicker">Roam · Cluster · 设置页</div>
+    <div class="kicker">Roami · Cluster · 设置页</div>
     <h1>多机：两种模式，页面上就能切</h1>
   </div>
   <span class="sp"></span>
@@ -333,7 +333,7 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
           <div class="tlink"><span class="lb">HTTPS</span><span class="ln"></span><span class="lb ok">↓ 外网</span></div>
           <div class="tnode">
             <div class="role">中心</div>
-            <div class="nm"><svg width="14" height="14" viewBox="0 0 24 24"><use href="#i-cloud"/></svg>roam.example.com</div>
+            <div class="nm"><svg width="14" height="14" viewBox="0 0 24 24"><use href="#i-cloud"/></svg>roami.example.com</div>
             <div class="sub">唯一入口 · 不跑活</div>
           </div>
           <div class="tlink"><span class="lb">隧道</span><span class="ln"></span><span class="lb ok">12ms · 它拨出去的</span></div>
@@ -359,7 +359,7 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
             <span class="t"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-host"/></svg>这台机器<span class="cur">当前</span></span>
             <span class="d">在这台机器上跑活——终端、文件、Git、镜像都在这里。<b>就是你现在用的这套。</b><br>
               可以接到一个中心上，接上之后<b>从外网也能访问它</b>。</span>
-            <span class="now">现在：已接入 <b>roam.example.com</b> · 4 个会话</span>
+            <span class="now">现在：已接入 <b>roami.example.com</b> · 4 个会话</span>
           </button>
           <button class="mode">
             <span class="radio"></span>
@@ -408,7 +408,7 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
       <div class="bd">
         <div class="state">
           <i class="dot"></i>
-          <span>已接入 <b>roam.example.com</b></span>
+          <span>已接入 <b>roami.example.com</b></span>
           <span class="sub">延迟 12ms · 已连 2 小时 18 分</span>
           <span class="sp"></span>
           <button class="btn ghost">断开</button>
@@ -417,7 +417,7 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
         <div class="row">
           <div class="f">
             <label>中心地址</label>
-            <div class="box"><span class="mono">https://roam.example.com</span></div>
+            <div class="box"><span class="mono">https://roami.example.com</span></div>
             <div class="hint">在中心那台机器的「多机」设置页顶上能看到这个地址。</div>
           </div>
           <div class="f">
@@ -461,7 +461,7 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
           </div>
           <div class="way">
             <div class="h"><svg width="14" height="14" viewBox="0 0 24 24"><use href="#i-cloud"/></svg>经中心（外网）</div>
-            <div class="u">https://roam.example.com → 选「公司工作站」</div>
+            <div class="u">https://roami.example.com → 选「公司工作站」</div>
             <div class="n">在外面走这条：这台机器<b>不需要公网 IP、不用开端口</b>，是它自己拨出去连的中心。</div>
           </div>
         </div>
@@ -473,12 +473,12 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
       <div class="bd">
         <div class="eff">
           <div class="r"><span class="k">角色</span><span class="v">这台机器（standard）</span></div>
-          <div class="r"><span class="k">中心地址</span><span class="v">https://roam.example.com</span></div>
+          <div class="r"><span class="k">中心地址</span><span class="v">https://roami.example.com</span></div>
           <div class="r"><span class="k">接入凭证</span><span class="v">长期凭证 · 已换发<span style="color:var(--text-dimmer)"> （令牌已作废，不再显示）</span></span></div>
           <div class="r"><span class="k">显示名</span><span class="v">公司工作站</span></div>
           <div class="r"><span class="k">分组</span><span class="v dim">未设置</span></div>
           <div class="r"><span class="k">节点 ID</span><span class="v">n_7f3a9c2b41e8</span></div>
-          <div class="r"><span class="k">配置文件</span><span class="v">~/.roam/config.yaml</span></div>
+          <div class="r"><span class="k">配置文件</span><span class="v">~/.roami/config.yaml</span></div>
         </div>
         <div class="hint" style="font-size:var(--fs-micro);color:var(--text-dimmer);line-height:1.7">
           上面表单里的值是<b style="color:var(--text-bright)">你正在编辑的</b>，这一块是<b style="color:var(--text-bright)">当前真正生效的</b>。
@@ -545,7 +545,7 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
           <div class="tlink"><span class="lb">HTTPS</span><span class="ln"></span><span class="lb ok">↓</span></div>
           <div class="tnode me">
             <div class="role">这台机器 · 中心</div>
-            <div class="nm"><svg width="14" height="14" viewBox="0 0 24 24"><use href="#i-cloud"/></svg>roam.example.com</div>
+            <div class="nm"><svg width="14" height="14" viewBox="0 0 24 24"><use href="#i-cloud"/></svg>roami.example.com</div>
             <div class="sub">只当入口<br><b style="color:var(--text-dimmer)">不跑活</b></div>
           </div>
           <div class="tlink"><span class="lb">隧道</span><span class="ln"></span><span class="lb ok">它们拨进来</span></div>
@@ -584,12 +584,12 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
         <div class="ways">
           <div class="way">
             <div class="h"><svg width="14" height="14" viewBox="0 0 24 24"><use href="#i-cloud"/></svg>给人用（浏览器）</div>
-            <div class="u">https://roam.example.com</div>
+            <div class="u">https://roami.example.com</div>
             <div class="n">你和你的手机都只记这一个地址。</div>
           </div>
           <div class="way">
             <div class="h"><svg width="14" height="14" viewBox="0 0 24 24"><use href="#i-host"/></svg>给机器用（接入）</div>
-            <div class="u">https://roam.example.com</div>
+            <div class="u">https://roami.example.com</div>
             <div class="n">同一个地址。机器是<b>出站</b>连过来的，所以它们不用有公网 IP。</div>
           </div>
         </div>
@@ -632,16 +632,16 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
           <div class="f"><label>分组（可选）</label><div class="box ph">工作</div></div>
         </div>
         <div style="font-size:var(--fs-meta);color:var(--text-dim)">
-          <b style="color:var(--text-bright)">方式一</b>：在那台机器上执行这条命令（没装 Roam 也能一步装好）
+          <b style="color:var(--text-bright)">方式一</b>：在那台机器上执行这条命令（没装 Roami 也能一步装好）
         </div>
-        <div class="cmd">curl -fsSL <b>https://roam.example.com/install.sh</b> | bash -s -- \
-          <br>&nbsp;&nbsp;--hub <b>https://roam.example.com</b> --token <b>enr_7f3a…</b></div>
+        <div class="cmd">curl -fsSL <b>https://roami.example.com/install.sh</b> | bash -s -- \
+          <br>&nbsp;&nbsp;--hub <b>https://roami.example.com</b> --token <b>enr_7f3a…</b></div>
         <div style="font-size:var(--fs-meta);color:var(--text-dim)">
-          <b style="color:var(--text-bright)">方式二</b>：那台机器已经装了 Roam —— 打开它的
+          <b style="color:var(--text-bright)">方式二</b>：那台机器已经装了 Roami —— 打开它的
           <b style="color:var(--text-bright)">设置 › 多机</b>，把下面两样填进去
         </div>
         <div class="row">
-          <div class="f"><label>中心地址</label><div class="box"><span class="mono">https://roam.example.com</span></div></div>
+          <div class="f"><label>中心地址</label><div class="box"><span class="mono">https://roami.example.com</span></div></div>
           <div class="f"><label>接入令牌</label><div class="box"><span class="mono">enr_7f3a9c2b41e8…</span></div></div>
         </div>
         <div class="acts">
@@ -657,7 +657,7 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
   </div>
 </div>
 <ul class="pts">
-  <li><b>两种接入方式并列给，不藏</b>：一条命令装好新机器；已经装了 Roam 的直接在它的设置页填两栏。
+  <li><b>两种接入方式并列给，不藏</b>：一条命令装好新机器；已经装了 Roami 的直接在它的设置页填两栏。
     后者是常见情况（用户往往先各自装了几台），只给 curl 命令会让人以为必须重装。</li>
   <li><b>「等待接入…」原地变绿</b>：机器一连上，这一行变成「<b>公司工作站</b> 已接入」，上面的表格多一行。
     不用回列表刷新确认——这是整页唯一需要实时的地方，值得一条轮询。</li>
@@ -674,7 +674,7 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
 <h3>3.1 三条路各服务一种人，都得留</h3>
 <div class="paths">
   <div class="path">
-    <div class="h"><svg width="15" height="15" viewBox="0 0 24 24"><use href="#i-host"/></svg>已经有一台 Roam</div>
+    <div class="h"><svg width="15" height="15" viewBox="0 0 24 24"><use href="#i-host"/></svg>已经有一台 Roami</div>
     <div class="who">最常见 · 想先试试</div>
     <div class="d">在那台机器上打开<b>设置 › 多机</b>，把角色改成「中心」，重启。
       它原来的项目和终端会停掉——所以这条路适合<b>本来就闲着</b>的那台。</div>
@@ -683,15 +683,15 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
     <div class="h"><svg width="15" height="15" viewBox="0 0 24 24"><use href="#i-cloud"/></svg>新买一台小主机</div>
     <div class="who">推荐 · 长期用</div>
     <div class="d">装的时候就说清楚它是中心，装完直接是入口，不经过「先当机器再改成中心」那一步。</div>
-    <pre>curl -fsSL https://roam.sh/install.sh | bash -s -- <b>--hub</b></pre>
+    <pre>curl -fsSL https://roami.sh/install.sh | bash -s -- <b>--hub</b></pre>
   </div>
   <div class="path">
     <div class="h"><svg width="15" height="15" viewBox="0 0 24 24"><use href="#i-cloud"/></svg>丢进容器</div>
     <div class="who">已经有 docker 的人</div>
     <div class="d">中心不跑业务，没有 tmux / Chrome / adb 那些依赖，<b>是这套里唯一适合塞进容器的角色</b>。</div>
     <pre>docker run -d -p 443:13570 \
-  -v roam-hub:/root/.roam \
-  roam/hub</pre>
+  -v roami-hub:/root/.roami \
+  roami/hub</pre>
   </div>
 </div>
 <div class="note">
@@ -716,7 +716,7 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
         <div class="row">
           <div class="f" style="flex:2 1 320px">
             <label>对外地址</label>
-            <div class="box"><span class="mono">https://roam.example.com</span></div>
+            <div class="box"><span class="mono">https://roami.example.com</span></div>
             <div class="hint">默认填成<b>你现在正在用的这个地址</b>——你能打开，说明它至少对你可达。
               只有「给机器用的地址跟你自己用的不一样」时才需要改（反代、frp、内外网双地址）。</div>
           </div>
@@ -844,7 +844,7 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
   <div class="steps"><span>1 设置口令</span> › <b class="on">2 接到中心</b> › <span>3 完成</span></div>
   <div class="bd2">
     <div class="row">
-      <div class="f"><label>中心地址</label><div class="box"><span class="mono">https://roam.example.com</span></div></div>
+      <div class="f"><label>中心地址</label><div class="box"><span class="mono">https://roami.example.com</span></div></div>
       <div class="f"><label>接入令牌</label><div class="box"><span class="mono">enr_7f3a··········</span></div>
         <div class="hint">在中心页点「添加机器」生成。<b>不是中心的登录口令。</b></div></div>
     </div>
@@ -959,8 +959,8 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
             <span class="d" style="font-size:var(--fs-micro)">只当入口，自己不跑活。</span>
           </button>
         </div>
-        <div class="state" style="font-size:var(--fs-micro)"><i class="dot"></i><span>已接入 <b>roam.example.com</b> · 12ms</span></div>
-        <div class="f"><label>中心地址</label><div class="box"><span class="mono" style="font-size:10px">https://roam.example.com</span></div></div>
+        <div class="state" style="font-size:var(--fs-micro)"><i class="dot"></i><span>已接入 <b>roami.example.com</b> · 12ms</span></div>
+        <div class="f"><label>中心地址</label><div class="box"><span class="mono" style="font-size:10px">https://roami.example.com</span></div></div>
         <div class="f"><label>接入令牌</label><div class="box ph"><span class="mono" style="font-size:10px">enr_7f3a··········</span></div></div>
         <div class="acts"><button class="btn pri" style="flex:1;justify-content:center">保存并接入</button></div>
       </div>
@@ -974,7 +974,7 @@ html[data-theme="light"] .phone { border-color:#c9d1d9; box-shadow:0 18px 48px r
         <div style="font-size:var(--fs-lg);font-weight:600">多机 · 中心</div>
         <div class="way">
           <div class="h"><svg width="14" height="14" viewBox="0 0 24 24"><use href="#i-cloud"/></svg>入口地址</div>
-          <div class="u" style="font-size:10px">https://roam.example.com</div>
+          <div class="u" style="font-size:10px">https://roami.example.com</div>
         </div>
         <div style="font-size:var(--fs-meta);color:var(--text-dim);display:flex;align-items:center">
           接进来的机器 <span style="flex:1"></span>

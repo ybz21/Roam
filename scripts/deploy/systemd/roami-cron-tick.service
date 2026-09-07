@@ -1,6 +1,6 @@
 [Unit]
-Description=Roam 定时任务巡检（roam.cron 的 tick）
-After=roam.service
+Description=Roami 定时任务巡检（roam.cron 的 tick）
+After=roami.service
 
 [Service]
 Type=oneshot

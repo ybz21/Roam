@@ -5,10 +5,12 @@
 // `ttmux plugin run cron.list`，开会话又是 `ttmux ls`——插件名、命令名、
 // 前缀各记一套，谁也记不住。现在统一成：
 //
-//	roam <插件> <命令> [--k v]   任何已装插件都自动是一组（im / cron / host / review…）
-//	roam ttmux <参数...>          会话、蜂群、窗格：原样转发给 ttmux
-//	roam <其它>                   也转发给 ttmux（它自己再兜底给 tmux），所以 roam ls 照用
-//	roam [flags]                  没有子命令时照旧启动 Web 服务，一个字都没变
+//	roami <插件> <命令> [--k v]   任何已装插件都自动是一组（im / cron / host / review…）
+//	roami ttmux <参数...>          会话、蜂群、窗格：原样转发给 ttmux
+//	roami <其它>                   也转发给 ttmux（它自己再兜底给 tmux），所以 roami ls 照用
+//	roami [flags]                  没有子命令时照旧启动 Web 服务，一个字都没变
+//
+// 改名前叫 roam，装的时候留了一条同名软链，老脚本照跑。
 //
 // 插件那一组不是硬编码的清单：装了什么就有什么，名字按**唯一前缀**认——
 // `roam im send` 对应 roam.im-bridge，`roam host stats` 对应 roam.host-monitor。
@@ -146,7 +148,7 @@ func runCLI(args []string, ttmuxBin string) (handled bool, code int) {
 		return true, 0
 	}
 	if !p.Enabled {
-		fmt.Fprintf(os.Stderr, "插件 %s 已停用：先 roam ttmux plugin enable %s\n", p.Name, p.ID)
+		fmt.Fprintf(os.Stderr, "插件 %s 已停用：先 roami ttmux plugin enable %s\n", p.Name, p.ID)
 		return true, 2
 	}
 	return true, forward(ttmuxBin, pluginRunArgs(*p, rest[0], rest[1:]))
@@ -167,11 +169,11 @@ func forward(bin string, args []string) int {
 }
 
 func printHelp(plugins []pluginInfo) {
-	fmt.Printf("  roam %s — 一个入口\n\n", displayVersion())
-	fmt.Println("  roam <插件> <命令> [--k v]   插件命令（装了什么就有什么，名字可写唯一前缀）")
-	fmt.Println("  roam ttmux <参数...>          会话 / 蜂群 / 窗格（转发给 ttmux）")
-	fmt.Println("  roam <会话命令>               同上，roam ls / roam a <名> 直接用")
-	fmt.Println("  roam [flags]                 不带子命令＝启动 Web 服务（roam -h 看 flags）")
+	fmt.Printf("  roami %s — 一个入口\n\n", displayVersion())
+	fmt.Println("  roami <插件> <命令> [--k v]   插件命令（装了什么就有什么，名字可写唯一前缀）")
+	fmt.Println("  roami ttmux <参数...>          会话 / 蜂群 / 窗格（转发给 ttmux）")
+	fmt.Println("  roami <会话命令>               同上，roami ls / roami a <名> 直接用")
+	fmt.Println("  roami [flags]                 不带子命令＝启动 Web 服务（roami -h 看 flags）")
 	if len(plugins) == 0 {
 		return
 	}
@@ -183,13 +185,14 @@ func printHelp(plugins []pluginInfo) {
 		}
 		fmt.Printf("    %-14s %s%s\n", p.Name, firstLine(p.Summary), state)
 	}
-	fmt.Println("\n  例：roam im send --text '跑完了'   roam cron list   roam host stats")
+	fmt.Println("\n  例：roami im send --text '跑完了'   roami cron list   roami host stats")
+	fmt.Println("  （改名前叫 roam，那个名字留了软链，老脚本照跑）")
 }
 
 func printGroup(p pluginInfo) {
 	fmt.Printf("  %s — %s\n\n", p.Name, firstLine(p.Summary))
 	for _, c := range p.Commands {
-		fmt.Printf("    roam %s %s\n", p.Name, c)
+		fmt.Printf("    roami %s %s\n", p.Name, c)
 	}
 }
 

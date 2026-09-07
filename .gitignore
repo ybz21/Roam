@@ -18,6 +18,7 @@
 # 锚定到根的规则盖不住它，34MB 的二进制就这么混进了一次提交。
 ttmux-web
 /backend/roam
+/backend/roami
 /backend/internal/webui/site/*
 !/backend/internal/webui/site/.gitkeep
 
@@ -25,5 +26,6 @@ ttmux-web
 # 让人以为「还有东西没提交」。
 /.vite/
 /.roam/
+/.roami/
 *.bak-gitpanel
 /frontend/dist.bak-*/

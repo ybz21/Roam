@@ -22,12 +22,13 @@ type Runtime struct {
 }
 
 func New() Runtime {
+	BridgeEnvAliases() // ROAMI_* 与 ROAM_* 互为别名（改名前写好的脚本继续有效）
 	home, _ := os.UserHomeDir()
-	// Roam 主目录 ~/.roam（数据/配置根）。优先 ROAM_HOME，兼容旧 TTMUX_HOME。
-	homeDir := envOr("ROAM_HOME", envOr("TTMUX_HOME", filepath.Join(home, ".roam")))
-	MigrateLegacyHome(homeDir) // 首次把 ~/.ttmux 与旧运行时数据并入 ~/.roam
+	// Roami 主目录 ~/.roami（数据/配置根）。优先 ROAMI_HOME，兼容旧 ROAM_HOME / TTMUX_HOME。
+	homeDir := envOr("ROAMI_HOME", envOr("ROAM_HOME", envOr("TTMUX_HOME", filepath.Join(home, ".roami"))))
+	MigrateLegacyHome(homeDir) // 首次把 ~/.roam（更早是 ~/.ttmux）并入 ~/.roami
 	// 运行时数据默认与主目录同根；可用 ROAM_DATA 覆盖（兼容旧 TTMUX_DATA）。
-	dataDir := envOr("ROAM_DATA", envOr("TTMUX_DATA", homeDir))
+	dataDir := envOr("ROAMI_DATA", envOr("ROAM_DATA", envOr("TTMUX_DATA", homeDir)))
 	return Runtime{
 		HomeDir:   homeDir,
 		DataDir:   dataDir,
@@ -40,15 +41,17 @@ func New() Runtime {
 	}
 }
 
-// MigrateLegacyHome 首次启动时把旧目录并入 Roam 主目录（默认 ~/.roam）：
-//   - ~/.ttmux → ~/.roam（整体改名，含 meta.db/swarms/plugins）
-//   - ~/.local/share/ttmux/* → ~/.roam（旧运行时数据：logs/groups/meta/env/agents/tls…）
+// MigrateLegacyHome 首次启动时把旧目录并入 Roami 主目录（默认 ~/.roami）：
+//   - ~/.roam → ~/.roami（改名 Roami 之前的主目录）
+//   - ~/.ttmux → ~/.roami（更早那次改名之前的）
+//   - ~/.local/share/ttmux/* → ~/.roami（旧运行时数据：logs/groups/meta/env/agents/tls…）
 //
-// 幂等：目标已存在即跳过。设置了 ROAM_HOME/TTMUX_HOME/ROAM_DATA/TTMUX_DATA 任一自定义路径时不迁移。
+// 幂等：目标已存在即跳过。设置了任一自定义路径（ROAMI_/ROAM_/TTMUX_ 的 HOME/DATA）时不迁移。
 func MigrateLegacyHome(roamHome string) {
-	if os.Getenv("ROAM_HOME") != "" || os.Getenv("TTMUX_HOME") != "" ||
-		os.Getenv("ROAM_DATA") != "" || os.Getenv("TTMUX_DATA") != "" {
-		return
+	for _, k := range []string{"ROAMI_HOME", "ROAM_HOME", "TTMUX_HOME", "ROAMI_DATA", "ROAM_DATA", "TTMUX_DATA"} {
+		if os.Getenv(k) != "" {
+			return
+		}
 	}
 	if _, err := os.Stat(roamHome); err == nil {
 		return // 已迁移
@@ -57,10 +60,15 @@ func MigrateLegacyHome(roamHome string) {
 	if err != nil {
 		return
 	}
-	if legacy := filepath.Join(home, ".ttmux"); dirExists(legacy) {
+	// 按「新到旧」找一份还在的：先 ~/.roam，再 ~/.ttmux。整体改名，数据一个字节都不动。
+	for _, legacy := range []string{filepath.Join(home, ".roam"), filepath.Join(home, ".ttmux")} {
+		if !dirExists(legacy) {
+			continue
+		}
 		if err := os.Rename(legacy, roamHome); err != nil {
 			return
 		}
+		break
 	}
 	// 合并旧运行时数据目录的各子项（不覆盖已存在的目标）。
 	legacyData := filepath.Join(home, ".local", "share", "ttmux")

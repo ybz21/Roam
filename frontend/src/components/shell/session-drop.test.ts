@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SESSION_MIME, buildIntro, canDrop, readDrag, type SessionDrag } from './session-drop'
+import { SESSION_MIME, buildIntro, canDrop, readDrag, type SessionDrag, noticePrefixOf } from './session-drop'
 
 const src: SessionDrag = {
   id: '2026-0824-1501-006h',
@@ -125,5 +125,14 @@ describe('对面不是 Agent 的时候', () => {
       k === 'pair.intro.note' ? '和人敲进去的没区别' : k)
     expect(agent).toContain('和人敲进去的没区别')
     expect(agent).not.toContain('noteShell')
+  })
+})
+
+describe('noticePrefixOf', () => {
+  it('认新标记，也认改名前的那批——历史注入还躺在转录里', () => {
+    expect(noticePrefixOf('[Roami] 你旁边还有一个会话')).toBe('[Roami] ')
+    expect(noticePrefixOf('[Roam] 你旁边还有一个会话')).toBe('[Roam] ')
+    expect(noticePrefixOf('普通的一句话')).toBeNull()
+    expect(noticePrefixOf(undefined)).toBeNull()
   })
 })

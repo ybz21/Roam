@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Roam 中心页 · 设计稿</title>
+<title>Roami 中心页 · 设计稿</title>
 <style>
 /* 中心页设计稿 —— 令牌取 frontend/src/theme.tsx 与 index.css 的真值，稿子和成品同源。
  * 稿子里的数字**都是真的**：正常态取自 2026-08-11 11:15 的 health.log，
@@ -253,7 +253,7 @@ html[data-theme="light"] .dd { box-shadow:0 10px 24px rgba(31,35,40,.14); }
 
 <div class="doc">
 <header>
-  <div class="kick">Roam · Design · Cluster</div>
+  <div class="kick">Roami · Design · Cluster</div>
   <h1>中心页：让中心自己能被看见</h1>
   <p>今天中心卡死了十几个小时，是部署时碰巧撞见的 —— 界面上没有任何地方会说「中心不健康」。
      这份稿子补的就是这个洞：中心自身的状态、它接着哪些机器、怎么再接一台，以及**出事时它自己会喊**。</p>
@@ -317,7 +317,7 @@ html[data-theme="light"] .dd { box-shadow:0 10px 24px rgba(31,35,40,.14); }
   </div>
 
   <div class="frame">
-    <div class="chrome"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="url">roam.local / #/hub</span></div>
+    <div class="chrome"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="url">roami.local / #/hub</span></div>
     <div class="shell">
       <nav class="nav">
         <div class="brand"></div>
@@ -401,7 +401,7 @@ html[data-theme="light"] .dd { box-shadow:0 10px 24px rgba(31,35,40,.14); }
     换台机器就没有了，重装一次就丢。放进程里，任何一台中心都自带这条曲线。
   </div>
   <div class="note warn">
-    <b>诊断口不进这个接口。</b> pprof 仍然只绑回环（<code>ROAM_PPROF</code>），页面上那个「看诊断」按钮只教你
+    <b>诊断口不进这个接口。</b> pprof 仍然只绑回环（<code>ROAMI_PPROF</code>），页面上那个「看诊断」按钮只教你
     <code>ssh -L</code> 怎么转发。把 heap/goroutine dump 挂到公网接口上，等于把内存内容和打垮进程的入口一起送出去。
   </div>
 </section>

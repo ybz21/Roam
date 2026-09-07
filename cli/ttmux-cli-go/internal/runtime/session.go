@@ -28,7 +28,7 @@ const LabelOption = "@roam_name"
 
 // SessionRow 一条 tmux 会话的身份：名字(=id) + 展示名 + 原始 tmux id + 创建时刻。
 type SessionRow struct {
-	Name    string // #{session_name}：新会话就是 Roam 会话 id
+	Name    string // #{session_name}：新会话就是 Roami 会话 id
 	Label   string // @roam_name：展示名，空则回退 Name
 	TmuxID  string // #{session_id}，如 $3
 	Created int64  // #{session_created}

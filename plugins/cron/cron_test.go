@@ -102,7 +102,7 @@ func TestWithoutJob(t *testing.T) {
 // 通知正文是这条功能唯一交给人的东西：跑完了、跑多久、产物在哪、末段是什么。
 func TestDoneBody(t *testing.T) {
 	run := &Run{At: 100, DoneAt: 100 + 2*3600 + 5*60}
-	got := doneBody("cron-自检-3", run, "/home/ai/.roam/selftest/2026-09-08.md", 3300, "PASS 17 · FAIL 0")
+	got := doneBody("cron-自检-3", run, "/home/ai/.roami/selftest/2026-09-08.md", 3300, "PASS 17 · FAIL 0")
 	for _, want := range []string{"cron-自检-3", "2 小时 5 分钟", "selftest/2026-09-08.md", "3.2 KB", "PASS 17"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("正文里少了 %q：\n%s", want, got)
@@ -136,7 +136,7 @@ func TestFmtDurAndSize(t *testing.T) {
 
 func TestExpandHome(t *testing.T) {
 	home, _ := os.UserHomeDir()
-	if got := expandHome("~/.roam/x.md"); got != home+"/.roam/x.md" {
+	if got := expandHome("~/.roami/x.md"); got != home+"/.roami/x.md" {
 		t.Errorf("expandHome = %q", got)
 	}
 	if got := expandHome("/abs/x.md"); got != "/abs/x.md" {

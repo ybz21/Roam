@@ -54,7 +54,7 @@ func (claude) OneShotArgs(opt StartOpts) []string {
 	return append(a, "--output-format", "text")
 }
 
-// permArgs 把 Roam 口径的权限档翻成 claude 的参数。
+// permArgs 把 Roami 口径的权限档翻成 claude 的参数。
 // "dangerously-skip-permissions" 是个独立开关，其余走 --permission-mode。
 func permArgs(perm string) []string {
 	if perm == "dangerously-skip-permissions" {

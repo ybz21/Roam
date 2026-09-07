@@ -13,7 +13,7 @@ import (
 	"ttmux-cli-go/internal/id"
 )
 
-// 一次性收编：把 Roam 后端那三个散装 JSON 台账、以及每群 swarm.db 里的
+// 一次性收编：把 Roami 后端那三个散装 JSON 台账、以及每群 swarm.db 里的
 // members / cards，搬进主库。
 //
 // **盲态口径**：本步骤不问 tmux。session-homes.json 自带会话名快照，够用了。

@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// TestAdoptRealHome 拿一份真实 Roam 主目录的**副本**跑一遍接管，
+// TestAdoptRealHome 拿一份真实 Roami 主目录的**副本**跑一遍接管，
 // 断言「只增不减」：老数据一行不少，新表都建出来，旧台账都收编了。
 //
 // 用 ROAM_TEST_HOME 指向副本目录才会跑（不设就跳过），绝不碰线上库。

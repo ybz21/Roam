@@ -69,7 +69,7 @@ func (a *API) cronJobSource() search.Source {
 - 有三重上限：条数（60000）、访问条目（400000）、时间预算（15s）。任何一条触发都
   标记 `truncated`，UI 会说一句「结果较多」。
 - 跳过产物与依赖目录（`node_modules` / `dist` / `.git` / `__pycache__` …），也跳过
-  `.worktrees`——roam 自己的 worktree 就在仓库内，不跳的话同一个文件会以「主仓库一份
+  `.worktrees`——roami 自己的 worktree 就在仓库内，不跳的话同一个文件会以「主仓库一份
   + 每个 worktree 一份」重复出现。
 - 不做 fsnotify 常驻监听：为此要吃掉每个项目的 inotify 配额，而 TTL 足够。
 

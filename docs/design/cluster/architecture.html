@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Roam · 多机管理（技术架构 v0.2）</title>
+<title>Roami · 多机管理（技术架构 v0.2）</title>
 <style>
 /* ── 令牌：直接取 frontend/src/theme.tsx 的真值 ─────────────────────────── */
 :root {
@@ -125,7 +125,7 @@ dl.q dd { margin:4px 0 0; color:var(--text-dim); line-height:1.85; }
 
 <div class="top">
   <div>
-    <div class="kicker">Roam · Cluster · 技术架构 v0.2</div>
+    <div class="kicker">Roami · Cluster · 技术架构 v0.2</div>
     <h1>多机管理 —— 中心 / 节点 / 隧道 · 协议选型与带宽账</h1>
   </div>
   <span class="sp"></span>
@@ -163,7 +163,7 @@ dl.q dd { margin:4px 0 0; color:var(--text-dim); line-height:1.85; }
   <thead><tr><th style="width:14%">模式</th><th style="width:26%">含义</th><th>谁跑业务</th><th>谁监听公网</th><th>frp 类比</th></tr></thead>
   <tbody>
     <tr><td><b>standard</b><br><span class="pill">默认</span></td>
-      <td>现在的 Roam，跑全套能力。<b>可选</b>填 <code>cluster.hub</code> → 额外出站注册进云端</td>
+      <td>现在的 Roami，跑全套能力。<b>可选</b>填 <code>cluster.hub</code> → 额外出站注册进云端</td>
       <td>本机</td><td>本机（局域网直连口保留）</td><td><code>frpc</code>（填了 hub 时）</td></tr>
     <tr><td><b>cloud</b></td>
       <td>中心：注册表 + 隧道 + 反代 + 控制台静态资源</td>
@@ -171,7 +171,7 @@ dl.q dd { margin:4px 0 0; color:var(--text-dim); line-height:1.85; }
   </tbody>
 </table>
 <p class="lede">
-  <b>没有第三种「client 模式」</b>：一台开发机注册进云端后，它本身还是标准 Roam，
+  <b>没有第三种「client 模式」</b>：一台开发机注册进云端后，它本身还是标准 Roami，
   只是多连了一条到 中心 的隧道。
   "Client" 只是「标准节点在云端视角下的身份」，不是一种部署形态。
 </p>
@@ -197,10 +197,10 @@ dl.q dd { margin:4px 0 0; color:var(--text-dim); line-height:1.85; }
     没有机器芯片、没有方章、没有 <code>/nodes</code>。<b>同一份前端，两种入口，零分支。</b></li>
   <li><b>一台机器可以同时被两个人从两条路用</b>：tmux 本来就是多客户端的，这不引入新问题。</li>
 </ul>
-<pre class="code"><i># 开发机（标准节点）~/.roam/config.yaml</i>
+<pre class="code"><i># 开发机（标准节点）~/.roami/config.yaml</i>
 cluster:
   mode: standard                 <s># 默认，可省</s>
-  hub: https://roam.example.com   <b># 填了才上云；不填 = 纯单机，界面零变化</b>
+  hub: https://roami.example.com   <b># 填了才上云；不填 = 纯单机，界面零变化</b>
   token: enr_7f3a…               <s># 一次性接入令牌，注册后自动换长期凭证并回写</s>
   name: 公司工作站                 <s># 可选，默认 hostname</s>
   group: 工作                      <s># 可选</s>
@@ -264,7 +264,7 @@ cluster:
     <tr><td><code>cluster/hub/hub.go</code></td><td><span class="pill bad">修硬伤</span></td>
       <td>反代丢 <code>RawPath</code>（见下 ①）；<code>Bootstrap.recommended</code> 语义要改（见下 ②）</td></tr>
     <tr><td><code>cluster/node/node.go</code>、<code>creds.go</code></td><td><span class="pill good">原样留</span></td>
-      <td>拨号 / 注册 / 指数退避重连 / 心跳 / <code>auth.WithInternal</code> 后交本机 Handler。凭证落盘 <code>~/.roam/node.json</code></td></tr>
+      <td>拨号 / 注册 / 指数退避重连 / 心跳 / <code>auth.WithInternal</code> 后交本机 Handler。凭证落盘 <code>~/.roami/node.json</code></td></tr>
     <tr><td><code>auth/internal.go</code> + <code>auth.go</code></td><td><span class="pill good">原样留</span></td>
       <td>typed transport principal：进程内 context 标记，<b>不可经线缆伪造</b>。这条是整套安全的地基</td></tr>
     <tr><td><code>server/hub.go</code></td><td><span class="pill warn">补路由</span></td>
@@ -416,7 +416,7 @@ export const termKey = (nodeId: string | null, name: string) =&gt;
   那会形成启动死循环：要读偏好得先知道去哪台机器读。它属于 中心 级状态。
 </p>
 <pre class="code"><b>1.</b> 读 URL 的 <code>?nodeId=</code>            <i>// 深链优先，不发请求</i>
-<b>2.</b> 读 <code>localStorage['roam.node']</code>   <i>// 上次用的，不发请求 —— <u>首帧就用它渲染</u></i>
+<b>2.</b> 读 <code>localStorage['roami.node']</code>   <i>// 上次用的，不发请求 —— <u>首帧就用它渲染</u></i>
 <b>3.</b> 都没有 / 已失效 → <code>GET /api/hub/bootstrap</code>
        → { nodes, recommended, prefs }         <i>// 中心本地，不依赖 current node</i>
 <b>4.</b> 定下来才允许发第一条 <code>/n/&lt;id&gt;/api/*</code>
@@ -438,7 +438,7 @@ export const termKey = (nodeId: string | null, name: string) =&gt;
       <thead><tr><th>段</th><th>凭证</th></tr></thead>
       <tbody>
         <tr><td><b>用户 → 中心</b></td><td>密码 + TOTP（复用 <code>backend/auth</code>），签发 <code>ttmux_session</code> cookie（HttpOnly / SameSite=Strict / 7 天）</td></tr>
-        <tr><td><b>节点 → 中心</b></td><td>一次性 enrollment token 换长期节点凭证，落盘 <code>~/.roam/node.json</code>；隧道全程 TLS（后续可上 mTLS）</td></tr>
+        <tr><td><b>节点 → 中心</b></td><td>一次性 enrollment token 换长期节点凭证，落盘 <code>~/.roami/node.json</code>；隧道全程 TLS（后续可上 mTLS）</td></tr>
         <tr><td><b>中心 → 节点</b></td><td><b>不带用户 cookie</b>。节点认的是「这个请求是从已认证隧道里取出来的」——进程内 typed principal</td></tr>
       </tbody>
     </table>
@@ -446,7 +446,7 @@ export const termKey = (nodeId: string | null, name: string) =&gt;
   <div>
     <div class="note bad" style="margin-top:0">
       <b>永远不要用 header 判定「来自隧道」。</b>
-      <code>X-Forwarded-*</code> / <code>X-Roam-Internal</code> 这类头，公网和局域网的任何客户端都能伪造，
+      <code>X-Forwarded-*</code> / <code>X-Roami-Internal</code> 这类头，公网和局域网的任何客户端都能伪造，
       而标准节点<b>本机端口是照常对局域网开着的</b>——一个伪造头就等于绕过登录。
       PR #116 的 <code>auth.WithInternal(r)</code> 在 request context 上打进程内标记，
       只有"已从可信隧道取出该请求"这条代码路径能设置它，线缆上不存在这个字段。
@@ -660,7 +660,7 @@ GET <b>/api/hub/projects</b>?scope=needs        <i>// 6s 一轮</i>
       <td><span class="pill bad">最容易漏</span> <code>shell/palette/rows.ts</code> 的
         <code>dedupeByKey</code> 按 <code>kind + id</code> 去重，而 <code>SearchHit.id</code> 今天是
         「会话名 / 文件绝对路径」。两台机器上都有 <code>build</code>、都有
-        <code>~/codes/roam/README.md</code> —— 不带 nodeId 就会<b>被静默合成一条</b>。
+        <code>~/codes/roami/README.md</code> —— 不带 nodeId 就会<b>被静默合成一条</b>。
         <code>action.target</code> 同理（打开 = 切机器 + 打开）。与 §6 的 <code>TermKey</code> 同一笔账</td></tr>
     <tr><td><b>④ 部分失败要显式</b></td>
       <td>超时/离线的机器在结果里留一行「树莓派 未响应」。静默丢弃比搜不到更糟——
@@ -801,7 +801,7 @@ EnrollmentToken { token, expiresAt, usedAt, presetName, presetGroup }
 <b>节点 B</b>  开发机（amd64）              NAT 后 · <i>mode: standard</i> + cluster.hub · 本机口 :13601
 
 <i># 节点侧交叉编译，26MB 单文件丢过去就跑，目标机<b>不需要 Go</b></i>
-CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o roam ./cmd</pre>
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o roami ./cmd</pre>
 <div class="note warn">
   <b>踩到的第一个坑不在代码里</b>：云主机安全组放行了 13570-13590，但机器本身
   <code>ufw</code> 是 <code>policy DROP</code>——13579-13590 之所以通，是<b>同机 docker 自己插的

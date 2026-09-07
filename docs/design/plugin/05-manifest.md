@@ -2,7 +2,7 @@
 
 > 返回 [插件机制设计主文档](README.md)
 
-## 1. Manifest 草案(`roam-plugin.json`)
+## 1. Manifest 草案(`roami-plugin.json`)
 
 ```json
 {
@@ -12,8 +12,8 @@
   "name": "ci",
   "displayName": { "zh-CN": "Acme CI", "en-US": "Acme CI" },
   "version": "1.2.0",
-  "description": { "zh-CN": "在 Roam 内运行 CI 检查并总结失败原因", "en-US": "Run CI checks and summarize failures inside Roam." },
-  "engines": { "roam": ">=0.6.0" },
+  "description": { "zh-CN": "在 Roami 内运行 CI 检查并总结失败原因", "en-US": "Run CI checks and summarize failures inside Roami." },
+  "engines": { "roami": ">=0.6.0" },
   "main": "dist/main.js",
   "runtime": { "kind": "node", "activation": "lazy" },
   "permissions": {
@@ -53,7 +53,7 @@
 
 设计要点:
 
-- `manifestVersion` 控制插件协议版本;`engines.roam` 约束宿主兼容性。
+- `manifestVersion` 控制插件协议版本;`engines.roami` 约束宿主兼容性。
 - `contributes` 只声明能力,不含实现;宿主不执行插件代码即可建立能力索引(命令面板、MCP 工具列表、watcher 计划)。
 - `permissions` 是**声明上限**;实际授予 = min(声明, workspace policy, 用户授权)。其约束力边界见 [07-security.md](07-security.md)——v1 只在宿主 API 侧强制。
 - `runtime.kind`:`node`(宿主用内置约定拉起,官方 SDK)或 `exec`(任意可执行文件,协议同为 JSON-RPC over stdio)。

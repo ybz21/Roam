@@ -70,18 +70,19 @@ describe('长文件名', () => {
   })
 })
 
-describe('Roam 塞进来的介绍词', () => {
+describe('Roami 塞进来的介绍词', () => {
   // 它是经 SendPromptSubmit 投进输入框并回车的，转录里记成一个 user turn——
   // 可那不是人说的话，画成实心蓝气泡会把对话搅浑
-  const notice = (): Msg => ({
+  // 用**改名前**的 `[Roam]` 标记：那批注入还躺在老会话的转录里，翻回去看也得照样折叠
+  const notice = (mark = '[Roam]'): Msg => ({
     role: 'user', id: 'n1',
-    blocks: [{ kind: 'text', text: '[Roam] 你旁边还有一个会话，可以直接跟它说话。\n  会话名：2026-0823-1911-003a' }],
+    blocks: [{ kind: 'text', text: `${mark} 你旁边还有一个会话，可以直接跟它说话。\n  会话名：2026-0823-1911-003a` }],
   })
 
   it('收成一条通知，不画成用户气泡', () => {
     const { container } = render(
       <I18nProvider><ChatMessage m={notice()} results={{}} side="claude" /></I18nProvider>)
-    expect(container.textContent).toContain('Roam 给这个会话发的通知')
+    expect(container.textContent).toContain('Roami 给这个会话发的通知')
     // 默认收起：正文不在 DOM 里
     expect(container.textContent).not.toContain('2026-0823-1911-003a')
   })
@@ -89,9 +90,16 @@ describe('Roam 塞进来的介绍词', () => {
   it('展开能看到原文，但不带那个标记前缀', () => {
     const { container } = render(
       <I18nProvider><ChatMessage m={notice()} results={{}} side="claude" /></I18nProvider>)
-    fireEvent.click(screen.getByText('Roam 给这个会话发的通知'))
+    fireEvent.click(screen.getByText('Roami 给这个会话发的通知'))
     expect(container.textContent).toContain('2026-0823-1911-003a')
     expect(container.textContent).not.toContain('[Roam]')
+  })
+
+  it('新标记 [Roami] 同样收成通知', () => {
+    const { container } = render(
+      <I18nProvider><ChatMessage m={notice('[Roami]')} results={{}} side="claude" /></I18nProvider>)
+    expect(container.textContent).toContain('Roami 给这个会话发的通知')
+    expect(container.textContent).not.toContain('[Roami]')
   })
 
   it('普通用户消息照旧走气泡', () => {

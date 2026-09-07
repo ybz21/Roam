@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# 构建「单一自包含」roam 二进制：把前端(frontend/dist)与 ttmux CLI 内嵌进后端。
+# 构建「单一自包含」roami 二进制：把前端(frontend/dist)与 ttmux CLI 内嵌进后端。
 #
 # 用法：
-#   scripts/build/build-roam.sh                 # 构建当前平台 → backend/dist/roam-<os>-<arch>
-#   GOOS=darwin GOARCH=arm64 scripts/build/build-roam.sh
-#   SKIP_FRONTEND=1 GOOS=linux GOARCH=arm64 scripts/build/build-roam.sh   # 复用已构建前端（CI 多目标时）
+#   scripts/build/build-roami.sh                 # 构建当前平台 → backend/dist/roami-<os>-<arch>
+#   GOOS=darwin GOARCH=arm64 scripts/build/build-roami.sh
+#   SKIP_FRONTEND=1 GOOS=linux GOARCH=arm64 scripts/build/build-roami.sh   # 复用已构建前端（CI 多目标时）
 #
 # 结束后会把内嵌占位文件还原，保持工作树干净（避免误提交构建产物）。
 set -euo pipefail
@@ -13,7 +13,7 @@ cd "$ROOT"
 
 GOOS="${GOOS:-$(go env GOOS)}"
 GOARCH="${GOARCH:-$(go env GOARCH)}"
-OUT="${OUT:-backend/dist/roam-$GOOS-$GOARCH}"
+OUT="${OUT:-backend/dist/roami-$GOOS-$GOARCH}"
 
 WEBUI_DIST="backend/internal/webui/site"
 CLIBIN="backend/internal/clibin/ttmux"
@@ -38,9 +38,9 @@ cp -r frontend/dist/. "$WEBUI_DIST/"
 CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" \
   go -C cli/ttmux-cli-go build -o "$ROOT/$CLIBIN" ./cmd/ttmux-cli-go
 
-# 4) 编译 roam（内嵌前端 + CLI；版本号由 ROAM_BUILD_VERSION 注入，默认 dev）
+# 4) 编译 roami（内嵌前端 + CLI；版本号由 ROAMI_BUILD_VERSION 注入，默认 dev）
 mkdir -p "$(dirname "$OUT")"
-VER="${ROAM_BUILD_VERSION:-dev}"
+VER="${ROAMI_BUILD_VERSION:-dev}"
 CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" \
   go -C backend build -ldflags "-X main.version=${VER}" -o "$ROOT/$OUT" ./cmd
 

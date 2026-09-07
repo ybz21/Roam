@@ -127,7 +127,7 @@ case "${1:-}" in
     exec tail -n 100 -f "$LOG" ;;
 esac
 
-# ── 登录口令：由后端从 ~/.roam/config.yaml 管理。留空则首次打开网页时在界面上设置；
+# ── 登录口令：由后端从 ~/.roami/config.yaml 管理。留空则首次打开网页时在界面上设置；
 #    也可编辑 config.yaml 的 web.password，或用「设置 → 修改登录口令」。
 #    这里不再生成/写回口令，避免用环境变量覆盖掉「首次设置」流程。
 BIN=backend/ttmux-web
@@ -199,8 +199,8 @@ if [ "$DEV" = 1 ]; then
   # 检测 .go 与 go:embed 的资源(*.tmpl/*.html)变更，避免改模板却跳过编译
   if [ ! -f "$BIN" ] || [ "$(find backend \( -name '*.go' -o -name '*.tmpl' -o -name '*.html' \) -newer "$BIN" 2>/dev/null | head -1)" ]; then
     echo "==> 编译后端..."
-    ROAM_VER="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
-    (cd backend && go build -ldflags "-X main.version=${ROAM_VER}" -o ttmux-web ./cmd)
+    ROAMI_VER="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
+    (cd backend && go build -ldflags "-X main.version=${ROAMI_VER}" -o ttmux-web ./cmd)
   else
     echo "==> 后端无变更，跳过编译"
   fi
@@ -235,8 +235,8 @@ kvm_step() {
 kvm_step
 
 # ── 启动 ─────────────────────────────────────────────────────────
-echo "==> 启动 Roam  $SCHEME://$BIND"
-echo "    登录口令：首次打开网页时在界面上设置；或编辑 ~/.roam/config.yaml 的 web.password。"
+echo "==> 启动 Roami  $SCHEME://$BIND"
+echo "    登录口令：首次打开网页时在界面上设置；或编辑 ~/.roami/config.yaml 的 web.password。"
 [ -n "$LAN" ] && echo "==> 手机/平板（同 WiFi）: $SCHEME://$LAN:$PORT"
 [ "$SCHEME" = https ] && echo "    （自签证书：手机首次访问点「高级 → 继续前往」即可，之后语音/剪贴板可用；如需 http 设 TTMUX_WEB_TLS=0）"
 
@@ -252,12 +252,12 @@ echo "    登录口令：首次打开网页时在界面上设置；或编辑 ~/.
 # **必须排除 fg**：systemd 的 ExecStart 就是 `start.sh fg`，不排除的话它一进来
 # 又去 restart 自己，systemd 数到 start-limit-hit 直接把服务判死（实测踩过）。
 if [ "${1:-}" != "fg" ] && command -v systemctl >/dev/null 2>&1 \
-   && systemctl --user is-enabled roam.service >/dev/null 2>&1; then
-  echo "==> 交给 systemd 重启（roam.service）"
-  systemctl --user restart roam.service
+   && systemctl --user is-enabled roami.service >/dev/null 2>&1; then
+  echo "==> 交给 systemd 重启（roami.service）"
+  systemctl --user restart roami.service
   sleep 2
-  echo "==> 服务 $(systemctl --user is-active roam.service)  ·  $SCHEME://$BIND"
-  echo "    日志: journalctl --user -u roam.service -f   停止: systemctl --user stop roam"
+  echo "==> 服务 $(systemctl --user is-active roami.service)  ·  $SCHEME://$BIND"
+  echo "    日志: journalctl --user -u roami.service -f   停止: systemctl --user stop roami"
   exit 0
 fi
 

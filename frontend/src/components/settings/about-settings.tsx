@@ -37,11 +37,11 @@ export function AboutSettings() {
   }
   return (
     <Space direction="vertical" size={18} align="center" style={{ width: '100%', padding: 'var(--sp-3) 0' }}>
-        <img src="/logo-mark.svg" width={72} height={72} alt="Roam" />
+        <img src="/logo-mark.svg" width={72} height={72} alt="Roami" />
         <div style={{
           fontWeight: 800, fontSize: 28, letterSpacing: 0.5,
           background: 'var(--brand-grad)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent',
-        }}>Roam</div>
+        }}>Roami</div>
         <p style={{ color: 'var(--text-dim)', fontSize: 13, lineHeight: 1.7, margin: 0, textAlign: 'left', maxWidth: 420 }}>
           {t('about.intro')}
         </p>

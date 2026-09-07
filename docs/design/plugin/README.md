@@ -1,8 +1,8 @@
-# Roam / ttmux 插件机制设计
+# Roami / ttmux 插件机制设计
 
 > 状态: **设计草案 v2**　日期: 2026-07-03
 >
-> 目标: 允许第三方插件动态接入 Roam / ttmux,组织会话与 Agent(claude / codex),把它们串联成智能工作流,并做到可发现、可组合、可治理、可动态启停。
+> 目标: 允许第三方插件动态接入 Roami / ttmux,组织会话与 Agent(claude / codex),把它们串联成智能工作流,并做到可发现、可组合、可治理、可动态启停。
 
 ## 范围声明
 
@@ -43,14 +43,14 @@ flowchart TB
 
     pa["插件 A(独立子进程)"]
     pb["插件 B(独立子进程)"]
-    roam["Roam 本体:tmux 会话们 + ~/.ttmux/meta.db(状态 · events)+ 工作区文件"]
+    roami["Roami 本体:tmux 会话们 + ~/.ttmux/meta.db(状态 · events)+ 工作区文件"]
 
     cli -- "unix socket" --> d
     web -- "exec CLI --json(保持薄封装)" --> cli
     agent -- "MCP(stdio)" --> d
     d <-- "JSON-RPC over stdio" --> pa
     d <-- "JSON-RPC over stdio" --> pb
-    d -- "进程内 Go 调用:tmux 原语 + SQLite" --> roam
+    d -- "进程内 Go 调用:tmux 原语 + SQLite" --> roami
 ```
 
 ## 关键决策
@@ -59,7 +59,7 @@ flowchart TB
 |---|---|---|
 | 宿主进程归属 | 新增单例守护进程 `ttmux-plugind`,托管在专用 tmux 会话中,CLI/Web 按需拉起 | CLI 是短命进程,backend 与 CLI 之间是 exec 边界;watcher、事件订阅、常驻插件必须有常驻宿主。详见 [04-architecture.md](04-architecture.md) |
 | 事件来源 | meta.db 追加式 `events` 表(写路径同步落事件)+ plugind 游标消费;session 生命周期由 plugind 轮询合成 | 现状没有事件总线,swarm/session 状态靠显式命令写 SQLite + 轮询。v1 诚实做"事件日志 + 游标",不假装有实时总线 |
-| 插件描述格式 | JSON manifest(`roam-plugin.json`) | 与 VS Code/Figma 类似,易校验、易生成、易展示 |
+| 插件描述格式 | JSON manifest(`roami-plugin.json`) | 与 VS Code/Figma 类似,易校验、易生成、易展示 |
 | v1 运行时 | 协议语言无关(JSON-RPC over stdio,任意可执行文件);官方先提供 Node SDK | ttmux 是 Go 单二进制极简安装,不能把 Node 变成硬依赖 |
 | 激活策略 | 默认惰性激活,超时 10s(可配) | 控制启动性能和风险 |
 | 信任模型 | v1 安装即信任 + 声明式权限(展示/审计/宿主 API 约束);v2 容器/受限用户才谈 enforce | 普通子进程无法约束插件自身的命令执行与网络访问,不做虚假承诺 |

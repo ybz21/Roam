@@ -1,8 +1,8 @@
-# Roam — 功能列表
+# Roami — 功能列表
 
 [English](features.md) ｜ **简体中文**
 
-Roam 的详细能力清单。总览与截图见 [README](../README.zh-CN.md)。
+Roami 的详细能力清单。总览与截图见 [README](../README.zh-CN.md)。
 
 ## 远程接入 & 多设备
 - **零安装 Web 控制台** —— 手机、平板、笔电任意浏览器打开即用，客户端不用装任何东西。
