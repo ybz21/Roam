@@ -83,22 +83,44 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
 
   // 每一行都是侧栏那枚 .tt-nav-item：同样的高、图标槽、hover、选中态、同一款计数徽标。
   // 区别只有图标槽里放什么：项目放首字母圆标，任务放状态点，会话放 agent 标。
-  // 右键菜单：会话行 = 打开 / 重命名 / 关闭会话；任务行 = 起名 / 派生三样 / 收尾。
+  // 右键菜单：会话行 = 打开 / 重命名 / 关闭会话；任务行 = 起名 / 派生三样 / 收尾；
+  // 两者合成的那一行（soleRow）见 soleMenu——它挑着拼，不是两张摞一起。
   // 标签条的 × 只是收起标签，会话还活着、树上还在——真要关，在这里
-  const sessionMenu = (task: TaskKey, s: TreeSession) => ({ items: [
-    { key: 'open', icon: <OpenInIcon size={14} />, label: t('tree.menu.open'), onClick: () => onSession(task, s.name) },
-    ...(onRename ? [{ key: 'rename', icon: <PencilIcon size={14} />, label: t('session.rename'), onClick: () => onRename(s.name) }] : []),
-    ...(onKill ? [{ type: 'divider' as const }, { key: 'kill', icon: <CloseIcon size={14} />, label: t('tree.menu.close'), danger: true, onClick: () => onKill(s.name) }] : []),
-  ] })
-  const taskMenu = (task: TreeTask) => ({ items: [
-    ...(onRenameTask ? [{ key: 'name', icon: <PencilIcon size={14} />, label: t('session.rename'), onClick: () => onRenameTask(task.key, task.name) }] : []),
-    ...(onNewInTask ? [{ type: 'group' as const, label: t('tree.menu.deriveHere'), children: [
+  const openItem = (task: TaskKey, s: TreeSession) =>
+    ({ key: 'open', icon: <OpenInIcon size={14} />, label: t('tree.menu.open'), onClick: () => onSession(task, s.name) })
+  const renameSession = (s: TreeSession) => onRename
+    ? [{ key: 'rename', icon: <PencilIcon size={14} />, label: t('session.rename'), onClick: () => onRename(s.name) }] : []
+  const renameTask = (task: TreeTask) => onRenameTask
+    ? [{ key: 'name', icon: <PencilIcon size={14} />, label: t('session.rename'), onClick: () => onRenameTask(task.key, task.name) }] : []
+  const derive = (task: TreeTask) => onNewInTask
+    ? [{ type: 'group' as const, label: t('tree.menu.deriveHere'), children: [
       { key: 'sh', icon: <TerminalIcon size={14} />, label: t('tabs.newTerminal'), onClick: () => onNewInTask(task.key, 'shell') },
       { key: 'cc', icon: <AgentLogo kind="claude" size={14} />, label: t('tabs.newClaude'), onClick: () => onNewInTask(task.key, 'claude') },
       { key: 'cx', icon: <AgentLogo kind="codex" size={14} />, label: t('tabs.newCodex'), onClick: () => onNewInTask(task.key, 'codex') },
-    ] }] : []),
-    ...(onFinishTask && !task.main ? [{ type: 'divider' as const }, { key: 'finish', icon: <ArchiveIcon size={14} />, label: t('tree.menu.finish'), danger: true, onClick: () => onFinishTask(task) }] : []),
+    ] }] : []
+  const killSession = (s: TreeSession) => onKill
+    ? [{ type: 'divider' as const }, { key: 'kill', icon: <CloseIcon size={14} />, label: t('tree.menu.close'), danger: true, onClick: () => onKill(s.name) }] : []
+  const finishTask = (task: TreeTask) => onFinishTask && !task.main
+    ? [{ type: 'divider' as const }, { key: 'finish', icon: <ArchiveIcon size={14} />, label: t('tree.menu.finish'), danger: true, onClick: () => onFinishTask(task) }] : []
+
+  const sessionMenu = (task: TaskKey, s: TreeSession) => ({ items: [openItem(task, s), ...renameSession(s), ...killSession(s)] })
+  const taskMenu = (task: TreeTask) => ({ items: [...renameTask(task), ...derive(task), ...finishTask(task)] })
+
+  /**
+   * 合成行的菜单（见下面 soleRow）。**不是把两张菜单拼起来**——拼出来的那张里，
+   * 同一件事印了两遍：任务只有一个会话时，「收尾」走的就是 finishTask → beginClose(那个会话)，
+   * 和「关闭会话」一字不差，而且两枚都是红的；两个「重命名」也只是改同一个名字
+   * （任务没单独起过名时，任务名本来就跟着这个会话的 label 走）。
+   * 所以各留一枚：重命名留会话那枚（它改的是真名字，标签、树、CLI 都跟着变），
+   * 红的那枚留「关闭会话」（它写明了后果是结束进程；worktree 怎么处置由随后的弹窗问）。
+   */
+  const soleMenu = (task: TreeTask, s: TreeSession) => ({ items: [
+    openItem(task.key, s),
+    ...renameSession(s),
+    ...derive(task),
+    ...(onKill ? killSession(s) : finishTask(task)),
   ] })
+
   // 互审陪跑那一行：缩进半格挂在被审会话下面，名字写「互审 · 被审的是谁」——
   // 它自己的会话名是一串 id（<被审id>-review），照原样印出来没人认得出这是什么。
   const rowLabel = (s: TreeSession) => (s.reviewOf ? t('tree.reviewOf', { name: s.reviewOf }) : s.label)
@@ -150,10 +172,7 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
    * 因为它们本来就是同一个东西。右键菜单也把两边的动作合起来，免得少了哪一样。
    */
   const soleRow = (task: TreeTask, s: TreeSession) => (
-    <Dropdown key={s.name} trigger={['contextMenu']} menu={{ items: [
-      ...sessionMenu(task.key, s).items,
-      ...(taskMenu(task).items.length ? [{ type: 'divider' as const, key: 'd-task' }, ...taskMenu(task).items] : []),
-    ] }}>
+    <Dropdown key={s.name} trigger={['contextMenu']} menu={soleMenu(task, s)}>
       <button type="button"
         className={`tt-nav-item tt-tree-row head${activeTask === task.key ? ' on' : ''}${s.dormant ? ' dormant' : ''}`}
         onClick={() => onSession(task.key, s.name)} title={s.dormant ? t('session.dormant.hint') : task.path}
