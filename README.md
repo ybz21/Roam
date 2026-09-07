@@ -305,6 +305,21 @@ Roam also provides command-line entry points for scripts, automation, and AI
 agents. This is not the main entry point for most users; start from the Web
 console in most cases.
 
+`roam` is the single entry point. Plugin commands are grouped by plugin name
+(any unique prefix works), and anything else is forwarded to `ttmux`:
+
+```bash
+roam help                        # what is installed and how to reach it
+roam cron list                   # scheduled tasks
+roam im send --text "done"       # message yourself through the IM bridge
+roam host stats                  # host resource snapshot
+roam ls                          # sessions — forwarded to ttmux
+roam ttmux swarm ls              # explicit passthrough when a name collides
+roam -addr 0.0.0.0:13579         # no subcommand: start the web console (unchanged)
+```
+
+Underneath:
+
 - `ttmux`: manages persistent sessions, background tasks, agent workers, swarms,
   and machine-readable state.
 - `chrome`: drives Chrome on the development machine for UI debugging,
@@ -312,10 +327,12 @@ console in most cases.
 
 Plugins extend the console itself — `roam.host-monitor` contributes the resource
 monitor, `roam.cron` adds scheduled prompts with its own configuration panel.
+Whatever a plugin declares in its manifest shows up as a `roam <name> <command>`
+group with no extra wiring.
 
 Command details are intentionally not expanded on the home page, so the README
 does not become a tool manual. When needed, see
-**[docs/install/](docs/install/)**, `ttmux help`, and `chrome help`.
+**[docs/install/](docs/install/)**, `roam help`, `ttmux help`, and `chrome help`.
 
 ## Development And Contribution
 
