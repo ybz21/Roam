@@ -130,34 +130,24 @@ export default function CronPanel({ pluginId, enabled, t }: { pluginId: string; 
       render: (v: string, j: Job) => (
         <Space direction="vertical" size={0}>
           <Typography.Text strong>{v}</Typography.Text>
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>{actionSummary(j, t)}</Typography.Text>
+          {/* 一行截断：这条摘要长得很（prompt 前 40 字），换行会把任务名那列撑成四行 */}
+          <span className="tt-cron-sum" title={actionSummary(j, t)}>{actionSummary(j, t)}</span>
         </Space>
       ),
     },
     {
       title: t('cron.colSchedule'), dataIndex: 'schedule', key: 'schedule', width: 130,
-      render: (v: string) => <Typography.Text code style={{ fontSize: 12 }}>{v}</Typography.Text>,
+      render: (v: string) => <Typography.Text code style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{v}</Typography.Text>,
     },
     {
       title: t('cron.colAction'), dataIndex: 'action', key: 'action', width: 90,
       render: (a: Action) => <Tag color={ACTION_COLOR[a]}>{t(`cron.action.${a}`)}</Tag>,
     },
     {
-      title: t('cron.colNext'), dataIndex: 'nextRunAt', key: 'nextRunAt', width: 170,
+      title: t('cron.colNext'), dataIndex: 'nextRunAt', key: 'nextRunAt', width: 180,
       render: (v: string, j: Job) => j.enabled
-        ? (v || '—')
+        ? <span style={{ whiteSpace: 'nowrap' }}>{v || '—'}</span>
         : <Typography.Text type="secondary">{t('cron.paused')}</Typography.Text>,
-    },
-    {
-      // 「已触发 3」本身答不出任何问题：哪次跑的、成没成、会话在哪。点开就是记录。
-      title: t('cron.colRuns'), dataIndex: 'runs', key: 'runs', width: 90,
-      render: (n: number, j: Job) => (
-        <Button size="small" type="link" style={{ padding: 0 }} disabled={!n}
-          title={j.lastRunAt ? t('cron.lastRun', { time: j.lastRunAt }) : t('cron.neverRun')}
-          onClick={() => openRuns(j)}>
-          {n || 0}
-        </Button>
-      ),
     },
     {
       title: t('cron.colEnabled'), key: 'enabled', width: 70,
@@ -167,10 +157,14 @@ export default function CronPanel({ pluginId, enabled, t }: { pluginId: string; 
       ),
     },
     {
-      title: t('cron.colOps'), key: 'ops', width: 190,
+      title: t('cron.colOps'), key: 'ops', width: 250,
       render: (_: any, j: Job) => (
         <Space size={4}>
           <Button size="small" disabled={!enabled || busy === j.name} onClick={() => runNow(j)}>{t('cron.runNow')}</Button>
+          {/* 执行记录得在操作里明摆着：藏在「已触发」那个数字后面，没人猜得到它能点 */}
+          <Button size="small" disabled={!j.runs} title={t('cron.runsTitleShort')} onClick={() => openRuns(j)}>
+            {t('cron.runs')} {j.runs || 0}
+          </Button>
           <Button size="small" disabled={!enabled} onClick={() => { setEditing(j); setOpen(true) }}>{t('cron.edit')}</Button>
           <Popconfirm title={t('cron.removeConfirm', { name: j.name })} onConfirm={() => remove(j)}
             okText={t('cron.remove')} cancelText={t('cron.cancel')}>
@@ -208,13 +202,10 @@ export default function CronPanel({ pluginId, enabled, t }: { pluginId: string; 
                 <div className="meta">
                   <Typography.Text code style={{ fontSize: 12 }}>{j.schedule}</Typography.Text>
                   <span>{j.enabled ? (j.nextRunAt || '—') : t('cron.paused')}</span>
-                  <Button size="small" type="link" style={{ padding: 0, height: 'auto' }}
-                    disabled={!j.runs} onClick={() => openRuns(j)}>
-                    {t('cron.colRuns')} {j.runs || 0}
-                  </Button>
                 </div>
                 <div className="ops">
                   <Button size="small" disabled={!enabled || busy === j.name} onClick={() => runNow(j)}>{t('cron.runNow')}</Button>
+                  <Button size="small" disabled={!j.runs} onClick={() => openRuns(j)}>{t('cron.runs')} {j.runs || 0}</Button>
                   <Button size="small" disabled={!enabled} onClick={() => { setEditing(j); setOpen(true) }}>{t('cron.edit')}</Button>
                   <Popconfirm title={t('cron.removeConfirm', { name: j.name })} onConfirm={() => remove(j)}
                     okText={t('cron.remove')} cancelText={t('cron.cancel')}>
@@ -225,8 +216,8 @@ export default function CronPanel({ pluginId, enabled, t }: { pluginId: string; 
             ))}
           </div>
         ) : <Table<Job> size="small" rowKey="name" dataSource={jobs} columns={columns as any}
-            pagination={{ pageSize: 20, hideOnSinglePage: true }} scroll={{ x: 720 }} />}
-      <RunsDrawer job={runsOf} t={t} runCmd={runCmd} onClose={() => setRunsOf(null)} />
+            pagination={{ pageSize: 20, hideOnSinglePage: true }} scroll={{ x: 900 }} />}
+      <RunsDrawer job={runsOf} t={t} isPhone={isPhone} runCmd={runCmd} onClose={() => setRunsOf(null)} />
       <JobModal open={open} job={editing} existing={jobs} t={t} pluginId={pluginId}
         onClose={() => setOpen(false)}
         onSaved={async () => { setOpen(false); await reload() }}
@@ -312,17 +303,18 @@ function WorkdirPicker({ t, value, onChange }: { t: T; value: string; onChange: 
 //
 // 定时任务最要紧的问题不是「排期对不对」，而是**上次到底跑了没、跑成什么样**。
 // 表上原来只有一个「已触发 3」，点不开——出了事只能去翻 tmux 里那个会话还在不在。
-function RunsDrawer({ job, t, runCmd, onClose }: {
-  job: Job | null; t: T
+function RunsDrawer({ job, t, isPhone, runCmd, onClose }: {
+  job: Job | null; t: T; isPhone: boolean
   runCmd: (command: string, args?: Record<string, string>) => Promise<any>
   onClose: () => void
 }) {
   const [runs, setRuns] = useState<Run[]>([])
   const [loading, setLoading] = useState(false)
   const [live, setLive] = useState<Set<string>>(new Set()) // 还活着的会话名
+  const [openOut, setOpenOut] = useState<Set<number>>(new Set()) // 展开了输出的那几条
 
   useEffect(() => {
-    if (!job) { setRuns([]); return }
+    if (!job) { setRuns([]); setOpenOut(new Set()); return }
     let stop = false
     setLoading(true)
     ;(async () => {
@@ -347,46 +339,85 @@ function RunsDrawer({ job, t, runCmd, onClose }: {
     // 会话在工作区里开，不在插件页：直接换路由，把它设成当前标签
     location.hash = `#/w?terms=${encodeURIComponent(name)}&active=${encodeURIComponent(name)}`
   }
+  const toggleOut = (at: number) => setOpenOut((prev) => {
+    const next = new Set(prev)
+    next.has(at) ? next.delete(at) : next.add(at)
+    return next
+  })
+
+  const failed = runs.filter((r) => !r.ok).length
 
   return (
-    <Drawer open={!!job} onClose={onClose} width={560} destroyOnClose
+    <Drawer open={!!job} onClose={onClose} width={isPhone ? '100%' : 520} destroyOnClose
       title={job ? t('cron.runsTitle', { name: job.name }) : ''}>
       {loading
         ? <div style={{ padding: 24, textAlign: 'center' }}><Spin /></div>
         : runs.length === 0
           ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('cron.runsEmpty')} />
           : (
-            <div className="tt-cron-runs">
-              {runs.map((r) => (
-                <div key={`${r.at}-${r.session || r.exit}`} className="run">
-                  <div className="hd">
-                    <Typography.Text code style={{ fontSize: 12 }}>{r.atStr}</Typography.Text>
-                    <Tag color={r.ok ? 'green' : 'red'} style={{ margin: 0 }}>
-                      {r.ok ? t('cron.runOk') : t('cron.runFail')}
-                    </Tag>
-                    <Tag style={{ margin: 0 }}>{t(`cron.trigger.${r.trigger}`)}</Tag>
-                    {r.exit != null && (
-                      <Typography.Text type={r.exit === 0 ? 'secondary' : 'danger'} style={{ fontSize: 12 }}>
-                        exit {r.exit}
-                      </Typography.Text>
-                    )}
-                  </div>
-                  {r.error && <div className="err">{r.error}</div>}
-                  {r.session && (
-                    <div className="sess">
-                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>{r.session}</Typography.Text>
-                      {live.has(r.session)
-                        ? <Button size="small" onClick={() => openSession(r.session!)}>{t('cron.openSession')}</Button>
-                        : <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('cron.sessionGone')}</Typography.Text>}
+            <>
+              {/* 一句话交代这几条是什么：几次、错了几次。失败数是这张抽屉里唯一的红 */}
+              <div className="tt-runs-sum">
+                {t('cron.runsCount', { n: runs.length })}
+                {failed > 0 && <b className="bad">{t('cron.runsFailed', { n: failed })}</b>}
+              </div>
+              <div className="tt-runs">
+                {runs.map((r) => {
+                  const out = (r.output || '').trimEnd()
+                  const lines = out ? out.split('\n').length : 0
+                  const on = openOut.has(r.at)
+                  return (
+                    <div key={r.at} className={`run${r.ok ? '' : ' bad'}`}>
+                      <span className="dot" aria-hidden />
+                      <div className="main">
+                        <div className="hd">
+                          {/* 相对时间在前：看记录问的是「最近那次怎么样」，绝对时刻挂在 title 上 */}
+                          <b title={r.atStr}>{relTime(r.at, t)}</b>
+                          <span className="trig">{t(`cron.trigger.${r.trigger}`)}</span>
+                          {r.exit != null && (
+                            <span className={`ex${r.exit === 0 ? '' : ' bad'}`}>exit {r.exit}</span>
+                          )}
+                          {/* 「失败」只在没有别的东西替它说话时才写：exit 码和错误行都已经是红的 */}
+                          {!r.ok && r.exit == null && !r.error && <span className="ex bad">{t('cron.runFail')}</span>}
+                        </div>
+                        {r.error && <div className="err">{r.error}</div>}
+                        {r.session && (
+                          <div className="sess">
+                            <code>{r.session}</code>
+                            {live.has(r.session)
+                              ? <button type="button" className="tt-act" onClick={() => openSession(r.session!)}>
+                                  {t('cron.openSession')}
+                                </button>
+                              : <span className="gone">{t('cron.sessionGone')}</span>}
+                          </div>
+                        )}
+                        {/* 输出默认收着：三条记录各摊一个 200px 的黑框，重点就没了 */}
+                        {out && (
+                          <>
+                            <button type="button" className="tt-act sm" aria-expanded={on} onClick={() => toggleOut(r.at)}>
+                              {on ? t('cron.hideOutput') : t('cron.showOutput', { n: lines })}
+                            </button>
+                            {on && <pre className="out">{out}</pre>}
+                          </>
+                        )}
+                      </div>
                     </div>
-                  )}
-                  {r.output && <pre className="out">{r.output.trimEnd()}</pre>}
-                </div>
-              ))}
-            </div>
+                  )
+                })}
+              </div>
+            </>
           )}
     </Drawer>
   )
+}
+
+/** 「3 分钟前」。抽屉比树行宽，放得下整句话，比 `3m` 好读 */
+function relTime(sec: number, t: T): string {
+  const d = Math.max(0, Math.floor(Date.now() / 1000 - sec))
+  if (d < 60) return t('time.justNow')
+  if (d < 3600) return t('time.minutesAgo', { count: Math.floor(d / 60) })
+  if (d < 86400) return t('time.hoursAgo', { count: Math.floor(d / 3600) })
+  return t('time.daysAgo', { count: Math.floor(d / 86400) })
 }
 
 // ── 新增/编辑弹窗 ──

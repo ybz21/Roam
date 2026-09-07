@@ -397,6 +397,11 @@ func fireJob(ctx *sdk.Ctx, j *Job, trigger string) (any, error) {
 			rec.Output = tailStr(o, 4000)
 		}
 	}
+	// 命令跑完了但 exit≠0 —— 对人来说这就是「这次没成」，不该在记录里画一颗绿点。
+	// （动作本身有没有发起成功是另一回事，那种失败上面已经填了 Error。）
+	if rec.Exit != nil && *rec.Exit != 0 {
+		rec.OK = false
+	}
 	recordRun(ctx, rec)
 	return res, err
 }
