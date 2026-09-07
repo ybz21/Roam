@@ -343,7 +343,9 @@ export function NewProjectModal({ open, onClose, onCreated }: { open: boolean; o
       })
       message.destroy('newproj')
       pushRecentDir(dir.trim())
-      message.success(t('project.createdProject'))
+      // 目录是某个已在册仓库的 worktree：没有新项目，归到那个项目下，名字也没动
+      if (res.data.created === false) message.info(res.data.worktree ? t('project.existsAsWorktree', { name: res.data.name }) : t('project.existsAlready', { name: res.data.name }), 6)
+      else message.success(t('project.createdProject'))
       onClose(); onCreated?.()
       location.hash = '#/projects/' + encodeURIComponent(res.data.key)
     } catch (e: any) { message.destroy('newproj'); message.error(e.message) }

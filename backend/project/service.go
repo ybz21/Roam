@@ -312,10 +312,14 @@ func (s *Store) Touch(dir string) string {
 }
 
 // Add 显式创建（POST /projects）：origin=user 的一等对象。目录已在册则升级为 user
-// （发现来的条目被用户「转正」，id 不变），并可顺带设显示名。返回项目 id。
-func (s *Store) Add(dir, displayName string) string {
+// （发现来的条目被用户「转正」，id 不变）。返回项目 id 和「是不是新建的」。
+//
+// 显示名只在新建、或原来没起过名时写：已有项目再「新建」一次（典型是从它的某个
+// worktree 目录建——ResolveRepo 归位到同一个仓库根），传来的名字是给那个 worktree 起的，
+// 不该把项目本来的名字盖掉（blade-agent 就这么被改成了 blade-agent-sea-attack）。
+func (s *Store) Add(dir, displayName string) (key string, created bool) {
 	if dir == "" {
-		return ""
+		return "", false
 	}
 	now := time.Now().Unix()
 	s.mu.Lock()
@@ -329,11 +333,25 @@ func (s *Store) Add(dir, displayName string) string {
 	e := s.repos[key]
 	e.Origin = "user"
 	e.LastSeen = now
-	if displayName != "" {
+	if displayName != "" && (!ok || e.DisplayName == "") {
 		e.DisplayName = displayName
 	}
 	s.save()
-	return key
+	return key, !ok
+}
+
+// Name 项目的显示名（没起过就是目录名）；不在册返回空。
+func (s *Store) Name(key string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e, ok := s.repos[s.resolve(key)]
+	if !ok {
+		return ""
+	}
+	if e.DisplayName != "" {
+		return e.DisplayName
+	}
+	return filepath.Base(e.Dir)
 }
 
 // NoteSessions 记「这个项目此刻有会话」。聚合层每轮算完会话数调一次，

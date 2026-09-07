@@ -1913,6 +1913,8 @@ const enUS = {
   'project.cloneHint': 'Clones into the folder above (created if missing; must be empty if it exists). Private repos use this machine\'s existing SSH keys or credentials; a bad URL fails fast instead of hanging on a password prompt.',
   'project.newHint': 'A project is any directory (git optional — worktree/formation/activity need git); a missing directory is created automatically. Stored persistently; start sessions/features from the task box inside the project',
   'project.createdProject': 'Project created',
+  'project.existsAsWorktree': 'This directory is a worktree of "{name}" and now sits under that project; to work in it, show idle worktrees from the project row menu or pick it as the base on the project page',
+  'project.existsAlready': '"{name}" is already registered; nothing was created twice',
   'project.notGit': 'Not a git repository',
   'project.removed': 'Removed from list',
   'project.removeConfirm': 'Remove this project from the list? Directory, worktrees and sessions are untouched',

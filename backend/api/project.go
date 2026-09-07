@@ -449,11 +449,20 @@ func (a *API) ProjectCreate(c *gin.Context) {
 		dir = filepath.Clean(dir)
 		git = false
 	}
-	key := a.Projects.Add(dir, strings.TrimSpace(b.DisplayName))
+	key, created := a.Projects.Add(dir, strings.TrimSpace(b.DisplayName))
 	projRespMu.Lock()
 	projResp = nil
 	projRespMu.Unlock()
-	c.JSON(http.StatusOK, gin.H{"data": gin.H{"key": key, "dir": dir, "git": git}})
+	// 没新建 = 目录归位到了一个已在册的仓库（多半是它的某个 worktree）：把项目名和归位前的目录
+	// 一起告诉前端，让它说清楚「这是 X 的 worktree，已归到 X 下」，而不是「项目已创建」
+	resp := gin.H{"key": key, "dir": dir, "git": git, "created": created}
+	if !created {
+		resp["name"] = a.Projects.Name(key)
+		if b.Dir != "" && filepath.Clean(b.Dir) != dir {
+			resp["worktree"] = filepath.Clean(b.Dir)
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"data": resp})
 }
 
 // cloneMaxWait 克隆最多等多久。10 秒是给「读一下本地目录」用的，克隆完全是另一个量级：

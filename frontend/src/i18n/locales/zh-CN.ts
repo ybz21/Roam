@@ -1918,6 +1918,8 @@ const zhCN = {
   'project.cloneHint': '克隆到上面那个目录（不存在会自动创建，已存在则必须是空的）。私有仓库走本机已配好的 SSH 密钥或凭证；填错地址会直接报错，不会卡在密码提示上。',
   'project.newHint': '项目 = 任意目录（git 可选：是 git 仓库才有 worktree/编队/活动能力）；目录不存在会自动创建。创建后持久保存，开会话/建 feature 请进入项目后在任务框操作',
   'project.createdProject': '项目已创建',
+  'project.existsAsWorktree': '这个目录是「{name}」的一个 worktree，已归到该项目下；要在里面开工，去项目行「…」显示空闲 worktree，或在项目主页选它做起点',
+  'project.existsAlready': '「{name}」已经在册，没有重复创建',
   'project.notGit': '该目录不是 git 仓库',
   'project.removed': '已从列表移除',
   'project.removeConfirm': '从列表移除该项目？不动目录、worktree 与会话',

@@ -62,7 +62,7 @@ func TestSetPrefsUnknownKey(t *testing.T) {
 // 目录搬家（mv 项目 / worktree 子目录归位仓库根）：id 不变、偏好不丢。
 func TestSetDirKeepsIdentity(t *testing.T) {
 	s := NewStore(t.TempDir(), nil)
-	k := s.Add("/repo/old", "我的项目")
+	k, _ := s.Add("/repo/old", "我的项目")
 	s.SetPrefs(k, func(p *Prefs) { p.Pinned = true })
 	if got := s.SetDir(k, "/repo/new"); got != k {
 		t.Fatalf("平移应保持 id: %q → %q", k, got)
@@ -82,7 +82,7 @@ func TestSetDirKeepsIdentity(t *testing.T) {
 // 新目录已被别的条目占用 → 合并用户意志，被并掉的 id 变别名（老链接仍可解析）。
 func TestSetDirMergesUserIntent(t *testing.T) {
 	s := NewStore(t.TempDir(), nil)
-	sub := s.Add("/repo/.worktrees", "")
+	sub, _ := s.Add("/repo/.worktrees", "")
 	s.SetPrefs(sub, func(p *Prefs) { p.Pinned = true })
 	root := s.Touch("/repo")
 	if got := s.SetDir(sub, "/repo"); got != root {
@@ -352,5 +352,28 @@ func TestTraceTrimsPerRepo(t *testing.T) {
 	}
 	if got := s.ReadTrace("/repo/b", 10); len(got) != 1 {
 		t.Fatalf("修剪串到别的仓库了: %+v", got)
+	}
+}
+
+// 已在册的项目再「新建」一次（典型：从它的 worktree 目录建，归位到同一仓库根）：
+// id 不变、不算新建，传来的名字不许盖掉项目本来的名字。
+func TestAddExistingKeepsDisplayName(t *testing.T) {
+	s := NewStore(t.TempDir(), nil)
+	k, created := s.Add("/repo/blade-agent", "blade-agent")
+	if !created {
+		t.Fatal("第一次该是新建")
+	}
+	k2, created2 := s.Add("/repo/blade-agent", "blade-agent-sea-attack")
+	if k2 != k || created2 {
+		t.Fatalf("同目录再建应返回原 id 且不算新建: %q/%v vs %q", k2, created2, k)
+	}
+	if got := s.Name(k); got != "blade-agent" {
+		t.Fatalf("项目名不该被盖掉: %q", got)
+	}
+	// 从来没起过名的，再建时给的名字可以补上
+	k3, _ := s.Add("/repo/noname", "")
+	s.Add("/repo/noname", "起个名")
+	if got := s.Name(k3); got != "起个名" {
+		t.Fatalf("没起过名的可以补: %q", got)
 	}
 }
