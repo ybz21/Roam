@@ -1,4 +1,4 @@
-// Package config 负责 Roam 后端的配置：从 ~/.roam/config.yaml 读取（首次缺失则由
+// Package config 负责 Roami 后端的配置：从 ~/.roami/config.yaml 读取（首次缺失则由
 // 内嵌模板生成），并按「命令行 flag > 环境变量 > 配置文件 > 默认值」的优先级解析。
 //
 // flag 覆盖在 backend/cmd 里叠加（flag 定义在 main）；本包负责 env + 文件 + 默认值，
@@ -45,7 +45,7 @@ type Web struct {
 }
 
 // Cluster 对应 config.yaml 里的 cluster: 段（横向扩展：标准节点 / 中心）。
-// mode=standard（默认）为现在的单机 Roam，填了 broker 就额外出站注册进云端；
+// mode=standard（默认）为现在的单机 Roami，填了 broker 就额外出站注册进云端；
 // mode=cloud 是中心，只做路由 + 注册表 + 控制台，不跑业务。
 // 见 docs/design/cluster/architecture.html。
 type Cluster struct {
@@ -74,18 +74,18 @@ type Config struct {
 	Path    string // 实际配置文件路径（供 SavePassword 落盘）
 }
 
-// Home 返回 Roam 主目录（数据/配置根）。优先 ROAM_HOME，兼容旧 TTMUX_HOME。
+// Home 返回 Roami 主目录（数据/配置根）。优先 ROAMI_HOME，兼容旧 ROAM_HOME / TTMUX_HOME。
 func Home() string {
-	if d := firstEnv("ROAM_HOME", "TTMUX_HOME"); d != "" {
+	if d := firstEnv("ROAMI_HOME", "ROAM_HOME", "TTMUX_HOME"); d != "" {
 		return d
 	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".roam")
+	return filepath.Join(home, ".roami")
 }
 
-// ResolvePath 解析配置文件路径：ROAM_CONFIG > <home>/config.yaml。
+// ResolvePath 解析配置文件路径：ROAMI_CONFIG（兼容 ROAM_CONFIG）> <home>/config.yaml。
 func ResolvePath() string {
-	if p := os.Getenv("ROAM_CONFIG"); p != "" {
+	if p := firstEnv("ROAMI_CONFIG", "ROAM_CONFIG"); p != "" {
 		return p
 	}
 	return filepath.Join(Home(), "config.yaml")

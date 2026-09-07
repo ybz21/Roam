@@ -3,7 +3,7 @@
 //
 //   - 入站:provider(飞书/钉钉…,见 provider.go)长连接收 @机器人 消息,
 //     进常驻管家会话(concierge.go),由它自答或委派 worker(delegate.go);
-//   - 出站:作为 notification sink 把 Roam 通知(互审结果、告警)渲染成卡片
+//   - 出站:作为 notification sink 把 Roami 通知(互审结果、告警)渲染成卡片
 //     发到「绑定通知」记下的会话。
 //
 // 本文件是提供方无关的插件骨架:Activate 注册、事件收尾、通知 sink。
@@ -121,7 +121,7 @@ func tailForCard(s string, maxRunes int) string {
 func test(ctx *sdk.Ctx, args map[string]string) (any, error) {
 	title := args["title"]
 	if title == "" {
-		title = "Roam 测试消息"
+		title = "Roami 测试消息"
 	}
 	c := card{
 		Title:    title,

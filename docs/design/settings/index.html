@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Roam 设置页重构 · 原型</title>
+<title>Roami 设置页重构 · 原型</title>
 <style>
 /* 设置页重构原型 —— 令牌取 frontend/src/theme.tsx 与 index.css 的真值，稿子和成品同源。
  * 只画结构与状态：看的是「设置怎么分、怎么找得到」，不是像素级还原 antd 组件。 */
@@ -243,7 +243,7 @@ html[data-theme="light"] .phone { box-shadow:0 10px 26px rgba(31,35,40,.12); }
 
 <div class="doc">
 <header>
-  <div class="kick">Roam · Design</div>
+  <div class="kick">Roami · Design</div>
   <h1>设置页重构 · 搜索 + 分类树 + 一类一页</h1>
   <p>今天的设置是「7 个横向 tab，其中一个 tab 装 9 张卡」。这份稿子换成 VSCode 那套：顶上一个搜索框，
      左边一棵两级分类树，右边<b>只显示选中的那一类</b>——不是一条从主题滚到两步验证的长流。
@@ -297,7 +297,7 @@ html[data-theme="light"] .phone { box-shadow:0 10px 26px rgba(31,35,40,.12); }
 
   <div class="frame">
     <div class="chrome"><i class="dot"></i><i class="dot"></i><i class="dot"></i>
-      <span class="url" id="url">roam.local / #/settings/common</span></div>
+      <span class="url" id="url">roami.local / #/settings/common</span></div>
     <div class="shell">
       <nav class="nav">
         <div class="brand"></div>
@@ -804,7 +804,7 @@ function draw() {
     pane.innerHTML = h + '<p class="pnote">结果按类分段，点「打开这一页」跳过去改。</p>'
       + '<div class="rows">' + (n ? body : '<div class="none">没有匹配的设置。换个词试试，或者 <a href="#" onclick="clearQ();return false">清空搜索</a>。</div>') + '</div>'
     cnt.textContent = n + ' 项匹配'
-    document.getElementById('url').textContent = 'roam.local / #/settings?q=' + encodeURIComponent(q.value.trim())
+    document.getElementById('url').textContent = 'roami.local / #/settings?q=' + encodeURIComponent(q.value.trim())
     return
   }
   const p = PAGES[cur]
@@ -818,7 +818,7 @@ function draw() {
     + (p.note ? '<p class="pnote">'+p.note+'</p>' : '')
     + '<div class="rows">' + p.items.map(it => row(it, p, '', true)).join('') + '</div>'
   cnt.textContent = ''
-  document.getElementById('url').textContent = 'roam.local / #/settings/' + cur.replace('.', '/')
+  document.getElementById('url').textContent = 'roami.local / #/settings/' + cur.replace('.', '/')
 }
 function goto(id) { clearQ(); cur = id; draw() }
 function clearQ() { q.value = ''; document.getElementById('sb').classList.remove('has') }

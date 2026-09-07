@@ -8,7 +8,7 @@
 
 产出(不写运行时代码):
 
-- `roam-plugin.json` JSON Schema;contribution point v1 列表;权限 v1 列表。
+- `roami-plugin.json` JSON Schema;contribution point v1 列表;权限 v1 列表。
 - 宿主 ↔ 插件 JSON-RPC 协议草案(initialize / activate / invoke / event / deactivate,requestId + 取消 + 超时)。
 - 事件类型与延迟语义表([04-architecture.md](04-architecture.md) 第 6 节)冻结。
 - 与《智能评审插件设计》对齐:finding 数据模型、manifest 字段逐项核对,消除两文档分叉。
@@ -25,7 +25,7 @@
 - meta.db 新增 plugins 注册表;`ttmux plugin install ./path | ls | info | enable | disable | uninstall | run`。
 - `ttmux-plugind` 最小实现:单例(tmux 会话 + 文件锁 + 冷却)、unix socket、Host Manager 拉起/停止插件子进程。
 - JSON-RPC over stdio;`commands` contribution;`onCommand` 激活;激活/调用超时。
-- Node SDK 骨架(`@roam/plugin-sdk`:activate/ctx.commands/ctx.log)。
+- Node SDK 骨架(`@roami/plugin-sdk`:activate/ctx.commands/ctx.log)。
 - 审计日志(命令调用留痕)。
 - Web:`GET /api/plugins`、enable/disable/invoke(exec CLI `--json`),插件管理页(文案走 i18n)。
 
@@ -61,7 +61,7 @@
 
 - Secret API(加密落盘、按 key 发放、读取审计)。
 - Webhook 网关(路径隔离、签名、重放、限速);飞书优先验证**长连接模式**以绕开公网入口。
-- Command Intent + Approval API;身份绑定(飞书用户 ↔ Roam 操作者)。
+- Command Intent + Approval API;身份绑定(飞书用户 ↔ Roami 操作者)。
 - SCM / PR API、Diff Mapping、Review/Check Publisher、发布限速队列与 policy(REQUEST_CHANGES 默认禁止)。
 - `skills` contribution:插件附带 skill 注册/失效(复用 `skills/sync-skills.sh` 分发约定)。
 
@@ -83,7 +83,7 @@ swarm 部分(此前所有阶段不涉及 swarm):
 
 - swarm 写路径落事件(`member.completed`、`swarm.integrating` 等,复用阶段 2 的事件日志机制)。
 - `swarmHooks` contribution 与 `onSwarmEvent` 激活;Swarm API(board / plaza / block / unblock)。
-- v1 原则:插件只做 hook(参与规划、补充建议、更新看板、触发任务),核心状态机仍由 Roam 管,不开放可替换调度核心。
+- v1 原则:插件只做 hook(参与规划、补充建议、更新看板、触发任务),核心状态机仍由 Roami 管,不开放可替换调度核心。
 - 典型增强:member.completed 自动触发 review-mesh;blocking finding 阻塞 swarm 集成门禁。
 
 生态治理:GitHub source 安装、版本锁定与更新、签名校验、组织 allowlist、升级权限 diff 与回滚、插件打包/校验命令。

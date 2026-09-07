@@ -18,8 +18,8 @@ func Manifest() manifest.Manifest {
 		DisplayName:     manifest.LocaleText{"zh-CN": "IM 机器人", "en-US": "IM Bridge"},
 		Version:         "0.4.0",
 		Description: manifest.LocaleText{
-			"zh-CN": "双向 IM 桥(飞书已支持,钉钉等可扩展):@机器人 的消息进常驻管家 Agent,简单问题直接答,复杂任务委派 worker 会话干活并回报;Roam 通知推送到绑定的群",
-			"en-US": "Two-way IM bridge (Feishu supported, DingTalk extensible): messages go to a resident concierge agent that answers directly or delegates worker sessions; Roam notifications go to the bound chat",
+			"zh-CN": "双向 IM 桥(飞书已支持,钉钉等可扩展):@机器人 的消息进常驻管家 Agent,简单问题直接答,复杂任务委派 worker 会话干活并回报;Roami 通知推送到绑定的群",
+			"en-US": "Two-way IM bridge (Feishu supported, DingTalk extensible): messages go to a resident concierge agent that answers directly or delegates worker sessions; Roami notifications go to the bound chat",
 		},
 		Runtime: manifest.Runtime{Kind: "builtin"},
 		Permissions: manifest.Perms{
@@ -53,8 +53,8 @@ func Manifest() manifest.Manifest {
 				{Key: "inbound",
 					Title: manifest.LocaleText{"zh-CN": "飞书自建应用(provider=feishu)", "en-US": "Feishu self-built app (provider=feishu)"},
 					Description: manifest.LocaleText{
-						"zh-CN": "配好后群里 @应用机器人 即可查状态、派活给 Agent、干完回报;再说一句「绑定通知」,Roam 系统通知(互审结果、告警)也发到该群。\n1. open.feishu.cn → 创建「企业自建应用」,取 App ID / App Secret\n2. 权限管理:开通 im:message(获取与发送单聊、群组消息)\n3. 事件订阅:选「使用长连接接收事件」,订阅「接收消息 im.message.receive_v1」\n4. 发布版本,把应用机器人拉进群\n5. 保存后 plugind 自动拉起监听(tmux 会话 _ttmux-im),群里 @它 说「帮助」验证",
-						"en-US": "Once configured, @ the app bot in a group to check status, dispatch agent tasks and get results back; say \"bind\" and Roam system notifications also go to that chat.\n1. open.feishu.cn → create a self-built app, get App ID / App Secret\n2. Scopes: enable im:message (receive & send)\n3. Events: choose long-connection mode, subscribe to im.message.receive_v1\n4. Release the app and add its bot to the group\n5. Save; plugind auto-starts the listener (tmux session _ttmux-im) — @ the bot with \"help\" to verify"},
+						"zh-CN": "配好后群里 @应用机器人 即可查状态、派活给 Agent、干完回报;再说一句「绑定通知」,Roami 系统通知(互审结果、告警)也发到该群。\n1. open.feishu.cn → 创建「企业自建应用」,取 App ID / App Secret\n2. 权限管理:开通 im:message(获取与发送单聊、群组消息)\n3. 事件订阅:选「使用长连接接收事件」,订阅「接收消息 im.message.receive_v1」\n4. 发布版本,把应用机器人拉进群\n5. 保存后 plugind 自动拉起监听(tmux 会话 _ttmux-im),群里 @它 说「帮助」验证",
+						"en-US": "Once configured, @ the app bot in a group to check status, dispatch agent tasks and get results back; say \"bind\" and Roami system notifications also go to that chat.\n1. open.feishu.cn → create a self-built app, get App ID / App Secret\n2. Scopes: enable im:message (receive & send)\n3. Events: choose long-connection mode, subscribe to im.message.receive_v1\n4. Release the app and add its bot to the group\n5. Save; plugind auto-starts the listener (tmux session _ttmux-im) — @ the bot with \"help\" to verify"},
 				},
 				{Key: "task",
 					Title: manifest.LocaleText{"zh-CN": "派活设置", "en-US": "Task settings"},
@@ -92,7 +92,7 @@ func Manifest() manifest.Manifest {
 				{Key: "workspace", Group: "task",
 					Title:       manifest.LocaleText{"zh-CN": "管家工作目录", "en-US": "Concierge workspace"},
 					Description: manifest.LocaleText{"zh-CN": "常驻管家的家:AGENT.md(角色与协议,可自行修改)、MEMORY.md、tasks/ 台账、inbox.jsonl 收件箱都在这里", "en-US": "Home of the resident concierge: AGENT.md (role & protocol, editable), MEMORY.md, tasks/ ledger and inbox.jsonl live here"},
-					Placeholder: "~/.roam/plugins/feishu/workspace"},
+					Placeholder: "~/.roami/plugins/feishu/workspace"},
 				{Key: "tick_interval", Group: "task",
 					Title:       manifest.LocaleText{"zh-CN": "心跳巡逻间隔", "en-US": "Patrol tick interval"},
 					Description: manifest.LocaleText{"zh-CN": "每隔这么久给管家投一次 tick,它会巡检超时 worker、跟进悬置事项;如 10m/30m,填 off 关闭", "en-US": "Interval between patrol ticks (e.g. 10m/30m); the concierge checks stalled workers and pending items; 'off' disables"},

@@ -103,12 +103,12 @@ flowchart TB
 
 ### 2.3 运行时层的对象模型:CLI、会话、窗口、面板的关系
 
-tmux 的对象层级是 `server → session → window → pane`;**Roam 以 session 为唯一管理粒度**——spawn 一个 Agent、起一个开发服务、跑一个守护进程,都是开一个命名 session;window/pane 是 tmux 的内层结构,Roam 命令默认作用于 session 的活动 pane(`ttmux` 未知命令透传 tmux,高级用户仍可直接操作 window/pane)。
+tmux 的对象层级是 `server → session → window → pane`;**Roami 以 session 为唯一管理粒度**——spawn 一个 Agent、起一个开发服务、跑一个守护进程,都是开一个命名 session;window/pane 是 tmux 的内层结构,Roami 命令默认作用于 session 的活动 pane(`ttmux` 未知命令透传 tmux,高级用户仍可直接操作 window/pane)。
 
 ```mermaid
 flowchart LR
     subgraph srv["tmux server(每台开发机一个,常驻)"]
-        subgraph sess["session(Roam 管理单位:一个 Agent / 服务 / 守护进程 = 一个命名 session)"]
+        subgraph sess["session(Roami 管理单位:一个 Agent / 服务 / 守护进程 = 一个命名 session)"]
             subgraph win["window 0..n"]
                 pane["pane:进程真正运行的地方<br/>claude · codex · npm run dev · plugind"]
             end
@@ -127,7 +127,7 @@ flowchart LR
 | # | 通路 | 协议/机制 | 用途 |
 |---|---|---|---|
 | ① | **CLI → plugind**(仅 CLI;backend 不直连,见⑥) | unix socket(JSON) | 插件管理(ls/enable/...)、命令调用(`plugin run`)、状态查询 |
-| ② | plugind ↔ 插件子进程 | **stdio 上的 JSON-RPC,双向** | 下行:派发命令/事件/工具调用/UI 消息;上行:插件反调平台 API(`roam.agent.spawn`、`roam.session.capture`…) |
+| ② | plugind ↔ 插件子进程 | **stdio 上的 JSON-RPC,双向** | 下行:派发命令/事件/工具调用/UI 消息;上行:插件反调平台 API(`roami.agent.spawn`、`roami.session.capture`…) |
 | ③ | Agent(tmux 会话里的 claude/codex)→ plugind | MCP over stdio(`ttmux plugin mcp`) | Agent 调用插件贡献的工具(如写回结构化 finding) |
 | ④ | 插件 → 外部系统 | 插件进程自行 HTTPS/WS(飞书长连接、GitHub API) | 外部消息进出;入站一律转 Command Intent 才可执行 |
 | ⑤ | plugind → 运行时/存储层 | **进程内 Go 调用**(同一二进制,直接复用 `internal/swarm`、`internal/runtime` 的 Tmux/Store) | 把平台 API 落成 tmux 原语与 SQLite 读写,见 2.5 |
@@ -135,8 +135,8 @@ flowchart LR
 
 三条铁律,整个架构就立在这上面:
 
-1. **插件永远不直接碰运行时层和存储层**——不 exec tmux、不开 meta.db、不拼 claude 命令行;对 Roam 的一切读写都走②的平台 API,由 plugind 代执行(⑤),因此每次操作都有权限检查和审计。
-2. **plugind 是唯一的"翻译器"**——它与 CLI 同一个 Go 二进制,直接 import 现有 internal 包操作 tmux 和 SQLite,不需要再 exec 一层 ttmux;平台 API ↔ Roam 原语的对应关系集中在一处。
+1. **插件永远不直接碰运行时层和存储层**——不 exec tmux、不开 meta.db、不拼 claude 命令行;对 Roami 的一切读写都走②的平台 API,由 plugind 代执行(⑤),因此每次操作都有权限检查和审计。
+2. **plugind 是唯一的"翻译器"**——它与 CLI 同一个 Go 二进制,直接 import 现有 internal 包操作 tmux 和 SQLite,不需要再 exec 一层 ttmux;平台 API ↔ Roami 原语的对应关系集中在一处。
 3. **插件之间不直连**——级联全靠事件(A 发通知 → 事件日志 → B 被唤醒),每一跳都可审计、可禁用。
 
 ### 2.5 一个插件如何拿到多个会话并组织它们
@@ -181,7 +181,7 @@ const group = await ctx.sessions.list({ owner: 'self', labels: { job: 'job-42' }
 
 **操作面——插件"动"会话组**:
 
-| 接口 | plugind 落到的 Roam 原语(经⑤) | 权限 |
+| 接口 | plugind 落到的 Roami 原语(经⑤) | 权限 |
 |---|---|---|
 | `agent.spawn({provider, prompt, sessionName, labels})` | 复用 spawn 包拼 claude/codex 命令 → `tmux new-session` → 注册表记 owner/labels → events 记 `agent.spawned` | `agents:spawn` |
 | `session.send({name, text})` | `tmux send-keys`(向运行中的 Agent 追加指令) | `sessions:write` + policy |
@@ -297,9 +297,9 @@ MVP-A 的 plugind 只有四个模块(Registry、Host Manager、Audit、socket),�
 
 ```text
 my-plugin/                        # 开发仓库
-├── roam-plugin.json              # manifest:身份、权限、贡献点、激活条件
+├── roami-plugin.json              # manifest:身份、权限、贡献点、激活条件
 ├── README.md
-├── package.json                  # 依赖 @roam/plugin-sdk(Node 插件)
+├── package.json                  # 依赖 @roami/plugin-sdk(Node 插件)
 ├── schemas/
 │   └── config.schema.json        # 可选:宿主自动渲染设置表单,插件不写前端
 ├── src/
@@ -318,14 +318,14 @@ my-plugin/                        # 开发仓库
 安装后落在 `~/.ttmux/plugins/installed/<id>/<version>/`(内容即 dist + manifest + schemas)。
 
 - **v1 不支持纯前端运行时插件**:任何运行时能力(哪怕只是展示)都需要 `main` 作为数据来源和权限主体;`dist/ui` 只是 `main` 的展示层。后续可考虑"纯 manifest 插件"(无 `main`,只贡献命令别名、配置 preset、文档入口等静态声明),不在 v1 范围。
-- **纯后端插件是 v1 主流**:飞书消息插件就是一个没有任何页面的后端程序——常驻订阅 Roam 通知、调飞书 OpenAPI 发卡片、接收回调转成受控命令;它的"设置界面"由宿主根据 config schema 自动渲染。
+- **纯后端插件是 v1 主流**:飞书消息插件就是一个没有任何页面的后端程序——常驻订阅 Roami 通知、调飞书 OpenAPI 发卡片、接收回调转成受控命令;它的"设置界面"由宿主根据 config schema 自动渲染。
 
 **插件用什么语言写?——协议语言无关,分三种形态**:
 
 | `runtime.kind` | 谁用 | 说明 |
 |---|---|---|
 | `builtin` | **内置官方插件(review-mesh、monitor)用 Go 写** | 编译进 ttmux 单二进制,plugind 以隐藏子命令(`ttmux _plugin-host <id>`)拉起自身作为插件子进程;保持"Go 单二进制、零 Node 依赖"的安装体验,内置插件不给 ttmux 引入任何新运行时 |
-| `node` | 第三方生态主推形态 | 官方 `@roam/plugin-sdk`;用 TS 还是 JS 开发随意(示例中的 `src/main.ts` 即 TS 源码),**分发和运行的是构建后的 `dist/main.js`**;仅安装了 Node 插件的用户机器需要 Node |
+| `node` | 第三方生态主推形态 | 官方 `@roami/plugin-sdk`;用 TS 还是 JS 开发随意(示例中的 `src/main.ts` 即 TS 源码),**分发和运行的是构建后的 `dist/main.js`**;仅安装了 Node 插件的用户机器需要 Node |
 | `exec` | 任意语言 | Python/Go/Rust 均可,自带可执行文件/解释器,直接实现 stdio 上的 JSON-RPC 即可 |
 
 三种形态在 plugind 眼里完全一致:都是"一个子进程 + stdio JSON-RPC",权限、审计、生命周期无差别。
@@ -394,10 +394,10 @@ sequenceDiagram
     D->>P: RPC: initialize(ctx)
     P-->>D: RPC: initialized(注册 handlers)
     D->>P: RPC: invokeCommand(req)
-    P->>D: RPC: roam.workspace.diff(反向调平台 API,可多次)
+    P->>D: RPC: roami.workspace.diff(反向调平台 API,可多次)
     Note over D: 权限检查 + 审计,执行,返回
     D-->>P: diff 结果
-    P->>D: RPC: roam.agent.spawn(codex …)
+    P->>D: RPC: roami.agent.spawn(codex …)
     D-->>P: 会话名 rv-1
     P-->>D: RPC: progress / log
     D-->>C: 流式输出 / 进度
@@ -428,9 +428,9 @@ sequenceDiagram
     W->>D: events 表 append(agent.exited)<br/>或 tmux 列表 diff 合成
     Note over D: 游标读到事件<br/>匹配订阅(manifest 声明)<br/>插件未激活则先走激活流程
     D->>R: RPC: onEvent(agent.exited) —— handler 幂等
-    R->>D: RPC: roam.findings.list()
+    R->>D: RPC: roami.findings.list()
     D-->>R: findings
-    R->>D: RPC: roam.notifications.publish(blocking)
+    R->>D: RPC: roami.notifications.publish(blocking)
     Note over D: 写 notifications + events 表
     D->>F: onEvent(notification: finding.blocking)<br/>飞书 sink 被同样机制唤起
 ```
@@ -507,7 +507,7 @@ claude ──MCP(stdio)──> ttmux plugin mcp ──socket──> plugind ─�
 
 ## 8. 前端展示与前后端协同
 
-插件在 Roam Web 里的展示分两级:**v1 全部由宿主前端渲染,插件零前端代码;v2 才允许插件自带 iframe 面板**。无论哪级,链路都是 `前端 → backend → CLI/socket → plugind → 插件 main`,插件 main 永远是数据与权限的唯一后端。
+插件在 Roami Web 里的展示分两级:**v1 全部由宿主前端渲染,插件零前端代码;v2 才允许插件自带 iframe 面板**。无论哪级,链路都是 `前端 → backend → CLI/socket → plugind → 插件 main`,插件 main 永远是数据与权限的唯一后端。
 
 ### 8.1 v1:宿主渲染,插件零前端
 
@@ -532,7 +532,7 @@ claude ──MCP(stdio)──> ttmux plugin mcp ──socket──> plugind ─�
 
 ```mermaid
 flowchart LR
-    subgraph web["Roam Web(React)"]
+    subgraph web["Roami Web(React)"]
         ifr["sandboxed iframe<br/>src=/api/plugins/acme.ci/ui/<br/>allow-scripts · 独立 CSP"]
         bridge["宿主桥 PluginBridge.ts<br/>(PluginFrame 组件内)"]
         ifr <-- "postMessage" --> bridge
@@ -623,7 +623,7 @@ plugins/                             # 新增:官方内置插件与示例
 ├── builtin/review-mesh/ ...
 └── examples/hello/ ...
 
-sdk/plugin-sdk-node/                 # 新增:@roam/plugin-sdk(activate/ctx/RPC 封装)
+sdk/plugin-sdk-node/                 # 新增:@roami/plugin-sdk(activate/ctx/RPC 封装)
 ```
 
 ## 10. 数据布局

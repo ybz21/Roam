@@ -35,7 +35,7 @@ type Result struct {
 //
 // 手机和桌面同时点开同一个休眠会话时，两个请求会同时发现「tmux 里没有」并各建一个
 // 会话：两个都顶着同一个名字和目录，还都敲 claude --resume 抢同一份 transcript。
-// Roam 是单进程，进程内锁就够。
+// Roami 是单进程，进程内锁就够。
 var locks sync.Map // dormant id -> *sync.Mutex
 
 func lockFor(id string) *sync.Mutex {

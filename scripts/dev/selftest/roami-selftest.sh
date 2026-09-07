@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# Roam 自检：能用命令验的那一半。
+# Roami 自检：能用命令验的那一半。
 #
-#   scripts/dev/selftest/roam-selftest.sh [--url https://localhost:13579] [--remote]
+#   scripts/dev/selftest/roami-selftest.sh [--url https://localhost:13579] [--remote]
 #
 # 每条打一行 PASS/FAIL/WARN，末尾给汇总；有 FAIL 就 exit 1（定时任务据此判断要不要报警）。
 # 看得见的那一半（界面、手机档、镜像画面）在
-# docs/development/roam-selftest-checklist.md 里，由 Agent 用浏览器跑。
+# docs/development/roami-selftest-checklist.md 里，由 Agent 用浏览器跑。
 #
-# 口令从 ~/.roam/config.yaml 读，绝不写进脚本，也绝不打印。
+# 口令从 ~/.roami/config.yaml 读，绝不写进脚本，也绝不打印。
 set -uo pipefail
 
-URL="${ROAM_URL:-https://localhost:13579}"
+URL="${ROAMI_URL:-https://localhost:13579}"
 REMOTE=0
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -59,14 +59,14 @@ else
   bad "/api/version" "连不上 $URL"
 fi
 
-if [ "$URL" = "${ROAM_URL:-https://localhost:13579}" ] && command -v systemctl >/dev/null; then
-  systemctl --user is-active --quiet roam.service 2>/dev/null \
-    && ok "roam.service" "active" \
-    || warn "roam.service" "不是 systemd 起的（前台跑也算正常）"
+if [ "$URL" = "${ROAMI_URL:-https://localhost:13579}" ] && command -v systemctl >/dev/null; then
+  systemctl --user is-active --quiet roami.service 2>/dev/null \
+    && ok "roami.service" "active" \
+    || warn "roami.service" "不是 systemd 起的（前台跑也算正常）"
 fi
 
 section "登录"
-CONF="${ROAM_HOME:-$HOME/.roam}/config.yaml"
+CONF="${ROAMI_HOME:-$HOME/.roami}/config.yaml"
 pw=$(sed -n 's/^[[:space:]]*password:[[:space:]]*"\{0,1\}\([^"]*\)"\{0,1\}[[:space:]]*$/\1/p' "$CONF" 2>/dev/null | head -1)
 if [ -z "$pw" ]; then
   bad "读口令" "$CONF 里没找到 web.password"
@@ -107,8 +107,8 @@ tmux has-session -t "=_ttmux-plugind" 2>/dev/null \
   || bad "plugind 守护进程" "不在——插件的定时/常驻能力全停摆"
 # 到点触发靠外面按分钟叫一次 cron.tick（插件宿主没有内置调度器）。这一条不在，
 # 所有定时任务都只是躺在库里、永远不会跑——包括这份自检自己。
-if systemctl --user is-active --quiet roam-cron-tick.timer 2>/dev/null; then
-  ok "定时任务巡检" "roam-cron-tick.timer active"
+if systemctl --user is-active --quiet roami-cron-tick.timer 2>/dev/null; then
+  ok "定时任务巡检" "roami-cron-tick.timer active"
 elif pgrep -f "cron[.]serve" >/dev/null 2>&1; then
   ok "定时任务巡检" "cron.serve 常驻中"
 else

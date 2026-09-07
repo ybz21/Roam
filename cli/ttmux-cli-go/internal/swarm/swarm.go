@@ -72,11 +72,11 @@ type swarmMeta struct {
 
 func DefaultOptions() Options {
 	home, _ := os.UserHomeDir()
-	homeDir := firstEnv("ROAM_HOME", "TTMUX_HOME")
+	homeDir := firstEnv("ROAMI_HOME", "ROAM_HOME", "TTMUX_HOME")
 	if homeDir == "" {
-		homeDir = filepath.Join(home, ".roam")
+		homeDir = filepath.Join(home, ".roami")
 	}
-	dataDir := firstEnv("ROAM_DATA", "TTMUX_DATA")
+	dataDir := firstEnv("ROAMI_DATA", "ROAM_DATA", "TTMUX_DATA")
 	if dataDir == "" {
 		dataDir = homeDir
 	}
@@ -96,7 +96,7 @@ func DefaultOptions() Options {
 	}
 }
 
-// firstEnv 返回首个非空环境变量值（用于 ROAM_* 主键 + 旧 TTMUX_* 兼容）。
+// firstEnv 返回首个非空环境变量值（ROAMI_* 主键，兼容旧 ROAM_* / TTMUX_*）。
 func firstEnv(keys ...string) string {
 	for _, k := range keys {
 		if v := os.Getenv(k); v != "" {

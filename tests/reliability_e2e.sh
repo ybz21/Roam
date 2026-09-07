@@ -51,7 +51,7 @@ make_dormant() {
   python3 - "$sid" "$epoch" <<'PYEOF'
 import sqlite3,sys,os,datetime,time
 sid,epoch=sys.argv[1],sys.argv[2]
-db=os.path.expanduser('~/.roam/meta.db')
+db=os.path.expanduser('~/.roami/meta.db')
 want=epoch+'-old'
 # 写完回读确认，不对就重来——和产品里 memguard.Apply 必须回读 memory.max 同一个道理：
 # 有别的写者在并发改这张表，"命令返回 0" 证明不了状态。
@@ -86,7 +86,7 @@ pane_pid() { tmux list-panes -s -t "=$1" -F '#{pane_pid}' 2>/dev/null | head -1;
 cg_dir()   { local p; p=$(pane_pid "$1"); [ -n "$p" ] && echo "/sys/fs/cgroup$(cut -d: -f3 < /proc/"$p"/cgroup 2>/dev/null)"; }
 db()       { python3 -c "
 import sqlite3,sys,os
-c=sqlite3.connect(os.path.expanduser('~/.roam/meta.db'))
+c=sqlite3.connect(os.path.expanduser('~/.roami/meta.db'))
 r=list(c.execute(sys.argv[1], sys.argv[2:]))
 print(r[0][0] if r and r[0][0] is not None else '')" "$@"; }
 
@@ -169,7 +169,7 @@ while 1: a.append(bytearray(30*1024*1024))'" C-m 2>/dev/null
   # page cache 是全局共享的，只有**首次读入**才 charge 给某个 cgroup——
   # 反复跑测试时那些文件早就在缓存里了，再读一遍这个 cgroup 一分钱不涨
   # （实测就是这么一直 skip 的）。而写入产生的脏页必然算在写的人头上。
-  local tmpf="/tmp/roam-e2e-cache-$$.bin"
+  local tmpf="/tmp/roami-e2e-cache-$$.bin"
   tmux send-keys -t "=$s:" "dd if=/dev/zero of=$tmpf bs=1M count=300 2>/dev/null; cat $tmpf >/dev/null" C-m 2>/dev/null
   local w=0
   until [ "$(cat "$d/memory.current" 2>/dev/null || echo 0)" -gt $((250*1024*1024)) ] || [ $w -ge 20 ]; do sleep 1; w=$((w+1)); done
@@ -292,7 +292,7 @@ print(out if out else '')" 2>/dev/null)
     python3 - "$fake" "$kind" "$newid" <<'PYEOF'
 import sqlite3,sys,os
 sid,kind,cid=sys.argv[1],sys.argv[2],sys.argv[3]
-c=sqlite3.connect(os.path.expanduser('~/.roam/meta.db'))
+c=sqlite3.connect(os.path.expanduser('~/.roami/meta.db'))
 c.execute("update sessions set agent_kind=?, agent_session_uuid=? where id=?",(kind,cid,sid))
 c.commit()
 PYEOF

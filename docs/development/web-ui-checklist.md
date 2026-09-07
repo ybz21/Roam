@@ -1,6 +1,6 @@
 # Web UI 验收清单（Chrome CLI / 手机 ADB）
 
-前端改动**不能只靠肉眼和 typecheck 收工**——Roam 的坑大多在真实浏览器里才现形：层叠上下文、
+前端改动**不能只靠肉眼和 typecheck 收工**——Roami 的坑大多在真实浏览器里才现形：层叠上下文、
 触摸事件命中、软键盘、tmux attach 尺寸。本清单给出一套可复现的跑法：桌面走 `chrome` CLI 或
 CDP，手机走 adb + 手机 Chrome 的 DevTools（同一套 CDP 脚本两端复用）。
 
@@ -145,10 +145,10 @@ console.assert(b1.top < b0.top, '聊天区滑不动')
 
 ```bash
 # 独立会话 + 真实转录：起一个 claude（不发消息=不花钱），再把一份历史 jsonl 拷进它的 project 目录
-tmux new-session -d -s roam-uitest -x 200 -y 45 -c /tmp/uitest 'claude'
+tmux new-session -d -s roami-uitest -x 200 -y 45 -c /tmp/uitest 'claude'
 cp <某个较小的>.jsonl ~/.claude/projects/-tmp-uitest/aaaa1111-....jsonl
 ```
 
 - 转录别拿几十 MB 的大文件，前端一次性拉全量会把手机拖死（那是测试数据问题，不是 bug）。
 - 要真选择框：在测试会话里发 `/model`，那就是一个标准的 Claude Code 选择框。
-- 收尾：`tmux kill-session -t roam-uitest`，删掉拷进去的 jsonl。
+- 收尾：`tmux kill-session -t roami-uitest`，删掉拷进去的 jsonl。

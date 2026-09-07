@@ -3,7 +3,7 @@
 # 没有 KVM，本机 Android 模拟器（QEMU+KVM）根本起不来，界面上只剩一句「无权访问 /dev/kvm」。
 #
 # 权限有两条来路，两条都要，因为它们管的时间段不一样：
-#   setfacl  立刻生效（ACL 按 uid 匹配，连正在跑的 roam 都能开），但它是 logind 挂的，
+#   setfacl  立刻生效（ACL 按 uid 匹配，连正在跑的 roami 都能开），但它是 logind 挂的，
 #            换个座位会话就被重挂掉，也不过重启
 #   kvm 组   持久、重启后照样在，代价是附加组在进程创建时定死 —— 要新登录才带得上
 # ACL 管「现在」，组管「以后」。中间那段（加了组还没重新登录）由后端套 sg 兜住，
@@ -40,8 +40,8 @@ kvm_manual_hint() {
 kvm_ensure() {
     local say="${1:-echo}"
     [ "$(uname -s)" = Linux ] || return 0                 # macOS 用 HVF，不碰 /dev/kvm
-    if [ "${ROAM_NO_KVM:-0}" = 1 ]; then
-        $say "ROAM_NO_KVM=1：跳过 /dev/kvm 授权（本机模拟器将起不来）"; return 0
+    if [ "${ROAMI_NO_KVM:-0}" = 1 ]; then
+        $say "ROAMI_NO_KVM=1：跳过 /dev/kvm 授权（本机模拟器将起不来）"; return 0
     fi
     # 机器上没有这个设备就整段跳过：云主机大多如此，不该为一个用不上的功能弹口令框。
     [ -e /dev/kvm ] || return 0
@@ -72,7 +72,7 @@ kvm_ensure() {
     if kvm_usable; then
         $say "KVM 已授权（已加入 kvm 组，重启后依然有效）"
     elif kvm_in_group; then
-        $say "已加入 kvm 组（重新登录后生效；在那之前 roam 会自动借 sg 起模拟器）"
+        $say "已加入 kvm 组（重新登录后生效；在那之前 roami 会自动借 sg 起模拟器）"
     else
         $say "KVM 授权未成功，本机模拟器起不来。手动执行："
         kvm_manual_hint

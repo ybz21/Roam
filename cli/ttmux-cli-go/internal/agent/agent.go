@@ -1,6 +1,6 @@
-// Package agent 是「一型 agent 与 Roam 的契约」。
+// Package agent 是「一型 agent 与 Roami 的契约」。
 //
-// Roam 要对一个 agent 做三件事：把它拉起来、记住它这段对话是哪一段、
+// Roami 要对一个 agent 做三件事：把它拉起来、记住它这段对话是哪一段、
 // 会话被机器重启带走后把那段对话接回来。这三件事每一型的做法都不同：
 //
 //	                 指定对话 id            接回一段对话
@@ -84,7 +84,7 @@ type StartOpts struct {
 	ConvID string
 	// Model 模型名，空则用 agent 自己的默认。
 	Model string
-	// Permission 权限档。取值是 Roam 这一侧的口径（"auto" /
+	// Permission 权限档。取值是 Roami 这一侧的口径（"auto" /
 	// "dangerously-skip-permissions"），**怎么翻译成自家参数由各型自己决定** ——
 	// claude 有 --permission-mode，codex 只有一个 bypass 开关，没有档位概念。
 	Permission string

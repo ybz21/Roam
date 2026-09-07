@@ -94,10 +94,10 @@ func handleMessage(ctx *sdk.Ctx, st *conciergeState, seen *seenSet, m Message) {
 
 	switch strings.ToLower(text) {
 	case "", "hi", "hello", "你好", "help", "帮助", "?", "？":
-		replyText(ctx, m.Chat, "我是 Roam 机器人,@我 之后:\n"+
+		replyText(ctx, m.Chat, "我是 Roami 机器人,@我 之后:\n"+
 			"· 帮助 —— 看这份说明\n"+
 			"· 状态 —— 看我派出去的任务会话\n"+
-			"· 绑定通知 —— Roam 系统通知(互审结果、告警)以后发到本群\n"+
+			"· 绑定通知 —— Roami 系统通知(互审结果、告警)以后发到本群\n"+
 			"· 结束 —— 收掉当前任务会话\n"+
 			"· 其他任何话 —— 派给 Agent 干活;它会主动汇报进度、有疑问会反问你,你的回复我会转给它")
 	case "状态", "status":
@@ -107,10 +107,10 @@ func handleMessage(ctx *sdk.Ctx, st *conciergeState, seen *seenSet, m Message) {
 			replyText(ctx, m.Chat, "绑定失败: "+err.Error())
 			return
 		}
-		replyText(ctx, m.Chat, "已绑定 ✅ Roam 系统通知(互审结果、blocking finding、告警)以后发到本群;「解绑通知」可取消。")
+		replyText(ctx, m.Chat, "已绑定 ✅ Roami 系统通知(互审结果、blocking finding、告警)以后发到本群;「解绑通知」可取消。")
 	case "解绑通知", "unbind":
 		_ = ctx.StorageSet("notify_chat", "")
-		replyText(ctx, m.Chat, "已解绑,Roam 系统通知不再发送(重新绑定:任意群里说「绑定通知」)。")
+		replyText(ctx, m.Chat, "已解绑,Roami 系统通知不再发送(重新绑定:任意群里说「绑定通知」)。")
 	case "结束", "stop", "exit":
 		if sess := activeTask(ctx, m.Chat); sess != "" {
 			_ = ctx.SessionSend(sess, "/exit")

@@ -63,7 +63,7 @@ func sdkTool(name string) string {
 	return ""
 }
 
-// avdDir：模拟器启动日志等落在配置同目录下的 android/（默认 ~/.roam/android）。
+// avdDir：模拟器启动日志等落在配置同目录下的 android/（默认 ~/.roami/android）。
 func avdDir() string {
 	cfgStore.mu.Lock()
 	f := cfgStore.file
@@ -74,7 +74,7 @@ func avdDir() string {
 	}
 	if base == "" {
 		home, _ := os.UserHomeDir()
-		base = filepath.Join(home, ".roam")
+		base = filepath.Join(home, ".roami")
 	}
 	d := filepath.Join(base, "android")
 	_ = os.MkdirAll(d, 0o755)

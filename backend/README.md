@@ -11,7 +11,7 @@ ttmux 的 Web 控制台后端，是 ttmux CLI 的薄封装：读 = 调 `ttmux <c
 ./start.sh --dev
 ```
 
-配置走 **`~/.roam/config.yaml`**（首次启动由内嵌模板自动生成；schema 见仓库
+配置走 **`~/.roami/config.yaml`**（首次启动由内嵌模板自动生成；schema 见仓库
 [`configs/config.yaml.template`](../configs/config.yaml.template)）。优先级：命令行 flag >
 环境变量（`ROAM_*`，兼容旧 `TTMUX_*`）> 配置文件 > 默认值：
 ```yaml

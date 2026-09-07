@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 让 Roam 开机自启（用户级 systemd 服务）。不需要 root。
+# 让 Roami 开机自启（用户级 systemd 服务）。不需要 root。
 #
 #   bash scripts/dev/install-autostart.sh          装上并立即接管
 #   bash scripts/dev/install-autostart.sh remove   卸掉，退回手工 start.sh
@@ -8,7 +8,7 @@
 #
 # 这台机器上的实例是 start.sh 起的，配置从 .env 读（口令、TOTP、TLS、绑定地址），
 # 前端目录由 `-web $(pwd)/frontend/dist` 显式指定。install.sh 里那个服务模板跑的是
-# 另一条路（发布版二进制 + ~/.roam/config.yaml + 内嵌前端）。两条路的配置一旦对不上，
+# 另一条路（发布版二进制 + ~/.roami/config.yaml + 内嵌前端）。两条路的配置一旦对不上，
 # 一次「装个自启」就变成了改口令、改端口、前端回退到编译时快照。
 #
 # 所以这里只改**谁来拉起**，不改**拉起时带什么**：ExecStart 就是 `start.sh fg`，
@@ -17,7 +17,7 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 UNIT_DIR="${HOME}/.config/systemd/user"
-UNIT="roam.service"
+UNIT="roami.service"
 
 if [ "${1:-}" = "remove" ]; then
   systemctl --user disable --now "$UNIT" 2>/dev/null || true
@@ -33,7 +33,7 @@ command -v systemctl >/dev/null || { echo "✘ 无 systemd，装不了自启" >&
 mkdir -p "$UNIT_DIR"
 cat > "${UNIT_DIR}/${UNIT}" <<UNITFILE
 [Unit]
-Description=Roam web console
+Description=Roami web console
 After=network-online.target
 Wants=network-online.target
 

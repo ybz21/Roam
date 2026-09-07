@@ -28,16 +28,16 @@ ttmux plugin logs my.plugin --follow   # 查看插件 stderr 日志
 
 ```text
 my-plugin/
-├── roam-plugin.json
+├── roami-plugin.json
 ├── README.md
 ├── src/main.js            # 构建到 dist/main.js
 ├── schemas/config.schema.json
-└── package.json           # 依赖 @roam/plugin-sdk
+└── package.json           # 依赖 @roami/plugin-sdk
 ```
 
 ## 3. 最小插件(hello)
 
-`roam-plugin.json`:
+`roami-plugin.json`:
 
 ```json
 {
@@ -47,7 +47,7 @@ my-plugin/
   "name": "hello",
   "displayName": { "zh-CN": "你好插件", "en-US": "Hello Plugin" },
   "version": "0.1.0",
-  "engines": { "roam": ">=0.6.0" },
+  "engines": { "roami": ">=0.6.0" },
   "main": "dist/main.js",
   "runtime": { "kind": "node", "activation": "lazy" },
   "permissions": {},
@@ -63,12 +63,12 @@ my-plugin/
 `src/main.js`:
 
 ```js
-const { activate } = require('@roam/plugin-sdk')
+const { activate } = require('@roami/plugin-sdk')
 
 activate(ctx => {
   ctx.commands.register('acme.hello.greet', async args => {
     ctx.log.info('greet invoked')            // -> stderr -> plugins/logs/acme.hello.log
-    return { text: `hello, ${args.name ?? 'roam'}` }
+    return { text: `hello, ${args.name ?? 'roami'}` }
   })
   // 返回可选清理函数;ctx 注册的资源在 deactivate 时由 SDK 自动注销
   return () => ctx.log.info('bye')
@@ -152,8 +152,8 @@ Content-Length: 118\r\n
 {"jsonrpc":"2.0","id":9,"method":"plugin/deactivate","params":{"reason":"idle"}}   // 5s 内退出,否则 SIGKILL
 
 // Plugin -> Host(反调平台 API,同样是标准请求)
-{"jsonrpc":"2.0","id":101,"method":"roam/workspace.diff","params":{}}
-{"jsonrpc":"2.0","id":102,"method":"roam/agent.spawn","params":{"provider":"codex","sessionName":"qc-j42-rv1","labels":{"job":"j42"}}}
+{"jsonrpc":"2.0","id":101,"method":"roami/workspace.diff","params":{}}
+{"jsonrpc":"2.0","id":102,"method":"roami/agent.spawn","params":{"provider":"codex","sessionName":"qc-j42-rv1","labels":{"job":"j42"}}}
 
 // 响应与错误:标准 result / error(含 code/message/data)
 {"jsonrpc":"2.0","id":101,"result":{...}}
@@ -188,7 +188,7 @@ ttmux plugin dev pack .       # 产出 my-plugin-0.1.0.tgz(含 manifest、dist�
 ```
 
 - v1 分发 = 发 tarball / git 仓库,用户 `ttmux plugin install <path|url>`。
-- 版本号遵循 semver;`engines.roam` 声明兼容宿主版本;升级若新增权限,用户会看到权限 diff 并需重新确认。
+- 版本号遵循 semver;`engines.roami` 声明兼容宿主版本;升级若新增权限,用户会看到权限 diff 并需重新确认。
 - 团队内分发:仓库提交 `.ttmux/plugins.json`(启用清单)与 `.ttmux/plugin-policy.json`(来源/权限上限),成员 `ttmux plugin sync` 一键对齐(阶段 3+)。
 
 ## 9. 最佳实践清单

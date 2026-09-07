@@ -1,6 +1,6 @@
-# Roam 文档
+# Roami 文档
 
-> **Code anywhere, anytime.** — 品牌名 **Roam**，命令行工具名 `ttmux`。
+> **Code anywhere, anytime.** — 品牌名 **Roami**，命令行工具名 `ttmux`。
 
 | 目录 | 内容 |
 |------|------|

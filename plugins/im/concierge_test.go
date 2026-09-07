@@ -99,7 +99,7 @@ func TestWorkspaceTildeExpansion(t *testing.T) {
 		t.Fatalf("tilde not expanded: %s", got)
 	}
 	ctx2 := &sdk.Ctx{Config: map[string]string{}}
-	if got := workspaceDir(ctx2); !strings.HasSuffix(got, filepath.Join(".roam", "plugins", "im", "workspace")) {
+	if got := workspaceDir(ctx2); !strings.HasSuffix(got, filepath.Join(".roami", "plugins", "im", "workspace")) {
 		t.Fatalf("default workspace wrong: %s", got)
 	}
 }

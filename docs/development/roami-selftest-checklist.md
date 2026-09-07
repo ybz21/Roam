@@ -1,13 +1,13 @@
-# Roam 自检清单
+# Roami 自检清单
 
-**每天凌晨 2:00 由定时任务跑一遍**（`roam.cron` 里的 `roam-自检`），也可以随时手动跑：出了
+**每天凌晨 2:00 由定时任务跑一遍**（`roam.cron` 里的 `roami-自检`），也可以随时手动跑：出了
 奇怪的问题时，先照这张单子过一遍，比凭印象猜快。
 
 清单分两半，界线是**能不能不看屏幕就判对错**：
 
 | | 谁来跑 | 怎么跑 |
 | --- | --- | --- |
-| 机器那一半 | 脚本 | `scripts/dev/selftest/roam-selftest.sh [--remote]` |
+| 机器那一半 | 脚本 | `scripts/dev/selftest/roami-selftest.sh [--remote]` |
 | 眼睛那一半 | Agent 开浏览器 | 本文 §2，用 playwright 连本机实例逐项看 |
 
 判定：脚本有 `FAIL` 就是坏了；`WARN` 是「值得看一眼但不一定是故障」（版本不齐、磁盘偏满）。
@@ -17,11 +17,11 @@
 
 ## 1. 机器那一半（脚本已覆盖）
 
-`scripts/dev/selftest/roam-selftest.sh` 逐条打 PASS/FAIL/WARN，有 FAIL 时退出码非 0：
+`scripts/dev/selftest/roami-selftest.sh` 逐条打 PASS/FAIL/WARN，有 FAIL 时退出码非 0：
 
 - **服务**：`/api/version` 通、版本不是 `vdev`（`vdev` = 手动 `go build` 丢了 ldflags）；
-  `roam.service` 是 active。
-- **登录**：拿 `~/.roam/config.yaml` 里的口令走 `/api/login`，能拿到 cookie。
+  `roami.service` 是 active。
+- **登录**：拿 `~/.roami/config.yaml` 里的口令走 `/api/login`，能拿到 cookie。
   口令只读不打印。
 - **核心接口**：`/api/sessions`、`/api/projects`、`/api/plugins`、`/api/preferences`、
   `/api/browser/config` 都返回**合法 JSON**并能取到关键字段。
@@ -31,13 +31,13 @@
   `ttmux ls --json` 读得出台账。
 - **前端产物**：首页 HTML 引得到 `/assets/*.js` 且该文件 200（dist 没构建 / `-web` 指错目录
   会在这里露馅）。
-- **定时任务巡检**：`roam-cron-tick.timer` 在跑（或有人常驻 `cron.serve`）。插件宿主**没有**
+- **定时任务巡检**：`roami-cron-tick.timer` 在跑（或有人常驻 `cron.serve`）。插件宿主**没有**
   内置调度器，到点触发全靠外面每分钟叫一次 `ttmux plugin run cron.tick`；这条断了，
   所有定时任务只是躺在库里——包括这份自检本身。装法：
 
   ```bash
-  cp scripts/deploy/systemd/roam-cron-tick.{service,timer} ~/.config/systemd/user/
-  systemctl --user daemon-reload && systemctl --user enable --now roam-cron-tick.timer
+  cp scripts/deploy/systemd/roami-cron-tick.{service,timer} ~/.config/systemd/user/
+  systemctl --user daemon-reload && systemctl --user enable --now roami-cron-tick.timer
   ```
 - **容量**：磁盘、内存 <90%。
 - `--remote`：jetson 与阿里云的版本和本机是否一致（不一致只报 WARN——常常只是还没部署）。
@@ -91,7 +91,7 @@
 
 ## 3. 产出
 
-- 报告写到 `~/.roam/selftest/<YYYY-MM-DD>.md`：首行是
+- 报告写到 `~/.roami/selftest/<YYYY-MM-DD>.md`：首行是
   `PASS n · FAIL n · WARN n`，然后是脚本原样输出，再是 §2 逐条结论与截图路径。
 - 有 FAIL：把失败项摘要发一份 IM（`ttmux plugin run im-bridge.send`，没绑就跳过），
   并在报告顶部标红。

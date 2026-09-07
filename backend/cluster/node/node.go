@@ -26,12 +26,12 @@ import (
 
 // 与 broker 侧约定的接入头（见 cluster/broker/broker.go）。
 const (
-	hdrEnroll = "X-Roam-Enroll"
-	hdrNodeID = "X-Roam-Node-Id"
-	hdrToken  = "X-Roam-Node-Token"
-	hdrName   = "X-Roam-Node-Name"
-	hdrGroup  = "X-Roam-Node-Group"
-	hdrMeta   = "X-Roam-Node-Meta"
+	hdrEnroll = "X-Roami-Enroll"
+	hdrNodeID = "X-Roami-Node-Id"
+	hdrToken  = "X-Roami-Node-Token"
+	hdrName   = "X-Roami-Node-Name"
+	hdrGroup  = "X-Roami-Node-Group"
+	hdrMeta   = "X-Roami-Node-Meta"
 )
 
 // Client 是节点侧隧道客户端。
@@ -41,7 +41,7 @@ type Client struct {
 	Name     string       // 节点显示名
 	Group    string       // 分组
 	Insecure bool         // 跳过中心 TLS 校验（自签调试）
-	Version  string       // 本机 Roam 版本
+	Version  string       // 本机 Roami 版本
 	CredPath string       // node.json 落盘路径
 	Handler  http.Handler // 本机业务 Handler（server.New 返回的引擎）
 	// Stats 供心跳上报本机会话数与负载；为 nil 时报 0。由 main 注入，
@@ -262,7 +262,7 @@ func hubHint(code int, body string) string {
 	case strings.Contains(body, "NODE_UNAUTHORIZED"):
 		return "：节点凭证已失效（可能被移除过），删掉 <home>/cluster/node.json 后用新令牌重新接入"
 	case code == 404:
-		return "：这个地址上没有 中心（对方是普通 Roam？检查 cluster.broker）"
+		return "：这个地址上没有 中心（对方是普通 Roami？检查 cluster.broker）"
 	case code == 401 || code == 403:
 		return "：被拒绝，检查令牌"
 	}

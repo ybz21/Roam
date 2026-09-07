@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Roam · 会话内存护栏（R1 v0.2）</title>
+<title>Roami · 会话内存护栏（R1 v0.2）</title>
 <style>
 /* ── 令牌：直接取 frontend/src/theme.tsx 的真值 ─────────────────────────── */
 :root {
@@ -152,7 +152,7 @@ tr.hot td { color:var(--danger); font-weight:600; }
 
 <div class="top">
   <div>
-    <div class="kicker">Roam · Reliability</div>
+    <div class="kicker">Roami · Reliability</div>
     <h1>R1 会话内存护栏</h1>
   </div>
   <div class="sp"></div>
@@ -162,7 +162,7 @@ tr.hot td { color:var(--danger); font-weight:600; }
 <div class="wrap">
 
 <p class="lede">
-2026-08-22 21:51，这台 30 GB 的机器被打爆。凶手不是 Roam 后端，是 Roam 托管的<b>一个
+2026-08-22 21:51，这台 30 GB 的机器被打爆。凶手不是 Roami 后端，是 Roami 托管的<b>一个
 Claude Code 进程</b>——它自己涨到 15.5 GB。这份稿子先把证据摆完，再给出四层护栏：
 让失控的会话只杀死自己，而不是拖走整机和另外 16 个会话。
 </p>
@@ -185,7 +185,7 @@ Aug 22 21:51:23 kernel: Out of memory: Killed process 831019 (<span class="r">2.
   <p><code>2.1.228</code> 是 <b>Claude Code 的版本号</b>（本机当前 <code>claude --version</code> =
   2.1.241，8/22 那天正是 2.1.228）。Node 应用把 <code>process.title</code> 设成版本串，
   内核的 <code>comm</code> 就记成了这个。它跑在 <code>tmux-spawn-*.scope</code> 里——
-  也就是 <b>Roam 起的一个 tmux 会话的 pane</b> 中。</p>
+  也就是 <b>Roami 起的一个 tmux 会话的 pane</b> 中。</p>
 </div>
 
 <h3>OOM 那一刻的内存排行（按内核 dump 的真实 RSS 聚合）</h3>
@@ -208,7 +208,7 @@ Aug 22 21:51:23 kernel: Out of memory: Killed process 831019 (<span class="r">2.
   <code>pty.Handler</code> 的 <code>defer</code> 里 <code>ptmx.Close()</code> +
   <code>Process.Kill()</code> + <code>Wait()</code> 三件齐全，PR #197 已经修掉了中心反代
   每请求新建 <code>Transport</code> 的 goroutine 泄漏。</p>
-  <p><b>真正的问题是：Roam 是个进程编排器，而它编排出来的进程没有任何内存上限。</b>
+  <p><b>真正的问题是：Roami 是个进程编排器，而它编排出来的进程没有任何内存上限。</b>
   11 个常驻 claude（2.3 GB）+ 一台 AVD 模拟器（4.6 GB）+ java（2 GB）是长期底盘，
   一个失控的 agent 补上最后 15.5 GB，30 GB 就没了。</p>
 </div>
@@ -298,7 +298,7 @@ func Wrap(cmd []string, max string) []string {
     if max == "" || max == "0" || !available() { return cmd }
     return append([]string{
         "systemd-run", "--user", "--scope", "--quiet",
-        "--unit", "roam-sess-" + id,          <span class="c">// 可反查是哪个会话</span>
+        "--unit", "roami-sess-" + id,          <span class="c">// 可反查是哪个会话</span>
         "-p", "MemoryMax=" + max,
         "-p", "MemorySwapMax=" + swapCap(max), <span class="c">// 别让它把 swap 也吃穿</span>
         "-p", "MemoryHigh=" + high(max),       <span class="c">// 撞硬顶前先 throttle 一段，给看门狗反应时间</span>
@@ -344,7 +344,7 @@ func Wrap(cmd []string, max string) []string {
 <p>L1 管不了「每个都合规、加起来超了」。补一道软限，它不杀进程，只是让整个用户会话在
 逼近上限时先回收、先变慢，把硬 OOM 换成可感知的卡顿：</p>
 
-<pre><code><span class="c"># /etc/systemd/system/user@1000.service.d/roam-memory.conf（需 root，一次性）</span>
+<pre><code><span class="c"># /etc/systemd/system/user@1000.service.d/roami-memory.conf（需 root，一次性）</span>
 [Service]
 MemoryHigh=75%      <span class="c"># 30 G 机器 → 22.5 G，软限，触发回收+throttle</span>
 MemoryMax=88%       <span class="c"># → 26.4 G，硬顶，仍留 3.6 G 给内核和系统服务</span>
@@ -395,7 +395,7 @@ $ ls -l .../user@1000.service/memory.high
 <p>「当前是不是踩着刹车」<b>从内核读</b>，不自己记：CLI 每次调用都是一个新进程，
 记在内存里的状态活不过这一轮，落盘又要多一张表。内核里那个数就是唯一真相。</p>
 
-<p>三条线可以按机器调（<code>ROAM_MEM_BRAKE_LOW</code> / <code>_OK</code> / <code>_SHARE</code>）：
+<p>三条线可以按机器调（<code>ROAMI_MEM_BRAKE_LOW</code> / <code>_OK</code> / <code>_SHARE</code>）：
 128 G 的机器上 12% 是 15 G 余量，早得没必要；8 G 的机器上 12% 只剩 1 G，已经太晚。</p>
 
 <p>剩下的那半——<b>硬顶</b>，也就是「把 OOM 关在用户切片里」——仍然只有 root 做得到，
@@ -529,7 +529,7 @@ $ cat .../tmux-spawn-&lt;uuid&gt;.scope/memory.events    <span class="c"># high 
 scope 目录随进程消失，所以这一眼得赶在 systemd 回收之前——采集器（L3）本来就在周期性读，
 把最后一次读到的值缓存住即可，不必和内核赛跑。</p>
 
-<p>另外把 <code>ROAM_PPROF</code> 这条既有的诊断口写进部署文档
+<p>另外把 <code>ROAMI_PPROF</code> 这条既有的诊断口写进部署文档
 （<code>backend/cmd/pprof.go</code>，只绑回环，默认关）。它诊断的是 ttmux-web 自身——
 这次证明不是它的锅，但下次可能是，而事故当场再去翻怎么开就晚了。</p>
 
@@ -582,9 +582,9 @@ scope 目录随进程消失，所以这一眼得赶在 systemd 回收之前—�
 </ul>
 
 <div class="foot">
-  Roam · docs/design/reliability/memory-guard.html · v0.2 · 2026-08-23<br>
+  Roami · docs/design/reliability/memory-guard.html · v0.2 · 2026-08-23<br>
   证据来源：<code>journalctl -k -b -1</code>（2026-08-22 21:51:23 OOM dump）、
-  <code>~/.roam/meta.db</code> sessions 表、本机 cgroup v2 实测。
+  <code>~/.roami/meta.db</code> sessions 表、本机 cgroup v2 实测。
   姊妹稿：<a href="session-restore.html">R2 会话懒恢复</a>。
 </div>
 

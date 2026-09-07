@@ -75,7 +75,7 @@ feishu-agent 管家会话(常驻交互式 claude/codex,cwd=workspace)      ◄�
 
 - 名称:`feishu-agent`(不带下划线前缀——它是用户可围观、可接管的正经会话,
   `_` 前缀留给纯基础设施);
-- 启动方式:**经 `roam/agent.spawn`(interactive=true)**,即 listener 插件进程调
+- 启动方式:**经 `roami/agent.spawn`(interactive=true)**,即 listener 插件进程调
   `ctx.AgentSpawn`——复用 prompt-file 注入、provider 抽象、autoconfirm、任务 meta
   与日志,不走裸 `tmux new-session`(与现有派活会话同一条已验证的通路);初始
   prompt = workspace/AGENT.md 内容;
@@ -220,7 +220,7 @@ ttmux plugin run feishu-bridge.delegate \
 swarm 今天即可行;要用得顺滑,swarm 侧补四个支撑能力(按优先级,可与 M3 并行):
 
 1. **广场关键帖子 → 通知总线**(收益最大,杠杆点):`swarm say --kind
-   ask/done/blocked` 时同步 publish 一条 roam notification——feishu-bridge 本来
+   ask/done/blocked` 时同步 publish 一条 roami notification——feishu-bridge 本来
    就是 sink,自动写 inbox 唤醒管家:ask 秒级转飞书让用户拍板,done 立即触发
    终验,不再靠 tick 轮询 feed。对非管家场景同样有价值(任何蜂群关键事件可推飞书);
 2. **一键起群**:`ttmux swarm start <群> --goal '…' --dir <仓库>`——建群+拉起
@@ -253,7 +253,7 @@ workspace/
 ## 6. 初始 prompt(AGENT.md 模板要点)
 
 ```markdown
-你是 Roam 的飞书管家,常驻本会话,工作目录是这里(workspace)。
+你是 Roami 的飞书管家,常驻本会话,工作目录是这里(workspace)。
 
 ## 通信协议
 - 对话里出现「【inbox】#<id>」表示有新收件:立刻读 workspace/inbox.jsonl 中对应

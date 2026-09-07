@@ -130,7 +130,7 @@ func feishuCardContent(c card) map[string]any {
 		"elements": []any{
 			map[string]any{"tag": "markdown", "content": body},
 			map[string]any{"tag": "note", "elements": []any{
-				map[string]any{"tag": "plain_text", "content": "Roam · " + c.Source},
+				map[string]any{"tag": "plain_text", "content": "Roami · " + c.Source},
 			}},
 		},
 	}

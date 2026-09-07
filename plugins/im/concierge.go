@@ -39,7 +39,7 @@ type inboxItem struct {
 
 // ── workspace ──
 
-// workspaceDir resolves the concierge home(默认 ~/.roam/plugins/im/workspace)。
+// workspaceDir resolves the concierge home(默认 ~/.roami/plugins/im/workspace)。
 func workspaceDir(ctx *sdk.Ctx) string {
 	dir := strings.TrimSpace(ctx.Config["workspace"])
 	if dir == "" {
@@ -47,7 +47,7 @@ func workspaceDir(ctx *sdk.Ctx) string {
 		if err != nil {
 			home = "."
 		}
-		dir = filepath.Join(home, ".roam", "plugins", "im", "workspace")
+		dir = filepath.Join(home, ".roami", "plugins", "im", "workspace")
 	} else if strings.HasPrefix(dir, "~/") {
 		if home, err := os.UserHomeDir(); err == nil {
 			dir = filepath.Join(home, dir[2:])
@@ -81,7 +81,7 @@ func ensureWorkspace(ctx *sdk.Ctx) error {
 }
 
 // agentMDTemplate 是管家的出厂初始 prompt(角色+协议)。设计 §6。
-const agentMDTemplate = `你是 Roam 的飞书管家,常驻本会话,工作目录就是这里(workspace)。
+const agentMDTemplate = `你是 Roami 的飞书管家,常驻本会话,工作目录就是这里(workspace)。
 
 ## 通信协议
 - 对话里出现「【inbox】#<行号>」表示有新收件:立刻读本目录 inbox.jsonl 的对应行
@@ -229,7 +229,7 @@ func tryBind(ctx *sdk.Ctx, chatID, sender, arg string) string {
 	owner := ownerOpenID(ctx)
 	if owner != "" && sender == owner {
 		_ = ctx.StorageSet("notify_chat", chatID)
-		return "已绑定 ✅ Roam 系统通知以后发到本会话。"
+		return "已绑定 ✅ Roami 系统通知以后发到本会话。"
 	}
 	stored, _ := ctx.StorageGet("bind_token")
 	token, expireRaw, _ := strings.Cut(stored, "|")
@@ -264,7 +264,7 @@ func handleConciergeMessage(ctx *sdk.Ctx, st *conciergeState, chatID, sender, te
 	switch text {
 	case "解绑通知":
 		_ = ctx.StorageSet("notify_chat", "")
-		replyText(ctx, chatID, "已解绑,Roam 系统通知不再发送(任意会话说「绑定通知」可重绑)。")
+		replyText(ctx, chatID, "已解绑,Roami 系统通知不再发送(任意会话说「绑定通知」可重绑)。")
 		return
 	case "重启管家":
 		replyText(ctx, chatID, "收到,管家将优雅重建:写 checkpoint → 等空闲 → 重启,期间消息照常入箱不丢。")

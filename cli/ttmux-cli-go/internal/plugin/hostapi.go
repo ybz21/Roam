@@ -17,7 +17,7 @@ import (
 )
 
 // HostAPI serves roam/* platform calls for one hosted plugin. 它是"平台 API →
-// Roam 原语"的唯一翻译处:权限检查与审计都发生在这里
+// Roami 原语"的唯一翻译处:权限检查与审计都发生在这里
 // (docs/design/plugin/04-architecture.md 2.4 铁律)。
 type HostAPI struct {
 	Env     Env

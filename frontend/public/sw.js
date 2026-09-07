@@ -1,9 +1,9 @@
-// Roam PWA service worker —— 目标是「可安装 + 离线能打开外壳」，不缓存实时数据。
+// Roami PWA service worker —— 目标是「可安装 + 离线能打开外壳」，不缓存实时数据。
 // 设计原则：
 //  - /api/**（含 WebSocket 升级）一律直连网络，绝不拦截/缓存（终端、实时接口不能走缓存）。
 //  - 导航请求(index.html) 网络优先，断网时回退到缓存的外壳，避免部署后拿到旧页面。
 //  - 静态构建产物（带 hash 的 js/css/图标）缓存优先 + 后台更新（内容寻址、永不串版本）。
-const SHELL = 'roam-shell-v1'
+const SHELL = 'roami-shell-v1'
 
 self.addEventListener('install', () => {
   self.skipWaiting()

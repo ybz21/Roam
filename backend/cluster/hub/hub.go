@@ -58,12 +58,12 @@ func New(dir string) *Hub {
 
 // 隧道接入 / 心跳协议里用到的头。
 const (
-	hdrEnroll = "X-Roam-Enroll"     // 一次性接入令牌（首次注册）
-	hdrNodeID = "X-Roam-Node-Id"    // 长期节点 id（重连）
-	hdrToken  = "X-Roam-Node-Token" // 长期节点凭证（重连；注册成功时经 101 响应头下发一次）
-	hdrName   = "X-Roam-Node-Name"
-	hdrGroup  = "X-Roam-Node-Group"
-	hdrMeta   = "X-Roam-Node-Meta" // JSON(NodeMeta)
+	hdrEnroll = "X-Roami-Enroll"     // 一次性接入令牌（首次注册）
+	hdrNodeID = "X-Roami-Node-Id"    // 长期节点 id（重连）
+	hdrToken  = "X-Roami-Node-Token" // 长期节点凭证（重连；注册成功时经 101 响应头下发一次）
+	hdrName   = "X-Roami-Node-Name"
+	hdrGroup  = "X-Roami-Node-Group"
+	hdrMeta   = "X-Roami-Node-Meta" // JSON(NodeMeta)
 )
 
 // HandleTunnel 是节点出站拨号的落点：先按 token 鉴权（enrollment 或长期凭证），

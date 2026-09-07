@@ -22,12 +22,12 @@ export default function Login({ onOk }: { onOk: () => void }) {
 
   const Brand = (
     <div style={{ textAlign: 'center', marginBottom: 18 }}>
-      <img src="/logo-mark.svg" width={64} height={64} alt="Roam" />
+      <img src="/logo-mark.svg" width={64} height={64} alt="Roami" />
       <div style={{
         fontSize: 30, fontWeight: 800, letterSpacing: 1, marginTop: 12,
         background: 'var(--brand-grad)',
         WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent',
-      }}>Roam</div>
+      }}>Roami</div>
       <div style={{ color: 'var(--text-dimmer)', fontSize: 12, marginTop: 4, letterSpacing: 0.5 }}>{t('auth.tagline')}</div>
     </div>
   )

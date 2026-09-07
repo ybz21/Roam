@@ -1,4 +1,4 @@
-// Package id 生成 Roam 的可读实例 id：`YYYY-MMDD-HHMM-<rand4>`（如 2026-0728-1113-asbd）。
+// Package id 生成 Roami 的可读实例 id：`YYYY-MMDD-HHMM-<rand4>`（如 2026-0728-1113-asbd）。
 // 可排序（前缀就是创建时刻）、能人肉看出是什么时候的东西、放进 URL 也不难看。
 //
 // 格式与 CLI 侧 cli/ttmux-cli-go/internal/id 保持一致（蜂群 id 早就是这个格式）。

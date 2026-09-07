@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 )
 
-// syncClaudeTheme 把 Roam 的主题写进 Claude Code 自己的 ~/.claude/settings.json（theme 键）。
+// syncClaudeTheme 把 Roami 的主题写进 Claude Code 自己的 ~/.claude/settings.json（theme 键）。
 // Claude Code 按自己的主题吐 24 位色，深色配色落在白底上靠 xterm 拉对比度怎么都勉强：
 // 选中行和别的行要么一起淡、要么一起灰。让它自己换配色才是正路。
 // 只在文件已存在、值确实不同时改写；改不动就算了，不影响偏好保存。

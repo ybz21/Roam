@@ -103,7 +103,7 @@ func TestSetDirMergesUserIntent(t *testing.T) {
 // v1 文件（key = 目录名 slug + 路径 hash）迁移：发 id、老 key 留别名、偏好原样。
 func TestLegacyKeyMigration(t *testing.T) {
 	dir := t.TempDir()
-	legacy := `{"repos":{"ttmux-3f2a":{"dir":"/home/u/codes/ttmux","origin":"user","pinned":true,"displayName":"Roam","firstSeen":100,"lastSeen":200}}}`
+	legacy := `{"repos":{"ttmux-3f2a":{"dir":"/home/u/codes/ttmux","origin":"user","pinned":true,"displayName":"Roami","firstSeen":100,"lastSeen":200}}}`
 	if err := os.WriteFile(filepath.Join(dir, "projects.json"), []byte(legacy), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +120,7 @@ func TestLegacyKeyMigration(t *testing.T) {
 		t.Fatalf("迁移后 key 应是 id，got %q", newKey)
 	}
 	e := ents[newKey]
-	if e.ID != newKey || e.Dir != "/home/u/codes/ttmux" || !e.Pinned || e.DisplayName != "Roam" || e.Origin != "user" || e.FirstSeen != 100 {
+	if e.ID != newKey || e.Dir != "/home/u/codes/ttmux" || !e.Pinned || e.DisplayName != "Roami" || e.Origin != "user" || e.FirstSeen != 100 {
 		t.Fatalf("迁移丢字段: %+v", e)
 	}
 	// 老书签 #/projects/ttmux-3f2a 仍能解析

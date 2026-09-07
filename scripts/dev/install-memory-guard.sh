@@ -3,7 +3,7 @@
 #
 #   sudo bash scripts/dev/install-memory-guard.sh
 #
-# 背景：2026-08-22 21:51，一个跑在 Roam 会话里的 Claude Code 进程涨到 15.5 GB，
+# 背景：2026-08-22 21:51，一个跑在 Roami 会话里的 Claude Code 进程涨到 15.5 GB，
 # 把这台 30 GB 的机器打爆。内核当时打的是 **global_oom** —— 在全机范围选 victim，
 # 于是整个桌面僵死，只能按电源。
 #
@@ -26,7 +26,7 @@ set -euo pipefail
 UID_TARGET="${1:-1000}"
 UNIT="user@${UID_TARGET}.service"
 DIR="/etc/systemd/system/${UNIT}.d"
-CONF="${DIR}/roam-memory.conf"
+CONF="${DIR}/roami-memory.conf"
 
 if [ "$(id -u)" != "0" ]; then
   echo "✘ 需要 root：sudo bash $0 [uid]" >&2
@@ -35,7 +35,7 @@ fi
 
 mkdir -p "$DIR"
 cat > "$CONF" <<'CONF'
-# Roam · 用户切片内存总闸（L2）。由 scripts/dev/install-memory-guard.sh 写入。
+# Roami · 用户切片内存总闸（L2）。由 scripts/dev/install-memory-guard.sh 写入。
 #
 # MemoryHigh 是软限：到了先激进回收 + throttle，进程变慢但不死，留出反应时间。
 # MemoryMax 是硬顶，仍给内核和系统服务留出 12% —— 那正是「机器还救得回来」的余量。

@@ -46,7 +46,7 @@ func (r Runtime) MigrateSessionsToID() map[string]string {
 	if rows == nil {
 		return nil // 盲态：不迁移、不写标记
 	}
-	// 只改**自己台账里认得的**会话。tmux server 是公共的：别的 Roam 实例（另一个
+	// 只改**自己台账里认得的**会话。tmux server 是公共的：别的 Roami 实例（另一个
 	// ROAM_HOME）、测试、用户手搓的临时会话都可能在同一个 server 上，改名它们属于
 	// 越界——而且会让「按名字定位」的旁路（别人的脚本、别人的测试）当场断掉。
 	owned := r.knownSessions()

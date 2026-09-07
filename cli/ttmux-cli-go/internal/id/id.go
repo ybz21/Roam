@@ -1,4 +1,4 @@
-// Package id 生成 Roam 的可读实例 id：`YYYY-MMDD-HHMM-<rand4>`（如 2026-0728-1113-asbd）。
+// Package id 生成 Roami 的可读实例 id：`YYYY-MMDD-HHMM-<rand4>`（如 2026-0728-1113-asbd）。
 // 蜂群 id 一直是这个格式，抽出来给全 CLI 共用，别再各写各的。
 //
 // 后端 backend/internal/id 有一份同格式实现（两个 Go module，不跨模块 import——

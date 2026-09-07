@@ -1,5 +1,5 @@
-// roam-web — Roam 的 Web 控制台后端入口。
-// 读取 ~/.roam/config.yaml（缺失则由内嵌模板生成）→ 叠加 flag → 组装 server.Config → 启动 Gin。
+// roami-web — Roami 的 Web 控制台后端入口。
+// 读取 ~/.roami/config.yaml（缺失则由内嵌模板生成）→ 叠加 flag → 组装 server.Config → 启动 Gin。
 package main
 
 import (
@@ -32,11 +32,12 @@ func main() {
 	// 子命令层（roam im send / roam cron list / roam ttmux ls…）。
 	// 必须在 flag.Parse 之前：flag 包遇到非 flag 参数就停下，之后的 --text 会被当成
 	// 本进程的 flag 报错。不带子命令（或第一个参数是 -flag）时原样往下走，启动服务。
+	config.BridgeEnvAliases() // ROAMI_* 与 ROAM_* 互为别名（改名前写好的脚本继续有效）
 	if handled, code := runCLI(os.Args[1:], envOr("TTMUX_BIN", "ttmux")); handled {
 		os.Exit(code)
 	}
 
-	configFlag := flag.String("config", "", "配置文件路径（覆盖 ROAM_CONFIG / ~/.roam/config.yaml）")
+	configFlag := flag.String("config", "", "配置文件路径（覆盖 ROAMI_CONFIG / ~/.roami/config.yaml）")
 	addrFlag := flag.String("addr", "", "监听地址，如 0.0.0.0:13579（覆盖配置里的 web.bind）")
 	webFlag := flag.String("web", "", "前端构建产物目录 frontend/dist（覆盖自动探测；留空用内嵌前端）")
 	tlsFlag := flag.Bool("tls", false, "强制启用自签 HTTPS（覆盖配置里的 web.tls=false）")
@@ -44,7 +45,7 @@ func main() {
 	tlsKeyFlag := flag.String("tls-key", "", "TLS 私钥路径（缺省 <home>/tls/key.pem，缺失则自动生成）")
 	flag.Parse()
 
-	// 迁移旧数据目录（~/.ttmux、~/.local/share/ttmux → ~/.roam），随后加载配置。
+	// 迁移旧数据目录（~/.roam、~/.ttmux、~/.local/share/ttmux → ~/.roami），随后加载配置。
 	migrateLegacyHome()
 	cfgPath := *configFlag
 	if cfgPath == "" {
@@ -141,7 +142,7 @@ func main() {
 
 	// 横向扩展模式分流（见 docs/design/cluster/architecture.html §1/§3）：
 	//   - cloud：中心，只做路由 + 注册表 + 控制台，不构造业务 runtime；
-	//   - standard（默认）：现在的单机 Roam；若配了 cluster.broker，则额外出站注册进云端。
+	//   - standard（默认）：现在的单机 Roami；若配了 cluster.broker，则额外出站注册进云端。
 	// standard 下**本机监听口照常对外**——上云和局域网直连是两条并行的入口，不是二选一。
 	var r *gin.Engine
 	if conf.Cluster.Mode == "hub" {
@@ -227,7 +228,7 @@ func tlsCertPathIf(on bool, path string) string {
 	return ""
 }
 
-// dataDir 返回后端数据目录（TLS 证书、totp.json 等）。默认 Roam 主目录 ~/.roam；
+// dataDir 返回后端数据目录（TLS 证书、totp.json 等）。默认 Roami 主目录 ~/.roami；
 // 可用 ROAM_DATA 覆盖（兼容旧 TTMUX_DATA）。
 // embeddedBin 解出内嵌的 ttmux 路径（dev 构建里内嵌的是占位符，返回空）。
 func embeddedBin() string {
@@ -238,7 +239,7 @@ func embeddedBin() string {
 }
 
 func dataDir() string {
-	if data := envOr("ROAM_DATA", os.Getenv("TTMUX_DATA")); data != "" {
+	if data := envOr("ROAMI_DATA", envOr("ROAM_DATA", os.Getenv("TTMUX_DATA"))); data != "" {
 		return data
 	}
 	return config.Home()
@@ -246,33 +247,42 @@ func dataDir() string {
 
 func logsDir() string { return filepath.Join(dataDir(), "logs") }
 
-// migrateLegacyHome 首次启动时把旧目录迁移到 ~/.roam：
-//   - ~/.ttmux → ~/.roam（整体改名，含 meta.db/swarms/plugins）
-//   - ~/.local/share/ttmux 里的 tls/、totp.json → ~/.roam（旧后端数据目录）
+// migrateLegacyHome 首次启动时把旧目录迁移到 ~/.roami：
+//   - ~/.roam → ~/.roami（改名 Roami 之前的主目录）
+//   - ~/.ttmux → ~/.roami（更早那次改名之前的）
+//   - ~/.local/share/ttmux 里的 tls/、totp.json → ~/.roami（旧后端数据目录）
 //
-// 仅在目标不存在时迁移，且尊重 ROAM_HOME/ROAM_DATA 覆盖（此时不动）。
+// 仅在目标不存在时迁移，且尊重自定义路径（ROAMI_/ROAM_ 的 HOME/DATA）（此时不动）。
+// 整体 rename：数据一个字节都不动，Linux 上已打开的 fd 跟着 inode 走，
+// 正在跑的 plugind 不会因为这次改名断掉。
 func migrateLegacyHome() {
-	if os.Getenv("ROAM_HOME") != "" || os.Getenv("TTMUX_HOME") != "" {
-		return
+	for _, k := range []string{"ROAMI_HOME", "ROAM_HOME", "TTMUX_HOME"} {
+		if os.Getenv(k) != "" {
+			return
+		}
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return
 	}
-	roam := filepath.Join(home, ".roam")
+	roam := filepath.Join(home, ".roami")
 	if _, err := os.Stat(roam); err == nil {
 		return // 已存在，视为已迁移
 	}
-	legacyHome := filepath.Join(home, ".ttmux")
-	if st, err := os.Stat(legacyHome); err == nil && st.IsDir() {
+	for _, legacyHome := range []string{filepath.Join(home, ".roam"), filepath.Join(home, ".ttmux")} {
+		st, err := os.Stat(legacyHome)
+		if err != nil || !st.IsDir() {
+			continue
+		}
 		if err := os.Rename(legacyHome, roam); err != nil {
 			log.Printf("⚠ 迁移 %s → %s 失败: %v", legacyHome, roam, err)
 			return
 		}
 		log.Printf("已迁移旧目录 %s → %s", legacyHome, roam)
+		break
 	}
 	// 旧运行时数据目录 ~/.local/share/ttmux/*（tls/totp.json/logs/groups/meta/env/agents…）
-	// 并入 ~/.roam（不覆盖已存在的目标）。
+	// 并入 ~/.roami（不覆盖已存在的目标）。
 	legacyData := filepath.Join(home, ".local", "share", "ttmux")
 	entries, err := os.ReadDir(legacyData)
 	if err != nil {

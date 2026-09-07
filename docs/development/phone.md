@@ -252,7 +252,7 @@ mode 由地址形状决定，不是两个独立选择：`avd:<名>`/`emulator-xx
 | 组里有名字、进程没带上 | `EACCES` 且组数据库里有 | **我们自己兜住**：套一层 `sg kvm -c` 起模拟器 |
 
 第三格最坑：附加组是进程创建时定死的，systemd 的**用户实例**也是登录时定死的，
-`systemctl --user restart roam` 换不来新组。用户明明照做了那条 sudo，模拟器还是起不来，
+`systemctl --user restart roami` 换不来新组。用户明明照做了那条 sudo，模拟器还是起不来，
 只会觉得那条命令没生效。`sg` 会照组数据库重算整套组再执行，不需要口令（本来就是成员），
 副作用只有「这条命令新建的文件属组变成 kvm」，落在 AVD 自己的镜像文件上，无碍。
 
@@ -262,7 +262,7 @@ mode 由地址形状决定，不是两个独立选择：`avd:<名>`/`emulator-xx
 `install.sh` 按「本地仓库 → 远端同源 raw → 只打印命令」三级取用它，不留第二份副本；
 `start.sh --dev` 直接 source 它。判据是**回读设备**，不是命令返回码——装上一个不生效的
 授权比没有更糟。机器上没有 `/dev/kvm` 就整段跳过（云主机不该为一个用不上的功能弹口令框，
-`ROAM_NO_KVM=1` 可显式跳过）。
+`ROAMI_NO_KVM=1` 可显式跳过）。
 
 **提权只在提得起来的时候**，规矩沿用 `lib/platform.sh` 的 `can_autoinstall`：root /
 免密 sudo / 交互式终端才动手，否则打印命令。`curl … | bash` 的 stdin 是管道、systemd 下
@@ -273,7 +273,7 @@ systemd 的 `ExecStart` 就是 `start.sh fg`，「启动服务」这件事本来
 ### `-gpu host` 要一块能画的屏，不只是一张显卡
 
 `gpuMode()` 从前只看有没有 Intel/AMD 渲染节点就回 `host`。但 `-gpu host` 走的是 GLX/EGL，
-要一个 X/Wayland 显示才拿得到 EGL display，而 roam 后端常年是 systemd 用户服务，
+要一个 X/Wayland 显示才拿得到 EGL display，而 roami 后端常年是 systemd 用户服务，
 `DISPLAY` 是空的 —— 于是 emulator 在日志里写 `Failed to get EGL display / Could not start
 renderer` 然后停在那儿，UI 上只剩一句「启动超时」，白等三分钟。**无头就只能软件渲染**
 （`swiftshader_indirect`），有独显也一样：显卡在，能画的那块屏不在。

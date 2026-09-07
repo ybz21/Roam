@@ -1,4 +1,4 @@
-// Package plugin implements the Roam plugin foundation (设计见
+// Package plugin implements the Roami plugin foundation (设计见
 // docs/design/plugin/):manifest、注册表、宿主 API、插件子进程托管与守护进程。
 //
 // v0 范围(对应设计文档 MVP-A/B 切片):builtin(Go)插件、commands 与

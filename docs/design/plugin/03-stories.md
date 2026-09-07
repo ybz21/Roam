@@ -10,7 +10,7 @@
 
 1. **Code Review 插件(review-mesh)**:Codex 与 Claude 互审,形成 finding、修复、复验闭环。
 2. **自动监控插件(monitor)**:持续监控 session、Agent、服务和长任务,异常时先总结再升级。
-3. **飞书消息插件(feishu-bridge)**:在飞书群 @ 机器人或私聊即可给开发机派活(包括代码开发),Agent 进度与结果回帖到同一话题;Roam 关键事件也推送到飞书。
+3. **飞书消息插件(feishu-bridge)**:在飞书群 @ 机器人或私聊即可给开发机派活(包括代码开发),Agent 进度与结果回帖到同一话题;Roami 关键事件也推送到飞书。
 4. **GitHub Code Review 插件(github-review)**:本地 Agent 互审与 GitHub PR Review、Checks 双向打通。
 
 ---
@@ -52,7 +52,7 @@ $ ttmux plugin run review-mesh.status
 
 ```text
 review-mesh/
-├── roam-plugin.json
+├── roami-plugin.json
 ├── README.md
 ├── dist/
 │   └── main.js              # 插件后端进程入口
@@ -67,10 +67,10 @@ review-mesh/
 {
   "manifestVersion": 1,
   "id": "roam.review-mesh",
-  "publisher": "roam",
+  "publisher": "roami",
   "name": "review-mesh",
   "version": "0.1.0",
-  "engines": { "roam": ">=0.6.0" },
+  "engines": { "roami": ">=0.6.0" },
   "main": "dist/main.js",
   "runtime": { "kind": "node", "activation": "lazy" },
   "permissions": {
@@ -104,7 +104,7 @@ review-mesh/
 `main.js` 骨架(SDK 用法详见 [09-plugin-development.md](09-plugin-development.md)):
 
 ```js
-const { activate } = require('@roam/plugin-sdk')
+const { activate } = require('@roami/plugin-sdk')
 
 activate(ctx => {
   ctx.commands.register('review-mesh.review', async () => {
@@ -169,7 +169,7 @@ monitor detected: session "api-dev" no output for 25m
 
 ```text
 monitor/
-├── roam-plugin.json
+├── roami-plugin.json
 ├── dist/main.js
 └── schemas/config.schema.json    # 巡检间隔、静默阈值、服务清单
 ```
@@ -178,7 +178,7 @@ manifest 关键部分:
 
 ```json
 {
-  "id": "roam.monitor",
+  "id": "roami.monitor",
   "main": "dist/main.js",
   "permissions": {
     "sessions": ["read"],
@@ -209,7 +209,7 @@ manifest 关键部分:
 
 | 底层能力 | 使用方式 |
 |---|---|
-| Watcher 调度器 | 持久定时巡检;Roam 重启后由 plugind 恢复 |
+| Watcher 调度器 | 持久定时巡检;Roami 重启后由 plugind 恢复 |
 | Session 事件 + 轮询 | 有事件(`session.exited`)时实时,无事件时定时巡检兜底 |
 | Session API | `session.list` / `session.capture` 判断是否卡住 |
 | Agent API | 拉起轻量 classifier agent 做现场分类与摘要 |
@@ -224,9 +224,9 @@ manifest 关键部分:
 
 ### 3.1 用户场景
 
-核心场景:**飞书就是遥控开发机的入口**。有人在飞书群里 @ 机器人,或者直接私聊,就能给 Roam 派活——包括真正的代码开发,人不需要在电脑前:
+核心场景:**飞书就是遥控开发机的入口**。有人在飞书群里 @ 机器人,或者直接私聊,就能给 Roami 派活——包括真正的代码开发,人不需要在电脑前:
 
-- 群里 @:"@Roam 在 ttmux 项目修一下登录页在手机上错位的 bug" → 拉起 claude 开发会话,干完回帖。
+- 群里 @:"@Roami 在 ttmux 项目修一下登录页在手机上错位的 bug" → 拉起 claude 开发会话,干完回帖。
 - 私聊:"帮我把昨天那个 PR 的 review 意见都处理了" → 拉起 fixer agent。
 - 话题内追问:"进展如何?" / "顺便把单测补了" → 转给同一个 Agent 会话,多轮持续对话。
 - 反向:Agent 会话完成/失败/等待确认时推送到飞书;review-mesh 发现 high finding 时推送摘要,卡片带 `批准` / `拒绝` / `派给 Claude 修复` 按钮。
@@ -234,9 +234,9 @@ manifest 关键部分:
 **派活主链路(含代码开发)**:
 
 ```text
-飞书群 @Roam "修复登录页手机端错位,修完跑下测试"
+飞书群 @Roami "修复登录页手机端错位,修完跑下测试"
   -> 事件经飞书长连接(或 webhook 网关)进入 feishu-bridge,校验签名
-  -> 身份绑定检查: 该飞书用户是否绑定 Roam 操作者、是否有派活权限
+  -> 身份绑定检查: 该飞书用户是否绑定 Roami 操作者、是否有派活权限
   -> 意图解析: 规则匹配(status/approve 等短指令)直接处理;
      自由文本交给轻量 classifier agent 解析出 {任务类型, 目标工作区, 任务描述}
   -> 创建 Command Intent: agent.dev-task { workspace: ~/codes/ttmux,
@@ -258,13 +258,13 @@ manifest 关键部分:
 
 ### 3.2 插件长什么样
 
-**前后端组成:纯后端插件——这是"插件有没有后端程序"的标准答案**。飞书插件没有任何自己的页面:它是一个常驻的后端程序,双向工作——出站订阅 Roam 通知调飞书 OpenAPI 发卡片,入站接收 @ 消息/私聊/按钮回调并转成受控 intent;唯一的"界面"是宿主根据 `config.schema.json` 自动渲染的设置表单(填 app id/secret、默认群、工作区白名单)。
+**前后端组成:纯后端插件——这是"插件有没有后端程序"的标准答案**。飞书插件没有任何自己的页面:它是一个常驻的后端程序,双向工作——出站订阅 Roami 通知调飞书 OpenAPI 发卡片,入站接收 @ 消息/私聊/按钮回调并转成受控 intent;唯一的"界面"是宿主根据 `config.schema.json` 自动渲染的设置表单(填 app id/secret、默认群、工作区白名单)。
 
 因为要接收消息,它是典型的**常驻型插件**:`onStartupFinished` 激活后维持飞书长连接,不适用"空闲即回收",manifest 里声明 `runtime.resident: true`。
 
 ```text
 feishu-bridge/
-├── roam-plugin.json
+├── roami-plugin.json
 ├── dist/main.js
 ├── templates/
 │   ├── task-card.json         # 派活确认/进度卡片
@@ -278,7 +278,7 @@ manifest 关键部分:
 
 ```json
 {
-  "id": "roam.feishu-bridge",
+  "id": "roami.feishu-bridge",
   "main": "dist/main.js",
   "runtime": { "kind": "node", "resident": true },
   "permissions": {
@@ -312,7 +312,7 @@ manifest 关键部分:
 
 权限解释:`agents:spawn` 仅用于意图解析的轻量 classifier 会话(把自由文本变成结构化任务);**真正的开发任务不是插件直接 spawn 的**,而是插件创建 intent、由宿主在 policy 裁决后执行——派活权限属于 intent 链,不属于插件本身。`sessions:read` + `workspace:read` 用于生成进度和结果卡片(会话摘要、diff 摘要)。
 
-**公网可达性问题(必须解决)**:Roam 跑在开发机上,通常没有公网 IP,飞书 HTTP 回调无法直达。两条路:
+**公网可达性问题(必须解决)**:Roami 跑在开发机上,通常没有公网 IP,飞书 HTTP 回调无法直达。两条路:
 
 1. **推荐:飞书事件长连接模式**——飞书开放平台支持通过 WebSocket 长连接订阅事件与卡片回调,无需公网 URL。插件作为客户端主动连接,完全绕开公网入口问题。落地前需验证卡片交互回调在长连接模式下的覆盖范围。
 2. 备选:HTTP 回调 + 用户自备反代/内网穿透,宿主 webhook 网关做路径隔离、签名校验、重放保护、限速。
@@ -322,7 +322,7 @@ manifest 关键部分:
 | 底层能力 | 使用方式 |
 |---|---|
 | Webhook 网关(v1.5)或飞书长连接 | 接收 @ 消息、私聊、卡片按钮回调 |
-| 身份绑定 | 飞书用户 ↔ Roam 操作者;未绑定只能查询,不能派活;派活权限按用户分级 |
+| 身份绑定 | 飞书用户 ↔ Roami 操作者;未绑定只能查询,不能派活;派活权限按用户分级 |
 | Agent API | 拉起轻量 classifier 解析自由文本意图(仅此用途) |
 | Command Intent API | **派活主通道**:@ 消息/按钮 → intent(`agent.dev-task` / `session.send` / `review-mesh.fix`)→ 权限/policy/审批 → 宿主执行,插件永不直接执行 |
 | Approval API | 卡片"批准/拒绝"映射为一次可审计的人类决策;高危任务类型强制二次确认 |
@@ -338,7 +338,7 @@ manifest 关键部分:
 
 ### 4.1 用户场景
 
-团队在 GitHub PR 上协作,希望 Roam 的 Agent 互审参与远程 PR review:
+团队在 GitHub PR 上协作,希望 Roami 的 Agent 互审参与远程 PR review:
 
 - PR 创建/更新后,拉取 PR diff、已有 review comments、check 状态,启动 codex/claude review。
 - findings 先内部记录,按 policy 决定发布为 GitHub review comments、`COMMENT` 或 `REQUEST_CHANGES`。
@@ -368,7 +368,7 @@ GitHub 侧技术约束(设计时必须考虑):
 
 ```text
 github-review/
-├── roam-plugin.json
+├── roami-plugin.json
 ├── dist/main.js
 ├── prompts/pr-reviewer.md
 └── schemas/config.schema.json     # 仓库映射、发布模式、节流参数
@@ -378,7 +378,7 @@ manifest 关键部分:
 
 ```json
 {
-  "id": "roam.github-review",
+  "id": "roami.github-review",
   "main": "dist/main.js",
   "permissions": {
     "workspace": ["read"],
@@ -463,14 +463,14 @@ manifest 关键部分:
 
 ## 6. Plugin、Skill、Workflow 的关系
 
-Roam 里会同时存在 plugin、skill、workflow、MCP/connector,不能混成一团:
+Roami 里会同时存在 plugin、skill、workflow、MCP/connector,不能混成一团:
 
 | 类型 | 本质 | 负责什么 | 不负责什么 |
 |---|---|---|---|
 | Plugin | 可执行能力包(后端进程) | API、命令、事件、存储、权限、外部系统接入 | 不决定 Agent 应该怎样思考 |
 | Skill | Agent 操作手册 | 审查策略、流程、提示词、判断标准、何时调用插件工具 | 不持有密钥、不提供常驻后台服务 |
 | Workflow | 可编排流程 | 把插件能力和 skill 步骤串成状态机 | 不实现底层 API |
-| Connector / MCP | 外部授权数据面 | GitHub、飞书、文档等授权访问 | 不承载 Roam 内部状态机 |
+| Connector / MCP | 外部授权数据面 | GitHub、飞书、文档等授权访问 | 不承载 Roami 内部状态机 |
 
 一句话:**Plugin 提供"能做什么",Skill 定义"怎么做好",Workflow 管"何时做、做到哪一步"。**
 

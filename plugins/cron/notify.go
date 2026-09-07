@@ -128,7 +128,7 @@ func fmtSize(n int64) string {
 	}
 }
 
-// expandHome 把 ~ 展开：任务是人在表单里填的，`~/.roam/selftest/x.md` 是最自然的写法。
+// expandHome 把 ~ 展开：任务是人在表单里填的，`~/.roami/selftest/x.md` 是最自然的写法。
 func expandHome(p string) string {
 	if !strings.HasPrefix(p, "~/") {
 		return p

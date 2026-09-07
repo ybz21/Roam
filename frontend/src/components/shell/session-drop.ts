@@ -67,7 +67,20 @@ export function readDrag(dt: DataTransfer | null): SessionDrag | null {
  *
  * 中英两份文案里它都是字面量（见 pair.intro.head），所以拿它当判据是稳的。
  */
-export const ROAM_NOTICE_PREFIX = '[Roam] '
+export const ROAM_NOTICE_PREFIX = '[Roami] '
+/**
+ * 改名前注入的那些还躺在转录里（标记是 `[Roam] `）。翻回去看的时候，
+ * 它们照样该折叠成一条通知，而不是突然变回一段没头没尾的裸文本。
+ */
+export const LEGACY_NOTICE_PREFIXES = ['[Roam] ']
+
+/** 这条文本是不是 Roami 的注入；返回命中的那个前缀（好把它从正文里剥掉） */
+export function noticePrefixOf(text: string | undefined): string | null {
+  for (const p of [ROAM_NOTICE_PREFIX, ...LEGACY_NOTICE_PREFIXES]) {
+    if (text?.startsWith(p)) return p
+  }
+  return null
+}
 
 type T = (key: string, vars?: Record<string, unknown>) => string
 

@@ -1,10 +1,10 @@
-# Roam
+# Roami
 
 [English](README.md) ｜ **简体中文**
 
 > **把你的开发机变成一个随身 AI 编程工作站。**
 
-**Roam** 让你**在任何地方、任何时间，用手机、平板或电脑连回自己的开发机**，
+**Roami** 让你**在任何地方、任何时间，用手机、平板或电脑连回自己的开发机**，
 继续写代码、跑测试、看日志、调浏览器，并监督 Claude Code、Codex 等
 AI coding agent 持续工作。
 
@@ -13,7 +13,7 @@ AI coding agent 持续工作。
 离开桌面后，回来仍然接着同一个现场继续。除非你主动关闭，开发机上的工作不会因为
 本地命令行退出、浏览器关闭或笔记本合盖而消失。
 
-**一眼看懂 Roam 的价值：**
+**一眼看懂 Roami 的价值：**
 
 - **一切围绕项目组织**：每个仓库就是一个作战台——任务、worktree、编队、活动都挂在它名下；
   工作台是跨项目的作战地图，哪里需要你一眼可见。
@@ -26,11 +26,11 @@ AI coding agent 持续工作。
 - **不止一台机器**：笔电、工作站、Jetson 可以挂在同一个控制台后面——在同一个窗口里切换，
   一个页面就能看出它们是不是都健康。
 
-Roam 不是另一个云 IDE。它连接你的真实开发机，把项目、终端、浏览器、文件、任务和
+Roami 不是另一个云 IDE。它连接你的真实开发机，把项目、终端、浏览器、文件、任务和
 AI Agent 放进一个可远程接管的工作空间里。你看到的是一个控制台，背后仍然是你
 熟悉的开发环境和工具链。
 
-![Roam —— 左边是工作台，右边是正在干活的 Claude Code](docs/screenshots/hero.zh.png)
+![Roami —— 左边是工作台，右边是正在干活的 Claude Code](docs/screenshots/hero.zh.png)
 
 <sub>一个窗口装下两件事：所有项目里哪些需要你，以及此刻正在干活的那个 Agent。</sub>
 
@@ -106,7 +106,7 @@ diff、折叠成组的工具调用，底下一条状态栏给出模式、上下�
 同一批项目、任务和 Agent。底栏放着你真正会去的五个地方，会话坞让正在跑的 Agent
 永远只差一次点击。
 
-![手机上的 Roam：工作台与会话坞](docs/screenshots/mobile-office.zh.png)
+![手机上的 Roami：工作台与会话坞](docs/screenshots/mobile-office.zh.png)
 
 **在手机上直接和 Agent 对话。** 打开一个会话就能当对话读——和桌面同一套卡片、diff
 和状态栏——然后打字或说话追加指令，把活儿往前推，不用开电脑。
@@ -125,26 +125,26 @@ diff、折叠成组的工具调用，底下一条状态栏给出模式、上下�
 - 你需要按项目快速知道哪些任务还在跑、哪些在等你
 - 机器多于一台之后，你还得知道某个会话到底在哪台上
 
-Roam 把开发机作为唯一真实工作现场。服务器负责保持工作持续运行，Web 控制台负责让
+Roami 把开发机作为唯一真实工作现场。服务器负责保持工作持续运行，Web 控制台负责让
 你从任何设备接入；需要自动化时，再通过脚本接口把会话、任务、日志和 Agent 编排接入流程。
 
 ## 典型使用方式
 
-1. 在开发机上启动 Roam。
+1. 在开发机上启动 Roami。
 2. 从手机、平板或另一台电脑打开 Web 控制台。
 3. 打开一个项目，进入已有任务或终端，继续之前的开发现场。
 4. 描述新任务，让 Claude Code、Codex 或其他 Agent 在开发机的独立 worktree 里执行。
 5. 离开浏览器或关闭本地命令行后，开发机上的终端、服务、日志和 Agent 仍继续运行。
 6. 稍后从任意设备回来：工作台告诉你哪些项目在等你，项目页告诉你每个任务跑到哪了。
 
-Roam 的重点不是「多一个终端工具」，而是让开发机变成一个持续在线的工作空间。你在
+Roami 的重点不是「多一个终端工具」，而是让开发机变成一个持续在线的工作空间。你在
 开发机上打开的终端、运行中的服务、调试浏览器、AI Agent 对话和任务状态，不会因为
 本地设备关机、SSH 断开、浏览器关闭而主动消失。
 
 ## 安装与启动
 
-`roam` 是把前端与 `ttmux` CLI 内嵌在一起的单一自包含二进制，目标机无需 go/node/npm。
-配置与数据都在 `~/.roam/`（`config.yaml` 首次运行自动生成）。
+`roami` 是把前端与 `ttmux` CLI 内嵌在一起的单一自包含二进制，目标机无需 go/node/npm。
+配置与数据都在 `~/.roami/`（`config.yaml` 首次运行自动生成）。
 
 ### 方式 A — 装成常驻服务（推荐给 24 小时常驻运行的机器）
 
@@ -154,9 +154,9 @@ Roam 的重点不是「多一个终端工具」，而是让开发机变成一个
 curl -fsSL https://raw.githubusercontent.com/ybz21/Roam/main/install.sh | bash
 ```
 
-`install.sh` 把 `roam` 装到 `~/.local/bin` 并注册用户级服务——用
-`systemctl --user {status|restart|stop} roam` 管理。环境开关：`ROAM_VERSION=vX.Y.Z`、
-`ROAM_BIN_DIR=DIR`、`ROAM_SYSTEM=1`（系统级服务，需 sudo）、`ROAM_NO_SERVICE=1`（只装二进制）。
+`install.sh` 把 `roami` 装到 `~/.local/bin` 并注册用户级服务——用
+`systemctl --user {status|restart|stop} roami` 管理。环境开关：`ROAMI_VERSION=vX.Y.Z`、
+`ROAMI_BIN_DIR=DIR`、`ROAMI_SYSTEM=1`（系统级服务，需 sudo）、`ROAMI_NO_SERVICE=1`（只装二进制）。
 
 ### 方式 B — 手动跑二进制
 
@@ -164,24 +164,24 @@ curl -fsSL https://raw.githubusercontent.com/ybz21/Roam/main/install.sh | bash
 
 ```bash
 # 例：Linux x86_64
-curl -fsSL -o ~/.local/bin/roam \
-  https://github.com/ybz21/Roam/releases/latest/download/roam-linux-amd64
-chmod +x ~/.local/bin/roam
-roam                    # 启动 Web 控制台，监听 0.0.0.0:13579
+curl -fsSL -o ~/.local/bin/roami \
+  https://github.com/ybz21/Roam/releases/latest/download/roami-linux-amd64
+chmod +x ~/.local/bin/roami
+roami                    # 启动 Web 控制台，监听 0.0.0.0:13579
 ```
 
 ### 方式 C — 从源码（开发）
 
 ```bash
 git clone https://github.com/ybz21/Roam.git
-cd Roam
+cd Roami
 ./start.sh --dev       # 从源码构建 CLI/chrome/skills + 前端 + 后端，然后启动
 ```
 
 `start.sh` 还支持 `stop` / `status` / `logs` / `fg`；不带 `--dev` 直接启动已构建产物。
 
 首次启动**没有口令**：在浏览器打开控制台先设一个再进入。之后可在**「设置 → 安全」**
-或编辑 `~/.roam/config.yaml` 修改。默认监听 `0.0.0.0:13579`（自签 HTTPS——麦克风和
+或编辑 `~/.roami/config.yaml` 修改。默认监听 `0.0.0.0:13579`（自签 HTTPS——麦克风和
 剪贴板需要安全上下文），局域网设备可直接访问。远程访问建议走 Tailscale、
 Cloudflare Tunnel、SSH forwarding 或 frp。
 
@@ -192,7 +192,7 @@ Cloudflare Tunnel、SSH forwarding 或 frp。
 
 ## 不止一台机器
 
-单机的 Roam 本身就是完整产品；只有当你有第二台机器时才需要这一节。每台机器照样自己
+单机的 Roami 本身就是完整产品；只有当你有第二台机器时才需要这一节。每台机器照样自己
 跑会话、Agent 和文件，中心只负责把请求路由过去——除了「从外面能不能连上」，机器的
 任何能力都不依赖中心活着。
 
@@ -200,19 +200,19 @@ Cloudflare Tunnel、SSH forwarding 或 frp。
 只有注册表、控制台和隧道：
 
 ```yaml
-# 中心机器的 ~/.roam/config.yaml
+# 中心机器的 ~/.roami/config.yaml
 cluster:
   mode: hub
-  public_url: https://roam.example.com    # 机器要拨过来用的那个地址
+  public_url: https://roami.example.com    # 机器要拨过来用的那个地址
 ```
 
 **每台机器**用一次性接入令牌（在**「设置 → 多机」**里签发）主动拨向中心，
 之后换成长期凭证：
 
 ```yaml
-# 各台机器的 ~/.roam/config.yaml
+# 各台机器的 ~/.roami/config.yaml
 cluster:
-  hub: https://roam.example.com
+  hub: https://roami.example.com
   token: <一次性接入令牌>
   name: workstation                        # 显示名，默认取 hostname
 ```
@@ -231,7 +231,7 @@ cluster:
 
 如果开发机上装了 Claude Code、Codex 或其他命令行编程工具，项目页是用它们最快的
 方式：描述任务，Agent 就在独立 worktree、独立分支上开干，并行任务互不踩脚；还可以
-让 Claude Code 和 Codex 竞赛同一任务，对比后择优采纳。当然也可以直接在 Roam 的
+让 Claude Code 和 Codex 竞赛同一任务，对比后择优采纳。当然也可以直接在 Roami 的
 持久终端里运行任何工具。执行过程、输出、上下文和后续指令入口都留在开发机上；
 你从手机或平板回来时，可以继续读它跑到哪里，也可以继续追加要求。
 
@@ -240,7 +240,7 @@ cluster:
 
 ## 命令行和自动化
 
-Roam 也提供命令行入口，方便脚本、自动化流程和 AI Agent 调用。这里不是普通用户的
+Roami 也提供命令行入口，方便脚本、自动化流程和 AI Agent 调用。这里不是普通用户的
 主入口；大多数时候你可以先从 Web 控制台开始。
 
 - `ttmux`：管理持久会话、后台任务、Agent worker、swarm 和机器可读状态。
@@ -299,14 +299,14 @@ TTMUX=./ttmux bash tests/test_ttmux.sh
 
 ## 安全说明
 
-Roam 能操作你开发机上的终端、文件、浏览器和 Agent，请把它当作接近 SSH 的权限对待。
+Roami 能操作你开发机上的终端、文件、浏览器和 Agent，请把它当作接近 SSH 的权限对待。
 正式部署时：
 
 - 使用强口令，必要时开启两步验证。
 - 外网访问优先走 Tailscale、Cloudflare Tunnel、SSH forwarding 或 frp。
 - 不要把 Web 控制台端口直接暴露在公网。
 - 接入令牌是一次性的且会过期（默认 30 分钟）；机器之后持有长期凭证，中心只存它的哈希。
-- 诊断端口（`ROAM_PPROF`）默认关闭，且只允许绑回环地址。
+- 诊断端口（`ROAMI_PPROF`）默认关闭，且只允许绑回环地址。
 - 只在你信任的机器和账号上运行。
 
 ## 文档
