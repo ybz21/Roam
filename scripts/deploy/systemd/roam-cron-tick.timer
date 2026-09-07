@@ -1,0 +1,11 @@
+[Unit]
+Description=每分钟叫一次 Roam 定时任务巡检
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+AccuracySec=10s
+Unit=roam-cron-tick.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,8 @@
+[Unit]
+Description=Roam 定时任务巡检（roam.cron 的 tick）
+After=roam.service
+
+[Service]
+Type=oneshot
+# 插件宿主没有内置调度器（watchers/onSchedule 未实现），到点触发靠外面按分钟叫一次
+ExecStart=%h/.local/bin/ttmux plugin run cron.tick
