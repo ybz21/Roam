@@ -139,6 +139,45 @@ func Throttled(db *metadb.DB, now time.Time, session, label string, high int64, 
 	})
 }
 
+// Compressed 主动压缩回收之后说一声。用 info：这是「趁还来得及，把冷页挪进了
+// 交换区」，进程一个字节没少、也没被 throttle —— 不该弹得和减速一样刺眼。
+// 但也不能不说：机器紧到需要动手了，人得知道。
+func Compressed(db *metadb.DB, now time.Time, session, label string, bytes int64) {
+	name := session
+	if strings.TrimSpace(label) != "" {
+		name = label
+	}
+	add(db, now, Notification{
+		Type: "memory", Severity: "info",
+		Title: "已把「" + name + "」的 " + human(bytes) + " 冷内存压进交换区",
+		Body: "机器可用内存不足，这个会话是当前最大的一个。压缩回收不影响它跑，" +
+			"只是把久未访问的页挪走；如果还不够，下一轮会给它踩软刹车（那时它会变慢）。",
+		Dedupe: "memthrottle-reclaim-" + session,
+	})
+}
+
+// NoSwapRoom 该动手却没落点时提醒人。这条不针对某个会话 —— 是整台机器的事。
+//
+// 必须说，而且必须说清楚要做什么：这一层到此为止了（开 zram 要 root），
+// 不说的话，用户下一次看到的就是「会话又莫名其妙没了」——2026-09-06 22:09
+// 那次正是如此，systemd-oomd 按内存压力把整条 scope 端掉，连 shell 带 agent。
+func NoSwapRoom(db *metadb.DB, now time.Time, compressed bool) {
+	body := "内存回收不出东西了：交换区已经见底，内核扫再多页也腾不出内存，" +
+		"再撑一会儿 systemd-oomd 会按压力整条会话端掉（shell 和 agent 一起）。"
+	if !compressed {
+		body += "这台机器还没开内存压缩（zram/zswap），开上就有地方放：" +
+			"sudo bash scripts/dev/install-zram-swap.sh"
+	} else {
+		body += "压缩已经开着，但也满了 —— 该关掉几个会话，或把 zram 调大。"
+	}
+	add(db, now, Notification{
+		Type: "memory", Severity: "warn",
+		Title:  "机器快没内存了，而且压不动",
+		Body:   body,
+		Dedupe: "memthrottle-noswap",
+	})
+}
+
 // human 把字节数写成人看的样子。通知正文里 "7.8G" 比 8375186227 有用得多。
 func human(n int64) string {
 	switch {

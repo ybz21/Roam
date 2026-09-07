@@ -402,9 +402,56 @@ $ ls -l .../user@1000.service/memory.high
 <code>scripts/dev/install-memory-guard.sh</code> 留着。总量闸能把机器从「快要爆」拉回来，
 但拦不住一次瞬间的巨额分配；那一下仍会打成 <code>global_oom</code>。两者是互补的，不是替代。</p>
 
-<p>顺手把 swap 用起来：<code>vm.swappiness</code> 现在是 60 但 swap 实际 <code>USED 0B</code>。
-配一份 zram（压缩内存 swap，比磁盘 swap 快一个数量级）能给突发增长再争取几十秒——
-足够 L3 的通知发出去。这一条是加分项，不是主线。</p>
+<h3>回收得有落点：zram 从「加分项」变成地基</h3>
+
+<p>这一节原本写着：「顺手把 swap 用起来……配一份 zram 能给突发增长再争取几十秒。
+<b>这一条是加分项，不是主线</b>。」<b>那句话是错的</b>，2026-09-06 22:09 把账结了。</p>
+
+<p>一个跑了一周的会话（Claude + 安卓模拟器，anon 9.5 G）连同里面 20 个进程被
+<code>systemd-oomd</code> 整条 scope 端掉。台账只记得下 <code>died_reason=killed</code>——
+cgroup 随 shell 一起消失，<code>oom_kills</code> 再也读不到了（见 §07）。内核日志里是这样：</p>
+
+<pre><code>Killed /user.slice/.../tmux-spawn-d432bbd9….scope due to memory pressure for
+/user.slice/user-1000.slice/user@1000.service being <b>85.02% &gt; 50.00% for &gt; 20s</b>
+with reclaim activity                        <span class="c"># ← 一直在回收，一直没回收出来</span>
+tmux-spawn-d432bbd9….scope: systemd-oomd killed <b>20 process(es)</b> in this unit.</code></pre>
+
+<p>当时那台机器：8 G 磁盘 swap 用掉 7.3 G，<code>zswap enabled=N</code>，zram 没加载。
+也就是说，<b>回收这个动作没有落点</b>：内核扫 LRU（那一轮 <code>pgscan</code> 3700 万）
+一页也腾不出来，PSI 于是永远降不下来，而 oomd 恰恰是按压力选 victim——
+压力最大的那个就是回收得最卖力的那个。</p>
+
+<p>关键在于软限<b>本身不回收内存</b>。<code>memory.high</code> 只是让内核在这个会话的
+每一次分配上做直接回收：<b>回收得出来才叫减速，回收不出来就是干转</b>，而干转会把 PSI
+顶上去，等于亲手把枪口对准自己。会话被 L1 默认软限（<code>max × 0.75</code> = 9.29 G）
+压着、实际用到 9.54 G 的那一整天，它一直在做这件事。</p>
+
+<h3>于是 L2 改成「先压后踩」</h3>
+
+<pre><code>可用 &lt; 12% 且占比 &gt; 35%
+  ├─ 交换区没余量（&lt; 64 M）  →  <b>什么都不做</b>，报给人（开 zram 要 root）
+  ├─ 这个会话还没压过        →  <b>主动压缩回收</b>：memory.reclaim ← min(cur×15%, 512 M, 余量)
+  └─ 压过一轮还不够          →  才踩软刹车 memory.high = cur × 0.85</code></pre>
+
+<ul>
+<li><b>压和踩腾出的量是一样的，代价不一样。</b>踩是逼内核在每次分配上回收，进程跟着变慢；
+压是一次性把冷的匿名页挤进 zram，进程一个字节没少、也没被 throttle。先做便宜的那个。</li>
+<li><b><code>swappiness=200</code> 写进 <code>memory.reclaim</code>。</b>默认档会先啃 page cache——
+可 cache 内核自己就会回收，不用我们催，而 agent 会话的大头是匿名页。这个参数是 6.9 才有的，
+老内核整条拒掉（<code>EINVAL</code>），退回不带参数的写法。</li>
+<li><b>没落点时不动手是有意的。</b>踩下去只是干转，而单会话失控仍有 L1 的硬顶兜着
+（撞顶只杀它自己）。这一层解决不了「整台机器没地方放」——那得有人去开 zram，
+所以改成在会话列表上说清楚要跑哪条命令。</li>
+<li><b>「压过没有」从内核读</b>（<code>memory.swap.current</code>），和「踩着没有」同一个道理：
+CLI 每次调用都是一个新进程，记在内存里的状态活不过这一轮。</li>
+<li><b>单轮封顶 512 M。</b>写 <code>memory.reclaim</code> 是同步的，会话列表每刷新一次就走一轮，
+压太多会把列表卡住；反正几秒后还有下一轮。</li>
+</ul>
+
+<p>落点本身由 <code>scripts/dev/install-zram-swap.sh</code> 装（需 root 一次）：
+zram 一块、<code>zstd</code>、优先级高于磁盘 swap，配上 <code>vm.swappiness=180</code> 与
+<code>vm.page-cluster=0</code>（zram 没有寻道，预读 8 页只是白白多解压 7 页）。
+zswap 同时开着等于把同一页压两遍，脚本会把它关掉。</p>
 
 <h2><span class="n">06</span>L3：看门狗与可见性</h2>
 
