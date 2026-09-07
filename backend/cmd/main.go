@@ -29,6 +29,13 @@ import (
 var version = "dev"
 
 func main() {
+	// 子命令层（roam im send / roam cron list / roam ttmux ls…）。
+	// 必须在 flag.Parse 之前：flag 包遇到非 flag 参数就停下，之后的 --text 会被当成
+	// 本进程的 flag 报错。不带子命令（或第一个参数是 -flag）时原样往下走，启动服务。
+	if handled, code := runCLI(os.Args[1:], envOr("TTMUX_BIN", "ttmux")); handled {
+		os.Exit(code)
+	}
+
 	configFlag := flag.String("config", "", "配置文件路径（覆盖 ROAM_CONFIG / ~/.roam/config.yaml）")
 	addrFlag := flag.String("addr", "", "监听地址，如 0.0.0.0:13579（覆盖配置里的 web.bind）")
 	webFlag := flag.String("web", "", "前端构建产物目录 frontend/dist（覆盖自动探测；留空用内嵌前端）")
