@@ -35,5 +35,20 @@ func (c *Client) RunCtx(ctx context.Context, args ...string) (string, error) {
 	return out.String(), err
 }
 
+// RunJSON 执行子命令，**分开**拿 stdout 与 stderr。
+//
+// 取 JSON 的地方必须用它：插件的日志走 stderr（SDK 的 Logf 写的
+// `[roam.cron] 已添加定时任务 …`），和 stdout 混在一起，返回的就不再是 JSON——
+// 浏览器只会看到「Unexpected token 'r'」，而真正发生了什么（那行日志）反被吞掉。
+// 出错时两股都要：诊断信息通常正在 stderr 里。
+func (c *Client) RunJSON(args ...string) (stdout, stderr string, err error) {
+	cmd := exec.CommandContext(context.Background(), c.Bin, args...)
+	var o, e bytes.Buffer
+	cmd.Stdout = &o
+	cmd.Stderr = &e
+	err = cmd.Run()
+	return o.String(), e.String(), err
+}
+
 // StripANSI 去除文本中的 ANSI 颜色转义。
 func StripANSI(s string) string { return ansiRE.ReplaceAllString(s, "") }
