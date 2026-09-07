@@ -1479,6 +1479,13 @@ html[data-size="compact"] .ant-form-item-control-input-content > .ant-picker { w
   color: var(--text-dim); font: var(--fs-micro)/1.6 var(--mono);
 }
 .tt-runs .run .sess .gone { color: var(--text-dimmer); font-size: var(--fs-micro); }
+/* 产物那行：路径要看全（截断也留 title），大小/缺失跟在后面弱一档 */
+.tt-runs .run .art { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.tt-runs .run .art code {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--text-dim); font: var(--fs-micro)/1.6 var(--mono);
+}
+.tt-runs .run .art .gone { flex: 0 0 auto; color: var(--text-dimmer); font-size: var(--fs-micro); }
 /* 展开钮比行尾动作再小一号：它是「要不要多看一眼」，不是主动作 */
 .tt-runs .run .tt-act.sm { align-self: flex-start; height: 22px; padding: 0 8px; font-size: var(--fs-micro); }
 /* 输出收着，展开后自己滚：一条 npm test 能吐几百行 */

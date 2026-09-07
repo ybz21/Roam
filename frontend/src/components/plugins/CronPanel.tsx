@@ -1,7 +1,7 @@
 // 定时任务面板(roam.cron 插件的宿主侧面板):管理「什么时候 / 干什么 / 由谁干」
 // 的定时任务表——增删改、启停、立即触发、改 prompt,全部走插件命令
 // (cron.add / list / remove / enable / disable / run)经 backend 薄封装 REST。
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Alert, Button, Drawer, Empty, Form, Input, Modal, Popconfirm, Select, Space, Spin, Switch, Table, Tag,
   Typography, message,
@@ -26,6 +26,8 @@ type Job = {
   workdir?: string
   interactive?: boolean
   command?: string
+  notify?: boolean
+  artifact?: string
   nextRunAt?: string
   lastRunAt?: string
 }
@@ -43,6 +45,10 @@ type Run = {
   interactive?: boolean
   exit?: number
   output?: string
+  doneAt?: number
+  tookSec?: number
+  artifact?: string
+  artifactSize?: number
 }
 
 type FormValues = {
@@ -54,6 +60,8 @@ type FormValues = {
   workdir: string
   interactive: boolean
   command: string
+  notify: boolean
+  artifact: string
 }
 
 type T = (k: string, vars?: Record<string, string | number>) => string
@@ -268,10 +276,15 @@ function WorkdirPicker({ t, value, onChange }: { t: T; value: string; onChange: 
     return () => { stop = true }
   }, [])
 
-  // 编辑既有任务：路径不在项目清单里就是自定义的，直接把输入框摊开
+  // 编辑既有任务：路径不在项目清单里才算自定义。**必须等清单到齐再判**——
+  // 清单还没回来时人人都「不在清单里」，那一判会把项目目录也认成自定义路径，
+  // 而且此后再不翻身（这一版第一次就是这么错的）。只判一次，之后交给用户自己选。
+  const judged = useRef(false)
   useEffect(() => {
-    if (value && !projects.some((p) => p.dir === value)) setCustom(true)
-  }, [value, projects])
+    if (loading || judged.current) return
+    judged.current = true
+    setCustom(!!value && !projects.some((p) => p.dir === value))
+  }, [loading, value, projects])
 
   const options = [
     { value: '', label: t('cron.workdirDefault') },
@@ -379,8 +392,20 @@ function RunsDrawer({ job, t, isPhone, runCmd, onClose }: {
                           )}
                           {/* 「失败」只在没有别的东西替它说话时才写：exit 码和错误行都已经是红的 */}
                           {!r.ok && r.exit == null && !r.error && <span className="ex bad">{t('cron.runFail')}</span>}
+                          {r.tookSec != null && <span className="trig">{t('cron.took', { s: fmtDur(r.tookSec, t) })}</span>}
                         </div>
                         {r.error && <div className="err">{r.error}</div>}
+                        {/* 产物：人要的是「结果在哪」，路径写全，没写出来就直说 */}
+                        {r.artifact && (
+                          <div className="art" title={r.artifact}>
+                            <code>{r.artifact}</code>
+                            <span className="gone">
+                              {r.artifactSize != null && r.artifactSize >= 0
+                                ? fmtSize(r.artifactSize)
+                                : t('cron.artifactMissing')}
+                            </span>
+                          </div>
+                        )}
                         {r.session && (
                           <div className="sess">
                             <code>{r.session}</code>
@@ -411,6 +436,20 @@ function RunsDrawer({ job, t, isPhone, runCmd, onClose }: {
   )
 }
 
+/** 用时：秒 → 「2 小时 5 分钟」，和插件侧那份口径一致 */
+function fmtDur(sec: number, t: T): string {
+  if (sec < 60) return t('cron.durSec', { n: sec })
+  if (sec < 3600) return t('cron.durMin', { n: Math.floor(sec / 60) })
+  return t('cron.durHour', { h: Math.floor(sec / 3600), m: Math.floor((sec % 3600) / 60) })
+}
+
+/** 产物大小 */
+function fmtSize(n: number): string {
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`
+}
+
 /** 「3 分钟前」。抽屉比树行宽，放得下整句话，比 `3m` 好读 */
 function relTime(sec: number, t: T): string {
   const d = Math.max(0, Math.floor(Date.now() / 1000 - sec))
@@ -439,11 +478,12 @@ function JobModal({ open, job, existing, t, pluginId, onClose, onSaved, submit }
         action: job.action,
         provider: job.provider || '', prompt: job.prompt || '', workdir: job.workdir || '',
         interactive: !!job.interactive,
+        notify: !!job.notify, artifact: job.artifact || '',
         command: job.command || '',
       })
     } else {
       form.resetFields()
-      form.setFieldsValue({ cron: '', action: 'agent', provider: '', interactive: false })
+      form.setFieldsValue({ cron: '', action: 'agent', provider: '', interactive: false, notify: true, artifact: '' })
     }
   }, [open, job, form])
 
@@ -457,6 +497,8 @@ function JobModal({ open, job, existing, t, pluginId, onClose, onSaved, submit }
       if (v.workdir) args.workdir = v.workdir
       args.interactive = v.interactive ? 'true' : 'false'
     } else if (v.action === 'exec') { args.command = v.command }
+    args.notify = v.notify ? 'true' : 'false'
+    if (v.artifact) args.artifact = v.artifact.trim()
     setSaving(true)
     try {
       await submit(args)
@@ -525,6 +567,14 @@ function JobModal({ open, job, existing, t, pluginId, onClose, onSaved, submit }
               </Form.Item>
             )
           }}
+        </Form.Item>
+
+        {/* 「跑完通知我」对两种动作都成立：拉 Agent 等会话退出，跑命令等命令返回 */}
+        <Form.Item name="notify" valuePropName="checked" label={t('cron.fieldNotify')} extra={t('cron.notifyHint')}>
+          <Switch />
+        </Form.Item>
+        <Form.Item name="artifact" label={t('cron.fieldArtifact')} extra={t('cron.artifactHint')}>
+          <Input placeholder={t('cron.artifactPlaceholder')} />
         </Form.Item>
       </Form>
     </Modal>

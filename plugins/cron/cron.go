@@ -42,6 +42,13 @@ type Job struct {
 	// action=exec(定时跑 shell 命令,经 sh -lc)
 	Command string `json:"command,omitempty"`
 
+	// 跑完通知我：拉 Agent 的等会话退出、跑命令的等命令返回，通知进 Roam 通知流
+	// (装了 IM 并绑定通知的话，同一条会渲染成飞书卡片)。
+	Notify bool `json:"notify,omitempty"`
+	// 产物文件(可选,支持 ~)：通知里带上它的路径、大小与末段——
+	// 「跑完了」这句话本身没用,人要的是结果在哪
+	Artifact string `json:"artifact,omitempty"`
+
 	NextRun int64 `json:"nextRun,omitempty"` // 下次触发(unix 秒)
 	LastRun int64 `json:"lastRun,omitempty"` // 上次触发(unix 秒)
 	Runs    int   `json:"runs,omitempty"`    // 累计触发次数
@@ -50,6 +57,10 @@ type Job struct {
 // Activate registers the plugin's commands (sdk.Serve 的入口)。
 func Activate(ctx *sdk.Ctx) sdk.Plugin {
 	return sdk.Plugin{
+		Events: map[string]sdk.EventHandler{
+			// 拉 Agent 的任务:会话退出才算这活干完(触发成功 ≠ 活干完了)
+			"session:agent.exited": onAgentExited,
+		},
 		Commands: map[string]sdk.CommandHandler{
 			"add":     add,
 			"list":    list,
@@ -115,10 +126,15 @@ func add(ctx *sdk.Ctx, args map[string]string) (any, error) {
 		Prompt:   args["prompt"],
 		Workdir:  args["workdir"],
 		Command:  args["command"],
+		Artifact: strings.TrimSpace(args["artifact"]),
 	}
 	// --interactive true/1 → 拉 Agent 时保持交互会话(仅 action=agent 有意义)
 	if v := strings.TrimSpace(args["interactive"]); v == "true" || v == "1" {
 		job.Interactive = true
+	}
+	// --notify true/1 → 跑完发通知(拉 Agent 等会话退出,跑命令等命令返回)
+	if v := strings.TrimSpace(args["notify"]); v == "true" || v == "1" {
+		job.Notify = true
 	}
 	if err := validateAction(job); err != nil {
 		return nil, err
@@ -435,7 +451,29 @@ func fireExec(ctx *sdk.Ctx, j *Job) (any, error) {
 		return nil, err
 	}
 	ctx.Logf("任务 %s 跑命令完成 exit=%d", j.Name, res.Exit)
-	if res.Exit != 0 {
+	// 跑命令是同步的,这里就是「活干完了」:开了通知就报一声,产物与输出末段一并带上
+	if j.Notify {
+		art, size := expandHome(j.Artifact), int64(0)
+		if art != "" {
+			size = -1
+			if st, err := os.Stat(art); err == nil {
+				size = st.Size()
+			}
+		}
+		title, sev := fmt.Sprintf("定时任务 %s 跑完了", j.Name), "info"
+		if res.Exit != 0 {
+			title, sev = fmt.Sprintf("定时任务 %s 失败(exit=%d)", j.Name, res.Exit), "warning"
+		}
+		_ = ctx.NotificationPublish(sdk.Notification{
+			Type:      "cron.done",
+			Severity:  sev,
+			Title:     title,
+			Body:      doneBody("", nil, art, size, tailStr(strings.TrimRight(res.Output, "\n"), artifactTail)),
+			DedupeKey: fmt.Sprintf("cron.done.%s.%d", j.Name, j.Runs),
+		})
+	}
+	// 没开通知的任务只在失败时吭一声——那是「它坏了而你不知道」，不吭声不行
+	if res.Exit != 0 && !j.Notify {
 		_ = ctx.NotificationPublish(sdk.Notification{
 			Type:      "cron.exec",
 			Severity:  "warning",
@@ -490,6 +528,8 @@ func jobView(j Job) map[string]any {
 		"prompt":      j.Prompt,
 		"workdir":     j.Workdir,
 		"interactive": j.Interactive,
+		"notify":      j.Notify,
+		"artifact":    j.Artifact,
 		"command":     j.Command,
 	}
 	if j.NextRun > 0 {

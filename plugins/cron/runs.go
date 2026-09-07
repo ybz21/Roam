@@ -38,6 +38,11 @@ type Run struct {
 	// action=exec
 	Exit   *int   `json:"exit,omitempty"`
 	Output string `json:"output,omitempty"` // 只留末段(见 tailStr)
+
+	// 收尾（拉 Agent 的会话退出时补上，见 markDone）
+	DoneAt       int64  `json:"doneAt,omitempty"`
+	Artifact     string `json:"artifact,omitempty"`
+	ArtifactSize int64  `json:"artifactSize,omitempty"`
 }
 
 func loadRuns(ctx *sdk.Ctx) ([]Run, error) {
@@ -147,7 +152,41 @@ func runsCmd(ctx *sdk.Ctx, args map[string]string) (any, error) {
 		if r.Output != "" {
 			item["output"] = r.Output
 		}
+		if r.DoneAt > 0 {
+			item["doneAt"] = r.DoneAt
+			item["tookSec"] = r.DoneAt - r.At
+		}
+		if r.Artifact != "" {
+			item["artifact"] = r.Artifact
+			item["artifactSize"] = r.ArtifactSize
+		}
 		out = append(out, item)
 	}
 	return map[string]any{"count": len(out), "runs": out}, nil
+}
+
+// markDone 会话退出时补上收尾信息（用时、产物），并把那条记录挑出来还给调用方。
+func markDone(ctx *sdk.Ctx, session string, at int64, artifact string, artifactSize int64) *Run {
+	runs, err := loadRuns(ctx)
+	if err != nil || len(runs) == 0 {
+		return nil
+	}
+	var hit *Run
+	for i := range runs {
+		if runs[i].Session == session {
+			runs[i].DoneAt = at
+			runs[i].Artifact = artifact
+			runs[i].ArtifactSize = artifactSize
+			hit = &runs[i]
+			break // 记录是新的在前，第一条就是最近那次
+		}
+	}
+	if hit == nil {
+		return nil
+	}
+	if b, err := json.Marshal(runs); err == nil {
+		_ = ctx.StorageSet(runsKey, string(b))
+	}
+	cp := *hit
+	return &cp
 }
