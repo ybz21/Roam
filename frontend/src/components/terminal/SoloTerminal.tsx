@@ -25,7 +25,7 @@ export default function SoloTerminal({ name }: { name: string }) {
       setSessionLabels(Object.fromEntries((Array.isArray(list) ? list : []).filter((s: any) => s?.name && s?.label).map((s: any) => [s.name, s.label])))
     }).catch(() => {})
   }, [])
-  useEffect(() => { document.title = `Roam · ${sessionDisplay(name) || name}` }, [name, label])
+  useEffect(() => { document.title = `Roami · ${sessionDisplay(name) || name}` }, [name, label])
   useEffect(() => {
     let stop = false
     const check = async () => {

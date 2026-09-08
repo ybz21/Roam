@@ -659,6 +659,8 @@ html[data-pointer="coarse"] .tt-csearch-line, html[data-pointer="coarse"] .tt-cs
 .tt-tree-agents .chev { display: inline-flex; color: var(--text-dimmer); transition: transform .15s; }
 .tt-tree-agents.closed .chev { transform: rotate(-90deg); }
 :where(html[data-pointer="fine"]) .tt-tree-agents:hover { background: var(--list-hover); color: var(--text-bright); }
+/* 「项目目录」那张兜底卡不画头行（同名重复），会话行也就不必再缩一级 */
+.tt-tree-task.bare .tt-tree-sessions .tt-tree-row { padding-left: 22px; }
 .tt-tree-sessions .tt-tree-row { padding-left: 30px; padding-right: 8px; min-height: 30px; border-radius: var(--r-xs); margin: 0 6px; width: calc(100% - 12px); gap: 8px; }
 .tt-tree-sessions .tt-tree-row .nm { flex: 1 1 auto; }
 .tt-tree-sessions .tt-tree-row .nm { color: var(--text-dim); font-size: var(--fs-sm); font-weight: 400; }

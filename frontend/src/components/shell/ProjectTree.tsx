@@ -188,7 +188,7 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
   )
 
   // 任务是一张卡（参照 Orca 的侧栏）：头行、「N 个会话」折叠头、会话行带时间；收起时只剩一枚「✳ +N ›」
-  const taskRows = (task: TreeTask) => {
+  const taskRows = (task: TreeTask, projName?: string) => {
     const on = activeTask === task.key
     const many = task.sessions.length > 1
     const open = !many || !closed.has(task.key)
@@ -197,9 +197,13 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
     const own = task.sessions.filter((x) => !x.reviewOf) // 互审是附属，不算「这个任务有几个会话」
     const sole = own.length === 1 && task.sessions.length === 1 && own[0].label === task.name ? own[0] : null
     if (sole) return <div key={task.key} className={`tt-tree-task${on ? ' on' : ''}`}>{soleRow(task, sole)}</div>
+    // 「项目目录」这张兜底卡（非 git 项目的会话都挂在这儿）跟项目行同名：
+    // 头行再印一遍项目名是纯噪音——项目行本来就在它上面一行。只画会话，
+    // 派生/收尾这些动作项目行的 ⋯ 里都有。
+    const bare = !!task.main && !!projName && task.name === projName
     return (
-      <div key={task.key} className={`tt-tree-task${on ? ' on' : ''}`}>
-        {taskHead(task, taskBadge(task), on && !hasActive)}
+      <div key={task.key} className={`tt-tree-task${on ? ' on' : ''}${bare ? ' bare' : ''}`}>
+        {!bare && taskHead(task, taskBadge(task), on && !hasActive)}
         {many && (
           <button type="button" className={`tt-tree-agents${open ? '' : ' closed'}`} onClick={() => toggle(task.key)}
             aria-expanded={open} aria-label={open ? t('common.collapse') : t('common.expand')}>
@@ -274,7 +278,7 @@ export function ProjectTree({ tree, activeTask, activeSession, onProject, onTask
             </button>
             {open && (
               <>
-                {live.map((x) => taskRows(x))}
+                {live.map((x) => taskRows(x, p.name))}
                 {showIdle.has(p.key) && idle.map((x) => idleCard(x))}
                 {!live.length && !showIdle.has(p.key) && <div className="tt-tree-empty">{t('tree.noTasks')}</div>}
               </>

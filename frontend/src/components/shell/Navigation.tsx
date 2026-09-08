@@ -69,9 +69,9 @@ export function Navigation({
   return (
     <div className={`tt-nav${rail ? ' rail' : ''}`}>
       <div className="tt-nav-brand">
-        {/* 轨态下标是唯一的品牌元素，得由它报名字；展开时旁边就写着 Roam，再念一遍是重复 */}
-        <img src="/logo-mark.svg" width={26} height={26} alt={rail ? 'Roam' : ''} aria-hidden={rail ? undefined : true} />
-        {!rail && <strong className="wd">Roam</strong>}
+        {/* 轨态下标是唯一的品牌元素，得由它报名字；展开时旁边就写着 Roami，再念一遍是重复 */}
+        <img src="/logo-mark.svg" width={26} height={26} alt={rail ? 'Roami' : ''} aria-hidden={rail ? undefined : true} />
+        {!rail && <strong className="wd">Roami</strong>}
       </div>
 
       {/* 搜索：顶栏 Command Center 撤了（22 设计 §3.5），这一行是桌面上唯一看得见的入口 */}

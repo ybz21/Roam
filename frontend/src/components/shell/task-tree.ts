@@ -153,6 +153,28 @@ export function buildTaskTree(o: {
       const ss = [sess(s.name)]
       tasks.push({ key: taskKeyOf('', wt), name: o.nameOf?.(wt) || ss[0].label, branch: pl.branch || '', path: wt, ahead: 0, unfinished: false, sessions: ss, ...(isMain ? { main: true } : {}) })
     }
+
+    // 兜底：/projects 自己已经把这些会话算给了这个项目（top/needs 是后端按 cwd 归属出来的，
+    // **非 git 目录也算**）。上面两条路都只认 worktree —— 于是像 /home/ai/codes 这种
+    // 「放着一堆仓库的普通目录」建成的项目，会话在项目页里好好列在项目下，
+    // 左树却把它们扔进「散会话」，同一件事两处不一致。以项目页为准。
+    const owned = new Set([...(p.top || []), ...(p.needs || [])].map((x) => x.name))
+    for (const s of o.sessions) {
+      if (placed.has(s.name) || !owned.has(s.name) || isInfraSession(s.name)) continue
+      placed.add(s.name)
+      const hit = tasks.find((x) => x.path.replace(/\/+$/, '') === root)
+      if (hit) {
+        // 只挂进去，**不改名**：这张卡叫项目名，再来一个会话不该把它改成那个会话的名字
+        hit.sessions.push(sess(s.name))
+        hit.unfinished = false
+        continue
+      }
+      const ss = [sess(s.name)]
+      // 项目根就是它的「任务位」：非 git 项目没有 worktree，也就没有别的位置可给。
+      // 名字用项目名而不是第一个会话的 label——这张卡代表的是「在项目目录里干活」，
+      // 不是某一个会话；跟着会话取名的话，再开一个会话它就莫名其妙改名了。
+      tasks.push({ key: taskKeyOf('', root), name: o.nameOf?.(root) || p.name, branch: '', path: root, ahead: 0, unfinished: false, sessions: ss, main: true })
+    }
     return { key: p.key, name: p.name, dir: p.dir, needs: (p.waiting || 0) + (p.unfinished || 0), tasks }
   })
 
