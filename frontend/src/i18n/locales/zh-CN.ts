@@ -117,7 +117,9 @@ const zhCN = {
   // ── 中心页（#/hub）──
   'hub.needTwoSamples': '曲线要等下一次采样（5 分钟一次）',
   'hub.why.goroutineClimb': 'Goroutine 持续增长',
+  'hub.why.goroutineClimbSpan': 'Goroutine 持续增长（{from} → {to}）',
   'hub.why.memClimb': '内存持续增长',
+  'hub.why.memClimbSpan': '内存持续增长（{from} → {to}）',
   'hub.why.nodeOffline': '有机器掉线',
   'hub.why.unknown': '状态异常',
   'hub.unhealthy': '中心状态异常：{why}。这类曲线不会自己好——先看诊断，或重启中心。',

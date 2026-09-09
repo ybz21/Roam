@@ -117,7 +117,9 @@ const enUS = {
   // ── Hub page (#/hub) ──
   'hub.needTwoSamples': 'Chart appears after the next sample (every 5 min)',
   'hub.why.goroutineClimb': 'Goroutines climbing',
+  'hub.why.goroutineClimbSpan': 'Goroutines climbing ({from} → {to})',
   'hub.why.memClimb': 'Memory climbing',
+  'hub.why.memClimbSpan': 'Memory climbing ({from} → {to})',
   'hub.why.nodeOffline': 'A machine is offline',
   'hub.why.unknown': 'Unhealthy',
   'hub.unhealthy': 'Hub looks unhealthy: {why}. This kind of curve does not recover on its own — check diagnostics or restart the hub.',
