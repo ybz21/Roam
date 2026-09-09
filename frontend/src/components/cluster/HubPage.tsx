@@ -13,7 +13,7 @@ import { useI18n } from '../../i18n'
 import { relTime } from '../../time-format'
 import { NodeMark, nodeDotColor } from './NodeMark'
 import { setCurrentNode, useClusterNodes, useCurrentNodeId, type ClusterNode } from './node-url'
-import { assessHub } from './hub-health'
+import { hubReasonText, assessHub } from './hub-health'
 import HostMonitorPanel, { type Snapshot } from '../plugins/HostMonitorPanel'
 import { WarnIcon } from '../../icons'
 
@@ -304,7 +304,7 @@ export default function HubPage() {
           四张等大的指标卡占掉三分之一首屏，却只为传达「一切正常」这一件事。 */}
       <div className={`tt-hub-status${health.level !== 'ok' ? ' bad' : ''}`}>
         <i className="d" />
-        <b>{health.level === 'ok' ? t('hub.allGood') : t('hub.why.' + health.reasons[0])}</b>
+        <b>{health.level === 'ok' ? t('hub.allGood') : hubReasonText(health, t)}</b>
         <span className="nums">
           {t('hub.memory')} {mb(now.rss)}MB
           {host.memTotal ? `（${t('hub.ofHostShort', { pct: Math.round(rssShare * 100) })}）` : ''}

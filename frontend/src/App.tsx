@@ -6,7 +6,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { bootstrapCluster, setCurrentNode, useClusterNodes, useCurrentNodeId } from './components/cluster/node-url'
 import { NodeMark, nodeDotColor } from './components/cluster/NodeMark'
-import { useHubHealth } from './components/cluster/hub-health'
+import { hubReasonText, useHubHealth } from './components/cluster/hub-health'
 import {
   Layout, Button, Card, List, Tag, Form, Input, Select, Segmented, Tabs, Descriptions,
   Statistic, Row, Col, Space, Popconfirm, Empty, Modal, App as AntApp, Typography, Spin, Tooltip, Dropdown, Checkbox, Progress, AutoComplete, Radio, Switch, Collapse, InputNumber,
@@ -935,7 +935,7 @@ export default function App() {
           <span className="lat">
             {hubHealth.level === 'ok'
               ? t('hub.onlineShort', { n: clusterNodes.filter((n) => n.online).length })
-              : t('hub.why.' + (hubHealth.reasons[0] || 'unknown'))}
+              : hubReasonText(hubHealth, t)}
           </span>
         </span>
       ),
@@ -955,7 +955,7 @@ export default function App() {
   const statusCells = systemCells({
     online,
     node: curNode ? { name: curNode.name, online: curNode.online, latencyMs: curNode.latencyMs } : null,
-    hubAlarm: hubHealth.level === 'ok' ? undefined : t('hub.why.' + (hubHealth.reasons[0] || 'unknown')),
+    hubAlarm: hubHealth.level === 'ok' ? undefined : hubReasonText(hubHealth, t),
     clustered: clusterNodes.length > 0,
     sessions: terms.length,
     waiting: Object.values(mobileWaiting).filter(Boolean).length,
@@ -1009,7 +1009,7 @@ export default function App() {
                 title: t('project.removeConfirm'), okText: t('project.remove'), okButtonProps: { danger: true }, cancelText: t('common.cancel'),
                 onOk: async () => { try { await api('DELETE', `/projects/${encodeURIComponent(key)}`); antMessage.success(t('project.removed')); treeReload.current?.() } catch (e: any) { antMessage.error(e.message) } },
               })} />}
-            hubAlarm={hubHealth.level === 'ok' ? undefined : t('hub.why.' + (hubHealth.reasons[0] || 'unknown'))}
+            hubAlarm={hubHealth.level === 'ok' ? undefined : hubReasonText(hubHealth, t)}
             node={curNode ? {
               name: curNode.name,
               // 切换器那枚**不涂蓝**：它永远是当前机器，`current` 那层高亮不传递任何信息，
