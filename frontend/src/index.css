@@ -3587,6 +3587,8 @@ html[data-size="compact"] .tt-histname { flex: 1 1 auto; max-width: none; }
 .tt-statusbar .cell.danger .mini i { background: var(--danger); }
 /* 过期：变暗置 --，不留最后一帧。一个停在 34% 的假数字比空白危险得多 */
 .tt-statusbar .cell.stale { color: var(--text-dimmer); opacity: .55; }
+/* 变暗的格连状态点一起褪色：留一颗绿点在「中转」旁边，等于说反话 */
+.tt-statusbar .cell.stale .dot { background: var(--text-dimmer); }
 /* 钉住：这一格不参与折叠。竖线表示「它是被留下来的，不是碰巧还在」 */
 .tt-statusbar .cell.pin { position: relative; }
 .tt-statusbar .cell.pin::before {

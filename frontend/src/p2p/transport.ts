@@ -104,6 +104,9 @@ export interface LinkStatus {
   file?: LinkState
   // file 类 PC 命中路径（ipv6-direct|upnp|stun|lan / frp）；file==='connected' 时有值。
   filePath?: P2PPathLabel
+  // 这条直连当前的速率（字节/秒），control+media+file 三类 PC 合计；空闲时为 0。
+  downBps?: number
+  upBps?: number
 }
 
 // —— 全局 control 链路状态 store（useSyncExternalStore 订阅，喂左边栏 LinkStatus 组件）—— //
@@ -176,8 +179,47 @@ function clearTimers() {
   if (connectTimer) { clearTimeout(connectTimer); connectTimer = 0 }
 }
 
+// 活着的 PC：control 一条常驻，media 一条按需，file 每次下载一条。
+//
+// 速率必须三类合计。只看 control 的话读数永远接近 0——保活心跳而已，真正的字节都在
+// file/media 那两条上，而用户问「直连现在跑多快」问的是整条链路。
+// 不在每个 close 处反注册，改成采样时按 connectionState 剔除：关闭点有七八处，
+// 漏挂一处就会留下一条永不消失的幽灵 PC。
+const livePcs = new Set<RTCPeerConnection>()
+function trackPc(peer: RTCPeerConnection) { livePcs.add(peer) }
+
+let lastBytes: { down: number; up: number; at: number } | null = null
+
+async function sampleThroughput() {
+  let down = 0
+  let up = 0
+  for (const peer of livePcs) {
+    if (peer.connectionState === 'closed') { livePcs.delete(peer); continue }
+    const stats = await peer.getStats().catch(() => null)
+    if (!stats) continue
+    stats.forEach((r) => {
+      const rr = r as { type?: string; nominated?: boolean; selected?: boolean; bytesSent?: number; bytesReceived?: number }
+      if (rr.type !== 'candidate-pair' || !(rr.nominated || rr.selected)) return
+      down += rr.bytesReceived || 0
+      up += rr.bytesSent || 0
+    })
+  }
+  const at = performance.now()
+  const prev = lastBytes
+  lastBytes = { down, up, at }
+  if (!prev) return
+  const dt = (at - prev.at) / 1000
+  if (dt <= 0) return
+  // 一条 file PC 用完拆掉，它那份累计字节就从合计里消失 → 增量为负。
+  // 负增量按 0 算，否则每传完一个文件条上都要闪一下天文数字。
+  setStatus({
+    downBps: Math.max(0, (down - prev.down) / dt),
+    upBps: Math.max(0, (up - prev.up) / dt),
+  })
+}
+
 // 实时 RTT：control 连上后每 1.5s getStats 取选中候选对的 currentRoundTripTime → store，
-// 让左边栏「往返时延」动态刷新（后端 connected/link 只给初值，静态）。
+// 让状态条那一格的延迟动态刷新（后端 connected/link 只给初值，静态）。
 let rttTimer = 0
 function startRttPoll(peer: RTCPeerConnection) {
   stopRttPoll()
@@ -193,9 +235,15 @@ function startRttPoll(peer: RTCPeerConnection) {
       })
       if (rtt != null) setStatus({ rttMs: Math.round(rtt * 1000) })
     }).catch(() => { /* ignore */ })
+    void sampleThroughput()
   }, 1500)
 }
-function stopRttPoll() { if (rttTimer) { clearInterval(rttTimer); rttTimer = 0 } }
+function stopRttPoll() {
+  if (rttTimer) { clearInterval(rttTimer); rttTimer = 0 }
+  // 断开后不要把最后一次读数留在条上——那会变成一个永远不动的假速率
+  lastBytes = null
+  setStatus({ downBps: 0, upBps: 0 })
+}
 
 // 拆当前一轮 control 连接（幂等），保留 store 状态由调用方决定。
 function teardown() {
@@ -265,8 +313,18 @@ async function negotiate() {
   const socket = openSignal()
   ws = socket
   const peer = new RTCPeerConnection({ iceServers })
+  trackPc(peer)
   pc = peer
   attachIceDiagLogs('control', peer)
+
+  // 轮询挂在 PC 自己的状态上，不挂后端那条 connected 消息。
+  // 实测（2026-09-10，局域网直连）后端只发了 link{state:up}，connected 一条没来，
+  // 于是这个「实时 RTT」轮询从来没启动过——条上的延迟一直是后端给的那个静态初值，
+  // 速率更是压根没人采。PC 自己的 connectionstatechange 才是权威。
+  peer.addEventListener('connectionstatechange', () => {
+    if (peer.connectionState === 'connected') startRttPoll(peer)
+    else if (peer.connectionState !== 'connecting' && peer.connectionState !== 'new') stopRttPoll()
+  })
 
   // control PC 上开一条保活通道（也让 SCTP/ICE 起真正协商）。label 走 control#id 规范，
   // 后端 OnDataChannel 按前缀识别为 control 保活，不承载业务。
@@ -453,6 +511,7 @@ async function negotiateMedia() {
   const socket = openSignal()
   mediaWs = socket
   const peer = new RTCPeerConnection({ iceServers })
+  trackPc(peer)
   mediaPc = peer
   attachIceDiagLogs('media', peer)
 
@@ -643,6 +702,7 @@ export async function connectFile(opts: ConnectFileOptions): Promise<FilePeer> {
 
   const ws = openSignal()
   const peer = new RTCPeerConnection({ iceServers: servers })
+  trackPc(peer)
   attachIceDiagLogs('file', peer)
 
   // 业务通道：label 固定 'file'（线协议约定），可靠·有序。后端 OnDataChannel 拿到即走 serveFile。

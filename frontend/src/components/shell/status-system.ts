@@ -7,8 +7,11 @@
 // M1 只登载 App 手里已经有的东西。分支 / 改动 / 蜂群 / 后台任务要各自的数据源，
 // 那些留 M2；缺了就不渲染那一格，**不为了填满一条状态条去加一条轮询**。
 import { systemCell } from './status-registry'
+import { humanBytes } from './status-cells'
 import type { CellValue, Severity } from './status-cells'
 import type { SystemCell } from './WorkspaceStatusBar'
+import { pathLabelKey } from '../../p2p/labels'
+import type { LinkState, LinkStatus } from '../../p2p/transport'
 
 export type SystemInput = {
   /** 浏览器与后端连着没有（单机时机器格的状态点看它） */
@@ -33,6 +36,8 @@ export type SystemInput = {
   projectKey: string
   /** 活跃蜂群数（已归档的不算） */
   swarms: number
+  /** P2P 直连链路；偏好关着（state='disabled'）或没有时整格不出现 */
+  link: LinkStatus | null
   t: (key: string, vars?: Record<string, unknown>) => string
 }
 
@@ -49,6 +54,37 @@ const SLOW_MS = 300
 export function shortVersion(v: string): string {
   const bare = v.replace(/^v/, '').replace(/-\d+-g[0-9a-f]+(-dirty)?$/i, '').replace(/-dirty$/i, '')
   return 'v' + bare
+}
+
+/** 子链路（镜像 / 文件）在悬停里的一句话；空闲就不提它。 */
+const SUBLINK_KEY: Record<LinkState, string> = {
+  disabled: 'p2p.link.sub.idle',
+  connecting: 'p2p.link.sub.connecting',
+  connected: 'p2p.link.sub.connected',
+  relay: 'p2p.link.sub.relay',
+}
+
+/**
+ * 速率低于这个数就不往条上写。
+ *
+ * control 那条保活心跳常年几百字节/秒，写上去就是一个永远在 0.2K 附近抖的读数——
+ * 既不说明问题，又让整格宽度每 1.5 秒变一次，挤得右边的读数跟着晃。
+ * 有真流量（镜像几百 K、下载几 M）时才值得占这个位置。
+ */
+const RATE_FLOOR = 16 * 1024
+
+/** 同网直连往返常常不到 1ms，取整成 `0ms` 像是没测出来；那种时候直说「不到 1ms」。 */
+function rttText(i: SystemInput, ms: number, full = false): string {
+  if (ms > 0) return i.t(full ? 'p2p.link.rttFull' : 'p2p.link.rtt', { ms })
+  return i.t(full ? 'p2p.link.rttFullSub1' : 'p2p.link.rttSub1')
+}
+
+function subLink(i: SystemInput, labelKey: string, state?: LinkState, path?: string): string {
+  if (!state || state === 'disabled') return ''
+  const val = state === 'connected'
+    ? i.t('p2p.link.sub.directPath', { path: i.t(pathLabelKey(path)) })
+    : i.t(SUBLINK_KEY[state])
+  return `${i.t(labelKey)} ${val}`
 }
 
 export function systemCells(i: SystemInput): SystemCell[] {
@@ -86,6 +122,50 @@ export function systemCells(i: SystemInput): SystemCell[] {
         text: i.hubAlarm || i.t('status.hubOk'),
         detail: i.hubAlarm,
         severity: i.hubAlarm ? 'danger' : 'ok',
+      },
+    )
+  }
+
+  // ── 直连：紧挨着机器与中心，因为它说的正是「你是怎么够到这台机器的」 ──
+  //
+  // 只有**真直连**才上色（绿点）：中转是今天的常态，给它一个常驻黄格子等于
+  // 让整条条子天天有颜色，两天后连真告警也没人看了（§08）。中转与连接中一律走
+  // stale 的视觉语言——有这一格、但此刻没有那条快路。
+  if (i.link && i.link.state !== 'disabled') {
+    const link = i.link
+    const direct = link.state === 'connected'
+    // 条上只写大头那个方向：下载时是下行、上传镜像时是上行，两个数一起写太长
+    const peak = Math.max(link.downBps || 0, link.upBps || 0)
+    push(
+      systemCell('roam.core', 'link', {
+        label: '', priority: 88, tier: 3, render: 'dot',
+        // 点开去 P2P 那一页：开关、STUN、超时都在那儿，是唯一能对这一格做点什么的地方
+        onClick: { kind: 'route', id: '#/settings/node/p2p' },
+      }),
+      {
+        text: [
+          direct
+            ? i.t('p2p.link.direct', { path: i.t(pathLabelKey(link.path)) })
+            : link.state === 'relay' ? i.t('p2p.link.relay') : i.t('p2p.link.connecting'),
+          // 延迟与速率只在直连时说：中转/连接中报这两个数没有意义，
+          // 那时候的往返走的是中心，不是这一格说的那条路。
+          direct && link.rttMs != null ? rttText(i, link.rttMs) : '',
+          direct && peak >= RATE_FLOOR ? i.t('p2p.link.rate', { rate: humanBytes(peak) }) : '',
+        ].filter(Boolean).join(' '),
+        // 条上只有一个方向的峰值；两个方向拆开、镜像/文件各走哪条路（media 与 file 是
+        // 独立的 PC），都放不下，进悬停。
+        detail: [
+          i.t('p2p.link.title'),
+          direct && link.rttMs != null ? rttText(i, link.rttMs, true) : '',
+          direct
+            ? (peak >= RATE_FLOOR
+              ? `${i.t('p2p.link.down', { rate: humanBytes(link.downBps || 0) })} · ${i.t('p2p.link.up', { rate: humanBytes(link.upBps || 0) })}`
+              : i.t('p2p.link.idleRate'))
+            : '',
+          subLink(i, 'p2p.link.media', link.media, link.mediaPath),
+          subLink(i, 'p2p.link.file', link.file, link.filePath),
+        ].filter(Boolean).join(' · '),
+        stale: !direct,
       },
     )
   }
