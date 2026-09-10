@@ -44,6 +44,21 @@ type Web struct {
 	P2PMDNS    bool `yaml:"p2p_mdns"`
 }
 
+// DefaultICEServers 是 p2p_ice_servers 留空时的默认 STUN 列表。
+//
+// 多写几台不是冗余：这些地址是并行查询的，谁先回谁先给出 srflx 候选，一台不可达也只是
+// 少一条候选、不阻塞其余（实测见 docs/design/p2p/stun-servers.md）。国内两台排在前面纯粹
+// 因为快——本机实测 3~10ms，Google 那几台 100~180ms，而我们等的就是第一个 srflx。
+//
+// 都是公共服务，只做 NAT 映射发现、不承载数据；要自建就在配置里覆盖整份列表。
+var DefaultICEServers = []string{
+	"stun:stun.miwifi.com:3478",
+	"stun:stun.chat.bilibili.com:3478",
+	"stun:stun.l.google.com:19302",
+	"stun:stun1.l.google.com:19302",
+	"stun:global.stun.twilio.com:3478",
+}
+
 // Cluster 对应 config.yaml 里的 cluster: 段（横向扩展：标准节点 / 中心）。
 // mode=standard（默认）为现在的单机 Roami，填了 broker 就额外出站注册进云端；
 // mode=cloud 是中心，只做路由 + 注册表 + 控制台，不跑业务。
@@ -155,9 +170,9 @@ func (c *Config) applyDefaults() {
 	if c.Web.LockSecs <= 0 {
 		c.Web.LockSecs = 30
 	}
+	c.Web.P2PICEServers = normalizeICEServers(c.Web.P2PICEServers)
 	if len(c.Web.P2PICEServers) == 0 {
-		// 默认公共 STUN 仅供开发/自测；生产应改为 frps 自建 STUN（见 docs/design/p2p）。
-		c.Web.P2PICEServers = []string{"stun:stun.l.google.com:19302"}
+		c.Web.P2PICEServers = append([]string(nil), DefaultICEServers...)
 	}
 	if c.Cluster.Mode == "" {
 		c.Cluster.Mode = "standard"
@@ -204,7 +219,7 @@ func (c *Config) applyEnv() {
 		c.Web.P2PEnabled = truthy(v)
 	}
 	if v := firstEnv("ROAM_WEB_P2P_ICE_SERVERS", "TTMUX_WEB_P2P_ICE_SERVERS"); v != "" {
-		c.Web.P2PICEServers = splitCSV(v)
+		c.Web.P2PICEServers = normalizeICEServers(splitCSV(v))
 	}
 	if v := firstEnv("ROAM_WEB_P2P_UDP_PORT", "TTMUX_WEB_P2P_UDP_PORT"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
@@ -295,6 +310,33 @@ func truthy(s string) bool {
 		return false
 	}
 	return true
+}
+
+// normalizeICEServers 清理 ICE server 列表：去空白、补 stun: 前缀、按原序去重。
+//
+// 补前缀是因为「stun.miwifi.com:3478」这样漏掉 scheme 的写法太自然了，而 pion 与浏览器
+// 都会把它整条丢掉——一台配了却从不生效的 STUN 比没配更难查。
+func normalizeICEServers(in []string) []string {
+	out := make([]string, 0, len(in))
+	seen := map[string]bool{}
+	for _, u := range in {
+		u = strings.TrimSpace(u)
+		if u == "" {
+			continue
+		}
+		if !strings.Contains(u, ":") {
+			continue // 连主机:端口都不是，不猜
+		}
+		if !strings.HasPrefix(u, "stun:") && !strings.HasPrefix(u, "stuns:") &&
+			!strings.HasPrefix(u, "turn:") && !strings.HasPrefix(u, "turns:") {
+			u = "stun:" + u
+		}
+		if !seen[u] {
+			seen[u] = true
+			out = append(out, u)
+		}
+	}
+	return out
 }
 
 func splitCSV(s string) []string {

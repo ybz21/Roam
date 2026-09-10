@@ -226,6 +226,22 @@ func TestPathFromCands(t *testing.T) {
 	}
 }
 
+// TestRTCConfigurationPerServer 多台 STUN 必须一台一条，不能挤进同一条 ICEServer。
+func TestRTCConfigurationPerServer(t *testing.T) {
+	cfg := rtcConfiguration([]string{"stun:a:3478", "stun:b:3478", "stun:c:3478"})
+	if len(cfg.ICEServers) != 3 {
+		t.Fatalf("三台应得三条 ICEServer，得到 %d 条", len(cfg.ICEServers))
+	}
+	for i, want := range []string{"stun:a:3478", "stun:b:3478", "stun:c:3478"} {
+		if len(cfg.ICEServers[i].URLs) != 1 || cfg.ICEServers[i].URLs[0] != want {
+			t.Errorf("第 %d 条应为 [%s]，得到 %v", i, want, cfg.ICEServers[i].URLs)
+		}
+	}
+	if got := rtcConfiguration(nil); len(got.ICEServers) != 0 {
+		t.Errorf("空列表应得空配置，得到 %v", got.ICEServers)
+	}
+}
+
 // TestWaitGathered 三条路：完成、拿到 srflx 后宽限、一个都没有等满上限。
 func TestWaitGathered(t *testing.T) {
 	oldGrace, oldMax := srflxGraceDur, gatherMaxDur

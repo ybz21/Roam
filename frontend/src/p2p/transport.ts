@@ -14,6 +14,7 @@
 
 import { openSignal } from './signaling'
 import { nodeApi } from '../components/cluster/node-url'
+import { parseStunList, toIceServers } from './ice-servers'
 import type { SignalMsg } from './types'
 import type { P2PPathLabel } from './labels'
 import { getPreferences } from '../preferences'
@@ -162,11 +163,8 @@ async function fetchIce(): Promise<RTCIceServer[] | null> {
     const data = await r.json().catch(() => null)
     const cfg: P2PConfig = data?.data ?? data ?? {}
     // 用户在设置页自定义了 STUN → 用它覆盖服务端默认（仅影响本浏览器侧打洞）。
-    const userStun = getPreferences().p2pStunServers?.trim()
-    if (userStun) {
-      const urls = userStun.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean)
-      if (urls.length) return [{ urls }]
-    }
+    const urls = parseStunList(getPreferences().p2pStunServers)
+    if (urls.length) return toIceServers(urls)
     return Array.isArray(cfg.iceServers) ? cfg.iceServers : []
   } catch {
     return null
