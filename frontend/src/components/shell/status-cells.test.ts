@@ -252,4 +252,27 @@ describe('状态条：P2P 直连格', () => {
     expect(c?.val.detail).toContain('p2p.link.media')
     expect(c?.val.detail).not.toContain('p2p.link.file')
   })
+
+  it('直连时条上带延迟；有真流量才带速率', async () => {
+    const idle = await cells({ state: 'connected', path: 'lan', rttMs: 2, downBps: 400, upBps: 120 })
+    expect(idle?.val.text).toBe('p2p.link.direct p2p.link.rtt')
+    expect(idle?.val.detail).toContain('p2p.link.idleRate')
+
+    const busy = await cells({ state: 'connected', path: 'lan', rttMs: 2, downBps: 3 * 1024 * 1024, upBps: 120 })
+    expect(busy?.val.text).toBe('p2p.link.direct p2p.link.rtt p2p.link.rate')
+    expect(busy?.val.detail).toContain('p2p.link.down')
+    expect(busy?.val.detail).toContain('p2p.link.up')
+  })
+
+  it('局域网往返不到 1ms 时直说「不到 1ms」，不是取整成 0ms', async () => {
+    const c = await cells({ state: 'connected', path: 'lan', rttMs: 0 })
+    expect(c?.val.text).toBe('p2p.link.direct p2p.link.rttSub1')
+  })
+
+  it('中转/连接中不报延迟速率——那时候的往返走的是中心，不是这一格说的路', async () => {
+    const c = await cells({ state: 'relay', rttMs: 90, downBps: 5 * 1024 * 1024 })
+    expect(c?.val.text).toBe('p2p.link.relay')
+    expect(c?.val.detail).not.toContain('p2p.link.rttFull')
+    expect(c?.val.detail).not.toContain('p2p.link.down')
+  })
 })
