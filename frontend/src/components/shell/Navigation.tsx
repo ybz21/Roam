@@ -28,7 +28,7 @@ export type NavGroup = { label: string; items: NavEntry[] }
 
 export function Navigation({
   rail, active, groups, onGo, settings, hubAlarm,
-  linkStatus, node, nodeMenu, onToggleRail, tree, onSearch, searchHint,
+  node, nodeMenu, onToggleRail, tree, onSearch, searchHint,
 }: {
   /** 品牌下面那行搜索：⌘K 面板的可见入口（22 设计 §3.5：顶栏撤了，搬到这） */
   onSearch?: () => void
@@ -42,7 +42,6 @@ export function Navigation({
   onGo: (key: string) => void
   /** 设置：是页面，但摆在底部——它跟「概览/项目」不是一类事（14 §4.4） */
   settings: NavEntry
-  linkStatus: ReactNode
   /** 多机（连了中心）时给：顶部出现机器切换器；单机传 null，那一块整个不渲染 */
   node: { name: string; mark: ReactNode; dot: string; latency: string } | null
   /** 切换器下拉里的机器列表（含中心）；单机时不会用到 */
@@ -115,7 +114,6 @@ export function Navigation({
             </button>
           </Dropdown>
         )}
-        {linkStatus}
         {/* 终端开关不在这儿了：顶栏 Command Center 已经有一枚（还带数量），
             外加 ⌘J。侧栏这枚是同一个动作的第三个入口，占的还是最贵的那一格。 */}
         {/* 设置摆在这儿而不是账户菜单里：它是一整页，且是这列里唯一天天要开的一页——

@@ -221,3 +221,35 @@ describe('状态条：分支名截断', () => {
     expect(git?.val.detail).toContain(long)
   })
 })
+
+// 直连那一格：只有真直连才上色，中转/连接中一律变暗，关了整格不出现。
+// 这三条是它存在的全部意义——一个常驻黄格子会把整条状态条的可信度花掉。
+describe('状态条：P2P 直连格', () => {
+  const cells = async (link: unknown) => {
+    const { systemCells } = await import('./status-system')
+    return systemCells({ t: (k: string) => k, link } as any).find((c) => c.spec.id === 'roam.core/link')
+  }
+
+  it('偏好关着（disabled）不占位', async () => {
+    expect(await cells({ state: 'disabled' })).toBeUndefined()
+    expect(await cells(null)).toBeUndefined()
+  })
+
+  it('直连：绿点 + 路径，不变暗', async () => {
+    const c = await cells({ state: 'connected', path: 'lan' })
+    expect(c?.val.text).toBe('p2p.link.direct')
+    expect(c?.val.stale).toBe(false)
+  })
+
+  it('中转与连接中都变暗（不上色、不钉住）', async () => {
+    expect((await cells({ state: 'relay' }))?.val.stale).toBe(true)
+    expect((await cells({ state: 'connecting' }))?.val.stale).toBe(true)
+    expect((await cells({ state: 'relay' }))?.val.severity).toBeUndefined()
+  })
+
+  it('镜像/文件各自的路子进悬停，空闲的那条不提', async () => {
+    const c = await cells({ state: 'connected', path: 'lan', media: 'relay', file: 'disabled' })
+    expect(c?.val.detail).toContain('p2p.link.media')
+    expect(c?.val.detail).not.toContain('p2p.link.file')
+  })
+})

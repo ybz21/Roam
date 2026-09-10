@@ -64,7 +64,7 @@ import RenameSessionModal from './components/sessions/RenameSessionModal'
 import { TaskComposer } from './components/sessions/TaskComposer'
 import { NewProjectModal } from './components/projects/Projects'
 import { setSessionLabels, sessionLabel, sessionDisplay } from './components/sessions/session-label'
-import LinkStatus from './p2p/LinkStatus'
+import { useLinkStatus } from './p2p/use-link-status'
 import { startControlLink, stopControlLink } from './p2p/transport'
 import FilesPage from './components/files/FilesPage'
 import Login from './components/auth/Login'
@@ -615,6 +615,7 @@ export default function App() {
 
   // 通用传输 Phase 1a：登录后且用户偏好开 P2P → 建会话级常驻 control PC（左边栏全局状态）。
   // 偏好关闭 / 登出即拆链。P2P 是否真正可用由 transport 内部拉 /api/p2p/config 决定。
+  const link = useLinkStatus()
   useEffect(() => {
     if (authed && prefs.p2pEnabled) startControlLink()
     else stopControlLink()
@@ -965,6 +966,7 @@ export default function App() {
     git,
     projectKey: activeProject?.key || '',
     swarms: swarmCount,
+    link,
     t,
   })
   // 插件只能给白名单里的两种动作，给不了任意跳转（20 设计 §05 约束①）
@@ -994,7 +996,6 @@ export default function App() {
           <Navigation
             rail={navRail} active={tab} groups={navGroups} onGo={go}
             settings={{ key: 'settings', label: t('nav.env'), icon: ICONS.settings }}
-            linkStatus={<LinkStatus collapsed={navRail} />}
             nodeMenu={nodeItems}
             onSearch={openPalette}
             searchHint={`${modKeyLabel}K`}

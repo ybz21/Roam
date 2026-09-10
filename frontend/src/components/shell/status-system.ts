@@ -9,6 +9,8 @@
 import { systemCell } from './status-registry'
 import type { CellValue, Severity } from './status-cells'
 import type { SystemCell } from './WorkspaceStatusBar'
+import { pathLabelKey } from '../../p2p/labels'
+import type { LinkState, LinkStatus } from '../../p2p/transport'
 
 export type SystemInput = {
   /** 浏览器与后端连着没有（单机时机器格的状态点看它） */
@@ -33,6 +35,8 @@ export type SystemInput = {
   projectKey: string
   /** 活跃蜂群数（已归档的不算） */
   swarms: number
+  /** P2P 直连链路；偏好关着（state='disabled'）或没有时整格不出现 */
+  link: LinkStatus | null
   t: (key: string, vars?: Record<string, unknown>) => string
 }
 
@@ -49,6 +53,22 @@ const SLOW_MS = 300
 export function shortVersion(v: string): string {
   const bare = v.replace(/^v/, '').replace(/-\d+-g[0-9a-f]+(-dirty)?$/i, '').replace(/-dirty$/i, '')
   return 'v' + bare
+}
+
+/** 子链路（镜像 / 文件）在悬停里的一句话；空闲就不提它。 */
+const SUBLINK_KEY: Record<LinkState, string> = {
+  disabled: 'p2p.link.sub.idle',
+  connecting: 'p2p.link.sub.connecting',
+  connected: 'p2p.link.sub.connected',
+  relay: 'p2p.link.sub.relay',
+}
+
+function subLink(i: SystemInput, labelKey: string, state?: LinkState, path?: string): string {
+  if (!state || state === 'disabled') return ''
+  const val = state === 'connected'
+    ? i.t('p2p.link.sub.directPath', { path: i.t(pathLabelKey(path)) })
+    : i.t(SUBLINK_KEY[state])
+  return `${i.t(labelKey)} ${val}`
 }
 
 export function systemCells(i: SystemInput): SystemCell[] {
@@ -86,6 +106,35 @@ export function systemCells(i: SystemInput): SystemCell[] {
         text: i.hubAlarm || i.t('status.hubOk'),
         detail: i.hubAlarm,
         severity: i.hubAlarm ? 'danger' : 'ok',
+      },
+    )
+  }
+
+  // ── 直连：紧挨着机器与中心，因为它说的正是「你是怎么够到这台机器的」 ──
+  //
+  // 只有**真直连**才上色（绿点）：中转是今天的常态，给它一个常驻黄格子等于
+  // 让整条条子天天有颜色，两天后连真告警也没人看了（§08）。中转与连接中一律走
+  // stale 的视觉语言——有这一格、但此刻没有那条快路。
+  if (i.link && i.link.state !== 'disabled') {
+    const link = i.link
+    const direct = link.state === 'connected'
+    push(
+      systemCell('roam.core', 'link', {
+        label: '', priority: 88, tier: 3, render: 'dot',
+        // 点开去 P2P 那一页：开关、STUN、超时都在那儿，是唯一能对这一格做点什么的地方
+        onClick: { kind: 'route', id: '#/settings/node/p2p' },
+      }),
+      {
+        text: direct
+          ? i.t('p2p.link.direct', { path: i.t(pathLabelKey(link.path)) })
+          : link.state === 'relay' ? i.t('p2p.link.relay') : i.t('p2p.link.connecting'),
+        // 镜像/文件各自可能走另一条路（media 与 file 是独立的 PC），条上放不下，进悬停
+        detail: [
+          i.t('p2p.link.title'),
+          subLink(i, 'p2p.link.media', link.media, link.mediaPath),
+          subLink(i, 'p2p.link.file', link.file, link.filePath),
+        ].filter(Boolean).join(' · '),
+        stale: !direct,
       },
     )
   }
