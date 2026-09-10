@@ -225,3 +225,36 @@ func TestPathFromCands(t *testing.T) {
 		}
 	}
 }
+
+// TestWaitGathered 三条路：完成、拿到 srflx 后宽限、一个都没有等满上限。
+func TestWaitGathered(t *testing.T) {
+	oldGrace, oldMax := srflxGraceDur, gatherMaxDur
+	srflxGraceDur, gatherMaxDur = 30*time.Millisecond, 120*time.Millisecond
+	defer func() { srflxGraceDur, gatherMaxDur = oldGrace, oldMax }()
+
+	elapsed := func(done, srflx chan struct{}) time.Duration {
+		t0 := time.Now()
+		waitGathered(done, srflx)
+		return time.Since(t0)
+	}
+
+	// gathering 完成：立刻返回。
+	done := make(chan struct{})
+	close(done)
+	if d := elapsed(done, make(chan struct{})); d > 20*time.Millisecond {
+		t.Errorf("完成后应立刻返回，等了 %v", d)
+	}
+
+	// 拿到 srflx：只再宽限 srflxGraceDur，不等满上限。
+	srflx := make(chan struct{})
+	close(srflx)
+	d := elapsed(make(chan struct{}), srflx)
+	if d < srflxGraceDur || d > gatherMaxDur {
+		t.Errorf("srflx 后应只宽限 %v，实际 %v", srflxGraceDur, d)
+	}
+
+	// 一个 srflx 都没有：等满上限——那种情况无从判断它是不是马上要来。
+	if d := elapsed(make(chan struct{}), make(chan struct{})); d < gatherMaxDur {
+		t.Errorf("无 srflx 应等满 %v，实际 %v", gatherMaxDur, d)
+	}
+}

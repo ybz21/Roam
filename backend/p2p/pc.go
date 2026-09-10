@@ -13,7 +13,9 @@ package p2p
 import (
 	"encoding/json"
 	"log"
+	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/pion/webrtc/v4"
 )
@@ -25,6 +27,40 @@ type peer struct {
 	pc        *webrtc.PeerConnection
 	closed    int32 // 原子终结标志，幂等 close
 	connected int32 // 原子：已进入 Connected
+	// srflx 在拿到第一个反射候选时关闭（见 waitGathered）。
+	srflx     chan struct{}
+	srflxOnce sync.Once
+}
+
+// noteSrflx 记下「已经有反射候选了」，幂等。
+func (p *peer) noteSrflx() {
+	p.srflxOnce.Do(func() { close(p.srflx) })
+}
+
+// 拿到 srflx 之后再宽限多久 / 一直等不到 srflx 时最多等多久。var 而非 const：单测要调小。
+var (
+	srflxGraceDur = 500 * time.Millisecond
+	gatherMaxDur  = 30 * time.Second
+)
+
+// waitGathered 等候选收集——但不死等「全部完成」。
+//
+// gathering=complete 的语义是「所有 STUN 都答完或超时」，这在实测里要 ~40s（Chrome 侧同理），
+// 而能用的候选 0.2 秒就齐了。整整半分钟的建链等待全花在等那几台不回话的服务器上。
+// 所以改成：拿到第一个反射候选就只再宽限 500ms（给同一批里稍慢的那台留条路），到点就发。
+// 一个 srflx 都没有时才等满上限——那种情况确实无从判断它是不是马上要来。
+func waitGathered(done <-chan struct{}, srflx <-chan struct{}) {
+	select {
+	case <-done:
+		return
+	case <-srflx:
+	case <-time.After(gatherMaxDur):
+		return
+	}
+	select {
+	case <-done:
+	case <-time.After(srflxGraceDur):
+	}
 }
 
 // peerConfig 参数化一条 PC 的信令字段与回调，抹平持久/临时两类的差异。
@@ -67,20 +103,26 @@ func (s *session) newPeer(cfg peerConfig) (*peer, error) {
 	if err != nil {
 		return nil, err
 	}
-	p := &peer{pc: pc}
+	p := &peer{pc: pc, srflx: make(chan struct{})}
 
 	// 非 trickle（P0-2）：本端候选**不再**逐个回传前端——answerOffer 等 gathering 完成后一次性
 	// 把全部候选编进 answer 完整 SDP 发出。这里只保留候选诊断日志（复验 gather 到没到 srflx）。
 	pc.OnICECandidate(func(c *webrtc.ICECandidate) {
-		if !cfg.verboseCand {
-			return
-		}
 		if c == nil {
-			log.Printf("p2p: %s local-cand gathering-complete", cfg.keyLog)
+			// 收集结束：把 srflx 闸也放开，免得 waitGathered 在「一个 srflx 都没有」时白等宽限。
+			p.noteSrflx()
+			if cfg.verboseCand {
+				log.Printf("p2p: %s local-cand gathering-complete", cfg.keyLog)
+			}
 			return
 		}
-		log.Printf("p2p: %s local-cand typ=%s proto=%s addr=%s:%d",
-			cfg.keyLog, c.Typ.String(), c.Protocol.String(), c.Address, c.Port)
+		if c.Typ == webrtc.ICECandidateTypeSrflx {
+			p.noteSrflx()
+		}
+		if cfg.verboseCand {
+			log.Printf("p2p: %s local-cand typ=%s proto=%s addr=%s:%d",
+				cfg.keyLog, c.Typ.String(), c.Protocol.String(), c.Address, c.Port)
+		}
 	})
 
 	pc.OnConnectionStateChange(func(st webrtc.PeerConnectionState) {
@@ -134,9 +176,9 @@ func (s *session) answerOffer(p *peer, cfg peerConfig, offerSDP string) error {
 		log.Printf("p2p: %s SetLocalDescription: %v", cfg.keyLog, err)
 		return err
 	}
-	// 等 ICE gathering 完成，让 LocalDescription 携带全部候选（含 srflx）后再发。PC 关闭时 promise
-	// 也会 resolve，此时 LocalDescription 仍可用（含已 gather 的候选），不阻塞终结。
-	<-gatherDone
+	// 等候选，但不死等 gathering=complete（见 waitGathered）。PC 关闭时 promise 也会 resolve，
+	// 此时 LocalDescription 仍可用（含已 gather 的候选），不阻塞终结。
+	waitGathered(gatherDone, p.srflx)
 	sdp := ans.SDP
 	if ld := p.pc.LocalDescription(); ld != nil {
 		sdp = ld.SDP
