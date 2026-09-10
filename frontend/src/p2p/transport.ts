@@ -22,30 +22,50 @@ import { getPreferences } from '../preferences'
 const P2P_DEBUG = import.meta.env.DEV
 function dlog(...args: unknown[]) { if (P2P_DEBUG) console.log(...args) }
 
-// 非 trickle（P0-2）：ICE gathering 完成才发 offer/answer 完整 SDP。等 iceGatheringState==='complete'，
-// 或到 gather 上限就用当前 pc.localDescription 兜底发出。
-// gather 上限可配（设置页 p2pGatherTimeoutSec，默认 30s）：STUN 正常时 gathering 1–2s 就 complete、
-// 立刻发（LAN/快网不受影响）；只有慢网（如手机蜂窝 srflx 迟迟不来）才等满。太短会在 srflx 还没
-// gather 出来时就发 SDP → srflx 丢失 → 跨网只能中转。connect 计时器已设为 gather+connect，不会误判。
+// 非 trickle（P0-2）：一次性发含全部候选的完整 SDP，不逐个 trickle。
+//
+// 但**不等 `iceGatheringState==='complete'`**：那个状态的语义是「所有 STUN 都答完或超时」，
+// 实测 Chrome 要 ~40s（被 gather 上限截成 30s），而能用的候选 0.2 秒就齐了——整整半分钟
+// 的建链等待，全花在等那几台不回话的服务器上。
+//
+// 改成：**拿到第一个 srflx 就只再宽限 500ms** 发出去。宽限是给同一批里稍慢的那台留的：
+// 几台 STUN 并行查询，最快的那台先回，慢一点的通常也在几十毫秒内到，而它们报的多半是
+// 同一个公网地址（浏览器自己去重）。一个 srflx 都没有时才等满上限——那种情况确实无从
+// 判断它是不是马上要来（比如手机蜂窝，srflx 迟迟不来；太早发 SDP 会丢掉 srflx → 只能中转）。
+const SRFLX_GRACE_MS = 500
 const DEFAULT_GATHER_TIMEOUT_MS = 30_000
 function gatherTimeoutMs() {
   const s = getPreferences().p2pGatherTimeoutSec
   return typeof s === 'number' && s >= 3 && s <= 300 ? s * 1000 : DEFAULT_GATHER_TIMEOUT_MS
 }
 // exported for unit test（非产品 API）；timeoutMs 缺省用 gatherTimeoutMs()（设置页可配）。
-export function waitForIceGathering(peer: RTCPeerConnection, timeoutMs = gatherTimeoutMs()): Promise<void> {
+export function waitForIceGathering(
+  peer: RTCPeerConnection,
+  timeoutMs = gatherTimeoutMs(),
+  graceMs = SRFLX_GRACE_MS,
+): Promise<void> {
   if (peer.iceGatheringState === 'complete') return Promise.resolve()
   return new Promise((resolve) => {
     let done = false
+    let graceTimer: ReturnType<typeof setTimeout> | undefined
     const finish = () => {
       if (done) return
       done = true
       peer.removeEventListener('icegatheringstatechange', onChange)
+      peer.removeEventListener('icecandidate', onCand)
       clearTimeout(timer)
+      clearTimeout(graceTimer)
       resolve()
     }
     const onChange = () => { if (peer.iceGatheringState === 'complete') finish() }
+    // 第一个反射候选到手就起宽限；后面再来的 srflx 不重置它，否则一台慢服务器就能把
+    // 宽限一路往后推，又变回死等。
+    const onCand = (e: RTCPeerConnectionIceEvent) => {
+      if (graceTimer || e.candidate?.type !== 'srflx') return
+      graceTimer = setTimeout(finish, graceMs)
+    }
     peer.addEventListener('icegatheringstatechange', onChange)
+    peer.addEventListener('icecandidate', onCand)
     // 上限兜底：超时用已 gather 的候选（当前 localDescription）发出，不无限等。
     const timer = setTimeout(finish, timeoutMs)
   })
