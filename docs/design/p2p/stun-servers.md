@@ -16,15 +16,16 @@ node scripts/dev/p2p/stun-probe.mjs stun:自建:3478
 三种配置，同一台机器、同一个 Chrome 实测（`RTCPeerConnection` + `createDataChannel`，
 记录首个 `typ srflx` 的时刻与 `iceGatheringState==='complete'` 的时刻）：
 
-| 配置 | 候选数 | 首个 srflx | gathering=complete |
+| 配置 | 候选数 | 首个 srflx（三轮） | gathering=complete |
 |---|---|---|---|
-| 只有 `stun.l.google.com` | 2 | **197ms** | 39890ms |
-| 默认五台 | 2 | **11ms** | 39886ms |
-| 默认五台 + 一台死的（`stun.qq.com`） | 2 | **15ms** | 39885ms |
+| 只有 `stun.l.google.com` | 2 | **192 / 56 / 159 ms** | 39.9s |
+| 默认五台 | 2 | **14 / 10 / 9 ms** | 39.9s |
+| 默认五台 + 一台死的（`stun.qq.com`） | 2 | **10 / 16 / 7 ms** | 39.9s |
 
 三行都要读：
 
-- **首个 srflx 从 197ms 降到 11ms**——快的那台（小米）就在国内，Google 要绕出去。
+- **首个 srflx 快一个数量级**（三轮 56–192ms → 7–16ms）——快的那台（小米）就在国内，
+  Google 要绕出去。单轮波动不小，所以上表列了三轮的原始值而不是一个平均数。
 - **候选数没变**：几台 STUN 报的是同一个公网地址，浏览器自己去重。多台不会撑大 SDP。
 - **掺一台死的没有代价**：`complete` 一样落在 ~39.9s，那是 Chrome 自己的收集上限，与列表
   长度无关。死的那台只是没贡献候选，它不会拖住别人。
@@ -92,7 +93,37 @@ web:
 浏览器侧还可以在**设置 › P2P** 里覆盖（偏好 `p2pStunServers`，只影响本浏览器打洞，不改
 服务端）。下拉里列的是上表「设置页可选」那几台，也能直接粘贴自建地址。
 
-## 4. 都是公共服务，这有没有问题
+## 4. 两把尺子：命令行量的和设置页量的不是一个数
+
+- `scripts/dev/p2p/stun-probe.mjs` 量的是**裸 UDP 往返**：一个 Binding Request 出去、
+  响应回来。这是网络本身的时延。
+- 设置页那个「检测」按钮量的是**浏览器拿到第一个 srflx 要多久**：包含建 `RTCPeerConnection`、
+  起收集、发请求、解析响应。同一台 STUN，这个数大概是前者的三倍
+  （小米 9ms → 32ms，Google 159ms → 169ms）。
+
+**下拉里那个「参考 xxms」用的是后者**，因为它要和你点「检测」量出来的数放在同一列比。
+混着放会让人以为自己的网络慢了三倍。浏览器口径的出厂参考值（开发机五轮中位数）：
+
+| STUN | 参考 |
+|---|---|
+| `stun.miwifi.com` | 32ms |
+| `stun.chat.bilibili.com` | 50ms |
+| `global.stun.twilio.com` | 77ms |
+| `stun.relay.metered.ca` | 102ms |
+| `stun.nextcloud.com` | 162ms |
+| `stun.hot-chilli.net` | 165ms |
+| `stun.l.google.com` | 169ms |
+| `stun1.l.google.com` | 175ms |
+| `stun.cloudflare.com` | 202ms |
+
+「优选」= 检测一遍，把通的里面最快的**四台**写进偏好。不是只留最快那一台（它一挂就没有
+候选了），也不是全都要（第五台之后对「第一个 srflx 什么时候到」已经没有贡献）。检测结果
+存在 `localStorage['roam.stunProbe']`，换页回来还看得见，不必为一个只读的数字再等五秒。
+
+节点那一侧（pion）的质量这套 UI 量不到——它量的是**你这台浏览器**到各 STUN 的路。
+节点侧要量就在那台机器上跑命令行探针。
+
+## 5. 都是公共服务，这有没有问题
 
 STUN 只做一件事：告诉你「我从外面看到你的地址是什么」。**不承载任何数据字节**，也看不到
 数据。它能知道的是「某个 IP 在某时刻问过一次」——和你访问任何一个网站暴露的一样多。

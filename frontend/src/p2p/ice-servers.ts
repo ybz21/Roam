@@ -27,16 +27,22 @@ export function parseStunList(text: string | undefined): string[] {
   return out
 }
 
-// 设置页下拉的候选。都是公共服务，只做 NAT 映射发现、不承载数据字节。
-// 前两台国内直连快（本机实测 3~10ms，Google 那几台 100~180ms），排前面。
-export const STUN_PRESETS: { value: string; brand: string }[] = [
-  { value: 'stun:stun.miwifi.com:3478', brand: 'Xiaomi' },
-  { value: 'stun:stun.chat.bilibili.com:3478', brand: 'Bilibili' },
-  { value: 'stun:stun.l.google.com:19302', brand: 'Google' },
-  { value: 'stun:stun1.l.google.com:19302', brand: 'Google' },
-  { value: 'stun:global.stun.twilio.com:3478', brand: 'Twilio' },
-  { value: 'stun:stun.cloudflare.com:3478', brand: 'Cloudflare' },
-  { value: 'stun:stun.relay.metered.ca:80', brand: 'Metered' },
-  { value: 'stun:stun.nextcloud.com:3478', brand: 'Nextcloud' },
-  { value: 'stun:stun.hot-chilli.net:3478', brand: 'Hot-Chilli' },
+// 设置页下拉的候选，随身带着一个参考时延。都是公共服务，只做 NAT 映射发现、不承载数据字节。
+//
+// refMs = 浏览器口径的「第一个 srflx 多久到」（2026-09-10 开发机上五轮取中位数，
+// 详见 docs/design/p2p/stun-servers.md）。刻意和设置页「检测」按钮量的是同一件事，
+// 两个数才好放在同一列里比：命令行那份裸 UDP 往返只有它的三分之一，混着看会以为
+// 自己的网络慢了三倍。
+//
+// 它只是**出厂参考**：你那儿的网络不一样，数也会不一样——量过就盖掉。前两台国内直连快。
+export const STUN_PRESETS: { value: string; brand: string; refMs: number }[] = [
+  { value: 'stun:stun.miwifi.com:3478', brand: 'Xiaomi', refMs: 32 },
+  { value: 'stun:stun.chat.bilibili.com:3478', brand: 'Bilibili', refMs: 50 },
+  { value: 'stun:global.stun.twilio.com:3478', brand: 'Twilio', refMs: 77 },
+  { value: 'stun:stun.relay.metered.ca:80', brand: 'Metered', refMs: 102 },
+  { value: 'stun:stun.nextcloud.com:3478', brand: 'Nextcloud', refMs: 162 },
+  { value: 'stun:stun.hot-chilli.net:3478', brand: 'Hot-Chilli', refMs: 165 },
+  { value: 'stun:stun.l.google.com:19302', brand: 'Google', refMs: 169 },
+  { value: 'stun:stun1.l.google.com:19302', brand: 'Google', refMs: 175 },
+  { value: 'stun:stun.cloudflare.com:3478', brand: 'Cloudflare', refMs: 202 },
 ]
