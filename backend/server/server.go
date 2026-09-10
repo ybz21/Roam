@@ -136,9 +136,12 @@ func New(cfg Config) *gin.Engine {
 		p2p.RegisterPhoneHandler(phone.PhoneDCHandler)
 		g.GET("/p2p/signal", p2pHub.SignalHandler)
 		g.GET("/p2p/config", func(c *gin.Context) {
-			c.JSON(http.StatusOK, gin.H{
-				"iceServers": []gin.H{{"urls": cfg.P2PICEServers}},
-			})
+			// 一台一条，与后端 rtcConfiguration 同构（同一条里的 URL 共享凭据，见 p2p/ice.go）。
+			servers := make([]gin.H, 0, len(cfg.P2PICEServers))
+			for _, u := range cfg.P2PICEServers {
+				servers = append(servers, gin.H{"urls": u})
+			}
+			c.JSON(http.StatusOK, gin.H{"iceServers": servers})
 		})
 		// M2 埋点接收端：前端一次传输结束（成功/回退）后上报 goodput 等指标。
 		g.POST("/p2p/metric", p2pHub.MetricHandler)

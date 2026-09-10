@@ -24,11 +24,12 @@ web:
 
   # P2P 直连（浏览器 ↔ 后端 WebRTC DataChannel，M0a spike）。
   # p2p_enabled 为灰度总开关（默认关）；开启后 /api/p2p/signal 才接受升级。
-  # p2p_ice_servers 为 STUN/TURN 列表；下面是公共 STUN，仅供开发自测，
-  # 生产应改为 frps 自建 STUN（见 docs/design/p2p）。
+  # p2p_ice_servers 是 STUN/TURN 列表，可以写多台：它们是并行查询的，谁先回谁先给出
+  # 候选，一台不可达只是少一条候选、不拖慢其余（实测 docs/design/p2p/stun-servers.md）。
+  # 整份留空 = 用内置默认（国内两台在前 + Google 两台 + Twilio）；写了就完全以这里为准。
+  # 漏掉 stun: 前缀会自动补上。自建 STUN（frps 上 coturn --stun-only）也写进这里。
   p2p_enabled: false
-  p2p_ice_servers:
-    - stun:stun.l.google.com:19302
+  p2p_ice_servers: []
   # M0b 跨网穿透杠杆（默认值等价 M0a 行为）：
   # p2p_udp_port：固定 ICE 本地 UDP 端口 + UDPMux，便于手动端口转发/配合 UPnP 端口一致；
   #   0=随机（走 M0a 路径，不设 mux）。

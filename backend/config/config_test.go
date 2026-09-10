@@ -84,3 +84,45 @@ func TestEnvOverride(t *testing.T) {
 		t.Errorf("legacy TTMUX_WEB_LOCK_AFTER override failed: %d", c.Web.LockAfter)
 	}
 }
+
+// ICE 列表：留空落到默认多台；写了就以写的为准；顺序、去重、补前缀都要对。
+func TestICEServers(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("ROAM_WEB_P2P_ICE_SERVERS", "")
+	dir := t.TempDir()
+
+	c, err := Load(filepath.Join(dir, "empty.yaml"))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(c.Web.P2PICEServers) < 2 {
+		t.Errorf("留空应落到默认多台，得到 %v", c.Web.P2PICEServers)
+	}
+
+	path := filepath.Join(dir, "custom.yaml")
+	yaml := "web:\n  p2p_ice_servers:\n    - stun.example.com:3478\n    - \"  stun:a.example.com:3478  \"\n    - stun:a.example.com:3478\n    - \"\"\n    - nonsense\n"
+	if err := os.WriteFile(path, []byte(yaml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err = Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	want := []string{"stun:stun.example.com:3478", "stun:a.example.com:3478"}
+	if strings.Join(c.Web.P2PICEServers, ",") != strings.Join(want, ",") {
+		t.Errorf("规整后应为 %v，得到 %v", want, c.Web.P2PICEServers)
+	}
+}
+
+// 环境变量 CSV 同样支持多台（部署脚本/容器只有环境变量可用）。
+func TestICEServersFromEnv(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("ROAM_WEB_P2P_ICE_SERVERS", "stun:one:3478, two:3478")
+	c, err := Load(filepath.Join(t.TempDir(), "config.yaml"))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if strings.Join(c.Web.P2PICEServers, ",") != "stun:one:3478,stun:two:3478" {
+		t.Errorf("环境变量多台解析失败：%v", c.Web.P2PICEServers)
+	}
+}

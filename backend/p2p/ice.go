@@ -117,13 +117,16 @@ func hasGlobalIPv6() bool {
 
 // rtcConfiguration 从配置的 ICE server 列表构造 webrtc.Configuration。
 // M0a：STUN-only，不建 TURN（无 Username/Credential）。
+//
+// 一台一条 ICEServer，不把多个 URL 塞进同一条：同一条里的 URL 共享凭据，将来混进 TURN
+// 就会连坐——一条 URL 校验失败，pion 把整条丢掉，一起配的 STUN 跟着失效。
 func rtcConfiguration(iceServers []string) webrtc.Configuration {
 	if len(iceServers) == 0 {
 		return webrtc.Configuration{}
 	}
-	return webrtc.Configuration{
-		ICEServers: []webrtc.ICEServer{
-			{URLs: iceServers},
-		},
+	servers := make([]webrtc.ICEServer, 0, len(iceServers))
+	for _, u := range iceServers {
+		servers = append(servers, webrtc.ICEServer{URLs: []string{u}})
 	}
+	return webrtc.Configuration{ICEServers: servers}
 }
