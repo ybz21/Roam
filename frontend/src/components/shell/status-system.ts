@@ -93,21 +93,60 @@ export function systemCells(i: SystemInput): SystemCell[] {
 
   // ── 机器：这条的锚，永远在最左、永远不被折叠掉 ──
   // 它同时接管了顶栏那颗「在线/离线」小点：单机看浏览器连没连上，多机看这台机器。
+  //
+  // 直连也并进这一格：两格说的本来就是同一件事——「你是怎么够到这台机器的」。
+  // 分成两格时，左边写「当前设备 在线」、右边写「直连 · 局域网 12ms」，中间还夹着分隔线，
+  // 像两件事；而且直连那格是档 3，窄屏一挤就没了，恰恰是想看的时候看不到。
+  // 并进档 1 之后它永不消失，读起来也是一句话：这台机器、怎么连的、多快。
+  const link = i.link && i.link.state !== 'disabled' ? i.link : null
+  const direct = link?.state === 'connected'
+  // 条上只写大头那个方向：下载时是下行、上传镜像时是上行，两个数一起写太长
+  const peak = Math.max(link?.downBps || 0, link?.upBps || 0)
   const machineSeverity: Severity = i.node
     ? (!i.node.online ? 'danger' : i.node.latencyMs > SLOW_MS ? 'warn' : 'ok')
     : (i.online ? 'ok' : 'danger')
   const machineText = i.node
     ? (i.node.online ? i.t('node.latencyMs', { ms: i.node.latencyMs }) : i.t('node.offline'))
     : (i.online ? i.t('workspace.online') : i.t('workspace.offline'))
+  // 怎么连的：直连报路径，中转/连接中各报各的，偏好关着就不提这回事。
+  const linkPhrase = !link ? ''
+    : direct ? i.t('p2p.link.direct', { path: i.t(pathLabelKey(link.path)) })
+      : link.state === 'relay' ? i.t('p2p.link.relay') : i.t('p2p.link.connecting')
   push(
     systemCell('roam.core', 'machine', {
-      label: i.node?.name || i.t('nav.thisDevice'),
-      // 延迟预留 5ch：6ms → 12ms 多一位数，右边所有格会跟着平移一次
-      priority: 100, tier: 1, render: 'dot', unit: 'ms',
-      // 多机时点它去中心页（机器都在那儿）；单机没有可去的地方，就不是按钮
-      onClick: i.clustered ? { kind: 'route', id: '#/hub' } : undefined,
+      // 机器名与「怎么连的」都进 label（这两截很少变），变的那两个数留在 value 里——
+      // value 有固定预留宽度，延迟涨一位数、速率来了又走都不会推着右边的格子跑。
+      label: [i.node?.name || i.t('nav.thisDevice'), linkPhrase].filter(Boolean).join(' '),
+      priority: 100, tier: 1, render: 'dot',
+      // 直连时报的是 P2P 往返（那才是这条路的延迟），预留 13ch 给「延迟 + 速率」；
+      // 其余情况报机器延迟，5ch 就够。
+      unit: direct ? 'latencyRate' : 'ms',
+      // 多机点它去中心页（机器都在那儿）；单机而直连在跑时，唯一能对它做点什么的地方是设置。
+      onClick: i.clustered ? { kind: 'route', id: '#/hub' }
+        : link ? { kind: 'route', id: '#/settings/node/p2p' } : undefined,
     }),
-    { text: machineText, severity: machineSeverity },
+    {
+      // 直连成立时，延迟说的是那条快路的往返；否则还是机器那句（在线 / 6ms / 离线）。
+      text: direct
+        ? [link.rttMs != null ? rttText(i, link.rttMs) : '', peak >= RATE_FLOOR ? i.t('p2p.link.rate', { rate: humanBytes(peak) }) : ''].filter(Boolean).join(' ')
+        : machineText,
+      // 悬停里把两件事都摊开：机器那边的延迟、两个方向的速率、镜像与文件各走哪条路。
+      detail: [
+        direct && i.node?.online ? i.t('node.latencyMs', { ms: i.node.latencyMs }) : '',
+        link ? i.t('p2p.link.title') : '',
+        direct && link.rttMs != null ? rttText(i, link.rttMs, true) : '',
+        direct
+          ? (peak >= RATE_FLOOR
+            ? `${i.t('p2p.link.down', { rate: humanBytes(link.downBps || 0) })} · ${i.t('p2p.link.up', { rate: humanBytes(link.upBps || 0) })}`
+            : i.t('p2p.link.idleRate'))
+          : '',
+        link ? subLink(i, 'p2p.link.media', link.media, link.mediaPath) : '',
+        link ? subLink(i, 'p2p.link.file', link.file, link.filePath) : '',
+      ].filter(Boolean).join(' · ') || undefined,
+      severity: machineSeverity,
+      // 直连没成立时整格不变暗：这一格首先是「机器在不在」，那件事一直成立。
+      // 变暗留给「有这一格、但此刻没有那条快路」——而机器格永远有话说。
+    },
   )
 
   // ── 中心：只在接入中心时出现 ──
@@ -123,54 +162,6 @@ export function systemCells(i: SystemInput): SystemCell[] {
         text: i.hubAlarm || i.t('status.hubOk'),
         detail: i.hubAlarm,
         severity: i.hubAlarm ? 'danger' : 'ok',
-      },
-    )
-  }
-
-  // ── 直连：紧挨着机器与中心，因为它说的正是「你是怎么够到这台机器的」 ──
-  //
-  // 只有**真直连**才上色（绿点）：中转是今天的常态，给它一个常驻黄格子等于
-  // 让整条条子天天有颜色，两天后连真告警也没人看了（§08）。中转与连接中一律走
-  // stale 的视觉语言——有这一格、但此刻没有那条快路。
-  if (i.link && i.link.state !== 'disabled') {
-    const link = i.link
-    const direct = link.state === 'connected'
-    // 条上只写大头那个方向：下载时是下行、上传镜像时是上行，两个数一起写太长
-    const peak = Math.max(link.downBps || 0, link.upBps || 0)
-    push(
-      systemCell('roam.core', 'link', {
-        // 路径进 label、两个数进 vl：vl 有固定预留宽度（latencyRate），
-        // 于是延迟涨一位数、速率来了又走，都不再推着右边的格子跑。
-        label: direct
-          ? i.t('p2p.link.direct', { path: i.t(pathLabelKey(link.path)) })
-          : link.state === 'relay' ? i.t('p2p.link.relay') : i.t('p2p.link.connecting'),
-        // 只有直连才有数要报，也只有那时才占那 13ch 预留
-        unit: direct ? 'latencyRate' : undefined,
-        priority: 88, tier: 3, render: 'dot',
-        // 点开去 P2P 那一页：开关、STUN、超时都在那儿，是唯一能对这一格做点什么的地方
-        onClick: { kind: 'route', id: '#/settings/node/p2p' },
-      }),
-      {
-        // 延迟与速率只在直连时说：中转/连接中报这两个数没有意义，
-        // 那时候的往返走的是中心，不是这一格说的那条路。
-        text: [
-          direct && link.rttMs != null ? rttText(i, link.rttMs) : '',
-          direct && peak >= RATE_FLOOR ? i.t('p2p.link.rate', { rate: humanBytes(peak) }) : '',
-        ].filter(Boolean).join(' '),
-        // 条上只有一个方向的峰值；两个方向拆开、镜像/文件各走哪条路（media 与 file 是
-        // 独立的 PC），都放不下，进悬停。
-        detail: [
-          i.t('p2p.link.title'),
-          direct && link.rttMs != null ? rttText(i, link.rttMs, true) : '',
-          direct
-            ? (peak >= RATE_FLOOR
-              ? `${i.t('p2p.link.down', { rate: humanBytes(link.downBps || 0) })} · ${i.t('p2p.link.up', { rate: humanBytes(link.upBps || 0) })}`
-              : i.t('p2p.link.idleRate'))
-            : '',
-          subLink(i, 'p2p.link.media', link.media, link.mediaPath),
-          subLink(i, 'p2p.link.file', link.file, link.filePath),
-        ].filter(Boolean).join(' · '),
-        stale: !direct,
       },
     )
   }
