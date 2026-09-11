@@ -7,6 +7,8 @@ import { ThemeProvider } from './theme'
 import { I18nProvider } from './i18n'
 import { spike, verify } from './p2p/download'
 import { roamP2PEcho } from './p2p/transport'
+import { readFileRange } from './p2p/file-bytes'
+import { wireFileBytesToServiceWorker } from './p2p/file-bytes-sw'
 import './index.css'
 
 // [临时/仅开发] P2P 直连的控制台自测入口（不接产品 UI，避免触发 i18n 规范）：
@@ -20,12 +22,15 @@ if (import.meta.env.DEV) {
   ;(window as any).roamP2PSpike = spike
   ;(window as any).roamP2PVerify = verify
   ;(window as any).roamP2PEcho = roamP2PEcho
+  ;(window as any).roamReadRange = readFileRange
 }
 
 // 注册 service worker：满足 PWA「添加到桌面」可安装条件 + 离线打开应用外壳。
 // 仅在安全上下文(https / localhost)注册；/api 与 WebSocket 不被其拦截（见 public/sw.js）。
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}) })
+  // SW 拦到 /api/file/raw 会回头问页面要字节（图片/视频/PDF 走直连，见 p2p/file-bytes-sw.ts）
+  wireFileBytesToServiceWorker()
 }
 
 // 安卓 Chrome 软键盘默认会压缩布局视口（把界面挤一下）。这里让虚拟键盘「悬浮覆盖」内容，

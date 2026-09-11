@@ -36,6 +36,9 @@ type dcHandler func(dc *webrtc.DataChannel)
 //     RegisterPhoneHandler 注入，避免 p2p↔phone 循环 import。
 var linkHandlers = map[string]dcHandler{
 	"echo": serveEcho,
+	// "bytes"：浏览器要某个文件的某一段（图片/视频/PDF 的 Range 请求，见 bytes.go）。
+	// 开在常驻 PC 上——拖一次进度条就是一次新请求，不能每次重新打洞。
+	"bytes": serveBytes,
 }
 
 // RegisterScreencastHandler 注入浏览器镜像的 DataChannel handler（label 前缀 "screencast"）。
