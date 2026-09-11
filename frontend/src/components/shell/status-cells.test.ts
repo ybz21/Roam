@@ -134,15 +134,15 @@ describe('窄窗折叠', () => {
     expect(kept).toContain('hm/net')
     expect(kept).not.toContain('git/branch')
   })
-  it('挤不下时告警格提到机器格右边', () => {
+  it('告警格就地上色，不挪位 —— 宽屏窄屏都在同一个位置', () => {
     const cs = bar().map((c) => (c.id === 'hm/disk' ? { ...c, severity: 'danger' as Severity } : c))
-    const kept = ids(pickCells(cs, 300))
-    expect(kept[0]).toBe('core/machine')
-    expect(kept[1]).toBe('hm/disk')
-  })
-  it('宽屏里不挪位 —— 挪位会让格子在眼皮底下跑', () => {
-    const cs = bar().map((c) => (c.id === 'hm/disk' ? { ...c, severity: 'danger' as Severity } : c))
-    expect(ids(pickCells(cs, 2000))[1]).toBe('git/branch')
+    const wide = ids(pickCells(cs, 2000))
+    const tight = ids(pickCells(cs, 300))
+    expect(wide[1]).toBe('git/branch')
+    // 挤到只剩几格时它仍在原来的相对位置，不会瞬移到机器格右边：
+    // 触发条件一旦挂在「这一帧有没有格被丢掉」上，读数一变就来回跳。
+    expect(tight.indexOf('hm/disk')).toBe(tight.length - 1)
+    expect(tight[0]).toBe('core/machine')
   })
   it('同 priority 按 id 字典序，装插件的顺序不影响排布', () => {
     const a = cell({ id: 'zzz/x', priority: 50, width: 50 })
@@ -237,7 +237,7 @@ describe('状态条：P2P 直连格', () => {
 
   it('直连：绿点 + 路径，不变暗', async () => {
     const c = await cells({ state: 'connected', path: 'lan' })
-    expect(c?.val.text).toBe('p2p.link.direct')
+    expect(c?.spec.label).toBe('p2p.link.direct')
     expect(c?.val.stale).toBe(false)
   })
 
@@ -255,23 +255,25 @@ describe('状态条：P2P 直连格', () => {
 
   it('直连时条上带延迟；有真流量才带速率', async () => {
     const idle = await cells({ state: 'connected', path: 'lan', rttMs: 2, downBps: 400, upBps: 120 })
-    expect(idle?.val.text).toBe('p2p.link.direct p2p.link.rtt')
+    expect(idle?.val.text).toBe('p2p.link.rtt')
     expect(idle?.val.detail).toContain('p2p.link.idleRate')
 
     const busy = await cells({ state: 'connected', path: 'lan', rttMs: 2, downBps: 3 * 1024 * 1024, upBps: 120 })
-    expect(busy?.val.text).toBe('p2p.link.direct p2p.link.rtt p2p.link.rate')
+    expect(busy?.val.text).toBe('p2p.link.rtt p2p.link.rate')
     expect(busy?.val.detail).toContain('p2p.link.down')
     expect(busy?.val.detail).toContain('p2p.link.up')
   })
 
   it('局域网往返不到 1ms 时直说「不到 1ms」，不是取整成 0ms', async () => {
     const c = await cells({ state: 'connected', path: 'lan', rttMs: 0 })
-    expect(c?.val.text).toBe('p2p.link.direct p2p.link.rttSub1')
+    expect(c?.val.text).toBe('p2p.link.rttSub1')
   })
 
   it('中转/连接中不报延迟速率——那时候的往返走的是中心，不是这一格说的路', async () => {
     const c = await cells({ state: 'relay', rttMs: 90, downBps: 5 * 1024 * 1024 })
-    expect(c?.val.text).toBe('p2p.link.relay')
+    expect(c?.spec.label).toBe('p2p.link.relay')
+    expect(c?.val.text).toBe('')          // 空串 = 没数可报；不是 '--'（那是取不到）
+    expect(c?.spec.unit).toBeUndefined()  // 也不占那 13ch 预留
     expect(c?.val.detail).not.toContain('p2p.link.rttFull')
     expect(c?.val.detail).not.toContain('p2p.link.down')
   })
