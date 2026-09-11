@@ -224,57 +224,67 @@ describe('状态条：分支名截断', () => {
 
 // 直连那一格：只有真直连才上色，中转/连接中一律变暗，关了整格不出现。
 // 这三条是它存在的全部意义——一个常驻黄格子会把整条状态条的可信度花掉。
-describe('状态条：P2P 直连格', () => {
-  const cells = async (link: unknown) => {
+describe('状态条：机器格（直连并进来之后）', () => {
+  const machine = async (input: Record<string, unknown>) => {
     const { systemCells } = await import('./status-system')
-    return systemCells({ t: (k: string) => k, link } as any).find((c) => c.spec.id === 'roam.core/link')
+    return systemCells({ t: (k: string) => k, online: true, ...input } as any).find((c) => c.spec.id === 'roam.core/machine')
   }
 
-  it('偏好关着（disabled）不占位', async () => {
-    expect(await cells({ state: 'disabled' })).toBeUndefined()
-    expect(await cells(null)).toBeUndefined()
+  it('偏好关着：还是原来那句「在线」，不提直连这回事', async () => {
+    const c = await machine({ link: { state: 'disabled' } })
+    expect(c?.spec.label).toBe('nav.thisDevice')
+    expect(c?.val.text).toBe('workspace.online')
+    expect(c?.spec.unit).toBe('ms')
   })
 
-  it('直连：绿点 + 路径，不变暗', async () => {
-    const c = await cells({ state: 'connected', path: 'lan' })
-    expect(c?.spec.label).toBe('p2p.link.direct')
-    expect(c?.val.stale).toBe(false)
+  it('直连：机器名和路径都进 label，延迟进 value', async () => {
+    const c = await machine({ link: { state: 'connected', path: 'lan', rttMs: 12 } })
+    expect(c?.spec.label).toBe('nav.thisDevice p2p.link.direct')
+    expect(c?.val.text).toBe('p2p.link.rtt')
+    expect(c?.spec.unit).toBe('latencyRate') // 延迟+速率那 13ch 预留，免得读数一变就推右边的格
   })
 
-  it('中转与连接中都变暗（不上色、不钉住）', async () => {
-    expect((await cells({ state: 'relay' }))?.val.stale).toBe(true)
-    expect((await cells({ state: 'connecting' }))?.val.stale).toBe(true)
-    expect((await cells({ state: 'relay' }))?.val.severity).toBeUndefined()
+  it('有真流量才带速率；心跳那点量不写', async () => {
+    const idle = await machine({ link: { state: 'connected', path: 'lan', rttMs: 1, downBps: 400 } })
+    expect(idle?.val.text).toBe('p2p.link.rtt')
+    const busy = await machine({ link: { state: 'connected', path: 'lan', rttMs: 1, downBps: 3 * 1024 * 1024 } })
+    expect(busy?.val.text).toBe('p2p.link.rtt p2p.link.rate')
+  })
+
+  it('中转/连接中：label 说明走的是哪条路，value 还是机器那句', async () => {
+    const relay = await machine({ link: { state: 'relay' } })
+    expect(relay?.spec.label).toBe('nav.thisDevice p2p.link.relay')
+    expect(relay?.val.text).toBe('workspace.online')
+    const conn = await machine({ link: { state: 'connecting' } })
+    expect(conn?.spec.label).toBe('nav.thisDevice p2p.link.connecting')
+  })
+
+  it('机器离线是红点 —— 直连没成立不算故障，机器没了才算', async () => {
+    const off = await machine({ online: false, link: { state: 'relay' } })
+    expect(off?.val.severity).toBe('danger')
+    const direct = await machine({ link: { state: 'connected', path: 'lan' } })
+    expect(direct?.val.severity).toBe('ok')
+    // 直连没成立时整格不变暗：这一格首先是「机器在不在」，那件事一直成立
+    expect((await machine({ link: { state: 'relay' } }))?.val.stale).toBeUndefined()
   })
 
   it('镜像/文件各自的路子进悬停，空闲的那条不提', async () => {
-    const c = await cells({ state: 'connected', path: 'lan', media: 'relay', file: 'disabled' })
+    const c = await machine({ link: { state: 'connected', path: 'lan', media: 'relay', file: 'disabled' } })
     expect(c?.val.detail).toContain('p2p.link.media')
     expect(c?.val.detail).not.toContain('p2p.link.file')
   })
 
-  it('直连时条上带延迟；有真流量才带速率', async () => {
-    const idle = await cells({ state: 'connected', path: 'lan', rttMs: 2, downBps: 400, upBps: 120 })
-    expect(idle?.val.text).toBe('p2p.link.rtt')
-    expect(idle?.val.detail).toContain('p2p.link.idleRate')
-
-    const busy = await cells({ state: 'connected', path: 'lan', rttMs: 2, downBps: 3 * 1024 * 1024, upBps: 120 })
-    expect(busy?.val.text).toBe('p2p.link.rtt p2p.link.rate')
-    expect(busy?.val.detail).toContain('p2p.link.down')
-    expect(busy?.val.detail).toContain('p2p.link.up')
-  })
-
-  it('局域网往返不到 1ms 时直说「不到 1ms」，不是取整成 0ms', async () => {
-    const c = await cells({ state: 'connected', path: 'lan', rttMs: 0 })
+  it('局域网往返不到 1ms 时直说「不到 1ms」', async () => {
+    const c = await machine({ link: { state: 'connected', path: 'lan', rttMs: 0 } })
     expect(c?.val.text).toBe('p2p.link.rttSub1')
   })
 
-  it('中转/连接中不报延迟速率——那时候的往返走的是中心，不是这一格说的路', async () => {
-    const c = await cells({ state: 'relay', rttMs: 90, downBps: 5 * 1024 * 1024 })
-    expect(c?.spec.label).toBe('p2p.link.relay')
-    expect(c?.val.text).toBe('')          // 空串 = 没数可报；不是 '--'（那是取不到）
-    expect(c?.spec.unit).toBeUndefined()  // 也不占那 13ch 预留
-    expect(c?.val.detail).not.toContain('p2p.link.rttFull')
-    expect(c?.val.detail).not.toContain('p2p.link.down')
+  it('多机时点它去中心页；单机而直连在跑时点去设置', async () => {
+    const hub = await machine({ clustered: true, node: { name: 'dev', online: true, latencyMs: 6 }, link: { state: 'connected', path: 'lan' } })
+    expect(hub?.spec.onClick).toEqual({ kind: 'route', id: '#/hub' })
+    const solo = await machine({ link: { state: 'connected', path: 'lan' } })
+    expect(solo?.spec.onClick).toEqual({ kind: 'route', id: '#/settings/node/p2p' })
+    const plain = await machine({ link: null })
+    expect(plain?.spec.onClick).toBeUndefined()
   })
 })

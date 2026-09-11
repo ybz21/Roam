@@ -261,7 +261,7 @@ export function buildSettings(deps: {
       id: 'node.p2p', name: t('set.pageTransfer'), parent: t('set.groupNode'), scope: 'node',
       items: [{
         id: 'p2p', label: t('settings.p2p'), bare: true, control: { kind: 'custom', node: <P2PSettings /> },
-        keywords: 'p2p stun ice webrtc 直连 中转 frp 超时 速率 下载',
+        keywords: 'p2p stun ice webrtc 直连 中转 frp 超时 速率 下载 加速 网络 视频 图片 预览',
       }],
     },
     {
