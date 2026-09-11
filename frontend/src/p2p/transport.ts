@@ -85,7 +85,7 @@ export interface DuplexTransport {
 }
 
 // 本阶段支持的服务名（echo 验证 + 后续消费者占位）。
-export type Service = 'echo' | 'term' | 'screencast' | 'phone' | 'file'
+export type Service = 'echo' | 'term' | 'screencast' | 'phone' | 'file' | 'bytes'
 
 // control 链路对外可观察状态（左边栏数据源）。
 export type LinkState = 'disabled' | 'connecting' | 'connected' | 'relay'
@@ -627,6 +627,48 @@ function releaseMedia() {
   }, RELEASE_GRACE_MS)
 }
 
+/**
+ * 把 media PC 多留一会儿（每次调用重新计时）。
+ *
+ * 字节请求是一阵一阵来的：翻一张图、隔十秒再翻一张。默认那 3 秒宽限（为镜像重挂设的）
+ * 太短，两次之间 PC 就被拆了，下一张图又要重新打洞——实测这种间隔下每次都在付 0.7 秒
+ * 的建链钱。留 60 秒，一轮翻图/一段视频就都落在同一条链路上。
+ *
+ * 净引用恒为 1：第一次调用 +1，之后只是重新计时；到点还回去。
+ */
+let bytesHoldTimer = 0
+export function holdMediaFor(ms: number) {
+  if (!bytesHoldTimer) ensureMediaLink()
+  else clearTimeout(bytesHoldTimer)
+  bytesHoldTimer = window.setTimeout(() => {
+    bytesHoldTimer = 0
+    releaseMedia()
+  }, ms)
+}
+
+/**
+ * 等 media PC 连上（最多 timeoutMs），期间保持引用计数，让它有机会连起来。
+ *
+ * 给字节请求用：第一张图/第一段视频到得比 PC 快，如果那一刻直接判「没直连」就走 HTTP，
+ * 那条快路等于永远用不上第一次。建链现在 0.7s 左右，值得等一下——但只在调用方说值得时
+ * 才等（小图片等 0.7s 不如直接走 HTTP 拿回来）。
+ */
+export async function whenMediaReady(timeoutMs: number): Promise<boolean> {
+  if (isMediaConnected()) return true
+  if (timeoutMs <= 0) return false
+  ensureMediaLink()
+  try {
+    const deadline = Date.now() + timeoutMs
+    while (Date.now() < deadline) {
+      if (isMediaConnected()) return true
+      await new Promise((r) => setTimeout(r, 100))
+    }
+    return isMediaConnected()
+  } finally {
+    releaseMedia() // 归还这次「为了等」而加的引用；真正的通道会自己再加一次
+  }
+}
+
 // media PC 是否已连（connect('screencast') 据此决定走不可靠 DataChannel 还是 frp WS）。
 function isMediaConnected(): boolean {
   return status.media === 'connected' && !!mediaPc && mediaPc.connectionState === 'connected'
@@ -1009,6 +1051,21 @@ export function connect(service: Service, opts: ConnectOptions = {}): DuplexTran
       } catch { /* 建通道失败 → 落到下面 frp 回退 */ }
     }
     return withRelease(frp()) // media 未连/建通道失败：本次走 frp，但保留 media 引用继续重连
+  }
+  // 'bytes'：文件字节（图片/视频/PDF 的 Range）走 media PC 上的**可靠·有序**通道。
+  //
+  // 借 media PC 而不是 control PC：一部视频几百 MB，塞进终端那条 SCTP 会把按键堵在后面
+  // （head-of-line）。media 本来就是为「重流量、与终端隔离」建的那条。通道语义是按通道设的，
+  // 所以镜像走不可靠、字节走可靠，两者共用一条 PC 互不矛盾。
+  if (service === 'bytes') {
+    ensureMediaLink()
+    if (!isMediaConnected() || !mediaPc) return withRelease(frpPlaceholder())
+    try {
+      const id = crypto.randomUUID().slice(0, 8)
+      return withRelease(wrapChannel(mediaPc.createDataChannel(`bytes#${id}`, { ordered: true })))
+    } catch {
+      return withRelease(frpPlaceholder())
+    }
   }
   // 其余服务走 control PC 的可靠通道。
   if (!isControlConnected() || !pc) return opts.frpUrl ? wrapWebSocket(new WebSocket(opts.frpUrl)) : frpPlaceholder()

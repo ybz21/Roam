@@ -1,7 +1,10 @@
 package p2p
 
 import (
+	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -272,5 +275,42 @@ func TestWaitGathered(t *testing.T) {
 	// 一个 srflx 都没有：等满上限——那种情况无从判断它是不是马上要来。
 	if d := elapsed(make(chan struct{}), make(chan struct{})); d < gatherMaxDur {
 		t.Errorf("无 srflx 应等满 %v，实际 %v", gatherMaxDur, d)
+	}
+}
+
+// TestContentTypeOf 直连给出的 Content-Type 必须和 HTTP 那条路一致：
+// 先按扩展名，判不出再嗅前 512 字节。不一致的话，同一个文件在两条路上会被浏览器
+// 当成两种东西（一条能播、另一条弹下载）。
+func TestContentTypeOf(t *testing.T) {
+	dir := t.TempDir()
+	cases := []struct {
+		name string
+		body []byte
+		want string // 前缀匹配（mime 库可能带 charset）
+	}{
+		{"a.mp4", []byte("\x00\x00\x00\x18ftypmp42"), "video/mp4"},
+		{"a.png", []byte("\x89PNG\r\n\x1a\n"), "image/png"},
+		{"noext", []byte("%PDF-1.4\n%âãÏÓ"), "application/pdf"}, // 没扩展名 → 嗅出来
+	}
+	for _, c := range cases {
+		p := filepath.Join(dir, c.name)
+		if err := os.WriteFile(p, c.body, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		f, err := os.Open(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := contentTypeOf(f, p)
+		// 嗅探要把读游标还回开头，否则接下来发出去的字节会少 512 个
+		var head [4]byte
+		n, _ := f.Read(head[:])
+		f.Close()
+		if !strings.HasPrefix(got, c.want) {
+			t.Errorf("%s: 期望 %s，得到 %s", c.name, c.want, got)
+		}
+		if n != 4 || !bytes.Equal(head[:], c.body[:4]) {
+			t.Errorf("%s: 嗅探后游标没回到开头（读到 %q）", c.name, head[:n])
+		}
 	}
 }
