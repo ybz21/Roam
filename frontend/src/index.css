@@ -3563,6 +3563,10 @@ html[data-size="compact"] .tt-histname { flex: 1 1 auto; max-width: none; }
 .tt-statusbar .vl[data-unit="bytes"] { min-width: 6ch; }
 .tt-statusbar .vl[data-unit="bytesPerSec"] { min-width: 8ch; }
 .tt-statusbar .vl[data-unit="bytesRatio"] { min-width: 9ch; }
+.tt-statusbar .vl[data-unit="ms"] { min-width: 5ch; }
+/* 延迟 + 速率两截：左对齐，让「8ms」待在原地，速率出现时往右边那半截留白里长，
+   而不是把延迟顶着往左推。 */
+.tt-statusbar .vl[data-unit="latencyRate"] { min-width: 13ch; text-align: left; }
 .tt-statusbar .dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; background: var(--ok); }
 .tt-statusbar .dot.warn { background: var(--warn); }
 .tt-statusbar .dot.danger { background: var(--danger); }

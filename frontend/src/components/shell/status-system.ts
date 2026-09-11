@@ -102,7 +102,8 @@ export function systemCells(i: SystemInput): SystemCell[] {
   push(
     systemCell('roam.core', 'machine', {
       label: i.node?.name || i.t('nav.thisDevice'),
-      priority: 100, tier: 1, render: 'dot',
+      // 延迟预留 5ch：6ms → 12ms 多一位数，右边所有格会跟着平移一次
+      priority: 100, tier: 1, render: 'dot', unit: 'ms',
       // 多机时点它去中心页（机器都在那儿）；单机没有可去的地方，就不是按钮
       onClick: i.clustered ? { kind: 'route', id: '#/hub' } : undefined,
     }),
@@ -138,17 +139,21 @@ export function systemCells(i: SystemInput): SystemCell[] {
     const peak = Math.max(link.downBps || 0, link.upBps || 0)
     push(
       systemCell('roam.core', 'link', {
-        label: '', priority: 88, tier: 3, render: 'dot',
+        // 路径进 label、两个数进 vl：vl 有固定预留宽度（latencyRate），
+        // 于是延迟涨一位数、速率来了又走，都不再推着右边的格子跑。
+        label: direct
+          ? i.t('p2p.link.direct', { path: i.t(pathLabelKey(link.path)) })
+          : link.state === 'relay' ? i.t('p2p.link.relay') : i.t('p2p.link.connecting'),
+        // 只有直连才有数要报，也只有那时才占那 13ch 预留
+        unit: direct ? 'latencyRate' : undefined,
+        priority: 88, tier: 3, render: 'dot',
         // 点开去 P2P 那一页：开关、STUN、超时都在那儿，是唯一能对这一格做点什么的地方
         onClick: { kind: 'route', id: '#/settings/node/p2p' },
       }),
       {
+        // 延迟与速率只在直连时说：中转/连接中报这两个数没有意义，
+        // 那时候的往返走的是中心，不是这一格说的那条路。
         text: [
-          direct
-            ? i.t('p2p.link.direct', { path: i.t(pathLabelKey(link.path)) })
-            : link.state === 'relay' ? i.t('p2p.link.relay') : i.t('p2p.link.connecting'),
-          // 延迟与速率只在直连时说：中转/连接中报这两个数没有意义，
-          // 那时候的往返走的是中心，不是这一格说的那条路。
           direct && link.rttMs != null ? rttText(i, link.rttMs) : '',
           direct && peak >= RATE_FLOOR ? i.t('p2p.link.rate', { rate: humanBytes(peak) }) : '',
         ].filter(Boolean).join(' '),

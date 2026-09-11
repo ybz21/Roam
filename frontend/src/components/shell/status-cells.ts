@@ -9,7 +9,7 @@ export type CellAlign = 'left' | 'right'
 export type CellRender = 'text' | 'gauge' | 'dot' | 'progress'
 /** 折叠档位：1 最晚被丢（永不丢），4 最先丢 */
 export type CellTier = 1 | 2 | 3 | 4
-export type CellUnit = 'percent' | 'bytes' | 'bytesPerSec' | 'bytesRatio' | 'celsius' | 'count' | 'text'
+export type CellUnit = 'percent' | 'bytes' | 'bytesPerSec' | 'bytesRatio' | 'celsius' | 'count' | 'ms' | 'latencyRate' | 'text'
 
 export type Thresholds = {
   warn?: number
@@ -131,6 +131,9 @@ export function formatRatio(used: number, total: number): string {
 
 export function formatValue(v: CellValue, unit?: CellUnit): string {
   if (v.text) return v.text
+  // 显式给空串 = 这一格此刻没有数可报（不是「取不到」）。'--' 是留给后者的：
+  // 直连格中转时就是这种情况，写成 `中转 --` 等于凭空多出一个坏掉的读数。
+  if (v.text === '') return ''
   if (v.stale || v.value == null || !Number.isFinite(v.value)) return '--'
   switch (unit) {
     case 'percent': return Math.round(v.value) + '%'
@@ -154,6 +157,8 @@ export const UNIT_CH: Partial<Record<CellUnit, number>> = {
   bytesPerSec: 8,  // 999.9M/s
   bytesRatio: 9,   // 12.1/32G
   count: 3,
+  ms: 5,           // 999ms
+  latencyRate: 13, // 「8ms 31.9M/s」：延迟 + 速率两截一起预留，空闲时速率那半截留白
 }
 
 /**
@@ -198,8 +203,12 @@ function ordered(cells: Cell[]): Cell[] {
  * - 档位从 4 往 1 丢；**同档内右半先于左半**——右半描述「你在动的东西」，
  *   而那个东西本身就在屏幕正中央摆着；左半描述你看不见的东西。
  * - 档 1 永不丢。
- * - 任何 warn/danger 的格被**钉住**，跳过丢弃顺序；只有在它本来会被丢掉时
- *   才提前到左半第二位（宽屏里就地上色，不挪位——挪位会让格子在眼皮底下跑）。
+ * - 任何 warn/danger 的格被**钉住**，跳过丢弃顺序——但**就地上色，不挪位**。
+ *
+ * 曾经有一条「挤不下时把上色的格提到机器格右边」的规则，删掉了：它的触发条件是
+ * 「这一帧有没有格被丢掉」，而总宽度每 1.5 秒随读数变一次（延迟多一位数、速率
+ * 出现又消失），于是同一格在「原位」和「第二位」之间来回瞬移——正是这个文件里
+ * 那句「挪位会让格子在眼皮底下跑」说的事。钉住已经保证它不会消失，够了。
  */
 export function pickCells(cells: Cell[], availableWidth: number): Cell[] {
   const all = ordered(cells)
@@ -223,13 +232,5 @@ export function pickCells(cells: Cell[], availableWidth: number): Cell[] {
     keep.delete(c.id)
   }
 
-  const visible = all.filter((c) => keep.has(c.id))
-  // 有格子被丢掉，说明位置紧张：把上色的格提到左半第二位（机器格右边）
-  const dropped = visible.length < all.length
-  if (!dropped) return visible
-  const hoist = visible.filter((c) => c.severity !== 'ok' && c.align === 'left')
-  if (!hoist.length) return visible
-  const rest = visible.filter((c) => !hoist.includes(c))
-  const head = rest.slice(0, 1)
-  return [...head, ...hoist, ...rest.slice(1)]
+  return all.filter((c) => keep.has(c.id))
 }
